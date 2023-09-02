@@ -18,7 +18,7 @@ use crate::ChannelClientTransport;
 /// A server transport which uses [`crossbeam-channel`](https://docs.rs/crossbeam-channel) MPSC
 /// senders and receivers to transmit data.
 /// 
-/// See the [crate docs](./index.html) details.
+/// See the [crate docs](./index.html) for details.
 #[derive(Debug, derivative::Derivative)]
 #[derivative(Default)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
@@ -44,8 +44,8 @@ impl<S: TransportSettings> ChannelServerTransport<S> {
 
     /// Creates and connects a client to this server transport, by creating new MPSC channels.
     /// 
-    /// This is the only way to construct a [`ChannelClientTransport`], as well as get that client
-    /// transport's corresponding [`ClientId`].
+    /// This is the only way to construct a [`ChannelClientTransport`], as well as to get that
+    /// client transport's corresponding [`ClientId`].
     pub fn connect(&mut self) -> (ChannelClientTransport<S>, ClientId) {
         let (send_c2s, recv_c2s) = unbounded::<S::C2S>();
         let (send_s2c, recv_s2c) = unbounded::<S::S2C>();

@@ -13,7 +13,9 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError};
 /// **Note:** you cannot construct this struct directly. Instead, you must use
 /// [`ChannelServerTransport::connect`] to construct a client transport.
 /// 
-/// See the [crate docs](./index.html) details.
+/// See the [crate docs](./index.html) for details.
+/// 
+/// [`ChannelServerTransport::connect`]: struct.ChannelServerTransport.html#method.connect
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelClientTransport<S: TransportSettings> {
