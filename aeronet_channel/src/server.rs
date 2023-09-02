@@ -15,15 +15,20 @@ impl<S: TransportSettings> ChannelServerTransport<S> {
         Self::default()
     }
 
-    pub fn connect(&mut self) -> ChannelClientTransport<S> {
+    pub fn connect(&mut self) -> (ChannelClientTransport<S>, ClientId) {
         let (send_c2s, recv_c2s) = unbounded::<S::C2S>();
         let (send_s2c, recv_s2c) = unbounded::<S::S2C>();
 
-        self.clients.insert((send_s2c, recv_c2s));
-        ChannelClientTransport {
+        let transport = ChannelClientTransport {
             send: send_c2s,
             recv: recv_s2c,
-        }
+        };
+        let id = ClientId(self.clients.insert((send_s2c, recv_c2s)));
+        (transport, id)
+    }
+
+    pub fn disconnect(&mut self, client: ClientId) {
+        self.clients.remove(client.0);
     }
 }
 

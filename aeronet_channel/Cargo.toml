@@ -2,6 +2,12 @@
 name = "aeronet_channel"
 version = "0.1.0"
 edition = "2021"
+description = "Crossbeam MPSC channel transport for aeronet"
+authors = [ "aecsocket <aecsocket@tutanota.com>" ]
+repository = "https://github.com/aecsocket/aeronet"
+keywords = [ "gamedev", "network", "bevy" ]
+categories = [ "game-development", "network-programming" ]
+license = "MIT OR Apache-2.0"
 
 [features]
 bevy = [ "aeronet/bevy", "dep:bevy" ]

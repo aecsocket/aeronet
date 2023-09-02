@@ -1,3 +1,6 @@
+#![warn(clippy::all)]
+#![warn(clippy::cargo)]
+
 mod client;
 #[cfg(feature = "bevy")]
 mod client_bevy;
