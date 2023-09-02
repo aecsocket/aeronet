@@ -20,6 +20,7 @@ impl<S: TransportSettings, T: ServerTransport<S> + Resource> Plugin
         app.add_event::<ServerTransportEvent>()
             .add_event::<ServerRecvEvent<S>>()
             .add_event::<ServerSendEvent<S>>()
+            .add_event::<ServerDisconnectClientEvent>()
             .add_event::<ServerTransportError>()
             .configure_set(
                 PreUpdate,
@@ -33,11 +34,16 @@ impl<S: TransportSettings, T: ServerTransport<S> + Resource> Plugin
             )
             .add_systems(
                 PreUpdate,
-                (recv_events::<S, T>, recv::<S, T>)
+                (disconnect::<S, T>, pop_events::<S, T>, recv::<S, T>)
                     .chain()
                     .in_set(ServerTransportSet::Recv),
             )
-            .add_systems(PostUpdate, send::<S, T>.in_set(ServerTransportSet::Send))
+            .add_systems(
+                PostUpdate,
+                send::<S, T>
+                    .chain()
+                    .in_set(ServerTransportSet::Send),
+            )
             .add_systems(PostUpdate, log);
     }
 }
@@ -63,10 +69,13 @@ pub struct ServerSendEvent<S: TransportSettings> {
     pub msg: S::S2C,
 }
 
+#[derive(Debug, Clone, Event)]
+pub struct ServerDisconnectClientEvent {
+    pub client: ClientId,
+}
+
 #[derive(Debug, thiserror::Error, Event)]
 pub enum ServerTransportError {
-    #[error("receiving client events")]
-    RecvEvents(#[source] anyhow::Error),
     #[error("receiving data from client `{from}`")]
     Recv {
         from: ClientId,
@@ -79,29 +88,40 @@ pub enum ServerTransportError {
         #[source]
         source: anyhow::Error,
     },
+    #[error("disconnecting client `{client}`")]
+    Disconnect {
+        client: ClientId,
+        #[source]
+        source: anyhow::Error,
+    },
 }
 
-fn recv_events<S: TransportSettings, T: ServerTransport<S> + Resource>(
+fn disconnect<S: TransportSettings, T: ServerTransport<S> + Resource>(
+    mut transport: ResMut<T>,
+    mut disconnect: EventReader<ServerDisconnectClientEvent>,
+    mut errors: EventWriter<ServerTransportError>,
+) {
+    for ServerDisconnectClientEvent { client } in disconnect.iter() {
+        if let Err(err) = transport.disconnect(*client) {
+            errors.send(ServerTransportError::Disconnect {
+                client: *client,
+                source: err,
+            });
+        }
+    }
+}
+
+fn pop_events<S: TransportSettings, T: ServerTransport<S> + Resource>(
     mut transport: ResMut<T>,
     mut clients: ResMut<ClientSet>,
     mut events: EventWriter<ServerTransportEvent>,
-    mut errors: EventWriter<ServerTransportError>,
 ) {
-    loop {
-        match transport.recv_events() {
-            Ok(Some(event)) => {
-                match event {
-                    ServerTransportEvent::Connect { client: id } => clients.0.insert(id),
-                    ServerTransportEvent::Disconnect { client: id } => clients.0.remove(&id),
-                };
-                events.send(event);
-            }
-            Ok(None) => break,
-            Err(err) => {
-                errors.send(ServerTransportError::RecvEvents(err));
-                break;
-            }
-        }
+    while let Some(event) = transport.pop_event() {
+        match event {
+            ServerTransportEvent::Connect { client } => clients.0.insert(client),
+            ServerTransportEvent::Disconnect { client, .. } => clients.0.remove(&client),
+        };
+        events.send(event);
     }
 }
 
@@ -134,12 +154,11 @@ fn send<S: TransportSettings, T: ServerTransport<S> + Resource>(
     mut errors: EventWriter<ServerTransportError>,
 ) {
     for ServerSendEvent { to, msg } in send.iter() {
-        match transport.send(*to, msg.clone()) {
-            Ok(_) => {}
-            Err(err) => errors.send(ServerTransportError::Send {
+        if let Err(err) = transport.send(*to, msg.clone()) {
+            errors.send(ServerTransportError::Send {
                 to: *to,
                 source: err,
-            }),
+            });
         }
     }
 }

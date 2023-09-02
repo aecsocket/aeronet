@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 
-use crate::{util::AsPrettyError, ClientTransport, TransportSettings};
+use crate::{util::AsPrettyError, ClientTransport, ClientTransportEvent, TransportSettings};
 
 #[derive(derivative::Derivative)]
 #[derivative(Default)]
@@ -15,13 +15,35 @@ impl<S: TransportSettings, T: ClientTransport<S> + Resource> Plugin
     for ClientTransportPlugin<S, T>
 {
     fn build(&self, app: &mut App) {
-        app.add_event::<ClientRecvEvent<S>>()
+        app.add_event::<ClientTransportEvent>()
+            .add_event::<ClientRecvEvent<S>>()
             .add_event::<ClientSendEvent<S>>()
             .add_event::<ClientTransportError>()
-            .add_systems(PreUpdate, recv::<S, T>.run_if(resource_exists::<T>()))
-            .add_systems(PostUpdate, send::<S, T>.run_if(resource_exists::<T>()))
-            .add_systems(PostUpdate, log);
+            .configure_set(
+                PreUpdate,
+                ClientTransportSet::Recv.run_if(resource_exists::<T>()),
+            )
+            .configure_set(
+                PostUpdate,
+                ClientTransportSet::Send.run_if(resource_exists::<T>()),
+            )
+            .add_systems(
+                PreUpdate,
+                (pop_events::<S, T>, recv::<S, T>)
+                    .chain()
+                    .in_set(ClientTransportSet::Recv),
+            )
+            .add_systems(
+                PostUpdate,
+                (send::<S, T>.in_set(ClientTransportSet::Send), log).chain(),
+            );
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, SystemSet)]
+pub enum ClientTransportSet {
+    Recv,
+    Send,
 }
 
 #[derive(Debug, Clone, Event)]
@@ -42,6 +64,15 @@ pub enum ClientTransportError {
     Send(#[source] anyhow::Error),
 }
 
+fn pop_events<S: TransportSettings, T: ClientTransport<S> + Resource>(
+    mut transport: ResMut<T>,
+    mut events: EventWriter<ClientTransportEvent>,
+) {
+    while let Some(event) = transport.pop_event() {
+        events.send(event);
+    }
+}
+
 fn recv<S: TransportSettings, T: ClientTransport<S> + Resource>(
     mut transport: ResMut<T>,
     mut recv: EventWriter<ClientRecvEvent<S>>,
@@ -52,7 +83,7 @@ fn recv<S: TransportSettings, T: ClientTransport<S> + Resource>(
             Ok(Some(msg)) => recv.send(ClientRecvEvent { msg }),
             Ok(None) => break,
             Err(err) => {
-                errors.send(ClientTransportError::Recv(err.into()));
+                errors.send(ClientTransportError::Recv(err));
                 break;
             }
         }
@@ -65,9 +96,8 @@ fn send<S: TransportSettings, T: ClientTransport<S> + Resource>(
     mut errors: EventWriter<ClientTransportError>,
 ) {
     for ClientSendEvent { msg } in send.iter() {
-        match transport.send(msg.clone()) {
-            Ok(_) => {}
-            Err(err) => errors.send(ClientTransportError::Send(err.into())),
+        if let Err(err) = transport.send(msg.clone()) {
+            errors.send(ClientTransportError::Send(err.into()));
         }
     }
 }

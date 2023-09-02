@@ -1,15 +1,51 @@
-use aeronet::{ClientTransport, TransportSettings};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+
+use aeronet::{
+    ClientTransport, ClientTransportEvent, DisconnectReason,
+    TransportSettings,
+};
+use anyhow::Result;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelClientTransport<S: TransportSettings> {
-    pub(crate) send: Sender<S::C2S>,
-    pub(crate) recv: Receiver<S::S2C>,
+    send: Sender<S::C2S>,
+    recv: Receiver<S::S2C>,
+    connected: Arc<AtomicBool>,
+    last_connected: bool,
+}
+
+impl<S: TransportSettings> ChannelClientTransport<S> {
+    pub(crate) fn new(send: Sender<S::C2S>, recv: Receiver<S::S2C>) -> (Self, Arc<AtomicBool>) {
+        let connected = Arc::new(AtomicBool::new(true));
+        let this = Self {
+            send,
+            recv,
+            connected: connected.clone(),
+            last_connected: true,
+        };
+        (this, connected)
+    }
 }
 
 impl<S: TransportSettings> ClientTransport<S> for ChannelClientTransport<S> {
-    fn recv(&mut self) -> Result<Option<S::S2C>, anyhow::Error> {
+    fn pop_event(&mut self) -> Option<ClientTransportEvent> {
+        let connected = self.connected.load(Ordering::SeqCst);
+        if connected != self.last_connected {
+            self.last_connected = connected;
+            Some(ClientTransportEvent::Disconnect {
+                reason: DisconnectReason::ByServer,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn recv(&mut self) -> Result<Option<S::S2C>> {
         match self.recv.try_recv() {
             Ok(msg) => Ok(Some(msg)),
             Err(TryRecvError::Empty) => Ok(None),
@@ -17,7 +53,7 @@ impl<S: TransportSettings> ClientTransport<S> for ChannelClientTransport<S> {
         }
     }
 
-    fn send(&mut self, msg: impl Into<S::C2S>) -> Result<(), anyhow::Error> {
+    fn send(&mut self, msg: impl Into<S::C2S>) -> Result<()> {
         self.send.try_send(msg.into()).map_err(|err| err.into())
     }
 }

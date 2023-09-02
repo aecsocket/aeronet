@@ -12,15 +12,14 @@ mod util;
 
 pub use generational_arena::{Arena, Index};
 
-pub use client::ClientTransport;
+pub use client::{ClientDisconnectedError, ClientTransport, ClientTransportEvent};
 #[cfg(feature = "bevy")]
 pub use client_bevy::{
     ClientRecvEvent, ClientSendEvent, ClientTransportError, ClientTransportPlugin,
 };
-pub use server::{ServerTransport, ServerTransportEvent, ServerClientsError};
+pub use server::{ServerClientsError, ServerTransport, ServerTransportEvent};
 #[cfg(feature = "bevy")]
 pub use server_bevy::{
-    ClientSet, ServerRecvEvent, ServerSendEvent, ServerTransportError, ServerTransportPlugin,
+    ClientSet, ServerRecvEvent, ServerSendEvent, ServerTransportError, ServerTransportPlugin, ServerDisconnectClientEvent,
 };
-pub use transport::{Message, TransportSettings};
-pub use util::ClientId;
+pub use transport::{ClientId, DisconnectReason, Message, TransportSettings};

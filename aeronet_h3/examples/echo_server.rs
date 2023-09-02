@@ -1,7 +1,7 @@
-use std::{sync::Arc, net::SocketAddr};
+use std::{net::SocketAddr, sync::Arc};
 
 use aeronet::TransportSettings;
-use aeronet_h3::{H3ServerTransport, quinn, rustls, AsyncRuntime};
+use aeronet_h3::{quinn, rustls, AsyncRuntime, H3ServerTransport};
 use bevy::prelude::*;
 
 pub struct AppTransportSettings;
@@ -31,9 +31,11 @@ fn main() {
 // TODO: this is *really* stupid. When you get rid of this, remove `macros` feature for tokio as well.
 #[tokio::main]
 async fn setup(mut commands: Commands, runtime: Res<AsyncRuntime>) {
+    // the server.cert and server.key are copied from
+    // https://github.com/hyperium/h3/tree/22da9387f19d724852b3bf1dfd7e66f0fd45cb81/examples
     let cert = rustls::Certificate(std::fs::read("./aeronet_h3/examples/server.cert").unwrap());
     let key = rustls::PrivateKey(std::fs::read("./aeronet_h3/examples/server.key").unwrap());
-    
+
     let tls_config = rustls::ServerConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()

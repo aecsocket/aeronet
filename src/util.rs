@@ -1,17 +1,5 @@
 use std::fmt::Display;
 
-use generational_arena::Index;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ClientId(pub Index);
-
-impl Display for ClientId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (index, gen) = self.0.into_raw_parts();
-        write!(f, "{index}v{gen}")
-    }
-}
-
 pub struct PrettyError<'a, E>(&'a E);
 
 impl<E: std::error::Error> Display for PrettyError<'_, E> {

@@ -31,16 +31,13 @@ impl TransportSettings for AppTransportSettings {
 // Since your app will most likely only use one type of transport and one type of settings,
 // it's recommended to typedef your desired transport and your app's transport settings together
 
-pub type ClientTransport = ChannelClientTransport<AppTransportSettings>;
-
-pub type ServerTransport = ChannelServerTransport<AppTransportSettings>;
+pub type AppClientTransport = ChannelClientTransport<AppTransportSettings>;
+pub type AppServerTransport = ChannelServerTransport<AppTransportSettings>;
 
 pub type ClientRecvEvent = aeronet::ClientRecvEvent<AppTransportSettings>;
-
 pub type ClientSendEvent = aeronet::ClientSendEvent<AppTransportSettings>;
 
 pub type ServerRecvEvent = aeronet::ServerRecvEvent<AppTransportSettings>;
-
 pub type ServerSendEvent = aeronet::ServerSendEvent<AppTransportSettings>;
 
 fn main() {
@@ -50,8 +47,8 @@ fn main() {
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
         ))
         .add_plugins((
-            ClientTransportPlugin::<AppTransportSettings, ClientTransport>::default(),
-            ServerTransportPlugin::<AppTransportSettings, ServerTransport>::default(),
+            ClientTransportPlugin::<AppTransportSettings, AppClientTransport>::default(),
+            ServerTransportPlugin::<AppTransportSettings, AppServerTransport>::default(),
         ))
         .add_systems(Startup, setup)
         .add_systems(Update, (client::update, server::update).chain())
@@ -60,12 +57,12 @@ fn main() {
             TimerMode::Repeating,
         )))
         .add_systems(Update, client::send_ping)
-        .add_systems(Update, client::disconnect.run_if(client::should_disconnect))
+        .add_systems(Update, server::disconnect.run_if(server::should_disconnect))
         .run();
 }
 
 fn setup(mut commands: Commands) {
-    let mut server_tx = ServerTransport::new();
+    let mut server_tx = AppServerTransport::new();
     let (client_tx, client_id) = server_tx.connect();
 
     commands.insert_resource(server_tx);
@@ -79,9 +76,15 @@ fn setup(mut commands: Commands) {
 pub struct ConnectedClientId(ClientId);
 
 mod client {
+    use aeronet::ClientTransportEvent;
+
     use super::*;
 
-    pub fn update(mut recv: EventReader<ClientRecvEvent>) {
+    pub fn update(mut events: EventReader<ClientTransportEvent>, mut recv: EventReader<ClientRecvEvent>) {
+        for event in events.iter() {
+            info!("Event: {:?}", event);
+        }
+
         for ClientRecvEvent { msg } in recv.iter() {
             info!("Received {:?}", msg);
         }
@@ -103,24 +106,11 @@ mod client {
             send.send(ClientSendEvent { msg });
         }
     }
-
-    pub fn should_disconnect(time: Res<Time>, client: Option<Res<ClientTransport>>) -> bool {
-        time.elapsed_seconds() > 5.0 && client.is_some()
-    }
-
-    pub fn disconnect(
-        mut commands: Commands,
-        mut server_tx: ResMut<ServerTransport>,
-        client_id: Res<ConnectedClientId>,
-    ) {
-        info!("Disconnecting");
-        server_tx.disconnect(client_id.0);
-        commands.remove_resource::<ClientTransport>();
-        commands.remove_resource::<ConnectedClientId>();
-    }
 }
 
 mod server {
+    use aeronet::ServerDisconnectClientEvent;
+
     use super::*;
 
     pub fn update(
@@ -144,5 +134,19 @@ mod server {
                 }
             }
         }
+    }
+
+    pub fn should_disconnect(time: Res<Time>, client: Option<Res<ConnectedClientId>>) -> bool {
+        time.elapsed_seconds() > 3.0 && client.is_some()
+    }
+
+    pub fn disconnect(
+        mut commands: Commands,
+        mut disconnect: EventWriter<ServerDisconnectClientEvent>,
+        client_id: Res<ConnectedClientId>,
+    ) {
+        info!("Disconnecting");
+        disconnect.send(ServerDisconnectClientEvent { client: client_id.0 });
+        commands.remove_resource::<ConnectedClientId>();
     }
 }

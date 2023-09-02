@@ -22,10 +22,7 @@ pub struct H3ServerTransport<S: TransportSettings> {
 }
 
 impl<S: TransportSettings> H3ServerTransport<S> {
-    pub async fn new(
-        config: ServerConfig,
-        addr: SocketAddr,
-    ) -> io::Result<Self> {
+    pub async fn new(config: ServerConfig, addr: SocketAddr) -> io::Result<Self> {
         let endpoint = Endpoint::server(config, addr)?;
         let (send_errors, recv_errors) =
             mpsc::channel::<Result<ServerTransportEvent, anyhow::Error>>(BUFFER_SIZE);
@@ -42,7 +39,7 @@ impl<S: TransportSettings> H3ServerTransport<S> {
 }
 
 impl<S: TransportSettings> ServerTransport<S> for H3ServerTransport<S> {
-    fn recv_events(&mut self) -> Result<Option<ServerTransportEvent>, anyhow::Error> {
+    fn pop_event(&mut self) -> Result<Option<ServerTransportEvent>, anyhow::Error> {
         Ok(None)
     }
 
