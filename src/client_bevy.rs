@@ -15,12 +15,12 @@ impl<S: TransportSettings, T: ClientTransport<S> + Resource> Plugin
     for ClientTransportPlugin<S, T>
 {
     fn build(&self, app: &mut App) {
-        app.add_event::<ClientRecvEvent<S>>()
-            .add_event::<ClientSendEvent<S>>()
-            .add_event::<ClientTransportError>()
-            .add_systems(PreUpdate, recv::<S, T>.run_if(resource_exists::<T>()))
-            .add_systems(PostUpdate, send::<S, T>.run_if(resource_exists::<T>()))
-            .add_systems(PostUpdate, log);
+        app//.add_event::<ClientRecvEvent<S>>()
+            //.add_event::<ClientSendEvent<S>>()
+            //.add_event::<ClientTransportError>()
+            .add_systems(PreUpdate, recv::<S, T>.run_if(resource_exists::<T>()));
+            //.add_systems(PostUpdate, send::<S, T>.run_if(resource_exists::<T>()))
+            //.add_systems(PostUpdate, log);
     }
 }
 
@@ -36,14 +36,14 @@ pub struct ClientSendEvent<S: TransportSettings> {
 
 fn recv<S: TransportSettings, T: ClientTransport<S> + Resource>(
     mut transport: ResMut<T>,
-    mut recv: EventWriter<ClientRecvEvent<S>>,
-    mut errors: EventWriter<ClientTransportError>,
+    //mut recv: EventWriter<ClientRecvEvent<S>>,
+    //mut errors: EventWriter<ClientTransportError>,
 ) {
     while let Some(result) = transport.recv() {
-        match result {
-            Ok(msg) => recv.send(ClientRecvEvent { msg }),
-            Err(err) => errors.send(err),
-        }
+        // match result {
+        //     Ok(msg) => {},//recv.send(ClientRecvEvent { msg }),
+        //     Err(err) => {},//errors.send(err),
+        // }
     }
 }
 
