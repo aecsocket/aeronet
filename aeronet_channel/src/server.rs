@@ -5,7 +5,7 @@ use aeronet::{
 };
 use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
 
-use crate::{ChannelClientTransport, ChannelDisconnectedError};
+use crate::ChannelClientTransport;
 
 #[derive(Debug, derivative::Derivative)]
 #[derivative(Default)]
@@ -56,9 +56,9 @@ impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
         match recv.try_recv() {
             Ok(msg) => Some(Ok(msg)),
             Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => Some(Err(ServerTransportError::Recv {
+            Err(err) => Some(Err(ServerTransportError::Recv {
                 from,
-                source: ChannelDisconnectedError.into(),
+                source: err.into(),
             })),
         }
     }

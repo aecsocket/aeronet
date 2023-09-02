@@ -1,8 +1,6 @@
 use aeronet::{ClientTransport, ClientTransportError, TransportSettings};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
-use crate::ChannelDisconnectedError;
-
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelClientTransport<S: TransportSettings> {
@@ -15,9 +13,7 @@ impl<S: TransportSettings> ClientTransport<S> for ChannelClientTransport<S> {
         match self.recv.try_recv() {
             Ok(msg) => Some(Ok(msg)),
             Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => Some(Err(ClientTransportError::Recv(
-                ChannelDisconnectedError.into(),
-            ))),
+            Err(err) => Some(Err(ClientTransportError::Recv(err.into()))),
         }
     }
 
