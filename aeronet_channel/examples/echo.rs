@@ -5,7 +5,7 @@ use aeronet::{
     ServerTransportPlugin, TransportSettings, ServerTransportError,
 };
 use aeronet_channel::{ChannelClientTransport, ChannelServerTransport};
-use bevy::{app::ScheduleRunnerPlugin, prelude::*};
+use bevy::{app::ScheduleRunnerPlugin, prelude::*, log::LogPlugin};
 
 pub struct AppTransportSettings;
 
@@ -45,7 +45,10 @@ pub type ServerSendEvent = aeronet::ServerSendEvent<AppTransportSettings>;
 
 fn main() {
     App::new()
-        .add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))))
+        .add_plugins((
+            LogPlugin::default(),
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
+        ))
         .add_plugins((
             ClientTransportPlugin::<AppTransportSettings, ClientTransport>::default(),
             ServerTransportPlugin::<AppTransportSettings, ServerTransport>::default(),

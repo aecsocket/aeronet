@@ -35,10 +35,10 @@ impl<S: TransportSettings> ChannelServerTransport<S> {
 
     pub fn disconnect(&mut self, id: ClientId) -> bool {
         let existed = self.clients.remove(id.0).is_some();
-        // if existed {
-        //     self.events
-        //         .push_back(ServerTransportEvent::Disconnect { id });
-        // }
+        if existed {
+            self.events
+                .push_back(ServerTransportEvent::Disconnect { id });
+        }
         existed
     }
 }
