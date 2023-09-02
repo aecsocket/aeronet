@@ -10,13 +10,18 @@ pub struct ChannelClientTransport {
 }
 
 impl ChannelClientTransport {
-    fn recv(&mut self) -> Option<Result<(), ()>> {
+    fn recv(&mut self) -> Option<Result<(), TryRecvError>> {
         match self.recv.try_recv() {
             Ok(msg) => Some(Ok(msg)),
-            Err(TryRecvError::Empty) => Some(Err(())),
-            Err(TryRecvError::Disconnected) => Some(Err(())),
+            Err(e) => Some(Err(e)),
         }
     }
+}
+
+#[derive(Resource)]
+struct ServerStuff {
+    send: Sender<()>,
+    recv: Receiver<()>,
 }
 
 fn main() {
@@ -39,19 +44,17 @@ fn setup(mut commands: Commands) {
         send: s_c2s,
         recv: r_s2c,
     };
-    //commands.insert_resource(server_tx);
     commands.insert_resource(tx);
+    commands.insert_resource(ServerStuff {
+        send: s_s2c,
+        recv: r_c2s,
+    });
 }
 
 fn recv(
     mut transport: ResMut<ChannelClientTransport>,
-    //mut recv: EventWriter<ClientRecvEvent<S>>,
-    //mut errors: EventWriter<ClientTransportError>,
 ) {
     while let Some(result) = transport.recv() {
-        // match result {
-        //     Ok(msg) => {},//recv.send(ClientRecvEvent { msg }),
-        //     Err(err) => {},//errors.send(err),
-        // }
+        println!("r = {:?}", result);
     }
 }
