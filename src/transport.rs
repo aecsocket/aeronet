@@ -48,29 +48,29 @@ pub enum DisconnectReason {
 /// This type is automatically implemented for `'static + Send + Sync + Clone` types, so you may
 /// use any simple data container such as a [`Bytes`](https://docs.rs/bytes/latest/bytes/#bytes),
 /// or alternatively use your own struct or enum for messaging.
-/// 
+///
 /// The client-to-server (C2S) and server-to-client (S2C) messages may be different types.
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use aeronet::Message;
-/// 
+///
 /// #[derive(Debug, Clone)]
 /// enum C2S {
 ///     Ping(u64),
 /// }
-/// 
+///
 /// #[derive(Debug, Clone)]
 /// enum S2C {
 ///     Pong(u64),
 /// }
-/// 
+///
 /// fn take_message(msg: impl Message) {}
-/// 
+///
 /// take_message(C2S::Ping(1));
 /// take_message(S2C::Pong(2));
-/// 
+///
 /// take_message(1);
 /// take_message(2);
 /// ```
@@ -79,30 +79,30 @@ pub trait Message: 'static + Send + Sync + Clone {}
 impl<T> Message for T where T: 'static + Send + Sync + Clone {}
 
 /// Settings for the types used by a transport.
-/// 
+///
 /// This trait allows you to define what type of message you want to send along a transport.
 /// The type used for the client-to-server (C2S) message may be different to the type used for the
 /// server-to-client (S2C) message.
-/// 
+///
 /// See [`Message`] for what kind of types you can use here.
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use aeronet::TransportSettings;
-/// 
+///
 /// struct AppTransportSettings;
-/// 
+///
 /// #[derive(Debug, Clone)]
 /// enum C2S {
 ///     Ping(u64),
 /// }
-/// 
+///
 /// #[derive(Debug, Clone)]
 /// enum S2C {
 ///     Pong(u64),
 /// }
-/// 
+///
 /// impl TransportSettings for AppTransportSettings {
 ///     type C2S = C2S;
 ///     type S2C = S2C;
@@ -112,9 +112,9 @@ impl<T> Message for T where T: 'static + Send + Sync + Clone {}
 /// as [`Bytes`](https://docs.rs/bytes/latest/bytes/#bytes):
 /// ```
 /// # use aeronet::TransportSettings;
-/// 
+///
 /// struct RawTransportSettings;
-/// 
+///
 /// impl TransportSettings for RawTransportSettings {
 ///     type C2S = Vec<u8>;
 ///     type S2C = Vec<u8>;

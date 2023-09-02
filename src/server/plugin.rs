@@ -8,14 +8,14 @@ use crate::{
 
 /// Provides default functionality for consuming data from and sending data to a
 /// [`ServerTransport`].
-/// 
+///
 /// This plugin provides:
 /// - [`ServerTransportEvent`] for consuming connect/disconnect client events
 /// - [`ServerRecvEvent`] for consuming messages sent from a client
 /// - [`ServerSendEvent`] for sending messages to a client
 /// - [`ServerDisconnectClientEvent`] for disconnecting a client from the server
 /// - [`ServerTransportError`] event for consuming errors that occurred while doing the above
-/// 
+///
 /// This plugin is *not* required; you can implement receiving and sending messages entirely on
 /// your own if you wish. This may be useful when you want ownership of the received message before
 /// they are sent to the rest of your app, or when they are sent out.
@@ -69,7 +69,7 @@ pub enum ServerTransportSet {
 }
 
 /// Keeps track of clients which are connected to the current server transport.
-/// 
+///
 /// The [`ServerTransportPlugin`] automatically adds and removes clients to/from this set
 /// according to [`ServerTransportEvent`] events.
 #[derive(Debug, Default, Resource)]
@@ -81,11 +81,11 @@ pub struct ServerRecvEvent<S: TransportSettings> {
     /// Which client sent the message.
     pub from: ClientId,
     /// The message received.
-    /// 
+    ///
     /// Note that consumers in a system will only have access to this behind a shared reference;
     /// if you want ownership of this data, consider not using the plugin as described in the
     /// [plugin docs].
-    /// 
+    ///
     /// [plugin docs]: struct.ServerTransportPlugin.html
     pub msg: S::C2S,
 }

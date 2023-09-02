@@ -17,7 +17,7 @@ use crate::ChannelClientTransport;
 
 /// A server transport which uses [`crossbeam-channel`](https://docs.rs/crossbeam-channel) MPSC
 /// senders and receivers to transmit data.
-/// 
+///
 /// See the [crate docs](./index.html) for details.
 #[derive(Debug, derivative::Derivative)]
 #[derivative(Default)]
@@ -36,14 +36,14 @@ struct ClientData<S2C, C2S> {
 
 impl<S: TransportSettings> ChannelServerTransport<S> {
     /// Creates a new server transport with no connected clients.
-    /// 
+    ///
     /// This is functionally equivalent to [`Default::default`].
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Creates and connects a client to this server transport, by creating new MPSC channels.
-    /// 
+    ///
     /// This is the only way to construct a [`ChannelClientTransport`], as well as to get that
     /// client transport's corresponding [`ClientId`].
     pub fn connect(&mut self) -> (ChannelClientTransport<S>, ClientId) {

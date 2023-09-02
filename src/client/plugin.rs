@@ -4,15 +4,15 @@ use bevy::prelude::*;
 
 use crate::{util::AsPrettyError, ClientTransport, ClientTransportEvent, TransportSettings};
 
-/// Provides default functionality for consuming data from and sending data to a 
+/// Provides default functionality for consuming data from and sending data to a
 /// [`ClientTransport`].
-/// 
+///
 /// This plugin provides:
 /// - [`ClientTransportEvent`] for consuming connect/disconnect events
 /// - [`ClientRecvEvent`] for consuming messages sent from the server
 /// - [`ClientSendEvent`] for sending messages to the server
 /// - [`ClientTransportError`] event for consuming errors that occurred while doing the above
-/// 
+///
 /// This plugin is *not* required; you can implement receiving and sending messages entirely on
 /// your own if you wish. This may be useful when you want ownership of the received message before
 /// they are sent to the rest of your app, or when they are sent out.
@@ -72,11 +72,11 @@ pub enum ClientTransportSet {
 #[derive(Debug, Clone, Event)]
 pub struct ClientRecvEvent<S: TransportSettings> {
     /// The message received.
-    /// 
+    ///
     /// Note that consumers in a system will only have access to this behind a shared reference;
     /// if you want ownership of this data, consider not using the plugin as described in the
     /// [plugin docs].
-    /// 
+    ///
     /// [plugin docs]: struct.ClientTransportPlugin.html
     pub msg: S::S2C,
 }
