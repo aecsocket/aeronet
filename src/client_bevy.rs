@@ -42,7 +42,10 @@ fn recv<S: TransportSettings, T: ClientTransport<S> + Resource>(
     while let Some(result) = transport.recv() {
         match result {
             Ok(msg) => recv.send(ClientRecvEvent { msg }),
-            Err(err) => errors.send(err),
+            Err(err) => {
+                errors.send(err);
+                break;
+            }
         }
     }
 }

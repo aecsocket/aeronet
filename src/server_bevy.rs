@@ -79,7 +79,10 @@ fn recv_events<S: TransportSettings, T: ServerTransport<S> + Resource>(
                 };
                 events.send(event);
             }
-            Err(err) => errors.send(err),
+            Err(err) => {
+                errors.send(err);
+                break;
+            }
         }
     }
 }
@@ -96,7 +99,6 @@ fn recv<S: TransportSettings, T: ServerTransport<S> + Resource>(
                 Ok(msg) => recv.send(ServerRecvEvent { from: *from, msg }),
                 Err(err) => {
                     errors.send(err);
-                    // after the first error, stop processing this client's inputs (for this frame at least)
                     break;
                 }
             }
