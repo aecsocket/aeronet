@@ -1,12 +1,12 @@
-use std::{net::SocketAddr, io, marker::PhantomData};
+use std::{io, marker::PhantomData, net::SocketAddr};
 
-use aeronet::{ServerTransport, TransportSettings, ServerTransportEvent, ServerTransportError};
+use aeronet::{ServerTransport, ServerTransportError, ServerTransportEvent, TransportSettings};
 use bytes::Bytes;
-use h3::{server::Connection, ext::Protocol};
+use h3::{ext::Protocol, server::Connection};
 pub use h3_quinn::quinn;
 use h3_webtransport::server::WebTransportSession;
 use http::Method;
-use quinn::{ServerConfig, Endpoint, Connecting};
+use quinn::{Connecting, Endpoint, ServerConfig};
 use tokio::sync::mpsc;
 
 use crate::BUFFER_SIZE;
@@ -22,9 +22,13 @@ pub struct H3ServerTransport<S: TransportSettings> {
 }
 
 impl<S: TransportSettings> H3ServerTransport<S> {
-    pub fn new(config: ServerConfig, addr: SocketAddr) -> io::Result<Self> {
+    pub async fn new(
+        config: ServerConfig,
+        addr: SocketAddr,
+    ) -> io::Result<Self> {
         let endpoint = Endpoint::server(config, addr)?;
-        let (send_errors, recv_errors) = mpsc::channel::<Result<ServerTransportEvent, anyhow::Error>>(BUFFER_SIZE);
+        let (send_errors, recv_errors) =
+            mpsc::channel::<Result<ServerTransportEvent, anyhow::Error>>(BUFFER_SIZE);
 
         tokio::spawn(async move {
             update_endpoint(endpoint).await;
@@ -51,9 +55,7 @@ impl<S: TransportSettings> ServerTransport<S> for H3ServerTransport<S> {
     }
 }
 
-async fn update_endpoint(
-    endpoint: Endpoint,
-) {
+async fn update_endpoint(endpoint: Endpoint) {
     while let Some(conn) = endpoint.accept().await {
         tokio::spawn(async move {
             match conn.await {
@@ -70,9 +72,7 @@ async fn update_endpoint(
     endpoint.wait_idle().await;
 }
 
-async fn accept_connection(
-    conn: quinn::Connection,
-) -> Result<(), h3::Error> {
+async fn accept_connection(conn: quinn::Connection) -> Result<(), h3::Error> {
     let h3_conn = h3::server::builder()
         .enable_webtransport(true)
         .enable_connect(true)

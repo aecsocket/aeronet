@@ -23,7 +23,8 @@ h3 = { git = "https://github.com/hyperium/h3.git", rev = "a57ed22" }
 h3-quinn = { git = "https://github.com/hyperium/h3.git", rev = "a57ed22" }
 h3-webtransport = { git = "https://github.com/hyperium/h3.git", rev = "a57ed22" }
 quinn = { version = "0.10.2", features = [ "ring" ] }
-tokio = { version = "1.32.0", features = [ "rt" ] }
+rustls = "0.21.7"
+tokio = { version = "1.32.0", features = [ "rt", "rt-multi-thread" , "macros" ] }
 bytes = "1.4.0"
 http = "0.2.9"
 
@@ -31,6 +32,11 @@ http = "0.2.9"
 bevy = "0.11.2"
 
 [[example]]
-name = "client"
-path = "examples/client.rs"
+name = "echo_client"
+path = "examples/echo_client.rs"
+required-features = [ "bevy" ]
+
+[[example]]
+name = "echo_server"
+path = "examples/echo_server.rs"
 required-features = [ "bevy" ]

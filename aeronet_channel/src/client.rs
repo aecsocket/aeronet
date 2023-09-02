@@ -18,8 +18,6 @@ impl<S: TransportSettings> ClientTransport<S> for ChannelClientTransport<S> {
     }
 
     fn send(&mut self, msg: impl Into<S::C2S>) -> Result<(), anyhow::Error> {
-        self.send
-            .try_send(msg.into())
-            .map_err(|err| err.into())
+        self.send.try_send(msg.into()).map_err(|err| err.into())
     }
 }

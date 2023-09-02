@@ -3,8 +3,7 @@ use std::marker::PhantomData;
 use bevy::{prelude::*, utils::HashSet};
 
 use crate::{
-    util::AsPrettyError, ClientId, ServerTransport, ServerTransportEvent,
-    TransportSettings,
+    util::AsPrettyError, ClientId, ServerTransport, ServerTransportEvent, TransportSettings,
 };
 
 #[derive(derivative::Derivative)]
@@ -79,7 +78,7 @@ pub enum ServerTransportError {
         to: ClientId,
         #[source]
         source: anyhow::Error,
-    }
+    },
 }
 
 fn recv_events<S: TransportSettings, T: ServerTransport<S> + Resource>(
@@ -118,7 +117,10 @@ fn recv<S: TransportSettings, T: ServerTransport<S> + Resource>(
                 Ok(Some(msg)) => recv.send(ServerRecvEvent { from: *from, msg }),
                 Ok(None) => break,
                 Err(err) => {
-                    errors.send(ServerTransportError::Recv { from: *from, source: err });
+                    errors.send(ServerTransportError::Recv {
+                        from: *from,
+                        source: err,
+                    });
                     break;
                 }
             }
@@ -134,7 +136,10 @@ fn send<S: TransportSettings, T: ServerTransport<S> + Resource>(
     for ServerSendEvent { to, msg } in send.iter() {
         match transport.send(*to, msg.clone()) {
             Ok(_) => {}
-            Err(err) => errors.send(ServerTransportError::Send { to: *to, source: err }),
+            Err(err) => errors.send(ServerTransportError::Send {
+                to: *to,
+                source: err,
+            }),
         }
     }
 }

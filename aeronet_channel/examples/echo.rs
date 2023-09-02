@@ -5,7 +5,7 @@ use aeronet::{
     ServerTransportPlugin, TransportSettings,
 };
 use aeronet_channel::{ChannelClientTransport, ChannelServerTransport};
-use bevy::{app::ScheduleRunnerPlugin, prelude::*, log::LogPlugin};
+use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 
 pub struct AppTransportSettings;
 
@@ -108,7 +108,11 @@ mod client {
         time.elapsed_seconds() > 5.0 && client.is_some()
     }
 
-    pub fn disconnect(mut commands: Commands, mut server_tx: ResMut<ServerTransport>, client_id: Res<ConnectedClientId>) {
+    pub fn disconnect(
+        mut commands: Commands,
+        mut server_tx: ResMut<ServerTransport>,
+        client_id: Res<ConnectedClientId>,
+    ) {
         info!("Disconnecting");
         server_tx.disconnect(client_id.0);
         commands.remove_resource::<ClientTransport>();
@@ -127,7 +131,7 @@ mod server {
         for event in events.iter() {
             info!("Event: {:?}", event);
         }
-    
+
         for ServerRecvEvent { from, msg } in recv.iter() {
             info!("Received {:?}", msg);
             match msg {

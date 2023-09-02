@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use aeronet::{
-    Arena, ClientId, ServerTransport, ServerTransportEvent, TransportSettings, InvalidClientError,
+    Arena, ClientId, InvalidClientError, ServerTransport, ServerTransportEvent, TransportSettings,
 };
 use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
 
@@ -65,7 +65,6 @@ impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
             return Err(InvalidClientError(to).into());
         };
 
-        send.try_send(msg.into())
-            .map_err(|err| err.into())
+        send.try_send(msg.into()).map_err(|err| err.into())
     }
 }
