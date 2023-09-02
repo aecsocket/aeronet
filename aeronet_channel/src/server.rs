@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use aeronet::{
-    Arena, ClientId, ServerTransport, ServerTransportError, ServerTransportEvent, TransportSettings, InvalidClientError,
+    Arena, ClientId, ServerTransport, ServerTransportEvent, TransportSettings, InvalidClientError,
 };
 use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
 

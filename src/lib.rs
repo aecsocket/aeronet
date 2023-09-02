@@ -12,9 +12,9 @@ mod util;
 
 pub use generational_arena::{Arena, Index};
 
-pub use client::{ClientTransport, ClientTransportError};
+pub use client::ClientTransport;
 #[cfg(feature = "bevy")]
-pub use client_bevy::{ClientRecvEvent, ClientSendEvent, ClientTransportPlugin};
+pub use client_bevy::{ClientRecvEvent, ClientSendEvent, ClientTransportPlugin, ClientTransportError};
 pub use server::{ServerTransport, ServerTransportEvent};
 #[cfg(feature = "bevy")]
 pub use server_bevy::{ClientSet, ServerRecvEvent, ServerSendEvent, ServerTransportPlugin, ServerTransportError};

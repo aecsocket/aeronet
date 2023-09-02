@@ -1,4 +1,4 @@
-use aeronet::{ClientTransport, ClientTransportError, TransportSettings};
+use aeronet::{ClientTransport, TransportSettings};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
 #[derive(Debug)]
@@ -9,17 +9,17 @@ pub struct ChannelClientTransport<S: TransportSettings> {
 }
 
 impl<S: TransportSettings> ClientTransport<S> for ChannelClientTransport<S> {
-    fn recv(&mut self) -> Option<Result<S::S2C, ClientTransportError>> {
+    fn recv(&mut self) -> Result<Option<S::S2C>, anyhow::Error> {
         match self.recv.try_recv() {
-            Ok(msg) => Some(Ok(msg)),
-            Err(TryRecvError::Empty) => None,
-            Err(err) => Some(Err(ClientTransportError::Recv(err.into()))),
+            Ok(msg) => Ok(Some(msg)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(err) => Err(err.into()),
         }
     }
 
-    fn send(&mut self, msg: impl Into<S::C2S>) -> Result<(), ClientTransportError> {
+    fn send(&mut self, msg: impl Into<S::C2S>) -> Result<(), anyhow::Error> {
         self.send
             .try_send(msg.into())
-            .map_err(|err| ClientTransportError::Send(err.into()))
+            .map_err(|err| err.into())
     }
 }

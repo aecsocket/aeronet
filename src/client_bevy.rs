@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 
-use crate::{util::AsPrettyError, ClientTransport, ClientTransportError, TransportSettings};
+use crate::{util::AsPrettyError, ClientTransport, TransportSettings};
 
 #[derive(derivative::Derivative)]
 #[derivative(Default)]
@@ -34,16 +34,25 @@ pub struct ClientSendEvent<S: TransportSettings> {
     pub msg: S::C2S,
 }
 
+#[derive(Debug, thiserror::Error, Event)]
+pub enum ClientTransportError {
+    #[error("receiving data from server")]
+    Recv(#[source] anyhow::Error),
+    #[error("sending data to server")]
+    Send(#[source] anyhow::Error),
+}
+
 fn recv<S: TransportSettings, T: ClientTransport<S> + Resource>(
     mut transport: ResMut<T>,
     mut recv: EventWriter<ClientRecvEvent<S>>,
     mut errors: EventWriter<ClientTransportError>,
 ) {
-    while let Some(result) = transport.recv() {
-        match result {
-            Ok(msg) => recv.send(ClientRecvEvent { msg }),
+    loop {
+        match transport.recv() {
+            Ok(Some(msg)) => recv.send(ClientRecvEvent { msg }),
+            Ok(None) => break,
             Err(err) => {
-                errors.send(err);
+                errors.send(ClientTransportError::Recv(err.into()));
                 break;
             }
         }
@@ -58,7 +67,7 @@ fn send<S: TransportSettings, T: ClientTransport<S> + Resource>(
     for ClientSendEvent { msg } in send.iter() {
         match transport.send(msg.clone()) {
             Ok(_) => {}
-            Err(err) => errors.send(err),
+            Err(err) => errors.send(ClientTransportError::Send(err.into())),
         }
     }
 }
