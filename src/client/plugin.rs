@@ -4,6 +4,28 @@ use bevy::prelude::*;
 
 use crate::{util::AsPrettyError, ClientTransport, ClientTransportEvent, TransportSettings};
 
+/// Provides default functionality for consuming data from and sending data to a 
+/// [`ClientTransport`].
+/// 
+/// This plugin provides:
+/// - [`ClientTransportEvent`] for consuming connect/disconnect events
+/// - [`ClientRecvEvent`] for consuming messages sent from the server
+/// - [`ClientSendEvent`] for sending messages to the server
+/// - [`ClientTransportError`] event for consuming errors that occurred while doing any of the
+///   above
+/// 
+/// This plugin is *not* required; you can implement receiving and sending messages entirely on
+/// your own if you wish. This may be useful when you want ownership of the received message before
+/// they are sent to the rest of your app, or when they are sent out.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use bevy::prelude::*;
+/// 
+/// App::new()
+///     .add_plugins(ClientTransportPlugin::default());
+/// ```
 #[derive(derivative::Derivative)]
 #[derivative(Default)]
 pub struct ClientTransportPlugin<S, T> {
@@ -47,26 +69,42 @@ impl<S: TransportSettings, T: ClientTransport<S> + Resource> Plugin
     }
 }
 
+/// System sets used by [`ClientTransportPlugin`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, SystemSet)]
 pub enum ClientTransportSet {
+    /// When receiving events and messages from a transport.
     Recv,
+    /// When sending messages out using a transport.
     Send,
 }
 
+/// Snet when the transport receives a message from the server.
 #[derive(Debug, Clone, Event)]
 pub struct ClientRecvEvent<S: TransportSettings> {
+    /// The message received.
+    /// 
+    /// Note that consumers in a system will only have access to this behind a shared reference;
+    /// if you want ownership of this data, consider not using the plugin as described in the
+    /// [plugin docs].
+    /// 
+    /// [plugin docs]: struct.ClientTransportPlugin.html
     pub msg: S::S2C,
 }
 
+/// Snet when a client wants to send a message to the server.
 #[derive(Debug, Clone, Event)]
 pub struct ClientSendEvent<S: TransportSettings> {
+    /// The message that the app wants to send using the transport.
     pub msg: S::C2S,
 }
 
+/// Sent when the transport experiences an error while updating.
 #[derive(Debug, thiserror::Error, Event)]
 pub enum ClientTransportError {
+    /// Some message could not be received from the server.
     #[error("receiving data from server")]
     Recv(#[source] anyhow::Error),
+    /// Some message could not be sent to the server.
     #[error("sending data to server")]
     Send(#[source] anyhow::Error),
 }

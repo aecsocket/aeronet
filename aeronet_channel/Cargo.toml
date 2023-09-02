@@ -22,6 +22,11 @@ bevy = { version = "0.11.2", default-features = false, optional = true }
 crossbeam-channel = "0.5.8"
 
 [[example]]
-name = "echo"
-path = "examples/echo.rs"
+name = "echo_simple"
+path = "examples/echo_simple.rs"
 required-features = [ "bevy" ]
+
+# [[example]]
+# name = "echo_manual"
+# path = "examples/echo_manual.rs"
+# required-features = [ "bevy" ]

@@ -1,5 +1,4 @@
 #![warn(clippy::all)]
-#![warn(clippy::cargo)]
 
 #[cfg(feature = "bevy")]
 mod runtime;

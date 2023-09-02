@@ -1,3 +1,5 @@
+//! The server-side functionality of this crate.
+
 #[cfg(feature = "bevy")]
 pub mod plugin;
 

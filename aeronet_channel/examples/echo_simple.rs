@@ -1,15 +1,11 @@
 use std::time::Duration;
 
 use aeronet::{
-    ClientId, ClientSet, ClientTransportPlugin, ServerTransportEvent,
-    ServerTransportPlugin, TransportSettings,
+    ClientId, ClientSet, ClientTransportPlugin, ServerTransportEvent, ServerTransportPlugin,
+    TransportSettings,
 };
 use aeronet_channel::{ChannelClientTransport, ChannelServerTransport};
-use bevy::{
-    app::ScheduleRunnerPlugin,
-    log::LogPlugin,
-    prelude::*,
-};
+use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 
 pub struct AppTransportSettings;
 
