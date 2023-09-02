@@ -1,4 +1,8 @@
-use aeronet::{Arena, ClientId, ServerTransport, ServerTransportError, TransportSettings};
+use std::collections::VecDeque;
+
+use aeronet::{
+    Arena, ClientId, ServerTransport, ServerTransportError, ServerTransportEvent, TransportSettings,
+};
 use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
 
 use crate::{ChannelClientTransport, ChannelDisconnectedError};
@@ -8,6 +12,7 @@ use crate::{ChannelClientTransport, ChannelDisconnectedError};
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelServerTransport<S: TransportSettings> {
     clients: Arena<(Sender<S::S2C>, Receiver<S::C2S>)>,
+    events: VecDeque<ServerTransportEvent>,
 }
 
 impl<S: TransportSettings> ChannelServerTransport<S> {
@@ -24,20 +29,23 @@ impl<S: TransportSettings> ChannelServerTransport<S> {
             recv: recv_s2c,
         };
         let id = ClientId(self.clients.insert((send_s2c, recv_c2s)));
+        self.events.push_back(ServerTransportEvent::Connect { id });
         (transport, id)
     }
 
-    pub fn disconnect(&mut self, client: ClientId) {
-        self.clients.remove(client.0);
+    pub fn disconnect(&mut self, id: ClientId) -> bool {
+        let existed = self.clients.remove(id.0).is_some();
+        // if existed {
+        //     self.events
+        //         .push_back(ServerTransportEvent::Disconnect { id });
+        // }
+        existed
     }
 }
 
 impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
-    fn clients(&self) -> Vec<ClientId> {
-        self.clients
-            .iter()
-            .map(|(idx, _)| ClientId(idx))
-            .collect::<Vec<_>>()
+    fn recv_events(&mut self) -> Option<Result<ServerTransportEvent, ServerTransportError>> {
+        self.events.pop_front().map(|e| Ok(e))
     }
 
     fn recv(&mut self, from: ClientId) -> Option<Result<S::C2S, ServerTransportError>> {

@@ -3,6 +3,8 @@ use crate::{ClientId, TransportSettings};
 #[derive(Debug, thiserror::Error)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
 pub enum ServerTransportError {
+    #[error("failed to receive client connection")]
+    RecvClient,
     #[error("no client with id `{id}`")]
     NoClient { id: ClientId },
     #[error("failed to receive data from client `{from}`")]
@@ -19,18 +21,15 @@ pub enum ServerTransportError {
     },
 }
 
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
+pub enum ServerTransportEvent {
+    Connect { id: ClientId },
+    Disconnect { id: ClientId },
+}
+
 pub trait ServerTransport<S: TransportSettings> {
-    /// This function deliberately does not return an iterator, because that would mean that while
-    /// iterating, a shared reference to this transport would be kept. A typical usage pattern is
-    /// ```ignore
-    /// for client_id in transport.clients() {
-    ///     transport.recv(client_id);
-    /// }
-    /// ```
-    /// If this function returned an iterator, `recv` could not be used because that takes an
-    /// exclusive reference. You would have to manually collect the iterator into a Vec before
-    /// iterating over it.
-    fn clients(&self) -> Vec<ClientId>;
+    fn recv_events(&mut self) -> Option<Result<ServerTransportEvent, ServerTransportError>>;
 
     fn recv(&mut self, from: ClientId) -> Option<Result<S::C2S, ServerTransportError>>;
 

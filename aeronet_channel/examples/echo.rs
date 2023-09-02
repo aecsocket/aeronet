@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use aeronet::{ClientTransportPlugin, Message, ServerTransportPlugin, TransportSettings, ClientId};
+use aeronet::{
+    ClientId, ClientSet, ClientTransportPlugin, Message, ServerTransportEvent,
+    ServerTransportPlugin, TransportSettings, ServerTransportError,
+};
 use aeronet_channel::{ChannelClientTransport, ChannelServerTransport};
 use bevy::{app::ScheduleRunnerPlugin, prelude::*};
 
@@ -63,6 +66,8 @@ fn setup(mut commands: Commands) {
     let (client_tx, client_id) = server_tx.connect();
 
     commands.insert_resource(server_tx);
+    commands.insert_resource(ClientSet::default());
+
     commands.insert_resource(client_tx);
     commands.insert_resource(ConnectedClientId(client_id));
 }
@@ -73,7 +78,20 @@ fn update_client(mut recv: EventReader<ClientRecvEvent>) {
     }
 }
 
-fn update_server(mut recv: EventReader<ServerRecvEvent>, mut send: EventWriter<ServerSendEvent>) {
+fn update_server(
+    mut recv: EventReader<ServerRecvEvent>,
+    mut events: EventReader<ServerTransportEvent>,
+    mut errors: EventReader<ServerTransportError>,
+    mut send: EventWriter<ServerSendEvent>,
+) {
+    for event in events.iter() {
+        println!("[sv] Event: {:?}", event);
+    }
+
+    for err in errors.iter() {
+        println!("[sv] Error: {:#}", err);
+    }
+
     for ServerRecvEvent { from, msg } in recv.iter() {
         println!("[sv] Received {:?}", msg);
         match msg {
@@ -109,9 +127,10 @@ fn send_ping(
 }
 
 fn should_disconnect(time: Res<Time>) -> bool {
-    time.elapsed_seconds() > 10.0
+    time.elapsed_seconds() > 5.0
 }
 
 fn disconnect(mut server_tx: ResMut<ServerTransport>, client_id: Res<ConnectedClientId>) {
+    println!("[cl] Disconnecting");
     server_tx.disconnect(client_id.0);
 }

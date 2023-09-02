@@ -1,9 +1,10 @@
 use std::marker::PhantomData;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashSet};
 
 use crate::{
-    util::AsPrettyError, ClientId, ServerTransport, ServerTransportError, TransportSettings,
+    util::AsPrettyError, ClientId, ServerTransport, ServerTransportError, ServerTransportEvent,
+    TransportSettings,
 };
 
 #[derive(derivative::Derivative)]
@@ -17,14 +18,39 @@ impl<S: TransportSettings, T: ServerTransport<S> + Resource> Plugin
     for ServerTransportPlugin<S, T>
 {
     fn build(&self, app: &mut App) {
-        app.add_event::<ServerRecvEvent<S>>()
+        app.add_event::<ServerTransportEvent>()
+            .add_event::<ServerRecvEvent<S>>()
             .add_event::<ServerSendEvent<S>>()
             .add_event::<ServerTransportError>()
-            .add_systems(PreUpdate, recv::<S, T>.run_if(resource_exists::<T>()))
-            .add_systems(PostUpdate, send::<S, T>.run_if(resource_exists::<T>()))
+            .configure_set(
+                PreUpdate,
+                ServerTransportSet::Recv
+                    .run_if(resource_exists::<T>().and_then(resource_exists::<ClientSet>())),
+            )
+            .configure_set(
+                PostUpdate,
+                ServerTransportSet::Send
+                    .run_if(resource_exists::<T>().and_then(resource_exists::<ClientSet>())),
+            )
+            .add_systems(
+                PreUpdate,
+                (recv_events::<S, T>, recv::<S, T>)
+                    .chain()
+                    .in_set(ServerTransportSet::Recv),
+            )
+            .add_systems(PostUpdate, send::<S, T>.in_set(ServerTransportSet::Send))
             .add_systems(PostUpdate, log);
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, SystemSet)]
+pub enum ServerTransportSet {
+    Recv,
+    Send,
+}
+
+#[derive(Debug, Default, Resource)]
+pub struct ClientSet(pub HashSet<ClientId>);
 
 #[derive(Debug, Clone, Event)]
 pub struct ServerRecvEvent<S: TransportSettings> {
@@ -38,16 +64,41 @@ pub struct ServerSendEvent<S: TransportSettings> {
     pub msg: S::S2C,
 }
 
+fn recv_events<S: TransportSettings, T: ServerTransport<S> + Resource>(
+    mut transport: ResMut<T>,
+    mut clients: ResMut<ClientSet>,
+    mut events: EventWriter<ServerTransportEvent>,
+    mut errors: EventWriter<ServerTransportError>,
+) {
+    while let Some(result) = transport.recv_events() {
+        match result {
+            Ok(event) => {
+                match event {
+                    ServerTransportEvent::Connect { id } => clients.0.insert(id),
+                    ServerTransportEvent::Disconnect { id } => clients.0.remove(&id),
+                };
+                events.send(event);
+            }
+            Err(err) => errors.send(err),
+        }
+    }
+}
+
 fn recv<S: TransportSettings, T: ServerTransport<S> + Resource>(
     mut transport: ResMut<T>,
+    clients: Res<ClientSet>,
     mut recv: EventWriter<ServerRecvEvent<S>>,
     mut errors: EventWriter<ServerTransportError>,
 ) {
-    for from in transport.clients() {
-        while let Some(result) = transport.recv(from) {
+    for from in clients.0.iter() {
+        while let Some(result) = transport.recv(*from) {
             match result {
-                Ok(msg) => recv.send(ServerRecvEvent { from, msg }),
-                Err(err) => errors.send(err),
+                Ok(msg) => recv.send(ServerRecvEvent { from: *from, msg }),
+                Err(err) => {
+                    errors.send(err);
+                    // after the first error, stop processing this client's inputs (for this frame at least)
+                    break;
+                }
             }
         }
     }
