@@ -1,3 +1,6 @@
+#[cfg(feature = "bevy")]
+pub mod plugin;
+
 use anyhow::Result;
 
 use crate::{ClientId, DisconnectReason, TransportSettings};
