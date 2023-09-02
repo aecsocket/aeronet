@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use aeronet::{
     ClientId, ClientSet, ClientTransportPlugin, Message, ServerTransportEvent,
-    ServerTransportPlugin, TransportSettings, ServerTransportError,
+    ServerTransportPlugin, TransportSettings,
 };
 use aeronet_channel::{ChannelClientTransport, ChannelServerTransport};
 use bevy::{app::ScheduleRunnerPlugin, prelude::*, log::LogPlugin};
@@ -104,13 +104,15 @@ mod client {
         }
     }
 
-    pub fn should_disconnect(time: Res<Time>) -> bool {
-        time.elapsed_seconds() > 5.0
+    pub fn should_disconnect(time: Res<Time>, client: Option<Res<ClientTransport>>) -> bool {
+        time.elapsed_seconds() > 5.0 && client.is_some()
     }
 
-    pub fn disconnect(mut server_tx: ResMut<ServerTransport>, client_id: Res<ConnectedClientId>) {
+    pub fn disconnect(mut commands: Commands, mut server_tx: ResMut<ServerTransport>, client_id: Res<ConnectedClientId>) {
         info!("Disconnecting");
         server_tx.disconnect(client_id.0);
+        commands.remove_resource::<ClientTransport>();
+        commands.remove_resource::<ConnectedClientId>();
     }
 }
 
