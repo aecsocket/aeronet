@@ -31,7 +31,7 @@ pub enum DisconnectReason {
 
 pub trait Message: 'static + Send + Sync + Clone {}
 
-impl Message for () {}
+impl<T> Message for T where T: 'static + Send + Sync + Clone {}
 
 pub trait TransportSettings: 'static + Send + Sync {
     type C2S: Message;

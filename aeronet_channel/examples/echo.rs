@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use aeronet::{
-    ClientId, ClientSet, ClientTransportPlugin, Message, ServerTransportEvent,
+    ClientId, ClientSet, ClientTransportPlugin, ServerTransportEvent,
     ServerTransportPlugin, TransportSettings,
 };
 use aeronet_channel::{ChannelClientTransport, ChannelServerTransport};
@@ -18,14 +18,10 @@ pub enum C2S {
     Ping(String),
 }
 
-impl Message for C2S {}
-
 #[derive(Debug, Clone)]
 pub enum S2C {
     Pong(String),
 }
-
-impl Message for S2C {}
 
 impl TransportSettings for AppTransportSettings {
     type C2S = C2S;
