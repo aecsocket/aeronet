@@ -4,13 +4,18 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-bevy = [ "dep:bevy" ]
+bevy = [ "aeronet/bevy", "dep:bevy" ]
 
 [dependencies]
 aeronet = { path = "..", version = "0.1.0" }
 thiserror = "1.0.47"
 anyhow = "1.0.75"
-bytes = "1.4.0"
+derivative = "2.2.0"
 bevy = { version = "0.11.2", default-features = false, optional = true }
 
 crossbeam-channel = "0.5.8"
+
+[[example]]
+name = "echo"
+path = "examples/echo.rs"
+required-features = [ "bevy" ]

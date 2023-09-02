@@ -1,27 +1,29 @@
-use aeronet::{ClientTransport, ClientTransportError};
-use anyhow::anyhow;
-use bytes::Bytes;
+use aeronet::{ClientTransport, ClientTransportError, TransportSettings};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
+
+use crate::ChannelDisconnectedError;
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct ChannelClientTransport {
-    pub(crate) send: Sender<Bytes>,
-    pub(crate) recv: Receiver<Bytes>,
+pub struct ChannelClientTransport<S: TransportSettings> {
+    pub(crate) send: Sender<S::C2S>,
+    pub(crate) recv: Receiver<S::S2C>,
 }
 
-impl ClientTransport for ChannelClientTransport {
-    fn recv(&mut self) -> Option<Result<Bytes, ClientTransportError>> {
+impl<S: TransportSettings> ClientTransport<S> for ChannelClientTransport<S> {
+    fn recv(&mut self) -> Option<Result<S::S2C, ClientTransportError>> {
         match self.recv.try_recv() {
             Ok(msg) => Some(Ok(msg)),
             Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => Some(Err(anyhow!("channel disconnected").into())),
+            Err(TryRecvError::Disconnected) => Some(Err(ClientTransportError::Recv(
+                ChannelDisconnectedError.into(),
+            ))),
         }
     }
 
-    fn send(&mut self, msg: impl Into<Bytes>) -> Result<(), ClientTransportError> {
+    fn send(&mut self, msg: impl Into<S::C2S>) -> Result<(), ClientTransportError> {
         self.send
             .try_send(msg.into())
-            .map_err(|err| anyhow!(err).into())
+            .map_err(|err| ClientTransportError::Send(err.into()))
     }
 }

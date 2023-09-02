@@ -1,20 +1,25 @@
-use bytes::Bytes;
-
-use crate::ClientId;
+use crate::{ClientId, TransportSettings};
 
 #[derive(Debug, thiserror::Error)]
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
 pub enum ServerTransportError {
-    #[error("no client with id {id}")]
+    #[error("no client with id `{id}`")]
     NoClient { id: ClientId },
-    #[error("internal error")]
-    Internal(
-        #[from]
+    #[error("failed to receive data from client `{from}`")]
+    Recv {
+        from: ClientId,
         #[source]
-        anyhow::Error,
-    ),
+        source: anyhow::Error,
+    },
+    #[error("failed to send data to client `{to}`")]
+    Send {
+        to: ClientId,
+        #[source]
+        source: anyhow::Error,
+    },
 }
 
-pub trait ServerTransport {
+pub trait ServerTransport<S: TransportSettings> {
     /// This function deliberately does not return an iterator, because that would mean that while
     /// iterating, a shared reference to this transport would be kept. A typical usage pattern is
     /// ```ignore
@@ -27,11 +32,7 @@ pub trait ServerTransport {
     /// iterating over it.
     fn clients(&self) -> Vec<ClientId>;
 
-    fn recv(&mut self, client_id: ClientId) -> Option<Result<Bytes, ServerTransportError>>;
+    fn recv(&mut self, from: ClientId) -> Option<Result<S::C2S, ServerTransportError>>;
 
-    fn send(
-        &mut self,
-        client_id: ClientId,
-        msg: impl Into<Bytes>,
-    ) -> Result<(), ServerTransportError>;
+    fn send(&mut self, to: ClientId, msg: impl Into<S::S2C>) -> Result<(), ServerTransportError>;
 }
