@@ -21,7 +21,10 @@ bevy = { version = "0.11.2", default-features = false, optional = true }
 
 h3 = { git = "https://github.com/hyperium/h3.git", rev = "a57ed22" }
 
+[dev-dependencies]
+bevy = "0.11.2"
+
 [[example]]
-name = "echo"
-path = "examples/echo.rs"
+name = "client"
+path = "examples/client.rs"
 required-features = [ "bevy" ]
