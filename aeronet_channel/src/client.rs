@@ -7,6 +7,13 @@ use aeronet::{ClientTransport, ClientTransportEvent, DisconnectReason, Transport
 use anyhow::Result;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
+/// A client transport which uses [`crossbeam-channel`](https://docs.rs/crossbeam-channel) MPSC
+/// senders and receivers to transmit data.
+/// 
+/// **Note:** you cannot construct this struct directly. Instead, you must use
+/// [`ChannelServerTransport::connect`] to construct a client transport.
+/// 
+/// See the [crate docs](./index.html) details.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelClientTransport<S: TransportSettings> {

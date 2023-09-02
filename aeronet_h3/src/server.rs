@@ -39,8 +39,8 @@ impl<S: TransportSettings> H3ServerTransport<S> {
 }
 
 impl<S: TransportSettings> ServerTransport<S> for H3ServerTransport<S> {
-    fn pop_event(&mut self) -> Result<Option<ServerTransportEvent>, anyhow::Error> {
-        Ok(None)
+    fn pop_event(&mut self) -> Option<ServerTransportEvent> {
+        None
     }
 
     fn recv(&mut self, from: aeronet::ClientId) -> Result<Option<S::C2S>, anyhow::Error> {
@@ -48,6 +48,10 @@ impl<S: TransportSettings> ServerTransport<S> for H3ServerTransport<S> {
     }
 
     fn send(&mut self, to: aeronet::ClientId, msg: impl Into<S::S2C>) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+
+    fn disconnect(&mut self, client: aeronet::ClientId) -> anyhow::Result<()> {
         Ok(())
     }
 }
