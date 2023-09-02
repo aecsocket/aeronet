@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use aeronet::{
-    Arena, ClientId, ServerTransport, ServerTransportError, ServerTransportEvent, TransportSettings,
+    Arena, ClientId, ServerTransport, ServerTransportError, ServerTransportEvent, TransportSettings, InvalidClientError,
 };
 use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
 
@@ -44,34 +44,28 @@ impl<S: TransportSettings> ChannelServerTransport<S> {
 }
 
 impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
-    fn recv_events(&mut self) -> Option<Result<ServerTransportEvent, ServerTransportError>> {
-        self.events.pop_front().map(|e| Ok(e))
+    fn recv_events(&mut self) -> Result<Option<ServerTransportEvent>, anyhow::Error> {
+        Ok(self.events.pop_front())
     }
 
-    fn recv(&mut self, from: ClientId) -> Option<Result<S::C2S, ServerTransportError>> {
+    fn recv(&mut self, from: ClientId) -> Result<Option<S::C2S>, anyhow::Error> {
         let Some((_, recv)) = self.clients.get(from.0) else {
-            return Some(Err(ServerTransportError::NoClient { id: from }));
+            return Err(InvalidClientError(from).into());
         };
 
         match recv.try_recv() {
-            Ok(msg) => Some(Ok(msg)),
-            Err(TryRecvError::Empty) => None,
-            Err(err) => Some(Err(ServerTransportError::Recv {
-                from,
-                source: err.into(),
-            })),
+            Ok(msg) => Ok(Some(msg)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(err) => Err(err.into()),
         }
     }
 
-    fn send(&mut self, to: ClientId, msg: impl Into<S::S2C>) -> Result<(), ServerTransportError> {
+    fn send(&mut self, to: ClientId, msg: impl Into<S::S2C>) -> Result<(), anyhow::Error> {
         let Some((send, _)) = self.clients.get(to.0) else {
-            return Err(ServerTransportError::NoClient { id: to });
+            return Err(InvalidClientError(to).into());
         };
 
         send.try_send(msg.into())
-            .map_err(|err| ServerTransportError::Send {
-                to,
-                source: err.into(),
-            })
+            .map_err(|err| err.into())
     }
 }

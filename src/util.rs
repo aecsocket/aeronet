@@ -12,6 +12,10 @@ impl Display for ClientId {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("no client with id `{0}`")]
+pub struct InvalidClientError(pub ClientId);
+
 pub struct PrettyError<'a, E>(&'a E);
 
 impl<E: std::error::Error> Display for PrettyError<'_, E> {

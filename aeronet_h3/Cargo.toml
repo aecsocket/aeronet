@@ -20,6 +20,12 @@ derivative = "2.2.0"
 bevy = { version = "0.11.2", default-features = false, optional = true }
 
 h3 = { git = "https://github.com/hyperium/h3.git", rev = "a57ed22" }
+h3-quinn = { git = "https://github.com/hyperium/h3.git", rev = "a57ed22" }
+h3-webtransport = { git = "https://github.com/hyperium/h3.git", rev = "a57ed22" }
+quinn = { version = "0.10.2", features = [ "ring" ] }
+tokio = { version = "1.32.0", features = [ "rt" ] }
+bytes = "1.4.0"
+http = "0.2.9"
 
 [dev-dependencies]
 bevy = "0.11.2"

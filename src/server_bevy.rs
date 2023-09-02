@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use bevy::{prelude::*, utils::HashSet};
 
 use crate::{
-    util::AsPrettyError, ClientId, ServerTransport, ServerTransportError, ServerTransportEvent,
+    util::AsPrettyError, ClientId, ServerTransport, ServerTransportEvent,
     TransportSettings,
 };
 
@@ -64,23 +64,42 @@ pub struct ServerSendEvent<S: TransportSettings> {
     pub msg: S::S2C,
 }
 
+#[derive(Debug, thiserror::Error, Event)]
+pub enum ServerTransportError {
+    #[error("receiving client events")]
+    RecvEvents(#[source] anyhow::Error),
+    #[error("receiving data from client `{from}`")]
+    Recv {
+        from: ClientId,
+        #[source]
+        source: anyhow::Error,
+    },
+    #[error("sending data to client `{to}`")]
+    Send {
+        to: ClientId,
+        #[source]
+        source: anyhow::Error,
+    }
+}
+
 fn recv_events<S: TransportSettings, T: ServerTransport<S> + Resource>(
     mut transport: ResMut<T>,
     mut clients: ResMut<ClientSet>,
     mut events: EventWriter<ServerTransportEvent>,
     mut errors: EventWriter<ServerTransportError>,
 ) {
-    while let Some(result) = transport.recv_events() {
-        match result {
-            Ok(event) => {
+    loop {
+        match transport.recv_events() {
+            Ok(Some(event)) => {
                 match event {
                     ServerTransportEvent::Connect { id } => clients.0.insert(id),
                     ServerTransportEvent::Disconnect { id } => clients.0.remove(&id),
                 };
                 events.send(event);
             }
+            Ok(None) => break,
             Err(err) => {
-                errors.send(err);
+                errors.send(ServerTransportError::RecvEvents(err));
                 break;
             }
         }
@@ -94,11 +113,12 @@ fn recv<S: TransportSettings, T: ServerTransport<S> + Resource>(
     mut errors: EventWriter<ServerTransportError>,
 ) {
     for from in clients.0.iter() {
-        while let Some(result) = transport.recv(*from) {
-            match result {
-                Ok(msg) => recv.send(ServerRecvEvent { from: *from, msg }),
+        loop {
+            match transport.recv(*from) {
+                Ok(Some(msg)) => recv.send(ServerRecvEvent { from: *from, msg }),
+                Ok(None) => break,
                 Err(err) => {
-                    errors.send(err);
+                    errors.send(ServerTransportError::Recv { from: *from, source: err });
                     break;
                 }
             }
@@ -114,7 +134,7 @@ fn send<S: TransportSettings, T: ServerTransport<S> + Resource>(
     for ServerSendEvent { to, msg } in send.iter() {
         match transport.send(*to, msg.clone()) {
             Ok(_) => {}
-            Err(err) => errors.send(err),
+            Err(err) => errors.send(ServerTransportError::Send { to: *to, source: err }),
         }
     }
 }
