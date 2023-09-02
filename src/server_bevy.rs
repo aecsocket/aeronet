@@ -91,8 +91,8 @@ fn recv_events<S: TransportSettings, T: ServerTransport<S> + Resource>(
         match transport.recv_events() {
             Ok(Some(event)) => {
                 match event {
-                    ServerTransportEvent::Connect { id } => clients.0.insert(id),
-                    ServerTransportEvent::Disconnect { id } => clients.0.remove(&id),
+                    ServerTransportEvent::Connect { client: id } => clients.0.insert(id),
+                    ServerTransportEvent::Disconnect { client: id } => clients.0.remove(&id),
                 };
                 events.send(event);
             }

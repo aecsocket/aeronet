@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
 
 use aeronet::{
-    Arena, ClientId, InvalidClientError, ServerTransport, ServerTransportEvent, TransportSettings,
+    Arena, ClientId, InvalidClientError, ServerTransport, ServerTransportEvent, TransportSettings, ServerClientsError,
 };
+use anyhow::{Result, anyhow};
 use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
 
 use crate::ChannelClientTransport;
@@ -29,26 +30,17 @@ impl<S: TransportSettings> ChannelServerTransport<S> {
             recv: recv_s2c,
         };
         let id = ClientId(self.clients.insert((send_s2c, recv_c2s)));
-        self.events.push_back(ServerTransportEvent::Connect { id });
+        self.events.push_back(ServerTransportEvent::Connect { client: id });
         (transport, id)
-    }
-
-    pub fn disconnect(&mut self, id: ClientId) -> bool {
-        let existed = self.clients.remove(id.0).is_some();
-        if existed {
-            self.events
-                .push_back(ServerTransportEvent::Disconnect { id });
-        }
-        existed
     }
 }
 
 impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
-    fn recv_events(&mut self) -> Result<Option<ServerTransportEvent>, anyhow::Error> {
+    fn recv_events(&mut self) -> Result<Option<ServerTransportEvent>> {
         Ok(self.events.pop_front())
     }
 
-    fn recv(&mut self, from: ClientId) -> Result<Option<S::C2S>, anyhow::Error> {
+    fn recv(&mut self, from: ClientId) -> Result<Option<S::C2S>> {
         let Some((_, recv)) = self.clients.get(from.0) else {
             return Err(InvalidClientError(from).into());
         };
@@ -60,11 +52,21 @@ impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
         }
     }
 
-    fn send(&mut self, to: ClientId, msg: impl Into<S::S2C>) -> Result<(), anyhow::Error> {
+    fn send(&mut self, to: ClientId, msg: impl Into<S::S2C>) -> Result<()> {
         let Some((send, _)) = self.clients.get(to.0) else {
-            return Err(InvalidClientError(to).into());
+            return Err(ServerClientsError::Invalid(to).into());
         };
 
         send.try_send(msg.into()).map_err(|err| err.into())
+    }
+
+    fn disconnect(&mut self, client: ClientId) -> Result<()> {
+        match self.clients.remove(client.0) {
+            Some(_) => {
+                self.events.push_back(ServerTransportEvent::Disconnect { client });
+                Ok(())
+            }
+            None => Err(ServerClientsError::AlreadyRemoved(client).into()),
+        }
     }
 }

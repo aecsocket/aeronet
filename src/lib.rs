@@ -17,10 +17,10 @@ pub use client::ClientTransport;
 pub use client_bevy::{
     ClientRecvEvent, ClientSendEvent, ClientTransportError, ClientTransportPlugin,
 };
-pub use server::{ServerTransport, ServerTransportEvent};
+pub use server::{ServerTransport, ServerTransportEvent, ServerClientsError};
 #[cfg(feature = "bevy")]
 pub use server_bevy::{
     ClientSet, ServerRecvEvent, ServerSendEvent, ServerTransportError, ServerTransportPlugin,
 };
 pub use transport::{Message, TransportSettings};
-pub use util::{ClientId, InvalidClientError};
+pub use util::ClientId;
