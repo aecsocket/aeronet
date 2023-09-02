@@ -29,9 +29,16 @@ impl<S: TransportSettings, T: ClientTransport<S> + Resource> Plugin
             )
             .add_systems(
                 PreUpdate,
-                (pop_events::<S, T>, recv::<S, T>)
-                    .chain()
-                    .in_set(ClientTransportSet::Recv),
+                (
+                    // If `pop_events` ends up removing the client, it means that the connection
+                    // is closed - trying to receive any more data will be an error.
+                    // Therefore, we immediately remove the resource, then re-check if the resource
+                    // exists for the `recv` invocation.
+                    (pop_events::<S, T>, apply_deferred)
+                        .chain()
+                        .in_set(ClientTransportSet::Recv),
+                    recv::<S, T>.chain().in_set(ClientTransportSet::Recv),
+                ),
             )
             .add_systems(
                 PostUpdate,
@@ -65,10 +72,15 @@ pub enum ClientTransportError {
 }
 
 fn pop_events<S: TransportSettings, T: ClientTransport<S> + Resource>(
+    mut commands: Commands,
     mut transport: ResMut<T>,
     mut events: EventWriter<ClientTransportEvent>,
 ) {
     while let Some(event) = transport.pop_event() {
+        match event {
+            ClientTransportEvent::Disconnect { .. } => commands.remove_resource::<T>(),
+            _ => {}
+        };
         events.send(event);
     }
 }

@@ -40,9 +40,7 @@ impl<S: TransportSettings, T: ServerTransport<S> + Resource> Plugin
             )
             .add_systems(
                 PostUpdate,
-                send::<S, T>
-                    .chain()
-                    .in_set(ServerTransportSet::Send),
+                send::<S, T>.chain().in_set(ServerTransportSet::Send),
             )
             .add_systems(PostUpdate, log);
     }

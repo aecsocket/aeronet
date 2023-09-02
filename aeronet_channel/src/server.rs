@@ -7,7 +7,8 @@ use std::{
 };
 
 use aeronet::{
-    Arena, ClientId, ServerClientsError, ServerTransport, ServerTransportEvent, TransportSettings, DisconnectReason,
+    Arena, ClientId, DisconnectReason, ServerClientsError, ServerTransport, ServerTransportEvent,
+    TransportSettings,
 };
 use anyhow::Result;
 use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
@@ -90,7 +91,10 @@ impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
                     .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
                     .is_ok()
                 {
-                    self.events.push_back(ServerTransportEvent::Disconnect { client, reason: DisconnectReason::ByServer });
+                    self.events.push_back(ServerTransportEvent::Disconnect {
+                        client,
+                        reason: DisconnectReason::ByServer,
+                    });
                     Ok(())
                 } else {
                     Err(ServerClientsError::Disconnected.into())

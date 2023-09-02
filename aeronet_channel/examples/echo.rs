@@ -5,7 +5,11 @@ use aeronet::{
     ServerTransportPlugin, TransportSettings,
 };
 use aeronet_channel::{ChannelClientTransport, ChannelServerTransport};
-use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
+use bevy::{
+    app::ScheduleRunnerPlugin,
+    log::LogPlugin,
+    prelude::*,
+};
 
 pub struct AppTransportSettings;
 
@@ -51,7 +55,13 @@ fn main() {
             ServerTransportPlugin::<AppTransportSettings, AppServerTransport>::default(),
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, (client::update, server::update).chain())
+        //
+        .add_systems(
+            Update,
+            client::update.run_if(resource_exists::<AppClientTransport>()),
+        )
+        .add_systems(Update, server::update)
+        // send pings
         .insert_resource(client::PingTimer(Timer::new(
             Duration::from_millis(500),
             TimerMode::Repeating,
@@ -80,7 +90,10 @@ mod client {
 
     use super::*;
 
-    pub fn update(mut events: EventReader<ClientTransportEvent>, mut recv: EventReader<ClientRecvEvent>) {
+    pub fn update(
+        mut events: EventReader<ClientTransportEvent>,
+        mut recv: EventReader<ClientRecvEvent>,
+    ) {
         for event in events.iter() {
             info!("Event: {:?}", event);
         }
@@ -146,7 +159,9 @@ mod server {
         client_id: Res<ConnectedClientId>,
     ) {
         info!("Disconnecting");
-        disconnect.send(ServerDisconnectClientEvent { client: client_id.0 });
+        disconnect.send(ServerDisconnectClientEvent {
+            client: client_id.0,
+        });
         commands.remove_resource::<ConnectedClientId>();
     }
 }

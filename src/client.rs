@@ -9,10 +9,6 @@ pub enum ClientTransportEvent {
     Disconnect { reason: DisconnectReason },
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
-#[error("client is already disconnected")]
-pub struct ClientDisconnectedError;
-
 pub trait ClientTransport<S: TransportSettings> {
     fn pop_event(&mut self) -> Option<ClientTransportEvent>;
 
