@@ -14,14 +14,20 @@ use crate::{DisconnectReason, TransportSettings};
 pub enum ClientTransportEvent {
     /// The client connected to a server.
     Connect,
-    /// The client lost connection from its previously connected server; the reason why is
-    /// stored alongside.
-    Disconnect { reason: DisconnectReason },
+    /// The client lost connection from its previously connected server.
+    Disconnect {
+        /// The reason why the connection was lost.
+        reason: DisconnectReason,
+    },
 }
 
 /// The main client-side interface for transmitting data to, and receiving data from, a server.
+/// 
 /// The server may be local or remote; the transport is just an interface to allow communication
 /// between the two.
+/// 
+/// Consuming or sending data using this transport will never panic, however an error may be
+/// emitted.
 /// 
 /// # Consuming data
 /// 
@@ -34,14 +40,10 @@ pub enum ClientTransportEvent {
 /// During a single update cycle (e.g. a single frame in a game loop):
 /// - call [`Self::pop_event`] until all events are consumed
 ///   - if [`ClientTransportEvent::Disconnect`] is emitted, stop all processing
-/// - call [`Self::recv`] until either an error or `Ok(None)` is returned *before* your main game
-///   logic (in Bevy, this would be before the `Update` schedule, aka `PreUpdate`)
-/// - call [`Self::send`] for all the data you want to send *after* your main game logic (in Bevy,
-///   this would be after the `Update` schedule, aka `PostUpdate`)
-/// 
-/// See the [crate docs] for more details.
-/// 
-/// [crate docs]: index.html
+/// - call [`Self::recv`] until either an error or `Ok(None)`
+///   - do this *before* your main game logic (in Bevy, this would be in `PreUpdate`)
+/// - call [`Self::send`] for all the data you want to send
+///   - do this *after* your main game logic (in Bevy, this would be in `PostUpdate`)
 pub trait ClientTransport<S: TransportSettings> {
     /// Consumes a single event from this transport's event buffer.
     /// 

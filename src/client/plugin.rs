@@ -11,21 +11,11 @@ use crate::{util::AsPrettyError, ClientTransport, ClientTransportEvent, Transpor
 /// - [`ClientTransportEvent`] for consuming connect/disconnect events
 /// - [`ClientRecvEvent`] for consuming messages sent from the server
 /// - [`ClientSendEvent`] for sending messages to the server
-/// - [`ClientTransportError`] event for consuming errors that occurred while doing any of the
-///   above
+/// - [`ClientTransportError`] event for consuming errors that occurred while doing the above
 /// 
 /// This plugin is *not* required; you can implement receiving and sending messages entirely on
 /// your own if you wish. This may be useful when you want ownership of the received message before
 /// they are sent to the rest of your app, or when they are sent out.
-/// 
-/// # Examples
-/// 
-/// ```
-/// use bevy::prelude::*;
-/// 
-/// App::new()
-///     .add_plugins(ClientTransportPlugin::default());
-/// ```
 #[derive(derivative::Derivative)]
 #[derivative(Default)]
 pub struct ClientTransportPlugin<S, T> {
@@ -69,7 +59,7 @@ impl<S: TransportSettings, T: ClientTransport<S> + Resource> Plugin
     }
 }
 
-/// System sets used by [`ClientTransportPlugin`].
+/// System set used by [`ClientTransportPlugin`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, SystemSet)]
 pub enum ClientTransportSet {
     /// When receiving events and messages from a transport.
@@ -91,14 +81,14 @@ pub struct ClientRecvEvent<S: TransportSettings> {
     pub msg: S::S2C,
 }
 
-/// Snet when a client wants to send a message to the server.
+/// Snet when a system wants to send a message to the server.
 #[derive(Debug, Clone, Event)]
 pub struct ClientSendEvent<S: TransportSettings> {
     /// The message that the app wants to send using the transport.
     pub msg: S::C2S,
 }
 
-/// Sent when the transport experiences an error while updating.
+/// Sent when the transport experiences an error.
 #[derive(Debug, thiserror::Error, Event)]
 pub enum ClientTransportError {
     /// Some message could not be received from the server.

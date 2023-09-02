@@ -121,6 +121,9 @@ impl<T> Message for T where T: 'static + Send + Sync + Clone {}
 /// }
 /// ```
 pub trait TransportSettings: 'static + Send + Sync {
+    /// The client-to-server message type.
     type C2S: Message;
+
+    /// The server-to-client message type.
     type S2C: Message;
 }
