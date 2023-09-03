@@ -3,7 +3,7 @@ use std::sync::{
     Arc,
 };
 
-use aeronet::{ClientTransport, ClientTransportEvent, DisconnectReason, TransportSettings};
+use aeronet::{ClientTransport, ClientTransportEvent, DisconnectReason, TransportSettings, TransportStats};
 use anyhow::Result;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
@@ -61,5 +61,9 @@ impl<S: TransportSettings> ClientTransport<S> for ChannelClientTransport<S> {
 
     fn send(&mut self, msg: impl Into<S::C2S>) -> Result<()> {
         self.send.try_send(msg.into()).map_err(|err| err.into())
+    }
+
+    fn stats(&self) -> TransportStats {
+        TransportStats::default()
     }
 }

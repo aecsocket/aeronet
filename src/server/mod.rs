@@ -5,43 +5,7 @@ pub mod plugin;
 
 use anyhow::Result;
 
-use crate::{ClientId, DisconnectReason, TransportSettings};
-
-/// Sent when a [`ServerTransport`] receives some sort of non-message event, such as a connection
-/// or a disconnection.
-#[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
-pub enum ServerTransportEvent {
-    /// A client connected to this server.
-    Connect {
-        /// The ID of the client who connected.
-        client: ClientId,
-    },
-    /// A client lost connection to this server.
-    Disconnect {
-        /// The ID of the client who lost connection.
-        client: ClientId,
-        /// The reason why the connection was lost.
-        reason: DisconnectReason,
-    },
-}
-
-/// An error involving something about a server's connected client being invalid.
-///
-/// This may be used by [`ServerTransport`] implementations when a caller passes a [`ClientId`]
-/// which is invalid or does not exist in some form.
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum ServerClientsError {
-    /// Attempted to use a client who was already disconnected from the server.
-    #[error("client disconnected")]
-    Disconnected,
-    /// Attempted to use a client who does not exist.
-    ///
-    /// This may either be because the client's ID never existed, or because the client's ID was
-    /// removed at some point.
-    #[error("invalid client id")]
-    Invalid,
-}
+use crate::{ClientId, DisconnectReason, TransportSettings, TransportStats};
 
 /// The main server-side interface for transmitting data to, and receiving data from, multiple
 /// connected clients.
@@ -96,4 +60,45 @@ pub trait ServerTransport<S: TransportSettings> {
     ///
     /// This should be called in the order defined in the [trait docs](trait.ServerTransport.html).
     fn disconnect(&mut self, client: ClientId) -> Result<()>;
+
+    /// Gets statistics on a current server-client connection.
+    /// 
+    /// If the client is disconnected or otherwise invalid, `Err` is returned.
+    fn stats(&self, client: ClientId) -> Result<TransportStats>;
+}
+
+/// Sent when a [`ServerTransport`] receives some sort of non-message event, such as a connection
+/// or a disconnection.
+#[derive(Debug)]
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
+pub enum ServerTransportEvent {
+    /// A client connected to this server.
+    Connect {
+        /// The ID of the client who connected.
+        client: ClientId,
+    },
+    /// A client lost connection to this server.
+    Disconnect {
+        /// The ID of the client who lost connection.
+        client: ClientId,
+        /// The reason why the connection was lost.
+        reason: DisconnectReason,
+    },
+}
+
+/// An error involving something about a server's connected client being invalid.
+///
+/// This may be used by [`ServerTransport`] implementations when a caller passes a [`ClientId`]
+/// which is invalid or does not exist in some form.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ServerClientsError {
+    /// Attempted to use a client who was already disconnected from the server.
+    #[error("client disconnected")]
+    Disconnected,
+    /// Attempted to use a client who does not exist.
+    ///
+    /// This may either be because the client's ID never existed, or because the client's ID was
+    /// removed at some point.
+    #[error("invalid client id")]
+    Invalid,
 }

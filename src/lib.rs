@@ -21,4 +21,4 @@ pub use server::plugin::{
     ServerTransportPlugin,
 };
 pub use server::{ServerClientsError, ServerTransport, ServerTransportEvent};
-pub use transport::{ClientId, DisconnectReason, Message, TransportSettings};
+pub use transport::{ClientId, DisconnectReason, Message, TransportSettings, TransportStats};

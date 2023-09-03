@@ -5,21 +5,7 @@ pub mod plugin;
 
 use anyhow::Result;
 
-use crate::{DisconnectReason, TransportSettings};
-
-/// Sent when a [`ClientTransport`] receives some sort of non-message event, such as a connection
-/// or disconnection.
-#[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
-pub enum ClientTransportEvent {
-    /// The client connected to a server.
-    Connect,
-    /// The client lost connection from its previously connected server.
-    Disconnect {
-        /// The reason why the connection was lost.
-        reason: DisconnectReason,
-    },
-}
+use crate::{DisconnectReason, TransportSettings, TransportStats};
 
 /// The main client-side interface for transmitting data to, and receiving data from, a server.
 ///
@@ -62,4 +48,21 @@ pub trait ClientTransport<S: TransportSettings> {
     ///
     /// This should be called in the order defined in the [trait docs](trait.ClientTransport.html).
     fn send(&mut self, msg: impl Into<S::C2S>) -> Result<()>;
+
+    /// Gets statistics on the current client-server connection.
+    fn stats(&self) -> TransportStats;
+}
+
+/// Sent when a [`ClientTransport`] receives some sort of non-message event, such as a connection
+/// or disconnection.
+#[derive(Debug)]
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
+pub enum ClientTransportEvent {
+    /// The client connected to a server.
+    Connect,
+    /// The client lost connection from its previously connected server.
+    Disconnect {
+        /// The reason why the connection was lost.
+        reason: DisconnectReason,
+    },
 }

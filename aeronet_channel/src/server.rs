@@ -8,7 +8,7 @@ use std::{
 
 use aeronet::{
     Arena, ClientId, DisconnectReason, ServerClientsError, ServerTransport, ServerTransportEvent,
-    TransportSettings,
+    TransportSettings, TransportStats,
 };
 use anyhow::Result;
 use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
@@ -111,6 +111,16 @@ impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
                     Err(ServerClientsError::Disconnected.into())
                 }
             }
+            None => Err(ServerClientsError::Invalid.into()),
+        }
+    }
+
+    fn stats(&self, client: ClientId) -> Result<TransportStats> {
+        match self.clients.get(client.into_raw()) {
+            Some(ClientData { connected, .. }) if connected.load(Ordering::SeqCst) => {
+                Ok(TransportStats::default())
+            }
+            Some(_) => Err(ServerClientsError::Disconnected.into()),
             None => Err(ServerClientsError::Invalid.into()),
         }
     }
