@@ -62,7 +62,7 @@ pub trait ServerTransport<S: TransportSettings> {
     fn disconnect(&mut self, client: ClientId) -> Result<()>;
 
     /// Gets statistics on a current server-client connection.
-    /// 
+    ///
     /// If the client is disconnected or otherwise invalid, `Err` is returned.
     fn stats(&self, client: ClientId) -> Result<TransportStats>;
 }

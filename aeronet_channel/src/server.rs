@@ -61,6 +61,14 @@ impl<S: TransportSettings> ChannelServerTransport<S> {
             .push_back(ServerTransportEvent::Connect { client });
         (transport, client)
     }
+
+    fn client(&self, client: ClientId) -> Result<&ClientData<S::S2C, S::C2S>> {
+        match self.clients.get(client.into_raw()) {
+            Some(data) if data.connected.load(Ordering::SeqCst) => Ok(data),
+            Some(_) => Err(ServerClientsError::Disconnected.into()),
+            None => Err(ServerClientsError::Invalid.into()),
+        }
+    }
 }
 
 impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
@@ -69,29 +77,17 @@ impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
     }
 
     fn recv(&mut self, from: ClientId) -> Result<Option<S::C2S>> {
-        match self.clients.get(from.into_raw()) {
-            Some(ClientData {
-                recv, connected, ..
-            }) if connected.load(Ordering::SeqCst) => match recv.try_recv() {
-                Ok(msg) => Ok(Some(msg)),
-                Err(TryRecvError::Empty) => Ok(None),
-                Err(err) => Err(err.into()),
-            },
-            Some(_) => Err(ServerClientsError::Disconnected.into()),
-            None => Err(ServerClientsError::Invalid.into()),
+        let ClientData { recv, .. } = self.client(from)?;
+        match recv.try_recv() {
+            Ok(msg) => Ok(Some(msg)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(err) => Err(err.into()),
         }
     }
 
     fn send(&mut self, to: ClientId, msg: impl Into<S::S2C>) -> Result<()> {
-        match self.clients.get(to.into_raw()) {
-            Some(ClientData {
-                send, connected, ..
-            }) if connected.load(Ordering::SeqCst) => {
-                send.try_send(msg.into()).map_err(|err| err.into())
-            }
-            Some(_) => Err(ServerClientsError::Disconnected.into()),
-            None => Err(ServerClientsError::Invalid.into()),
-        }
+        let ClientData { send, .. } = self.client(to)?;
+        send.try_send(msg.into()).map_err(|err| err.into())
     }
 
     fn disconnect(&mut self, client: ClientId) -> Result<()> {
@@ -116,12 +112,7 @@ impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
     }
 
     fn stats(&self, client: ClientId) -> Result<TransportStats> {
-        match self.clients.get(client.into_raw()) {
-            Some(ClientData { connected, .. }) if connected.load(Ordering::SeqCst) => {
-                Ok(TransportStats::default())
-            }
-            Some(_) => Err(ServerClientsError::Disconnected.into()),
-            None => Err(ServerClientsError::Invalid.into()),
-        }
+        let _ = self.client(client)?;
+        Ok(TransportStats::default())
     }
 }

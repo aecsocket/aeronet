@@ -44,14 +44,14 @@ pub enum DisconnectReason {
 }
 
 /// Statistics for a client/server connection over a transport.
-/// 
+///
 /// These can be obtained by either [`ClientTransport::stats`] or [`ClientTransport::stats`],
 /// depending on which side you are currently working with.
 #[derive(Debug, Clone, Default)]
 pub struct TransportStats {
     /// The round-trip time (or "ping") of a connection, describing how long it takes to get info
     /// to and from the other end. This is measured in seconds.
-    /// 
+    ///
     /// If there is no reasonable RTT value for this channel, `0.0` is used.
     #[doc(alias = "ping")]
     pub rtt: f64,

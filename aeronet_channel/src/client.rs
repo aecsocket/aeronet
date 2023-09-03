@@ -3,7 +3,9 @@ use std::sync::{
     Arc,
 };
 
-use aeronet::{ClientTransport, ClientTransportEvent, DisconnectReason, TransportSettings, TransportStats};
+use aeronet::{
+    ClientTransport, ClientTransportEvent, DisconnectReason, TransportSettings, TransportStats,
+};
 use anyhow::Result;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
