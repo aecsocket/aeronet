@@ -24,7 +24,7 @@ pub struct ChannelClientTransport<S: TransportSettings> {
     send: Sender<S::C2S>,
     recv: Receiver<S::S2C>,
     connected: Arc<AtomicBool>,
-    last_connected: bool,
+    last_connected: Option<bool>,
 }
 
 impl<S: TransportSettings> ChannelClientTransport<S> {
@@ -34,7 +34,7 @@ impl<S: TransportSettings> ChannelClientTransport<S> {
             send,
             recv,
             connected: connected.clone(),
-            last_connected: true,
+            last_connected: None,
         };
         (this, connected)
     }
@@ -43,13 +43,16 @@ impl<S: TransportSettings> ChannelClientTransport<S> {
 impl<S: TransportSettings> ClientTransport<S> for ChannelClientTransport<S> {
     fn pop_event(&mut self) -> Option<ClientTransportEvent> {
         let connected = self.connected.load(Ordering::SeqCst);
-        if connected != self.last_connected {
-            self.last_connected = connected;
-            Some(ClientTransportEvent::Disconnect {
-                reason: DisconnectReason::ByServer,
-            })
-        } else {
-            None
+        match self.last_connected {
+            None => {
+                self.last_connected = Some(true);
+                Some(ClientTransportEvent::Connect)
+            }
+            Some(last_connected) if last_connected != connected => {
+                self.last_connected = Some(connected);
+                Some(ClientTransportEvent::Disconnect { reason: DisconnectReason::ByServer })
+            }
+            Some(_) => None
         }
     }
 
