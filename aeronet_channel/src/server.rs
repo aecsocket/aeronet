@@ -91,23 +91,16 @@ impl<S: TransportSettings> ServerTransport<S> for ChannelServerTransport<S> {
     }
 
     fn disconnect(&mut self, client: ClientId) -> Result<()> {
-        match self.clients.remove(client.into_raw()) {
-            Some(data) => {
-                if data
-                    .connected
-                    .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-                    .is_ok()
-                {
-                    self.events.push_back(ServerTransportEvent::Disconnect {
-                        client,
-                        reason: DisconnectReason::ByServer,
-                    });
-                    Ok(())
-                } else {
-                    Err(ServerClientsError::Disconnected.into())
-                }
-            }
-            None => Err(ServerClientsError::Invalid.into()),
+        let ClientData { connected, .. } = self.client(client)?;
+        // mark the client as disconnected first, then remove the entry (and drop channels)
+        // avoid race condition where a client has `connected = true` but its channels are disconnected
+        // TODO: the above isn't actually true
+        if connected.compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            self.clients.remove(client.into_raw());
+            self.events.push_back(ServerTransportEvent::Disconnect { client, reason: DisconnectReason::ByServer });
+            Ok(())
+        } else {
+            Err(ServerClientsError::Disconnected.into())
         }
     }
 

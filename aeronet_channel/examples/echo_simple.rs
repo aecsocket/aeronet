@@ -48,10 +48,7 @@ fn main() {
         ))
         .add_systems(Startup, setup)
         //
-        .add_systems(
-            Update,
-            client::update.run_if(resource_exists::<AppClientTransport>()),
-        )
+        .add_systems(Update, client::update)
         .add_systems(Update, server::update)
         // send pings
         .insert_resource(client::PingTimer(Timer::new(
