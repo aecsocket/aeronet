@@ -12,7 +12,7 @@ use crate::{util::AsPrettyError, ClientTransport, ClientTransportEvent, Transpor
 /// - [`ClientRecvEvent`] for consuming messages sent from the server
 /// - [`ClientSendEvent`] for sending messages to the server
 /// - [`ClientTransportError`] event for consuming errors that occurred while doing the above
-/// 
+///
 /// The systems this plugin adds follow the order described in the [`ClientTransport`] docs.
 /// In addition, when the transport is disconnected from the server, the `T` resource is
 /// automatically removed.
