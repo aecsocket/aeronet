@@ -25,6 +25,13 @@ tokio = { version = "1.32.0", default-features = false, features = [ "rt", "rt-m
 
 [dev-dependencies]
 bevy = "0.11.2"
+anyhow = "1.0.71"
+base64 = "0.21.0"
+rcgen = "0.11.1"
+ring = "0.16.20"
+time = "0.3.21"
+tokio = { version = "1.28.1", features = ["rt", "rt-multi-thread", "macros"] }
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 [[example]]
 name = "echo_client"
