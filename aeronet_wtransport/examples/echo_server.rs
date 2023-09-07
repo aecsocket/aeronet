@@ -22,13 +22,11 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
 
 fn create(rt: &AsyncRuntime) -> Result<WebTransportServer> {
     let bind_addr = "[::1]:4433".parse::<SocketAddr>()?;
-
-    let cert = std::fs::read("./aeronet_wtransport/examples/cert.pem")?;
-    let private_key = std::fs::read("./aeronet_wtransport/examples/key.pem")?;
-
+    let cert = Certificate::load("target/cert.pem", "target/key.pem")?;
+    
     let config = ServerConfig::builder()
         .with_bind_address(bind_addr)
-        .with_certificate(Certificate::new(vec![cert], private_key))
+        .with_certificate(cert)
         .build();
 
     Ok(WebTransportServer::new(config, &rt.0))
