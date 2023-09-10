@@ -62,11 +62,23 @@ pub enum ServerError {
         #[source]
         source: ConnectionError,
     },
+    #[error("failed to parse datagram from {client}")]
+    ParseDatagram {
+        client: ClientId,
+        #[source]
+        source: anyhow::Error,
+    },
     #[error("failed to receive stream data from {client}")]
     RecvStream {
         client: ClientId,
         #[source]
         source: StreamReadError,
+    },
+    #[error("failed to parse stream data from {client}")]
+    ParseStream {
+        client: ClientId,
+        #[source]
+        source: anyhow::Error,
     },
     #[error("failed to send datagram to {client}")]
     SendDatagram {
@@ -182,15 +194,20 @@ async fn session<C: TransportConfig>(
             // recv from client, send to sync server
             result = conn.receive_datagram() => {
                 match result {
-                    Ok(msg) => {
-                        let msg: &[u8] = msg.as_ref();
+                    Ok(msg) => match C::C2S::from_payload(msg.as_ref()) {
+                        Ok(msg) => {
+                            let _ = send.send(A2S::Recv { client, msg }).await;
+                        }
+                        Err(source) => return Err(ServerError::ParseDatagram { client, source }),
                     },
                     Err(source) => return Err(ServerError::RecvDatagram { client, source }),
                 }
             }
             result = bi_recv.read(&mut buf) => {
                 match result {
-                    Ok(_) => {},
+                    Ok(read_bytes) => {
+                        
+                    }
                     Err(source) => return Err(ServerError::RecvStream { client, source }),
                 }
             }
@@ -200,12 +217,12 @@ async fn session<C: TransportConfig>(
                     Ok(S2A::Send { client: target, msg }) if target == client => {
                         match msg.stream() {
                             TransportStream::Datagram => {
-                                if let Err(source) = conn.send_datagram(msg.payload()) {
+                                if let Err(source) = conn.send_datagram(msg.as_payload()) {
                                     let _ = send.send(A2S::Error(ServerError::SendDatagram { client, source })).await;
                                 }
                             }
                             TransportStream::Bi => {
-                                if let Err(source) = bi_send.write(msg.payload()).await {
+                                if let Err(source) = bi_send.write(msg.as_payload()).await {
                                     let _ = send.send(A2S::Error(ServerError::SendStream { client, source })).await;
                                 }
                             }

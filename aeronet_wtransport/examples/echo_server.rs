@@ -5,17 +5,23 @@ use std::{
 
 use aeronet_wtransport::{
     server::{WebTransportServer, WebTransportServerPlugin},
-    AsyncRuntime, TransportConfig,
+    AsyncRuntime, TransportConfig, Message,
 };
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
+use serde::{Serialize, Deserialize};
 
 pub struct AppTransportConfig;
 
 impl TransportConfig for AppTransportConfig {
     type C2S = ();
     type S2C = ();
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum C2S {
+
 }
 
 fn main() {

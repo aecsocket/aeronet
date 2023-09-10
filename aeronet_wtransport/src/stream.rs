@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use anyhow::Result;
+
 // clients
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -26,13 +28,19 @@ impl ClientId {
 // streams
 
 pub trait Message: 'static + Send + Sync + Clone {
-    fn payload(&self) -> &[u8];
+    fn from_payload(payload: &[u8]) -> Result<Self>;
+
+    fn as_payload(&self) -> &[u8];
 
     fn stream(&self) -> TransportStream;
 }
 
 impl Message for () {
-    fn payload(&self) -> &[u8] {
+    fn from_payload(_: &[u8]) -> Result<Self> {
+        Ok(())
+    }
+
+    fn as_payload(&self) -> &[u8] {
         &[]
     }
 
