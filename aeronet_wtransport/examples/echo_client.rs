@@ -15,7 +15,9 @@ fn main() {
 }
 
 async fn send_err<E: std::error::Error>(errors: &mut mpsc::Sender<E>, err: E) {
-    let Err(err) = errors.send(err).await else { return; };
+    let Err(err) = errors.send(err).await else {
+        return;
+    };
     let err = err.0;
     warn!("Failed to send error on disconnected channel: {err:#}");
 }
@@ -24,7 +26,9 @@ async fn send_on_err<E: std::error::Error>(
     errors: &mut mpsc::Sender<E>,
     block: impl FnOnce() -> Result<(), E>,
 ) {
-    let Err(err) = block() else { return; };
+    let Err(err) = block() else {
+        return;
+    };
     send_err(errors, err).await;
 }
 
@@ -35,7 +39,7 @@ fn setup(rt: Res<AsyncRuntime>) {
 
     let config = ClientConfig::builder()
         .with_bind_address(bind_addr)
-        .with_native_certs()
+        .with_no_cert_validation()
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(30)))
         .expect("timeout is valid")

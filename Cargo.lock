@@ -108,6 +108,7 @@ dependencies = [
  "derivative",
  "rcgen",
  "ring",
+ "serde",
  "thiserror",
  "time",
  "tokio",

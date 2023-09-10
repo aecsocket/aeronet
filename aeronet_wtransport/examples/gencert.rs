@@ -15,7 +15,7 @@ use std::io::Write;
 use time::Duration;
 use time::OffsetDateTime;
 
-// chromium --origin-to-force-quic-on=localhost:4433 --ignore-certificate-errors-spki-list=07FUycDZ6Pbwr/Og3lLbfMEBIdkLTuXq1U1PYKE8r60=
+// chromium --origin-to-force-quic-on=localhost:25565 --ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
 
 fn main() {
     const COMMON_NAME: &str = "localhost";
@@ -40,12 +40,12 @@ fn main() {
 
     let certificate = rcgen::Certificate::from_params(cert_params).unwrap();
 
-    fs::File::create("target/cert.pem")
+    fs::File::create("./aeronet_wtransport/examples/cert.pem")
         .unwrap()
         .write_all(certificate.serialize_pem().unwrap().as_bytes())
         .unwrap();
 
-    fs::File::create("target/key.pem")
+    fs::File::create("./aeronet_wtransport/examples/key.pem")
         .unwrap()
         .write_all(certificate.serialize_private_key_pem().as_bytes())
         .unwrap();
