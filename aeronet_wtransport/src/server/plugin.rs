@@ -8,10 +8,19 @@ use crate::{server::SyncServer, AsyncRuntime, TransportConfig};
 
 use super::A2S;
 
-#[derive(Debug, derivative::Derivative)]
-#[derivative(Default)]
-pub struct WebTransportServerPlugin<C: TransportConfig> {
+#[derive(Debug)]
+pub struct WebTransportServerPlugin<C> {
+    pub logging: bool,
     _phantom: PhantomData<C>,
+}
+
+impl<C> Default for WebTransportServerPlugin<C> {
+    fn default() -> Self {
+        Self {
+            logging: true,
+            _phantom: PhantomData::default(),
+        }
+    }
 }
 
 impl<T: TransportConfig> Plugin for WebTransportServerPlugin<T> {
@@ -20,6 +29,10 @@ impl<T: TransportConfig> Plugin for WebTransportServerPlugin<T> {
             PreUpdate,
             recv::<T>.run_if(resource_exists::<WebTransportServer<T>>()),
         );
+
+        if self.logging {
+            app.add_systems(PostUpdate, log);
+        }
     }
 }
 
@@ -68,3 +81,5 @@ fn recv<C: TransportConfig>(mut commands: Commands, mut server: ResMut<WebTransp
         }
     }
 }
+
+fn log() {}

@@ -1,60 +1,57 @@
-use std::fmt::Display;
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StreamC2S(pub(crate) StreamKind);
 
-use anyhow::Result;
+#[derive()]
+pub struct StreamS2C(pub(crate) StreamKind);
 
-// clients
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Reflect))]
-pub struct ClientId(usize);
-
-impl Display for ClientId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl ClientId {
-    pub fn from_raw(raw: usize) -> Self {
-        Self(raw)
-    }
-
-    pub fn into_raw(self) -> usize {
-        self.0
-    }
-}
-
-// streams
-
-pub trait Message: 'static + Send + Sync + Clone {
-    fn from_payload(payload: &[u8]) -> Result<Self>;
-
-    fn as_payload(&self) -> &[u8];
-
-    fn stream(&self) -> TransportStream;
-}
-
-impl Message for () {
-    fn from_payload(_: &[u8]) -> Result<Self> {
-        Ok(())
-    }
-
-    fn as_payload(&self) -> &[u8] {
-        &[]
-    }
-
-    fn stream(&self) -> TransportStream {
-        TransportStream::Datagram
-    }
-}
-
-pub enum TransportStream {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum StreamKind {
     Datagram,
-    Bi,
+    Bi(usize),
+    Uni(usize),
 }
 
-pub trait TransportConfig: 'static + Send + Sync {
-    type C2S: Message;
-    type S2C: Message;
+#[derive(Debug, Clone, Default)]
+pub struct Streams {
+    pub(crate) bi: usize,
+    pub(crate) c2s: usize,
+    pub(crate) s2c: usize,
+}
+
+impl Streams {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn c2s_datagram(&self) -> StreamC2S {
+        StreamC2S(StreamKind::Datagram)
+    }
+
+    pub fn s2c_datagram(&self) -> StreamS2C {
+        StreamS2C(StreamKind::Datagram)
+    }
+
+    pub fn c2s_bi(&mut self) -> StreamC2S {
+        let index = self.bi;
+        self.bi += 1;
+        StreamC2S(StreamKind::Bi(index))
+    }
+
+    pub fn s2c_bi(&mut self) -> StreamS2C {
+        let index = self.bi;
+        self.bi += 1;
+        StreamS2C(StreamKind::Bi(index))
+    }
+
+    pub fn c2s_uni(&mut self) -> StreamC2S {
+        let index = self.c2s;
+        self.c2s += 1;
+        StreamC2S(StreamKind::Uni(index))
+    }
+
+    pub fn s2c_uni(&mut self) -> StreamS2C {
+        let index = self.s2c;
+        self.s2c += 1;
+        StreamS2C(StreamKind::Uni(index))
+    }
 }
