@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use anyhow::Result;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -23,13 +23,11 @@ impl ClientId {
     }
 }
 
-pub trait Message: 'static + Send + Sync + Clone {
-    fn from_payload(payload: &[u8]) -> Result<Self>;
-
-    fn as_payload(&self) -> &[u8];
-}
-
 pub trait TransportConfig: 'static + Send + Sync {
     type C2S: Message;
     type S2C: Message;
 }
+
+pub trait Message: Send + Sync + Clone + Serialize + DeserializeOwned {}
+
+impl<T: Send + Sync + Clone + Serialize + DeserializeOwned> Message for T {}

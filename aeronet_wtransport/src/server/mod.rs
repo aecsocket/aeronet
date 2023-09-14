@@ -12,10 +12,41 @@ use tokio::sync::{broadcast, mpsc};
 use wtransport::{
     endpoint::IncomingSession,
     error::{ConnectionError, StreamOpeningError},
-    Endpoint, ServerConfig, SendStream, RecvStream,
+    Connection, Endpoint, RecvStream, SendStream, ServerConfig, datagram::Datagram,
 };
 
-use crate::{ClientId, Message, StreamC2S, Streams, TransportConfig, stream::StreamKind};
+use crate::{
+    stream::{StreamKind, Streams},
+    ClientId, TransportConfig,
+};
+
+// stream management
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StreamS2C(StreamKind);
+
+#[derive(Debug, Clone)]
+pub struct ServerStreams(pub(crate) Streams);
+
+impl ServerStreams {
+    pub fn new() -> Self {
+        Self(Streams::default())
+    }
+
+    pub fn datagram(&mut self) -> StreamS2C {
+        StreamS2C(self.0.datagram())
+    }
+
+    pub fn bi(&mut self) -> StreamS2C {
+        StreamS2C(self.0.bi())
+    }
+
+    pub fn uni(&mut self) -> StreamS2C {
+        StreamS2C(self.0.uni_s2c())
+    }
+}
+
+// messages
 
 const BUFFER_SIZE: usize = 128;
 
@@ -33,7 +64,7 @@ pub enum A2S<C2S> {
 pub enum S2A<S2C> {
     Send {
         client: ClientId,
-        stream: StreamC2S,
+        stream: StreamS2C,
         msg: S2C,
     },
     Disconnect {
@@ -43,8 +74,10 @@ pub enum S2A<S2C> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
+    // creation
     #[error("failed to create endpoint")]
     CreateEndpoint(#[source] io::Error),
+    // sessions
     #[error("failed to receive incoming session from {client}")]
     RecvSession {
         client: ClientId,
@@ -75,17 +108,25 @@ pub enum ServerError {
         #[source]
         source: ConnectionError,
     },
+    // receiving
+    #[error("failed to deserialize data received from {client}")]
+    Deserialize {
+        client: ClientId,
+        #[source]
+        source: Box<bincode::ErrorKind>,
+    },
     #[error("failed to receive data from {client}")]
     Recv {
         client: ClientId,
         #[source]
-        source: anyhow::Error,
+        source: ConnectionError,
     },
-    #[error("failed to parse data from {client}")]
-    Parse {
+    // sending
+    #[error("failed to serialize data to send to {client}")]
+    Serialize {
         client: ClientId,
         #[source]
-        source: anyhow::Error,
+        source: Box<bincode::ErrorKind>,
     },
     #[error("failed to send data to {client}")]
     Send {
@@ -171,22 +212,23 @@ async fn listen<C: TransportConfig>(
         };
 
         let req = endpoint.accept().await;
+        let streams = streams.clone();
         let send = send_a2s.clone();
         let recv = send_s2a.subscribe();
-        // tokio::spawn(async move {
-        //     if let Err(err) = session::<C>(&streams, send.clone(), recv, req, client).await {
-        //         let _ = send.send(A2S::Error(err)).await;
-        //     }
-        //     let _ = send.send(A2S::Disconnect { client });
-        // });
+        tokio::spawn(async move {
+            if let Err(err) = session::<C>(streams, send.clone(), recv, req, client).await {
+                let _ = send.send(A2S::Error(err)).await;
+            }
+            let _ = send.send(A2S::Disconnect { client });
+        });
     }
 
     Ok(())
 }
 
 async fn session<C: TransportConfig>(
-    streams: &Streams,
-    send: mpsc::Sender<A2S<C::C2S>>,
+    streams: Streams,
+    mut send: mpsc::Sender<A2S<C::C2S>>,
     mut recv: broadcast::Receiver<S2A<C::S2C>>,
     req: IncomingSession,
     client: ClientId,
@@ -196,7 +238,7 @@ async fn session<C: TransportConfig>(
         .map_err(|source| ServerError::RecvSession { client, source })?;
     let _ = send.send(A2S::Incoming { client }).await;
 
-    let conn = conn
+    let mut conn = conn
         .accept()
         .await
         .map_err(|source| ServerError::AcceptSession { client, source })?;
@@ -237,25 +279,22 @@ async fn session<C: TransportConfig>(
     }))
     .await?;
 
+    let mut buf = [0u8; 0x10_000];
+
     loop {
         tokio::select! {
+            // recv from client, send to sync server
+            result = conn.receive_datagram() => {
+                if let Err(err) = recv_datagram::<C>(&mut send, client, result).await {
+                    let _ = send.send(A2S::Error(err)).await;
+                }
+            }
             // recv from sync server, send to client
             result = recv.recv() => {
                 match result {
                     Ok(S2A::Send { client: target, stream, msg }) if target == client => {
-                        let payload: &[u8];
-                        match stream.0 {
-                            StreamKind::Datagram => {
-                                conn.send_datagram(payload);
-                            }
-                            StreamKind::Bi(index) => {
-                                let (send, _) = &mut bi[index];
-                                send.write_all(payload);
-                            }
-                            StreamKind::Uni(index) => {
-                                let send = &mut s2c[index];
-                                send.write_all(payload);
-                            }
+                        if let Err(err) = send_msg::<C>(client, stream, &mut conn, &mut bi, &mut s2c, msg).await {
+                            let _ = send.send(A2S::Error(err)).await;
                         }
                     }
                     Ok(S2A::Disconnect { client: target }) if target == client => break,
@@ -263,15 +302,45 @@ async fn session<C: TransportConfig>(
                     Err(_) => break,
                 }
             }
-            // recv from client, send to sync server
-            result = conn.recv_datagram() => {
-                // AAAAAAAAAAA
-                match result {
-
-                }
-            }
         }
     }
 
     Ok(())
+}
+
+async fn recv_datagram<C: TransportConfig>(
+    send: &mut mpsc::Sender<A2S<C::C2S>>,
+    client: ClientId,
+    result: Result<Datagram, ConnectionError>,
+) -> Result<(), ServerError> {
+    let datagram = result
+        .map_err(|source| ServerError::Recv { client, source })?;
+    let msg: C::C2S = bincode::deserialize(&datagram)
+        .map_err(|source| ServerError::Deserialize { client, source })?;
+    let _ = send.send(A2S::Recv { client, msg }).await;
+    Ok(())
+}
+
+async fn send_msg<C: TransportConfig>(
+    client: ClientId,
+    stream: StreamS2C,
+    conn: &mut Connection,
+    bi: &mut [(SendStream, RecvStream)],
+    s2c: &mut [SendStream],
+    msg: C::S2C,
+) -> Result<(), ServerError> {
+    let payload =
+        bincode::serialize(&msg).map_err(|source| ServerError::Serialize { client, source })?;
+    let res: Result<_, anyhow::Error> = match stream.0 {
+        StreamKind::Datagram => conn.send_datagram(payload).map_err(|err| err.into()),
+        StreamKind::Bi(index) => {
+            let (send, _) = &mut bi[index];
+            send.write_all(&payload).await.map_err(|err| err.into())
+        }
+        StreamKind::Uni(index) => {
+            let send = &mut s2c[index];
+            send.write_all(&payload).await.map_err(|err| err.into())
+        }
+    };
+    res.map_err(|source| ServerError::Send { client, source })
 }

@@ -6,5 +6,4 @@ mod transport;
 
 #[cfg(feature = "bevy")]
 pub use runtime::AsyncRuntime;
-pub use stream::{StreamC2S, Streams};
 pub use transport::{ClientId, Message, TransportConfig};
