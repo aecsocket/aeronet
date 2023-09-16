@@ -1,35 +1,46 @@
-use std::{
-    net::{Ipv6Addr, SocketAddr},
-    time::Duration,
-};
+use std::time::Duration;
 
 use aeronet_wtransport::{
-    server::{WebTransportServer, WebTransportServerPlugin},
-    AsyncRuntime, Message, TransportConfig,
+    server::WtServerFrontend, AsyncRuntime, Message, ServerRecvEvent, Streams, TransportConfig,
+    WtServerPlugin,
 };
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
-use serde::{Deserialize, Serialize};
 use wtransport::{tls::Certificate, ServerConfig};
 
 pub struct AppTransportConfig;
 
 impl TransportConfig for AppTransportConfig {
-    type C2S = ();
-    type S2C = ();
+    type C2S = AppMessage;
+    type S2C = AppMessage;
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-enum C2S {}
+#[derive(Debug, Clone)]
+pub struct AppMessage(pub String);
+
+impl Message for AppMessage {
+    fn from_payload(payload: &[u8]) -> Result<Self> {
+        String::from_utf8(payload.to_owned().into_iter().collect())
+            .map(|s| AppMessage(s))
+            .map_err(|err| anyhow::Error::new(err))
+    }
+
+    fn into_payload(self) -> Result<Vec<u8>> {
+        Ok(self.0.into_bytes())
+    }
+}
+
+// chromium --origin-to-force-quic-on=localhost:25565 --ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
 
 fn main() {
     App::new()
         .add_plugins((
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
             LogPlugin::default(),
-            WebTransportServerPlugin::<AppTransportConfig>::default(),
+            WtServerPlugin::<AppTransportConfig>::default(),
         ))
         .add_systems(Startup, setup)
+        .add_systems(Update, recv_respond)
         .run();
 }
 
@@ -43,18 +54,31 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
     }
 }
 
-fn create(rt: &AsyncRuntime) -> Result<WebTransportServer<AppTransportConfig>> {
-    let bind_addr = SocketAddr::new(Ipv6Addr::LOCALHOST.into(), 25565);
+fn create(rt: &AsyncRuntime) -> Result<WtServerFrontend<AppTransportConfig>> {
     let cert = Certificate::load(
         "./aeronet_wtransport/examples/cert.pem",
         "./aeronet_wtransport/examples/key.pem",
     )?;
 
     let config = ServerConfig::builder()
-        .with_bind_address(bind_addr)
+        .with_bind_default(25565)
         .with_certificate(cert)
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    Ok(WebTransportServer::new(config, &rt.0))
+    let mut streams = Streams::new();
+    //streams.add_bi();
+    streams.add_c2s();
+
+    let (front, back) = aeronet_wtransport::server::create::<AppTransportConfig>(config, streams);
+    rt.0.spawn(async move {
+        back.listen().await;
+    });
+    Ok(front)
+}
+
+fn recv_respond(mut recv: EventReader<ServerRecvEvent<AppMessage>>) {
+    for ServerRecvEvent { client, msg } in recv.iter() {
+        info!("From {client}: {}", msg.0);
+    }
 }

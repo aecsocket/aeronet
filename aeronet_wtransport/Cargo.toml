@@ -12,6 +12,7 @@ license = "MIT OR Apache-2.0"
 [features]
 bevy = [ "dep:bevy", "aeronet/bevy" ]
 dangerous-configuration = [ "wtransport/dangerous-configuration" ]
+serde-bincode = [ "dep:serde", "dep:bincode" ]
 
 [dependencies]
 thiserror = "1.0.47"
@@ -20,11 +21,11 @@ bevy = { version = "0.11.2", default-features = false, optional = true }
 derivative = { version = "2.2.0", optional = true }
 
 aeronet = { path = "..", version = "0.1.0" }
-wtransport = "0.1.3"
+wtransport = "0.1.4"
 futures = "0.3.28"
 tokio = { version = "1.32.0", default-features = false, features = [ "rt", "rt-multi-thread" ] }
-serde = "1.0.188"
-bincode = "1.3.3"
+serde = { version = "1.0.188", optional = true }
+bincode = { version = "1.3.3", optional = true }
 
 [dev-dependencies]
 bevy = "0.11.2"

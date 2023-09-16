@@ -1,37 +1,50 @@
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum StreamKind {
-    Datagram,
-    Bi(usize),
-    Uni(usize),
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StreamId(pub(crate) usize);
+
+impl StreamId {
+    pub fn from_raw(raw: usize) -> Self {
+        Self(raw)
+    }
+
+    pub fn into_raw(self) -> usize {
+        self.0
+    }
 }
 
-#[derive(Debug, Clone, Default)]
-pub(crate) struct Streams {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Stream {
+    Datagram,
+    Bi(StreamId),
+    Uni(StreamId),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct Streams {
     pub(crate) bi: usize,
     pub(crate) c2s: usize,
     pub(crate) s2c: usize,
 }
 
 impl Streams {
-    pub(crate) fn datagram(&self) -> StreamKind {
-        StreamKind::Datagram
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub(crate) fn bi(&mut self) -> StreamKind {
-        let index = self.bi;
+    pub fn add_bi(&mut self) -> StreamId {
+        let id = StreamId(self.bi);
         self.bi += 1;
-        StreamKind::Bi(index)
+        id
     }
 
-    pub(crate) fn uni_c2s(&mut self) -> StreamKind {
-        let index = self.c2s;
+    pub fn add_c2s(&mut self) -> StreamId {
+        let id = StreamId(self.c2s);
         self.c2s += 1;
-        StreamKind::Uni(index)
+        id
     }
 
-    pub(crate) fn uni_s2c(&mut self) -> StreamKind {
-        let index = self.s2c;
+    pub fn add_s2c(&mut self) -> StreamId {
+        let id = StreamId(self.s2c);
         self.s2c += 1;
-        StreamKind::Uni(index)
+        id
     }
 }

@@ -15,8 +15,6 @@ use std::io::Write;
 use time::Duration;
 use time::OffsetDateTime;
 
-// chromium --origin-to-force-quic-on=localhost:25565 --ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
-
 fn main() {
     const COMMON_NAME: &str = "localhost";
 

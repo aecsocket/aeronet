@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use anyhow::Result;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -28,6 +28,19 @@ pub trait TransportConfig: 'static + Send + Sync {
     type S2C: Message;
 }
 
-pub trait Message: Send + Sync + Clone + Serialize + DeserializeOwned {}
+pub trait Message: Send + Sync + Clone {
+    fn from_payload(payload: &[u8]) -> Result<Self>;
 
-impl<T: Send + Sync + Clone + Serialize + DeserializeOwned> Message for T {}
+    fn into_payload(self) -> Result<Vec<u8>>;
+}
+
+#[cfg(feature = "serde-bincode")]
+impl<T: Send + Sync + Clone + serde::Serialize + serde::de::DeserializeOwned> Message for T {
+    fn from_payload(payload: &[u8]) -> Result<Self> {
+        bincode::deserialize(payload).map_err(|err| anyhow::Error::new(err))
+    }
+
+    fn into_payload(self) -> Result<Vec<u8>> {
+        bincode::serialize(&self).map_err(|err| anyhow::Error::new(err))
+    }
+}

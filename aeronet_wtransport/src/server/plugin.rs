@@ -1,20 +1,19 @@
-use std::marker::PhantomData;
+use std::{collections::HashMap, marker::PhantomData};
 
 use bevy::prelude::*;
-use tokio::{runtime::Runtime, sync::mpsc::error::TryRecvError};
-use wtransport::ServerConfig;
+use tokio::sync::mpsc::error::TryRecvError;
 
-use crate::{server::SyncServer, AsyncRuntime, TransportConfig};
+use crate::{server::WtServerFrontend, AsyncRuntime, ClientId, Stream, TransportConfig, ServerError};
 
-use super::A2S;
+use super::{B2F, F2B};
 
 #[derive(Debug)]
-pub struct WebTransportServerPlugin<C> {
+pub struct WtServerPlugin<C> {
     pub logging: bool,
     _phantom: PhantomData<C>,
 }
 
-impl<C> Default for WebTransportServerPlugin<C> {
+impl<C> Default for WtServerPlugin<C> {
     fn default() -> Self {
         Self {
             logging: true,
@@ -23,58 +22,122 @@ impl<C> Default for WebTransportServerPlugin<C> {
     }
 }
 
-impl<T: TransportConfig> Plugin for WebTransportServerPlugin<T> {
+impl<C: TransportConfig> Plugin for WtServerPlugin<C> {
     fn build(&self, app: &mut App) {
-        app.init_resource::<AsyncRuntime>().add_systems(
-            PreUpdate,
-            recv::<T>.run_if(resource_exists::<WebTransportServer<T>>()),
-        );
+        app.init_resource::<AsyncRuntime>()
+            .add_event::<ServerSendEvent<C::S2C>>()
+            .add_event::<ServerDisconnectClient>()
+            .add_event::<ServerRecvEvent<C::C2S>>()
+            .add_systems(
+                PreUpdate,
+                recv::<C>.run_if(resource_exists::<WtServerFrontend<C>>()),
+            )
+            .add_systems(
+                PostUpdate,
+                send::<C>.run_if(resource_exists::<WtServerFrontend<C>>()),
+            );
 
         if self.logging {
-            app.add_systems(PostUpdate, log);
+            app.add_systems(PostUpdate, log.after(send::<C>));
         }
     }
 }
 
-#[derive(Resource)]
-pub struct WebTransportServer<C: TransportConfig>(SyncServer<C>);
+#[derive(Debug, Clone, Event)]
+pub struct ServerStartEvent;
 
-impl<C: TransportConfig> WebTransportServer<C> {
-    pub fn new(config: ServerConfig, rt: &Runtime) -> Self {
-        let (sync_server, async_server) = crate::server::create(config);
-
-        rt.spawn(async move {
-            // todo
-            async_server.listen().await;
-        });
-
-        Self(sync_server)
-    }
+#[derive(Debug, Clone, Event)]
+pub struct ServerClientIncomingEvent {
+    client: ClientId,
+    authority: String,
+    path: String,
+    headers: HashMap<String, String>,
 }
 
-fn recv<C: TransportConfig>(mut commands: Commands, mut server: ResMut<WebTransportServer<C>>) {
+#[derive(Debug, Clone, Event)]
+pub struct ServerClientConnectEvent {
+    client: ClientId,
+}
+
+#[derive(Debug, Clone, Event)]
+pub struct ServerClientDisconnectEvent {
+    client: ClientId,
+}
+
+#[derive(Debug, Clone, Event)]
+pub struct ServerRecvEvent<C2S> {
+    pub client: ClientId,
+    pub msg: C2S,
+}
+
+#[derive(Debug, Clone, Event)]
+pub struct ServerSendEvent<S2C> {
+    pub client: ClientId,
+    pub stream: Stream,
+    pub msg: S2C,
+}
+
+#[derive(Debug, Clone, Event)]
+pub struct ServerDisconnectClient {
+    pub client: ClientId,
+}
+
+fn recv<C: TransportConfig>(
+    mut commands: Commands,
+    mut server: ResMut<WtServerFrontend<C>>,
+    mut start: EventWriter<ServerStartEvent>,
+    mut incoming: EventWriter<ServerClientIncomingEvent>,
+    mut connect: EventWriter<ServerClientConnectEvent>,
+    mut recv: EventWriter<ServerRecvEvent<C::C2S>>,
+    mut disconnect: EventWriter<ServerClientDisconnectEvent>,
+    mut error: EventWriter<ServerError>,
+) {
     loop {
-        match server.0.recv.try_recv() {
-            Ok(A2S::Start) => {
-                info!("Started server");
+        match server.recv.try_recv() {
+/*
+    Start,
+    Incoming {
+        client: ClientId,
+        authority: String,
+        path: String,
+        headers: HashMap<String, String>,
+    },
+    Connect {
+        client: ClientId,
+    },
+    Recv {
+        client: ClientId,
+        msg: C2S,
+    },
+    Disconnect {
+        client: ClientId,
+    },
+    Error(ServerError), */
+
+            Ok(B2F::Start) => start.send(ServerStartEvent),
+            Ok(B2F::Incoming {
+                client,
+                authority,
+                path,
+                headers,
+            }) => incoming.send(ServerClientIncomingEvent {
+                client,
+                authority,
+                path,
+                headers,
+            }),
+            Ok(B2F::Connect { client }) => connect.send(ServerClientConnectEvent { client }),
+            Ok(B2F::Recv { client, msg }) => {
+                recv.send(ServerRecvEvent { client, msg });
             }
-            Ok(A2S::Incoming { client }) => {
-                info!("Client {client} connecting");
+            Ok(B2F::Disconnect { client }) => {
+                disconnect.send(ServerClientDisconnectEvent { client })
             }
-            Ok(A2S::Connect { client }) => {
-                info!("Client {client} connected");
-            }
-            Ok(A2S::Disconnect { client }) => {
-                info!("Client {client} disconnected");
-            }
-            Ok(A2S::Error(err)) => {
-                let err = anyhow::Error::new(err);
-                warn!("Server transport error: {err:#}");
-            }
-            Ok(_) => {}
+            Ok(B2F::Error(err)) => error.send(err),
+            //
             Err(TryRecvError::Empty) => break,
             Err(TryRecvError::Disconnected) => {
-                commands.remove_resource::<WebTransportServer<C>>();
+                commands.remove_resource::<WtServerFrontend<C>>();
                 info!("Server closed");
                 break;
             }
@@ -82,4 +145,33 @@ fn recv<C: TransportConfig>(mut commands: Commands, mut server: ResMut<WebTransp
     }
 }
 
-fn log() {}
+fn send<C: TransportConfig>(
+    server: Res<WtServerFrontend<C>>,
+    mut send: EventReader<ServerSendEvent<C::S2C>>,
+    mut disconnect: EventReader<ServerDisconnectClient>,
+) {
+    for ServerSendEvent {
+        client,
+        stream,
+        msg,
+    } in send.iter()
+    {
+        let _ = server.send.send(F2B::Send {
+            client: *client,
+            stream: *stream,
+            msg: msg.clone(),
+        });
+    }
+
+    for ServerDisconnectClient { client } in disconnect.iter() {
+        let _ = server.send.send(F2B::Disconnect { client: *client });
+    }
+}
+
+fn log(
+    mut errors: EventReader<ServerError>
+) {
+    for err in errors.iter() {
+        
+    }
+}

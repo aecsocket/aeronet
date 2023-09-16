@@ -38,7 +38,7 @@ fn setup(rt: Res<AsyncRuntime>) {
         .expect("parsing address should not fail");
 
     let config = ClientConfig::builder()
-        .with_bind_address(bind_addr)
+        .with_bind_default()
         .with_no_cert_validation()
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(30)))
