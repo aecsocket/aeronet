@@ -4,6 +4,8 @@
 pub mod plugin;
 
 use futures::{stream::FuturesUnordered, Future, StreamExt};
+use log::debug;
+use tracing::{Instrument, info_span};
 
 use std::{collections::HashMap, io};
 
@@ -189,9 +191,8 @@ async fn listen<C: TransportConfig>(
     let endpoint = Endpoint::server(config).map_err(|err| ServerError::CreateEndpoint(err))?;
     let _ = send_b2f.send(B2F::Start).await;
 
+    debug!("Started WebTransport server backend");
     for client in 0.. {
-        let client = ClientId::from_raw(client);
-
         match recv.try_recv() {
             Ok(_) => {}
             Err(broadcast::error::TryRecvError::Empty) => {}
@@ -199,18 +200,33 @@ async fn listen<C: TransportConfig>(
         };
 
         let req = endpoint.accept().await;
+
         let streams = streams.clone();
         let send = send_b2f.clone();
         let recv = send_f2b.subscribe();
-        tokio::spawn(async move {
-            if let Err(err) = open_session::<C>(streams, send.clone(), recv, client, req).await {
-                let _ = send.send(B2F::Error(err)).await;
-            }
-            let _ = send.send(B2F::Disconnect { client });
-        });
+        tokio::spawn(
+            accept_session::<C>(streams, send, recv, ClientId::from_raw(client), req)
+                .instrument(info_span!("Session", id = client)),
+        );
     }
 
+    debug!("Stopped WebTransport server backend");
     Ok(())
+}
+
+async fn accept_session<C: TransportConfig>(
+    streams: Streams,
+    send: mpsc::Sender<B2F<C::C2S>>,
+    recv: broadcast::Receiver<F2B<C::S2C>>,
+    client: ClientId,
+    req: IncomingSession,
+) {
+    debug!("Incoming connection");
+    if let Err(err) = handle_session::<C>(streams, send.clone(), recv, client, req).await {
+        let _ = send.send(B2F::Error(err)).await;
+    }
+    debug!("Disconnected");
+    let _ = send.send(B2F::Disconnect { client });
 }
 
 struct Bi {
@@ -223,7 +239,7 @@ struct Recv {
     buf: [u8; RECV_BUF],
 }
 
-async fn open_session<C: TransportConfig>(
+async fn handle_session<C: TransportConfig>(
     streams: Streams,
     mut send: mpsc::Sender<B2F<C::C2S>>,
     mut recv: broadcast::Receiver<F2B<C::S2C>>,
@@ -232,6 +248,8 @@ async fn open_session<C: TransportConfig>(
 ) -> Result<(), ServerError> {
     let mut conn = open_connection::<C>(&mut send, client, req).await?;
     let (mut bi, mut c2s, mut s2c) = open_streams(&mut conn, client, &streams).await?;
+
+    debug!("Connected");
     let _ = send.send(B2F::Connect { client }).await;
 
     async fn forward_recv<C: TransportConfig>(
@@ -249,6 +267,7 @@ async fn open_session<C: TransportConfig>(
 
     loop {
         tokio::select! {
+            // recv from client, send to frontend
             result = recv_datagram::<C>(client, &mut conn) => {
                 forward_recv::<C>(&mut send, client, result).await;
             }
@@ -261,6 +280,7 @@ async fn open_session<C: TransportConfig>(
             Some(result) = recv_stream::<C>(client, c2s.iter_mut()) => {
                 forward_recv::<C>(&mut send, client, result).await;
             }
+            // recv from frontend, send to client
             result = recv.recv() => {
                 match result {
                     Ok(F2B::Send { client: target, stream, msg }) if target == client => {
@@ -268,14 +288,18 @@ async fn open_session<C: TransportConfig>(
                             let _ = send.send(B2F::Error(err)).await;
                         }
                     }
-                    Ok(F2B::Disconnect { client: target }) if target == client => break,
+                    Ok(F2B::Disconnect { client: target }) if target == client => {
+                        debug!("Disconnecting from server");
+                        return Ok(());
+                    }
                     Ok(_) => {},
-                    Err(_) => break,
+                    Err(_) => {
+                        return Ok(());
+                    },
                 }
             }
         }
     }
-    Ok(())
 }
 
 // https://github.com/rust-lang/rust/issues/102211
@@ -293,10 +317,13 @@ async fn open_connection<C: TransportConfig>(
     let conn = req
         .await
         .map_err(|source| ServerError::RecvSession { client, source })?;
+
+    let authority = conn.authority();
+    debug!("Connecting from {authority}");
     let _ = send
         .send(B2F::Incoming {
             client,
-            authority: conn.authority().to_owned(),
+            authority: authority.to_owned(),
             path: conn.path().to_owned(),
             headers: conn.headers().clone(),
         })
@@ -306,6 +333,7 @@ async fn open_connection<C: TransportConfig>(
         .accept()
         .await
         .map_err(|source| ServerError::AcceptSession { client, source })?;
+
     Ok(conn)
 }
 

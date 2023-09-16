@@ -8,7 +8,7 @@ mod transport;
 pub use runtime::AsyncRuntime;
 #[cfg(feature = "bevy")]
 pub use server::plugin::{
-    ServerDisconnectClient, ServerRecvEvent, ServerSendEvent, WtServerPlugin,
+    ServerDisconnectClientEvent, ServerRecvEvent, ServerSendEvent, WtServerPlugin,
 };
 pub use server::{ServerError, WtServerBackend, WtServerFrontend};
 pub use stream::{Stream, StreamId, Streams};

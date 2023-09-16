@@ -1,11 +1,15 @@
 use std::time::Duration;
 
 use aeronet_wtransport::{
-    server::WtServerFrontend, AsyncRuntime, Message, ServerRecvEvent, Streams, TransportConfig,
-    WtServerPlugin,
+    server::WtServerFrontend, AsyncRuntime, Message, ServerDisconnectClientEvent, ServerRecvEvent,
+    Streams, TransportConfig, WtServerPlugin,
 };
 use anyhow::Result;
-use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
+use bevy::{
+    app::ScheduleRunnerPlugin,
+    log::{Level, LogPlugin},
+    prelude::*,
+};
 use wtransport::{tls::Certificate, ServerConfig};
 
 pub struct AppTransportConfig;
@@ -36,11 +40,14 @@ fn main() {
     App::new()
         .add_plugins((
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
-            LogPlugin::default(),
+            LogPlugin {
+                level: Level::DEBUG,
+                ..default()
+            },
             WtServerPlugin::<AppTransportConfig>::default(),
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, recv_respond)
+        .add_systems(Update, recv_reply)
         .run();
 }
 
@@ -77,8 +84,12 @@ fn create(rt: &AsyncRuntime) -> Result<WtServerFrontend<AppTransportConfig>> {
     Ok(front)
 }
 
-fn recv_respond(mut recv: EventReader<ServerRecvEvent<AppMessage>>) {
+fn recv_reply(
+    mut recv: EventReader<ServerRecvEvent<AppMessage>>,
+    mut dc: EventWriter<ServerDisconnectClientEvent>,
+) {
     for ServerRecvEvent { client, msg } in recv.iter() {
         info!("From {client}: {}", msg.0);
+        dc.send(ServerDisconnectClientEvent { client: *client });
     }
 }
