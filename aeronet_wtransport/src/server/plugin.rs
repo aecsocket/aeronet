@@ -3,11 +3,9 @@ use std::{collections::HashMap, marker::PhantomData};
 use bevy::prelude::*;
 use tokio::sync::mpsc::error::TryRecvError;
 
-use crate::{
-    AsyncRuntime, ClientId, ServerError, TransportConfig, ServerStream,
-};
+use crate::{AsyncRuntime, TransportConfig};
 
-use super::{B2F, F2B, ServerDisconnectReason, WtServerFrontend};
+use super::{ClientId, DisconnectReason, ServerStream, WtServerFrontend, B2F, F2B};
 
 #[derive(Debug, derivative::Derivative)]
 #[derivative(Default)]
@@ -26,7 +24,6 @@ impl<C: TransportConfig> Plugin for WtServerPlugin<C> {
             .add_event::<ServerSend<C::S2C>>()
             .add_event::<ServerDisconnectClient>()
             .add_event::<ServerClosed>()
-            .add_event::<ServerError>()
             .add_systems(
                 PreUpdate,
                 recv::<C>.run_if(resource_exists::<WtServerFrontend<C>>()),
@@ -63,7 +60,7 @@ pub struct ServerRecv<C2S> {
 #[derive(Debug, Event)]
 pub struct ServerClientDisconnected {
     pub client: ClientId,
-    pub reason: ServerDisconnectReason,
+    pub reason: DisconnectReason,
 }
 
 #[derive(Debug, Clone, Event)]
@@ -90,7 +87,6 @@ fn recv<C: TransportConfig>(
     mut recv: EventWriter<ServerRecv<C::C2S>>,
     mut disconnected: EventWriter<ServerClientDisconnected>,
     mut closed: EventWriter<ServerClosed>,
-    mut error: EventWriter<ServerError>,
 ) {
     loop {
         match server.recv.try_recv() {
@@ -110,13 +106,6 @@ fn recv<C: TransportConfig>(
             Ok(B2F::Recv { client, msg }) => recv.send(ServerRecv { client, msg }),
             Ok(B2F::Disconnected { client, reason }) => {
                 disconnected.send(ServerClientDisconnected { client, reason })
-            }
-            Ok(B2F::ServerError(err)) => {
-                warn!(
-                    "Server transport error: {:#}",
-                    aeronet::error::AsPrettyError::as_pretty(&err)
-                );
-                error.send(err);
             }
             Err(TryRecvError::Empty) => break,
             Err(TryRecvError::Disconnected) => {

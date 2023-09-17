@@ -1,8 +1,11 @@
 use std::time::Duration;
 
 use aeronet_wtransport::{
-    server::{WtServerFrontend, plugin::{ServerDisconnectClient, WtServerPlugin, ServerRecv}}, AsyncRuntime, Message, Streams,
-    TransportConfig,
+    server::{
+        plugin::{ServerDisconnectClient, ServerRecv, WtServerPlugin},
+        WtServerFrontend,
+    },
+    AsyncRuntime, Message, Streams, TransportConfig,
 };
 use anyhow::Result;
 use bevy::{
@@ -75,12 +78,11 @@ fn create(rt: &AsyncRuntime) -> Result<WtServerFrontend<AppTransportConfig>> {
 
     let mut streams = Streams::new();
     //streams.add_bi();
-    streams.add_c2s();
-    streams.add_s2c();
+    //streams.add_c2s();
 
     let (front, back) = aeronet_wtransport::server::create::<AppTransportConfig>(config, streams);
     rt.0.spawn(async move {
-        back.listen().await;
+        back.listen().await.unwrap();
     });
     Ok(front)
 }
@@ -91,6 +93,6 @@ fn recv_reply(
 ) {
     for ServerRecv { client, msg } in recv.iter() {
         info!("From {client}: {}", msg.0);
-        dc.send(ServerDisconnectClient { client: *client });
+        //dc.send(ServerDisconnectClient { client: *client });
     }
 }
