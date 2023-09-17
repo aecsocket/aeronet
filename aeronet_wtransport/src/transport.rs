@@ -44,3 +44,11 @@ impl<T: Send + Sync + Clone + serde::Serialize + serde::de::DeserializeOwned> Me
         bincode::serialize(&self).map_err(|err| anyhow::Error::new(err))
     }
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum DisconnectReason {
+    #[error("server forced disconnect")]
+    ByServer,
+    #[error("transport error")]
+    Error(#[from] anyhow::Error),
+}

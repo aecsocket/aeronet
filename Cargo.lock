@@ -108,12 +108,14 @@ dependencies = [
  "bincode",
  "derivative",
  "futures",
+ "log",
  "rcgen",
  "ring",
  "serde",
  "thiserror",
  "time",
  "tokio",
+ "tracing",
  "tracing-subscriber",
  "wtransport",
 ]
@@ -4254,9 +4256,9 @@ dependencies = [
 
 [[package]]
 name = "wtransport"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e917b4460c9bdd764da8da36c84d0b3a55cefef9b1d02ea618367760bcb349a"
+checksum = "ebd6ad0de90ad2a0f51ebf0339045e1222363bdf20413dd79355db2c8bd780e2"
 dependencies = [
  "bytes",
  "quinn",
@@ -4264,6 +4266,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "rustls-pemfile",
+ "socket2",
  "thiserror",
  "tokio",
  "tracing",
@@ -4273,9 +4276,9 @@ dependencies = [
 
 [[package]]
 name = "wtransport-proto"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff825d2f61eec48c8429c4a6cb1c4835eab113aaacd18cfe2ce867ea2cca9e05"
+checksum = "7960a5ce6ce2defbdcf4d910229030032373e987f203b5b04f7429b6b3d105ef"
 dependencies = [
  "ls-qpack",
  "octets",

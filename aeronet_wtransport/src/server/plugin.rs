@@ -18,14 +18,14 @@ pub struct WtServerPlugin<C> {
 impl<C: TransportConfig> Plugin for WtServerPlugin<C> {
     fn build(&self, app: &mut App) {
         app.init_resource::<AsyncRuntime>()
-            .add_event::<ServerStartEvent>()
-            .add_event::<ServerClientIncomingEvent>()
-            .add_event::<ServerClientConnectEvent>()
-            .add_event::<ServerRecvEvent<C::C2S>>()
-            .add_event::<ServerClientDisconnectEvent>()
-            .add_event::<ServerSendEvent<C::S2C>>()
-            .add_event::<ServerDisconnectClientEvent>()
-            .add_event::<ServerCloseEvent>()
+            .add_event::<ServerStarted>()
+            .add_event::<ServerClientIncoming>()
+            .add_event::<ServerClientConnected>()
+            .add_event::<ServerRecv<C::C2S>>()
+            .add_event::<ServerClientDisconnected>()
+            .add_event::<ServerSend<C::S2C>>()
+            .add_event::<ServerDisconnectClient>()
+            .add_event::<ServerClosed>()
             .add_event::<ServerError>()
             .add_systems(
                 PreUpdate,
@@ -39,10 +39,10 @@ impl<C: TransportConfig> Plugin for WtServerPlugin<C> {
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct ServerStartEvent;
+pub struct ServerStarted;
 
 #[derive(Debug, Clone, Event)]
-pub struct ServerClientIncomingEvent {
+pub struct ServerClientIncoming {
     pub client: ClientId,
     pub authority: String,
     pub path: String,
@@ -50,67 +50,67 @@ pub struct ServerClientIncomingEvent {
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct ServerClientConnectEvent {
+pub struct ServerClientConnected {
     pub client: ClientId,
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct ServerRecvEvent<C2S> {
+pub struct ServerRecv<C2S> {
     pub client: ClientId,
     pub msg: C2S,
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct ServerClientDisconnectEvent {
+pub struct ServerClientDisconnected {
     pub client: ClientId,
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct ServerSendEvent<S2C> {
+pub struct ServerSend<S2C> {
     pub client: ClientId,
     pub stream: Stream,
     pub msg: S2C,
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct ServerDisconnectClientEvent {
+pub struct ServerDisconnectClient {
     pub client: ClientId,
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct ServerCloseEvent;
+pub struct ServerClosed;
 
 fn recv<C: TransportConfig>(
     mut commands: Commands,
     mut server: ResMut<WtServerFrontend<C>>,
-    mut start: EventWriter<ServerStartEvent>,
-    mut incoming: EventWriter<ServerClientIncomingEvent>,
-    mut connect: EventWriter<ServerClientConnectEvent>,
-    mut recv: EventWriter<ServerRecvEvent<C::C2S>>,
-    mut disconnect: EventWriter<ServerClientDisconnectEvent>,
-    mut close: EventWriter<ServerCloseEvent>,
+    mut started: EventWriter<ServerStarted>,
+    mut incoming: EventWriter<ServerClientIncoming>,
+    mut connected: EventWriter<ServerClientConnected>,
+    mut recv: EventWriter<ServerRecv<C::C2S>>,
+    mut disconnected: EventWriter<ServerClientDisconnected>,
+    mut closed: EventWriter<ServerClosed>,
     mut error: EventWriter<ServerError>,
 ) {
     loop {
         match server.recv.try_recv() {
-            Ok(B2F::Start) => start.send(ServerStartEvent),
+            Ok(B2F::Started) => started.send(ServerStarted),
             Ok(B2F::Incoming {
                 client,
                 authority,
                 path,
                 headers,
-            }) => incoming.send(ServerClientIncomingEvent {
+            }) => incoming.send(ServerClientIncoming {
                 client,
                 authority,
                 path,
                 headers,
             }),
-            Ok(B2F::Connect { client }) => connect.send(ServerClientConnectEvent { client }),
-            Ok(B2F::Recv { client, msg }) => recv.send(ServerRecvEvent { client, msg }),
-            Ok(B2F::Disconnect { client }) => {
-                disconnect.send(ServerClientDisconnectEvent { client })
+            Ok(B2F::Connected { client }) => connected.send(ServerClientConnected { client }),
+            Ok(B2F::Recv { client, msg }) => recv.send(ServerRecv { client, msg }),
+            Ok(B2F::Disconnected { client, reason }) => {
+                disconnected.send(ServerClientDisconnected { client })
             }
-            Ok(B2F::Error(err)) => {
+            Ok(B2F::ServerError(err)) => {
                 warn!(
                     "Server transport error: {:#}",
                     aeronet::error::AsPrettyError::as_pretty(&err)
@@ -120,7 +120,7 @@ fn recv<C: TransportConfig>(
             Err(TryRecvError::Empty) => break,
             Err(TryRecvError::Disconnected) => {
                 commands.remove_resource::<WtServerFrontend<C>>();
-                close.send(ServerCloseEvent);
+                closed.send(ServerClosed);
                 break;
             }
         }
@@ -129,10 +129,10 @@ fn recv<C: TransportConfig>(
 
 fn send<C: TransportConfig>(
     server: Res<WtServerFrontend<C>>,
-    mut send: EventReader<ServerSendEvent<C::S2C>>,
-    mut disconnect: EventReader<ServerDisconnectClientEvent>,
+    mut send: EventReader<ServerSend<C::S2C>>,
+    mut disconnect: EventReader<ServerDisconnectClient>,
 ) {
-    for ServerSendEvent {
+    for ServerSend {
         client,
         stream,
         msg,
@@ -145,7 +145,8 @@ fn send<C: TransportConfig>(
         });
     }
 
-    for ServerDisconnectClientEvent { client } in disconnect.iter() {
+    for ServerDisconnectClient { client } in disconnect.iter() {
+        debug!("Sending disconnect to {client}");
         let _ = server.send.send(F2B::Disconnect { client: *client });
     }
 }

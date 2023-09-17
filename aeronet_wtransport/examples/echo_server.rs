@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use aeronet_wtransport::{
-    server::WtServerFrontend, AsyncRuntime, Message, ServerDisconnectClientEvent, ServerRecvEvent,
-    Streams, TransportConfig, WtServerPlugin,
+    server::WtServerFrontend, AsyncRuntime, Message, ServerDisconnectClient, ServerRecv, Streams,
+    TransportConfig, WtServerPlugin,
 };
 use anyhow::Result;
 use bevy::{
@@ -40,11 +40,11 @@ fn main() {
     App::new()
         .add_plugins((
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
+            WtServerPlugin::<AppTransportConfig>::default(),
             LogPlugin {
                 level: Level::DEBUG,
                 ..default()
             },
-            WtServerPlugin::<AppTransportConfig>::default(),
         ))
         .add_systems(Startup, setup)
         .add_systems(Update, recv_reply)
@@ -85,11 +85,11 @@ fn create(rt: &AsyncRuntime) -> Result<WtServerFrontend<AppTransportConfig>> {
 }
 
 fn recv_reply(
-    mut recv: EventReader<ServerRecvEvent<AppMessage>>,
-    mut dc: EventWriter<ServerDisconnectClientEvent>,
+    mut recv: EventReader<ServerRecv<AppMessage>>,
+    mut dc: EventWriter<ServerDisconnectClient>,
 ) {
-    for ServerRecvEvent { client, msg } in recv.iter() {
+    for ServerRecv { client, msg } in recv.iter() {
         info!("From {client}: {}", msg.0);
-        dc.send(ServerDisconnectClientEvent { client: *client });
+        dc.send(ServerDisconnectClient { client: *client });
     }
 }

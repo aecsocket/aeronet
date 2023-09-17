@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 
-use crate::{util::AsPrettyError, ClientTransport, ClientTransportEvent, TransportSettings};
+use crate::{error::AsPrettyError, ClientTransport, ClientTransportEvent, TransportSettings};
 
 /// Provides default functionality for consuming data from and sending data to a
 /// [`ClientTransport`].

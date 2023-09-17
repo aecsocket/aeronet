@@ -4,9 +4,9 @@
 #![doc = include_str!("../README.md")]
 
 mod client;
+pub mod error;
 mod server;
 mod transport;
-mod util;
 
 pub use generational_arena::{Arena, Index};
 

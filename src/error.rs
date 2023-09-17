@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-pub(crate) struct PrettyError<'a, E>(&'a E);
+pub struct PrettyError<'a, E>(&'a E);
 
 impl<E: std::error::Error> Display for PrettyError<'_, E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -18,7 +18,7 @@ impl<E: std::error::Error> Display for PrettyError<'_, E> {
     }
 }
 
-pub(crate) trait AsPrettyError: Sized {
+pub trait AsPrettyError: Sized {
     fn as_pretty(&self) -> PrettyError<Self>;
 }
 

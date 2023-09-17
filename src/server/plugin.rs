@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use bevy::{prelude::*, utils::HashSet};
 
 use crate::{
-    util::AsPrettyError, ClientId, ServerTransport, ServerTransportEvent, TransportSettings,
+    error::AsPrettyError, ClientId, ServerTransport, ServerTransportEvent, TransportSettings,
 };
 
 /// Provides default functionality for consuming data from and sending data to a
