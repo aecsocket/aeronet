@@ -18,12 +18,6 @@ impl<E: std::error::Error> Display for PrettyError<'_, E> {
     }
 }
 
-pub trait AsPrettyError: Sized {
-    fn as_pretty(&self) -> PrettyError<Self>;
-}
-
-impl<E: std::error::Error> AsPrettyError for E {
-    fn as_pretty(&self) -> PrettyError<Self> {
-        PrettyError(self)
-    }
+pub fn as_pretty<E: std::error::Error>(err: &E) -> PrettyError<'_, E> {
+    PrettyError(err)
 }

@@ -2,9 +2,7 @@ use std::marker::PhantomData;
 
 use bevy::{prelude::*, utils::HashSet};
 
-use crate::{
-    error::AsPrettyError, ClientId, ServerTransport, ServerTransportEvent, TransportSettings,
-};
+use crate::{ClientId, ServerTransport, ServerTransportEvent, TransportSettings};
 
 /// Provides default functionality for consuming data from and sending data to a
 /// [`ServerTransport`].
@@ -207,6 +205,6 @@ fn send<S: TransportSettings, T: ServerTransport<S> + Resource>(
 
 fn log(mut errors: EventReader<ServerTransportError>) {
     for err in errors.iter() {
-        warn!("Server transport error: {:#}", err.as_pretty());
+        warn!("Server transport error: {:#}", crate::error::as_pretty(err));
     }
 }

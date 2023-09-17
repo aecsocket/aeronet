@@ -160,7 +160,7 @@ async fn accept_session<C: TransportConfig>(
 
     let authority = conn.authority();
     let path = conn.path();
-    debug!("Connecting, authority: {authority} / path: {path}");
+    debug!("Connecting, authority: {authority:?} / path: {path:?}");
     send.send(Event::Connecting {
         client,
         authority: authority.to_owned(),
@@ -341,7 +341,8 @@ async fn recv_stream<C: TransportConfig>(
 // sending
 
 fn into_payload<S2C: Message>(msg: S2C) -> Result<Vec<u8>, StreamError> {
-    msg.into_payload().map_err(|err| StreamError::Send(err.into()))
+    msg.into_payload()
+        .map_err(|err| StreamError::Send(err.into()))
 }
 
 async fn send_client<C: TransportConfig>(
@@ -355,9 +356,7 @@ async fn send_client<C: TransportConfig>(
         stream: &mut mpsc::Sender<C::S2C>,
         msg: C::S2C,
     ) -> Result<(), StreamError> {
-        stream.send(msg)
-            .await
-            .map_err(|_| StreamError::Closed)?;
+        stream.send(msg).await.map_err(|_| StreamError::Closed)?;
         Ok(())
     }
 

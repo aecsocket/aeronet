@@ -93,7 +93,11 @@ fn reply(server: Res<Frontend<AppTransportConfig>>, mut recv: EventReader<Server
         info!("  {:?}", server.client_info(*client));
         match msg.0.as_str() {
             "dc" => server.disconnect(*client),
-            _ => server.send(*client, ServerStream::Datagram, AppMessage("Acknowledged".into())),
+            _ => server.send(
+                *client,
+                ServerStream::Datagram,
+                AppMessage("Acknowledged".into()),
+            ),
         }
     }
 }
@@ -103,7 +107,10 @@ fn log_disconnect(
     mut dc: EventReader<ServerClientDisconnected>,
 ) {
     for ServerClientDisconnected { client, reason } in dc.iter() {
-        info!("Client {client} disconnected: {reason:#}");
+        info!(
+            "Client {client} disconnected: {:#}",
+            aeronet::error::as_pretty(reason)
+        );
         info!("  {:?}", server.client_info(*client));
     }
 }

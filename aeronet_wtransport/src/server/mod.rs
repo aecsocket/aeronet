@@ -106,7 +106,7 @@ pub enum SessionError {
     RecvSession(#[source] ConnectionError),
     #[error("failed to accept session")]
     AcceptSession(#[source] ConnectionError),
-    #[error("on {stream:?}")]
+    #[error("stream {stream:?}")]
     Stream {
         stream: StreamKind,
         #[source]
