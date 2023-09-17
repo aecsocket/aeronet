@@ -5,7 +5,7 @@ mod front;
 #[cfg(feature = "bevy")]
 pub mod plugin;
 
-use aeronet::{server::ClientId, TransportConfig};
+use aeronet::{server::ClientId, Message, TransportConfig};
 pub use back::Backend;
 pub use front::Frontend;
 
@@ -26,13 +26,13 @@ use crate::{StreamId, StreamKind, Streams};
 pub(crate) const CHANNEL_BUF: usize = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ServerStream {
+pub enum Stream {
     Datagram,
     Bi(StreamId),
     S2C(StreamId),
 }
 
-impl ServerStream {
+impl Stream {
     pub fn as_kind(self) -> StreamKind {
         match self {
             Self::Datagram => StreamKind::Datagram,
@@ -42,7 +42,12 @@ impl ServerStream {
     }
 }
 
+pub trait StreamMessage: Message {
+    fn stream(&self) -> Stream;
+}
+
 #[derive(Debug)]
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
 pub enum Event<C2S> {
     Connecting {
         client: ClientId,
@@ -67,7 +72,7 @@ pub enum Event<C2S> {
 pub(crate) enum Request<S2C> {
     Send {
         client: ClientId,
-        stream: ServerStream,
+        stream: Stream,
         msg: S2C,
     },
     Disconnect {
@@ -109,7 +114,7 @@ pub enum StreamError {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ClientInfo {
     pub max_datagram_size: Option<usize>,
-    pub remote_address: SocketAddr,
+    pub remote_addr: SocketAddr,
     pub rtt: Duration,
     pub stable_id: usize,
 }
@@ -118,7 +123,7 @@ impl ClientInfo {
     pub fn from(conn: &Connection) -> Self {
         Self {
             max_datagram_size: conn.max_datagram_size(),
-            remote_address: conn.remote_address(),
+            remote_addr: conn.remote_address(),
             rtt: conn.rtt(),
             stable_id: conn.stable_id(),
         }

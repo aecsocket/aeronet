@@ -1,10 +1,11 @@
 use std::time::Duration;
 
 use aeronet::{AsyncRuntime, Message, TransportConfig};
+use aeronet::server::Transport;
 use aeronet_wtransport::{
     server::{
         plugin::{ServerClientDisconnected, ServerRecv, WtServerPlugin},
-        Frontend, ServerStream,
+        Frontend, Stream, StreamMessage,
     },
     Streams,
 };
@@ -35,6 +36,12 @@ impl Message for AppMessage {
 
     fn into_payload(self) -> Result<Vec<u8>> {
         Ok(self.0.into_bytes())
+    }
+}
+
+impl StreamMessage for AppMessage {
+    fn stream(&self) -> Stream {
+        Stream::Datagram
     }
 }
 
@@ -88,7 +95,7 @@ fn create(rt: &AsyncRuntime) -> Result<Frontend<AppTransportConfig>> {
     Ok(front)
 }
 
-fn reply(server: Res<Frontend<AppTransportConfig>>, mut recv: EventReader<ServerRecv<AppMessage>>) {
+fn reply(mut server: ResMut<Frontend<AppTransportConfig>>, mut recv: EventReader<ServerRecv<AppMessage>>) {
     for ServerRecv { client, msg } in recv.iter() {
         info!("From {client}: {:?}", msg.0);
         info!("  {:?}", server.client_info(*client));
@@ -96,7 +103,6 @@ fn reply(server: Res<Frontend<AppTransportConfig>>, mut recv: EventReader<Server
             "dc" => server.disconnect(*client),
             _ => server.send(
                 *client,
-                ServerStream::Datagram,
                 AppMessage("Acknowledged".into()),
             ),
         }

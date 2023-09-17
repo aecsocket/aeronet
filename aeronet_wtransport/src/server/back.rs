@@ -14,7 +14,7 @@ use wtransport::{
 use crate::{StreamId, StreamKind, Streams};
 
 use super::{
-    ClientInfo, Event, Request, ServerStream, SessionError, SharedClients, StreamError, CHANNEL_BUF,
+    ClientInfo, Event, Request, Stream, SessionError, SharedClients, StreamError, CHANNEL_BUF,
 };
 
 const RECV_BUF: usize = 65536;
@@ -349,7 +349,7 @@ async fn send_client<C: TransportConfig>(
     conn: &mut Connection,
     streams_bi: &mut [mpsc::Sender<C::S2C>],
     streams_s2c: &mut [mpsc::Sender<C::S2C>],
-    stream: ServerStream,
+    stream: Stream,
     msg: C::S2C,
 ) -> Result<(), StreamError> {
     async fn on_stream<C: TransportConfig>(
@@ -361,15 +361,15 @@ async fn send_client<C: TransportConfig>(
     }
 
     match stream {
-        ServerStream::Datagram => {
+        Stream::Datagram => {
             let buf = into_payload(msg)?;
             conn.send_datagram(buf)
                 .map_err(|err| StreamError::Send(err.into()))?;
         }
-        ServerStream::Bi(i) => {
+        Stream::Bi(i) => {
             on_stream::<C>(&mut streams_bi[i.0], msg).await?;
         }
-        ServerStream::S2C(i) => {
+        Stream::S2C(i) => {
             on_stream::<C>(&mut streams_s2c[i.0], msg).await?;
         }
     }

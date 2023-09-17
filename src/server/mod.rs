@@ -1,9 +1,25 @@
 //! Server-side transport API, handling incoming clients, and sending/receiving messages
 //! to/from clients.
 
-use std::fmt::Display;
+use std::{fmt::Display, net::SocketAddr, time::Duration};
 
 use generational_arena::Index;
+
+use crate::TransportConfig;
+
+pub trait Transport<C: TransportConfig> {
+    fn send(&mut self, client: ClientId, msg: C::S2C);
+
+    fn disconnect(&mut self, client: ClientId);
+}
+
+pub trait ClientRtt {
+    fn rtt(&self, client: ClientId) -> Option<Duration>;
+}
+
+pub trait ClientRemoteAddr {
+    fn remote_addr(&self, client: ClientId) -> Option<SocketAddr>;
+}
 
 /// A unique identifier for a client connected to a server.
 ///
