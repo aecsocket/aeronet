@@ -5,7 +5,7 @@ use tokio::sync::mpsc::error::TryRecvError;
 
 use crate::{AsyncRuntime, TransportConfig};
 
-use super::{ClientId, DisconnectReason, ServerStream, WtServerFrontend, B2F, F2B};
+use super::{ClientId, ServerStream, SessionError, WtServerFrontend, B2F, F2B};
 
 #[derive(Debug, derivative::Derivative)]
 #[derivative(Default)]
@@ -60,7 +60,7 @@ pub struct ServerRecv<C2S> {
 #[derive(Debug, Event)]
 pub struct ServerClientDisconnected {
     pub client: ClientId,
-    pub reason: DisconnectReason,
+    pub reason: SessionError,
 }
 
 #[derive(Debug, Clone, Event)]

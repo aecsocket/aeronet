@@ -12,7 +12,7 @@ use wtransport::{
 
 use crate::{Message, StreamId, StreamKind, Streams, TransportConfig};
 
-use super::{ClientId, DisconnectReason, ServerStream, SessionError, StreamError, B2F, F2B};
+use super::{ClientId, ServerStream, SessionError, StreamError, B2F, F2B};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
@@ -117,11 +117,9 @@ async fn accept_session<C: TransportConfig>(
 ) -> Result<(), ()> {
     debug!("Incoming connection");
 
-    let reason = match handle_session::<C>(streams, send.clone(), recv, client, req).await {
-        Ok(reason) => reason,
-        Err(err) => DisconnectReason::from(err),
-    };
-
+    let reason = handle_session::<C>(streams, send.clone(), recv, client, req)
+        .await
+        .unwrap_err();
     debug!(
         "Disconnected: {:#}",
         aeronet::error::AsPrettyError::as_pretty(&reason)
@@ -139,7 +137,7 @@ async fn handle_session<C: TransportConfig>(
     mut recv: broadcast::Receiver<F2B<C::S2C>>,
     client: ClientId,
     req: IncomingSession,
-) -> Result<DisconnectReason, SessionError> {
+) -> Result<Infallible, SessionError> {
     let mut conn = open_connection::<C>(&mut send, client, req).await?;
 
     let (send_c2s, mut recv_c2s) = mpsc::channel::<C::C2S>(INTERNAL_CHANNEL_BUF);
@@ -151,7 +149,7 @@ async fn handle_session<C: TransportConfig>(
     debug!("Connected");
     send.send(B2F::Connected { client })
         .await
-        .map_err(|_| SessionError::Closed)?;
+        .map_err(|_| SessionError::ServerClosed)?;
 
     loop {
         tokio::select! {
@@ -173,7 +171,7 @@ async fn handle_session<C: TransportConfig>(
             }
             // recv from frontend, send to client
             result = recv.recv() => {
-                match result.map_err(|_| SessionError::Closed)? {
+                match result.map_err(|_| SessionError::ServerClosed)? {
                     F2B::Send { client: target, stream, msg } if target == client => {
                         send_msg::<C>(stream, &mut conn, &mut send_bi, &mut send_uni, msg)
                             .await
@@ -183,8 +181,7 @@ async fn handle_session<C: TransportConfig>(
                             })?;
                     }
                     F2B::Disconnect { client: target } if target == client => {
-                        debug!("Forcing disconnect");
-                        return Ok(DisconnectReason::Forced);
+                        return Err(SessionError::ForceDisconnect);
                     }
                     _ => {},
                 }
@@ -209,7 +206,7 @@ async fn open_connection<C: TransportConfig>(
         headers: conn.headers().clone(),
     })
     .await
-    .map_err(|_| SessionError::Closed)?;
+    .map_err(|_| SessionError::ServerClosed)?;
 
     let conn = conn
         .accept()
@@ -390,7 +387,7 @@ async fn forward_recv<C: TransportConfig>(
 ) -> Result<(), SessionError> {
     send.send(B2F::Recv { client, msg })
         .await
-        .map_err(|_| SessionError::Closed)
+        .map_err(|_| SessionError::ServerClosed)
 }
 
 async fn send_msg<C: TransportConfig>(
@@ -414,7 +411,7 @@ async fn send_msg<C: TransportConfig>(
                 .await
                 .map_err(|err| StreamError::Send(err.into()))
         }
-        ServerStream::C2S(StreamId(index)) => {
+        ServerStream::S2C(StreamId(index)) => {
             let send = &mut send_uni[index];
             send.send(payload)
                 .await

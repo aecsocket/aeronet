@@ -37,7 +37,7 @@ impl ClientId {
 pub enum ServerStream {
     Datagram,
     Bi(StreamId),
-    C2S(StreamId),
+    S2C(StreamId),
 }
 
 impl ServerStream {
@@ -45,7 +45,7 @@ impl ServerStream {
         match self {
             Self::Datagram => StreamKind::Datagram,
             Self::Bi(id) => StreamKind::Bi(id),
-            Self::C2S(id) => StreamKind::C2S(id),
+            Self::S2C(id) => StreamKind::S2C(id),
         }
     }
 }
@@ -68,7 +68,7 @@ pub enum B2F<C2S> {
     },
     Disconnected {
         client: ClientId,
-        reason: DisconnectReason,
+        reason: SessionError,
     },
 }
 
@@ -85,17 +85,11 @@ pub enum F2B<S2C> {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum DisconnectReason {
-    #[error("forced by server")]
-    Forced,
-    #[error("transport error")]
-    Error(#[from] SessionError),
-}
-
-#[derive(Debug, thiserror::Error)]
 pub enum SessionError {
-    #[error("frontend closed")]
-    Closed,
+    #[error("server closed")]
+    ServerClosed,
+    #[error("forced disconnect by server")]
+    ForceDisconnect,
     #[error("failed to receive incoming session")]
     RecvSession(#[source] ConnectionError),
     #[error("failed to accept session")]
@@ -116,8 +110,6 @@ pub enum StreamError {
     Open(#[source] StreamOpeningError),
     #[error("failed to accept C2S")]
     Accept(#[source] ConnectionError),
-    #[error("closed by client")]
-    Closed,
     #[error("failed to receive data")]
     Recv(#[source] anyhow::Error),
     #[error("failed to deserialize incoming data")]
@@ -126,4 +118,6 @@ pub enum StreamError {
     Send(#[source] anyhow::Error),
     #[error("failed to serialize outgoing data")]
     Serialize(anyhow::Error),
+    #[error("closed by client")]
+    Closed,
 }

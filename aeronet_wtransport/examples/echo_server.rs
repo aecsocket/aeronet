@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use aeronet_wtransport::{
     server::{
-        plugin::{ServerDisconnectClient, ServerRecv, WtServerPlugin},
+        plugin::{ServerClientDisconnected, ServerDisconnectClient, ServerRecv, WtServerPlugin},
         WtServerFrontend,
     },
     AsyncRuntime, Message, Streams, TransportConfig,
@@ -50,7 +50,7 @@ fn main() {
             },
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, recv_reply)
+        .add_systems(Update, (recv_reply, log_disconnect).chain())
         .run();
 }
 
@@ -93,6 +93,12 @@ fn recv_reply(
 ) {
     for ServerRecv { client, msg } in recv.iter() {
         info!("From {client}: {}", msg.0);
-        //dc.send(ServerDisconnectClient { client: *client });
+        dc.send(ServerDisconnectClient { client: *client });
+    }
+}
+
+fn log_disconnect(mut dc: EventReader<ServerClientDisconnected>) {
+    for ServerClientDisconnected { client, reason } in dc.iter() {
+        info!("Client {client} disconnected: {reason:#}");
     }
 }
