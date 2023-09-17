@@ -12,10 +12,11 @@ impl StreamId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Stream {
+pub enum StreamKind {
     Datagram,
     Bi(StreamId),
-    Uni(StreamId),
+    C2S(StreamId),
+    S2C(StreamId),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]

@@ -4,10 +4,10 @@ use bevy::prelude::*;
 use tokio::sync::mpsc::error::TryRecvError;
 
 use crate::{
-    server::WtServerFrontend, AsyncRuntime, ClientId, ServerError, Stream, TransportConfig,
+    AsyncRuntime, ClientId, ServerError, TransportConfig, ServerStream,
 };
 
-use super::{B2F, F2B};
+use super::{B2F, F2B, ServerDisconnectReason, WtServerFrontend};
 
 #[derive(Debug, derivative::Derivative)]
 #[derivative(Default)]
@@ -60,15 +60,16 @@ pub struct ServerRecv<C2S> {
     pub msg: C2S,
 }
 
-#[derive(Debug, Clone, Event)]
+#[derive(Debug, Event)]
 pub struct ServerClientDisconnected {
     pub client: ClientId,
+    pub reason: ServerDisconnectReason,
 }
 
 #[derive(Debug, Clone, Event)]
 pub struct ServerSend<S2C> {
     pub client: ClientId,
-    pub stream: Stream,
+    pub stream: ServerStream,
     pub msg: S2C,
 }
 
@@ -108,7 +109,7 @@ fn recv<C: TransportConfig>(
             Ok(B2F::Connected { client }) => connected.send(ServerClientConnected { client }),
             Ok(B2F::Recv { client, msg }) => recv.send(ServerRecv { client, msg }),
             Ok(B2F::Disconnected { client, reason }) => {
-                disconnected.send(ServerClientDisconnected { client })
+                disconnected.send(ServerClientDisconnected { client, reason })
             }
             Ok(B2F::ServerError(err)) => {
                 warn!(
