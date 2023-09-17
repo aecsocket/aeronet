@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, time::Duration};
 
-use aeronet_wtransport::AsyncRuntime;
+use aeronet::AsyncRuntime;
 use anyhow::Result;
 use bevy::prelude::*;
 use tokio::sync::mpsc;

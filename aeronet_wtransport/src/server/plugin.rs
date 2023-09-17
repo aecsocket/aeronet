@@ -1,9 +1,8 @@
 use std::{collections::HashMap, marker::PhantomData};
 
+use aeronet::{AsyncRuntime, TransportConfig};
 use bevy::prelude::*;
 use tokio::sync::mpsc::error::TryRecvError;
-
-use crate::{AsyncRuntime, TransportConfig};
 
 use super::{ClientId, Event, Frontend, SessionError};
 

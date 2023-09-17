@@ -1,5 +1,6 @@
 use std::{convert::Infallible, io};
 
+use aeronet::{server::ClientId, Message, TransportConfig};
 use log::debug;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug_span, Instrument};
@@ -10,11 +11,10 @@ use wtransport::{
     Connection, Endpoint, SendStream, ServerConfig,
 };
 
-use crate::{Message, StreamId, StreamKind, Streams, TransportConfig};
+use crate::{StreamId, StreamKind, Streams};
 
 use super::{
-    ClientId, ClientInfo, Event, Request, ServerStream, SessionError, SharedClients, StreamError,
-    CHANNEL_BUF,
+    ClientInfo, Event, Request, ServerStream, SessionError, SharedClients, StreamError, CHANNEL_BUF,
 };
 
 const RECV_BUF: usize = 65536;
@@ -60,7 +60,7 @@ async fn listen<C: TransportConfig>(
             _ = recv_close.recv() => break
         };
 
-        let client = ClientId(clients.lock().unwrap().insert(None));
+        let client = ClientId::from_raw(clients.lock().unwrap().insert(None));
 
         let streams = streams.clone();
         let send = send_evt.clone();
@@ -82,7 +82,7 @@ async fn listen<C: TransportConfig>(
                 {
                     let _ = send_close.send(()).await;
                 }
-                clients.lock().unwrap().remove(client.0);
+                clients.lock().unwrap().remove(client.into_raw());
             }
             .instrument(debug_span!("Session", id = tracing::field::display(client))),
         );
@@ -107,7 +107,7 @@ async fn handle_session<C: TransportConfig>(
         open_streams::<C>(&streams, &mut conn, send_c2s, send_err).await?;
 
     loop {
-        *&mut clients.lock().unwrap()[client.0] = Some(ClientInfo::from(&conn));
+        *&mut clients.lock().unwrap()[client.into_raw()] = Some(ClientInfo::from(&conn));
         tokio::select! {
             result = conn.receive_datagram() => {
                 let msg = recv_datagram::<C>(result)

@@ -1,10 +1,9 @@
 use std::time::Duration;
 
+use aeronet::{server::ClientId, TransportConfig};
 use tokio::sync::{broadcast, mpsc};
 
-use crate::TransportConfig;
-
-use super::{ClientId, ClientInfo, Event, Request, ServerStream, SharedClients};
+use super::{ClientInfo, Event, Request, ServerStream, SharedClients};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
@@ -35,7 +34,7 @@ impl<C: TransportConfig> Frontend<C> {
         self.clients
             .lock()
             .unwrap()
-            .get(client.0)
+            .get(client.into_raw())
             .and_then(Option::as_ref)
             .cloned()
     }
@@ -44,7 +43,7 @@ impl<C: TransportConfig> Frontend<C> {
         self.clients
             .lock()
             .unwrap()
-            .get(client.0)
+            .get(client.into_raw())
             .and_then(Option::as_ref)
             .map(|client| client.rtt)
     }

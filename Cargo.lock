@@ -92,9 +92,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "bincode",
  "derivative",
  "generational-arena",
+ "serde",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]

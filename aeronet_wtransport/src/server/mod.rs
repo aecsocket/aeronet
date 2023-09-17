@@ -5,15 +5,15 @@ mod front;
 #[cfg(feature = "bevy")]
 pub mod plugin;
 
+use aeronet::{server::ClientId, TransportConfig};
 pub use back::Backend;
 pub use front::Frontend;
 
-use generational_arena::{Arena, Index};
+use generational_arena::Arena;
 use tokio::sync::{broadcast, mpsc};
 
 use std::{
     collections::HashMap,
-    fmt::Display,
     net::SocketAddr,
     sync::{Arc, Mutex},
     time::Duration,
@@ -21,30 +21,9 @@ use std::{
 
 use wtransport::{error::ConnectionError, Connection, ServerConfig};
 
-use crate::{StreamId, StreamKind, Streams, TransportConfig};
+use crate::{StreamId, StreamKind, Streams};
 
 pub(crate) const CHANNEL_BUF: usize = 128;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct ClientId(pub(crate) Index);
-
-impl Display for ClientId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (index, gen) = self.0.into_raw_parts();
-        write!(f, "{}v{}", index, gen)
-    }
-}
-
-impl ClientId {
-    pub fn from_raw(raw: Index) -> Self {
-        Self(raw)
-    }
-
-    pub fn into_raw(self) -> Index {
-        self.0
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServerStream {
