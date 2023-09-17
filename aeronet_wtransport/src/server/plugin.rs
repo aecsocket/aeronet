@@ -5,7 +5,7 @@ use tokio::sync::mpsc::error::TryRecvError;
 
 use crate::{AsyncRuntime, TransportConfig};
 
-use super::{ClientId, ServerStream, SessionError, WtServerFrontend, B2F, F2B};
+use super::{ClientId, Frontend, ServerStream, SessionError, Event, Request};
 
 #[derive(Debug, derivative::Derivative)]
 #[derivative(Default)]
@@ -16,7 +16,6 @@ pub struct WtServerPlugin<C> {
 impl<C: TransportConfig> Plugin for WtServerPlugin<C> {
     fn build(&self, app: &mut App) {
         app.init_resource::<AsyncRuntime>()
-            .add_event::<ServerStarted>()
             .add_event::<ServerClientIncoming>()
             .add_event::<ServerClientConnected>()
             .add_event::<ServerRecv<C::C2S>>()
@@ -26,17 +25,14 @@ impl<C: TransportConfig> Plugin for WtServerPlugin<C> {
             .add_event::<ServerClosed>()
             .add_systems(
                 PreUpdate,
-                recv::<C>.run_if(resource_exists::<WtServerFrontend<C>>()),
+                recv::<C>.run_if(resource_exists::<Frontend<C>>()),
             )
             .add_systems(
                 PostUpdate,
-                (send::<C>.run_if(resource_exists::<WtServerFrontend<C>>()),).chain(),
+                (send::<C>.run_if(resource_exists::<Frontend<C>>()),).chain(),
             );
     }
 }
-
-#[derive(Debug, Clone, Event)]
-pub struct ServerStarted;
 
 #[derive(Debug, Clone, Event)]
 pub struct ServerClientIncoming {
@@ -80,8 +76,7 @@ pub struct ServerClosed;
 
 fn recv<C: TransportConfig>(
     mut commands: Commands,
-    mut server: ResMut<WtServerFrontend<C>>,
-    mut started: EventWriter<ServerStarted>,
+    mut server: ResMut<Frontend<C>>,
     mut incoming: EventWriter<ServerClientIncoming>,
     mut connected: EventWriter<ServerClientConnected>,
     mut recv: EventWriter<ServerRecv<C::C2S>>,
@@ -90,8 +85,7 @@ fn recv<C: TransportConfig>(
 ) {
     loop {
         match server.recv.try_recv() {
-            Ok(B2F::Started) => started.send(ServerStarted),
-            Ok(B2F::Incoming {
+            Ok(Event::Connecting {
                 client,
                 authority,
                 path,
@@ -102,14 +96,14 @@ fn recv<C: TransportConfig>(
                 path,
                 headers,
             }),
-            Ok(B2F::Connected { client }) => connected.send(ServerClientConnected { client }),
-            Ok(B2F::Recv { client, msg }) => recv.send(ServerRecv { client, msg }),
-            Ok(B2F::Disconnected { client, reason }) => {
+            Ok(Event::Connected { client }) => connected.send(ServerClientConnected { client }),
+            Ok(Event::Recv { client, msg }) => recv.send(ServerRecv { client, msg }),
+            Ok(Event::Disconnected { client, reason }) => {
                 disconnected.send(ServerClientDisconnected { client, reason })
             }
             Err(TryRecvError::Empty) => break,
             Err(TryRecvError::Disconnected) => {
-                commands.remove_resource::<WtServerFrontend<C>>();
+                commands.remove_resource::<Frontend<C>>();
                 closed.send(ServerClosed);
                 break;
             }
@@ -118,7 +112,7 @@ fn recv<C: TransportConfig>(
 }
 
 fn send<C: TransportConfig>(
-    server: Res<WtServerFrontend<C>>,
+    server: Res<Frontend<C>>,
     mut send: EventReader<ServerSend<C::S2C>>,
     mut disconnect: EventReader<ServerDisconnectClient>,
 ) {
@@ -128,7 +122,7 @@ fn send<C: TransportConfig>(
         msg,
     } in send.iter()
     {
-        let _ = server.send.send(F2B::Send {
+        let _ = server.send.send(Request::Send {
             client: *client,
             stream: *stream,
             msg: msg.clone(),
@@ -137,6 +131,6 @@ fn send<C: TransportConfig>(
 
     for ServerDisconnectClient { client } in disconnect.iter() {
         debug!("Sending disconnect to {client}");
-        let _ = server.send.send(F2B::Disconnect { client: *client });
+        let _ = server.send.send(Request::Disconnect { client: *client });
     }
 }

@@ -1,4 +1,7 @@
-use std::{convert::Infallible, io};
+use std::{
+    convert::Infallible,
+    io,
+};
 
 use log::debug;
 use tokio::sync::{broadcast, mpsc};
@@ -12,60 +15,30 @@ use wtransport::{
 
 use crate::{Message, StreamId, StreamKind, Streams, TransportConfig};
 
-use super::{ClientId, ServerStream, SessionError, StreamError, B2F, F2B};
+use super::{
+    ClientId, ClientInfo, ServerStream, SessionError, SharedClients, StreamError, Event, Request,
+};
 
-#[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-#[non_exhaustive]
-pub struct WtServerFrontend<C: TransportConfig> {
-    pub send: broadcast::Sender<F2B<C::S2C>>,
-    pub recv: mpsc::Receiver<B2F<C::C2S>>,
+pub struct Backend<C: TransportConfig> {
+    pub(crate) config: ServerConfig,
+    pub(crate) streams: Streams,
+    pub(crate) send_b2f: mpsc::Sender<Event<C::C2S>>,
+    pub(crate) send_f2b: broadcast::Sender<Request<C::S2C>>,
+    pub(crate) clients: SharedClients,
 }
 
-pub struct WtServerBackend<C: TransportConfig> {
-    config: ServerConfig,
-    streams: Streams,
-    send_b2f: mpsc::Sender<B2F<C::C2S>>,
-    send_f2b: broadcast::Sender<F2B<C::S2C>>,
-}
-
-pub fn create<C: TransportConfig>(
-    config: ServerConfig,
-    streams: Streams,
-) -> (WtServerFrontend<C>, WtServerBackend<C>) {
-    let (send_b2f, recv_b2f) = mpsc::channel::<B2F<C::C2S>>(INTERNAL_CHANNEL_BUF);
-    let (send_f2b, _) = broadcast::channel::<F2B<C::S2C>>(INTERNAL_CHANNEL_BUF);
-
-    let frontend = WtServerFrontend::<C> {
-        send: send_f2b.clone(),
-        recv: recv_b2f,
-    };
-
-    let backend = WtServerBackend::<C> {
-        config,
-        streams,
-        send_b2f,
-        send_f2b,
-    };
-
-    (frontend, backend)
-}
-
-const INTERNAL_CHANNEL_BUF: usize = 128;
-const RECV_BUF: usize = 65536;
-
-impl<C: TransportConfig> WtServerBackend<C> {
+impl<C: TransportConfig> Backend<C> {
     pub async fn listen(self) -> Result<(), io::Error> {
         let Self {
             config,
             streams,
             send_b2f,
             send_f2b,
+            clients,
         } = self;
 
         let endpoint = Endpoint::server(config)?;
-
-        listen::<C>(endpoint, streams, send_b2f, send_f2b).await;
+        listen::<C>(endpoint, streams, send_b2f, send_f2b, clients).await;
         Ok(())
     }
 }
@@ -73,70 +46,166 @@ impl<C: TransportConfig> WtServerBackend<C> {
 async fn listen<C: TransportConfig>(
     endpoint: Endpoint<Server>,
     streams: Streams,
-    send_b2f: mpsc::Sender<B2F<C::C2S>>,
-    send_f2b: broadcast::Sender<F2B<C::S2C>>,
+    send_evt: mpsc::Sender<Event<C::C2S>>,
+    send_req: broadcast::Sender<Request<C::S2C>>,
+    clients: SharedClients,
 ) {
     debug!("Started WebTransport server backend");
-    let Ok(_) = send_b2f.send(B2F::Started).await else {
-        return;
-    };
 
     let (send_close, mut recv_close) = mpsc::channel::<()>(1);
-    for client in 0.. {
+    loop {
         debug!("Waiting for connection");
         let req = tokio::select! {
             req = endpoint.accept() => req,
             _ = recv_close.recv() => break
         };
 
+        let client = ClientId(clients.lock().unwrap().insert(None));
+
         let streams = streams.clone();
-        let send = send_b2f.clone();
-        let recv = send_f2b.subscribe();
+        let send = send_evt.clone();
+        let recv = send_req.subscribe();
+        let clients = clients.clone();
+
         let send_close = send_close.clone();
 
-        tokio::spawn(async move {
-            if let Err(_) =
-                accept_session::<C>(streams, send, recv, ClientId::from_raw(client), req)
-                    .instrument(debug_span!("Session", id = client))
+        tokio::spawn(
+            async move {
+                let reason =
+                    handle_session::<C>(streams, send.clone(), recv, clients.clone(), client, req)
+                        .await
+                        .unwrap_err();
+                if send
+                    .send(Event::Disconnected { client, reason })
                     .await
-            {
-                let _ = send_close.send(()).await;
+                    .is_err()
+                {
+                    let _ = send_close.send(()).await;
+                }
+                clients.lock().unwrap().remove(client.0);
             }
-        });
+            .instrument(debug_span!("Session", id = tracing::field::display(client))),
+        );
     }
 
     debug!("Stopped WebTransport server backend");
 }
 
-async fn accept_session<C: TransportConfig>(
+async fn handle_session<C: TransportConfig>(
     streams: Streams,
-    send: mpsc::Sender<B2F<C::C2S>>,
-    recv: broadcast::Receiver<F2B<C::S2C>>,
+    mut send: mpsc::Sender<Event<C::C2S>>,
+    mut recv: broadcast::Receiver<Request<C::S2C>>,
+    clients: SharedClients,
     client: ClientId,
     req: IncomingSession,
-) -> Result<(), ()> {
+) -> Result<Infallible, SessionError> {
+    let mut conn = accept_session::<C>(&mut send, client, req).await?;
+
+    loop {
+        tokio::select! {
+            result = conn.receive_datagram() => {
+                let msg = recv_datagram::<C>(result)
+                    .await
+                    .map_err(|source| SessionError::Stream {
+                        stream: StreamKind::Datagram,
+                        source,
+                    })?;
+                send.send(Event::Recv { client, msg })
+                    .await
+                    .map_err(|_| SessionError::ServerClosed)?;
+            }
+            result = recv.recv() => {
+                let req = result.map_err(|_| SessionError::ServerClosed)?;
+                match req {
+                    Request::Send { client: target, stream, msg } if target == client => {
+                        send_client::<C>(&mut conn, stream, msg)
+                            .await
+                            .map_err(|source| SessionError::Stream {
+                                stream: stream.as_kind(),
+                                source,
+                            })?;
+                    }
+                    Request::Disconnect { client: target } if target == client => {
+                        return Err(SessionError::ForceDisconnect);
+                    }
+                    Request::UpdateInfo { client: target } if target == client => {
+                        let new_info = Some(ClientInfo::from(&conn));
+                        *&mut clients.lock().unwrap()[client.0] = new_info;
+                    }
+                    _ => {},
+                }
+            }
+        }
+    }
+}
+
+async fn accept_session<C: TransportConfig>(
+    send: &mut mpsc::Sender<Event<C::C2S>>,
+    client: ClientId,
+    req: IncomingSession,
+) -> Result<Connection, SessionError> {
     debug!("Incoming connection");
 
-    let reason = handle_session::<C>(streams, send.clone(), recv, client, req)
-        .await
-        .unwrap_err();
-    debug!(
-        "Disconnected: {:#}",
-        aeronet::error::AsPrettyError::as_pretty(&reason)
-    );
-    send.send(B2F::Disconnected { client, reason })
-        .await
-        .map_err(|_| ())?;
+    let conn = req.await.map_err(|err| SessionError::RecvSession(err))?;
 
+    let authority = conn.authority();
+    let path = conn.path();
+    debug!("Connecting, authority: {authority} / path: {path}");
+    send.send(Event::Connecting {
+        client,
+        authority: authority.to_owned(),
+        path: path.to_owned(),
+        headers: conn.headers().clone(),
+    })
+    .await
+    .map_err(|_| SessionError::ServerClosed)?;
+
+    let conn = conn
+        .accept()
+        .await
+        .map_err(|err| SessionError::AcceptSession(err))?;
+
+    let remote_addr = conn.remote_address();
+    debug!("Connected from {remote_addr}");
+    send.send(Event::Connected { client })
+        .await
+        .map_err(|_| SessionError::ServerClosed)?;
+
+    Ok(conn)
+}
+
+async fn recv_datagram<C: TransportConfig>(
+    result: Result<Datagram, ConnectionError>,
+) -> Result<C::C2S, StreamError> {
+    let datagram = result.map_err(|err| StreamError::Recv(err.into()))?;
+    let msg = C::C2S::from_payload(&datagram).map_err(|err| StreamError::Deserialize(err))?;
+    Ok(msg)
+}
+
+async fn send_client<C: TransportConfig>(
+    conn: &mut Connection,
+    stream: ServerStream,
+    msg: C::S2C,
+) -> Result<(), StreamError> {
+    let payload = msg.into_payload()
+        .map_err(|err| StreamError::Serialize(err))?;
+    match stream {
+        ServerStream::Datagram => {
+            conn.send_datagram(payload)
+                .map_err(|err| StreamError::Send(err.into()))?;
+        }
+        _ => todo!(),
+    }
     Ok(())
 }
 
-async fn handle_session<C: TransportConfig>(
+/*
+async fn handle_connection<C: TransportConfig>(
     streams: Streams,
-    mut send: mpsc::Sender<B2F<C::C2S>>,
-    mut recv: broadcast::Receiver<F2B<C::S2C>>,
+    mut send: mpsc::Sender<Event<C::C2S>>,
+    mut recv: broadcast::Receiver<Request<C::S2C>>,
     client: ClientId,
-    req: IncomingSession,
+    conn: Connection,
 ) -> Result<Infallible, SessionError> {
     let mut conn = open_connection::<C>(&mut send, client, req).await?;
 
@@ -147,7 +216,7 @@ async fn handle_session<C: TransportConfig>(
         open_streams::<C>(&mut conn, &streams, send_c2s, send_err).await?;
 
     debug!("Connected");
-    send.send(B2F::Connected { client })
+    send.send(Event::Connected { client })
         .await
         .map_err(|_| SessionError::ServerClosed)?;
 
@@ -172,7 +241,7 @@ async fn handle_session<C: TransportConfig>(
             // recv from frontend, send to client
             result = recv.recv() => {
                 match result.map_err(|_| SessionError::ServerClosed)? {
-                    F2B::Send { client: target, stream, msg } if target == client => {
+                    Request::Send { client: target, stream, msg } if target == client => {
                         send_msg::<C>(stream, &mut conn, &mut send_bi, &mut send_uni, msg)
                             .await
                             .map_err(|source| SessionError::Stream {
@@ -180,7 +249,7 @@ async fn handle_session<C: TransportConfig>(
                                 source,
                             })?;
                     }
-                    F2B::Disconnect { client: target } if target == client => {
+                    Request::Disconnect{ client: target } if target == client => {
                         return Err(SessionError::ForceDisconnect);
                     }
                     _ => {},
@@ -191,7 +260,7 @@ async fn handle_session<C: TransportConfig>(
 }
 
 async fn open_connection<C: TransportConfig>(
-    send: &mut mpsc::Sender<B2F<C::C2S>>,
+    send: &mut mpsc::Sender<Event<C::C2S>>,
     client: ClientId,
     req: IncomingSession,
 ) -> Result<Connection, SessionError> {
@@ -199,7 +268,7 @@ async fn open_connection<C: TransportConfig>(
 
     let authority = conn.authority();
     debug!("Connecting from {authority}");
-    send.send(B2F::Incoming {
+    send.send(Event::Connecting {
         client,
         authority: authority.to_owned(),
         path: conn.path().to_owned(),
@@ -304,14 +373,6 @@ async fn open_streams<C: TransportConfig>(
     Ok((send_bi, send_uni))
 }
 
-async fn recv_datagram<C: TransportConfig>(
-    result: Result<Datagram, ConnectionError>,
-) -> Result<C::C2S, StreamError> {
-    let datagram = result.map_err(|err| StreamError::Recv(err.into()))?;
-    let msg = C::C2S::from_payload(&datagram).map_err(|err| StreamError::Deserialize(err))?;
-    Ok(msg)
-}
-
 async fn stream_recv<C: TransportConfig>(
     result: Result<Option<usize>, StreamReadError>,
     buf: &[u8; RECV_BUF],
@@ -381,11 +442,11 @@ async fn handle_c2s<C: TransportConfig>(
 }
 
 async fn forward_recv<C: TransportConfig>(
-    send: &mut mpsc::Sender<B2F<C::C2S>>,
+    send: &mut mpsc::Sender<Event<C::C2S>>,
     client: ClientId,
     msg: C::C2S,
 ) -> Result<(), SessionError> {
-    send.send(B2F::Recv { client, msg })
+    send.send(Event::Recv { client, msg })
         .await
         .map_err(|_| SessionError::ServerClosed)
 }
@@ -419,3 +480,4 @@ async fn send_msg<C: TransportConfig>(
         }
     }
 }
+*/

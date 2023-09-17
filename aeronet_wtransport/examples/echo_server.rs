@@ -3,7 +3,7 @@ use std::time::Duration;
 use aeronet_wtransport::{
     server::{
         plugin::{ServerClientDisconnected, ServerDisconnectClient, ServerRecv, WtServerPlugin},
-        WtServerFrontend,
+        Frontend,
     },
     AsyncRuntime, Message, Streams, TransportConfig,
 };
@@ -64,7 +64,7 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
     }
 }
 
-fn create(rt: &AsyncRuntime) -> Result<WtServerFrontend<AppTransportConfig>> {
+fn create(rt: &AsyncRuntime) -> Result<Frontend<AppTransportConfig>> {
     let cert = Certificate::load(
         "./aeronet_wtransport/examples/cert.pem",
         "./aeronet_wtransport/examples/key.pem",
