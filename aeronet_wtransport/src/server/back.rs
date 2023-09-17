@@ -1,7 +1,4 @@
-use std::{
-    convert::Infallible,
-    io,
-};
+use std::{convert::Infallible, io};
 
 use log::debug;
 use tokio::sync::{broadcast, mpsc};
@@ -10,14 +7,17 @@ use wtransport::{
     datagram::Datagram,
     endpoint::{IncomingSession, Server},
     error::{ConnectionError, StreamReadError},
-    Connection, Endpoint, RecvStream, SendStream, ServerConfig,
+    Connection, Endpoint, SendStream, ServerConfig,
 };
 
 use crate::{Message, StreamId, StreamKind, Streams, TransportConfig};
 
 use super::{
-    ClientId, ClientInfo, ServerStream, SessionError, SharedClients, StreamError, Event, Request,
+    ClientId, ClientInfo, Event, Request, ServerStream, SessionError, SharedClients, StreamError,
+    CHANNEL_BUF,
 };
+
+const RECV_BUF: usize = 65536;
 
 pub struct Backend<C: TransportConfig> {
     pub(crate) config: ServerConfig,
@@ -101,7 +101,13 @@ async fn handle_session<C: TransportConfig>(
 ) -> Result<Infallible, SessionError> {
     let mut conn = accept_session::<C>(&mut send, client, req).await?;
 
+    let (send_c2s, mut recv_c2s) = mpsc::channel::<C::C2S>(CHANNEL_BUF);
+    let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
+    let (mut streams_bi, mut streams_s2c) =
+        open_streams::<C>(&streams, &mut conn, send_c2s, send_err).await?;
+
     loop {
+        *&mut clients.lock().unwrap()[client.0] = Some(ClientInfo::from(&conn));
         tokio::select! {
             result = conn.receive_datagram() => {
                 let msg = recv_datagram::<C>(result)
@@ -114,11 +120,19 @@ async fn handle_session<C: TransportConfig>(
                     .await
                     .map_err(|_| SessionError::ServerClosed)?;
             }
+            Some(msg) = recv_c2s.recv() => {
+                send.send(Event::Recv { client, msg })
+                    .await
+                    .map_err(|_| SessionError::ServerClosed)?;
+            }
+            Some(err) = recv_err.recv() => {
+                return Err(err);
+            }
             result = recv.recv() => {
                 let req = result.map_err(|_| SessionError::ServerClosed)?;
                 match req {
                     Request::Send { client: target, stream, msg } if target == client => {
-                        send_client::<C>(&mut conn, stream, msg)
+                        send_client::<C>(&mut conn, &mut streams_bi, &mut streams_s2c, stream, msg)
                             .await
                             .map_err(|source| SessionError::Stream {
                                 stream: stream.as_kind(),
@@ -127,10 +141,6 @@ async fn handle_session<C: TransportConfig>(
                     }
                     Request::Disconnect { client: target } if target == client => {
                         return Err(SessionError::ForceDisconnect);
-                    }
-                    Request::UpdateInfo { client: target } if target == client => {
-                        let new_info = Some(ClientInfo::from(&conn));
-                        *&mut clients.lock().unwrap()[client.0] = new_info;
                     }
                     _ => {},
                 }
@@ -174,310 +184,207 @@ async fn accept_session<C: TransportConfig>(
     Ok(conn)
 }
 
+// streams
+
+async fn open_streams<C: TransportConfig>(
+    streams: &Streams,
+    mut conn: &mut Connection,
+    send_c2s: mpsc::Sender<C::C2S>,
+    send_err: mpsc::Sender<SessionError>,
+) -> Result<(Vec<mpsc::Sender<C::S2C>>, Vec<mpsc::Sender<C::S2C>>), SessionError> {
+    let mut streams_bi = Vec::new();
+    for stream_id in 0..streams.bi {
+        let stream = StreamKind::Bi(StreamId(stream_id));
+        let send = open_bi::<C>(&mut conn, stream, send_c2s.clone(), send_err.clone())
+            .await
+            .map_err(|source| SessionError::Stream { stream, source })?;
+        streams_bi.push(send);
+    }
+
+    let mut streams_s2c = Vec::new();
+    for stream_id in 0..streams.s2c {
+        let stream = StreamKind::S2C(StreamId(stream_id));
+        let send = open_s2c::<C>(&mut conn, stream, send_err.clone())
+            .await
+            .map_err(|source| SessionError::Stream { stream, source })?;
+        streams_s2c.push(send);
+    }
+
+    for stream_id in 0..streams.c2s {
+        let stream = StreamKind::C2S(StreamId(stream_id));
+        open_c2s::<C>(&mut conn, stream, send_c2s.clone(), send_err.clone())
+            .await
+            .map_err(|source| SessionError::Stream { stream, source })?;
+    }
+
+    Ok((streams_bi, streams_s2c))
+}
+
+async fn open_bi<C: TransportConfig>(
+    conn: &mut Connection,
+    stream: StreamKind,
+    mut send_c2s: mpsc::Sender<C::C2S>,
+    send_err: mpsc::Sender<SessionError>,
+) -> Result<mpsc::Sender<C::S2C>, StreamError> {
+    let (mut send, mut recv) = conn
+        .open_bi()
+        .await
+        .map_err(|err| StreamError::Open(err.into()))?
+        .await
+        .map_err(|err| StreamError::Open(err.into()))?;
+
+    let (send_s2c, mut recv_s2c) = mpsc::channel::<C::S2C>(CHANNEL_BUF);
+    let f = async move {
+        let mut buf = [0u8; RECV_BUF];
+        loop {
+            tokio::select! {
+                result = recv.read(&mut buf) => {
+                    recv_stream::<C>(&mut send_c2s, &buf, result).await?;
+                }
+                result = recv_s2c.recv() => {
+                    send_stream::<C>(&mut send, result).await?;
+                }
+            }
+        }
+    };
+
+    tokio::spawn(async move {
+        if let Err::<(), _>(source) = f.await {
+            let _ = send_err.send(SessionError::Stream { stream, source }).await;
+        }
+    });
+    Ok(send_s2c)
+}
+
+async fn open_s2c<C: TransportConfig>(
+    conn: &mut Connection,
+    stream: StreamKind,
+    send_err: mpsc::Sender<SessionError>,
+) -> Result<mpsc::Sender<C::S2C>, StreamError> {
+    let mut send = conn
+        .open_uni()
+        .await
+        .map_err(|err| StreamError::Open(err.into()))?
+        .await
+        .map_err(|err| StreamError::Open(err.into()))?;
+
+    let (send_s2c, mut recv_s2c) = mpsc::channel::<C::S2C>(CHANNEL_BUF);
+    let f = async move {
+        loop {
+            let result = recv_s2c.recv().await;
+            send_stream::<C>(&mut send, result).await?;
+        }
+    };
+
+    tokio::spawn(async move {
+        if let Err::<(), _>(source) = f.await {
+            let _ = send_err.send(SessionError::Stream { stream, source }).await;
+        }
+    });
+    Ok(send_s2c)
+}
+
+async fn open_c2s<C: TransportConfig>(
+    conn: &mut Connection,
+    stream: StreamKind,
+    mut send_c2s: mpsc::Sender<C::C2S>,
+    send_err: mpsc::Sender<SessionError>,
+) -> Result<(), StreamError> {
+    let mut recv = conn
+        .accept_uni()
+        .await
+        .map_err(|err| StreamError::Open(err.into()))?;
+
+    let f = async move {
+        let mut buf = [0u8; RECV_BUF];
+        loop {
+            let result = recv.read(&mut buf).await;
+            recv_stream::<C>(&mut send_c2s, &buf, result).await?;
+        }
+    };
+
+    tokio::spawn(async move {
+        if let Err::<(), _>(source) = f.await {
+            let _ = send_err.send(SessionError::Stream { stream, source }).await;
+        }
+    });
+    Ok(())
+}
+
+// receiving
+
+fn from_payload<C2S: Message>(buf: &[u8]) -> Result<C2S, StreamError> {
+    C2S::from_payload(buf).map_err(|err| StreamError::Recv(err.into()))
+}
+
 async fn recv_datagram<C: TransportConfig>(
     result: Result<Datagram, ConnectionError>,
 ) -> Result<C::C2S, StreamError> {
     let datagram = result.map_err(|err| StreamError::Recv(err.into()))?;
-    let msg = C::C2S::from_payload(&datagram).map_err(|err| StreamError::Deserialize(err))?;
+    let msg = from_payload::<C::C2S>(&datagram)?;
     Ok(msg)
 }
 
-async fn send_client<C: TransportConfig>(
-    conn: &mut Connection,
-    stream: ServerStream,
-    msg: C::S2C,
-) -> Result<(), StreamError> {
-    let payload = msg.into_payload()
-        .map_err(|err| StreamError::Serialize(err))?;
-    match stream {
-        ServerStream::Datagram => {
-            conn.send_datagram(payload)
-                .map_err(|err| StreamError::Send(err.into()))?;
-        }
-        _ => todo!(),
-    }
-    Ok(())
-}
-
-/*
-async fn handle_connection<C: TransportConfig>(
-    streams: Streams,
-    mut send: mpsc::Sender<Event<C::C2S>>,
-    mut recv: broadcast::Receiver<Request<C::S2C>>,
-    client: ClientId,
-    conn: Connection,
-) -> Result<Infallible, SessionError> {
-    let mut conn = open_connection::<C>(&mut send, client, req).await?;
-
-    let (send_c2s, mut recv_c2s) = mpsc::channel::<C::C2S>(INTERNAL_CHANNEL_BUF);
-    let (send_err, mut recv_err) = mpsc::channel::<SessionError>(INTERNAL_CHANNEL_BUF);
-
-    let (mut send_bi, mut send_uni) =
-        open_streams::<C>(&mut conn, &streams, send_c2s, send_err).await?;
-
-    debug!("Connected");
-    send.send(Event::Connected { client })
-        .await
-        .map_err(|_| SessionError::ServerClosed)?;
-
-    loop {
-        tokio::select! {
-            // recv from client (through other tasks), send to frontend
-            result = conn.receive_datagram() => {
-                let msg = recv_datagram::<C>(result)
-                    .await
-                    .map_err(|source| SessionError::Stream {
-                        stream: StreamKind::Datagram,
-                        source,
-                    })?;
-                forward_recv::<C>(&mut send, client, msg).await?;
-            }
-            Some(msg) = recv_c2s.recv() => {
-                forward_recv::<C>(&mut send, client, msg).await?;
-            }
-            Some(err) = recv_err.recv() => {
-                return Err(err);
-            }
-            // recv from frontend, send to client
-            result = recv.recv() => {
-                match result.map_err(|_| SessionError::ServerClosed)? {
-                    Request::Send { client: target, stream, msg } if target == client => {
-                        send_msg::<C>(stream, &mut conn, &mut send_bi, &mut send_uni, msg)
-                            .await
-                            .map_err(|source| SessionError::Stream {
-                                stream: stream.as_kind(),
-                                source,
-                            })?;
-                    }
-                    Request::Disconnect{ client: target } if target == client => {
-                        return Err(SessionError::ForceDisconnect);
-                    }
-                    _ => {},
-                }
-            }
-        }
-    }
-}
-
-async fn open_connection<C: TransportConfig>(
-    send: &mut mpsc::Sender<Event<C::C2S>>,
-    client: ClientId,
-    req: IncomingSession,
-) -> Result<Connection, SessionError> {
-    let conn = req.await.map_err(|err| SessionError::RecvSession(err))?;
-
-    let authority = conn.authority();
-    debug!("Connecting from {authority}");
-    send.send(Event::Connecting {
-        client,
-        authority: authority.to_owned(),
-        path: conn.path().to_owned(),
-        headers: conn.headers().clone(),
-    })
-    .await
-    .map_err(|_| SessionError::ServerClosed)?;
-
-    let conn = conn
-        .accept()
-        .await
-        .map_err(|err| SessionError::AcceptSession(err))?;
-
-    Ok(conn)
-}
-
-async fn open_streams<C: TransportConfig>(
-    conn: &mut Connection,
-    streams: &Streams,
-    send_c2s: mpsc::Sender<C::C2S>,
-    send_err: mpsc::Sender<SessionError>,
-) -> Result<(Vec<mpsc::Sender<Vec<u8>>>, Vec<mpsc::Sender<Vec<u8>>>), SessionError> {
-    let mut send_bi = Vec::new();
-    for id in 0..streams.bi {
-        let stream = StreamKind::Bi(StreamId(id));
-
-        let (send, recv) = conn
-            .open_bi()
-            .await
-            .map_err(|err| SessionError::Stream {
-                stream,
-                source: StreamError::Connect(err),
-            })?
-            .await
-            .map_err(|err| SessionError::Stream {
-                stream,
-                source: StreamError::Open(err),
-            })?;
-
-        let send_c2s = send_c2s.clone();
-        let send_err = send_err.clone();
-        let (send_s2c_buf, recv_s2c_buf) = mpsc::channel::<Vec<u8>>(INTERNAL_CHANNEL_BUF);
-
-        tokio::spawn(async move {
-            let source = handle_bi::<C>(send, recv, send_c2s, recv_s2c_buf)
-                .await
-                .unwrap_err();
-            let _ = send_err.send(SessionError::Stream { stream, source }).await;
-        });
-
-        send_bi.push(send_s2c_buf);
-    }
-
-    let mut send_uni = Vec::new();
-    for id in 0..streams.s2c {
-        let stream = StreamKind::S2C(StreamId(id));
-
-        let send = conn
-            .open_uni()
-            .await
-            .map_err(|err| SessionError::Stream {
-                stream,
-                source: StreamError::Connect(err),
-            })?
-            .await
-            .map_err(|err| SessionError::Stream {
-                stream,
-                source: StreamError::Open(err),
-            })?;
-
-        let send_err = send_err.clone();
-        let (send_s2c_buf, recv_s2c_buf) = mpsc::channel::<Vec<u8>>(INTERNAL_CHANNEL_BUF);
-
-        tokio::spawn(async move {
-            let source = handle_s2c::<C>(send, recv_s2c_buf).await.unwrap_err();
-            let _ = send_err.send(SessionError::Stream { stream, source }).await;
-        });
-
-        send_uni.push(send_s2c_buf);
-    }
-
-    for id in 0..streams.c2s {
-        let stream = StreamKind::C2S(StreamId(id));
-
-        let recv = conn
-            .accept_uni()
-            .await
-            .map_err(|err| SessionError::Stream {
-                stream,
-                source: StreamError::Accept(err),
-            })?;
-
-        let send_c2s = send_c2s.clone();
-        let send_err = send_err.clone();
-
-        tokio::spawn(async move {
-            let source = handle_c2s::<C>(recv, send_c2s).await.unwrap_err();
-            let _ = send_err.send(SessionError::Stream { stream, source }).await;
-        });
-    }
-
-    Ok((send_bi, send_uni))
-}
-
-async fn stream_recv<C: TransportConfig>(
-    result: Result<Option<usize>, StreamReadError>,
+async fn recv_stream<C: TransportConfig>(
+    send: &mpsc::Sender<C::C2S>,
     buf: &[u8; RECV_BUF],
-    send_c2s: &mpsc::Sender<C::C2S>,
+    result: Result<Option<usize>, StreamReadError>,
 ) -> Result<(), StreamError> {
     let read = result
         .map_err(|err| StreamError::Recv(err.into()))?
         .ok_or_else(|| StreamError::Closed)?;
-
-    let msg = C::C2S::from_payload(&buf[..read]).map_err(|err| StreamError::Deserialize(err))?;
-
-    send_c2s.send(msg).await.map_err(|_| StreamError::Closed)?;
-
+    let msg = from_payload::<C::C2S>(&buf[..read])?;
+    send.send(msg).await.map_err(|_| StreamError::Closed)?;
     Ok(())
 }
 
-async fn stream_send<C: TransportConfig>(
-    result: Option<Vec<u8>>,
-    send: &mut SendStream,
-) -> Result<(), StreamError> {
-    let payload = result.ok_or_else(|| StreamError::Closed)?;
-    send.write_all(&payload)
-        .await
-        .map_err(|err| StreamError::Send(err.into()))?;
+// sending
 
-    Ok(())
+fn into_payload<S2C: Message>(msg: S2C) -> Result<Vec<u8>, StreamError> {
+    msg.into_payload().map_err(|err| StreamError::Send(err.into()))
 }
 
-async fn handle_bi<C: TransportConfig>(
-    mut send: SendStream,
-    mut recv: RecvStream,
-    send_c2s: mpsc::Sender<C::C2S>,
-    mut recv_s2c_buf: mpsc::Receiver<Vec<u8>>,
-) -> Result<Infallible, StreamError> {
-    let mut buf = [0u8; RECV_BUF];
-    loop {
-        tokio::select! {
-            result = recv.read(&mut buf) => {
-                stream_recv::<C>(result, &buf, &send_c2s).await?;
-            }
-            result = recv_s2c_buf.recv() => {
-                stream_send::<C>(result, &mut send).await?;
-            }
-        }
-    }
-}
-
-async fn handle_s2c<C: TransportConfig>(
-    mut send: SendStream,
-    mut recv_s2c_buf: mpsc::Receiver<Vec<u8>>,
-) -> Result<Infallible, StreamError> {
-    loop {
-        let result = recv_s2c_buf.recv().await;
-        stream_send::<C>(result, &mut send).await?;
-    }
-}
-
-async fn handle_c2s<C: TransportConfig>(
-    mut recv: RecvStream,
-    send_c2s: mpsc::Sender<C::C2S>,
-) -> Result<Infallible, StreamError> {
-    let mut buf = [0u8; RECV_BUF];
-    loop {
-        let result = recv.read(&mut buf).await;
-        stream_recv::<C>(result, &buf, &send_c2s).await?;
-    }
-}
-
-async fn forward_recv<C: TransportConfig>(
-    send: &mut mpsc::Sender<Event<C::C2S>>,
-    client: ClientId,
-    msg: C::C2S,
-) -> Result<(), SessionError> {
-    send.send(Event::Recv { client, msg })
-        .await
-        .map_err(|_| SessionError::ServerClosed)
-}
-
-async fn send_msg<C: TransportConfig>(
-    stream: ServerStream,
+async fn send_client<C: TransportConfig>(
     conn: &mut Connection,
-    send_bi: &mut [mpsc::Sender<Vec<u8>>],
-    send_uni: &mut [mpsc::Sender<Vec<u8>>],
+    streams_bi: &mut [mpsc::Sender<C::S2C>],
+    streams_s2c: &mut [mpsc::Sender<C::S2C>],
+    stream: ServerStream,
     msg: C::S2C,
 ) -> Result<(), StreamError> {
-    let payload = msg
-        .into_payload()
-        .map_err(|err| StreamError::Serialize(err))?;
+    async fn on_stream<C: TransportConfig>(
+        stream: &mut mpsc::Sender<C::S2C>,
+        msg: C::S2C,
+    ) -> Result<(), StreamError> {
+        stream.send(msg)
+            .await
+            .map_err(|_| StreamError::Closed)?;
+        Ok(())
+    }
 
     match stream {
-        ServerStream::Datagram => conn
-            .send_datagram(payload)
-            .map_err(|err| StreamError::Send(err.into())),
-        ServerStream::Bi(StreamId(index)) => {
-            let send = &mut send_bi[index];
-            send.send(payload)
-                .await
-                .map_err(|err| StreamError::Send(err.into()))
+        ServerStream::Datagram => {
+            let buf = into_payload(msg)?;
+            conn.send_datagram(buf)
+                .map_err(|err| StreamError::Send(err.into()))?;
         }
-        ServerStream::S2C(StreamId(index)) => {
-            let send = &mut send_uni[index];
-            send.send(payload)
-                .await
-                .map_err(|err| StreamError::Send(err.into()))
+        ServerStream::Bi(i) => {
+            on_stream::<C>(&mut streams_bi[i.0], msg).await?;
+        }
+        ServerStream::S2C(i) => {
+            on_stream::<C>(&mut streams_s2c[i.0], msg).await?;
         }
     }
+    Ok(())
 }
-*/
+
+async fn send_stream<C: TransportConfig>(
+    send: &mut SendStream,
+    result: Option<C::S2C>,
+) -> Result<(), StreamError> {
+    let msg = result.ok_or_else(|| StreamError::Closed)?;
+    let buf = into_payload(msg)?;
+    send.write_all(&buf)
+        .await
+        .map_err(|err| StreamError::Send(err.into()))?;
+    Ok(())
+}

@@ -4,7 +4,7 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::TransportConfig;
 
-use super::{ClientId, ServerStream, SharedClients, Event, Request, ClientInfo};
+use super::{ClientId, ClientInfo, Event, Request, ServerStream, SharedClients};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]

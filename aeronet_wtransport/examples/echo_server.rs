@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use aeronet_wtransport::{
     server::{
-        plugin::{ServerClientDisconnected, ServerDisconnectClient, ServerRecv, WtServerPlugin},
-        Frontend,
+        plugin::{ServerClientDisconnected, ServerRecv, WtServerPlugin},
+        Frontend, ServerStream,
     },
     AsyncRuntime, Message, Streams, TransportConfig,
 };
@@ -50,7 +50,7 @@ fn main() {
             },
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, (recv_reply, log_disconnect).chain())
+        .add_systems(Update, (reply, log_disconnect).chain())
         .run();
 }
 
@@ -87,18 +87,23 @@ fn create(rt: &AsyncRuntime) -> Result<Frontend<AppTransportConfig>> {
     Ok(front)
 }
 
-fn recv_reply(
-    mut recv: EventReader<ServerRecv<AppMessage>>,
-    mut dc: EventWriter<ServerDisconnectClient>,
-) {
+fn reply(server: Res<Frontend<AppTransportConfig>>, mut recv: EventReader<ServerRecv<AppMessage>>) {
     for ServerRecv { client, msg } in recv.iter() {
-        info!("From {client}: {}", msg.0);
-        dc.send(ServerDisconnectClient { client: *client });
+        info!("From {client}: {:?}", msg.0);
+        info!("  {:?}", server.client_info(*client));
+        match msg.0.as_str() {
+            "dc" => server.disconnect(*client),
+            _ => server.send(*client, ServerStream::Datagram, AppMessage("Acknowledged".into())),
+        }
     }
 }
 
-fn log_disconnect(mut dc: EventReader<ServerClientDisconnected>) {
+fn log_disconnect(
+    server: Res<Frontend<AppTransportConfig>>,
+    mut dc: EventReader<ServerClientDisconnected>,
+) {
     for ServerClientDisconnected { client, reason } in dc.iter() {
         info!("Client {client} disconnected: {reason:#}");
+        info!("  {:?}", server.client_info(*client));
     }
 }

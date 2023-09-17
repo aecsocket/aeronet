@@ -5,7 +5,7 @@ use tokio::sync::mpsc::error::TryRecvError;
 
 use crate::{AsyncRuntime, TransportConfig};
 
-use super::{ClientId, Frontend, ServerStream, SessionError, Event, Request};
+use super::{ClientId, Event, Frontend, SessionError};
 
 #[derive(Debug, derivative::Derivative)]
 #[derivative(Default)]
@@ -20,16 +20,10 @@ impl<C: TransportConfig> Plugin for WtServerPlugin<C> {
             .add_event::<ServerClientConnected>()
             .add_event::<ServerRecv<C::C2S>>()
             .add_event::<ServerClientDisconnected>()
-            .add_event::<ServerSend<C::S2C>>()
-            .add_event::<ServerDisconnectClient>()
             .add_event::<ServerClosed>()
             .add_systems(
                 PreUpdate,
                 recv::<C>.run_if(resource_exists::<Frontend<C>>()),
-            )
-            .add_systems(
-                PostUpdate,
-                (send::<C>.run_if(resource_exists::<Frontend<C>>()),).chain(),
             );
     }
 }
@@ -57,18 +51,6 @@ pub struct ServerRecv<C2S> {
 pub struct ServerClientDisconnected {
     pub client: ClientId,
     pub reason: SessionError,
-}
-
-#[derive(Debug, Clone, Event)]
-pub struct ServerSend<S2C> {
-    pub client: ClientId,
-    pub stream: ServerStream,
-    pub msg: S2C,
-}
-
-#[derive(Debug, Clone, Event)]
-pub struct ServerDisconnectClient {
-    pub client: ClientId,
 }
 
 #[derive(Debug, Clone, Event)]
@@ -108,29 +90,5 @@ fn recv<C: TransportConfig>(
                 break;
             }
         }
-    }
-}
-
-fn send<C: TransportConfig>(
-    server: Res<Frontend<C>>,
-    mut send: EventReader<ServerSend<C::S2C>>,
-    mut disconnect: EventReader<ServerDisconnectClient>,
-) {
-    for ServerSend {
-        client,
-        stream,
-        msg,
-    } in send.iter()
-    {
-        let _ = server.send.send(Request::Send {
-            client: *client,
-            stream: *stream,
-            msg: msg.clone(),
-        });
-    }
-
-    for ServerDisconnectClient { client } in disconnect.iter() {
-        debug!("Sending disconnect to {client}");
-        let _ = server.send.send(Request::Disconnect { client: *client });
     }
 }

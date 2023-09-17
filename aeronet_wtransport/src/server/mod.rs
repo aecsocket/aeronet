@@ -19,19 +19,15 @@ use std::{
     time::Duration,
 };
 
-use wtransport::{
-    error::{ConnectionError, StreamOpeningError},
-    Connection, ServerConfig,
-};
+use wtransport::{error::ConnectionError, Connection, ServerConfig};
 
 use crate::{StreamId, StreamKind, Streams, TransportConfig};
 
-pub(crate) const INTERNAL_CHANNEL_BUF: usize = 128;
-pub(crate) const RECV_BUF: usize = 65536;
+pub(crate) const CHANNEL_BUF: usize = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct ClientId(Index);
+pub struct ClientId(pub(crate) Index);
 
 impl Display for ClientId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -98,9 +94,6 @@ pub(crate) enum Request<S2C> {
     Disconnect {
         client: ClientId,
     },
-    UpdateInfo {
-        client: ClientId,
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -123,20 +116,12 @@ pub enum SessionError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum StreamError {
-    #[error("failed to connect bi/S2C")]
-    Connect(#[source] ConnectionError),
-    #[error("failed to open")]
-    Open(#[source] StreamOpeningError),
-    #[error("failed to accept C2S")]
-    Accept(#[source] ConnectionError),
+    #[error("failed to open stream")]
+    Open(#[source] anyhow::Error),
     #[error("failed to receive data")]
     Recv(#[source] anyhow::Error),
-    #[error("failed to deserialize incoming data")]
-    Deserialize(#[source] anyhow::Error),
     #[error("failed to send data")]
     Send(#[source] anyhow::Error),
-    #[error("failed to serialize outgoing data")]
-    Serialize(anyhow::Error),
     #[error("closed by client")]
     Closed,
 }
@@ -167,8 +152,8 @@ pub fn create<C: TransportConfig>(
     config: ServerConfig,
     streams: Streams,
 ) -> (Frontend<C>, Backend<C>) {
-    let (send_b2f, recv_b2f) = mpsc::channel::<Event<C::C2S>>(INTERNAL_CHANNEL_BUF);
-    let (send_f2b, _) = broadcast::channel::<Request<C::S2C>>(INTERNAL_CHANNEL_BUF);
+    let (send_b2f, recv_b2f) = mpsc::channel::<Event<C::C2S>>(CHANNEL_BUF);
+    let (send_f2b, _) = broadcast::channel::<Request<C::S2C>>(CHANNEL_BUF);
     let clients: SharedClients = Arc::new(Mutex::new(Arena::new()));
 
     let frontend = Frontend::<C> {
