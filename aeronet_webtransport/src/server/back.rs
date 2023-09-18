@@ -1,6 +1,6 @@
 use std::{convert::Infallible, io};
 
-use aeronet::{server::ClientId, Message, TransportConfig};
+use aeronet::{server::{ClientId, SessionError, TransportConfig}, SendMessage, RecvMessage};
 use log::debug;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug_span, Instrument};
@@ -14,7 +14,7 @@ use wtransport::{
 use crate::{StreamId, StreamKind, Streams};
 
 use super::{
-    ClientInfo, Event, Request, SessionError, SharedClients, Stream, StreamError, CHANNEL_BUF,
+    ClientInfo, Event, Request, SharedClients, Stream, StreamError, CHANNEL_BUF,
 };
 
 const RECV_BUF: usize = 65536;
@@ -132,11 +132,11 @@ async fn handle_session<C: TransportConfig>(
             result = recv.recv() => {
                 let req = result.map_err(|_| SessionError::Frontend)?;
                 match req {
-                    Request::Send { client: target, stream, msg } if target == client => {
+                    Request::Send { client: target, msg } if target == client => {
                         send_client::<C>(&mut conn, &mut streams_bi, &mut streams_s2c, stream, msg)
                             .await
                             .map_err(|source| SessionError::Stream {
-                                stream: stream.as_kind(),
+                                stream: stream.into(),
                                 source,
                             })?;
                     }
@@ -158,28 +158,28 @@ async fn accept_session<C: TransportConfig>(
 ) -> Result<Connection, SessionError> {
     debug!("Incoming connection");
 
-    let req = req.await.map_err(|err| SessionError::RecvSession(err))?;
+    let req = req.await.map_err(|err| SessionError::Connecting(err.into()))?;
 
     debug!(
         "Requesting session, authority: {:?} / path: {:?}",
         req.authority(),
         req.path()
     );
-    send.send(Event::Requested { client })
+    send.send(Event::Incoming { client })
         .await
-        .map_err(|_| SessionError::Frontend)?;
+        .map_err(|_| SessionError::ServerClosed)?;
     *info = ClientInfo::from_request(&req);
 
     let conn = req
         .accept()
         .await
-        .map_err(|err| SessionError::AcceptSession(err))?;
+        .map_err(|err| SessionError::Connecting(err.into()))?;
 
     let remote_addr = conn.remote_address();
     debug!("Connected from {remote_addr}");
     send.send(Event::Connected { client })
         .await
-        .map_err(|_| SessionError::Frontend)?;
+        .map_err(|_| SessionError::ServerClosed)?;
 
     Ok(conn)
 }
@@ -313,7 +313,7 @@ async fn open_c2s<C: TransportConfig>(
 
 // receiving
 
-fn from_payload<C2S: Message>(buf: &[u8]) -> Result<C2S, StreamError> {
+fn from_payload<C2S: RecvMessage>(buf: &[u8]) -> Result<C2S, StreamError> {
     C2S::from_payload(buf).map_err(|err| StreamError::Recv(err.into()))
 }
 
@@ -340,7 +340,7 @@ async fn recv_stream<C: TransportConfig>(
 
 // sending
 
-fn into_payload<S2C: Message>(msg: S2C) -> Result<Vec<u8>, StreamError> {
+fn into_payload<S2C: SendMessage>(msg: S2C) -> Result<Vec<u8>, StreamError> {
     msg.into_payload()
         .map_err(|err| StreamError::Send(err.into()))
 }

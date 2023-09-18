@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use aeronet::server::Transport;
 use aeronet::{AsyncRuntime, Message, TransportConfig};
-use aeronet_wtransport::{
+use aeronet_webtransport::{
     server::{
         Frontend, Stream, StreamMessage,
     },
@@ -73,8 +73,8 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
 
 fn create(rt: &AsyncRuntime) -> Result<Frontend<AppTransportConfig>> {
     let cert = Certificate::load(
-        "./aeronet_wtransport/examples/cert.pem",
-        "./aeronet_wtransport/examples/key.pem",
+        "./aeronet_webtransport/examples/cert.pem",
+        "./aeronet_webtransport/examples/key.pem",
     )?;
 
     let config = ServerConfig::builder()
@@ -87,7 +87,7 @@ fn create(rt: &AsyncRuntime) -> Result<Frontend<AppTransportConfig>> {
     //streams.add_bi();
     //streams.add_c2s();
 
-    let (front, back) = aeronet_wtransport::server::create::<AppTransportConfig>(config, streams);
+    let (front, back) = aeronet_webtransport::server::create::<AppTransportConfig>(config, streams);
     rt.0.spawn(async move {
         back.listen().await.unwrap();
     });

@@ -1,8 +1,7 @@
 use std::{net::SocketAddr, time::Duration};
 
 use aeronet::{
-    server::{ClientId, ClientRemoteAddr, ClientRtt, Event, RecvError, Transport},
-    Message, TransportConfig,
+    server::{ClientId, GetRemoteAddr, GetRtt, Event, RecvError, Transport, TransportConfig}, SendMessage,
 };
 use anyhow::Result;
 use tokio::sync::{broadcast, mpsc};
@@ -23,7 +22,7 @@ struct BackendError;
 
 impl<S2C, C> Transport<C> for Frontend<C>
 where
-    S2C: Message,
+    S2C: SendMessage,
     C: TransportConfig<S2C = StreamMessage<S2C>>,
 {
     fn recv(&mut self) -> Result<Event<C::C2S>, RecvError> {
@@ -33,12 +32,9 @@ where
         })
     }
 
-    fn send(&mut self, client: ClientId, msg: StreamMessage<S2C>) {
-        let _ = self.send.send(Request::Send {
-            client,
-            stream: msg.stream,
-            msg: msg.msg,
-        });
+    fn send(&mut self, client: ClientId, msg: impl Into<StreamMessage<S2C>>) {
+        let msg = msg.into();
+        let _ = self.send.send(Request::Send { client, msg });
     }
 
     fn disconnect(&mut self, client: ClientId) {
@@ -46,7 +42,7 @@ where
     }
 }
 
-impl<C: TransportConfig> ClientRtt for Frontend<C> {
+impl<C: TransportConfig> GetRtt for Frontend<C> {
     fn rtt(&self, client: ClientId) -> Option<Duration> {
         self.clients
             .lock()
@@ -59,7 +55,7 @@ impl<C: TransportConfig> ClientRtt for Frontend<C> {
     }
 }
 
-impl<C: TransportConfig> ClientRemoteAddr for Frontend<C> {
+impl<C: TransportConfig> GetRemoteAddr for Frontend<C> {
     fn remote_addr(&self, client: ClientId) -> Option<SocketAddr> {
         self.clients
             .lock()

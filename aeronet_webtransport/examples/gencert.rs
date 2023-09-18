@@ -38,12 +38,12 @@ fn main() {
 
     let certificate = rcgen::Certificate::from_params(cert_params).unwrap();
 
-    fs::File::create("./aeronet_wtransport/examples/cert.pem")
+    fs::File::create("./aeronet_webtransport/examples/cert.pem")
         .unwrap()
         .write_all(certificate.serialize_pem().unwrap().as_bytes())
         .unwrap();
 
-    fs::File::create("./aeronet_wtransport/examples/key.pem")
+    fs::File::create("./aeronet_webtransport/examples/key.pem")
         .unwrap()
         .write_all(certificate.serialize_private_key_pem().as_bytes())
         .unwrap();

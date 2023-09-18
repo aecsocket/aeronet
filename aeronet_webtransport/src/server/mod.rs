@@ -1,12 +1,11 @@
-#![warn(clippy::future_not_send)]
-
 mod back;
 mod front;
 
 use aeronet::{
-    server::{ClientId, Event},
-    Arena, Message, TransportConfig,
+    server::{ClientId, Event, TransportConfig},
+    Arena, SendMessage,
 };
+use anyhow::Result;
 pub use back::Backend;
 pub use front::Frontend;
 
@@ -19,11 +18,13 @@ use std::{
     time::Duration,
 };
 
-use wtransport::{endpoint::SessionRequest, error::ConnectionError, Connection, ServerConfig};
+use wtransport::{endpoint::SessionRequest, Connection, ServerConfig};
 
 use crate::{StreamId, StreamKind, Streams};
 
 pub(crate) const CHANNEL_BUF: usize = 128;
+
+pub(crate) type SharedClients = Arc<Mutex<Arena<ClientInfo>>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Stream {
@@ -32,69 +33,47 @@ pub enum Stream {
     S2C(StreamId),
 }
 
-impl Stream {
-    pub fn from_kind(kind: StreamKind) -> Option<Self> {
-        match kind {
-            StreamKind::Datagram => Some(Self::Datagram),
-            StreamKind::Bi(id) => Some(Self::Bi(id)),
-            StreamKind::S2C(id) => Some(Self::S2C(id)),
+impl From<StreamKind> for Option<Stream> {
+    fn from(value: StreamKind) -> Self {
+        match value {
+            StreamKind::Datagram => Some(Stream::Datagram),
+            StreamKind::Bi(id) => Some(Stream::Bi(id)),
+            StreamKind::S2C(id) => Some(Stream::S2C(id)),
             _ => None,
         }
     }
+}
 
-    pub fn as_kind(self) -> StreamKind {
-        match self {
-            Self::Datagram => StreamKind::Datagram,
-            Self::Bi(id) => StreamKind::Bi(id),
-            Self::S2C(id) => StreamKind::S2C(id),
+impl From<Stream> for StreamKind {
+    fn from(value: Stream) -> Self {
+        match value {
+            Stream::Datagram => Self::Datagram,
+            Stream::Bi(id) => Self::Bi(id),
+            Stream::S2C(id) => Self::S2C(id),
         }
     }
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamMessage<T> {
     pub stream: Stream,
     pub msg: T,
 }
 
-impl<T> Message for StreamMessage<T> {}
+impl<T: SendMessage> SendMessage for StreamMessage<T> {
+    fn into_payload(self) -> Result<Vec<u8>> {
+        self.msg.into_payload()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub(crate) enum Request<S2C> {
     Send {
         client: ClientId,
-        stream: Stream,
         msg: S2C,
     },
     Disconnect {
         client: ClientId,
-    },
-}
-
-/// An error during a client's connected session.
-#[derive(Debug, thiserror::Error)]
-pub enum SessionError {
-    /// The connection to the [`Frontend`] was lost.
-    #[error("connection to frontend closed")]
-    Frontend,
-    /// The server forced this client to disconnect.
-    #[error("forced disconnect by server")]
-    ForceDisconnect,
-    /// Failed to receive the incoming session.
-    #[error("failed to receive incoming session")]
-    RecvSession(#[source] ConnectionError),
-    /// Failed to accept the session.
-    #[error("failed to accept session")]
-    AcceptSession(#[source] ConnectionError),
-    /// Failed while handling sending or receiving data along a stream.
-    #[error("stream {stream:?}")]
-    Stream {
-        /// The stream along which the error occurred.
-        stream: StreamKind,
-        /// The stream error.
-        #[source]
-        source: StreamError,
     },
 }
 
@@ -151,8 +130,6 @@ impl ClientInfo {
         }
     }
 }
-
-pub(crate) type SharedClients = Arc<Mutex<Arena<ClientInfo>>>;
 
 pub fn create<C: TransportConfig>(
     config: ServerConfig,

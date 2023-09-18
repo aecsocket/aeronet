@@ -3,6 +3,8 @@
 //! This module lays out building blocks for the higher level stream APIs, which will depend on
 //! whether you are on the client or server side. This is to ensure type safety, as you e.g. cannot
 //! send along an S2C channel from the client side.
+//! 
+//! See [`StreamKind`] for an explanation of the underlying streams.
 
 /// A side-agnostic type representing a kind of stream used for data transport.
 ///

@@ -7,10 +7,10 @@ pub mod error;
 #[cfg(all(feature = "bevy", feature = "tokio"))]
 mod runtime;
 pub mod server;
-mod transport;
+mod message;
 
 pub use generational_arena::{Arena, Index};
 
 #[cfg(all(feature = "bevy", feature = "tokio"))]
 pub use runtime::AsyncRuntime;
-pub use transport::{Message, TransportConfig};
+pub use message::{SendMessage, RecvMessage, Message};

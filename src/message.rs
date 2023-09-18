@@ -1,34 +1,11 @@
 use anyhow::Result;
 
-/// Configures the types used by a transport implementation.
-///
-/// A transport is abstract over the exact message type that it uses, instead letting the user
-/// decide. This trait allows configuring the message types both for:
-/// - client-to-server messages ([`TransportConfig::C2S`])
-/// - server-to-client messages ([`TransportConfig::S2C`])
-///
-/// The types used for C2S and S2C may be different.
-///
-/// See [`Message`] for info on what types can be used.
-///
-/// # Examples
-///
-/// ```
-/// use aeronet::TransportConfig;
-///
-/// pub struct AppTransportConfig;
-///
-/// impl TransportConfig for AppTransportConfig {
-///     type C2S = ();
-///     type S2C = ();
-/// }
-/// ```
-pub trait TransportConfig: 'static + Send + Sync {
-    /// The client-to-server message type.
-    type C2S: Message;
+pub trait SendMessage: Send + Sync + Clone + 'static {
+    fn into_payload(self) -> Result<Vec<u8>>;
+}
 
-    /// The server-to-client message type.
-    type S2C: Message;
+pub trait RecvMessage: Send + Sync + Sized + 'static {
+    fn from_payload(buf: &[u8]) -> Result<Self>;
 }
 
 /// Data that can be sent from the server to the client, or from the client to the server.

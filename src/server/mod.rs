@@ -9,7 +9,7 @@ use std::{fmt::Display, net::SocketAddr, time::Duration};
 use anyhow::Result;
 use generational_arena::Index;
 
-use crate::TransportConfig;
+use crate::{RecvMessage, SendMessage};
 
 /// A server-to-client layer responsible for sending user messages to the other side.
 /// 
@@ -27,7 +27,7 @@ pub trait Transport<C: TransportConfig>: Send + Sync {
     /// # Examples
     /// 
     /// ```
-    /// use aeronet::{TransportConfig, server::{Transport, Event, RecvError}};
+    /// use aeronet::server::{Transport, TransportConfig, Event, RecvError, ClientConnected};
     /// 
     /// # fn update<C: TransportConfig, T: Transport<C>>(transport: T) {
     /// loop {
@@ -46,7 +46,7 @@ pub trait Transport<C: TransportConfig>: Send + Sync {
     fn recv(&mut self) -> Result<Event<C::C2S>, RecvError>;
 
     /// Send a message to a connected client.
-    fn send(&mut self, client: ClientId, msg: C::S2C);
+    fn send(&mut self, client: ClientId, msg: impl Into<C::S2C>);
 
     /// Force a client to disconnect from the server.
     /// 
@@ -58,7 +58,7 @@ pub trait Transport<C: TransportConfig>: Send + Sync {
 /// 
 /// Since not all transports will use a network with a round-trip time, this trait is separate
 /// from [`Transport`].
-pub trait ClientRtt {
+pub trait GetRtt {
     /// Gets the round-trip time of a connected client.
     /// 
     /// The round-trip time is defined as the time taken for the following to happen:
@@ -75,11 +75,53 @@ pub trait ClientRtt {
 /// 
 /// Since not all transports will use a network with clients connecting from a socket address, this
 /// trait is separate from [`Transport`].
-pub trait ClientRemoteAddr {
+pub trait GetRemoteAddr {
     /// Gets the remote socket address of a connected client.
     /// 
     /// If no client exists for the given ID, [`None`] is returned.
     fn remote_addr(&self, client: ClientId) -> Option<SocketAddr>;
+}
+
+/// Configures the types used by a server-side transport implementation.
+///
+/// A transport is abstract over the exact message type that it uses, instead letting the user
+/// decide. This trait allows configuring the message types both for:
+/// - client-to-server messages ([`TransportConfig::C2S`])
+///   - the server must be able to deserialize these from a payload ([`RecvMessage`])
+/// - server-to-client messages ([`TransportConfig::S2C`])
+///   - the server must be able to serialize these into a payload ([`SendMessage`])
+///
+/// The types used for C2S and S2C may be different.
+///
+/// # Examples
+///
+/// ```
+/// use aeronet::server::TransportConfig;
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Clone, Serialize, Deserialize)]
+/// pub enum C2S {
+///     Ping(u64),
+/// }
+/// 
+/// #[derive(Debug, Clone, Serialize, Deserialize)]
+/// pub enum S2C {
+///     Pong(u64),
+/// }
+/// 
+/// pub struct AppTransportConfig;
+///
+/// impl TransportConfig for AppTransportConfig {
+///     type C2S = C2S;
+///     type S2C = S2C;
+/// }
+/// ```
+pub trait TransportConfig: Send + Sync + 'static {
+    /// The client-to-server message type.
+    type C2S: RecvMessage;
+
+    /// The server-to-client message type.
+    type S2C: SendMessage;
 }
 
 /// An error that occurrs while receiving queued [`Event`]s from a [`Transport`].
@@ -97,36 +139,38 @@ pub enum RecvError {
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
 pub enum Event<C2S> {
-    /// See [`ClientRequested`].
-    Requested(ClientRequested),
-    /// A client successfully connected and the connection can now be used.
+    /// A client requested a connection and has been assigned a client ID.
+    Incoming {
+        /// The ID assigned to the incoming connection.
+        client: ClientId,
+    },
+    /// A client has established a connection to the server and can now send/receive data.
+    /// 
+    /// This should be used to perform client initialization such as configuration and loading
+    /// the client data.
     Connected {
         /// The ID of the connected client.
         client: ClientId,
     },
-    /// A client sent data to this server.
+    /// A connected client sent data to the server.
     Recv {
         /// The ID of the sender.
         client: ClientId,
-        /// The message sent.
-        msg: C2S,
+        /// The message sent by the client.
+        msg: C2S
     },
-    /// A client disconnected from this server, caused by either a transport error or the server
-    /// forcing this client off.
+    /// A client was lost and the connection was closed for any reason.
+    /// 
+    /// This is called for both transport errors (such as the client losing connection) and for
+    /// the transport forcefully disconnecting the client via [`Transport::disconnect`].
+    /// 
+    /// This should be used to perform client teardown.
     Disconnected {
         /// The ID of the disconnected client.
         client: ClientId,
-        /// Why the client was disconnected.
+        /// Why the connection was lost.
         reason: SessionError,
     },
-}
-
-/// A client requested to connect and was subsequently given an ID.
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
-pub struct ClientRequested {
-    /// The ID of the requesting client.
-    pub client: ClientId,
 }
 
 /// The reason why a client was disconnected from a server.
@@ -141,6 +185,9 @@ pub enum SessionError {
     /// The client failed to establish a connection to the server.
     #[error("failed to connect to server")]
     Connecting(#[source] anyhow::Error),
+    /// There was an error in transport (receiving or sending data).
+    #[error("transport error")]
+    Transport(#[source] anyhow::Error),
 }
 
 /// A unique identifier for a client connected to a server.
