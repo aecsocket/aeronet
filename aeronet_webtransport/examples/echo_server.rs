@@ -1,10 +1,9 @@
 use std::time::Duration;
 
-use aeronet::{AsyncRuntime, Message, TransportConfig};
 use aeronet::server::Transport;
+use aeronet::{AsyncRuntime, Message, TransportConfig};
 use aeronet_wtransport::{
     server::{
-        plugin::{ServerClientDisconnected, ServerRecv, WtServerPlugin},
         Frontend, Stream, StreamMessage,
     },
     Streams,
@@ -45,7 +44,7 @@ impl StreamMessage for AppMessage {
     }
 }
 
-// chromium --origin-to-force-quic-on=localhost:25565 --ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
+// chromium --webtransport-developer-mode --ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
 
 fn main() {
     App::new()
@@ -95,16 +94,16 @@ fn create(rt: &AsyncRuntime) -> Result<Frontend<AppTransportConfig>> {
     Ok(front)
 }
 
-fn reply(mut server: ResMut<Frontend<AppTransportConfig>>, mut recv: EventReader<ServerRecv<AppMessage>>) {
+fn reply(
+    mut server: ResMut<Frontend<AppTransportConfig>>,
+    mut recv: EventReader<ServerRecv<AppMessage>>,
+) {
     for ServerRecv { client, msg } in recv.iter() {
         info!("From {client}: {:?}", msg.0);
         info!("  {:?}", server.client_info(*client));
         match msg.0.as_str() {
             "dc" => server.disconnect(*client),
-            _ => server.send(
-                *client,
-                AppMessage("Acknowledged".into()),
-            ),
+            _ => server.send(*client, AppMessage("Acknowledged".into())),
         }
     }
 }

@@ -1,12 +1,13 @@
-use std::{time::Duration, net::SocketAddr};
+use std::{net::SocketAddr, time::Duration};
 
 use aeronet::{
-    server::{ClientId, Transport, ClientRtt, ClientRemoteAddr},
-    TransportConfig,
+    server::{ClientId, ClientRemoteAddr, ClientRtt, Event, RecvError, Transport},
+    Message, TransportConfig,
 };
+use anyhow::Result;
 use tokio::sync::{broadcast, mpsc};
 
-use super::{ClientInfo, Event, Request, StreamMessage, SharedClients};
+use super::{ClientInfo, Request, SharedClients, StreamMessage};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
@@ -16,17 +17,27 @@ pub struct Frontend<C: TransportConfig> {
     pub(crate) clients: SharedClients,
 }
 
-impl<C2S, S2C, C> Transport<C> for Frontend<C>
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("connection to backend closed")]
+struct BackendError;
+
+impl<S2C, C> Transport<C> for Frontend<C>
 where
-    C2S: StreamMessage,
-    S2C: StreamMessage,
-    C: TransportConfig<C2S = C2S, S2C = S2C>,
+    S2C: Message,
+    C: TransportConfig<S2C = StreamMessage<S2C>>,
 {
-    fn send(&mut self, client: ClientId, msg: S2C) {
+    fn recv(&mut self) -> Result<Event<C::C2S>, RecvError> {
+        self.recv.try_recv().map_err(|err| match err {
+            mpsc::error::TryRecvError::Empty => RecvError::Empty,
+            _ => RecvError::Closed,
+        })
+    }
+
+    fn send(&mut self, client: ClientId, msg: StreamMessage<S2C>) {
         let _ = self.send.send(Request::Send {
             client,
-            stream: msg.stream(),
-            msg,
+            stream: msg.stream,
+            msg: msg.msg,
         });
     }
 
@@ -41,8 +52,10 @@ impl<C: TransportConfig> ClientRtt for Frontend<C> {
             .lock()
             .unwrap()
             .get(client.into_raw())
-            .and_then(Option::as_ref)
-            .map(|client| client.rtt)
+            .and_then(|client| match client {
+                ClientInfo::Connected { rtt, .. } => Some(*rtt),
+                _ => None,
+            })
     }
 }
 
@@ -52,8 +65,10 @@ impl<C: TransportConfig> ClientRemoteAddr for Frontend<C> {
             .lock()
             .unwrap()
             .get(client.into_raw())
-            .and_then(Option::as_ref)
-            .map(|client| client.remote_addr)
+            .and_then(|client| match client {
+                ClientInfo::Connected { remote_addr, .. } => Some(*remote_addr),
+                _ => None,
+            })
     }
 }
 
@@ -63,11 +78,6 @@ impl<C: TransportConfig> Frontend<C> {
     }
 
     pub fn client_info(&self, client: ClientId) -> Option<ClientInfo> {
-        self.clients
-            .lock()
-            .unwrap()
-            .get(client.into_raw())
-            .and_then(Option::as_ref)
-            .cloned()
+        self.clients.lock().unwrap().get(client.into_raw()).cloned()
     }
 }

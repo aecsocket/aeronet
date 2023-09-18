@@ -14,7 +14,7 @@ use wtransport::{
 use crate::{StreamId, StreamKind, Streams};
 
 use super::{
-    ClientInfo, Event, Request, Stream, SessionError, SharedClients, StreamError, CHANNEL_BUF,
+    ClientInfo, Event, Request, SessionError, SharedClients, Stream, StreamError, CHANNEL_BUF,
 };
 
 const RECV_BUF: usize = 65536;
@@ -60,7 +60,7 @@ async fn listen<C: TransportConfig>(
             _ = recv_close.recv() => break
         };
 
-        let client = ClientId::from_raw(clients.lock().unwrap().insert(None));
+        let client = ClientId::from_raw(clients.lock().unwrap().insert(ClientInfo::default()));
 
         let streams = streams.clone();
         let send = send_evt.clone();
@@ -99,7 +99,8 @@ async fn handle_session<C: TransportConfig>(
     client: ClientId,
     req: IncomingSession,
 ) -> Result<Infallible, SessionError> {
-    let mut conn = accept_session::<C>(&mut send, client, req).await?;
+    let info = &mut clients.lock().unwrap()[client.into_raw()];
+    let mut conn = accept_session::<C>(&mut send, client, info, req).await?;
 
     let (send_c2s, mut recv_c2s) = mpsc::channel::<C::C2S>(CHANNEL_BUF);
     let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
@@ -107,7 +108,7 @@ async fn handle_session<C: TransportConfig>(
         open_streams::<C>(&streams, &mut conn, send_c2s, send_err).await?;
 
     loop {
-        *&mut clients.lock().unwrap()[client.into_raw()] = Some(ClientInfo::from(&conn));
+        *&mut clients.lock().unwrap()[client.into_raw()] = ClientInfo::from_connection(&conn);
         tokio::select! {
             result = conn.receive_datagram() => {
                 let msg = recv_datagram::<C>(result)
@@ -118,18 +119,18 @@ async fn handle_session<C: TransportConfig>(
                     })?;
                 send.send(Event::Recv { client, msg })
                     .await
-                    .map_err(|_| SessionError::ServerClosed)?;
+                    .map_err(|_| SessionError::Frontend)?;
             }
             Some(msg) = recv_c2s.recv() => {
                 send.send(Event::Recv { client, msg })
                     .await
-                    .map_err(|_| SessionError::ServerClosed)?;
+                    .map_err(|_| SessionError::Frontend)?;
             }
             Some(err) = recv_err.recv() => {
                 return Err(err);
             }
             result = recv.recv() => {
-                let req = result.map_err(|_| SessionError::ServerClosed)?;
+                let req = result.map_err(|_| SessionError::Frontend)?;
                 match req {
                     Request::Send { client: target, stream, msg } if target == client => {
                         send_client::<C>(&mut conn, &mut streams_bi, &mut streams_s2c, stream, msg)
@@ -152,25 +153,24 @@ async fn handle_session<C: TransportConfig>(
 async fn accept_session<C: TransportConfig>(
     send: &mut mpsc::Sender<Event<C::C2S>>,
     client: ClientId,
+    info: &mut ClientInfo,
     req: IncomingSession,
 ) -> Result<Connection, SessionError> {
     debug!("Incoming connection");
 
-    let conn = req.await.map_err(|err| SessionError::RecvSession(err))?;
+    let req = req.await.map_err(|err| SessionError::RecvSession(err))?;
 
-    let authority = conn.authority();
-    let path = conn.path();
-    debug!("Connecting, authority: {authority:?} / path: {path:?}");
-    send.send(Event::Connecting {
-        client,
-        authority: authority.to_owned(),
-        path: path.to_owned(),
-        headers: conn.headers().clone(),
-    })
-    .await
-    .map_err(|_| SessionError::ServerClosed)?;
+    debug!(
+        "Requesting session, authority: {:?} / path: {:?}",
+        req.authority(),
+        req.path()
+    );
+    send.send(Event::Requested { client })
+        .await
+        .map_err(|_| SessionError::Frontend)?;
+    *info = ClientInfo::from_request(&req);
 
-    let conn = conn
+    let conn = req
         .accept()
         .await
         .map_err(|err| SessionError::AcceptSession(err))?;
@@ -179,7 +179,7 @@ async fn accept_session<C: TransportConfig>(
     debug!("Connected from {remote_addr}");
     send.send(Event::Connected { client })
         .await
-        .map_err(|_| SessionError::ServerClosed)?;
+        .map_err(|_| SessionError::Frontend)?;
 
     Ok(conn)
 }

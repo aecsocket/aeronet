@@ -1,5 +1,5 @@
 [package]
-name = "aeronet_wtransport"
+name = "aeronet_webtransport"
 version = "0.1.0"
 edition = "2021"
 description = "WebTransport transport implementation for aeronet"
@@ -12,7 +12,7 @@ license = "MIT OR Apache-2.0"
 [features]
 bevy = [ "dep:bevy", "aeronet/bevy" ]
 dangerous-configuration = [ "wtransport/dangerous-configuration" ]
-serde = [ "dep:serde", "generational-arena/serde" ]
+serde = [ "dep:serde", "aeronet/serde" ]
 bincode = [ "serde", "dep:bincode" ]
 
 [dependencies]
@@ -28,7 +28,6 @@ wtransport = "0.1.4"
 tokio = { version = "1.32.0", default-features = false, features = [ "rt" ] }
 serde = { version = "1.0.188", optional = true }
 bincode = { version = "1.3.3", optional = true }
-generational-arena = "0.2.9"
 
 [dev-dependencies]
 bevy = "0.11.2"

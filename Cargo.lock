@@ -101,7 +101,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aeronet_wtransport"
+name = "aeronet_webtransport"
 version = "0.1.0"
 dependencies = [
  "aeronet",
@@ -110,7 +110,6 @@ dependencies = [
  "bevy",
  "bincode",
  "derivative",
- "generational-arena",
  "log",
  "rcgen",
  "ring",

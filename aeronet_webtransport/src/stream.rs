@@ -1,20 +1,20 @@
 //! Types for representing QUIC streams and their directions.
-//! 
+//!
 //! This module lays out building blocks for the higher level stream APIs, which will depend on
 //! whether you are on the client or server side. This is to ensure type safety, as you e.g. cannot
 //! send along an S2C channel from the client side.
 
 /// A side-agnostic type representing a kind of stream used for data transport.
-/// 
+///
 /// WebTransport uses the QUIC protocol internally, which allows using multiple streams over the
 /// same connection. This type represents which of these streams is used to transport some data.
-/// 
+///
 /// There may be multiple streams of the same type open on a single connection, which is why the
 /// extra [`StreamId`] field is used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StreamKind {
     /// Not really a stream, however we treat it as one for the sake of the API.
-    /// 
+    ///
     /// Only one of these "streams" exists in a single connection.
     Datagram,
     /// A bidirectional stream, C2S and S2C.
@@ -26,7 +26,7 @@ pub enum StreamKind {
 }
 
 /// An identifier for a single instance of an opened stream.
-/// 
+///
 /// Since you can open multiple streams of the same type on a connection, we need a way to index
 /// which exact stream we're using when sending data. This struct provides an opaque way to
 /// represent this.
@@ -35,12 +35,12 @@ pub struct StreamId(pub(crate) usize);
 
 impl StreamId {
     /// Creates a stream ID from a raw index.
-    /// 
+    ///
     /// # Warning
-    /// 
+    ///
     /// Sending data using a stream ID created from this function may lead to bugs or panics, as
     /// an invalid stream will be used to send data. Prefer the functions on [`Streams`] instead
-    /// to obtain an ID.
+    /// to obtain a stream for your current side.
     pub fn from_raw(raw: usize) -> Self {
         Self(raw)
     }
@@ -51,6 +51,11 @@ impl StreamId {
     }
 }
 
+/// Defines which streams will be created when a client/server connection is established.
+///
+/// When a connection is started, the transport opens all required channels during the establish
+/// step. Channels cannot be opened or closed afterwards. This struct defines which channels will
+/// be created during this step.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Streams {
     pub(crate) bi: usize,
@@ -63,21 +68,21 @@ impl Streams {
         Self::default()
     }
 
-    pub fn add_bi(&mut self) -> StreamId {
-        let id = StreamId(self.bi);
+    pub fn add_bi(&mut self) -> StreamKind {
+        let i = self.bi;
         self.bi += 1;
-        id
+        StreamKind::Bi(StreamId(i))
     }
 
-    pub fn add_c2s(&mut self) -> StreamId {
-        let id = StreamId(self.c2s);
+    pub fn add_c2s(&mut self) -> StreamKind {
+        let i = self.c2s;
         self.c2s += 1;
-        id
+        StreamKind::C2S(StreamId(i))
     }
 
-    pub fn add_s2c(&mut self) -> StreamId {
-        let id = StreamId(self.s2c);
+    pub fn add_s2c(&mut self) -> StreamKind {
+        let i = self.s2c;
         self.s2c += 1;
-        id
+        StreamKind::S2C(StreamId(i))
     }
 }

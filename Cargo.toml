@@ -30,5 +30,5 @@ resolver = "2"
 members = [
     #"aeronet_channel",
     #"aeronet_h3",
-    "aeronet_wtransport",
+    "aeronet_webtransport",
 ]
