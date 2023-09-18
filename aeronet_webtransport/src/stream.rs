@@ -3,7 +3,7 @@
 //! This module lays out building blocks for the higher level stream APIs, which will depend on
 //! whether you are on the client or server side. This is to ensure type safety, as you e.g. cannot
 //! send along an S2C channel from the client side.
-//! 
+//!
 //! See [`StreamKind`] for an explanation of the underlying streams.
 
 /// A side-agnostic type representing a kind of stream used for data transport.
@@ -38,8 +38,6 @@ pub struct StreamId(pub(crate) usize);
 impl StreamId {
     /// Creates a stream ID from a raw index.
     ///
-    /// # Warning
-    ///
     /// Sending data using a stream ID created from this function may lead to bugs or panics, as
     /// an invalid stream will be used to send data. Prefer the functions on [`Streams`] instead
     /// to obtain a stream for your current side.
@@ -58,6 +56,16 @@ impl StreamId {
 /// When a connection is started, the transport opens all required channels during the establish
 /// step. Channels cannot be opened or closed afterwards. This struct defines which channels will
 /// be created during this step.
+/// 
+/// # Usage
+/// 
+/// ```
+/// use aeronet_webtransport::stream::Streams;
+/// 
+/// let mut streams = Streams::new();
+/// let game_data = streams.add_bi();
+/// let map_data = streams.add_s2c();
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Streams {
     pub(crate) bi: usize,

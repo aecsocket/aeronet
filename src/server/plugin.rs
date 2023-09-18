@@ -1,40 +1,54 @@
-//! Bevy plugin for interacting with a server transport.
-//!
-//! See [`TransportPlugin`] for usage info.
+//! [`bevy`] plugin for interacting with a server transport.
 
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
 
-use super::{ClientId, Event, RecvError, Transport, SessionError, TransportConfig};
+use super::{ClientId, Event, RecvError, SessionError, Transport, TransportConfig};
 
 /// Configures a server-side [`Transport`] of type `T` using configuration `C`.
-/// 
+///
 /// This handles receiving data from the transport and forwarding it to the app via events,
 /// as well as sending data to the transport by reading from events. The events provided are:
-/// - Incoming
-///   - [`ClientIncoming`] when a client requests a connection
-///   - [`ClientConnected`] when a client fully connects
-///     - Use this to run logic for when a client fully connects e.g. loading player data
-///   - [`FromClient`] when a client sends data to the server
-///   - [`ClientDisconnected`] when a client loses connection
-///     - Use this to run logic for when a client is dropped
-/// - Outgoing
-///   - [`ToClient`] to send a message to a client
-///   - [`DisconnectClient`] to force a client to lose the connection
-/// 
+/// * Incoming
+///   * [`ClientIncoming`] when a client requests a connection
+///   * [`ClientConnected`] when a client fully connects
+///     * Use this to run logic when a client fully connects e.g. loading player data
+///   * [`FromClient`] when a client sends data to the server
+///   * [`ClientDisconnected`] when a client loses connection
+///     * Use this to run logic when a client is dropped
+/// * Outgoing
+///   * [`ToClient`] to send a message to a client
+///   * [`DisconnectClient`] to force a client to lose the connection
+///
 /// # Usage
-/// 
+///
 /// You will need an implementation of [`TransportConfig`] to use as the `C` type parameter.
 /// See that type's docs to see how to implement one.
-/// 
-/// **Note:** this plugin is not *required* to use the server transports, however provides a simple
-/// transport-agnostic event API to send and receive data. This means that you can use any type of
-/// transport implementation on top of this app.
-/// 
-/// However if you have different requirements, such as reading incoming data and mutating it
-/// before sending it to the rest of the app (which requires ownership of messages), consider
-/// using your [`Transport`] directly as a resource.
+///
+/// This plugin is not *required* to use the server transports. Using the plugin actually poses
+/// the following limitations:
+/// * You do not get ownership of incoming messages
+///   * This means you are unable to mutate the messages before sending them to the rest of the app
+///     via [`FromClient`]
+/// * The transport implementation must implement [`Resource`]
+///   * All inbuilt transports implement [`Resource`]
+///
+/// If these are unsuitable for your use case, consider manually using the transport APIs from your
+/// app, bypassing the plugin altogether.
+/// ```
+/// use bevy::prelude::*;
+/// use aeronet::server::plugin::TransportPlugin;
+///
+/// # fn run<MyTransportConfig, MyTransportImpl>()
+/// # where
+/// #     MyTransportConfig: aeronet::server::TransportConfig,
+/// #     MyTransportImpl: aeronet::server::Transport<MyTransportConfig> + Resource,
+/// # {
+/// App::new()
+///     .add_plugins(TransportPlugin::<MyTransportConfig, MyTransportImpl>::default());
+/// # }
+/// ```
 #[derive(Debug, derivative::Derivative)]
 #[derivative(Default)]
 pub struct TransportPlugin<C, T> {
@@ -128,8 +142,7 @@ fn recv<C, T>(
     mut connected: EventWriter<ClientConnected>,
     mut from_client: EventWriter<FromClient<C::C2S>>,
     mut disconnected: EventWriter<ClientDisconnected>,
-)
-where
+) where
     C: TransportConfig,
     T: Transport<C> + Resource,
 {
@@ -160,8 +173,7 @@ fn send<C, T>(
     mut server: ResMut<T>,
     mut to_client: EventReader<ToClient<C::S2C>>,
     mut disconnect: EventReader<DisconnectClient>,
-)
-where
+) where
     C: TransportConfig,
     T: Transport<C> + Resource,
 {

@@ -2,8 +2,9 @@ mod back;
 mod front;
 
 use aeronet::{
+    message::SendMessage,
     server::{ClientId, Event, TransportConfig},
-    Arena, SendMessage,
+    Arena,
 };
 use anyhow::Result;
 pub use back::Backend;
@@ -68,13 +69,8 @@ impl<T: SendMessage> SendMessage for StreamMessage<T> {
 
 #[derive(Debug, Clone)]
 pub(crate) enum Request<S2C> {
-    Send {
-        client: ClientId,
-        msg: S2C,
-    },
-    Disconnect {
-        client: ClientId,
-    },
+    Send { client: ClientId, msg: S2C },
+    Disconnect { client: ClientId },
 }
 
 /// An error during processing a stream connected to a client.

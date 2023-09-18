@@ -108,8 +108,7 @@ dependencies = [
  "anyhow",
  "base64 0.21.3",
  "bevy",
- "bincode",
- "derivative",
+ "cfg-if",
  "log",
  "rcgen",
  "ring",
@@ -119,6 +118,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "web-sys",
  "wtransport",
 ]
 

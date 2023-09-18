@@ -3,9 +3,7 @@ use std::time::Duration;
 use aeronet::server::Transport;
 use aeronet::{AsyncRuntime, Message, TransportConfig};
 use aeronet_webtransport::{
-    server::{
-        Frontend, Stream, StreamMessage,
-    },
+    server::{Frontend, Stream, StreamMessage},
     Streams,
 };
 use anyhow::Result;

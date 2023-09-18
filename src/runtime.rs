@@ -1,3 +1,5 @@
+//! [`bevy`] utility to create and store an async [`tokio`] runtime [`Resource`].
+
 use bevy::prelude::*;
 
 /// Wrapper resource around an async [`tokio`] runtime.
@@ -6,17 +8,31 @@ use bevy::prelude::*;
 /// provide one by default. This module provides a [`tokio::runtime::Runtime`] wrapped in a
 /// [`Resource`] which can be injected into any system.
 ///
-/// To insert into a [`World`], simply initialize the resource:
+/// # Usage
+///
+/// To insert into a [`World`], initialize the resource using [`App::init_resource`]:
 /// ```
 /// use bevy::prelude::*;
 /// use aeronet::AsyncRuntime;
 ///
 /// App::new()
 ///     .init_resource::<AsyncRuntime>();
+/// ```
 ///
-/// fn system(rt: Res<AsyncRuntime>) {
-///     rt.0.spawn(async move {});
+/// Then add the [`AsyncRuntime`] as a [`Res`] system parameter:
+/// ```
+/// # use bevy::prelude::*;
+/// # use aeronet::AsyncRuntime;
+/// # fn main() {
+/// #     App::new().add_systems(Startup, run_something_async);
+/// # }
+/// fn run_something_async(rt: Res<AsyncRuntime>) {
+///     rt.0.spawn(async move {
+///         do_the_async_thing();
+///     });
 /// }
+///
+/// async fn do_the_async_thing() {}
 /// ```
 ///
 /// If the runtime cannot be created when initialized, the app will panic.

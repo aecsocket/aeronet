@@ -1,6 +1,9 @@
 use std::{convert::Infallible, io};
 
-use aeronet::{server::{ClientId, SessionError, TransportConfig}, SendMessage, RecvMessage};
+use aeronet::{
+    server::{ClientId, SessionError, TransportConfig},
+    message::{RecvMessage, SendMessage},
+};
 use log::debug;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug_span, Instrument};
@@ -13,9 +16,7 @@ use wtransport::{
 
 use crate::{StreamId, StreamKind, Streams};
 
-use super::{
-    ClientInfo, Event, Request, SharedClients, Stream, StreamError, CHANNEL_BUF,
-};
+use super::{ClientInfo, Event, Request, SharedClients, Stream, StreamError, CHANNEL_BUF};
 
 const RECV_BUF: usize = 65536;
 
@@ -158,7 +159,9 @@ async fn accept_session<C: TransportConfig>(
 ) -> Result<Connection, SessionError> {
     debug!("Incoming connection");
 
-    let req = req.await.map_err(|err| SessionError::Connecting(err.into()))?;
+    let req = req
+        .await
+        .map_err(|err| SessionError::Connecting(err.into()))?;
 
     debug!(
         "Requesting session, authority: {:?} / path: {:?}",

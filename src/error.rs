@@ -1,16 +1,15 @@
 //! Utility for pretty-printing errors.
 //!
-//! See [`PrettyError`].
+//! In some situations, such as when reading an error from a Bevy event reader, you may only have
+//! access to an error behind a shared reference. Use [`as_pretty`] to wrap that reference a
+//! [`PrettyError`], making the alternative [`Display`] impl format the entire error chain, in the
+//! same style as [`anyhow::Error`].
 
 use std::fmt::Display;
 
-/// Helper struct to display errors in [`anyhow::Error`]'s style whilst only holding a shared
-/// reference to the error.
+/// Helper struct to display errors in a pretty-printed style.
 ///
-/// In some situations, such as when reading an error from a Bevy event reader, you may only have
-/// access to an error behind a shared reference. Use [`as_pretty`] to wrap that reference in this
-/// struct, making the alternative [`Display`] impl format the entire error chain, in the same
-/// style as [`anyhow::Error`].
+/// See the [module-level docs](self).
 pub struct PrettyError<'a, E>(&'a E);
 
 impl<E: std::error::Error> Display for PrettyError<'_, E> {
@@ -32,7 +31,7 @@ impl<E: std::error::Error> Display for PrettyError<'_, E> {
 /// Wraps a shared reference to an error in order to make its [`Display`] impl write the entire
 /// error chain.
 ///
-/// See [`PrettyError`] for more info.
+/// See the [module-level docs](self).
 pub fn as_pretty<E: std::error::Error>(err: &E) -> PrettyError<'_, E> {
     PrettyError(err)
 }

@@ -1,7 +1,8 @@
 use std::{net::SocketAddr, time::Duration};
 
 use aeronet::{
-    server::{ClientId, GetRemoteAddr, GetRtt, Event, RecvError, Transport, TransportConfig}, SendMessage,
+    server::{ClientId, Event, GetRemoteAddr, GetRtt, RecvError, Transport, TransportConfig},
+    SendMessage,
 };
 use anyhow::Result;
 use tokio::sync::{broadcast, mpsc};
