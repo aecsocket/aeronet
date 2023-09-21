@@ -6,29 +6,29 @@ pub mod plugin;
 
 use std::{fmt::Display, net::SocketAddr, time::Duration};
 
-use anyhow::Result;
 use generational_arena::Index;
 
-use crate::message::{RecvMessage, SendMessage};
+use crate::{message::{RecvMessage, SendMessage}, transport::{RecvError, SessionError}};
 
 /// A server-to-client layer responsible for sending user messages to the other side.
 ///
 /// The server transport accepts incoming connections, sending and receiving messages, and handling
-/// disconnections and errors. Different transport implementations will use different methods to
+/// disconnections and errors.
+///
+/// Different transport implementations will use different methods to
 /// transport the data across, such as through memory or over a network. This means that a
 /// transport does not necessarily work over the internet! If you want info on networking, see
 /// related traits like [`GetRtt`] and [`GetRemoteAddr`].
 ///
 /// The `C` parameter allows configuring which types of messages are sent and received by this
 /// transport (see [`TransportConfig`]).
-pub trait Transport<C: TransportConfig>: Send + Sync {
+pub trait Transport<C: TransportConfig> {
     /// Attempts to receive a queued event from the transport.
     ///
     /// # Usage
     ///
     /// ```
-    /// use aeronet::server::{Transport, TransportConfig, Event, RecvError, ClientConnected};
-    ///
+    /// # use aeronet::{transport::RecvError, server::{Transport, TransportConfig, Event}};
     /// # fn update<C: TransportConfig, T: Transport<C>>(transport: T) {
     /// loop {
     ///     match transport.recv() {
@@ -129,18 +129,11 @@ pub trait TransportConfig: Send + Sync + 'static {
     type S2C: SendMessage;
 }
 
-/// An error that occurrs while receiving queued [`Event`]s from a [`Transport`].
-#[derive(Debug, thiserror::Error)]
-pub enum RecvError {
-    /// There are no more events to receive, however more events may be sent in the future.
-    #[error("no events to receive")]
-    Empty,
-    /// The server is closed and no more events will ever be received.
-    #[error("server closed")]
-    Closed,
-}
-
 /// An event received from a [`Transport`].
+/// 
+/// Under [`bevy`] this also implements `Event`, however this type cannot be used in an event
+/// reader or writer using the inbuilt plugins. `Event` is implemented to allow user code to use
+/// this type as an event if they wish to manually implement transport handling.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
 pub enum Event<C2S> {
@@ -166,8 +159,8 @@ pub enum Event<C2S> {
     },
     /// A client was lost and the connection was closed for any reason.
     ///
-    /// This is called for both transport errors (such as the client losing connection) and for
-    /// the transport forcefully disconnecting the client via [`Transport::disconnect`].
+    /// This is called for both transport errors (such as losing connection) and for the transport
+    /// forcefully disconnecting the client via [`Transport::disconnect`].
     ///
     /// This should be used as a signal to start client teardown and removing them from the app.
     Disconnected {
@@ -176,23 +169,6 @@ pub enum Event<C2S> {
         /// Why the connection was lost.
         reason: SessionError,
     },
-}
-
-/// The reason why a client was disconnected from a server.
-#[derive(Debug, thiserror::Error)]
-pub enum SessionError {
-    /// The server was closed and all open client connections have been dropped.
-    #[error("server closed")]
-    ServerClosed,
-    /// The server forced this client to disconnect.
-    #[error("forced disconnect by server")]
-    ForceDisconnect,
-    /// The client failed to establish a connection to the server.
-    #[error("failed to connect to server")]
-    Connecting(#[source] anyhow::Error),
-    /// There was an error in transport (receiving or sending data).
-    #[error("transport error")]
-    Transport(#[source] anyhow::Error),
 }
 
 /// A unique identifier for a client connected to a server.

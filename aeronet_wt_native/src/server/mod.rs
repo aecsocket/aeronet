@@ -2,11 +2,11 @@ mod back;
 mod front;
 
 use aeronet::{
+    anyhow::Result,
     message::SendMessage,
     server::{ClientId, Event, TransportConfig},
     Arena,
 };
-use anyhow::Result;
 pub use back::Backend;
 pub use front::Frontend;
 

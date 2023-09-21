@@ -1,8 +1,8 @@
 use std::{convert::Infallible, io};
 
 use aeronet::{
-    server::{ClientId, SessionError, TransportConfig},
     message::{RecvMessage, SendMessage},
+    server::{ClientId, SessionError, TransportConfig},
 };
 use log::debug;
 use tokio::sync::{broadcast, mpsc};

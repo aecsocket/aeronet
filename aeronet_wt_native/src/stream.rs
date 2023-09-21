@@ -56,12 +56,12 @@ impl StreamId {
 /// When a connection is started, the transport opens all required channels during the establish
 /// step. Channels cannot be opened or closed afterwards. This struct defines which channels will
 /// be created during this step.
-/// 
+///
 /// # Usage
-/// 
+///
 /// ```
 /// use aeronet_webtransport::stream::Streams;
-/// 
+///
 /// let mut streams = Streams::new();
 /// let game_data = streams.add_bi();
 /// let map_data = streams.add_s2c();

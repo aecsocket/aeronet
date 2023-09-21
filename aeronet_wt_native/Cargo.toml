@@ -1,8 +1,8 @@
 [package]
-name = "aeronet_webtransport"
+name = "aeronet_webtransport_native"
 version = "0.1.0"
 edition = "2021"
-description = "WebTransport transport implementation for aeronet"
+description = "Native WebTransport transport implementation for aeronet"
 authors = [ "aecsocket <aecsocket@tutanota.com>" ]
 repository = "https://github.com/aecsocket/aeronet"
 keywords = [ "gamedev", "network", "bevy" ]
@@ -18,12 +18,8 @@ aeronet = { path = "..", version = "0.1.0" }
 log = "0.4.20"
 tracing = "0.1.37"
 thiserror = "1.0.47"
-cfg-if = "1.0.0"
 bevy = { version = "0.11.2", default-features = false, optional = true }
 serde = { version = "1.0.188", optional = true }
-
-[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
-web-sys = { verison = "0.3.0", features = [ "WebTransport" ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 wtransport = { version = "0.1.4", features = [ "dangerous-configuration"] }

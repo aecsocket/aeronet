@@ -101,14 +101,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "aeronet_webtransport"
+name = "aeronet_webtransport_native"
 version = "0.1.0"
 dependencies = [
  "aeronet",
  "anyhow",
  "base64 0.21.3",
  "bevy",
- "cfg-if",
  "log",
  "rcgen",
  "ring",
@@ -118,7 +117,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "web-sys",
  "wtransport",
 ]
 

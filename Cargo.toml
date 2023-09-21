@@ -34,8 +34,12 @@ tokio = { version = "1.32.0", default-features = false, features = [ "rt-multi-t
 serde = { version = "1.0.188", optional = true }
 bincode = { version = "1.3.3", optional = true }
 
+[package.metadata.docs.rs]
+all-features = true
+
 [workspace]
 resolver = "2"
 members = [
-    "aeronet_webtransport",
+    "aeronet_wt_native",
+    #"aeronet_wt_wasm",
 ]
