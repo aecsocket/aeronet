@@ -24,7 +24,7 @@ pub trait Transport<C: TransportConfig> {
     ///
     /// ```
     /// # use aeronet::{transport::RecvError, client::{Transport, TransportConfig, Event}};
-    /// # fn update<C: TransportConfig, T: Transport<C>>(transport: T) {
+    /// # fn update<C: TransportConfig, T: Transport<C>>(mut transport: T) {
     /// loop {
     ///     match transport.recv() {
     ///         Ok(Event::Recv { msg }) => println!("Received a message"),
@@ -80,35 +80,34 @@ pub trait GetRemoteAddr {
 ///
 /// The types used for C2S and S2C may be different.
 ///
-#[cfg_attr(feature = "bincode", doc = r##"
-# [`bincode`] support
-
-TODO
-
-# Examples
-
-```
-use aeronet::client::TransportConfig;
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum C2S {
-    Ping(u64),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum S2C {
-    Pong(u64),
-}
-
-pub struct AppTransportConfig;
-
-impl TransportConfig for AppTransportConfig {
-    type C2S = C2S;
-    type S2C = S2C;
-}
-```
-"##)]
+/// # Examples
+/// 
+/// ```
+/// use aeronet::client::TransportConfig;
+/// 
+/// #[derive(Debug, Clone)]
+/// pub enum C2S {
+///     Ping(u64),
+/// }
+/// # impl aeronet::message::SendMessage for C2S {
+/// #     fn into_payload(self) -> anyhow::Result<Vec<u8>> { unimplemented!() }
+/// # }
+/// 
+/// #[derive(Debug, Clone)]
+/// pub enum S2C {
+///     Pong(u64),
+/// }
+/// # impl aeronet::message::RecvMessage for S2C {
+/// #     fn from_payload(buf: &[u8]) -> anyhow::Result<Self> { unimplemented!() }
+/// # }
+/// 
+/// pub struct AppTransportConfig;
+/// 
+/// impl TransportConfig for AppTransportConfig {
+///     type C2S = C2S;
+///     type S2C = S2C;
+/// }
+/// ```
 pub trait TransportConfig: Send + Sync + 'static {
     /// The client-to-server message type.
     ///

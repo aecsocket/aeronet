@@ -29,7 +29,7 @@ pub trait Transport<C: TransportConfig> {
     ///
     /// ```
     /// # use aeronet::{transport::RecvError, server::{Transport, TransportConfig, Event}};
-    /// # fn update<C: TransportConfig, T: Transport<C>>(transport: T) {
+    /// # fn update<C: TransportConfig, T: Transport<C>>(mut transport: T) {
     /// loop {
     ///     match transport.recv() {
     ///         Ok(Event::Connected { client }) => println!("Client {client} connected"),
@@ -98,17 +98,22 @@ pub trait GetRemoteAddr {
 ///
 /// ```
 /// use aeronet::server::TransportConfig;
-/// use serde::{Deserialize, Serialize};
 ///
-/// #[derive(Debug, Clone, Serialize, Deserialize)]
+/// #[derive(Debug, Clone)]
 /// pub enum C2S {
 ///     Ping(u64),
 /// }
+/// # impl aeronet::message::RecvMessage for C2S {
+/// #     fn from_payload(buf: &[u8]) -> anyhow::Result<Self> { unimplemented!() }
+/// # }
 ///
-/// #[derive(Debug, Clone, Serialize, Deserialize)]
+/// #[derive(Debug, Clone)]
 /// pub enum S2C {
 ///     Pong(u64),
 /// }
+/// # impl aeronet::message::SendMessage for S2C {
+/// #     fn into_payload(self) -> anyhow::Result<Vec<u8>> { unimplemented!() }
+/// # }
 ///
 /// pub struct AppTransportConfig;
 ///
