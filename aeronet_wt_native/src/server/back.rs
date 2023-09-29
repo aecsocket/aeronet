@@ -84,7 +84,7 @@ async fn listen<C: TransportConfig>(
                 {
                     let _ = send_close.send(()).await;
                 }
-                //clients.lock().unwrap().remove(client.into_raw());
+                clients.lock().unwrap().remove(client.into_raw());
             }
             .instrument(debug_span!("Session", id = tracing::field::display(client))),
         );
@@ -101,10 +101,7 @@ async fn handle_session<C: TransportConfig>(
     client: ClientId,
     req: IncomingSession,
 ) -> Result<Infallible, SessionError> {
-    let mut conn = {
-        let info = &mut clients.lock().unwrap()[client.into_raw()];
-        accept_session::<C>(&mut send, client, info, req).await?
-    };
+    let mut conn = accept_session::<C>(&mut send, &clients, client, req).await?;
 
     let (send_c2s, mut recv_c2s) = mpsc::channel::<C::C2S>(CHANNEL_BUF);
     let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
@@ -150,8 +147,8 @@ async fn handle_session<C: TransportConfig>(
 
 async fn accept_session<C: TransportConfig>(
     send: &mut mpsc::Sender<Event<C::C2S>>,
+    clients: &SharedClients,
     client: ClientId,
-    info: &mut ClientInfo,
     req: IncomingSession,
 ) -> Result<Connection, SessionError> {
     debug!("Incoming connection");
@@ -168,7 +165,7 @@ async fn accept_session<C: TransportConfig>(
     send.send(Event::Incoming { client })
         .await
         .map_err(|_| SessionError::ServerClosed)?;
-    *info = ClientInfo::from_request(&req);
+    *&mut clients.lock().unwrap()[client.into_raw()] = ClientInfo::from_request(&req);
 
     let conn = req
         .accept()
