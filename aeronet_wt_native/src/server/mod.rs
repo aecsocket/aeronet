@@ -1,16 +1,8 @@
 mod back;
 mod front;
 
-use aeronet::{
-    anyhow::Result,
-    message::SendMessage,
-    server::{ClientId, Event, TransportConfig},
-    Arena,
-};
 pub use back::Backend;
 pub use front::Frontend;
-
-use tokio::sync::{broadcast, mpsc};
 
 use std::{
     collections::HashMap,
@@ -19,6 +11,13 @@ use std::{
     time::Duration,
 };
 
+use aeronet::{
+    message::SendMessage,
+    server::{ClientId, Event, TransportConfig},
+    Arena,
+};
+use anyhow::Result;
+use tokio::sync::{broadcast, mpsc};
 use wtransport::{endpoint::SessionRequest, Connection, ServerConfig};
 
 use crate::{StreamId, StreamKind, Streams};
@@ -27,37 +26,38 @@ pub(crate) const CHANNEL_BUF: usize = 128;
 
 pub(crate) type SharedClients = Arc<Mutex<Arena<ClientInfo>>>;
 
+/// A stream along which the server can send data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Stream {
+pub enum OutStream {
     Datagram,
     Bi(StreamId),
     S2C(StreamId),
 }
 
-impl From<StreamKind> for Option<Stream> {
+impl From<StreamKind> for Option<OutStream> {
     fn from(value: StreamKind) -> Self {
         match value {
-            StreamKind::Datagram => Some(Stream::Datagram),
-            StreamKind::Bi(id) => Some(Stream::Bi(id)),
-            StreamKind::S2C(id) => Some(Stream::S2C(id)),
+            StreamKind::Datagram => Some(OutStream::Datagram),
+            StreamKind::Bi(id) => Some(OutStream::Bi(id)),
+            StreamKind::S2C(id) => Some(OutStream::S2C(id)),
             _ => None,
         }
     }
 }
 
-impl From<Stream> for StreamKind {
-    fn from(value: Stream) -> Self {
+impl From<OutStream> for StreamKind {
+    fn from(value: OutStream) -> Self {
         match value {
-            Stream::Datagram => Self::Datagram,
-            Stream::Bi(id) => Self::Bi(id),
-            Stream::S2C(id) => Self::S2C(id),
+            OutStream::Datagram => Self::Datagram,
+            OutStream::Bi(id) => Self::Bi(id),
+            OutStream::S2C(id) => Self::S2C(id),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct StreamMessage<T> {
-    pub stream: Stream,
+    pub stream: OutStream,
     pub msg: T,
 }
 
@@ -69,7 +69,11 @@ impl<T: SendMessage> SendMessage for StreamMessage<T> {
 
 #[derive(Debug, Clone)]
 pub(crate) enum Request<S2C> {
-    Send { client: ClientId, msg: S2C },
+    Send {
+        client: ClientId,
+        stream: OutStream,
+        msg: S2C,
+    },
     Disconnect { client: ClientId },
 }
 
@@ -88,6 +92,23 @@ pub enum StreamError {
     /// The client closed this stream.
     #[error("closed by client")]
     Closed,
+}
+
+/// A wrapper for [`StreamError`] detailing on which [`StreamKind`] the error occurred.
+#[derive(Debug, thiserror::Error)]
+#[error("on {stream:?}")]
+pub struct OnStreamError {
+    /// The stream on which the error occurred.
+    stream: StreamKind,
+    /// The stream error.
+    #[source]
+    source: StreamError,
+}
+
+impl StreamError {
+    pub fn on(self, stream: StreamKind) -> OnStreamError {
+        OnStreamError { stream, source: self }
+    }
 }
 
 #[derive(Debug, Clone, Default)]

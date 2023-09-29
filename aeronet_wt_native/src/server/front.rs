@@ -1,8 +1,9 @@
 use std::{net::SocketAddr, time::Duration};
 
 use aeronet::{
-    server::{ClientId, Event, GetRemoteAddr, GetRtt, RecvError, Transport, TransportConfig},
-    SendMessage,
+    server::{ClientId, Event, GetRemoteAddr, GetRtt, Transport, TransportConfig},
+    message::SendMessage,
+    transport::RecvError,
 };
 use anyhow::Result;
 use tokio::sync::{broadcast, mpsc};
@@ -35,7 +36,11 @@ where
 
     fn send(&mut self, client: ClientId, msg: impl Into<StreamMessage<S2C>>) {
         let msg = msg.into();
-        let _ = self.send.send(Request::Send { client, msg });
+        let _ = self.send.send(Request::Send {
+            client,
+            stream: msg.stream,
+            msg,
+        });
     }
 
     fn disconnect(&mut self, client: ClientId) {

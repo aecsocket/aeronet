@@ -2,7 +2,8 @@ use std::{convert::Infallible, io};
 
 use aeronet::{
     message::{RecvMessage, SendMessage},
-    server::{ClientId, SessionError, TransportConfig},
+    server::{ClientId, TransportConfig},
+    transport::SessionError,
 };
 use log::debug;
 use tokio::sync::{broadcast, mpsc};
@@ -16,7 +17,7 @@ use wtransport::{
 
 use crate::{StreamId, StreamKind, Streams};
 
-use super::{ClientInfo, Event, Request, SharedClients, Stream, StreamError, CHANNEL_BUF};
+use super::{ClientInfo, Event, Request, SharedClients, OutStream, StreamError, CHANNEL_BUF};
 
 const RECV_BUF: usize = 65536;
 
@@ -83,7 +84,7 @@ async fn listen<C: TransportConfig>(
                 {
                     let _ = send_close.send(()).await;
                 }
-                clients.lock().unwrap().remove(client.into_raw());
+                //clients.lock().unwrap().remove(client.into_raw());
             }
             .instrument(debug_span!("Session", id = tracing::field::display(client))),
         );
@@ -100,8 +101,10 @@ async fn handle_session<C: TransportConfig>(
     client: ClientId,
     req: IncomingSession,
 ) -> Result<Infallible, SessionError> {
-    let info = &mut clients.lock().unwrap()[client.into_raw()];
-    let mut conn = accept_session::<C>(&mut send, client, info, req).await?;
+    let mut conn = {
+        let info = &mut clients.lock().unwrap()[client.into_raw()];
+        accept_session::<C>(&mut send, client, info, req).await?
+    };
 
     let (send_c2s, mut recv_c2s) = mpsc::channel::<C::C2S>(CHANNEL_BUF);
     let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
@@ -114,32 +117,26 @@ async fn handle_session<C: TransportConfig>(
             result = conn.receive_datagram() => {
                 let msg = recv_datagram::<C>(result)
                     .await
-                    .map_err(|source| SessionError::Stream {
-                        stream: StreamKind::Datagram,
-                        source,
-                    })?;
+                    .map_err(|err| SessionError::Transport(err.on(StreamKind::Datagram).into()))?;
                 send.send(Event::Recv { client, msg })
                     .await
-                    .map_err(|_| SessionError::Frontend)?;
+                    .map_err(|_| SessionError::ServerClosed)?;
             }
             Some(msg) = recv_c2s.recv() => {
                 send.send(Event::Recv { client, msg })
                     .await
-                    .map_err(|_| SessionError::Frontend)?;
+                    .map_err(|_| SessionError::ServerClosed)?;
             }
             Some(err) = recv_err.recv() => {
                 return Err(err);
             }
             result = recv.recv() => {
-                let req = result.map_err(|_| SessionError::Frontend)?;
+                let req = result.map_err(|_| SessionError::ServerClosed)?;
                 match req {
-                    Request::Send { client: target, msg } if target == client => {
+                    Request::Send { client: target, stream, msg } if target == client => {
                         send_client::<C>(&mut conn, &mut streams_bi, &mut streams_s2c, stream, msg)
                             .await
-                            .map_err(|source| SessionError::Stream {
-                                stream: stream.into(),
-                                source,
-                            })?;
+                            .map_err(|err| SessionError::Transport(err.on(stream.into()).into()))?;
                     }
                     Request::Disconnect { client: target } if target == client => {
                         return Err(SessionError::ForceDisconnect);
@@ -200,7 +197,7 @@ async fn open_streams<C: TransportConfig>(
         let stream = StreamKind::Bi(StreamId(stream_id));
         let send = open_bi::<C>(&mut conn, stream, send_c2s.clone(), send_err.clone())
             .await
-            .map_err(|source| SessionError::Stream { stream, source })?;
+            .map_err(|err| SessionError::Transport(err.on(stream).into()))?;
         streams_bi.push(send);
     }
 
@@ -209,7 +206,7 @@ async fn open_streams<C: TransportConfig>(
         let stream = StreamKind::S2C(StreamId(stream_id));
         let send = open_s2c::<C>(&mut conn, stream, send_err.clone())
             .await
-            .map_err(|source| SessionError::Stream { stream, source })?;
+            .map_err(|err| SessionError::Transport(err.on(stream).into()))?;
         streams_s2c.push(send);
     }
 
@@ -217,7 +214,7 @@ async fn open_streams<C: TransportConfig>(
         let stream = StreamKind::C2S(StreamId(stream_id));
         open_c2s::<C>(&mut conn, stream, send_c2s.clone(), send_err.clone())
             .await
-            .map_err(|source| SessionError::Stream { stream, source })?;
+            .map_err(|err| SessionError::Transport(err.on(stream).into()))?;
     }
 
     Ok((streams_bi, streams_s2c))
@@ -252,8 +249,8 @@ async fn open_bi<C: TransportConfig>(
     };
 
     tokio::spawn(async move {
-        if let Err::<(), _>(source) = f.await {
-            let _ = send_err.send(SessionError::Stream { stream, source }).await;
+        if let Err::<(), StreamError>(err) = f.await {
+            let _ = send_err.send(SessionError::Transport(err.on(stream).into())).await;
         }
     });
     Ok(send_s2c)
@@ -280,8 +277,8 @@ async fn open_s2c<C: TransportConfig>(
     };
 
     tokio::spawn(async move {
-        if let Err::<(), _>(source) = f.await {
-            let _ = send_err.send(SessionError::Stream { stream, source }).await;
+        if let Err::<(), StreamError>(err) = f.await {
+            let _ = send_err.send(SessionError::Transport(err.on(stream).into())).await;
         }
     });
     Ok(send_s2c)
@@ -307,8 +304,8 @@ async fn open_c2s<C: TransportConfig>(
     };
 
     tokio::spawn(async move {
-        if let Err::<(), _>(source) = f.await {
-            let _ = send_err.send(SessionError::Stream { stream, source }).await;
+        if let Err::<(), StreamError>(err) = f.await {
+            let _ = send_err.send(SessionError::Transport(err.on(stream).into())).await;
         }
     });
     Ok(())
@@ -352,7 +349,7 @@ async fn send_client<C: TransportConfig>(
     conn: &mut Connection,
     streams_bi: &mut [mpsc::Sender<C::S2C>],
     streams_s2c: &mut [mpsc::Sender<C::S2C>],
-    stream: Stream,
+    stream: OutStream,
     msg: C::S2C,
 ) -> Result<(), StreamError> {
     async fn on_stream<C: TransportConfig>(
@@ -364,15 +361,15 @@ async fn send_client<C: TransportConfig>(
     }
 
     match stream {
-        Stream::Datagram => {
+        OutStream::Datagram => {
             let buf = into_payload(msg)?;
             conn.send_datagram(buf)
                 .map_err(|err| StreamError::Send(err.into()))?;
         }
-        Stream::Bi(i) => {
+        OutStream::Bi(i) => {
             on_stream::<C>(&mut streams_bi[i.0], msg).await?;
         }
-        Stream::S2C(i) => {
+        OutStream::S2C(i) => {
             on_stream::<C>(&mut streams_s2c[i.0], msg).await?;
         }
     }
