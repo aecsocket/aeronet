@@ -4,7 +4,7 @@
 //! whether you are on the client or server side. This is to ensure type safety, as you e.g. cannot
 //! send along an S2C channel from the client side.
 //!
-//! See [`StreamKind`] for an explanation of the underlying streams.
+//! See [`StreamKind`] for an explanation of how the underlying streams work.
 
 /// A side-agnostic type representing a kind of stream used for data transport.
 ///
@@ -19,13 +19,15 @@ pub enum StreamKind {
     ///
     /// Only one of these "streams" exists in a single connection.
     Datagram,
-    /// A bidirectional stream, C2S and S2C.
+    /// A bidirectional stream, supporting both client-to-server and server-to-client sending.
     Bi(StreamId),
-    /// A unidirectional stream in the C2S direction.
+    /// A unidirectional stream in the client-to-server direction.
     C2S(StreamId),
-    /// A unidirectional stream in the S2C direction.
+    /// A unidirectional stream in the server-to-client direction.
     S2C(StreamId),
 }
+
+pub enum C2SStream {}
 
 /// An identifier for a single instance of an opened stream.
 ///
@@ -67,29 +69,41 @@ impl StreamId {
 /// let map_data = streams.add_s2c();
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct Streams {
+pub struct StreamDefinitions {
     pub(crate) bi: usize,
     pub(crate) c2s: usize,
     pub(crate) s2c: usize,
 }
 
-impl Streams {
+impl StreamDefinitions {
+    /// Creates a new streams definition object.
+    ///
+    /// Use the various `add` functions to define new streams on this object.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Adds a bidirectional stream to the stream definitions.
+    ///
+    /// Returns a [`StreamKind`] which can be converted into any type of side-specific stream.
     pub fn add_bi(&mut self) -> StreamKind {
         let i = self.bi;
         self.bi += 1;
         StreamKind::Bi(StreamId(i))
     }
 
+    /// Adds a client-to-server stream to the stream definitions.
+    ///
+    /// Returns a [`StreamKind`] which can only be converted into a client-specific stream.
     pub fn add_c2s(&mut self) -> StreamKind {
         let i = self.c2s;
         self.c2s += 1;
         StreamKind::C2S(StreamId(i))
     }
 
+    /// Adds a server-to-client stream to the stream definitions.
+    ///
+    /// Returns a [`StreamKind`] which can only be converted into a server-specific stream.
     pub fn add_s2c(&mut self) -> StreamKind {
         let i = self.s2c;
         self.s2c += 1;

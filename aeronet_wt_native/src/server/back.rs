@@ -1,10 +1,6 @@
 use std::{convert::Infallible, io};
 
-use aeronet::{
-    message::{RecvMessage, SendMessage},
-    server::{ClientId, TransportConfig},
-    transport::SessionError,
-};
+use aeronet::{ClientId, RecvMessage, SendMessage, ServerTransportConfig, SessionError};
 use log::debug;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug_span, Instrument};
@@ -15,76 +11,70 @@ use wtransport::{
     Connection, Endpoint, SendStream, ServerConfig,
 };
 
-use crate::{StreamId, StreamKind, Streams};
+use crate::{StreamDefinitions, StreamId, StreamKind};
 
-use super::{ClientInfo, Event, Request, SharedClients, OutStream, StreamError, CHANNEL_BUF};
+use super::{ClientInfo, InternalEvent, Request, ServerStream, StreamError, CHANNEL_BUF};
 
 const RECV_BUF: usize = 65536;
 
-pub struct Backend<C: TransportConfig> {
+pub struct WebTransportBackend<C: ServerTransportConfig> {
     pub(crate) config: ServerConfig,
-    pub(crate) streams: Streams,
-    pub(crate) send_b2f: mpsc::Sender<Event<C::C2S>>,
+    pub(crate) streams: StreamDefinitions,
+    pub(crate) send_b2f: mpsc::Sender<InternalEvent<C::C2S>>,
     pub(crate) send_f2b: broadcast::Sender<Request<C::S2C>>,
-    pub(crate) clients: SharedClients,
 }
 
-impl<C: TransportConfig> Backend<C> {
+impl<C: ServerTransportConfig> WebTransportBackend<C> {
     pub async fn listen(self) -> Result<(), io::Error> {
         let Self {
             config,
             streams,
             send_b2f,
             send_f2b,
-            clients,
         } = self;
 
         let endpoint = Endpoint::server(config)?;
-        listen::<C>(endpoint, streams, send_b2f, send_f2b, clients).await;
+        listen::<C>(endpoint, streams, send_b2f, send_f2b).await;
         Ok(())
     }
 }
 
-async fn listen<C: TransportConfig>(
+async fn listen<C: ServerTransportConfig>(
     endpoint: Endpoint<Server>,
-    streams: Streams,
-    send_evt: mpsc::Sender<Event<C::C2S>>,
+    streams: StreamDefinitions,
+    send_evt: mpsc::Sender<InternalEvent<C::C2S>>,
     send_req: broadcast::Sender<Request<C::S2C>>,
-    clients: SharedClients,
 ) {
     debug!("Started WebTransport server backend");
 
     let (send_close, mut recv_close) = mpsc::channel::<()>(1);
-    loop {
+    for client in 0.. {
         debug!("Waiting for connection");
         let req = tokio::select! {
             req = endpoint.accept() => req,
             _ = recv_close.recv() => break
         };
 
-        let client = ClientId::from_raw(clients.lock().unwrap().insert(ClientInfo::default()));
+        let client = ClientId::from_raw(client);
 
         let streams = streams.clone();
         let send = send_evt.clone();
         let recv = send_req.subscribe();
-        let clients = clients.clone();
 
         let send_close = send_close.clone();
 
         tokio::spawn(
             async move {
-                let reason =
-                    handle_session::<C>(streams, send.clone(), recv, clients.clone(), client, req)
-                        .await
-                        .unwrap_err();
+                let reason = handle_session::<C>(streams, send.clone(), recv, client, req)
+                    .await
+                    .unwrap_err();
                 if send
-                    .send(Event::Disconnected { client, reason })
+                    .send(InternalEvent::Disconnected { client, reason })
                     .await
                     .is_err()
                 {
                     let _ = send_close.send(()).await;
                 }
-                clients.lock().unwrap().remove(client.into_raw());
             }
             .instrument(debug_span!("Session", id = tracing::field::display(client))),
         );
@@ -93,15 +83,14 @@ async fn listen<C: TransportConfig>(
     debug!("Stopped WebTransport server backend");
 }
 
-async fn handle_session<C: TransportConfig>(
-    streams: Streams,
-    mut send: mpsc::Sender<Event<C::C2S>>,
+async fn handle_session<C: ServerTransportConfig>(
+    streams: StreamDefinitions,
+    mut send: mpsc::Sender<InternalEvent<C::C2S>>,
     mut recv: broadcast::Receiver<Request<C::S2C>>,
-    clients: SharedClients,
     client: ClientId,
     req: IncomingSession,
 ) -> Result<Infallible, SessionError> {
-    let mut conn = accept_session::<C>(&mut send, &clients, client, req).await?;
+    let mut conn = accept_session::<C>(&mut send, client, req).await?;
 
     let (send_c2s, mut recv_c2s) = mpsc::channel::<C::C2S>(CHANNEL_BUF);
     let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
@@ -109,18 +98,21 @@ async fn handle_session<C: TransportConfig>(
         open_streams::<C>(&streams, &mut conn, send_c2s, send_err).await?;
 
     loop {
-        *&mut clients.lock().unwrap()[client.into_raw()] = ClientInfo::from_connection(&conn);
+        send.send(InternalEvent::UpdateInfo {
+            client,
+            info: ClientInfo::from_connection(&conn),
+        });
         tokio::select! {
             result = conn.receive_datagram() => {
                 let msg = recv_datagram::<C>(result)
                     .await
                     .map_err(|err| SessionError::Transport(err.on(StreamKind::Datagram).into()))?;
-                send.send(Event::Recv { client, msg })
+                send.send(InternalEvent::Recv { client, msg })
                     .await
                     .map_err(|_| SessionError::ServerClosed)?;
             }
             Some(msg) = recv_c2s.recv() => {
-                send.send(Event::Recv { client, msg })
+                send.send(InternalEvent::Recv { client, msg })
                     .await
                     .map_err(|_| SessionError::ServerClosed)?;
             }
@@ -145,9 +137,8 @@ async fn handle_session<C: TransportConfig>(
     }
 }
 
-async fn accept_session<C: TransportConfig>(
-    send: &mut mpsc::Sender<Event<C::C2S>>,
-    clients: &SharedClients,
+async fn accept_session<C: ServerTransportConfig>(
+    send: &mut mpsc::Sender<InternalEvent<C::C2S>>,
     client: ClientId,
     req: IncomingSession,
 ) -> Result<Connection, SessionError> {
@@ -162,10 +153,12 @@ async fn accept_session<C: TransportConfig>(
         req.authority(),
         req.path()
     );
-    send.send(Event::Incoming { client })
-        .await
-        .map_err(|_| SessionError::ServerClosed)?;
-    *&mut clients.lock().unwrap()[client.into_raw()] = ClientInfo::from_request(&req);
+    send.send(InternalEvent::Incoming {
+        client,
+        info: ClientInfo::from_request(&req),
+    })
+    .await
+    .map_err(|_| SessionError::ServerClosed)?;
 
     let conn = req
         .accept()
@@ -174,7 +167,7 @@ async fn accept_session<C: TransportConfig>(
 
     let remote_addr = conn.remote_address();
     debug!("Connected from {remote_addr}");
-    send.send(Event::Connected { client })
+    send.send(InternalEvent::Connected { client })
         .await
         .map_err(|_| SessionError::ServerClosed)?;
 
@@ -183,8 +176,8 @@ async fn accept_session<C: TransportConfig>(
 
 // streams
 
-async fn open_streams<C: TransportConfig>(
-    streams: &Streams,
+async fn open_streams<C: ServerTransportConfig>(
+    streams: &StreamDefinitions,
     mut conn: &mut Connection,
     send_c2s: mpsc::Sender<C::C2S>,
     send_err: mpsc::Sender<SessionError>,
@@ -217,7 +210,7 @@ async fn open_streams<C: TransportConfig>(
     Ok((streams_bi, streams_s2c))
 }
 
-async fn open_bi<C: TransportConfig>(
+async fn open_bi<C: ServerTransportConfig>(
     conn: &mut Connection,
     stream: StreamKind,
     mut send_c2s: mpsc::Sender<C::C2S>,
@@ -247,13 +240,15 @@ async fn open_bi<C: TransportConfig>(
 
     tokio::spawn(async move {
         if let Err::<(), StreamError>(err) = f.await {
-            let _ = send_err.send(SessionError::Transport(err.on(stream).into())).await;
+            let _ = send_err
+                .send(SessionError::Transport(err.on(stream).into()))
+                .await;
         }
     });
     Ok(send_s2c)
 }
 
-async fn open_s2c<C: TransportConfig>(
+async fn open_s2c<C: ServerTransportConfig>(
     conn: &mut Connection,
     stream: StreamKind,
     send_err: mpsc::Sender<SessionError>,
@@ -275,13 +270,15 @@ async fn open_s2c<C: TransportConfig>(
 
     tokio::spawn(async move {
         if let Err::<(), StreamError>(err) = f.await {
-            let _ = send_err.send(SessionError::Transport(err.on(stream).into())).await;
+            let _ = send_err
+                .send(SessionError::Transport(err.on(stream).into()))
+                .await;
         }
     });
     Ok(send_s2c)
 }
 
-async fn open_c2s<C: TransportConfig>(
+async fn open_c2s<C: ServerTransportConfig>(
     conn: &mut Connection,
     stream: StreamKind,
     mut send_c2s: mpsc::Sender<C::C2S>,
@@ -302,7 +299,9 @@ async fn open_c2s<C: TransportConfig>(
 
     tokio::spawn(async move {
         if let Err::<(), StreamError>(err) = f.await {
-            let _ = send_err.send(SessionError::Transport(err.on(stream).into())).await;
+            let _ = send_err
+                .send(SessionError::Transport(err.on(stream).into()))
+                .await;
         }
     });
     Ok(())
@@ -314,7 +313,7 @@ fn from_payload<C2S: RecvMessage>(buf: &[u8]) -> Result<C2S, StreamError> {
     C2S::from_payload(buf).map_err(|err| StreamError::Recv(err.into()))
 }
 
-async fn recv_datagram<C: TransportConfig>(
+async fn recv_datagram<C: ServerTransportConfig>(
     result: Result<Datagram, ConnectionError>,
 ) -> Result<C::C2S, StreamError> {
     let datagram = result.map_err(|err| StreamError::Recv(err.into()))?;
@@ -322,7 +321,7 @@ async fn recv_datagram<C: TransportConfig>(
     Ok(msg)
 }
 
-async fn recv_stream<C: TransportConfig>(
+async fn recv_stream<C: ServerTransportConfig>(
     send: &mpsc::Sender<C::C2S>,
     buf: &[u8; RECV_BUF],
     result: Result<Option<usize>, StreamReadError>,
@@ -342,14 +341,14 @@ fn into_payload<S2C: SendMessage>(msg: S2C) -> Result<Vec<u8>, StreamError> {
         .map_err(|err| StreamError::Send(err.into()))
 }
 
-async fn send_client<C: TransportConfig>(
+async fn send_client<C: ServerTransportConfig>(
     conn: &mut Connection,
     streams_bi: &mut [mpsc::Sender<C::S2C>],
     streams_s2c: &mut [mpsc::Sender<C::S2C>],
-    stream: OutStream,
+    stream: ServerStream,
     msg: C::S2C,
 ) -> Result<(), StreamError> {
-    async fn on_stream<C: TransportConfig>(
+    async fn on_stream<C: ServerTransportConfig>(
         stream: &mut mpsc::Sender<C::S2C>,
         msg: C::S2C,
     ) -> Result<(), StreamError> {
@@ -358,22 +357,22 @@ async fn send_client<C: TransportConfig>(
     }
 
     match stream {
-        OutStream::Datagram => {
+        ServerStream::Datagram => {
             let buf = into_payload(msg)?;
             conn.send_datagram(buf)
                 .map_err(|err| StreamError::Send(err.into()))?;
         }
-        OutStream::Bi(i) => {
+        ServerStream::Bi(i) => {
             on_stream::<C>(&mut streams_bi[i.0], msg).await?;
         }
-        OutStream::S2C(i) => {
+        ServerStream::S2C(i) => {
             on_stream::<C>(&mut streams_s2c[i.0], msg).await?;
         }
     }
     Ok(())
 }
 
-async fn send_stream<C: TransportConfig>(
+async fn send_stream<C: ServerTransportConfig>(
     send: &mut SendStream,
     result: Option<C::S2C>,
 ) -> Result<(), StreamError> {

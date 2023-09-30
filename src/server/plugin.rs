@@ -4,9 +4,11 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 
-use super::{ClientId, Event, RecvError, SessionError, Transport, TransportConfig};
+use super::{
+    ClientId, RecvError, ServerEvent, ServerTransport, ServerTransportConfig, SessionError,
+};
 
-/// Configures a server-side [`Transport`] of type `T` using configuration `C`.
+/// Configures a [`ServerTransport`] of type `T` using configuration `C`.
 ///
 /// This handles receiving data from the transport and forwarding it to the app via events,
 /// as well as sending data to the transport by reading from events. The events provided are:
@@ -23,7 +25,7 @@ use super::{ClientId, Event, RecvError, SessionError, Transport, TransportConfig
 ///
 /// # Usage
 ///
-/// You will need an implementation of [`TransportConfig`] to use as the `C` type parameter.
+/// You will need an implementation of [`ServerTransportConfig`] to use as the `C` type parameter.
 /// See that type's docs to see how to implement one.
 ///
 /// This plugin is not *required* to use the server transports. Using the plugin actually poses
@@ -51,15 +53,15 @@ use super::{ClientId, Event, RecvError, SessionError, Transport, TransportConfig
 /// ```
 #[derive(Debug, derivative::Derivative)]
 #[derivative(Default)]
-pub struct TransportPlugin<C, T> {
+pub struct ServerTransportPlugin<C, T> {
     _phantom_c: PhantomData<C>,
     _phantom_t: PhantomData<T>,
 }
 
-impl<C, T> Plugin for TransportPlugin<C, T>
+impl<C, T> Plugin for ServerTransportPlugin<C, T>
 where
-    C: TransportConfig,
-    T: Transport<C> + Resource,
+    C: ServerTransportConfig,
+    T: ServerTransport<C> + Resource,
 {
     fn build(&self, app: &mut App) {
         app.add_event::<ClientIncoming>()
@@ -68,58 +70,61 @@ where
             .add_event::<ClientDisconnected>()
             .add_event::<ToClient<C::S2C>>()
             .add_event::<DisconnectClient>()
-            .configure_set(PreUpdate, TransportSet::Recv.run_if(resource_exists::<T>()))
+            .configure_set(
+                PreUpdate,
+                ServerTransportSet::Recv.run_if(resource_exists::<T>()),
+            )
             .configure_set(
                 PostUpdate,
-                TransportSet::Send.run_if(resource_exists::<T>()),
+                ServerTransportSet::Send.run_if(resource_exists::<T>()),
             )
-            .add_systems(PreUpdate, recv::<C, T>.in_set(TransportSet::Recv))
-            .add_systems(PostUpdate, send::<C, T>.in_set(TransportSet::Send));
+            .add_systems(PreUpdate, recv::<C, T>.in_set(ServerTransportSet::Recv))
+            .add_systems(PostUpdate, send::<C, T>.in_set(ServerTransportSet::Send));
     }
 }
 
 /// A system set for transport operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum TransportSet {
+pub enum ServerTransportSet {
     /// Transports receiving data and forwarding it to the app.
     Recv,
     /// Transports sending data from the app.
     Send,
 }
 
-/// See [`Event::Incoming`].
+/// See [`ServerEvent::Incoming`].
 #[derive(Debug, Clone, Event)]
 pub struct ClientIncoming {
-    /// See [`Event::Incoming::client`].
+    /// See [`ServerEvent::Incoming::client`].
     pub client: ClientId,
 }
 
-/// See [`Event::Connected`].
+/// See [`ServerEvent::Connected`].
 #[derive(Debug, Clone, Event)]
 pub struct ClientConnected {
-    /// See [`Event::Connected::client`].
+    /// See [`ServerEvent::Connected::client`].
     pub client: ClientId,
 }
 
-/// See [`Event::Recv`].
+/// See [`ServerEvent::Recv`].
 #[derive(Debug, Clone, Event)]
 pub struct FromClient<C2S> {
-    /// See [`Event::Recv::client`].
+    /// See [`ServerEvent::Recv::client`].
     pub client: ClientId,
-    /// See [`Event::Recv::msg`].
+    /// See [`ServerEvent::Recv::msg`].
     pub msg: C2S,
 }
 
-/// See [`Event::Disconnected`].
+/// See [`ServerEvent::Disconnected`].
 #[derive(Debug, Event)]
 pub struct ClientDisconnected {
-    /// See [`Event::Disconnected::client`].
+    /// See [`ServerEvent::Disconnected::client`].
     pub client: ClientId,
-    /// See [`Event::Disconnected::reason`].
+    /// See [`ServerEvent::Disconnected::reason`].
     pub reason: SessionError,
 }
 
-/// Sends a message to a connected client using [`Transport::send`].
+/// Sends a message to a connected client using [`ServerTransport::send`].
 #[derive(Debug, Event)]
 pub struct ToClient<S2C> {
     /// The ID of the client to send to.
@@ -128,7 +133,7 @@ pub struct ToClient<S2C> {
     pub msg: S2C,
 }
 
-/// Forcefully disconnects a client using [`Transport::disconnect`].
+/// Forcefully disconnects a client using [`ServerTransport::disconnect`].
 #[derive(Debug, Clone, Event)]
 pub struct DisconnectClient {
     /// The ID of the client to disconnect.
@@ -143,21 +148,21 @@ fn recv<C, T>(
     mut from_client: EventWriter<FromClient<C::C2S>>,
     mut disconnected: EventWriter<ClientDisconnected>,
 ) where
-    C: TransportConfig,
-    T: Transport<C> + Resource,
+    C: ServerTransportConfig,
+    T: ServerTransport<C> + Resource,
 {
     loop {
         match server.recv() {
-            Ok(Event::Incoming { client }) => {
+            Ok(ServerEvent::Incoming { client }) => {
                 requested.send(ClientIncoming { client });
             }
-            Ok(Event::Connected { client }) => {
+            Ok(ServerEvent::Connected { client }) => {
                 connected.send(ClientConnected { client });
             }
-            Ok(Event::Recv { client, msg }) => {
+            Ok(ServerEvent::Recv { client, msg }) => {
                 from_client.send(FromClient { client, msg });
             }
-            Ok(Event::Disconnected { client, reason }) => {
+            Ok(ServerEvent::Disconnected { client, reason }) => {
                 disconnected.send(ClientDisconnected { client, reason });
             }
             Err(RecvError::Empty) => break,
@@ -174,8 +179,8 @@ fn send<C, T>(
     mut to_client: EventReader<ToClient<C::S2C>>,
     mut disconnect: EventReader<DisconnectClient>,
 ) where
-    C: TransportConfig,
-    T: Transport<C> + Resource,
+    C: ServerTransportConfig,
+    T: ServerTransport<C> + Resource,
 {
     for ToClient { client, msg } in to_client.iter() {
         server.send(*client, msg.clone());

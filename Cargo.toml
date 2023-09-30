@@ -18,7 +18,7 @@ bevy = [ "dep:bevy" ]
 bevy-tokio-rt = [ "bevy", "dep:tokio" ]
 
 ## Allows using [`serde`](https://docs.rs/serde) for message serialization.
-serde = [ "dep:serde", "generational-arena/serde" ]
+serde = [ "dep:serde" ]
 
 ## Allows using [`bincode`](https://docs.rs/bincode) as a format for message serialization
 ## using [`serde`](https://docs.rs/serde).
@@ -28,7 +28,6 @@ bincode = [ "serde", "dep:bincode" ]
 thiserror = "1.0.47"
 anyhow = "1.0.75"
 derivative = "2.2.0"
-generational-arena = "0.2.9"
 bevy = { version = "0.11.2", default-features = false, optional = true }
 tokio = { version = "1.32.0", default-features = false, features = [ "rt-multi-thread" ], optional = true }
 serde = { version = "1.0.188", optional = true }

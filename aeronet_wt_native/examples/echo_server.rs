@@ -1,11 +1,10 @@
 use std::time::Duration;
 
-use aeronet::server::Transport;
-use aeronet::{AsyncRuntime, Message, TransportConfig};
-use aeronet_webtransport::{
-    server::{Frontend, Stream, StreamMessage},
-    Streams,
+use aeronet::{
+    AsyncRuntime, ClientDisconnected, FromClient, RecvMessage, SendMessage, ServerTransport,
+    ServerTransportConfig,
 };
+use aeronet_wt_native::{ServerMessage, ServerStream, StreamDefinitions, WebTransportServer, OnServerStream};
 use anyhow::Result;
 use bevy::{
     app::ScheduleRunnerPlugin,
@@ -16,29 +15,25 @@ use wtransport::{tls::Certificate, ServerConfig};
 
 pub struct AppTransportConfig;
 
-impl TransportConfig for AppTransportConfig {
+impl ServerTransportConfig for AppTransportConfig {
     type C2S = AppMessage;
-    type S2C = AppMessage;
+    type S2C = ServerMessage<AppMessage>;
 }
 
 #[derive(Debug, Clone)]
 pub struct AppMessage(pub String);
 
-impl Message for AppMessage {
-    fn from_payload(payload: &[u8]) -> Result<Self> {
-        String::from_utf8(payload.to_owned().into_iter().collect())
-            .map(|s| AppMessage(s))
-            .map_err(|err| anyhow::Error::new(err))
-    }
-
+impl SendMessage for AppMessage {
     fn into_payload(self) -> Result<Vec<u8>> {
         Ok(self.0.into_bytes())
     }
 }
 
-impl StreamMessage for AppMessage {
-    fn stream(&self) -> Stream {
-        Stream::Datagram
+impl RecvMessage for AppMessage {
+    fn from_payload(payload: &[u8]) -> Result<Self> {
+        String::from_utf8(payload.to_owned().into_iter().collect())
+            .map(|s| AppMessage(s))
+            .map_err(|err| anyhow::Error::new(err))
     }
 }
 
@@ -46,9 +41,12 @@ impl StreamMessage for AppMessage {
 
 fn main() {
     App::new()
+        .add_plugins(aeronet::ServerTransportPlugin::<
+            AppTransportConfig,
+            aeronet_wt_native::WebTransportServer<_>,
+        >::default())
         .add_plugins((
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
-            WtServerPlugin::<AppTransportConfig>::default(),
             LogPlugin {
                 level: Level::DEBUG,
                 ..default()
@@ -69,7 +67,7 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
     }
 }
 
-fn create(rt: &AsyncRuntime) -> Result<Frontend<AppTransportConfig>> {
+fn create(rt: &AsyncRuntime) -> Result<WebTransportServer<AppTransportConfig>> {
     let cert = Certificate::load(
         "./aeronet_webtransport/examples/cert.pem",
         "./aeronet_webtransport/examples/key.pem",
@@ -81,11 +79,11 @@ fn create(rt: &AsyncRuntime) -> Result<Frontend<AppTransportConfig>> {
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    let mut streams = Streams::new();
+    let mut streams = StreamDefinitions::new();
     //streams.add_bi();
     //streams.add_c2s();
 
-    let (front, back) = aeronet_webtransport::server::create::<AppTransportConfig>(config, streams);
+    let (front, back) = aeronet_wt_native::create_server(config, streams);
     rt.0.spawn(async move {
         back.listen().await.unwrap();
     });
@@ -93,24 +91,27 @@ fn create(rt: &AsyncRuntime) -> Result<Frontend<AppTransportConfig>> {
 }
 
 fn reply(
-    mut server: ResMut<Frontend<AppTransportConfig>>,
-    mut recv: EventReader<ServerRecv<AppMessage>>,
+    mut server: ResMut<WebTransportServer<AppTransportConfig>>,
+    mut recv: EventReader<FromClient<AppMessage>>,
 ) {
-    for ServerRecv { client, msg } in recv.iter() {
+    for FromClient { client, msg } in recv.iter() {
         info!("From {client}: {:?}", msg.0);
         info!("  {:?}", server.client_info(*client));
         match msg.0.as_str() {
             "dc" => server.disconnect(*client),
-            _ => server.send(*client, AppMessage("Acknowledged".into())),
+            _ => server.send(
+                *client,
+                AppMessage("Acknowledged".into()).on(ServerStream::Datagram),
+            ),
         }
     }
 }
 
 fn log_disconnect(
-    server: Res<Frontend<AppTransportConfig>>,
-    mut dc: EventReader<ServerClientDisconnected>,
+    server: Res<WebTransportServer<AppTransportConfig>>,
+    mut dc: EventReader<ClientDisconnected>,
 ) {
-    for ServerClientDisconnected { client, reason } in dc.iter() {
+    for ClientDisconnected { client, reason } in dc.iter() {
         info!(
             "Client {client} disconnected: {:#}",
             aeronet::error::as_pretty(reason)

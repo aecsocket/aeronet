@@ -3,7 +3,10 @@
 
 use std::{net::SocketAddr, time::Duration};
 
-use crate::{message::{RecvMessage, SendMessage}, transport::{SessionError, RecvError}};
+use crate::{
+    message::{RecvMessage, SendMessage},
+    transport::{RecvError, SessionError},
+};
 
 /// A client-to-server layer responsible for sending user messages to the other side.
 ///
@@ -13,11 +16,11 @@ use crate::{message::{RecvMessage, SendMessage}, transport::{SessionError, RecvE
 /// Different transport implementations will use different methods to
 /// transport the data across, such as through memory or over a network. This means that a
 /// transport does not necessarily work over the internet! If you want info on networking, see
-/// related traits like [`GetRtt`] and [`GetRemoteAddr`].
+/// related traits like [`ClientRtt`] and [`ClientRemoteAddr`].
 ///
 /// The `C` parameter allows configuring which types of messages are sent and received by this
-/// transport (see [`TransportConfig`]).
-pub trait Transport<C: TransportConfig> {
+/// transport (see [`ClientTransportConfig`]).
+pub trait ClientTransport<C: ClientTransportConfig> {
     /// Attempts to receive a queued event from the transport.
     ///
     /// # Usage
@@ -39,17 +42,17 @@ pub trait Transport<C: TransportConfig> {
     /// }
     /// # }
     /// ```
-    fn recv(&mut self) -> Result<Event<C::S2C>, RecvError>;
+    fn recv(&mut self) -> Result<ClientEvent<C::S2C>, RecvError>;
 
     /// Sends a message to the connected server.
     fn send(&mut self, msg: impl Into<C::C2S>);
 }
 
-/// A [`Transport`] that allows access to the round-trip time to the connected server.
+/// A [`ClientTransport`] that allows access to the round-trip time to the connected server.
 ///
 /// Since not all transports will use a network with a round-trip time, this trait is separate
-/// from [`Transport`].
-pub trait GetRtt {
+/// from [`ClientTransport`].
+pub trait ClientRtt {
     /// Gets the round-trip time to the connected server.
     ///
     /// The round-trip time is defined as the time taken for the following to happen:
@@ -60,11 +63,11 @@ pub trait GetRtt {
     fn rtt(&self) -> Duration;
 }
 
-/// A [`Transport`] that allows access to the remote socket address of the connected server.
+/// A [`ClientTransport`] that allows access to the remote socket address of the connected server.
 ///
 /// Since not all transports will use a network to connect to the server, this trait is separate
-/// from [`Transport`].
-pub trait GetRemoteAddr {
+/// from [`ClientTransport`].
+pub trait ClientRemoteAddr {
     /// Gets the remote socket address of the connected server.
     fn remote_addr(&self) -> SocketAddr;
 }
@@ -73,42 +76,42 @@ pub trait GetRemoteAddr {
 ///
 /// A transport is abstract over the exact message type that it uses, instead letting the user
 /// decide. This trait allows configuring the message types both for:
-/// * client-to-server messages ([`TransportConfig::C2S`])
+/// * client-to-server messages ([`ClientTransportConfig::C2S`])
 ///   * the client must be able to serialize these into a payload ([`SendMessage`])
-/// * server-to-client messages ([`TransportConfig::S2C`])
+/// * server-to-client messages ([`ClientTransportConfig::S2C`])
 ///   * the client must be able to deserialize these from a payload ([`RecvMessage`])
 ///
 /// The types used for C2S and S2C may be different.
 ///
 /// # Examples
-/// 
+///
 /// ```
-/// use aeronet::client::TransportConfig;
-/// 
+/// use aeronet::ClientTransportConfig;
+///
 /// #[derive(Debug, Clone)]
 /// pub enum C2S {
 ///     Ping(u64),
 /// }
-/// # impl aeronet::message::SendMessage for C2S {
+/// # impl aeronet::SendMessage for C2S {
 /// #     fn into_payload(self) -> anyhow::Result<Vec<u8>> { unimplemented!() }
 /// # }
-/// 
+///
 /// #[derive(Debug, Clone)]
 /// pub enum S2C {
 ///     Pong(u64),
 /// }
-/// # impl aeronet::message::RecvMessage for S2C {
+/// # impl aeronet::RecvMessage for S2C {
 /// #     fn from_payload(buf: &[u8]) -> anyhow::Result<Self> { unimplemented!() }
 /// # }
-/// 
+///
 /// pub struct AppTransportConfig;
-/// 
-/// impl TransportConfig for AppTransportConfig {
+///
+/// impl ClientTransportConfig for AppTransportConfig {
 ///     type C2S = C2S;
 ///     type S2C = S2C;
 /// }
 /// ```
-pub trait TransportConfig: Send + Sync + 'static {
+pub trait ClientTransportConfig: Send + Sync + 'static {
     /// The client-to-server message type.
     ///
     /// The client will only send messages of this type, requiring [`SendMessage`].
@@ -120,14 +123,14 @@ pub trait TransportConfig: Send + Sync + 'static {
     type S2C: RecvMessage;
 }
 
-/// An event received from a [`Transport`].
-/// 
+/// An event received from a [`ClientTransport`].
+///
 /// Under [`bevy`] this also implements `Event`, however this type cannot be used in an event
 /// reader or writer using the inbuilt plugins. `Event` is implemented to allow user code to use
 /// this type as an event if they wish to manually implement transport handling.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
-pub enum Event<S2C> {
+pub enum ClientEvent<S2C> {
     /// The client successfully connected to the server that was requested when creating the
     /// transport.
     ///
@@ -140,14 +143,14 @@ pub enum Event<S2C> {
         msg: S2C,
     },
     /// The connection to the server was closed for any reason.
-    /// 
+    ///
     /// This is called for both transport errors (such as losing connection) and for the transport
     /// being forcefully disconnected by the server.
-    /// 
+    ///
     /// This should be used as a signal to transition into the next app state, such as entering the
     /// main menu after exiting a server.
     Disconnected {
         /// Why the connection was lost.
         reason: SessionError,
-    }
+    },
 }

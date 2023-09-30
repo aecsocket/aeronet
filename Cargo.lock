@@ -94,14 +94,13 @@ dependencies = [
  "bevy",
  "bincode",
  "derivative",
- "generational-arena",
  "serde",
  "thiserror",
  "tokio",
 ]
 
 [[package]]
-name = "aeronet_webtransport_native"
+name = "aeronet_wt_native"
 version = "0.1.0"
 dependencies = [
  "aeronet",
@@ -111,6 +110,7 @@ dependencies = [
  "log",
  "rcgen",
  "ring",
+ "rustc-hash",
  "serde",
  "thiserror",
  "time",
@@ -1693,16 +1693,6 @@ dependencies = [
  "parking",
  "pin-project-lite",
  "waker-fn",
-]
-
-[[package]]
-name = "generational-arena"
-version = "0.2.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "877e94aff08e743b651baaea359664321055749b398adff8740a7399af7796e7"
-dependencies = [
- "cfg-if",
- "serde",
 ]
 
 [[package]]

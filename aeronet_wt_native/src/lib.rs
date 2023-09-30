@@ -3,9 +3,13 @@
 #![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
 
-pub mod client;
-pub mod server;
-
+mod client;
+mod server;
 mod stream;
 
-pub use stream::{StreamId, StreamKind, Streams};
+pub use client::WebTransportClient;
+pub use server::{
+    back::WebTransportBackend, create_server, front::WebTransportServer, ClientInfo,
+    OnStreamError, ServerMessage, ServerStream, StreamError, OnServerStream,
+};
+pub use stream::{StreamDefinitions, StreamId, StreamKind};

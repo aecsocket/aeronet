@@ -3,14 +3,29 @@
 #![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
 
-pub mod client;
 pub mod error;
-pub mod message;
-pub mod server;
-pub mod transport;
+
+mod client;
+mod message;
+mod server;
+mod transport;
 
 #[cfg(feature = "bevy-tokio-rt")]
-pub mod runtime;
+mod runtime;
 
-pub use anyhow::{Error, Result};
-pub use generational_arena::{Arena, Index};
+pub use client::{
+    ClientEvent, ClientRemoteAddr, ClientRtt, ClientTransport, ClientTransportConfig,
+};
+pub use message::{RecvMessage, SendMessage};
+#[cfg(feature = "bevy")]
+pub use server::plugin::{
+    ClientConnected, ClientDisconnected, ClientIncoming, DisconnectClient, FromClient,
+    ServerTransportPlugin, ServerTransportSet, ToClient,
+};
+pub use server::{
+    ClientId, ServerEvent, ServerRemoteAddr, ServerRtt, ServerTransport, ServerTransportConfig,
+};
+pub use transport::{RecvError, SessionError};
+
+#[cfg(feature = "bevy-tokio-rt")]
+pub use runtime::AsyncRuntime;
