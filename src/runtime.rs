@@ -1,5 +1,3 @@
-//! [`bevy`] utility to create and store an async [`tokio`] runtime [`Resource`].
-
 use bevy::prelude::*;
 
 /// Wrapper resource around an async [`tokio`] runtime.
@@ -48,3 +46,4 @@ impl FromWorld for AsyncRuntime {
         Self(rt)
     }
 }
+ 

@@ -1,5 +1,3 @@
-//! Server-side implementation of the transport layer using WebTransport.
-
 pub mod back;
 pub mod front;
 

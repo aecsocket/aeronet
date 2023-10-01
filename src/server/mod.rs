@@ -1,6 +1,3 @@
-//! Server-side transport API, handling incoming clients, and sending/receiving messages
-//! to/from clients.
-
 #[cfg(feature = "bevy")]
 pub mod plugin;
 

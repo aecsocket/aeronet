@@ -1,5 +1,3 @@
-//! [`bevy`] plugin for interacting with a server transport.
-
 use std::marker::PhantomData;
 
 use bevy::prelude::*;

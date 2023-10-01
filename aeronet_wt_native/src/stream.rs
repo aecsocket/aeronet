@@ -1,11 +1,3 @@
-//! Types for representing QUIC streams and their directions.
-//!
-//! This module lays out building blocks for the higher level stream APIs, which will depend on
-//! whether you are on the client or server side. This is to ensure type safety, as you e.g. cannot
-//! send along an S2C channel from the client side.
-//!
-//! See [`TransportStream`] for an explanation of how the underlying streams work.
-
 /// An identifier for a single instance of an opened stream.
 ///
 /// Since you can open multiple streams of the same type on a connection, we need a way to index

@@ -1,5 +1,3 @@
-//! Types used by the [`crate::ClientTransport`] and [`crate::ServerTransport`] types.
-
 /// An error that occurrs while receiving queued events from a transport.
 #[derive(Debug, thiserror::Error)]
 pub enum RecvError {

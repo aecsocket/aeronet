@@ -1,6 +1,3 @@
-//! Client-side transport API, handling connecting to a server, and sending/receiving messages
-//! to/from the connected server.
-
 use std::{net::SocketAddr, time::Duration};
 
 use crate::{
