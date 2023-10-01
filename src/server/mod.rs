@@ -49,7 +49,7 @@ pub trait ServerTransport<C: ServerTransportConfig> {
 
     /// Forces a client to disconnect from the server.
     ///
-    /// This will issue an [`Event::Disconnected`] with reason [`SessionError::ForceDisconnect`].
+    /// This will issue a [`ServerEvent::Disconnected`] with reason [`SessionError::ForceDisconnect`].
     fn disconnect(&mut self, client: ClientId);
 }
 

@@ -9,7 +9,7 @@ mod stream;
 
 pub use client::WebTransportClient;
 pub use server::{
-    back::WebTransportBackend, create_server, front::WebTransportServer, ClientInfo,
+    back::WebTransportServerBackend, create_server, front::WebTransportServer, ClientInfo,
     OnServerStream, OnStreamError, SendOnServerStream, ServerStreamMessage, StreamError,
 };
 pub use stream::{ClientStream, ServerStream, StreamId, TransportStream, TransportStreams};

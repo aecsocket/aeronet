@@ -9,17 +9,34 @@ use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 use wtransport::{endpoint::SessionRequest, Connection, ServerConfig};
 
-use crate::{TransportStream, TransportStreams, WebTransportBackend, WebTransportServer, ServerStream};
+use crate::{TransportStream, TransportStreams, WebTransportServerBackend, WebTransportServer, ServerStream};
 
 pub(crate) const CHANNEL_BUF: usize = 128;
 
+/// A message that is sent along a specific [`ServerStream`].
+/// 
+/// This is used to determine along which WebTransport stream a message is sent when it is used
+/// by a [`WebTransportServer`]. Note that the type of message received (the type of
+/// [`ServerTransportConfig::C2S`]) does *not* have to implement this type, but *may* (if you are
+/// using the same message type for both C2S and S2C).
+/// 
+/// To use this, it is recommended to use the wrapper struct [`ServerStreamMessage`] to provide
+/// the stream along which the message is sent. This struct can easily be constructed using
+/// [`OnServerStream::on`], which is automatically implemented for all [`SendMessage`] types.
 pub trait SendOnServerStream {
+    /// Gets along which stream this message should be sent.
     fn stream(&self) -> ServerStream;
 }
 
+/// Wrapper around a user-defined message type which bundles which stream the message should
+/// be sent along.
+/// 
+/// Use [`OnServerStream::on`] to easily construct one.
 #[derive(Debug, Clone)]
 pub struct ServerStreamMessage<T> {
+    /// The stream along which to send the message.
     pub stream: ServerStream,
+    /// The message.
     pub msg: T,
 }
 
@@ -35,7 +52,12 @@ impl<T: SendMessage> SendOnServerStream for ServerStreamMessage<T> {
     }
 }
 
+/// Allows converting a [`SendMessage`] to a [`ServerStreamMessage`].
+/// 
+/// This is automatically implemented for all [`SendMessage`] types.
 pub trait OnServerStream: Sized {
+    /// Converts this into a [`ServerStreamMessage`] by providing the stream along which the
+    /// message is sent.
     fn on(self, stream: ServerStream) -> ServerStreamMessage<Self>;
 }
 
@@ -62,7 +84,7 @@ pub enum StreamError {
     Closed,
 }
 
-/// A wrapper for [`StreamError`] detailing on which [`StreamKind`] the error occurred.
+/// A wrapper for [`StreamError`] detailing on which [`TransportStream`] the error occurred.
 #[derive(Debug, thiserror::Error)]
 #[error("on {stream:?}")]
 pub struct OnStreamError {
@@ -85,6 +107,8 @@ impl StreamError {
 }
 
 /// Details on a client which is connected to this server through the WebTransport protocol.
+/// 
+/// Info for a specific client can be obtained using [`WebTransportServer::client_info`].
 #[derive(Debug, Clone, Default)]
 pub enum ClientInfo {
     /// The client has started a connection, but no further info is known.
@@ -138,14 +162,14 @@ impl ClientInfo {
 /// Creates a server-side transport using the WebTransport protocol.
 ///
 /// This returns a [`WebTransportServer`], which provides the API of the server and is the type you
-/// should store, pass around, etc; and also a [`WebTransportBackend`], which should be started
-/// once using [`WebTransportBackend::listen`] in an async Tokio runtime when it is first
+/// should store, pass around, etc; and also a [`WebTransportServerBackend`], which should be started
+/// once using [`WebTransportServerBackend::listen`] in an async Tokio runtime when it is first
 /// available (this function does not automatically start the backend, because we have no
 /// guarantees about the current Tokio runtime at this point).
 pub fn create_server<S2C, C>(
     config: ServerConfig,
     streams: TransportStreams,
-) -> (WebTransportServer<C>, WebTransportBackend<C>)
+) -> (WebTransportServer<C>, WebTransportServerBackend<C>)
 where
     S2C: SendMessage + SendOnServerStream,
     C: ServerTransportConfig<S2C = S2C>,
@@ -159,7 +183,7 @@ where
         clients: FxHashMap::default(),
     };
 
-    let backend = WebTransportBackend::<C> {
+    let backend = WebTransportServerBackend::<C> {
         config,
         streams,
         send_b2f,

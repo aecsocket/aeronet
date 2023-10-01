@@ -10,7 +10,7 @@ impl StreamId {
     /// Creates a stream ID from a raw index.
     ///
     /// Sending data using a stream ID created from this function may lead to bugs or panics, as
-    /// an invalid stream will be used to send data. Prefer the functions on [`StreamDefinitions`]
+    /// an invalid stream will be used to send data. Prefer the functions on [`TransportStreams`]
     /// instead to obtain a stream for your current side.
     pub fn from_raw(raw: usize) -> Self {
         Self(raw)

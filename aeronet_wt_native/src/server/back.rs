@@ -17,14 +17,20 @@ use super::{ClientInfo, InternalEvent, Request, ServerStream, StreamError, CHANN
 
 const RECV_BUF: usize = 65536;
 
-pub struct WebTransportBackend<C: ServerTransportConfig> {
+/// The backend server which runs the main logic for a [`crate::WebTransportServer`], intended to
+/// be run in an async [`tokio`] runtime.
+/// 
+/// The only thing you should do with this struct is to run [`WebTransportServerBackend::listen`]
+/// in an async task - the frontend server will handle the rest.
+pub struct WebTransportServerBackend<C: ServerTransportConfig> {
     pub(crate) config: ServerConfig,
     pub(crate) streams: TransportStreams,
     pub(crate) send_b2f: mpsc::Sender<InternalEvent<C::C2S>>,
     pub(crate) send_f2b: broadcast::Sender<Request<C::S2C>>,
 }
 
-impl<C: ServerTransportConfig> WebTransportBackend<C> {
+impl<C: ServerTransportConfig> WebTransportServerBackend<C> {
+    /// Starts the server logic which interfaces with clients.
     pub async fn listen(self) -> Result<(), io::Error> {
         let Self {
             config,

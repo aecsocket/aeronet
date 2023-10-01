@@ -12,12 +12,29 @@ use crate::SendOnServerStream;
 
 use super::{ClientInfo, InternalEvent, Request};
 
+/// Transport layer implementation for aeronet using the WebTransport protocol.
+/// 
+/// This is the server-side entry point to the crate, allowing you to interface with the clients
+/// by receiving and sending data and commands to the [`crate::WebTransportServerBackend`]. This
+/// is the type you should store and pass around in your app whenever you want to interface with
+/// the server. Use [`crate::create_server`] to create one.
+/// 
+/// When dropped, the backend server is shut down and all client connections are dropped.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct WebTransportServer<C: ServerTransportConfig> {
     pub(crate) send: broadcast::Sender<Request<C::S2C>>,
     pub(crate) recv: mpsc::Receiver<InternalEvent<C::C2S>>,
     pub(crate) clients: FxHashMap<ClientId, ClientInfo>,
+}
+
+impl<C: ServerTransportConfig> WebTransportServer<C> {
+    /// Gets the full client info for a connected client.
+    /// 
+    /// If no client exists for the given ID, [`None`] is returned.
+    pub fn client_info(&self, client: ClientId) -> Option<ClientInfo> {
+        self.clients.get(&client).cloned()
+    }
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -86,11 +103,5 @@ impl<C: ServerTransportConfig> ServerRemoteAddr for WebTransportServer<C> {
             ClientInfo::Connected { remote_addr, .. } => Some(*remote_addr),
             _ => None,
         })
-    }
-}
-
-impl<C: ServerTransportConfig> WebTransportServer<C> {
-    pub fn client_info(&self, client: ClientId) -> Option<ClientInfo> {
-        self.clients.get(&client).cloned()
     }
 }
