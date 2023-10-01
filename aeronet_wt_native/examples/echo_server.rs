@@ -1,11 +1,12 @@
 use std::time::Duration;
 
 use aeronet::{
-    AsyncRuntime, RemoteClientDisconnected, FromClient, RecvMessage, SendMessage, ServerTransport,
+    AsyncRuntime, FromClient, RecvMessage, RemoteClientDisconnected, SendMessage, ServerTransport,
     ServerTransportConfig, ServerTransportPlugin,
 };
 use aeronet_wt_native::{
-    OnServerStream, ServerStream, ServerStreamMessage, TransportStreams, WebTransportServer,
+    wtransport::{tls::Certificate, ServerConfig},
+    OnStream, ServerStream, StreamMessage, TransportStreams, WebTransportServer,
 };
 use anyhow::Result;
 use bevy::{
@@ -13,13 +14,12 @@ use bevy::{
     log::{Level, LogPlugin},
     prelude::*,
 };
-use wtransport::{tls::Certificate, ServerConfig};
 
 pub struct AppTransportConfig;
 
 impl ServerTransportConfig for AppTransportConfig {
     type C2S = AppMessage;
-    type S2C = ServerStreamMessage<AppMessage>;
+    type S2C = StreamMessage<ServerStream, AppMessage>;
 }
 
 #[derive(Debug, Clone)]
@@ -35,7 +35,7 @@ impl RecvMessage for AppMessage {
     fn from_payload(payload: &[u8]) -> Result<Self> {
         String::from_utf8(payload.to_owned().into_iter().collect())
             .map(|s| AppMessage(s))
-            .map_err(|err| anyhow::Error::new(err))
+            .map_err(|err| err.into())
     }
 }
 

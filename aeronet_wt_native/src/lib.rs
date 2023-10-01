@@ -5,11 +5,18 @@
 
 mod client;
 mod server;
+mod shared;
 mod stream;
+mod transport;
 
-pub use client::WebTransportClient;
+pub use wtransport;
+
+pub use client::{back::WebTransportClientBackend, create_client, front::WebTransportClient};
 pub use server::{
-    back::WebTransportServerBackend, create_server, front::WebTransportServer, ClientInfo,
-    OnServerStream, OnStreamError, SendOnServerStream, ServerStreamMessage, StreamError,
+    back::WebTransportServerBackend, create_server, front::WebTransportServer, RemoteClientInfo,
 };
 pub use stream::{ClientStream, ServerStream, StreamId, TransportStream, TransportStreams};
+pub use transport::{EndpointInfo, OnStream, OnStreamError, SendOn, StreamError, StreamMessage};
+
+pub(crate) const CHANNEL_BUF: usize = 128;
+pub(crate) const RECV_BUF: usize = 65536;

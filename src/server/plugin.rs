@@ -11,11 +11,11 @@ use super::{
 /// This handles receiving data from the transport and forwarding it to the app via events,
 /// as well as sending data to the transport by reading from events. The events provided are:
 /// * Incoming
-///   * [`ClientIncoming`] when a client requests a connection
-///   * [`ClientConnected`] when a client fully connects
+///   * [`RemoteClientIncoming`] when a client requests a connection
+///   * [`RemoteClientConnected`] when a client fully connects
 ///     * Use this to run logic when a client fully connects e.g. loading player data
 ///   * [`FromClient`] when a client sends data to the server
-///   * [`ClientDisconnected`] when a client loses connection
+///   * [`RemoteClientDisconnected`] when a client loses connection
 ///     * Use this to run logic when a client is dropped
 /// * Outgoing
 ///   * [`ToClient`] to send a message to a client
@@ -38,12 +38,12 @@ use super::{
 /// app, bypassing the plugin altogether.
 /// ```
 /// use bevy::prelude::*;
-/// use aeronet::server::plugin::TransportPlugin;
+/// use aeronet::ServerTransportPlugin;
 ///
 /// # fn run<MyTransportConfig, MyTransportImpl>()
 /// # where
-/// #     MyTransportConfig: aeronet::server::TransportConfig,
-/// #     MyTransportImpl: aeronet::server::Transport<MyTransportConfig> + Resource,
+/// #     MyTransportConfig: aeronet::ServerTransportConfig,
+/// #     MyTransportImpl: aeronet::ServerTransport<MyTransportConfig> + Resource,
 /// # {
 /// App::new()
 ///     .add_plugins(TransportPlugin::<MyTransportConfig, MyTransportImpl>::default());
@@ -81,12 +81,12 @@ where
     }
 }
 
-/// A system set for transport operations.
+/// A system set for server transport operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum ServerTransportSet {
-    /// Transports receiving data and forwarding it to the app.
+    /// Receives events from connected clients and forwards it to the app.
     Recv,
-    /// Transports sending data from the app.
+    /// Sends requests from the app to connected clients.
     Send,
 }
 
@@ -141,7 +141,7 @@ pub struct DisconnectClient {
 fn recv<C, T>(
     mut commands: Commands,
     mut server: ResMut<T>,
-    mut requested: EventWriter<RemoteClientIncoming>,
+    mut incoming: EventWriter<RemoteClientIncoming>,
     mut connected: EventWriter<RemoteClientConnected>,
     mut from_client: EventWriter<FromClient<C::C2S>>,
     mut disconnected: EventWriter<RemoteClientDisconnected>,
@@ -152,7 +152,7 @@ fn recv<C, T>(
     loop {
         match server.recv() {
             Ok(ServerEvent::Incoming { client }) => {
-                requested.send(RemoteClientIncoming { client });
+                incoming.send(RemoteClientIncoming { client });
             }
             Ok(ServerEvent::Connected { client }) => {
                 connected.send(RemoteClientConnected { client });

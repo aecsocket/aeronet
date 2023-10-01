@@ -1,3 +1,6 @@
+#[cfg(feature = "bevy")]
+pub mod plugin;
+
 use std::{net::SocketAddr, time::Duration};
 
 use crate::{

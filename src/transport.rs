@@ -9,17 +9,17 @@ pub enum RecvError {
     Closed,
 }
 
-/// The reason why a client was disconnected from a server.
+/// The reason why this side disconnected from the other side.
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
-    /// The server was closed and all open client connections have been dropped.
-    #[error("server closed")]
-    ServerClosed,
-    /// The server forced this client to disconnect.
-    #[error("forced disconnect by server")]
+    /// This side was closed and all open connections have been dropped.
+    #[error("side closed")]
+    Closed,
+    /// This side forced a disconnect from the other side.
+    #[error("forced disconnect")]
     ForceDisconnect,
-    /// The client failed to establish a connection to the server.
-    #[error("failed to connect to server")]
+    /// This side failed to establish a connection to the other side.
+    #[error("failed to connect")]
     Connecting(#[source] anyhow::Error),
     /// There was an error in transport (receiving or sending data).
     #[error("transport error")]

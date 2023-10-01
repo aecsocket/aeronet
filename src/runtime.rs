@@ -46,4 +46,3 @@ impl FromWorld for AsyncRuntime {
         Self(rt)
     }
 }
- 

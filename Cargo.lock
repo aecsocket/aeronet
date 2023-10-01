@@ -107,7 +107,6 @@ dependencies = [
  "anyhow",
  "base64 0.21.3",
  "bevy",
- "log",
  "rcgen",
  "ring",
  "rustc-hash",

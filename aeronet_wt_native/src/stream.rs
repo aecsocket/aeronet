@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 /// An identifier for a single instance of an opened stream.
 ///
 /// Since you can open multiple streams of the same type on a connection, we need a way to index
@@ -81,6 +83,7 @@ impl From<ServerStream> for TransportStream {
 /// A stream along which the client can send data.
 ///
 /// See [`TransportStream`] for details.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ClientStream {
     /// See [`TransportStream::Datagram`].
     Datagram,
