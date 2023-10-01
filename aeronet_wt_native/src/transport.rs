@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, time::Duration};
 
-use aeronet::SendMessage;
+use aeronet::{SendMessage, TransportRemoteAddr, TransportRtt};
 use anyhow::Result;
 use wtransport::Connection;
 
@@ -10,6 +10,7 @@ use crate::TransportStream;
 /// point in time.
 ///
 /// On the client side, this represents the client's connection to the server.
+///
 /// On the server side, this reprensets the server's connection to a specific client.
 #[derive(Debug, Clone)]
 pub struct EndpointInfo {
@@ -32,6 +33,18 @@ impl EndpointInfo {
             rtt: conn.rtt(),
             stable_id: conn.stable_id(),
         }
+    }
+}
+
+impl TransportRtt for EndpointInfo {
+    fn rtt(&self) -> Duration {
+        self.rtt
+    }
+}
+
+impl TransportRemoteAddr for EndpointInfo {
+    fn remote_addr(&self) -> SocketAddr {
+        self.remote_addr
     }
 }
 

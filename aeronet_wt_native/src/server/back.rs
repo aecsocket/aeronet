@@ -4,24 +4,22 @@ use aeronet::{ClientId, ServerTransportConfig, SessionError};
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, debug_span, Instrument};
 use wtransport::{
-    datagram::Datagram,
     endpoint::{IncomingSession, Server},
-    error::ConnectionError,
     Connection, Endpoint, ServerConfig,
 };
 
 use crate::{
-    shared::{from_payload, into_payload, open_streams},
-    StreamError, TransportStream, TransportStreams,
+    shared::{open_streams, recv_datagram, send_out},
+    TransportStream, TransportStreams,
 };
 
-use super::{Event, RemoteClientInfo, Request, ServerStream, CHANNEL_BUF};
+use super::{Event, RemoteClientInfo, Request, CHANNEL_BUF};
 
-/// The backend server which runs the main logic for a [`crate::WebTransportServer`], intended to
-/// be run in an async [`tokio`] runtime.
+/// Runs the actual logic behind a [`crate::WebTransportServer`], intended to be run in an async
+/// [`tokio`] runtime.
 ///
-/// The only thing you should do with this struct is to run [`WebTransportServerBackend::listen`]
-/// in an async task - the frontend server will handle the rest.
+/// The only thing you should do with this struct is to run [`WebTransportServerBackend::start`]
+/// in an async task - the frontend will handle the rest.
 pub struct WebTransportServerBackend<C: ServerTransportConfig> {
     pub(crate) config: ServerConfig,
     pub(crate) streams: TransportStreams,
@@ -31,7 +29,7 @@ pub struct WebTransportServerBackend<C: ServerTransportConfig> {
 
 impl<C: ServerTransportConfig> WebTransportServerBackend<C> {
     /// Starts the server logic which interfaces with clients.
-    pub async fn listen(self) -> Result<(), io::Error> {
+    pub async fn start(self) -> Result<(), io::Error> {
         let Self {
             config,
             streams,
@@ -111,7 +109,7 @@ async fn handle_session<C: ServerTransportConfig>(
 
         tokio::select! {
             result = conn.receive_datagram() => {
-                let msg = recv_datagram::<C>(result)
+                let msg = recv_datagram::<C::C2S>(result)
                     .await
                     .map_err(|err| SessionError::Transport(err.on(TransportStream::Datagram).into()))?;
                 send.send(Event::Recv { client, msg })
@@ -130,7 +128,7 @@ async fn handle_session<C: ServerTransportConfig>(
                 let req = result.map_err(|_| SessionError::Closed)?;
                 match req {
                     Request::Send { client: target, stream, msg } if target == client => {
-                        send_client::<C>(&mut conn, &mut streams_bi, &mut streams_uni_out, stream, msg)
+                        send_out::<C::S2C>(&mut conn, &mut streams_bi, &mut streams_uni_out, stream.into(), msg)
                             .await
                             .map_err(|err| SessionError::Transport(err.on(stream.into()).into()))?;
                     }
@@ -179,47 +177,4 @@ async fn accept_session<C: ServerTransportConfig>(
         .map_err(|_| SessionError::Closed)?;
 
     Ok(conn)
-}
-
-// receiving
-
-async fn recv_datagram<C: ServerTransportConfig>(
-    result: Result<Datagram, ConnectionError>,
-) -> Result<C::C2S, StreamError> {
-    let datagram = result.map_err(|err| StreamError::Recv(err.into()))?;
-    let msg = from_payload::<C::C2S>(&datagram)?;
-    Ok(msg)
-}
-
-// sending
-
-async fn send_client<C: ServerTransportConfig>(
-    conn: &mut Connection,
-    streams_bi: &mut [mpsc::Sender<C::S2C>],
-    streams_s2c: &mut [mpsc::Sender<C::S2C>],
-    stream: ServerStream,
-    msg: C::S2C,
-) -> Result<(), StreamError> {
-    async fn on_stream<C: ServerTransportConfig>(
-        stream: &mut mpsc::Sender<C::S2C>,
-        msg: C::S2C,
-    ) -> Result<(), StreamError> {
-        stream.send(msg).await.map_err(|_| StreamError::Closed)?;
-        Ok(())
-    }
-
-    match stream {
-        ServerStream::Datagram => {
-            let buf = into_payload(msg)?;
-            conn.send_datagram(buf)
-                .map_err(|err| StreamError::Send(err.into()))?;
-        }
-        ServerStream::Bi(i) => {
-            on_stream::<C>(&mut streams_bi[i.0], msg).await?;
-        }
-        ServerStream::Uni(i) => {
-            on_stream::<C>(&mut streams_s2c[i.0], msg).await?;
-        }
-    }
-    Ok(())
 }

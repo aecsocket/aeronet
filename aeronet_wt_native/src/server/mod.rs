@@ -1,7 +1,7 @@
 pub mod back;
 pub mod front;
 
-use std::{collections::HashMap, net::SocketAddr, time::Duration};
+use std::collections::HashMap;
 
 use aeronet::{ClientId, SendMessage, ServerTransportConfig, SessionError};
 use rustc_hash::FxHashMap;
@@ -9,21 +9,18 @@ use tokio::sync::{broadcast, mpsc};
 use wtransport::{endpoint::SessionRequest, Connection, ServerConfig};
 
 use crate::{
-    SendOn, ServerStream, TransportStreams, WebTransportServer, WebTransportServerBackend,
-    CHANNEL_BUF,
+    EndpointInfo, SendOn, ServerStream, TransportStreams, WebTransportServer,
+    WebTransportServerBackend, CHANNEL_BUF,
 };
 
 /// Details on a client which is connected to this server through the WebTransport protocol.
 ///
 /// Info for a specific client can be obtained using [`WebTransportServer::client_info`].
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub enum RemoteClientInfo {
-    /// The client has started a connection, but no further info is known.
-    #[default]
-    Incoming,
     /// The client has requested a connection, and has provided some initial information,
     /// but the request has not been accepted yet.
-    Request {
+    Connecting {
         /// See [`SessionRequest::authority`].
         authority: String,
         /// See [`SessionRequest::path`].
@@ -31,38 +28,24 @@ pub enum RemoteClientInfo {
         /// See [`SessionRequest::headers`].
         headers: HashMap<String, String>,
     },
-    /// The client has successfully established a connection, and full client info is now
+    /// The client has successfully established a connection, and full endpoint info is now
     /// available.
-    Connected {
-        /// See [`Connection::max_datagram_size`].
-        max_datagram_size: Option<usize>,
-        /// See [`Connection::remote_address`].
-        remote_addr: SocketAddr,
-        /// See [`Connection::rtt`].
-        rtt: Duration,
-        /// See [`Connection::stable_id`].
-        stable_id: usize,
-    },
+    Connected(EndpointInfo),
 }
 
 impl RemoteClientInfo {
-    /// Creates a [`ClientInfo::Request`] from a [`SessionRequest`].
+    /// Creates a [`RemoteClientInfo::Request`] from a [`SessionRequest`].
     pub fn from_request(req: &SessionRequest) -> Self {
-        Self::Request {
+        Self::Connecting {
             authority: req.authority().to_owned(),
             path: req.path().to_owned(),
             headers: req.headers().clone(),
         }
     }
 
-    /// Creates a [`ClientInfo::Connected`] from a [`Connection`].
+    /// Creates a [`RemoteClientInfo::Connected`] from a [`Connection`].
     pub fn from_connection(conn: &Connection) -> Self {
-        Self::Connected {
-            max_datagram_size: conn.max_datagram_size(),
-            remote_addr: conn.remote_address(),
-            rtt: conn.rtt(),
-            stable_id: conn.stable_id(),
-        }
+        Self::Connected(EndpointInfo::from_connection(conn))
     }
 }
 
@@ -70,7 +53,7 @@ impl RemoteClientInfo {
 ///
 /// This returns a [`WebTransportServer`], which provides the API of the server and is the type you
 /// should store, pass around, etc; and also a [`WebTransportServerBackend`], which should be started
-/// once using [`WebTransportServerBackend::listen`] in an async Tokio runtime when it is first
+/// once using [`WebTransportServerBackend::start`] in an async Tokio runtime when it is first
 /// available (this function does not automatically start the backend, because we have no
 /// guarantees about the current Tokio runtime at this point).
 pub fn create_server<S2C, C>(

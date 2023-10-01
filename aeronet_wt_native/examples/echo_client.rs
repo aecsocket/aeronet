@@ -1,65 +1,91 @@
-use std::{net::SocketAddr, time::Duration};
+use std::time::Duration;
 
-use aeronet::AsyncRuntime;
+use aeronet::{
+    AsyncRuntime, ClientTransportConfig, ClientTransportPlugin, RecvMessage, SendMessage, LocalClientConnected, LocalClientDisconnected,
+};
+use aeronet_wt_native::{
+    wtransport::ClientConfig, ClientStream, StreamMessage, WebTransportClient, TransportStreams,
+};
 use anyhow::Result;
-use bevy::prelude::*;
-use tokio::sync::mpsc;
-use wtransport::{ClientConfig, Endpoint};
+use bevy::{prelude::*, log::LogPlugin};
+
+// config
+
+pub struct AppTransportConfig;
+
+impl ClientTransportConfig for AppTransportConfig {
+    type C2S = StreamMessage<ClientStream, AppMessage>;
+    type S2C = AppMessage;
+}
+
+#[derive(Debug, Clone)]
+pub struct AppMessage(pub String);
+
+impl SendMessage for AppMessage {
+    fn into_payload(self) -> Result<Vec<u8>> {
+        Ok(self.0.into_bytes())
+    }
+}
+
+impl RecvMessage for AppMessage {
+    fn from_payload(payload: &[u8]) -> Result<Self> {
+        String::from_utf8(payload.to_owned().into_iter().collect())
+            .map(|s| AppMessage(s))
+            .map_err(|err| err.into())
+    }
+}
+
+// logic
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins((
+            DefaultPlugins.set(LogPlugin {
+                level: tracing::Level::DEBUG,
+                ..default()
+            }),
+            ClientTransportPlugin::<AppTransportConfig, WebTransportClient<_>>::default(),
+        ))
         .init_resource::<AsyncRuntime>()
         .add_systems(Startup, setup)
+        .add_systems(Update, reply)
         .run();
 }
 
-async fn send_err<E: std::error::Error>(errors: &mut mpsc::Sender<E>, err: E) {
-    let Err(err) = errors.send(err).await else {
-        return;
-    };
-    let err = err.0;
-    warn!("Failed to send error on disconnected channel: {err:#}");
+fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
+    match create(rt.as_ref()) {
+        Ok(client) => {
+            commands.insert_resource(client);
+            info!("Created client");
+        }
+        Err(err) => error!("Failed to create client: {err:#}"),
+    }
 }
 
-async fn send_on_err<E: std::error::Error>(
-    errors: &mut mpsc::Sender<E>,
-    block: impl FnOnce() -> Result<(), E>,
-) {
-    let Err(err) = block() else {
-        return;
-    };
-    send_err(errors, err).await;
-}
-
-fn setup(rt: Res<AsyncRuntime>) {
-    let bind_addr = "[::1]:0"
-        .parse::<SocketAddr>()
-        .expect("parsing address should not fail");
-
+fn create(rt: &AsyncRuntime) -> Result<WebTransportClient<AppTransportConfig>> {
     let config = ClientConfig::builder()
         .with_bind_default()
         .with_no_cert_validation()
-        .keep_alive_interval(Some(Duration::from_secs(1)))
-        .max_idle_timeout(Some(Duration::from_secs(30)))
-        .expect("timeout is valid")
+        .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    rt.0.spawn(async move {});
+    let (front, back) = aeronet_wt_native::create_client(config, TransportStreams::default());
+    front.connect("https://[::1]:25565");
+    rt.0.spawn(async move {
+        back.start().await.unwrap();
+    });
+    Ok(front)
 }
 
-async fn create_endpoint(config: ClientConfig) -> Result<()> {
-    let endpoint = Endpoint::client(config)?;
-    let conn = endpoint.connect("https://[::1]:4433").await?;
+fn reply(
+    mut connected: EventReader<LocalClientConnected>,
+    mut disconnected: EventReader<LocalClientDisconnected>,
+) {
+    for LocalClientConnected in connected.iter() {
+        info!("Client connected");
+    }
 
-    info!("Connected");
-
-    let (send, mut recv) = conn.open_bi().await?.await?;
-
-    let mut buf = [0u8; 1024];
-    recv.read(&mut buf).await?;
-
-    info!("Got: {:?}", buf);
-
-    Ok(())
+   for LocalClientDisconnected { reason } in disconnected.iter() {
+    info!("Client disconnected: {:#}", aeronet::error::as_pretty(reason));
+   }
 }

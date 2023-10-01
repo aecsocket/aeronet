@@ -1,8 +1,6 @@
 #[cfg(feature = "bevy")]
 pub mod plugin;
 
-use std::{net::SocketAddr, time::Duration};
-
 use crate::{
     message::{RecvMessage, SendMessage},
     transport::{RecvError, SessionError},
@@ -15,12 +13,15 @@ use crate::{
 ///
 /// Different transport implementations will use different methods to
 /// transport the data across, such as through memory or over a network. This means that a
-/// transport does not necessarily work over the internet! If you want info on networking, see
-/// related traits like [`ClientRtt`] and [`ClientRemoteAddr`].
+/// transport does not necessarily work over the internet! If you want to get details such as
+/// RTT or remote address, see [`crate::TransportRtt`] and [`crate::TransportRemoteAddr`].
 ///
 /// The `C` parameter allows configuring which types of messages are sent and received by this
 /// transport (see [`ClientTransportConfig`]).
 pub trait ClientTransport<C: ClientTransportConfig> {
+    /// The info that [`ClientTransport::info`] provides.
+    type Info;
+
     /// Attempts to receive a queued event from the transport.
     ///
     /// # Usage
@@ -46,30 +47,16 @@ pub trait ClientTransport<C: ClientTransportConfig> {
 
     /// Sends a message to the connected server.
     fn send(&mut self, msg: impl Into<C::C2S>);
-}
 
-/// A [`ClientTransport`] that allows access to the round-trip time to the connected server.
-///
-/// Since not all transports will use a network with a round-trip time, this trait is separate
-/// from [`ClientTransport`].
-pub trait ClientRtt {
-    /// Gets the round-trip time to the connected server.
+    /// Gets transport info on the current connection.
     ///
-    /// The round-trip time is defined as the time taken for the following to happen:
-    /// * client sends data
-    /// * server receives the data and sends a response
-    ///   * the processing time is assumed to be instant
-    /// * client receives data
-    fn rtt(&self) -> Duration;
-}
+    /// If this transport is not connected to a server, [`None`] is returned.
+    fn info(&self) -> Option<Self::Info>;
 
-/// A [`ClientTransport`] that allows access to the remote socket address of the connected server.
-///
-/// Since not all transports will use a network to connect to the server, this trait is separate
-/// from [`ClientTransport`].
-pub trait ClientRemoteAddr {
-    /// Gets the remote socket address of the connected server.
-    fn remote_addr(&self) -> SocketAddr;
+    /// Gets if this transport has a connection to a server.
+    fn is_connected(&self) -> bool {
+        self.info().is_some()
+    }
 }
 
 /// Configures the types used by a client-side transport implementation.

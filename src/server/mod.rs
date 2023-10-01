@@ -1,7 +1,7 @@
 #[cfg(feature = "bevy")]
 pub mod plugin;
 
-use std::{fmt::Display, net::SocketAddr, time::Duration};
+use std::fmt::Display;
 
 use crate::{
     message::{RecvMessage, SendMessage},
@@ -15,12 +15,15 @@ use crate::{
 ///
 /// Different transport implementations will use different methods to
 /// transport the data across, such as through memory or over a network. This means that a
-/// transport does not necessarily work over the internet! If you want info on networking, see
-/// related traits like [`ServerRtt`] and [`ServerRemoteAddr`].
+/// transport does not necessarily work over the internet! If you want to get details such as
+/// RTT or remote address, see [`crate::TransportRtt`] and [`crate::TransportRemoteAddr`].
 ///
 /// The `C` parameter allows configuring which types of messages are sent and received by this
 /// transport (see [`ServerTransportConfig`]).
 pub trait ServerTransport<C: ServerTransportConfig> {
+    /// The info that [`ServerTransport::client_info`] provides.
+    type ClientInfo;
+
     /// Attempts to receive a queued event from the transport.
     ///
     /// # Usage
@@ -51,34 +54,11 @@ pub trait ServerTransport<C: ServerTransportConfig> {
     ///
     /// This will issue a [`ServerEvent::Disconnected`] with reason [`SessionError::ForceDisconnect`].
     fn disconnect(&mut self, client: ClientId);
-}
 
-/// A [`ServerTransport`] that allows access to the round-trip time of a connected client.
-///
-/// Since not all transports will use a network with a round-trip time, this trait is separate
-/// from [`ServerTransport`].
-pub trait ServerRtt {
-    /// Gets the round-trip time of a connected client.
+    /// Gets transport info on a connected client.
     ///
-    /// The round-trip time is defined as the time taken for the following to happen:
-    /// * client sends data
-    /// * server receives the data and sends a response
-    ///   * the processing time is assumed to be instant
-    /// * client receives data
-    ///
-    /// If no client exists for the given ID, [`None`] is returned.
-    fn rtt(&self, client: ClientId) -> Option<Duration>;
-}
-
-/// A [`ServerTransport`] that allows access to the remote socket address of a connected client.
-///
-/// Since not all transports will use a network with clients connecting from a socket address, this
-/// trait is separate from [`ServerTransport`].
-pub trait ServerRemoteAddr {
-    /// Gets the remote socket address of a connected client.
-    ///
-    /// If no client exists for the given ID, [`None`] is returned.
-    fn remote_addr(&self, client: ClientId) -> Option<SocketAddr>;
+    /// If the specified client is not connected, [`None`] is returned.
+    fn client_info(&self, client: ClientId) -> Option<Self::ClientInfo>;
 }
 
 /// Configures the types used by a server-side transport implementation.
@@ -95,13 +75,13 @@ pub trait ServerRemoteAddr {
 /// # Examples
 ///
 /// ```
-/// use aeronet::server::TransportConfig;
+/// use aeronet::ServerTransportConfig;
 ///
 /// #[derive(Debug, Clone)]
 /// pub enum C2S {
 ///     Ping(u64),
 /// }
-/// # impl aeronet::message::RecvMessage for C2S {
+/// # impl aeronet::RecvMessage for C2S {
 /// #     fn from_payload(buf: &[u8]) -> anyhow::Result<Self> { unimplemented!() }
 /// # }
 ///
@@ -109,7 +89,7 @@ pub trait ServerRemoteAddr {
 /// pub enum S2C {
 ///     Pong(u64),
 /// }
-/// # impl aeronet::message::SendMessage for S2C {
+/// # impl aeronet::SendMessage for S2C {
 /// #     fn into_payload(self) -> anyhow::Result<Vec<u8>> { unimplemented!() }
 /// # }
 ///

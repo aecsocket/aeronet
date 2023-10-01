@@ -11,9 +11,11 @@ use aeronet_wt_native::{
 use anyhow::Result;
 use bevy::{
     app::{AppExit, ScheduleRunnerPlugin},
-    log::{Level, LogPlugin},
+    log::LogPlugin,
     prelude::*,
 };
+
+// config
 
 pub struct AppTransportConfig;
 
@@ -39,6 +41,8 @@ impl RecvMessage for AppMessage {
     }
 }
 
+// logic
+
 // chromium --webtransport-developer-mode --ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
 
 fn main() {
@@ -46,7 +50,7 @@ fn main() {
         .add_plugins((
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
             LogPlugin {
-                level: Level::DEBUG,
+                level: tracing::Level::DEBUG,
                 ..default()
             },
             ServerTransportPlugin::<AppTransportConfig, WebTransportServer<_>>::default(),
@@ -81,7 +85,7 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportServer<AppTransportConfig>> {
 
     let (front, back) = aeronet_wt_native::create_server(config, TransportStreams::default());
     rt.0.spawn(async move {
-        back.listen().await.unwrap();
+        back.start().await.unwrap();
     });
     Ok(front)
 }

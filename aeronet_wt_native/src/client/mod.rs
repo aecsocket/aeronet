@@ -3,19 +3,40 @@ pub mod front;
 
 use aeronet::{ClientTransportConfig, SendMessage, SessionError};
 use tokio::sync::mpsc;
-use wtransport::ClientConfig;
+use wtransport::{ClientConfig, Connection};
 
 use crate::{
-    ClientStream, SendOn, TransportStreams, WebTransportClient, WebTransportClientBackend,
-    CHANNEL_BUF,
+    ClientStream, EndpointInfo, SendOn, TransportStreams, WebTransportClient,
+    WebTransportClientBackend, CHANNEL_BUF,
 };
 
+/// Details on the server which this client is connected to through the WebTransport protocol.
+///
+/// Info for a client transport can be obtained using [`WebTransportClient::info`].
 #[derive(Debug, Clone)]
-pub struct RemoteServerInfo {}
+pub enum RemoteServerInfo {
+    /// The client has started a connection, but no further info is known.
+    Connecting,
+    /// The client has successfully established a connection, and full endpoint info is now
+    /// available.
+    Connected(EndpointInfo),
+}
 
+impl RemoteServerInfo {
+    pub fn from_connection(conn: &Connection) -> Self {
+        Self::Connected(EndpointInfo::from_connection(conn))
+    }
+}
+
+/// Creates a client-side transport using the WebTransport protocol.
+///
+/// This returns a [`WebTransportClient`], which provides the API of the client and is the type you
+/// should store, pass around, etc; and also a [`WebTransportClientBackend`], which should be started
+/// once using [`WebTransportClientBackend::start`] in an async Tokio runtime when it is first
+/// available (this function does not automatically start the backend, because we have no
+/// guarantees about the current Tokio runtime at this point).
 pub fn create_client<C2S, C>(
     config: ClientConfig,
-    url: impl Into<String>,
     streams: TransportStreams,
 ) -> (WebTransportClient<C>, WebTransportClientBackend<C>)
 where
@@ -28,11 +49,11 @@ where
     let frontend = WebTransportClient::<C> {
         send: send_f2b,
         recv: recv_b2f,
+        info: None,
     };
 
     let backend = WebTransportClientBackend::<C> {
         config,
-        url: url.into(),
         streams,
         send: send_b2f,
         recv: recv_f2b,
@@ -43,13 +64,13 @@ where
 
 #[derive(Debug, Clone)]
 pub(crate) enum Request<C2S> {
+    Connect { url: String },
     Send { stream: ClientStream, msg: C2S },
-    Disconnect, // TODO do we need this? just drop the frontend
+    Disconnect,
 }
 
 #[derive(Debug)]
 pub(crate) enum Event<S2C> {
-    Connecting { info: RemoteServerInfo },
     Connected,
     UpdateInfo { info: RemoteServerInfo },
     Recv { msg: S2C },
