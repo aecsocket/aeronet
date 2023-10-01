@@ -8,7 +8,9 @@ use anyhow::Result;
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 
-use super::{ClientInfo, InternalEvent, Request, ServerMessage};
+use crate::SendOnServerStream;
+
+use super::{ClientInfo, InternalEvent, Request};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
@@ -24,8 +26,8 @@ struct BackendError;
 
 impl<S2C, C> ServerTransport<C> for WebTransportServer<C>
 where
-    S2C: SendMessage,
-    C: ServerTransportConfig<S2C = ServerMessage<S2C>>,
+    S2C: SendMessage + SendOnServerStream,
+    C: ServerTransportConfig<S2C = S2C>,
 {
     fn recv(&mut self) -> Result<ServerEvent<C::C2S>, RecvError> {
         loop {
@@ -55,11 +57,11 @@ where
         }
     }
 
-    fn send(&mut self, client: ClientId, msg: impl Into<ServerMessage<S2C>>) {
+    fn send(&mut self, client: ClientId, msg: impl Into<S2C>) {
         let msg = msg.into();
         let _ = self.send.send(Request::Send {
             client,
-            stream: msg.stream,
+            stream: msg.stream(),
             msg,
         });
     }

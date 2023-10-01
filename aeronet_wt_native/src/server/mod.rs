@@ -3,7 +3,7 @@
 pub mod back;
 pub mod front;
 
-use std::{net::SocketAddr, time::Duration, collections::HashMap};
+use std::{collections::HashMap, net::SocketAddr, time::Duration};
 
 use aeronet::{ClientId, SendMessage, ServerTransportConfig, SessionError};
 use anyhow::Result;
@@ -11,90 +11,39 @@ use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 use wtransport::{endpoint::SessionRequest, Connection, ServerConfig};
 
-use crate::{StreamDefinitions, StreamId, StreamKind, WebTransportBackend, WebTransportServer};
+use crate::{TransportStream, TransportStreams, WebTransportBackend, WebTransportServer, ServerStream};
 
 pub(crate) const CHANNEL_BUF: usize = 128;
 
-/// A stream along which the server can send data.
-///
-/// See [`StreamKind`] for details.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ServerStream {
-    /// See [`StreamKind::Datagram`].
-    Datagram,
-    /// See [`StreamKind::Bi`].
-    Bi(StreamId),
-    /// See [`StreamKind::S2C`].
-    S2C(StreamId),
+pub trait SendOnServerStream {
+    fn stream(&self) -> ServerStream;
 }
 
-impl From<ServerStream> for StreamKind {
-    fn from(value: ServerStream) -> Self {
-        match value {
-            ServerStream::Datagram => Self::Datagram,
-            ServerStream::Bi(id) => Self::Bi(id),
-            ServerStream::S2C(id) => Self::S2C(id),
-        }
-    }
-}
-
-/// A server sent by the server along a specified stream.
-// TODO explain this
-/// 
-/// To create an object of this type, you can either:
-/// * call [`Self::new`] and provide the stream and message, or
-/// * call [`OnServerStream::on`] on the message to send, and pass the stream in
-///   (make sure to import the trait).
 #[derive(Debug, Clone)]
-pub struct ServerMessage<T> {
-    /// The server-to-client stream along which this message is sent.
+pub struct ServerStreamMessage<T> {
     pub stream: ServerStream,
-    /// The message to send.
     pub msg: T,
 }
 
-impl<T> ServerMessage<T> {
-    /// Bundles a message with the stream that it should be sent through by the server, to be used
-    /// by a [`WebTransportServer`].
-    pub fn new(stream: ServerStream, msg: T) -> Self {
-        Self { stream, msg }
-    }
-}
-
-impl<T: SendMessage> SendMessage for ServerMessage<T> {
+impl<T: SendMessage> SendMessage for ServerStreamMessage<T> {
     fn into_payload(self) -> Result<Vec<u8>> {
         self.msg.into_payload()
     }
 }
 
-/// Allows converting a [`SendMessage`] into a [`ServerMessage`] by specifying the stream along
-/// which the message is sent.
-/// 
-/// This trait is automatically implemented for all [`SendMessage`]s.
-/// 
-/// # Examples
-/// 
-/// ```
-/// use aeronet_wt_native::{SendMessage, OnServerStream, ServerMessage};
-/// 
-/// pub struct MyMessage;
-/// # impl aeronet::SendMessage for MyMessage {
-/// #     fn into_payload(self) -> anyhow::Result<Vec<u8>> { unimplemented!() }
-/// # }
-/// 
-/// fn create_message_on_a_stream() -> ServerMessage<MyMessage> {
-///     MyMessage.on(ServerStream::Datagram)
-/// }
-/// ```
+impl<T: SendMessage> SendOnServerStream for ServerStreamMessage<T> {
+    fn stream(&self) -> ServerStream {
+        self.stream
+    }
+}
+
 pub trait OnServerStream: Sized {
-    /// Creates a [`ServerMessage`] out of this message by providing the stream along which it is
-    /// sent.
-    fn on(self, stream: ServerStream) -> ServerMessage<Self>;
+    fn on(self, stream: ServerStream) -> ServerStreamMessage<Self>;
 }
 
 impl<T: SendMessage> OnServerStream for T {
-    fn on(self, stream: ServerStream) -> ServerMessage<Self> {
-        ServerMessage::new(stream, self)
+    fn on(self, stream: ServerStream) -> ServerStreamMessage<Self> {
+        ServerStreamMessage { stream, msg: self }
     }
 }
 
@@ -120,14 +69,16 @@ pub enum StreamError {
 #[error("on {stream:?}")]
 pub struct OnStreamError {
     /// The stream on which the error occurred.
-    stream: StreamKind,
+    pub stream: TransportStream,
     /// The stream error.
     #[source]
-    source: StreamError,
+    pub source: StreamError,
 }
 
 impl StreamError {
-    pub fn on(self, stream: StreamKind) -> OnStreamError {
+    /// Wraps this [`StreamError`] into an [`OnStreamError`] by providing which stream the error
+    /// occurred on.
+    pub fn on(self, stream: TransportStream) -> OnStreamError {
         OnStreamError {
             stream,
             source: self,
@@ -137,7 +88,6 @@ impl StreamError {
 
 /// Details on a client which is connected to this server through the WebTransport protocol.
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ClientInfo {
     /// The client has started a connection, but no further info is known.
     #[default]
@@ -188,16 +138,20 @@ impl ClientInfo {
 }
 
 /// Creates a server-side transport using the WebTransport protocol.
-/// 
+///
 /// This returns a [`WebTransportServer`], which provides the API of the server and is the type you
 /// should store, pass around, etc; and also a [`WebTransportBackend`], which should be started
 /// once using [`WebTransportBackend::listen`] in an async Tokio runtime when it is first
-/// available. (This function does not automatically start the backend, because we have no
-/// guarantees about the current Tokio runtime at this point.)
-pub fn create_server<C: ServerTransportConfig>(
+/// available (this function does not automatically start the backend, because we have no
+/// guarantees about the current Tokio runtime at this point).
+pub fn create_server<S2C, C>(
     config: ServerConfig,
-    streams: StreamDefinitions,
-) -> (WebTransportServer<C>, WebTransportBackend<C>) {
+    streams: TransportStreams,
+) -> (WebTransportServer<C>, WebTransportBackend<C>)
+where
+    S2C: SendMessage + SendOnServerStream,
+    C: ServerTransportConfig<S2C = S2C>,
+{
     let (send_b2f, recv_b2f) = mpsc::channel::<InternalEvent<C::C2S>>(CHANNEL_BUF);
     let (send_f2b, _) = broadcast::channel::<Request<C::S2C>>(CHANNEL_BUF);
 

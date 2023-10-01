@@ -13,17 +13,35 @@ use anyhow::Result;
 
 /// Data that can be sent from the current side to the opposite side.
 ///
-/// See [the module docs](self) for more info.
+/// The transport implementation may wish to transport the messages as a byte sequence.
+/// This trait means the message can be converted into this *payload* form, able to be
+/// sent over the wire.
+///
+/// See [`RecvMessage`] for the receiving counterpart.
+///
+/// # Serialization support
+///
+/// With the `bincode` feature enabled, this trait will automatically be implemented for types
+/// which implement `serde::Serialize`.
 pub trait SendMessage: Send + Sync + Clone + 'static {
-    /// Converts this message into its payload form as bytes.
+    /// Attempts to convert this message into its payload form as bytes.
     fn into_payload(self) -> Result<Vec<u8>>;
 }
 
-/// Data that can be received from the opposite side by the current side.
+/// Data that can be received from the opposite side by the current side.s
 ///
-/// See [the module docs](self) for more info.
+/// The transport implementation may wish to receive messages as a byte sequence.
+/// This trait means the message can be deserialized from this *payload* form, able to be
+/// received over the wire.
+///
+/// See [`SendMessage`] for the sending counterpart.
+///
+/// # Serialization support
+///
+/// With the `bincode` feature enabled, this trait will automatically be implemented for types
+/// which implement `serde::de::DeserializeOwned`.
 pub trait RecvMessage: Send + Sync + Sized + 'static {
-    /// Converts a payload from a byte buffer into this message.
+    /// Attempts to convert a payload from a byte buffer into this message.
     fn from_payload(buf: &[u8]) -> Result<Self>;
 }
 

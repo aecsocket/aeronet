@@ -11,7 +11,6 @@ license = "MIT OR Apache-2.0"
 
 [features]
 bevy = [ "dep:bevy", "aeronet/bevy" ]
-serde = [ "dep:serde", "aeronet/serde" ]
 
 [dependencies]
 aeronet = { path = "..", version = "0.1.0" }
@@ -21,7 +20,6 @@ thiserror = "1.0.47"
 anyhow = "1.0.75"
 rustc-hash = "1.1.0"
 bevy = { version = "0.11.2", default-features = false, optional = true }
-serde = { version = "1.0.188", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 wtransport = { version = "0.1.4", features = [ "dangerous-configuration"] }
@@ -37,6 +35,9 @@ time = "0.3.21"
 tokio = { version = "1.28.1", features = [ "rt", "rt-multi-thread", "macros" ] }
 tracing-subscriber = { version = "0.3.17", features = [ "env-filter" ] }
 
+[package.metadata.docs.rs]
+all-features = true
+
 [[example]]
 name = "echo_client"
 path = "examples/echo_client.rs"
@@ -45,4 +46,4 @@ required-features = [ "bevy" ]
 [[example]]
 name = "echo_server"
 path = "examples/echo_server.rs"
-required-features = [ "bevy" ]
+required-features = [ "bevy", "aeronet/bevy-tokio-rt" ]

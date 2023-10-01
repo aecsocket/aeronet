@@ -11,7 +11,7 @@ use wtransport::{
     Connection, Endpoint, SendStream, ServerConfig,
 };
 
-use crate::{StreamDefinitions, StreamId, StreamKind};
+use crate::{StreamId, TransportStream, TransportStreams};
 
 use super::{ClientInfo, InternalEvent, Request, ServerStream, StreamError, CHANNEL_BUF};
 
@@ -19,7 +19,7 @@ const RECV_BUF: usize = 65536;
 
 pub struct WebTransportBackend<C: ServerTransportConfig> {
     pub(crate) config: ServerConfig,
-    pub(crate) streams: StreamDefinitions,
+    pub(crate) streams: TransportStreams,
     pub(crate) send_b2f: mpsc::Sender<InternalEvent<C::C2S>>,
     pub(crate) send_f2b: broadcast::Sender<Request<C::S2C>>,
 }
@@ -41,7 +41,7 @@ impl<C: ServerTransportConfig> WebTransportBackend<C> {
 
 async fn listen<C: ServerTransportConfig>(
     endpoint: Endpoint<Server>,
-    streams: StreamDefinitions,
+    streams: TransportStreams,
     send_evt: mpsc::Sender<InternalEvent<C::C2S>>,
     send_req: broadcast::Sender<Request<C::S2C>>,
 ) {
@@ -84,7 +84,7 @@ async fn listen<C: ServerTransportConfig>(
 }
 
 async fn handle_session<C: ServerTransportConfig>(
-    streams: StreamDefinitions,
+    streams: TransportStreams,
     mut send: mpsc::Sender<InternalEvent<C::C2S>>,
     mut recv: broadcast::Receiver<Request<C::S2C>>,
     client: ClientId,
@@ -101,12 +101,15 @@ async fn handle_session<C: ServerTransportConfig>(
         send.send(InternalEvent::UpdateInfo {
             client,
             info: ClientInfo::from_connection(&conn),
-        });
+        })
+        .await
+        .map_err(|_| SessionError::ServerClosed)?;
+
         tokio::select! {
             result = conn.receive_datagram() => {
                 let msg = recv_datagram::<C>(result)
                     .await
-                    .map_err(|err| SessionError::Transport(err.on(StreamKind::Datagram).into()))?;
+                    .map_err(|err| SessionError::Transport(err.on(TransportStream::Datagram).into()))?;
                 send.send(InternalEvent::Recv { client, msg })
                     .await
                     .map_err(|_| SessionError::ServerClosed)?;
@@ -177,14 +180,14 @@ async fn accept_session<C: ServerTransportConfig>(
 // streams
 
 async fn open_streams<C: ServerTransportConfig>(
-    streams: &StreamDefinitions,
+    streams: &TransportStreams,
     mut conn: &mut Connection,
     send_c2s: mpsc::Sender<C::C2S>,
     send_err: mpsc::Sender<SessionError>,
 ) -> Result<(Vec<mpsc::Sender<C::S2C>>, Vec<mpsc::Sender<C::S2C>>), SessionError> {
     let mut streams_bi = Vec::new();
     for stream_id in 0..streams.bi {
-        let stream = StreamKind::Bi(StreamId(stream_id));
+        let stream = TransportStream::Bi(StreamId(stream_id));
         let send = open_bi::<C>(&mut conn, stream, send_c2s.clone(), send_err.clone())
             .await
             .map_err(|err| SessionError::Transport(err.on(stream).into()))?;
@@ -192,16 +195,16 @@ async fn open_streams<C: ServerTransportConfig>(
     }
 
     let mut streams_s2c = Vec::new();
-    for stream_id in 0..streams.s2c {
-        let stream = StreamKind::S2C(StreamId(stream_id));
+    for stream_id in 0..streams.uni_s2c {
+        let stream = TransportStream::UniS2C(StreamId(stream_id));
         let send = open_s2c::<C>(&mut conn, stream, send_err.clone())
             .await
             .map_err(|err| SessionError::Transport(err.on(stream).into()))?;
         streams_s2c.push(send);
     }
 
-    for stream_id in 0..streams.c2s {
-        let stream = StreamKind::C2S(StreamId(stream_id));
+    for stream_id in 0..streams.uni_c2s {
+        let stream = TransportStream::UniC2S(StreamId(stream_id));
         open_c2s::<C>(&mut conn, stream, send_c2s.clone(), send_err.clone())
             .await
             .map_err(|err| SessionError::Transport(err.on(stream).into()))?;
@@ -212,7 +215,7 @@ async fn open_streams<C: ServerTransportConfig>(
 
 async fn open_bi<C: ServerTransportConfig>(
     conn: &mut Connection,
-    stream: StreamKind,
+    stream: TransportStream,
     mut send_c2s: mpsc::Sender<C::C2S>,
     send_err: mpsc::Sender<SessionError>,
 ) -> Result<mpsc::Sender<C::S2C>, StreamError> {
@@ -250,7 +253,7 @@ async fn open_bi<C: ServerTransportConfig>(
 
 async fn open_s2c<C: ServerTransportConfig>(
     conn: &mut Connection,
-    stream: StreamKind,
+    stream: TransportStream,
     send_err: mpsc::Sender<SessionError>,
 ) -> Result<mpsc::Sender<C::S2C>, StreamError> {
     let mut send = conn
@@ -280,7 +283,7 @@ async fn open_s2c<C: ServerTransportConfig>(
 
 async fn open_c2s<C: ServerTransportConfig>(
     conn: &mut Connection,
-    stream: StreamKind,
+    stream: TransportStream,
     mut send_c2s: mpsc::Sender<C::C2S>,
     send_err: mpsc::Sender<SessionError>,
 ) -> Result<(), StreamError> {
@@ -365,7 +368,7 @@ async fn send_client<C: ServerTransportConfig>(
         ServerStream::Bi(i) => {
             on_stream::<C>(&mut streams_bi[i.0], msg).await?;
         }
-        ServerStream::S2C(i) => {
+        ServerStream::Uni(i) => {
             on_stream::<C>(&mut streams_s2c[i.0], msg).await?;
         }
     }

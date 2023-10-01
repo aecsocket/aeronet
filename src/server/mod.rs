@@ -137,7 +137,7 @@ pub trait ServerTransportConfig: Send + Sync + 'static {
 
 /// An event received from a [`ServerTransport`].
 ///
-/// Under [`bevy`] this also implements `Event`, however this type cannot be used in an event
+/// Under Bevy this also implements `Event`, however this type cannot be used in an event
 /// reader or writer using the inbuilt plugins. `Event` is implemented to allow user code to use
 /// this type as an event if they wish to manually implement transport handling.
 #[derive(Debug)]

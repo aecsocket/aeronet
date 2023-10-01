@@ -111,7 +111,6 @@ dependencies = [
  "rcgen",
  "ring",
  "rustc-hash",
- "serde",
  "thiserror",
  "time",
  "tokio",
