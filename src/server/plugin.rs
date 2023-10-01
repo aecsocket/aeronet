@@ -62,10 +62,10 @@ where
     T: ServerTransport<C> + Resource,
 {
     fn build(&self, app: &mut App) {
-        app.add_event::<ClientIncoming>()
-            .add_event::<ClientConnected>()
+        app.add_event::<RemoteClientIncoming>()
+            .add_event::<RemoteClientConnected>()
             .add_event::<FromClient<C::C2S>>()
-            .add_event::<ClientDisconnected>()
+            .add_event::<RemoteClientDisconnected>()
             .add_event::<ToClient<C::S2C>>()
             .add_event::<DisconnectClient>()
             .configure_set(
@@ -92,14 +92,14 @@ pub enum ServerTransportSet {
 
 /// See [`ServerEvent::Incoming`].
 #[derive(Debug, Clone, Event)]
-pub struct ClientIncoming {
+pub struct RemoteClientIncoming {
     /// See [`ServerEvent::Incoming::client`].
     pub client: ClientId,
 }
 
 /// See [`ServerEvent::Connected`].
 #[derive(Debug, Clone, Event)]
-pub struct ClientConnected {
+pub struct RemoteClientConnected {
     /// See [`ServerEvent::Connected::client`].
     pub client: ClientId,
 }
@@ -115,7 +115,7 @@ pub struct FromClient<C2S> {
 
 /// See [`ServerEvent::Disconnected`].
 #[derive(Debug, Event)]
-pub struct ClientDisconnected {
+pub struct RemoteClientDisconnected {
     /// See [`ServerEvent::Disconnected::client`].
     pub client: ClientId,
     /// See [`ServerEvent::Disconnected::reason`].
@@ -141,10 +141,10 @@ pub struct DisconnectClient {
 fn recv<C, T>(
     mut commands: Commands,
     mut server: ResMut<T>,
-    mut requested: EventWriter<ClientIncoming>,
-    mut connected: EventWriter<ClientConnected>,
+    mut requested: EventWriter<RemoteClientIncoming>,
+    mut connected: EventWriter<RemoteClientConnected>,
     mut from_client: EventWriter<FromClient<C::C2S>>,
-    mut disconnected: EventWriter<ClientDisconnected>,
+    mut disconnected: EventWriter<RemoteClientDisconnected>,
 ) where
     C: ServerTransportConfig,
     T: ServerTransport<C> + Resource,
@@ -152,16 +152,16 @@ fn recv<C, T>(
     loop {
         match server.recv() {
             Ok(ServerEvent::Incoming { client }) => {
-                requested.send(ClientIncoming { client });
+                requested.send(RemoteClientIncoming { client });
             }
             Ok(ServerEvent::Connected { client }) => {
-                connected.send(ClientConnected { client });
+                connected.send(RemoteClientConnected { client });
             }
             Ok(ServerEvent::Recv { client, msg }) => {
                 from_client.send(FromClient { client, msg });
             }
             Ok(ServerEvent::Disconnected { client, reason }) => {
-                disconnected.send(ClientDisconnected { client, reason });
+                disconnected.send(RemoteClientDisconnected { client, reason });
             }
             Err(RecvError::Empty) => break,
             Err(RecvError::Closed) => {

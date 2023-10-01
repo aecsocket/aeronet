@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use aeronet::{
-    AsyncRuntime, ClientDisconnected, FromClient, RecvMessage, SendMessage, ServerTransport,
+    AsyncRuntime, RemoteClientDisconnected, FromClient, RecvMessage, SendMessage, ServerTransport,
     ServerTransportConfig, ServerTransportPlugin,
 };
 use aeronet_wt_native::{
@@ -107,9 +107,9 @@ fn reply(
 
 fn log_disconnect(
     server: Res<WebTransportServer<AppTransportConfig>>,
-    mut dc: EventReader<ClientDisconnected>,
+    mut dc: EventReader<RemoteClientDisconnected>,
 ) {
-    for ClientDisconnected { client, reason } in dc.iter() {
+    for RemoteClientDisconnected { client, reason } in dc.iter() {
         info!(
             "Client {client} disconnected: {:#}",
             aeronet::error::as_pretty(reason)

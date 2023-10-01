@@ -19,7 +19,7 @@ pub use client::{
 pub use message::{RecvMessage, SendMessage};
 #[cfg(feature = "bevy")]
 pub use server::plugin::{
-    ClientConnected, ClientDisconnected, ClientIncoming, DisconnectClient, FromClient,
+    RemoteClientConnected, RemoteClientDisconnected, RemoteClientIncoming, DisconnectClient, FromClient,
     ServerTransportPlugin, ServerTransportSet, ToClient,
 };
 pub use server::{
