@@ -57,6 +57,57 @@ pub enum TransportStream {
     UniS2C(StreamId),
 }
 
+pub trait TransportSide {
+    fn num_uni_in_streams(streams: &TransportStreams) -> usize;
+
+    fn num_uni_out_streams(streams: &TransportStreams) -> usize;
+
+    fn uni_in_stream(id: StreamId) -> TransportStream;
+
+    fn uni_out_stream(id: StreamId) -> TransportStream;
+}
+
+/// A stream along which the client can send data.
+///
+/// See [`TransportStream`] for details.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ClientStream {
+    /// See [`TransportStream::Datagram`].
+    Datagram,
+    /// See [`TransportStream::Bi`].
+    Bi(StreamId),
+    /// See [`TransportStream::UniC2S`].
+    Uni(StreamId),
+}
+
+impl From<ClientStream> for TransportStream {
+    fn from(value: ClientStream) -> Self {
+        match value {
+            ClientStream::Datagram => Self::Datagram,
+            ClientStream::Bi(id) => Self::Bi(id),
+            ClientStream::Uni(id) => Self::UniC2S(id),
+        }
+    }
+}
+
+impl TransportSide for ClientStream {
+    fn num_uni_in_streams(streams: &TransportStreams) -> usize {
+        streams.uni_s2c
+    }
+
+    fn num_uni_out_streams(streams: &TransportStreams) -> usize {
+        streams.uni_c2s
+    }
+
+    fn uni_in_stream(id: StreamId) -> TransportStream {
+        TransportStream::UniS2C(id)
+    }
+
+    fn uni_out_stream(id: StreamId) -> TransportStream {
+        TransportStream::UniC2S(id)
+    }
+}
+
 /// A stream along which the server can send data.
 ///
 /// See [`TransportStream`] for details.
@@ -80,26 +131,21 @@ impl From<ServerStream> for TransportStream {
     }
 }
 
-/// A stream along which the client can send data.
-///
-/// See [`TransportStream`] for details.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ClientStream {
-    /// See [`TransportStream::Datagram`].
-    Datagram,
-    /// See [`TransportStream::Bi`].
-    Bi(StreamId),
-    /// See [`TransportStream::UniC2S`].
-    Uni(StreamId),
-}
+impl TransportSide for ServerStream {
+    fn num_uni_in_streams(streams: &TransportStreams) -> usize {
+        streams.uni_c2s
+    }
 
-impl From<ClientStream> for TransportStream {
-    fn from(value: ClientStream) -> Self {
-        match value {
-            ClientStream::Datagram => Self::Datagram,
-            ClientStream::Bi(id) => Self::Bi(id),
-            ClientStream::Uni(id) => Self::UniC2S(id),
-        }
+    fn num_uni_out_streams(streams: &TransportStreams) -> usize {
+        streams.uni_s2c
+    }
+
+    fn uni_in_stream(id: StreamId) -> TransportStream {
+        TransportStream::UniC2S(id)
+    }
+
+    fn uni_out_stream(id: StreamId) -> TransportStream {
+        TransportStream::UniS2C(id)
     }
 }
 

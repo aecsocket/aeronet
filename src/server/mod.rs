@@ -59,6 +59,11 @@ pub trait ServerTransport<C: ServerTransportConfig> {
     ///
     /// If the specified client is not connected, [`None`] is returned.
     fn client_info(&self, client: ClientId) -> Option<Self::ClientInfo>;
+
+    /// Gets if the specified client is connected to this server.
+    fn is_connected(&self, client: ClientId) -> bool {
+        self.client_info(client).is_some()
+    }
 }
 
 /// Configures the types used by a server-side transport implementation.
@@ -121,7 +126,9 @@ pub trait ServerTransportConfig: Send + Sync + 'static {
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
 pub enum ServerEvent<C2S> {
     /// A client requested a connection and has been assigned a client ID.
-    Incoming {
+    ///
+    /// This event may not be sent in some implementations.
+    Connecting {
         /// The ID assigned to the incoming connection.
         client: ClientId,
     },

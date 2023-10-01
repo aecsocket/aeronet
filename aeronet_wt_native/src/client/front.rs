@@ -34,7 +34,7 @@ impl<C: ClientTransportConfig> WebTransportClient<C> {
     ///
     /// [connected]: ClientTransport::is_connected
     pub fn connect(&self, url: impl Into<String>) {
-        let _ = self.send.send(Request::Connect { url: url.into() });
+        let _ = self.send.try_send(Request::Connect { url: url.into() });
     }
 
     /// Requests the client to disconnect from the current connection.
@@ -43,7 +43,7 @@ impl<C: ClientTransportConfig> WebTransportClient<C> {
     ///
     /// [connected]: ClientTransport::is_connected
     pub fn disconnect(&self) {
-        let _ = self.send.send(Request::Disconnect);
+        let _ = self.send.try_send(Request::Disconnect);
     }
 }
 
@@ -59,9 +59,12 @@ where
             match self.recv.try_recv() {
                 // non-returning
                 Ok(Event::UpdateInfo { info }) => {
-                    self.info = Some(info);
+                    *self.info.as_mut().unwrap() = info;
                 }
                 // returning
+                Ok(Event::Connecting { info }) => {
+                    self.info = Some(info);
+                }
                 Ok(Event::Connected) => {
                     return Ok(ClientEvent::Connected);
                 }
@@ -78,7 +81,7 @@ where
 
     fn send(&mut self, msg: impl Into<C2S>) {
         let msg = msg.into();
-        let _ = self.send.send(Request::Send {
+        let _ = self.send.try_send(Request::Send {
             stream: msg.stream(),
             msg,
         });

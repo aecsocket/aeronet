@@ -25,8 +25,8 @@ pub use client::plugin::{
 };
 #[cfg(feature = "bevy")]
 pub use server::plugin::{
-    DisconnectClient, FromClient, RemoteClientConnected, RemoteClientDisconnected,
-    RemoteClientIncoming, ServerTransportPlugin, ServerTransportSet, ToClient,
+    DisconnectClient, FromClient, RemoteClientConnected, RemoteClientConnecting,
+    RemoteClientDisconnected, ServerTransportPlugin, ServerTransportSet, ToClient,
 };
 
 #[cfg(feature = "bevy-tokio-rt")]

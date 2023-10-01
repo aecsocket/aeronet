@@ -16,7 +16,10 @@ use crate::{
 #[derive(Debug, Clone)]
 pub enum RemoteServerInfo {
     /// The client has started a connection, but no further info is known.
-    Connecting,
+    Connecting {
+        /// The URL of the connection request.
+        url: String,
+    },
     /// The client has successfully established a connection, and full endpoint info is now
     /// available.
     Connected(EndpointInfo),
@@ -71,6 +74,7 @@ pub(crate) enum Request<C2S> {
 
 #[derive(Debug)]
 pub(crate) enum Event<S2C> {
+    Connecting { info: RemoteServerInfo },
     Connected,
     UpdateInfo { info: RemoteServerInfo },
     Recv { msg: S2C },

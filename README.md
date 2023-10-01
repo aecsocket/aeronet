@@ -14,6 +14,7 @@ underlying mechanism used to transport your data.
 # Meet the transports
 
 Currently aeronet supports:
-* [aeronet_channel](https://docs.rs/aeronet_channel): a transport implemented over crossbeam-channel MPSC
-  channels. No networking and works in WASM. Useful when you need a transport for a local
-  singleplayer game, but want to keep the same logic as in a multiplayer game.
+* [`aeronet_wt_native`](https://docs.rs/aeronet_wt_native): a transport implemented on top of the
+  WebTransport protocol, which is in turn implemented on top of QUIC. The transport has native
+  client and server implementations using [`wtransport`](https://docs.rs/wtransport), and a WASM
+  client implementation using [`web-sys`](https://docs.rs/web-sys).

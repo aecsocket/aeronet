@@ -13,7 +13,7 @@ license = "MIT OR Apache-2.0"
 bevy = [ "dep:bevy", "aeronet/bevy" ]
 
 [dependencies]
-aeronet = { path = "..", version = "0.1.0" }
+aeronet = { path = "..", version = "0.1.0", features = [ "bevy-tokio-rt" ] }
 tracing = "0.1.37"
 thiserror = "1.0.47"
 anyhow = "1.0.75"
@@ -31,8 +31,8 @@ base64 = "0.21.0"
 rcgen = "0.11.1"
 ring = "0.16.20"
 time = "0.3.21"
-tokio = { version = "1.28.1", features = [ "rt", "rt-multi-thread", "macros" ] }
-tracing-subscriber = { version = "0.3.17", features = [ "env-filter" ] }
+#tokio = { version = "1.28.1", features = [ "rt", "rt-multi-thread", "macros" ] }
+#tracing-subscriber = { version = "0.3.17", features = [ "env-filter" ] }
 
 [package.metadata.docs.rs]
 all-features = true
@@ -45,4 +45,4 @@ required-features = [ "bevy" ]
 [[example]]
 name = "echo_server"
 path = "examples/echo_server.rs"
-required-features = [ "bevy", "aeronet/bevy-tokio-rt" ]
+required-features = [ "bevy" ]

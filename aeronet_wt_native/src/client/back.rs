@@ -8,7 +8,7 @@ use wtransport::{endpoint::Client, ClientConfig, Connection, Endpoint};
 use crate::{
     client::RemoteServerInfo,
     shared::{open_streams, recv_datagram, send_out},
-    TransportStream, TransportStreams, CHANNEL_BUF,
+    ClientStream, TransportStream, TransportStreams, CHANNEL_BUF,
 };
 
 use super::{Event, Request};
@@ -60,7 +60,13 @@ async fn listen<C: ClientTransportConfig>(
                 _ => debug!("Received non-Connect request while not connected"),
             }
         };
-        debug!("Connecting to {url:?}");
+
+        debug!("Connecting to {url}");
+        send.send(Event::Connecting {
+            info: RemoteServerInfo::Connecting { url: url.clone() },
+        })
+        .await
+        .map_err(|_| SessionError::Closed)?;
         let conn = endpoint
             .connect(url)
             .await
@@ -83,7 +89,8 @@ async fn handle_session<C: ClientTransportConfig>(
     let (send_in, mut recv_in) = mpsc::channel::<C::S2C>(CHANNEL_BUF);
     let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
     let (mut streams_bi, mut streams_uni_out) =
-        open_streams::<C::C2S, C::S2C>(&streams, &mut conn, send_in, send_err).await?;
+        open_streams::<C::C2S, C::S2C, ClientStream>(&streams, &mut conn, send_in, send_err)
+            .await?;
 
     debug!("Connected to {}", conn.remote_address());
     send.send(Event::Connected)

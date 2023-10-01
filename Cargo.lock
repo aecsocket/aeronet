@@ -114,7 +114,6 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "wtransport",
 ]
 

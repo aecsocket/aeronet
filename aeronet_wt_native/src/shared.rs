@@ -7,15 +7,17 @@ use wtransport::{
     Connection, SendStream,
 };
 
-use crate::{StreamError, StreamId, TransportStream, TransportStreams, CHANNEL_BUF, RECV_BUF};
+use crate::{
+    stream::TransportSide, StreamError, StreamId, TransportStream, TransportStreams, CHANNEL_BUF,
+    RECV_BUF,
+};
 
-pub(crate) async fn open_streams<S: SendMessage, R: RecvMessage>(
+pub(crate) async fn open_streams<S: SendMessage, R: RecvMessage, Side: TransportSide>(
     streams: &TransportStreams,
     mut conn: &mut Connection,
     send_in: mpsc::Sender<R>,
     send_err: mpsc::Sender<SessionError>,
 ) -> Result<(Vec<mpsc::Sender<S>>, Vec<mpsc::Sender<S>>), SessionError> {
-    // TODO `streams` server/client
     let mut streams_bi = Vec::new();
     for stream_id in 0..streams.bi {
         let stream = TransportStream::Bi(StreamId(stream_id));
@@ -26,16 +28,16 @@ pub(crate) async fn open_streams<S: SendMessage, R: RecvMessage>(
     }
 
     let mut streams_uni_out = Vec::new();
-    for stream_id in 0..streams.uni_s2c {
-        let stream = TransportStream::UniS2C(StreamId(stream_id));
+    for stream_id in 0..Side::num_uni_out_streams(streams) {
+        let stream = Side::uni_out_stream(StreamId(stream_id));
         let send = open_uni_out::<S, R>(&mut conn, stream, send_err.clone())
             .await
             .map_err(|err| SessionError::Transport(err.on(stream).into()))?;
         streams_uni_out.push(send);
     }
 
-    for stream_id in 0..streams.uni_c2s {
-        let stream = TransportStream::UniC2S(StreamId(stream_id));
+    for stream_id in 0..Side::num_uni_in_streams(streams) {
+        let stream = Side::uni_in_stream(StreamId(stream_id));
         open_uni_in::<S, R>(&mut conn, stream, send_in.clone(), send_err.clone())
             .await
             .map_err(|err| SessionError::Transport(err.on(stream).into()))?;

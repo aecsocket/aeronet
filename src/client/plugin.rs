@@ -9,6 +9,9 @@ use crate::{ClientEvent, ClientTransport, ClientTransportConfig, RecvError, Sess
 /// This handles receiving data from the transport and forwarding it to the app via events,
 /// as well as sending data to the transport by reading from events. The events provided are:
 /// * Incoming
+///   * [`LocalClientConnecting`] when the app asks the client to connect to a server
+///     * Transport implementations are not required to send this event, so don't rely on it
+///       on main logic
 ///   * [`LocalClientConnected`] when the client fully connects to the server
 ///     * Use this to run logic when connection is complete e.g. loading the level
 ///   * [`FromServer`] when the server sends data to this client
@@ -58,7 +61,8 @@ where
     T: ClientTransport<C> + Resource,
 {
     fn build(&self, app: &mut App) {
-        app.add_event::<LocalClientConnected>()
+        app.add_event::<LocalClientConnecting>()
+            .add_event::<LocalClientConnected>()
             .add_event::<FromServer<C::S2C>>()
             .add_event::<LocalClientDisconnected>()
             .add_event::<ToServer<C::C2S>>()
@@ -83,6 +87,10 @@ pub enum ClientTransportSet {
     /// Sends requests from the app to the connected server.
     Send,
 }
+
+/// See [`ClientEvent::Connecting`].
+#[derive(Debug, Clone, Event)]
+pub struct LocalClientConnecting;
 
 /// See [`ClientEvent::Connected`].
 #[derive(Debug, Clone, Event)]
@@ -112,6 +120,7 @@ pub struct ToServer<C2S> {
 fn recv<C, T>(
     mut commands: Commands,
     mut client: ResMut<T>,
+    mut connecting: EventWriter<LocalClientConnecting>,
     mut connected: EventWriter<LocalClientConnected>,
     mut from_server: EventWriter<FromServer<C::S2C>>,
     mut disconnected: EventWriter<LocalClientDisconnected>,
@@ -121,6 +130,7 @@ fn recv<C, T>(
 {
     loop {
         match client.recv() {
+            Ok(ClientEvent::Connecting) => connecting.send(LocalClientConnecting),
             Ok(ClientEvent::Connected) => {
                 connected.send(LocalClientConnected);
             }

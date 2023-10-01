@@ -10,7 +10,7 @@ use wtransport::{
 
 use crate::{
     shared::{open_streams, recv_datagram, send_out},
-    TransportStream, TransportStreams,
+    ServerStream, TransportStream, TransportStreams,
 };
 
 use super::{Event, RemoteClientInfo, Request, CHANNEL_BUF};
@@ -97,7 +97,8 @@ async fn handle_session<C: ServerTransportConfig>(
     let (send_in, mut recv_in) = mpsc::channel::<C::C2S>(CHANNEL_BUF);
     let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
     let (mut streams_bi, mut streams_uni_out) =
-        open_streams::<C::S2C, C::C2S>(&streams, &mut conn, send_in, send_err).await?;
+        open_streams::<C::S2C, C::C2S, ServerStream>(&streams, &mut conn, send_in, send_err)
+            .await?;
 
     loop {
         send.send(Event::UpdateInfo {

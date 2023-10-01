@@ -11,7 +11,9 @@ use super::{
 /// This handles receiving data from the transport and forwarding it to the app via events,
 /// as well as sending data to the transport by reading from events. The events provided are:
 /// * Incoming
-///   * [`RemoteClientIncoming`] when a client requests a connection
+///   * [`RemoteClientConnecting`] when a client requests a connection
+///     * Transport implementations are not required to send this event, so don't rely on it
+///       on main logic
 ///   * [`RemoteClientConnected`] when a client fully connects
 ///     * Use this to run logic when a client fully connects e.g. loading player data
 ///   * [`FromClient`] when a client sends data to the server
@@ -62,7 +64,7 @@ where
     T: ServerTransport<C> + Resource,
 {
     fn build(&self, app: &mut App) {
-        app.add_event::<RemoteClientIncoming>()
+        app.add_event::<RemoteClientConnecting>()
             .add_event::<RemoteClientConnected>()
             .add_event::<FromClient<C::C2S>>()
             .add_event::<RemoteClientDisconnected>()
@@ -92,7 +94,7 @@ pub enum ServerTransportSet {
 
 /// See [`ServerEvent::Incoming`].
 #[derive(Debug, Clone, Event)]
-pub struct RemoteClientIncoming {
+pub struct RemoteClientConnecting {
     /// See [`ServerEvent::Incoming::client`].
     pub client: ClientId,
 }
@@ -141,7 +143,7 @@ pub struct DisconnectClient {
 fn recv<C, T>(
     mut commands: Commands,
     mut server: ResMut<T>,
-    mut incoming: EventWriter<RemoteClientIncoming>,
+    mut connecting: EventWriter<RemoteClientConnecting>,
     mut connected: EventWriter<RemoteClientConnected>,
     mut from_client: EventWriter<FromClient<C::C2S>>,
     mut disconnected: EventWriter<RemoteClientDisconnected>,
@@ -151,8 +153,8 @@ fn recv<C, T>(
 {
     loop {
         match server.recv() {
-            Ok(ServerEvent::Incoming { client }) => {
-                incoming.send(RemoteClientIncoming { client });
+            Ok(ServerEvent::Connecting { client }) => {
+                connecting.send(RemoteClientConnecting { client });
             }
             Ok(ServerEvent::Connected { client }) => {
                 connected.send(RemoteClientConnected { client });

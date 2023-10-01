@@ -42,7 +42,7 @@ where
                 // returning
                 Ok(Event::Incoming { client, info }) => {
                     self.clients.insert(client, info);
-                    return Ok(ServerEvent::Incoming { client });
+                    return Ok(ServerEvent::Connecting { client });
                 }
                 Ok(Event::Connected { client }) => {
                     return Ok(ServerEvent::Connected { client });

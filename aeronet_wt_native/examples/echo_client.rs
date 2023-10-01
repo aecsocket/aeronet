@@ -1,13 +1,14 @@
 use std::time::Duration;
 
 use aeronet::{
-    AsyncRuntime, ClientTransportConfig, ClientTransportPlugin, RecvMessage, SendMessage, LocalClientConnected, LocalClientDisconnected,
+    AsyncRuntime, ClientTransportConfig, ClientTransportPlugin, LocalClientConnected,
+    LocalClientDisconnected, RecvMessage, SendMessage,
 };
 use aeronet_wt_native::{
-    wtransport::ClientConfig, ClientStream, StreamMessage, WebTransportClient, TransportStreams,
+    wtransport::ClientConfig, ClientStream, StreamMessage, TransportStreams, WebTransportClient,
 };
 use anyhow::Result;
-use bevy::{prelude::*, log::LogPlugin};
+use bevy::{log::LogPlugin, prelude::*};
 
 // config
 
@@ -70,10 +71,10 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportClient<AppTransportConfig>> {
         .build();
 
     let (front, back) = aeronet_wt_native::create_client(config, TransportStreams::default());
-    front.connect("https://[::1]:25565");
     rt.0.spawn(async move {
         back.start().await.unwrap();
     });
+    front.connect("https://[::1]:25565");
     Ok(front)
 }
 
@@ -85,7 +86,10 @@ fn reply(
         info!("Client connected");
     }
 
-   for LocalClientDisconnected { reason } in disconnected.iter() {
-    info!("Client disconnected: {:#}", aeronet::error::as_pretty(reason));
-   }
+    for LocalClientDisconnected { reason } in disconnected.iter() {
+        info!(
+            "Client disconnected: {:#}",
+            aeronet::error::as_pretty(reason)
+        );
+    }
 }

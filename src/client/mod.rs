@@ -118,6 +118,10 @@ pub trait ClientTransportConfig: Send + Sync + 'static {
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
 pub enum ClientEvent<S2C> {
+    /// The client has started connecting to a server at the app's request.
+    ///
+    /// This event may not be sent in some implementations.
+    Connecting,
     /// The client successfully connected to the server that was requested when creating the
     /// transport.
     ///
