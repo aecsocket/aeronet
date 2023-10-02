@@ -3,7 +3,7 @@ pub mod front;
 
 use std::collections::HashMap;
 
-use aeronet::{ClientId, MessageTypes, SessionError, TryIntoBytes, Message};
+use aeronet::{ClientId, Message, SessionError, TryFromBytes, TryIntoBytes};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 use wtransport::{endpoint::SessionRequest, Connection, ServerConfig};
@@ -56,24 +56,27 @@ impl RemoteClientInfo {
 /// once using [`WebTransportServerBackend::start`] in an async Tokio runtime when it is first
 /// available (this function does not automatically start the backend, because we have no
 /// guarantees about the current Tokio runtime at this point).
-pub fn create_server<S2C, M>(
+pub fn create_server<C2S, S2C>(
     config: ServerConfig,
     streams: TransportStreams,
-) -> (WebTransportServer<M>, WebTransportServerBackend<M>)
+) -> (
+    WebTransportServer<C2S, S2C>,
+    WebTransportServerBackend<C2S, S2C>,
+)
 where
+    C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + SendOn<ServerStream> + Clone,
-    M: MessageTypes<S2C = S2C>,
 {
-    let (send_b2f, recv_b2f) = mpsc::channel::<Event<M::C2S>>(CHANNEL_BUF);
-    let (send_f2b, _) = broadcast::channel::<Request<M::S2C>>(CHANNEL_BUF);
+    let (send_b2f, recv_b2f) = mpsc::channel::<Event<C2S>>(CHANNEL_BUF);
+    let (send_f2b, _) = broadcast::channel::<Request<S2C>>(CHANNEL_BUF);
 
-    let frontend = WebTransportServer::<M> {
+    let frontend = WebTransportServer::<C2S, S2C> {
         send: send_f2b.clone(),
         recv: recv_b2f,
         clients: FxHashMap::default(),
     };
 
-    let backend = WebTransportServerBackend::<M> {
+    let backend = WebTransportServerBackend::<C2S, S2C> {
         config,
         streams,
         send_b2f,

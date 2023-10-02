@@ -1,6 +1,6 @@
 use std::{convert::Infallible, io};
 
-use aeronet::{ClientId, MessageTypes, SessionError, Message, TryIntoBytes, TryFromBytes};
+use aeronet::{ClientId, Message, SessionError, TryFromBytes, TryIntoBytes};
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, debug_span, Instrument};
 use wtransport::{
@@ -20,18 +20,17 @@ use super::{Event, RemoteClientInfo, Request, CHANNEL_BUF};
 ///
 /// The only thing you should do with this struct is to run [`WebTransportServerBackend::start`]
 /// in an async task - the frontend will handle the rest.
-pub struct WebTransportServerBackend<M: MessageTypes> {
+pub struct WebTransportServerBackend<C2S, S2C> {
     pub(crate) config: ServerConfig,
     pub(crate) streams: TransportStreams,
-    pub(crate) send_b2f: mpsc::Sender<Event<M::C2S>>,
-    pub(crate) send_f2b: broadcast::Sender<Request<M::S2C>>,
+    pub(crate) send_b2f: mpsc::Sender<Event<C2S>>,
+    pub(crate) send_f2b: broadcast::Sender<Request<S2C>>,
 }
 
-impl<C2S, S2C, M> WebTransportServerBackend<M>
+impl<C2S, S2C> WebTransportServerBackend<C2S, S2C>
 where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + Clone,
-    M: MessageTypes<C2S = C2S, S2C = S2C>,
 {
     /// Starts the server logic which interfaces with clients.
     pub async fn start(self) -> Result<(), io::Error> {
@@ -55,8 +54,7 @@ async fn listen<C2S, S2C>(
     streams: TransportStreams,
     send_evt: mpsc::Sender<Event<C2S>>,
     send_req: broadcast::Sender<Request<S2C>>,
-)
-where
+) where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + Clone,
 {
@@ -110,8 +108,7 @@ where
     let (send_in, mut recv_in) = mpsc::channel::<C2S>(CHANNEL_BUF);
     let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
     let (mut streams_bi, mut streams_uni_out) =
-        open_streams::<S2C, C2S, ServerStream>(&streams, &mut conn, send_in, send_err)
-            .await?;
+        open_streams::<S2C, C2S, ServerStream>(&streams, &mut conn, send_in, send_err).await?;
 
     loop {
         send.send(Event::UpdateInfo {

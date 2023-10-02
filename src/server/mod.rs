@@ -3,7 +3,7 @@ pub mod plugin;
 
 use std::fmt::Display;
 
-use crate::{MessageTypes, RecvError, SessionError};
+use crate::{Message, RecvError, SessionError};
 
 /// A server-to-client layer responsible for sending user messages to the other side.
 ///
@@ -13,11 +13,18 @@ use crate::{MessageTypes, RecvError, SessionError};
 /// Different transport implementations will use different methods to
 /// transport the data across, such as through memory or over a network. This means that a
 /// transport does not necessarily work over the internet! If you want to get details such as
-/// RTT or remote address, see [`crate::TransportRtt`] and [`crate::TransportRemoteAddr`].
+/// RTT or remote address, see [`Rtt`] and [`RemoteAddr`].
 ///
-/// The `C` parameter allows configuring which types of messages are sent and received by this
-/// transport (see [`ServerTransportConfig`]).
-pub trait ServerTransport<M: MessageTypes> {
+/// The type parameters allows configuring which types of messages are sent and received by this
+/// transport (see [`Message`]).
+/// 
+/// [`Rtt`]: crate::Rtt
+/// [`RemoteAddr`]: crate::RemoteAddr
+pub trait ServerTransport<C2S, S2C>
+where
+    C2S: Message,
+    S2C: Message,
+{
     /// The info that [`ServerTransport::client_info`] provides.
     type ClientInfo;
 
@@ -42,10 +49,10 @@ pub trait ServerTransport<M: MessageTypes> {
     /// }
     /// # }
     /// ```
-    fn recv(&mut self) -> Result<ServerEvent<M::C2S>, RecvError>;
+    fn recv(&mut self) -> Result<ServerEvent<C2S>, RecvError>;
 
     /// Sends a message to a connected client.
-    fn send(&mut self, client: ClientId, msg: impl Into<M::S2C>);
+    fn send(&mut self, client: ClientId, msg: impl Into<S2C>);
 
     /// Forces a client to disconnect from the server.
     ///

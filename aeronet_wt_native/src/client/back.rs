@@ -1,6 +1,6 @@
 use std::{convert::Infallible, io};
 
-use aeronet::{MessageTypes, SessionError, Message, TryIntoBytes, TryFromBytes};
+use aeronet::{Message, SessionError, TryFromBytes, TryIntoBytes};
 use tokio::sync::mpsc;
 use tracing::debug;
 use wtransport::{endpoint::Client, ClientConfig, Connection, Endpoint};
@@ -18,18 +18,17 @@ use super::{Event, Request};
 ///
 /// The only thing you should do with this struct is to run [`WebTransportClientBackend::start`]
 /// in an async task - the frontend will handle the rest.
-pub struct WebTransportClientBackend<M: MessageTypes> {
+pub struct WebTransportClientBackend<C2S, S2C> {
     pub(crate) config: ClientConfig,
     pub(crate) streams: TransportStreams,
-    pub(crate) send: mpsc::Sender<Event<M::S2C>>,
-    pub(crate) recv: mpsc::Receiver<Request<M::C2S>>,
+    pub(crate) send: mpsc::Sender<Event<S2C>>,
+    pub(crate) recv: mpsc::Receiver<Request<C2S>>,
 }
 
-impl<C2S, S2C, M> WebTransportClientBackend<M>
+impl<C2S, S2C> WebTransportClientBackend<C2S, S2C>
 where
     C2S: Message + TryIntoBytes,
     S2C: Message + TryFromBytes,
-    M: MessageTypes<C2S = C2S, S2C = S2C>,
 {
     /// Starts the server logic which interfaces with the target server.
     pub async fn start(self) -> Result<(), io::Error> {
@@ -81,7 +80,8 @@ where
             .await
             .map_err(|err| SessionError::Connecting(err.into()))?;
 
-        if let Err(reason) = handle_session::<C2S, S2C>(conn, &streams, &mut send, &mut recv).await {
+        if let Err(reason) = handle_session::<C2S, S2C>(conn, &streams, &mut send, &mut recv).await
+        {
             send.send(Event::Disconnected { reason })
                 .await
                 .map_err(|_| SessionError::Closed)?;

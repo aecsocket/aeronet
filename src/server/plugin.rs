@@ -2,9 +2,11 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 
-use super::{ClientId, MessageTypes, RecvError, ServerEvent, ServerTransport, SessionError};
+use crate::Message;
 
-/// Configures a [`ServerTransport`] of type `T`.
+use super::{ClientId, RecvError, ServerEvent, ServerTransport, SessionError};
+
+/// Handles [`ServerTransport`]s of type `T`.
 ///
 /// This handles receiving data from the transport and forwarding it to the app via events,
 /// as well as sending data to the transport by reading from events. The events provided are:
@@ -22,9 +24,6 @@ use super::{ClientId, MessageTypes, RecvError, ServerEvent, ServerTransport, Ses
 ///   * [`DisconnectClient`] to force a client to lose the connection
 ///
 /// # Usage
-///
-/// You will need an implementation of [`ServerTransportConfig`] to use as the `C` type parameter.
-/// See that type's docs to see how to implement one.
 ///
 /// This plugin is not *required* to use the server transports. Using the plugin actually poses
 /// the following limitations:
@@ -51,17 +50,17 @@ use super::{ClientId, MessageTypes, RecvError, ServerEvent, ServerTransport, Ses
 /// ```
 #[derive(Debug, derivative::Derivative)]
 #[derivative(Default)]
-pub struct ServerTransportPlugin<M, T> {
-    _phantom_m: PhantomData<M>,
+pub struct ServerTransportPlugin<C2S, S2C, T> {
+    _phantom_c2s: PhantomData<C2S>,
+    _phantom_s2c: PhantomData<S2C>,
     _phantom_t: PhantomData<T>,
 }
 
-impl<C2S, S2C, M, T> Plugin for ServerTransportPlugin<M, T>
+impl<C2S, S2C, T> Plugin for ServerTransportPlugin<C2S, S2C, T>
 where
-    C2S: Send + Sync + 'static,
-    S2C: Send + Sync + Clone + 'static,
-    M: MessageTypes<C2S = C2S, S2C = S2C>,
-    T: ServerTransport<M> + Resource,
+    C2S: Message,
+    S2C: Message + Clone,
+    T: ServerTransport<C2S, S2C> + Resource,
 {
     fn build(&self, app: &mut App) {
         app.add_event::<RemoteClientConnecting>()
@@ -80,11 +79,11 @@ where
             )
             .add_systems(
                 PreUpdate,
-                recv::<C2S, M, T>.in_set(ServerTransportSet::Recv),
+                recv::<C2S, S2C, T>.in_set(ServerTransportSet::Recv),
             )
             .add_systems(
                 PostUpdate,
-                send::<S2C, M, T>.in_set(ServerTransportSet::Send),
+                send::<C2S, S2C, T>.in_set(ServerTransportSet::Send),
             );
     }
 }
@@ -146,7 +145,7 @@ pub struct DisconnectClient {
     pub client: ClientId,
 }
 
-fn recv<C2S, M, T>(
+fn recv<C2S, S2C, T>(
     mut commands: Commands,
     mut server: ResMut<T>,
     mut connecting: EventWriter<RemoteClientConnecting>,
@@ -154,9 +153,9 @@ fn recv<C2S, M, T>(
     mut from_client: EventWriter<FromClient<C2S>>,
     mut disconnected: EventWriter<RemoteClientDisconnected>,
 ) where
-    C2S: Send + Sync + 'static,
-    M: MessageTypes<C2S = C2S>,
-    T: ServerTransport<M> + Resource,
+    C2S: Message,
+    S2C: Message,
+    T: ServerTransport<C2S, S2C> + Resource,
 {
     loop {
         match server.recv() {
@@ -181,14 +180,14 @@ fn recv<C2S, M, T>(
     }
 }
 
-fn send<S2C, M, T>(
+fn send<C2S, S2C, T>(
     mut server: ResMut<T>,
     mut to_client: EventReader<ToClient<S2C>>,
     mut disconnect: EventReader<DisconnectClient>,
 ) where
-    S2C: Send + Sync + Clone + 'static,
-    M: MessageTypes<S2C = S2C>,
-    T: ServerTransport<M> + Resource,
+    C2S: Message,
+    S2C: Message + Clone,
+    T: ServerTransport<C2S, S2C> + Resource,
 {
     for ToClient { client, msg } in to_client.iter() {
         server.send(*client, msg.clone());

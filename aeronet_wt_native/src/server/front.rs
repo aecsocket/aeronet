@@ -1,4 +1,6 @@
-use aeronet::{ClientId, MessageTypes, RecvError, ServerEvent, ServerTransport, TryIntoBytes};
+use aeronet::{
+    ClientId, Message, RecvError, ServerEvent, ServerTransport, TryFromBytes, TryIntoBytes,
+};
 use anyhow::Result;
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
@@ -17,20 +19,20 @@ use super::{Event, RemoteClientInfo, Request};
 /// When dropped, the backend server is shut down and all client connections are dropped.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct WebTransportServer<M: MessageTypes> {
-    pub(crate) send: broadcast::Sender<Request<M::S2C>>,
-    pub(crate) recv: mpsc::Receiver<Event<M::C2S>>,
+pub struct WebTransportServer<C2S, S2C> {
+    pub(crate) send: broadcast::Sender<Request<S2C>>,
+    pub(crate) recv: mpsc::Receiver<Event<C2S>>,
     pub(crate) clients: FxHashMap<ClientId, RemoteClientInfo>,
 }
 
-impl<S2C, M> ServerTransport<M> for WebTransportServer<M>
+impl<C2S, S2C> ServerTransport<C2S, S2C> for WebTransportServer<C2S, S2C>
 where
-    S2C: TryIntoBytes + SendOn<ServerStream>,
-    M: MessageTypes<S2C = S2C>,
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + SendOn<ServerStream>,
 {
     type ClientInfo = RemoteClientInfo;
 
-    fn recv(&mut self) -> Result<ServerEvent<M::C2S>, RecvError> {
+    fn recv(&mut self) -> Result<ServerEvent<C2S>, RecvError> {
         loop {
             match self.recv.try_recv() {
                 // non-returning

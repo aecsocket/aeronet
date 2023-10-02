@@ -1,48 +1,20 @@
 use anyhow::Result;
 
-/// Configures the types of messages that are sent and received by this side.
+/// Data that can be sent to and received by a transport.
 ///
-/// A transport is abstract over the exact message type that it uses, instead letting the user
-/// decide. This trait allows configuring the message types in both the client-to-server and
-/// server-to-client directions. The types used for both may be different or the same.
-/// The types used for C2S and S2C may be different.
+/// This is a marker trait that ensures that data sent between transports is:
+/// * [`Send`]
+/// * [`Sync`]
+/// * has lifetime `'static`
 ///
-/// # Examples
+/// The user defines which types of messages their transport uses, and this trait acts as a
+/// minimum bound for all message types. However, for different transport implementations, there
+/// may be additional bounds placed on message types, such as for transports using a network, in
+/// which data is sent as a byte sequence:
+/// * [`TryIntoBytes`] if the message should be able to be converted into a byte sequence
+/// * [`TryFromBytes`] if the message should be able to be constructed from a byte sequence
 ///
-/// ```
-/// use aeronet::TransportConfig;
-///
-/// #[derive(Debug, Clone)]
-/// pub enum C2S {
-///     Ping(u64),
-/// }
-/// # impl aeronet::RecvMessage for C2S {
-/// #     fn from_payload(buf: &[u8]) -> anyhow::Result<Self> { unimplemented!() }
-/// # }
-///
-/// #[derive(Debug, Clone)]
-/// pub enum S2C {
-///     Pong(u64),
-/// }
-/// # impl aeronet::SendMessage for S2C {
-/// #     fn into_payload(self) -> anyhow::Result<Vec<u8>> { unimplemented!() }
-/// # }
-///
-/// pub struct AppTransportConfig;
-///
-/// impl ServerTransportConfig for AppTransportConfig {
-///     type C2S = C2S;
-///     type S2C = S2C;
-/// }
-/// ```
-pub trait MessageTypes: Send + Sync + 'static {
-    /// The client-to-server message type.
-    type C2S: Message;
-
-    /// The server-to-client message type.
-    type S2C: Message;
-}
-
+/// This is automatically implemented for all types matching these criteria.
 pub trait Message: Send + Sync + 'static {}
 
 impl<T> Message for T where T: Send + Sync + 'static {}
@@ -92,14 +64,20 @@ pub trait TryFromBytes: Sized {
 }
 
 #[cfg(feature = "bincode")]
-impl<T> TryIntoBytes for T where T: serde::Serialize {
+impl<T> TryIntoBytes for T
+where
+    T: serde::Serialize,
+{
     fn try_into_bytes(self) -> Result<Vec<u8>> {
         bincode::serialize(&self).map_err(anyhow::Error::new)
     }
 }
 
 #[cfg(feature = "bincode")]
-impl<T> TryFromBytes for T where T: serde::de::DeserializeOwned {
+impl<T> TryFromBytes for T
+where
+    T: serde::de::DeserializeOwned,
+{
     fn try_from_bytes(buf: &[u8]) -> Result<Self> {
         bincode::deserialize(buf).map_err(anyhow::Error::new)
     }

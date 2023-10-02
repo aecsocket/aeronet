@@ -29,7 +29,7 @@ pub enum SessionError {
 }
 
 /// Allows access to the round-trip time of a connection.
-pub trait TransportRtt {
+pub trait Rtt {
     /// Gets the round-trip time to the connected endpoint.
     ///
     /// The round-trip time is defined as the time taken for the following to happen:
@@ -41,7 +41,7 @@ pub trait TransportRtt {
 }
 
 /// Allows access to the remote socket address of the other side of a connection.
-pub trait TransportRemoteAddr {
+pub trait RemoteAddr {
     /// Gets the remote socket address of the endpoint that this side is connected to.
     fn remote_addr(&self) -> SocketAddr;
 }

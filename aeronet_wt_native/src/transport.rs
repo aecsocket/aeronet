@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, time::Duration};
 
-use aeronet::{TransportRemoteAddr, TransportRtt, TryIntoBytes};
+use aeronet::{RemoteAddr, Rtt, TryIntoBytes};
 use anyhow::Result;
 use wtransport::Connection;
 
@@ -36,13 +36,13 @@ impl EndpointInfo {
     }
 }
 
-impl TransportRtt for EndpointInfo {
+impl Rtt for EndpointInfo {
     fn rtt(&self) -> Duration {
         self.rtt
     }
 }
 
-impl TransportRemoteAddr for EndpointInfo {
+impl RemoteAddr for EndpointInfo {
     fn remote_addr(&self) -> SocketAddr {
         self.remote_addr
     }
@@ -113,7 +113,10 @@ pub struct StreamMessage<S, T> {
     pub msg: T,
 }
 
-impl<S, T> SendOn<S> for StreamMessage<S, T> where S: Clone {
+impl<S, T> SendOn<S> for StreamMessage<S, T>
+where
+    S: Clone,
+{
     fn stream(&self) -> S {
         self.stream.clone()
     }

@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use aeronet::{
-    AsyncRuntime, FromClient, RemoteClientDisconnected, ServerTransport,
-    ServerTransportPlugin, TryIntoBytes, MessageTypes,
+    AsyncRuntime, FromClient, MessageTypes, RemoteClientDisconnected, ServerTransport,
+    ServerTransportPlugin, TryIntoBytes,
 };
 use aeronet_wt_native::{
     wtransport::{tls::Certificate, ServerConfig},

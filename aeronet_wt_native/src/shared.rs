@@ -1,4 +1,4 @@
-use aeronet::{SessionError, TryFromBytes, TryIntoBytes, Message};
+use aeronet::{Message, SessionError, TryFromBytes, TryIntoBytes};
 use anyhow::Result;
 use tokio::sync::mpsc;
 use wtransport::{

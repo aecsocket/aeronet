@@ -1,7 +1,7 @@
 pub mod back;
 pub mod front;
 
-use aeronet::{MessageTypes, SessionError, TryIntoBytes};
+use aeronet::{Message, SessionError, TryFromBytes, TryIntoBytes};
 use tokio::sync::mpsc;
 use wtransport::{ClientConfig, Connection};
 
@@ -38,24 +38,27 @@ impl RemoteServerInfo {
 /// once using [`WebTransportClientBackend::start`] in an async Tokio runtime when it is first
 /// available (this function does not automatically start the backend, because we have no
 /// guarantees about the current Tokio runtime at this point).
-pub fn create_client<C2S, M>(
+pub fn create_client<C2S, S2C>(
     config: ClientConfig,
     streams: TransportStreams,
-) -> (WebTransportClient<M>, WebTransportClientBackend<M>)
+) -> (
+    WebTransportClient<C2S, S2C>,
+    WebTransportClientBackend<C2S, S2C>,
+)
 where
-    C2S: TryIntoBytes + SendOn<ClientStream>,
-    M: MessageTypes<C2S = C2S>,
+    C2S: Message + TryIntoBytes + SendOn<ClientStream>,
+    S2C: Message + TryFromBytes,
 {
-    let (send_b2f, recv_b2f) = mpsc::channel::<Event<M::S2C>>(CHANNEL_BUF);
-    let (send_f2b, recv_f2b) = mpsc::channel::<Request<M::C2S>>(CHANNEL_BUF);
+    let (send_b2f, recv_b2f) = mpsc::channel::<Event<S2C>>(CHANNEL_BUF);
+    let (send_f2b, recv_f2b) = mpsc::channel::<Request<C2S>>(CHANNEL_BUF);
 
-    let frontend = WebTransportClient::<M> {
+    let frontend = WebTransportClient::<C2S, S2C> {
         send: send_f2b,
         recv: recv_b2f,
         info: None,
     };
 
-    let backend = WebTransportClientBackend::<M> {
+    let backend = WebTransportClientBackend::<C2S, S2C> {
         config,
         streams,
         send: send_b2f,

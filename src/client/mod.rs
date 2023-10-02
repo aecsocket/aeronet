@@ -1,7 +1,7 @@
 #[cfg(feature = "bevy")]
 pub mod plugin;
 
-use crate::{MessageTypes, RecvError, SessionError};
+use crate::{Message, RecvError, SessionError};
 
 /// A client-to-server layer responsible for sending user messages to the other side.
 ///
@@ -11,11 +11,14 @@ use crate::{MessageTypes, RecvError, SessionError};
 /// Different transport implementations will use different methods to
 /// transport the data across, such as through memory or over a network. This means that a
 /// transport does not necessarily work over the internet! If you want to get details such as
-/// RTT or remote address, see [`crate::TransportRtt`] and [`crate::TransportRemoteAddr`].
+/// RTT or remote address, see [`Rtt`] and [`RemoteAddr`].
 ///
-/// The `C` parameter allows configuring which types of messages are sent and received by this
-/// transport (see [`ClientTransportConfig`]).
-pub trait ClientTransport<M: MessageTypes> {
+/// The type parameters allow configuring which types of messages are sent and received by this
+/// transport (see [`Message`]).
+/// 
+/// [`Rtt`]: crate::Rtt
+/// [`RemoteAddr`]: crate::RemoteAddr
+pub trait ClientTransport<C2S: Message, S2C: Message> {
     /// The info that [`ClientTransport::info`] provides.
     type Info;
 
@@ -40,10 +43,10 @@ pub trait ClientTransport<M: MessageTypes> {
     /// }
     /// # }
     /// ```
-    fn recv(&mut self) -> Result<ClientEvent<M::S2C>, RecvError>;
+    fn recv(&mut self) -> Result<ClientEvent<S2C>, RecvError>;
 
     /// Sends a message to the connected server.
-    fn send(&mut self, msg: impl Into<M::C2S>);
+    fn send(&mut self, msg: impl Into<C2S>);
 
     /// Gets transport info on the current connection.
     ///
