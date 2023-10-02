@@ -92,10 +92,10 @@ pub enum ServerTransportSet {
     Send,
 }
 
-/// See [`ServerEvent::Incoming`].
+/// See [`ServerEvent::Connecting`].
 #[derive(Debug, Clone, Event)]
 pub struct RemoteClientConnecting {
-    /// See [`ServerEvent::Incoming::client`].
+    /// See [`ServerEvent::Connecting::client`].
     pub client: ClientId,
 }
 

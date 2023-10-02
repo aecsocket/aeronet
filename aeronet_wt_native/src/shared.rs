@@ -146,8 +146,7 @@ async fn open_uni_in<R: RecvMessage>(
 // send
 
 fn into_payload<S: SendMessage>(msg: S) -> Result<Vec<u8>, StreamError> {
-    msg.into_payload()
-        .map_err(StreamError::Send)
+    msg.into_payload().map_err(StreamError::Send)
 }
 
 async fn send_stream<S: SendMessage>(

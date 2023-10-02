@@ -29,7 +29,7 @@ pub trait ServerTransport<C: ServerTransportConfig> {
     /// # Usage
     ///
     /// ```
-    /// # use aeronet::{transport::RecvError, ServerTransport, ServerTransportConfig, ServerEvent};
+    /// # use aeronet::{RecvError, ServerTransport, ServerTransportConfig, ServerEvent};
     /// # fn update<C: ServerTransportConfig, T: ServerTransport<C>>(mut transport: T) {
     /// loop {
     ///     match transport.recv() {
@@ -100,7 +100,7 @@ pub trait ServerTransport<C: ServerTransportConfig> {
 ///
 /// pub struct AppTransportConfig;
 ///
-/// impl TransportConfig for AppTransportConfig {
+/// impl ServerTransportConfig for AppTransportConfig {
 ///     type C2S = C2S;
 ///     type S2C = S2C;
 /// }

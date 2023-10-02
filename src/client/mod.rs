@@ -27,11 +27,11 @@ pub trait ClientTransport<C: ClientTransportConfig> {
     /// # Usage
     ///
     /// ```
-    /// # use aeronet::{transport::RecvError, client::{Transport, TransportConfig, Event}};
-    /// # fn update<C: TransportConfig, T: Transport<C>>(mut transport: T) {
+    /// # use aeronet::{RecvError, ClientTransport, ClientTransportConfig, ClientEvent};
+    /// # fn update<C: ClientTransportConfig, T: ClientTransport<C>>(mut transport: T) {
     /// loop {
     ///     match transport.recv() {
-    ///         Ok(Event::Recv { msg }) => println!("Received a message"),
+    ///         Ok(ClientEvent::Recv { msg }) => println!("Received a message"),
     ///         Ok(_) => {},
     ///         // ...
     ///         Err(RecvError::Empty) => break,
