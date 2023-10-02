@@ -7,8 +7,8 @@ use wtransport::{endpoint::Client, ClientConfig, Connection, Endpoint};
 
 use crate::{
     client::RemoteServerInfo,
-    shared::{open_streams, recv_datagram, send_out},
-    ClientStream, TransportStream, TransportStreams, CHANNEL_BUF,
+    shared::{open_streams, recv_datagram, send_out, CHANNEL_BUF},
+    ClientStream, TransportStream, TransportStreams,
 };
 
 use super::{Event, Request};

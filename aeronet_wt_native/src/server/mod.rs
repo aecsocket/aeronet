@@ -10,7 +10,7 @@ use wtransport::{endpoint::SessionRequest, Connection, ServerConfig};
 
 use crate::{
     EndpointInfo, SendOn, ServerStream, TransportStreams, WebTransportServer,
-    WebTransportServerBackend, CHANNEL_BUF,
+    WebTransportServerBackend, shared::CHANNEL_BUF,
 };
 
 /// Details on a client which is connected to this server through the WebTransport protocol.

@@ -16,6 +16,3 @@ pub use server::{
 };
 pub use stream::{ClientStream, ServerStream, StreamId, TransportStream, TransportStreams};
 pub use transport::{EndpointInfo, OnStream, OnStreamError, SendOn, StreamError, StreamMessage};
-
-pub(crate) const CHANNEL_BUF: usize = 128;
-pub(crate) const RECV_BUF: usize = 65536;

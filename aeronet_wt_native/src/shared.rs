@@ -8,9 +8,11 @@ use wtransport::{
 };
 
 use crate::{
-    stream::TransportSide, StreamError, StreamId, TransportStream, TransportStreams, CHANNEL_BUF,
-    RECV_BUF,
+    stream::TransportSide, StreamError, StreamId, TransportStream, TransportStreams,
 };
+
+pub(crate) const CHANNEL_BUF: usize = 128;
+const RECV_BUF: usize = 65536;
 
 pub(crate) async fn open_streams<S: SendMessage, R: RecvMessage, Side: TransportSide>(
     streams: &TransportStreams,

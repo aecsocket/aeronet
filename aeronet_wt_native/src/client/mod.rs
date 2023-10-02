@@ -7,7 +7,7 @@ use wtransport::{ClientConfig, Connection};
 
 use crate::{
     ClientStream, EndpointInfo, SendOn, TransportStreams, WebTransportClient,
-    WebTransportClientBackend, CHANNEL_BUF,
+    WebTransportClientBackend, shared::CHANNEL_BUF,
 };
 
 /// Details on the server which this client is connected to through the WebTransport protocol.

@@ -36,6 +36,7 @@ all-features = true
 [workspace]
 resolver = "2"
 members = [
+    "aeronet_channel",
     "aeronet_wt_native",
     #"aeronet_wt_wasm",
 ]
