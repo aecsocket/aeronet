@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use aeronet::{
-    AsyncRuntime, FromClient, RecvMessage, RemoteClientDisconnected, ServerTransport,
-    ServerTransportConfig, ServerTransportPlugin, TryIntoBytes,
+    AsyncRuntime, FromClient, RemoteClientDisconnected, ServerTransport,
+    ServerTransportPlugin, TryIntoBytes, MessageTypes,
 };
 use aeronet_wt_native::{
     wtransport::{tls::Certificate, ServerConfig},
@@ -17,9 +17,9 @@ use bevy::{
 
 // config
 
-pub struct AppTransportConfig;
+pub struct AppMessageTypes;
 
-impl ServerTransportConfig for AppTransportConfig {
+impl MessageTypes for AppMessageTypes {
     type C2S = AppMessage;
     type S2C = StreamMessage<ServerStream, AppMessage>;
 }
@@ -53,7 +53,7 @@ fn main() {
                 level: tracing::Level::DEBUG,
                 ..default()
             },
-            ServerTransportPlugin::<AppTransportConfig, WebTransportServer<_>>::default(),
+            ServerTransportPlugin::<AppMessageTypes, WebTransportServer<_>>::default(),
         ))
         .init_resource::<AsyncRuntime>()
         .add_systems(Startup, setup)
@@ -71,7 +71,7 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
     }
 }
 
-fn create(rt: &AsyncRuntime) -> Result<WebTransportServer<AppTransportConfig>> {
+fn create(rt: &AsyncRuntime) -> Result<WebTransportServer<AppMessageTypes>> {
     let cert = Certificate::load(
         "./aeronet_wt_native/examples/cert.pem",
         "./aeronet_wt_native/examples/key.pem",
@@ -91,7 +91,7 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportServer<AppTransportConfig>> {
 }
 
 fn reply(
-    mut server: ResMut<WebTransportServer<AppTransportConfig>>,
+    mut server: ResMut<WebTransportServer<AppMessageTypes>>,
     mut recv: EventReader<FromClient<AppMessage>>,
     mut exit: EventWriter<AppExit>,
 ) {
@@ -110,7 +110,7 @@ fn reply(
 }
 
 fn log_disconnect(
-    server: Res<WebTransportServer<AppTransportConfig>>,
+    server: Res<WebTransportServer<AppMessageTypes>>,
     mut dc: EventReader<RemoteClientDisconnected>,
 ) {
     for RemoteClientDisconnected { client, reason } in dc.iter() {

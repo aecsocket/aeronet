@@ -3,7 +3,7 @@ pub mod front;
 
 use std::collections::HashMap;
 
-use aeronet::{ClientId, MessageTypes, SessionError, TryIntoBytes};
+use aeronet::{ClientId, MessageTypes, SessionError, TryIntoBytes, Message};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 use wtransport::{endpoint::SessionRequest, Connection, ServerConfig};
@@ -61,7 +61,7 @@ pub fn create_server<S2C, M>(
     streams: TransportStreams,
 ) -> (WebTransportServer<M>, WebTransportServerBackend<M>)
 where
-    S2C: TryIntoBytes + SendOn<ServerStream>,
+    S2C: Message + TryIntoBytes + SendOn<ServerStream> + Clone,
     M: MessageTypes<S2C = S2C>,
 {
     let (send_b2f, recv_b2f) = mpsc::channel::<Event<M::C2S>>(CHANNEL_BUF);
