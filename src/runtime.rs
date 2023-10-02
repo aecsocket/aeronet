@@ -3,7 +3,7 @@ use bevy::prelude::*;
 /// Wrapper resource around an async [`tokio`] runtime.
 ///
 /// Some transports may require an async runtime for handling connections, and Bevy does not
-/// provide one by default. This module provides a [`tokio::runtime::Runtime`] wrapped in a
+/// provide one by default. This provides a [`tokio::runtime::Runtime`] wrapped in a
 /// [`Resource`] which can be injected into any system.
 ///
 /// # Usage

@@ -11,10 +11,10 @@ an endpoint, either the client or the server. You write your code against this i
 the Bevy plugin which provides events used by the transport), and you don't have to worry about the
 underlying mechanism used to transport your data.
 
-# Meet the transports
+# Transports
 
-Currently aeronet supports:
-* [`aeronet_wt_native`](https://docs.rs/aeronet_wt_native): a transport implemented on top of the
-  WebTransport protocol, which is in turn implemented on top of QUIC. The transport has native
-  client and server implementations using [`wtransport`](https://docs.rs/wtransport), and a WASM
-  client implementation using [`web-sys`](https://docs.rs/web-sys).
+* [`aeronet_channel`](https://docs.rs/aeronet_channel) using in-memory MPSC channels, useful for
+  local singleplayer servers
+* [`aeronet_wt_native`](https://docs.rs/aeronet_wt_native) using the
+  [WebTransport](https://developer.chrome.com/en/articles/webtransport/), useful for a generic
+  client-server architecture with support for WASM clients

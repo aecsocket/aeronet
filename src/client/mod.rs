@@ -1,10 +1,7 @@
 #[cfg(feature = "bevy")]
 pub mod plugin;
 
-use crate::{
-    message::{RecvMessage, SendMessage},
-    transport::{RecvError, SessionError},
-};
+use crate::{Message, RecvError, SessionError};
 
 /// A client-to-server layer responsible for sending user messages to the other side.
 ///
@@ -14,11 +11,14 @@ use crate::{
 /// Different transport implementations will use different methods to
 /// transport the data across, such as through memory or over a network. This means that a
 /// transport does not necessarily work over the internet! If you want to get details such as
-/// RTT or remote address, see [`crate::TransportRtt`] and [`crate::TransportRemoteAddr`].
+/// RTT or remote address, see [`Rtt`] and [`RemoteAddr`].
 ///
-/// The `C` parameter allows configuring which types of messages are sent and received by this
-/// transport (see [`ClientTransportConfig`]).
-pub trait ClientTransport<C: ClientTransportConfig> {
+/// The type parameters allow configuring which types of messages are sent and received by this
+/// transport (see [`Message`]).
+///
+/// [`Rtt`]: crate::Rtt
+/// [`RemoteAddr`]: crate::RemoteAddr
+pub trait ClientTransport<C2S: Message, S2C: Message> {
     /// The info that [`ClientTransport::info`] provides.
     type Info;
 
@@ -43,10 +43,10 @@ pub trait ClientTransport<C: ClientTransportConfig> {
     /// }
     /// # }
     /// ```
-    fn recv(&mut self) -> Result<ClientEvent<C::S2C>, RecvError>;
+    fn recv(&mut self) -> Result<ClientEvent<S2C>, RecvError>;
 
     /// Sends a message to the connected server.
-    fn send(&mut self, msg: impl Into<C::C2S>);
+    fn send(&mut self, msg: impl Into<C2S>);
 
     /// Gets transport info on the current connection.
     ///
@@ -57,57 +57,6 @@ pub trait ClientTransport<C: ClientTransportConfig> {
     fn is_connected(&self) -> bool {
         self.info().is_some()
     }
-}
-
-/// Configures the types used by a client-side transport implementation.
-///
-/// A transport is abstract over the exact message type that it uses, instead letting the user
-/// decide. This trait allows configuring the message types both for:
-/// * client-to-server messages ([`ClientTransportConfig::C2S`])
-///   * the client must be able to serialize these into a payload ([`SendMessage`])
-/// * server-to-client messages ([`ClientTransportConfig::S2C`])
-///   * the client must be able to deserialize these from a payload ([`RecvMessage`])
-///
-/// The types used for C2S and S2C may be different.
-///
-/// # Examples
-///
-/// ```
-/// use aeronet::ClientTransportConfig;
-///
-/// #[derive(Debug, Clone)]
-/// pub enum C2S {
-///     Ping(u64),
-/// }
-/// # impl aeronet::SendMessage for C2S {
-/// #     fn into_payload(self) -> anyhow::Result<Vec<u8>> { unimplemented!() }
-/// # }
-///
-/// #[derive(Debug, Clone)]
-/// pub enum S2C {
-///     Pong(u64),
-/// }
-/// # impl aeronet::RecvMessage for S2C {
-/// #     fn from_payload(buf: &[u8]) -> anyhow::Result<Self> { unimplemented!() }
-/// # }
-///
-/// pub struct AppTransportConfig;
-///
-/// impl ClientTransportConfig for AppTransportConfig {
-///     type C2S = C2S;
-///     type S2C = S2C;
-/// }
-/// ```
-pub trait ClientTransportConfig: Send + Sync + 'static {
-    /// The client-to-server message type.
-    ///
-    /// The client will only send messages of this type, requiring [`SendMessage`].
-    type C2S: SendMessage;
-
-    /// The server-to-client message type.
-    ///
-    /// The client will only receive messages of this type, requiring [`RecvMessage`].
-    type S2C: RecvMessage;
 }
 
 /// An event received from a [`ClientTransport`].

@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, time::Duration};
 
-use aeronet::{SendMessage, TransportRemoteAddr, TransportRtt};
+use aeronet::{RemoteAddr, Rtt, TryIntoBytes};
 use anyhow::Result;
 use wtransport::Connection;
 
@@ -36,13 +36,13 @@ impl EndpointInfo {
     }
 }
 
-impl TransportRtt for EndpointInfo {
+impl Rtt for EndpointInfo {
     fn rtt(&self) -> Duration {
         self.rtt
     }
 }
 
-impl TransportRemoteAddr for EndpointInfo {
+impl RemoteAddr for EndpointInfo {
     fn remote_addr(&self) -> SocketAddr {
         self.remote_addr
     }
@@ -113,19 +113,22 @@ pub struct StreamMessage<S, T> {
     pub msg: T,
 }
 
-impl<S: Clone, T: SendMessage> SendOn<S> for StreamMessage<S, T> {
+impl<S, T> SendOn<S> for StreamMessage<S, T>
+where
+    S: Clone,
+{
     fn stream(&self) -> S {
         self.stream.clone()
     }
 }
 
-impl<S, T> SendMessage for StreamMessage<S, T>
+impl<S, T> TryIntoBytes for StreamMessage<S, T>
 where
-    S: Clone + Send + Sync + 'static,
-    T: SendMessage,
+    S: Clone,
+    T: TryIntoBytes,
 {
-    fn into_payload(self) -> Result<Vec<u8>> {
-        self.msg.into_payload()
+    fn try_into_bytes(self) -> Result<Vec<u8>> {
+        self.msg.try_into_bytes()
     }
 }
 
@@ -138,7 +141,7 @@ pub trait OnStream<S>: Sized {
     fn on(self, stream: S) -> StreamMessage<S, Self>;
 }
 
-impl<S, T: SendMessage> OnStream<S> for T {
+impl<S, T> OnStream<S> for T {
     fn on(self, stream: S) -> StreamMessage<S, Self> {
         StreamMessage { stream, msg: self }
     }
