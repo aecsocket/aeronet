@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use aeronet::{
-    AsyncRuntime, FromClient, MessageTypes, RemoteClientDisconnected, ServerTransport,
-    ServerTransportPlugin, TryIntoBytes,
+    AsyncRuntime, FromClient, RemoteClientDisconnected, ServerTransport, ServerTransportPlugin,
+    TryFromBytes, TryIntoBytes,
 };
 use aeronet_wt_native::{
     wtransport::{tls::Certificate, ServerConfig},
@@ -17,29 +17,24 @@ use bevy::{
 
 // config
 
-pub struct AppMessageTypes;
-
-impl MessageTypes for AppMessageTypes {
-    type C2S = AppMessage;
-    type S2C = StreamMessage<ServerStream, AppMessage>;
-}
-
 #[derive(Debug, Clone)]
 pub struct AppMessage(pub String);
 
 impl TryIntoBytes for AppMessage {
-    fn into_payload(self) -> Result<Vec<u8>> {
+    fn try_into_bytes(self) -> Result<Vec<u8>> {
         Ok(self.0.into_bytes())
     }
 }
 
-impl RecvMessage for AppMessage {
-    fn from_payload(payload: &[u8]) -> Result<Self> {
+impl TryFromBytes for AppMessage {
+    fn try_from_bytes(payload: &[u8]) -> Result<Self> {
         String::from_utf8(payload.to_owned().into_iter().collect())
             .map(|s| AppMessage(s))
             .map_err(|err| err.into())
     }
 }
+
+type Server = WebTransportServer<AppMessage, StreamMessage<ServerStream, AppMessage>>;
 
 // logic
 
@@ -53,7 +48,7 @@ fn main() {
                 level: tracing::Level::DEBUG,
                 ..default()
             },
-            ServerTransportPlugin::<AppMessageTypes, WebTransportServer<_>>::default(),
+            ServerTransportPlugin::<_, _, Server>::default(),
         ))
         .init_resource::<AsyncRuntime>()
         .add_systems(Startup, setup)
@@ -71,7 +66,7 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
     }
 }
 
-fn create(rt: &AsyncRuntime) -> Result<WebTransportServer<AppMessageTypes>> {
+fn create(rt: &AsyncRuntime) -> Result<Server> {
     let cert = Certificate::load(
         "./aeronet_wt_native/examples/cert.pem",
         "./aeronet_wt_native/examples/key.pem",
@@ -91,7 +86,7 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportServer<AppMessageTypes>> {
 }
 
 fn reply(
-    mut server: ResMut<WebTransportServer<AppMessageTypes>>,
+    mut server: ResMut<Server>,
     mut recv: EventReader<FromClient<AppMessage>>,
     mut exit: EventWriter<AppExit>,
 ) {
@@ -109,10 +104,7 @@ fn reply(
     }
 }
 
-fn log_disconnect(
-    server: Res<WebTransportServer<AppMessageTypes>>,
-    mut dc: EventReader<RemoteClientDisconnected>,
-) {
+fn log_disconnect(server: Res<Server>, mut dc: EventReader<RemoteClientDisconnected>) {
     for RemoteClientDisconnected { client, reason } in dc.iter() {
         info!(
             "Client {client} disconnected: {:#}",

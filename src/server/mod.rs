@@ -17,7 +17,7 @@ use crate::{Message, RecvError, SessionError};
 ///
 /// The type parameters allows configuring which types of messages are sent and received by this
 /// transport (see [`Message`]).
-/// 
+///
 /// [`Rtt`]: crate::Rtt
 /// [`RemoteAddr`]: crate::RemoteAddr
 pub trait ServerTransport<C2S, S2C>

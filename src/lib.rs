@@ -23,7 +23,7 @@ mod runtime;
 pub use client::{ClientEvent, ClientTransport};
 pub use message::{Message, TryFromBytes, TryIntoBytes};
 pub use server::{ClientId, ServerEvent, ServerTransport};
-pub use transport::{RecvError, SessionError, RemoteAddr, Rtt};
+pub use transport::{RecvError, RemoteAddr, Rtt, SessionError};
 
 #[cfg(feature = "bevy")]
 pub use client::plugin::{
