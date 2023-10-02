@@ -1,4 +1,4 @@
-use aeronet::{RecvMessage, SendMessage, SessionError};
+use aeronet::{SessionError, TryFromBytes, TryIntoBytes, Message};
 use anyhow::Result;
 use tokio::sync::mpsc;
 use wtransport::{
@@ -7,19 +7,22 @@ use wtransport::{
     Connection, SendStream,
 };
 
-use crate::{
-    stream::TransportSide, StreamError, StreamId, TransportStream, TransportStreams,
-};
+use crate::{stream::TransportSide, StreamError, StreamId, TransportStream, TransportStreams};
 
 pub(crate) const CHANNEL_BUF: usize = 128;
 const RECV_BUF: usize = 65536;
 
-pub(crate) async fn open_streams<S: SendMessage, R: RecvMessage, Side: TransportSide>(
+pub(crate) async fn open_streams<S, R, Side>(
     streams: &TransportStreams,
     conn: &mut Connection,
     send_in: mpsc::Sender<R>,
     send_err: mpsc::Sender<SessionError>,
-) -> Result<(Vec<mpsc::Sender<S>>, Vec<mpsc::Sender<S>>), SessionError> {
+) -> Result<(Vec<mpsc::Sender<S>>, Vec<mpsc::Sender<S>>), SessionError>
+where
+    S: Message + TryIntoBytes,
+    R: Message + TryFromBytes,
+    Side: TransportSide,
+{
     let mut streams_bi = Vec::new();
     for stream_id in 0..streams.bi {
         let stream = TransportStream::Bi(StreamId(stream_id));
@@ -48,12 +51,16 @@ pub(crate) async fn open_streams<S: SendMessage, R: RecvMessage, Side: Transport
     Ok((streams_bi, streams_uni_out))
 }
 
-async fn open_bi<S: SendMessage, R: RecvMessage>(
+async fn open_bi<S, R>(
     conn: &mut Connection,
     stream: TransportStream,
     send_in: mpsc::Sender<R>,
     send_err: mpsc::Sender<SessionError>,
-) -> Result<mpsc::Sender<S>, StreamError> {
+) -> Result<mpsc::Sender<S>, StreamError>
+where
+    S: Message + TryIntoBytes,
+    R: Message + TryFromBytes,
+{
     let (mut send, mut recv) = conn
         .open_bi()
         .await
@@ -86,11 +93,14 @@ async fn open_bi<S: SendMessage, R: RecvMessage>(
     Ok(send_out)
 }
 
-async fn open_uni_out<S: SendMessage>(
+async fn open_uni_out<S>(
     conn: &mut Connection,
     stream: TransportStream,
     send_err: mpsc::Sender<SessionError>,
-) -> Result<mpsc::Sender<S>, StreamError> {
+) -> Result<mpsc::Sender<S>, StreamError>
+where
+    S: Message + TryIntoBytes,
+{
     let mut send = conn
         .open_uni()
         .await
@@ -116,12 +126,15 @@ async fn open_uni_out<S: SendMessage>(
     Ok(send_out)
 }
 
-async fn open_uni_in<R: RecvMessage>(
+async fn open_uni_in<R>(
     conn: &mut Connection,
     stream: TransportStream,
     send_in: mpsc::Sender<R>,
     send_err: mpsc::Sender<SessionError>,
-) -> Result<(), StreamError> {
+) -> Result<(), StreamError>
+where
+    R: Message + TryFromBytes,
+{
     let mut recv = conn
         .accept_uni()
         .await
@@ -147,11 +160,11 @@ async fn open_uni_in<R: RecvMessage>(
 
 // send
 
-fn into_payload<S: SendMessage>(msg: S) -> Result<Vec<u8>, StreamError> {
-    msg.into_payload().map_err(StreamError::Send)
+fn into_payload<S: TryIntoBytes>(msg: S) -> Result<Vec<u8>, StreamError> {
+    msg.try_into_bytes().map_err(StreamError::Send)
 }
 
-async fn send_stream<S: SendMessage>(
+async fn send_stream<S: TryIntoBytes>(
     send: &mut SendStream,
     result: Option<S>,
 ) -> Result<(), StreamError> {
@@ -163,14 +176,17 @@ async fn send_stream<S: SendMessage>(
     Ok(())
 }
 
-pub(crate) async fn send_out<S: SendMessage>(
+pub(crate) async fn send_out<S>(
     conn: &mut Connection,
     streams_bi: &mut [mpsc::Sender<S>],
     streams_uni: &mut [mpsc::Sender<S>],
     stream: TransportStream,
     msg: S,
-) -> Result<(), StreamError> {
-    async fn on_stream<S: SendMessage>(
+) -> Result<(), StreamError>
+where
+    S: Message + TryIntoBytes,
+{
+    async fn on_stream<S: TryIntoBytes>(
         stream: &mut mpsc::Sender<S>,
         msg: S,
     ) -> Result<(), StreamError> {
@@ -196,23 +212,29 @@ pub(crate) async fn send_out<S: SendMessage>(
 
 // recv
 
-fn from_payload<R: RecvMessage>(buf: &[u8]) -> Result<R, StreamError> {
-    R::from_payload(buf).map_err(StreamError::Recv)
+fn from_payload<R: TryFromBytes>(buf: &[u8]) -> Result<R, StreamError> {
+    R::try_from_bytes(buf).map_err(StreamError::Recv)
 }
 
-pub(crate) async fn recv_datagram<R: RecvMessage>(
+pub(crate) async fn recv_datagram<R>(
     result: Result<Datagram, ConnectionError>,
-) -> Result<R, StreamError> {
+) -> Result<R, StreamError>
+where
+    R: Message + TryFromBytes,
+{
     let datagram = result.map_err(|err| StreamError::Recv(err.into()))?;
     let msg = from_payload::<R>(&datagram)?;
     Ok(msg)
 }
 
-async fn recv_stream<R: RecvMessage>(
+async fn recv_stream<R>(
     send: &mpsc::Sender<R>,
     buf: &[u8; RECV_BUF],
     result: Result<Option<usize>, StreamReadError>,
-) -> Result<(), StreamError> {
+) -> Result<(), StreamError>
+where
+    R: Message + TryFromBytes,
+{
     let read = result
         .map_err(|err| StreamError::Recv(err.into()))?
         .ok_or(StreamError::Closed)?;

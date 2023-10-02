@@ -62,9 +62,9 @@ mod transport;
 #[cfg(feature = "bevy-tokio-rt")]
 mod runtime;
 
-pub use client::{ClientEvent, ClientTransport, ClientTransportConfig};
-pub use message::{RecvMessage, SendMessage};
-pub use server::{ClientId, ServerEvent, ServerTransport, ServerTransportConfig};
+pub use client::{ClientEvent, ClientTransport};
+pub use message::{Message, MessageTypes, TryFromBytes, TryIntoBytes};
+pub use server::{ClientId, ServerEvent, ServerTransport};
 pub use transport::{RecvError, SessionError, TransportRemoteAddr, TransportRtt};
 
 #[cfg(feature = "bevy")]

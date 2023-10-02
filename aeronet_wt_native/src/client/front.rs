@@ -1,4 +1,4 @@
-use aeronet::{ClientEvent, ClientTransport, ClientTransportConfig, RecvError, SendMessage};
+use aeronet::{ClientEvent, ClientTransport, MessageTypes, RecvError, TryIntoBytes};
 use tokio::sync::mpsc;
 
 use crate::{ClientStream, SendOn};
@@ -21,13 +21,13 @@ use super::{Event, RemoteServerInfo, Request};
 /// When dropped, the backend client is shut down and the current connection is dropped.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct WebTransportClient<C: ClientTransportConfig> {
-    pub(crate) send: mpsc::Sender<Request<C::C2S>>,
-    pub(crate) recv: mpsc::Receiver<Event<C::S2C>>,
+pub struct WebTransportClient<M: MessageTypes> {
+    pub(crate) send: mpsc::Sender<Request<M::C2S>>,
+    pub(crate) recv: mpsc::Receiver<Event<M::S2C>>,
     pub(crate) info: Option<RemoteServerInfo>,
 }
 
-impl<C: ClientTransportConfig> WebTransportClient<C> {
+impl<M: MessageTypes> WebTransportClient<M> {
     /// Requests the client to connect to a given URL.
     ///
     /// If the client is not [connected], this request has no effect.
@@ -47,14 +47,14 @@ impl<C: ClientTransportConfig> WebTransportClient<C> {
     }
 }
 
-impl<C2S, C> ClientTransport<C> for WebTransportClient<C>
+impl<C2S, M> ClientTransport<M> for WebTransportClient<M>
 where
-    C2S: SendMessage + SendOn<ClientStream>,
-    C: ClientTransportConfig<C2S = C2S>,
+    C2S: TryIntoBytes + SendOn<ClientStream>,
+    M: MessageTypes<C2S = C2S>,
 {
     type Info = RemoteServerInfo;
 
-    fn recv(&mut self) -> Result<ClientEvent<C::S2C>, RecvError> {
+    fn recv(&mut self) -> Result<ClientEvent<M::S2C>, RecvError> {
         loop {
             match self.recv.try_recv() {
                 // non-returning

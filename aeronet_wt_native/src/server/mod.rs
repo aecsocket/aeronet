@@ -3,14 +3,14 @@ pub mod front;
 
 use std::collections::HashMap;
 
-use aeronet::{ClientId, SendMessage, ServerTransportConfig, SessionError};
+use aeronet::{ClientId, MessageTypes, SessionError, TryIntoBytes};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 use wtransport::{endpoint::SessionRequest, Connection, ServerConfig};
 
 use crate::{
-    EndpointInfo, SendOn, ServerStream, TransportStreams, WebTransportServer,
-    WebTransportServerBackend, shared::CHANNEL_BUF,
+    shared::CHANNEL_BUF, EndpointInfo, SendOn, ServerStream, TransportStreams, WebTransportServer,
+    WebTransportServerBackend,
 };
 
 /// Details on a client which is connected to this server through the WebTransport protocol.
@@ -56,24 +56,24 @@ impl RemoteClientInfo {
 /// once using [`WebTransportServerBackend::start`] in an async Tokio runtime when it is first
 /// available (this function does not automatically start the backend, because we have no
 /// guarantees about the current Tokio runtime at this point).
-pub fn create_server<S2C, C>(
+pub fn create_server<S2C, M>(
     config: ServerConfig,
     streams: TransportStreams,
-) -> (WebTransportServer<C>, WebTransportServerBackend<C>)
+) -> (WebTransportServer<M>, WebTransportServerBackend<M>)
 where
-    S2C: SendMessage + SendOn<ServerStream>,
-    C: ServerTransportConfig<S2C = S2C>,
+    S2C: TryIntoBytes + SendOn<ServerStream>,
+    M: MessageTypes<S2C = S2C>,
 {
-    let (send_b2f, recv_b2f) = mpsc::channel::<Event<C::C2S>>(CHANNEL_BUF);
-    let (send_f2b, _) = broadcast::channel::<Request<C::S2C>>(CHANNEL_BUF);
+    let (send_b2f, recv_b2f) = mpsc::channel::<Event<M::C2S>>(CHANNEL_BUF);
+    let (send_f2b, _) = broadcast::channel::<Request<M::S2C>>(CHANNEL_BUF);
 
-    let frontend = WebTransportServer::<C> {
+    let frontend = WebTransportServer::<M> {
         send: send_f2b.clone(),
         recv: recv_b2f,
         clients: FxHashMap::default(),
     };
 
-    let backend = WebTransportServerBackend::<C> {
+    let backend = WebTransportServerBackend::<M> {
         config,
         streams,
         send_b2f,

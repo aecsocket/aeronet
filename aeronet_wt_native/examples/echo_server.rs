@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use aeronet::{
-    AsyncRuntime, FromClient, RecvMessage, RemoteClientDisconnected, SendMessage, ServerTransport,
-    ServerTransportConfig, ServerTransportPlugin,
+    AsyncRuntime, FromClient, RecvMessage, RemoteClientDisconnected, ServerTransport,
+    ServerTransportConfig, ServerTransportPlugin, TryIntoBytes,
 };
 use aeronet_wt_native::{
     wtransport::{tls::Certificate, ServerConfig},
@@ -27,7 +27,7 @@ impl ServerTransportConfig for AppTransportConfig {
 #[derive(Debug, Clone)]
 pub struct AppMessage(pub String);
 
-impl SendMessage for AppMessage {
+impl TryIntoBytes for AppMessage {
     fn into_payload(self) -> Result<Vec<u8>> {
         Ok(self.0.into_bytes())
     }

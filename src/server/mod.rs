@@ -3,10 +3,7 @@ pub mod plugin;
 
 use std::fmt::Display;
 
-use crate::{
-    message::{RecvMessage, SendMessage},
-    transport::{RecvError, SessionError},
-};
+use crate::{MessageTypes, RecvError, SessionError};
 
 /// A server-to-client layer responsible for sending user messages to the other side.
 ///
@@ -20,7 +17,7 @@ use crate::{
 ///
 /// The `C` parameter allows configuring which types of messages are sent and received by this
 /// transport (see [`ServerTransportConfig`]).
-pub trait ServerTransport<C: ServerTransportConfig> {
+pub trait ServerTransport<M: MessageTypes> {
     /// The info that [`ServerTransport::client_info`] provides.
     type ClientInfo;
 
@@ -45,10 +42,10 @@ pub trait ServerTransport<C: ServerTransportConfig> {
     /// }
     /// # }
     /// ```
-    fn recv(&mut self) -> Result<ServerEvent<C::C2S>, RecvError>;
+    fn recv(&mut self) -> Result<ServerEvent<M::C2S>, RecvError>;
 
     /// Sends a message to a connected client.
-    fn send(&mut self, client: ClientId, msg: impl Into<C::S2C>);
+    fn send(&mut self, client: ClientId, msg: impl Into<M::S2C>);
 
     /// Forces a client to disconnect from the server.
     ///
@@ -64,57 +61,6 @@ pub trait ServerTransport<C: ServerTransportConfig> {
     fn is_connected(&self, client: ClientId) -> bool {
         self.client_info(client).is_some()
     }
-}
-
-/// Configures the types used by a server-side transport implementation.
-///
-/// A transport is abstract over the exact message type that it uses, instead letting the user
-/// decide. This trait allows configuring the message types both for:
-/// * client-to-server messages ([`ServerTransportConfig::C2S`])
-///   * the server must be able to deserialize these from a payload ([`RecvMessage`])
-/// * server-to-client messages ([`ServerTransportConfig::S2C`])
-///   * the server must be able to serialize these into a payload ([`SendMessage`])
-///
-/// The types used for C2S and S2C may be different.
-///
-/// # Examples
-///
-/// ```
-/// use aeronet::ServerTransportConfig;
-///
-/// #[derive(Debug, Clone)]
-/// pub enum C2S {
-///     Ping(u64),
-/// }
-/// # impl aeronet::RecvMessage for C2S {
-/// #     fn from_payload(buf: &[u8]) -> anyhow::Result<Self> { unimplemented!() }
-/// # }
-///
-/// #[derive(Debug, Clone)]
-/// pub enum S2C {
-///     Pong(u64),
-/// }
-/// # impl aeronet::SendMessage for S2C {
-/// #     fn into_payload(self) -> anyhow::Result<Vec<u8>> { unimplemented!() }
-/// # }
-///
-/// pub struct AppTransportConfig;
-///
-/// impl ServerTransportConfig for AppTransportConfig {
-///     type C2S = C2S;
-///     type S2C = S2C;
-/// }
-/// ```
-pub trait ServerTransportConfig: Send + Sync + 'static {
-    /// The client-to-server message type.
-    ///
-    /// The server will only receive messages of this type, requiring [`RecvMessage`].
-    type C2S: RecvMessage;
-
-    /// The server-to-client message type.
-    ///
-    /// The server will only send messages of this type, requiring [`SendMessage`].
-    type S2C: SendMessage;
 }
 
 /// An event received from a [`ServerTransport`].
