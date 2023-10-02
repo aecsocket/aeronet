@@ -115,8 +115,8 @@ impl From<ServerStream> for TransportStream {
 /// use aeronet_wt_native::TransportStreams;
 ///
 /// let mut streams = TransportStreams::default();
-/// let game_data = streams.add_server_bi();
-/// let map_data = streams.add_server_uni();
+/// let game_data = streams.add_bi_s2c();
+/// let map_data = streams.add_uni_s2c();
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct TransportStreams {

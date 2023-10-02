@@ -1,19 +1,11 @@
 // from
 // https://raw.githubusercontent.com/BiagioFesta/wtransport/master/wtransport/examples/gencert.rs
 
-use base64::engine::general_purpose::STANDARD as Base64Engine;
-use base64::Engine;
-use rcgen::CertificateParams;
-use rcgen::DistinguishedName;
-use rcgen::DnType;
-use rcgen::KeyPair;
-use rcgen::PKCS_ECDSA_P256_SHA256;
-use ring::digest::digest;
-use ring::digest::SHA256;
-use std::fs;
-use std::io::Write;
-use time::Duration;
-use time::OffsetDateTime;
+use base64::{engine::general_purpose::STANDARD as Base64Engine, Engine};
+use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, PKCS_ECDSA_P256_SHA256};
+use ring::digest::{digest, SHA256};
+use std::{fs, io::Write};
+use time::{Duration, OffsetDateTime};
 
 fn main() {
     const COMMON_NAME: &str = "localhost";
