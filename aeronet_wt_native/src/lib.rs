@@ -1,5 +1,4 @@
 #![warn(clippy::all)]
-#![warn(clippy::cargo)]
 #![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
 

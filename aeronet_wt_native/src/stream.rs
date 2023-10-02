@@ -57,16 +57,6 @@ pub enum TransportStream {
     UniS2C(StreamId),
 }
 
-pub trait TransportSide {
-    fn num_uni_in_streams(streams: &TransportStreams) -> usize;
-
-    fn num_uni_out_streams(streams: &TransportStreams) -> usize;
-
-    fn uni_in_stream(id: StreamId) -> TransportStream;
-
-    fn uni_out_stream(id: StreamId) -> TransportStream;
-}
-
 /// A stream along which the client can send data.
 ///
 /// See [`TransportStream`] for details.
@@ -90,24 +80,6 @@ impl From<ClientStream> for TransportStream {
     }
 }
 
-impl TransportSide for ClientStream {
-    fn num_uni_in_streams(streams: &TransportStreams) -> usize {
-        streams.uni_s2c
-    }
-
-    fn num_uni_out_streams(streams: &TransportStreams) -> usize {
-        streams.uni_c2s
-    }
-
-    fn uni_in_stream(id: StreamId) -> TransportStream {
-        TransportStream::UniS2C(id)
-    }
-
-    fn uni_out_stream(id: StreamId) -> TransportStream {
-        TransportStream::UniC2S(id)
-    }
-}
-
 /// A stream along which the server can send data.
 ///
 /// See [`TransportStream`] for details.
@@ -128,24 +100,6 @@ impl From<ServerStream> for TransportStream {
             ServerStream::Bi(id) => Self::Bi(id),
             ServerStream::Uni(id) => Self::UniS2C(id),
         }
-    }
-}
-
-impl TransportSide for ServerStream {
-    fn num_uni_in_streams(streams: &TransportStreams) -> usize {
-        streams.uni_c2s
-    }
-
-    fn num_uni_out_streams(streams: &TransportStreams) -> usize {
-        streams.uni_s2c
-    }
-
-    fn uni_in_stream(id: StreamId) -> TransportStream {
-        TransportStream::UniC2S(id)
-    }
-
-    fn uni_out_stream(id: StreamId) -> TransportStream {
-        TransportStream::UniS2C(id)
     }
 }
 
@@ -198,5 +152,51 @@ impl TransportStreams {
         let i = self.uni_s2c;
         self.uni_s2c += 1;
         ServerStream::Uni(StreamId(i))
+    }
+}
+
+pub(crate) trait TransportSide {
+    fn num_uni_in_streams(streams: &TransportStreams) -> usize;
+
+    fn num_uni_out_streams(streams: &TransportStreams) -> usize;
+
+    fn uni_in_stream(id: StreamId) -> TransportStream;
+
+    fn uni_out_stream(id: StreamId) -> TransportStream;
+}
+
+impl TransportSide for ClientStream {
+    fn num_uni_in_streams(streams: &TransportStreams) -> usize {
+        streams.uni_s2c
+    }
+
+    fn num_uni_out_streams(streams: &TransportStreams) -> usize {
+        streams.uni_c2s
+    }
+
+    fn uni_in_stream(id: StreamId) -> TransportStream {
+        TransportStream::UniS2C(id)
+    }
+
+    fn uni_out_stream(id: StreamId) -> TransportStream {
+        TransportStream::UniC2S(id)
+    }
+}
+
+impl TransportSide for ServerStream {
+    fn num_uni_in_streams(streams: &TransportStreams) -> usize {
+        streams.uni_c2s
+    }
+
+    fn num_uni_out_streams(streams: &TransportStreams) -> usize {
+        streams.uni_s2c
+    }
+
+    fn uni_in_stream(id: StreamId) -> TransportStream {
+        TransportStream::UniC2S(id)
+    }
+
+    fn uni_out_stream(id: StreamId) -> TransportStream {
+        TransportStream::UniS2C(id)
     }
 }

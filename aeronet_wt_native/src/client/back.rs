@@ -89,7 +89,7 @@ async fn handle_session<C: ClientTransportConfig>(
     let (send_in, mut recv_in) = mpsc::channel::<C::S2C>(CHANNEL_BUF);
     let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
     let (mut streams_bi, mut streams_uni_out) =
-        open_streams::<C::C2S, C::S2C, ClientStream>(&streams, &mut conn, send_in, send_err)
+        open_streams::<C::C2S, C::S2C, ClientStream>(streams, &mut conn, send_in, send_err)
             .await?;
 
     debug!("Connected to {}", conn.remote_address());
