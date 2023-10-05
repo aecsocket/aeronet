@@ -23,3 +23,8 @@ bevy = { version = "0.11.2", default-features = false, optional = true }
 
 [package.metadata.docs.rs]
 all-features = true
+
+[[example]]
+name = "echo"
+path = "examples/echo.rs"
+required-features = [ "bevy" ]

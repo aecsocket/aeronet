@@ -56,8 +56,15 @@ fn main() {
         .run();
 }
 
+#[derive(Debug, Clone, Resource)]
+struct MessageStream(pub ServerStream);
+
 fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
-    match create(rt.as_ref()) {
+    let mut streams = TransportStreams::default();
+    let msg_stream = streams.add_bi_s2c();
+    commands.insert_resource(MessageStream(msg_stream));
+
+    match create(rt.as_ref(), streams) {
         Ok(server) => {
             commands.insert_resource(server);
             info!("Created server");
@@ -66,7 +73,7 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
     }
 }
 
-fn create(rt: &AsyncRuntime) -> Result<Server> {
+fn create(rt: &AsyncRuntime, streams: TransportStreams) -> Result<Server> {
     let cert = Certificate::load(
         "./aeronet_wt_native/examples/cert.pem",
         "./aeronet_wt_native/examples/key.pem",
@@ -78,7 +85,7 @@ fn create(rt: &AsyncRuntime) -> Result<Server> {
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    let (front, back) = aeronet_wt_native::create_server(config, TransportStreams::default());
+    let (front, back) = aeronet_wt_native::create_server(config, streams);
     rt.0.spawn(async move {
         back.start().await.unwrap();
     });

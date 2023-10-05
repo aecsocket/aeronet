@@ -1,5 +1,7 @@
-use aeronet::{ClientId, RecvError, ServerEvent, ServerTransport, Message};
-use crossbeam_channel::{Receiver, Sender};
+use std::collections::VecDeque;
+
+use aeronet::{ClientId, Message, RecvError, ServerEvent, ServerTransport};
+use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use rustc_hash::FxHashMap;
 
 use crate::{shared::CHANNEL_BUF, ChannelTransportClient};
@@ -15,6 +17,7 @@ struct ClientInfo<C2S, S2C> {
 pub struct ChannelTransportServer<C2S, S2C> {
     clients: FxHashMap<ClientId, ClientInfo<C2S, S2C>>,
     next_client: usize,
+    queued_recv: VecDeque<ServerEvent<C2S>>,
 }
 
 impl<C2S, S2C> ChannelTransportServer<C2S, S2C>
@@ -26,6 +29,7 @@ where
         Self {
             clients: FxHashMap::default(),
             next_client: 0,
+            queued_recv: VecDeque::new(),
         }
     }
 
@@ -39,6 +43,7 @@ where
         let their_client = ChannelTransportClient {
             send: send_c2s,
             recv: recv_s2c,
+            connected: true,
         };
         let our_client = ClientInfo {
             send: send_s2c,
@@ -57,15 +62,36 @@ where
     type ClientInfo = ();
 
     fn recv(&mut self) -> Result<ServerEvent<C2S>, RecvError> {
+        if let Some(event) = self.queued_recv.pop_front() {
+            return Ok(event);
+        }
+
+        for (client, ClientInfo { recv, .. }) in self.clients.iter() {
+            match recv.try_recv() {
+                Ok(msg) => {
+                    return Ok(ServerEvent::Recv {
+                        client: *client,
+                        msg,
+                    })
+                }
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => {}
+            }
+        }
         todo!()
     }
 
     fn send(&mut self, client: ClientId, msg: impl Into<S2C>) {
-        todo!()
+        let msg = msg.into();
+        if let Some(ClientInfo { send, .. }) = self.clients.get(&client) {
+            // if this channel is disconnected, we'll catch it on the next `recv`
+            // so don't do anything here
+            let _ = send.send(msg);
+        }
     }
 
     fn disconnect(&mut self, client: ClientId) {
-        todo!()
+        self.clients.remove(&client);
     }
 
     fn client_info(&self, client: ClientId) -> Option<Self::ClientInfo> {

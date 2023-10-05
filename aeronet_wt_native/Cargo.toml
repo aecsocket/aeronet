@@ -29,6 +29,8 @@ base64 = "0.21.0"
 rcgen = "0.11.1"
 ring = "0.17.0"
 time = "0.3.21"
+bevy = "0.11.2"
+bevy_egui = "0.21.0"
 
 [package.metadata.docs.rs]
 all-features = true
