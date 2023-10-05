@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use aeronet::{
     AsyncRuntime, ClientTransportPlugin, FromServer, LocalClientConnected, LocalClientDisconnected,
-    ToServer, TryFromBytes, TryIntoBytes,
+    ToServer, TryFromBytes, TryIntoBytes, ClientTransport,
 };
 use aeronet_wt_native::{
     wtransport::ClientConfig, ClientStream, OnStream, StreamMessage, TransportStreams,
@@ -47,8 +47,19 @@ fn main() {
         ))
         .init_resource::<AsyncRuntime>()
         .init_resource::<UiState>()
+        .add_systems(Startup, setup)
         .add_systems(Update, (recv, ui))
         .run();
+}
+
+fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
+    let streams = TransportStreams::default();
+    match create(rt.as_ref(), streams) {
+        Ok(client) => {
+            commands.insert_resource(client);
+        }
+        Err(err) => panic!("Failed to create client: {err:#}"),
+    }
 }
 
 fn create(rt: &AsyncRuntime, streams: TransportStreams) -> Result<Client> {
@@ -80,18 +91,16 @@ impl UiState {
 }
 
 fn ui(
-    mut commands: Commands,
-    rt: Res<AsyncRuntime>,
     mut egui: EguiContexts,
     mut state: ResMut<UiState>,
     mut send: EventWriter<ToServer<StreamMessage<ClientStream, AppMessage>>>,
-    client: Option<Res<Client>>,
+    client: Res<Client>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
-        if client.is_some() {
+        if client.is_connected() {
             if ui.button("Disconnect").clicked() {
                 state.push("Disconnected by user");
-                commands.remove_resource::<Client>();
+                client.disconnect();
             }
         } else {
             let url_resp = ui
@@ -107,16 +116,8 @@ fn ui(
             if url_resp.lost_focus() {
                 let url = state.url.clone();
                 state.url.clear();
-
-                let streams = TransportStreams::default();
-                match create(rt.as_ref(), streams) {
-                    Ok(client) => {
-                        state.push(format!("Connecting to {url:?}"));
-                        client.connect(url);
-                        commands.insert_resource(client);
-                    }
-                    Err(err) => state.push(format!("Failed to connect to {url:?}: {err:#}")),
-                }
+                state.push(format!("Connecting to {url:?}"));
+                client.connect(url);
             }
         }
 

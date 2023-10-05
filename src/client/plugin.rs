@@ -122,6 +122,38 @@ pub struct ToServer<C2S> {
     pub msg: C2S,
 }
 
+/// System to check if the client transport `T` is [connected].
+/// 
+/// This can be used as a run condition for another system:
+/// 
+/// ```
+/// # use bevy::prelude::*;
+/// # use aeronet::{Message, ClientTransport};
+/// # fn run<C2S: Message, S2C: Message, MyTransportImpl: ClientTransport<C2S, S2C> + Resource>() {
+/// App::new()
+///     .add_systems(
+///         Update,
+///         system_that_uses_the_client
+///             .run_if(aeronet::client_connected::<_, _, MyTransportImpl>),
+///     );
+/// # }
+/// # fn system_that_uses_the_client() {}
+/// ```
+/// 
+/// [connected]: ClientTransport::is_connected
+pub fn client_connected<C2S, S2C, T>(client: Option<Res<T>>) -> bool
+where
+    C2S: Message,
+    S2C: Message,
+    T: ClientTransport<C2S, S2C> + Resource,
+{
+    if let Some(client) = client {
+        client.is_connected()
+    } else {
+        false
+    }
+}
+
 fn recv<C2S, S2C, T>(
     mut commands: Commands,
     mut client: ResMut<T>,
@@ -147,8 +179,6 @@ fn recv<C2S, S2C, T>(
             }
             Ok(ClientEvent::Disconnected { reason }) => {
                 disconnected.send(LocalClientDisconnected { reason });
-                commands.remove_resource::<T>();
-                break;
             }
             Err(RecvError::Empty) => break,
             Err(RecvError::Closed) => {

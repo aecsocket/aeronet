@@ -30,7 +30,7 @@ pub struct WebTransportClient<C2S, S2C> {
 impl<C2S, S2C> WebTransportClient<C2S, S2C> {
     /// Requests the client to connect to a given URL.
     ///
-    /// If the client is not [connected], this request has no effect.
+    /// If the client is [connected], this request has no effect.
     ///
     /// [connected]: ClientTransport::is_connected
     pub fn connect(&self, url: impl Into<String>) {

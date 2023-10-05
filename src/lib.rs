@@ -28,7 +28,7 @@ pub use transport::{RecvError, RemoteAddr, Rtt, SessionError};
 #[cfg(feature = "bevy")]
 pub use client::plugin::{
     ClientTransportPlugin, ClientTransportSet, FromServer, LocalClientConnected,
-    LocalClientConnecting, LocalClientDisconnected, ToServer,
+    LocalClientConnecting, LocalClientDisconnected, ToServer, client_connected,
 };
 #[cfg(feature = "bevy")]
 pub use server::plugin::{
