@@ -21,7 +21,7 @@ aeronet = { path = "..", version = "0.1.0" }
 log = "0.4.20"
 tracing = "0.1.37"
 thiserror = "1.0.47"
-bevy = { version = "0.11.2", default-features = false, optional = true }
+bevy = { version = "0.11.3", default-features = false, optional = true }
 serde = { version = "1.0.188", optional = true }
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"
