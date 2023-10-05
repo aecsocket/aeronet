@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use aeronet::{
-    AsyncRuntime, ClientTransportPlugin, FromServer, LocalClientConnected, LocalClientDisconnected,
-    ToServer, TryFromBytes, TryIntoBytes, ClientTransport,
+    AsyncRuntime, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
+    LocalClientDisconnected, ToServer, TryFromBytes, TryIntoBytes,
 };
 use aeronet_wt_native::{
     wtransport::ClientConfig, ClientStream, OnStream, StreamMessage, TransportStreams,

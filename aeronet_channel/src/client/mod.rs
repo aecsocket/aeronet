@@ -1,12 +1,19 @@
-use aeronet::{ClientTransport, Message};
+use aeronet::{ClientId, ClientTransport, Message};
 use crossbeam_channel::{Receiver, Sender};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelTransportClient<C2S, S2C> {
+    pub(crate) id: ClientId,
     pub(crate) send: Sender<C2S>,
     pub(crate) recv: Receiver<S2C>,
     pub(crate) connected: bool,
+}
+
+impl<C2S, S2C> ChannelTransportClient<C2S, S2C> {
+    pub fn id(&self) -> ClientId {
+        self.id
+    }
 }
 
 impl<C2S, S2C> ClientTransport<C2S, S2C> for ChannelTransportClient<C2S, S2C>

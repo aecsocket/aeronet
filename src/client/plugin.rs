@@ -32,7 +32,7 @@ use crate::{ClientEvent, ClientTransport, Message, RecvError, SessionError};
 ///
 /// If these are unsuitable for your use case, consider manually using the transport APIs from your
 /// app, bypassing the plugin altogether.
-/// 
+///
 /// ```
 /// use bevy::prelude::*;
 /// use aeronet::ClientTransportPlugin;
@@ -121,9 +121,9 @@ pub struct ToServer<C2S> {
 }
 
 /// System to check if the client transport `T` is [connected].
-/// 
+///
 /// This can be used as a run condition for another system:
-/// 
+///
 /// ```
 /// # use bevy::prelude::*;
 /// # use aeronet::{Message, ClientTransport};
@@ -137,7 +137,7 @@ pub struct ToServer<C2S> {
 /// # }
 /// # fn system_that_uses_the_client() {}
 /// ```
-/// 
+///
 /// [connected]: ClientTransport::is_connected
 pub fn client_connected<C2S, S2C, T>(client: Option<Res<T>>) -> bool
 where

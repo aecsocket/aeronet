@@ -21,9 +21,6 @@ use bevy::prelude::*;
 /// ```
 /// # use bevy::prelude::*;
 /// # use aeronet::AsyncRuntime;
-/// # fn main() {
-/// #     App::new().add_systems(Startup, run_something_async);
-/// # }
 /// fn run_something_async(rt: Res<AsyncRuntime>) {
 ///     rt.0.spawn(async move {
 ///         do_the_async_thing();

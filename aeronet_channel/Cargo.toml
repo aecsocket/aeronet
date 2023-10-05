@@ -23,6 +23,7 @@ bevy = { version = "0.11.2", default-features = false, optional = true }
 
 [dev-dependencies]
 bevy = "0.11.2"
+bevy_egui = "0.21.0"
 
 [package.metadata.docs.rs]
 all-features = true

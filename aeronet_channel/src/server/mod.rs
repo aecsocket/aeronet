@@ -33,7 +33,7 @@ where
         }
     }
 
-    pub fn connect(&mut self) -> (ClientId, ChannelTransportClient<C2S, S2C>) {
+    pub fn connect(&mut self) -> ChannelTransportClient<C2S, S2C> {
         let (send_c2s, recv_c2s) = crossbeam_channel::bounded::<C2S>(CHANNEL_BUF);
         let (send_s2c, recv_s2c) = crossbeam_channel::bounded::<S2C>(CHANNEL_BUF);
 
@@ -41,6 +41,7 @@ where
         self.next_client += 1;
 
         let their_client = ChannelTransportClient {
+            id: client_id,
             send: send_c2s,
             recv: recv_s2c,
             connected: true,
@@ -50,7 +51,7 @@ where
             recv: recv_c2s,
         };
         self.clients.insert(client_id, our_client);
-        (client_id, their_client)
+        their_client
     }
 }
 

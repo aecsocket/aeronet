@@ -14,12 +14,12 @@ use anyhow::Result;
 /// * [`TryIntoBytes`] if the message should be able to be converted into a byte sequence
 /// * [`TryFromBytes`] if the message should be able to be constructed from a byte sequence
 ///
-/// This is automatically implemented for all types matching these criteria.
+/// This trait is automatically implemented for all types matching these criteria.
 pub trait Message: Send + Sync + 'static {}
 
 impl<T> Message for T where T: Send + Sync + 'static {}
 
-/// Data that can be potentially converted into a sequence of bytes.
+/// Data that can potentially be converted into a sequence of bytes.
 ///
 /// The transport implementation may wish to handle messages as a byte sequence, for example
 /// if it communicates over a network.
@@ -41,7 +41,7 @@ pub trait TryIntoBytes {
     fn try_into_bytes(self) -> Result<Vec<u8>>;
 }
 
-/// Data that can be potentially converted from a sequence of bytes into this type.
+/// Data that can potentially be converted from a sequence of bytes into this type.
 ///
 /// The transport implementation may wish to handle messages as a byte sequence, for example
 /// if it communicates over a network.

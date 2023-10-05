@@ -106,6 +106,7 @@ dependencies = [
  "aeronet",
  "anyhow",
  "bevy",
+ "bevy_egui",
  "crossbeam-channel",
  "rustc-hash",
  "thiserror",
