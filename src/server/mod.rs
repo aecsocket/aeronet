@@ -33,8 +33,8 @@ where
     /// # Usage
     ///
     /// ```
-    /// # use aeronet::{RecvError, ServerTransport, ServerTransportConfig, ServerEvent};
-    /// # fn update<C: ServerTransportConfig, T: ServerTransport<C>>(mut transport: T) {
+    /// # use aeronet::{Message, RecvError, ServerTransport, ServerEvent};
+    /// # fn update<C2S: Message, S2C: Message, T: ServerTransport<C2S, S2C>>(mut transport: T) {
     /// loop {
     ///     match transport.recv() {
     ///         Ok(ServerEvent::Connected { client }) => println!("Client {client} connected"),
@@ -65,9 +65,7 @@ where
     fn client_info(&self, client: ClientId) -> Option<Self::ClientInfo>;
 
     /// Gets if the specified client is connected to this server.
-    fn is_connected(&self, client: ClientId) -> bool {
-        self.client_info(client).is_some()
-    }
+    fn connected(&self, client: ClientId) -> bool;
 }
 
 /// An event received from a [`ServerTransport`].

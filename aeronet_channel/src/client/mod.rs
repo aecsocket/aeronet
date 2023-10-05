@@ -34,4 +34,8 @@ where
             None
         }
     }
+
+    fn connected(&self) -> bool {
+        self.connected
+    }
 }

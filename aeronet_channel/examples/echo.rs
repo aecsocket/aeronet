@@ -5,6 +5,8 @@ use aeronet_channel::{ChannelTransportClient, ChannelTransportServer};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, prelude::*};
 
+// config
+
 #[derive(Debug, Clone)]
 pub struct AppMessage(pub String);
 
@@ -25,6 +27,8 @@ impl TryFromBytes for AppMessage {
 type Client = ChannelTransportClient<AppMessage, AppMessage>;
 
 type Server = ChannelTransportServer<AppMessage, AppMessage>;
+
+// logic
 
 fn main() {
     App::new()

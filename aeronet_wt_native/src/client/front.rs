@@ -90,4 +90,8 @@ where
     fn info(&self) -> Option<Self::Info> {
         self.info.as_ref().cloned()
     }
+
+    fn connected(&self) -> bool {
+        self.info.is_some()
+    }
 }

@@ -27,8 +27,8 @@ pub trait ClientTransport<C2S: Message, S2C: Message> {
     /// # Usage
     ///
     /// ```
-    /// # use aeronet::{RecvError, ClientTransport, ClientTransportConfig, ClientEvent};
-    /// # fn update<C: ClientTransportConfig, T: ClientTransport<C>>(mut transport: T) {
+    /// # use aeronet::{Message, RecvError, ClientTransport, ClientEvent};
+    /// # fn update<C2S: Message, S2C: Message, T: ClientTransport<C2S, S2C>>(mut transport: T) {
     /// loop {
     ///     match transport.recv() {
     ///         Ok(ClientEvent::Recv { msg }) => println!("Received a message"),
@@ -54,9 +54,7 @@ pub trait ClientTransport<C2S: Message, S2C: Message> {
     fn info(&self) -> Option<Self::Info>;
 
     /// Gets if this transport has a connection to a server.
-    fn is_connected(&self) -> bool {
-        self.info().is_some()
-    }
+    fn connected(&self) -> bool;
 }
 
 /// An event received from a [`ClientTransport`].

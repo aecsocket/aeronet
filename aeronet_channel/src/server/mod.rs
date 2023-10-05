@@ -101,4 +101,8 @@ where
             None
         }
     }
+
+    fn connected(&self, client: ClientId) -> bool {
+        self.clients.contains_key(&client)
+    }
 }

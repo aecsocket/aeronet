@@ -39,13 +39,10 @@ use super::{ClientId, RecvError, ServerEvent, ServerTransport, SessionError};
 /// use bevy::prelude::*;
 /// use aeronet::ServerTransportPlugin;
 ///
-/// # fn run<MyTransportConfig, MyTransportImpl>()
-/// # where
-/// #     MyTransportConfig: aeronet::ServerTransportConfig,
-/// #     MyTransportImpl: aeronet::ServerTransport<MyTransportConfig> + Resource,
-/// # {
+/// # use aeronet::{Message, ServerTransport};
+/// # fn run<C2S: Message, S2C: Message + Clone, MyTransportImpl: ServerTransport<C2S, S2C> + Resource>() {
 /// App::new()
-///     .add_plugins(TransportPlugin::<MyTransportConfig, MyTransportImpl>::default());
+///     .add_plugins(ServerTransportPlugin::<C2S, S2C, MyTransportImpl>::default());
 /// # }
 /// ```
 #[derive(Debug, derivative::Derivative)]

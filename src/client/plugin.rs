@@ -32,17 +32,15 @@ use crate::{ClientEvent, ClientTransport, Message, RecvError, SessionError};
 ///
 /// If these are unsuitable for your use case, consider manually using the transport APIs from your
 /// app, bypassing the plugin altogether.
+/// 
 /// ```
 /// use bevy::prelude::*;
 /// use aeronet::ClientTransportPlugin;
 ///
-/// # fn run<MyTransportConfig, MyTransportImpl>()
-/// # where
-/// #     MyTransportConfig: aeronet::ClientTransportConfig,
-/// #     MyTransportImpl: aeronet::ClientTransport<MyTransportConfig> + Resource,
-/// # {
+/// # use aeronet::{Message, ClientTransport};
+/// # fn run<C2S: Message + Clone, S2C: Message, MyTransportImpl: ClientTransport<C2S, S2C> + Resource>() {
 /// App::new()
-///     .add_plugins(TransportPlugin::<MyTransportConfig, MyTransportImpl>::default());
+///     .add_plugins(ClientTransportPlugin::<C2S, S2C, MyTransportImpl>::default());
 /// # }
 /// ```
 #[derive(Debug, derivative::Derivative)]
@@ -148,7 +146,7 @@ where
     T: ClientTransport<C2S, S2C> + Resource,
 {
     if let Some(client) = client {
-        client.is_connected()
+        client.connected()
     } else {
         false
     }

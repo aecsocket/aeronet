@@ -21,6 +21,9 @@ rustc-hash = "1.1.0"
 crossbeam-channel = "0.5.8"
 bevy = { version = "0.11.2", default-features = false, optional = true }
 
+[dev-dependencies]
+bevy = "0.11.2"
+
 [package.metadata.docs.rs]
 all-features = true
 

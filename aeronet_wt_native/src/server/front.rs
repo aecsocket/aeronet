@@ -74,4 +74,8 @@ where
     fn client_info(&self, client: ClientId) -> Option<Self::ClientInfo> {
         self.clients.get(&client).cloned()
     }
+
+    fn connected(&self, client: ClientId) -> bool {
+        self.clients.contains_key(&client)
+    }
 }

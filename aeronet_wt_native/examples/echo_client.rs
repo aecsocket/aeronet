@@ -97,7 +97,7 @@ fn ui(
     client: Res<Client>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
-        if client.is_connected() {
+        if client.connected() {
             if ui.button("Disconnect").clicked() {
                 state.push("Disconnected by user");
                 client.disconnect();
