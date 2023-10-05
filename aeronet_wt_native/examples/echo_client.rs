@@ -5,14 +5,12 @@ use aeronet::{
     ToServer, TryFromBytes, TryIntoBytes,
 };
 use aeronet_wt_native::{
-    wtransport::ClientConfig, ClientStream, StreamMessage, TransportStreams, WebTransportClient, OnStream,
+    wtransport::ClientConfig, ClientStream, OnStream, StreamMessage, TransportStreams,
+    WebTransportClient,
 };
 use anyhow::Result;
 use bevy::{log::LogPlugin, prelude::*};
-use bevy_egui::{
-    egui::{self, FontId, RichText},
-    EguiContexts, EguiPlugin,
-};
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 // config
 
@@ -49,27 +47,8 @@ fn main() {
         ))
         .init_resource::<AsyncRuntime>()
         .init_resource::<UiState>()
-        .add_systems(Startup, setup)
-        .add_systems(Update, ui)
-        .add_systems(Update, recv)
+        .add_systems(Update, (recv, ui))
         .run();
-}
-
-#[derive(Debug, Clone, Resource)]
-struct MessageStream(pub ClientStream);
-
-fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
-    let mut streams = TransportStreams::default();
-    let msg_stream = streams.add_bi_c2s();
-    commands.insert_resource(MessageStream(msg_stream));
-
-    match create(rt.as_ref(), streams) {
-        Ok(client) => {
-            commands.insert_resource(client);
-            info!("Created client");
-        }
-        Err(err) => error!("Failed to create client: {err:#}"),
-    }
 }
 
 fn create(rt: &AsyncRuntime, streams: TransportStreams) -> Result<Client> {
@@ -83,7 +62,6 @@ fn create(rt: &AsyncRuntime, streams: TransportStreams) -> Result<Client> {
     rt.0.spawn(async move {
         back.start().await.unwrap();
     });
-    front.connect("https://[::1]:25565");
     Ok(front)
 }
 
@@ -91,6 +69,7 @@ fn create(rt: &AsyncRuntime, streams: TransportStreams) -> Result<Client> {
 struct UiState {
     scrollback: Vec<String>,
     buf: String,
+    url: String,
 }
 
 impl UiState {
@@ -101,17 +80,53 @@ impl UiState {
 }
 
 fn ui(
+    mut commands: Commands,
+    rt: Res<AsyncRuntime>,
     mut egui: EguiContexts,
     mut state: ResMut<UiState>,
     mut send: EventWriter<ToServer<StreamMessage<ClientStream, AppMessage>>>,
-    msg_stream: Res<MessageStream>,
+    client: Option<Res<Client>>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for line in &state.scrollback {
-                ui.label(RichText::new(line).font(FontId::monospace(14.0)));
+        if client.is_some() {
+            if ui.button("Disconnect").clicked() {
+                state.push("Disconnected by user");
+                commands.remove_resource::<Client>();
             }
-        });
+        } else {
+            let url_resp = ui
+                .horizontal(|ui| {
+                    ui.label("URL");
+                    egui::TextEdit::singleline(&mut state.url)
+                        .hint_text("https://echo.webtransport.day")
+                        .show(ui)
+                })
+                .inner
+                .response;
+
+            if url_resp.lost_focus() {
+                let url = state.url.clone();
+                state.url.clear();
+
+                let streams = TransportStreams::default();
+                match create(rt.as_ref(), streams) {
+                    Ok(client) => {
+                        state.push(format!("Connecting to {url:?}"));
+                        client.connect(url);
+                        commands.insert_resource(client);
+                    }
+                    Err(err) => state.push(format!("Failed to connect to {url:?}: {err:#}")),
+                }
+            }
+        }
+
+        egui::ScrollArea::vertical()
+            .max_height(600.0)
+            .show(ui, |ui| {
+                for line in &state.scrollback {
+                    ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
+                }
+            });
 
         let buf_resp = ui
             .horizontal(|ui| {
@@ -125,7 +140,7 @@ fn ui(
             state.buf.clear();
             state.push(format!("> {}", buf));
             send.send(ToServer {
-                msg: AppMessage(buf).on(msg_stream.0),
+                msg: AppMessage(buf).on(ClientStream::Datagram),
             });
 
             ui.memory_mut(|m| m.request_focus(buf_resp.id));

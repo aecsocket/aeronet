@@ -56,13 +56,8 @@ fn main() {
         .run();
 }
 
-#[derive(Debug, Clone, Resource)]
-struct MessageStream(pub ServerStream);
-
 fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
-    let mut streams = TransportStreams::default();
-    let msg_stream = streams.add_bi_s2c();
-    commands.insert_resource(MessageStream(msg_stream));
+    let streams = TransportStreams::default();
 
     match create(rt.as_ref(), streams) {
         Ok(server) => {

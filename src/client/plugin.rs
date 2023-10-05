@@ -136,7 +136,9 @@ fn recv<C2S, S2C, T>(
 {
     loop {
         match client.recv() {
-            Ok(ClientEvent::Connecting) => connecting.send(LocalClientConnecting),
+            Ok(ClientEvent::Connecting) => {
+                connecting.send(LocalClientConnecting);
+            }
             Ok(ClientEvent::Connected) => {
                 connected.send(LocalClientConnected);
             }
@@ -145,6 +147,8 @@ fn recv<C2S, S2C, T>(
             }
             Ok(ClientEvent::Disconnected { reason }) => {
                 disconnected.send(LocalClientDisconnected { reason });
+                commands.remove_resource::<T>();
+                break;
             }
             Err(RecvError::Empty) => break,
             Err(RecvError::Closed) => {
