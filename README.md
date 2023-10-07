@@ -13,8 +13,8 @@ underlying mechanism used to transport your data.
 
 # Transports
 
-* [`aeronet_channel`](https://docs.rs/aeronet_channel) using in-memory MPSC channels, useful for
+* [`aeronet_channel`](https://docs.rs/aeronet_channel) via in-memory MPSC channels, useful for
   local singleplayer servers
-* [`aeronet_wt_native`](https://docs.rs/aeronet_wt_native) using the
+* [`aeronet_wt_native`](https://docs.rs/aeronet_wt_native) via
   [WebTransport](https://developer.chrome.com/en/articles/webtransport/), useful for a generic
   client-server architecture with support for WASM clients
