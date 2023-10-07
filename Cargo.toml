@@ -1,6 +1,6 @@
 [package]
 name = "aeronet"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Lightweight client/server network library"
 authors = [ "aecsocket <aecsocket@tutanota.com>" ]
