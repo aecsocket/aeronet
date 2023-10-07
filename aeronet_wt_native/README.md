@@ -1,4 +1,4 @@
-# aeronet_wt_native
+# `aeronet_wt_native`
 
 [![crates.io](https://img.shields.io/crates/v/aeronet_wt_native.svg)](https://crates.io/crates/aeronet_wt_native)
 [![docs.rs](https://img.shields.io/docsrs/aeronet_wt_native)](https://docs.rs/aeronet_wt_native)

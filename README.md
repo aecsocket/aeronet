@@ -1,4 +1,4 @@
-# aeronet
+# `aeronet`
 
 [![crates.io](https://img.shields.io/crates/v/aeronet.svg)](https://crates.io/crates/aeronet)
 [![docs.rs](https://img.shields.io/docsrs/aeronet)](https://docs.rs/aeronet)
@@ -13,8 +13,11 @@ underlying mechanism used to transport your data.
 
 # Transports
 
-* [`aeronet_channel`](https://docs.rs/aeronet_channel) via in-memory MPSC channels, useful for
-  local singleplayer servers
-* [`aeronet_wt_native`](https://docs.rs/aeronet_wt_native) via
+* [`aeronet_channel`](https://crates.io/crates/aeronet_channel) via in-memory MPSC channels, useful
+  for local singleplayer servers
+* [`aeronet_wt_native`](https://crates.io/crates/aeronet_wt_native) via a Rust implementation of
   [WebTransport](https://developer.chrome.com/en/articles/webtransport/), useful for a generic
   client-server architecture with support for WASM clients
+* [`aeronet_wt_wasm`](https://crates.io/crates/aeronet_wt_wasm) via the browser's implementation of
+  [WebTransport](https://developer.chrome.com/en/articles/webtransport/), useful for a WASM app
+  which requires a networking client
