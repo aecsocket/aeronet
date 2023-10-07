@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
 
-use aeronet::{ClientId, Message, RecvError, ServerEvent, ServerTransport};
+use aeronet::{ClientId, Message, RecvError, ServerEvent, ServerTransport, SessionError};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use rustc_hash::FxHashMap;
 
-use crate::{shared::CHANNEL_BUF, ChannelTransportClient};
+use crate::{shared::CHANNEL_BUF, ChannelTransportClient, DisconnectedError};
 
 #[derive(Debug)]
 struct ClientInfo<C2S, S2C> {
@@ -63,6 +63,9 @@ where
     type ClientInfo = ();
 
     fn recv(&mut self) -> Result<ServerEvent<C2S>, RecvError> {
+        // buffer up events so that, on recv, we'll iterate the client map once, buffer the events,
+        // then send them out on the next few recv calls
+        // this has the disadvantage that the first recv will always be RecvError::Empty
         if let Some(event) = self.queued_recv.pop_front() {
             return Ok(event);
         }
@@ -70,16 +73,22 @@ where
         for (client, ClientInfo { recv, .. }) in self.clients.iter() {
             match recv.try_recv() {
                 Ok(msg) => {
-                    return Ok(ServerEvent::Recv {
+                    self.queued_recv.push_back(ServerEvent::Recv {
                         client: *client,
                         msg,
-                    })
+                    });
                 }
                 Err(TryRecvError::Empty) => {}
-                Err(TryRecvError::Disconnected) => {}
+                Err(TryRecvError::Disconnected) => {
+                    self.queued_recv.push_back(ServerEvent::Disconnected {
+                        client: *client,
+                        reason: SessionError::Transport(DisconnectedError.into()),
+                    })
+                }
             }
         }
-        todo!()
+
+        Err(RecvError::Empty)
     }
 
     fn send(&mut self, client: ClientId, msg: impl Into<S2C>) {

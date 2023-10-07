@@ -1,5 +1,7 @@
-use aeronet::{ClientId, ClientTransport, Message};
-use crossbeam_channel::{Receiver, Sender};
+use aeronet::{ClientEvent, ClientId, ClientTransport, Message, RecvError, SessionError};
+use crossbeam_channel::{Receiver, Sender, TryRecvError};
+
+use crate::DisconnectedError;
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
@@ -23,8 +25,21 @@ where
 {
     type Info = ();
 
-    fn recv(&mut self) -> Result<aeronet::ClientEvent<S2C>, aeronet::RecvError> {
-        todo!()
+    fn recv(&mut self) -> Result<ClientEvent<S2C>, RecvError> {
+        match self.recv.try_recv() {
+            Ok(msg) => Ok(ClientEvent::Recv { msg }),
+            Err(TryRecvError::Empty) => Err(RecvError::Empty),
+            Err(TryRecvError::Disconnected) => {
+                if self.connected {
+                    self.connected = false;
+                    Ok(ClientEvent::Disconnected {
+                        reason: SessionError::Transport(DisconnectedError.into()),
+                    })
+                } else {
+                    Err(RecvError::Empty)
+                }
+            }
+        }
     }
 
     fn send(&mut self, msg: impl Into<C2S>) {

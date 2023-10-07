@@ -8,3 +8,4 @@ mod shared;
 
 pub use client::ChannelTransportClient;
 pub use server::ChannelTransportServer;
+pub use shared::DisconnectedError;
