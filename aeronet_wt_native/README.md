@@ -23,28 +23,35 @@ possible to start the server, then store and use the frontend within your app to
 the backend.
 
 ```rust
-use aeronet_wt_native::{wtransport::ClientConfig, TransportStreams};
+use aeronet::{Message, TryIntoBytes, TryFromBytes};
+use aeronet_wt_native::{wtransport::ClientConfig, TransportStreams, SendOn, ClientStream};
 
-# fn run<C2S, S2C>()
-# where
-#     C2S: aeronet::Message + aeronet::TryIntoBytes + aeronet_wt_native::SendOn<aeronet_wt_native::ClientStream>,
-#     S2C: aeronet::Message + aeronet::TryFromBytes,
-# {
-// the `wtransport` client config
-let config = create_client_config();
-// what QUIC streams will be opened by this connection
-// by default, zero (only datagrams are available)
-let streams = TransportStreams::default();
+fn run<C2S, S2C>()
+where
+    // Since we're making a client, the C2S message type must implement the outgoing traits
+    // Outgoing messages must:
+    // * `TryIntoBytes` - be able to be converted into `Vec<u8>`
+    // * `SendOn<ClientStream>` - determine what QUIC ClientStream they are sent along
+    C2S: Message + TryIntoBytes + SendOn<ClientStream>,
+    // Incoming messages must:
+    // * `TryFromBytes` - be able to be deserialized from a `Vec<u8>`
+    S2C: Message + TryFromBytes,
+{
+    // the `wtransport` client config
+    let config = create_client_config();
+    // what QUIC streams will be opened by this connection
+    // by default, zero (only datagrams are available)
+    let streams = TransportStreams::default();
 
-let (frontend, backend) = aeronet_wt_native::create_client::<C2S, S2C>(config, streams);
+    let (frontend, backend) = aeronet_wt_native::create_client::<C2S, S2C>(config, streams);
 
-// start the backend as soon as we have an async runtime
-tokio::spawn(async move {
-    backend.start().await.unwrap();
-});
+    // start the backend as soon as we have an async runtime
+    tokio::spawn(async move {
+        backend.start().await.unwrap();
+    });
 
-// and use the frontend throughout our app
-frontend.connect("https://echo.webtransport.day");
-# }
+    // and use the frontend throughout our app
+    frontend.connect("https://echo.webtransport.day");
+}
 # fn create_client_config() -> ClientConfig { unimplemented!() }
 ```

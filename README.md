@@ -24,21 +24,26 @@ underlying mechanism used to transport your data.
 
 # Getting started
 
-First, you will need two message types to use for sending client-to-server (C2S) and
+First, you will need two [`Message`] types to use for sending client-to-server (C2S) and
 server-to-client messages (S2C). They may be the same type.
 
-```rust,ignore
+```rust
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum C2S {
-    Move(Vector2),
+    Move(f32),
     Shoot,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum S2C {
-    AddPlayer(PlayerInfo),
+    AddPlayer(String),
     UpdateHealth(f32),
 }
+
+fn assert_is_message<T: aeronet::Message>() {}
+
+assert_is_message::<C2S>();
+assert_is_message::<S2C>();
 ```
 
 Then, you will need a transport implementation to use. Select one from the list above that
