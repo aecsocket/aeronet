@@ -7,4 +7,6 @@ mod client;
 mod wrappers;
 
 pub use client::WebTransportClient;
-pub use wrappers::{CongestionControl, ServerCertificateHash, ServerCertificateHashAlgorithm, WebTransportOptions};
+pub use wrappers::{
+    CongestionControl, ServerCertificateHash, ServerCertificateHashAlgorithm, WebTransportOptions, WebTransportError, WebTransportErrorSource
+};

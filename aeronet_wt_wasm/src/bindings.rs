@@ -35,7 +35,10 @@ extern "C" {
     pub fn new(url: &str) -> Result<WebTransport, JsValue>;
     #[wasm_bindgen(catch, constructor, js_class = "WebTransport")]
     #[doc = "The `new WebTransport(..)` constructor, creating a new instance of `WebTransport`."]
-    pub fn new_with_options(url: &str, options: &WebTransportOptions) -> Result<WebTransport, JsValue>;
+    pub fn new_with_options(
+        url: &str,
+        options: &WebTransportOptions,
+    ) -> Result<WebTransport, JsValue>;
     # [wasm_bindgen (method , structural , js_class = "WebTransport" , js_name = close)]
     #[doc = "The `close()` method."]
     #[doc = ""]
@@ -93,32 +96,60 @@ impl WebTransportOptions {
     }
     #[doc = "Change the `allowPooling` field of this object."]
     pub fn allow_pooling(&mut self, val: bool) -> &mut Self {
-        let r = ::js_sys::Reflect::set(self.as_ref(), &JsValue::from("allowPooling"), &JsValue::from(val));
-        debug_assert!(r.is_ok(), "setting properties should never fail on our dictionary objects");
+        let r = ::js_sys::Reflect::set(
+            self.as_ref(),
+            &JsValue::from("allowPooling"),
+            &JsValue::from(val),
+        );
+        debug_assert!(
+            r.is_ok(),
+            "setting properties should never fail on our dictionary objects"
+        );
         let _ = r;
         self
     }
 
     #[doc = "Change the `congestionControl` field of this object."]
     pub fn congestion_control(&mut self, val: &str) -> &mut Self {
-        let r = ::js_sys::Reflect::set(self.as_ref(), &JsValue::from("congestionControl"), &JsValue::from(val));
-        debug_assert!(r.is_ok(), "setting properties should never fail on our dictionary objects");
+        let r = ::js_sys::Reflect::set(
+            self.as_ref(),
+            &JsValue::from("congestionControl"),
+            &JsValue::from(val),
+        );
+        debug_assert!(
+            r.is_ok(),
+            "setting properties should never fail on our dictionary objects"
+        );
         let _ = r;
         self
     }
 
     #[doc = "Change the `requireUnreliable` field of this object."]
     pub fn require_unreliable(&mut self, val: bool) -> &mut Self {
-        let r = ::js_sys::Reflect::set(self.as_ref(), &JsValue::from("requireUnreliable"), &JsValue::from(val));
-        debug_assert!(r.is_ok(), "setting properties should never fail on our dictionary objects");
+        let r = ::js_sys::Reflect::set(
+            self.as_ref(),
+            &JsValue::from("requireUnreliable"),
+            &JsValue::from(val),
+        );
+        debug_assert!(
+            r.is_ok(),
+            "setting properties should never fail on our dictionary objects"
+        );
         let _ = r;
         self
     }
 
     #[doc = "Change the `serverCertificateHashes` field of this object."]
     pub fn server_certificate_hashes(&mut self, val: &::wasm_bindgen::JsValue) -> &mut Self {
-        let r = ::js_sys::Reflect::set(self.as_ref(), &JsValue::from("serverCertificateHashes"), &JsValue::from(val));
-        debug_assert!(r.is_ok(), "setting properties should never fail on our dictionary objects");
+        let r = ::js_sys::Reflect::set(
+            self.as_ref(),
+            &JsValue::from("serverCertificateHashes"),
+            &JsValue::from(val),
+        );
+        debug_assert!(
+            r.is_ok(),
+            "setting properties should never fail on our dictionary objects"
+        );
         let _ = r;
         self
     }

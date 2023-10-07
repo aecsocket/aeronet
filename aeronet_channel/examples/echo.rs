@@ -62,7 +62,10 @@ fn main() {
         .init_resource::<ClientState>()
         .init_resource::<ServerState>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (handle_client, handle_server, client_ui, server_ui).chain())
+        .add_systems(
+            Update,
+            (handle_client, handle_server, client_ui, server_ui).chain(),
+        )
         .run();
 }
 
@@ -184,9 +187,7 @@ fn server_ui(
 
         if let Some(buf) = buf_text_edit(ui, &mut state.buf) {
             let target_client = state.target_client;
-            state
-                .scrollback
-                .push(format!("{target_client} > {buf}"));
+            state.scrollback.push(format!("{target_client} > {buf}"));
             send.send(ToClient {
                 client: ClientId::from_raw(target_client),
                 msg: AppMessage(buf),
