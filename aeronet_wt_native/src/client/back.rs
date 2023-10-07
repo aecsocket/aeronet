@@ -40,10 +40,9 @@ where
         } = self;
 
         let endpoint = Endpoint::client(config)?;
-        let reason = listen::<C2S, S2C>(endpoint, streams, send.clone(), recv)
-            .await
-            .unwrap_err();
-        let _ = send.send(Event::Disconnected { reason }).await;
+        debug!("Started WebTransport client backend");
+        listen::<C2S, S2C>(endpoint, streams, send.clone(), recv).await;
+        debug!("Stopped WebTransport client backend");
         Ok(())
     }
 }
@@ -53,40 +52,53 @@ async fn listen<C2S, S2C>(
     streams: TransportStreams,
     mut send: mpsc::Sender<Event<S2C>>,
     mut recv: mpsc::Receiver<Request<C2S>>,
+) where
+    C2S: Message + TryIntoBytes,
+    S2C: Message + TryFromBytes,
+{
+    loop {
+        debug!("Waiting for connect request");
+        let url = loop {
+            match recv.recv().await {
+                Some(Request::Connect { url }) => break url,
+                Some(_) => debug!("Received non-Connect request while not connected"),
+                None => return,
+            }
+        };
+
+        let reason = connect::<C2S, S2C>(&endpoint, &streams, &mut send, &mut recv, url)
+            .await
+            .unwrap_err();
+        if send.send(Event::Disconnected { reason }).await.is_err() {
+            return;
+        }
+    }
+}
+
+async fn connect<C2S, S2C>(
+    endpoint: &Endpoint<Client>,
+    streams: &TransportStreams,
+    mut send: &mut mpsc::Sender<Event<S2C>>,
+    mut recv: &mut mpsc::Receiver<Request<C2S>>,
+    url: String,
 ) -> Result<Infallible, SessionError>
 where
     C2S: Message + TryIntoBytes,
     S2C: Message + TryFromBytes,
 {
-    debug!("Started WebTransport client backend");
+    debug!("Connecting to {url}");
+    send.send(Event::Connecting {
+        info: RemoteServerInfo::Connecting { url: url.clone() },
+    })
+    .await
+    .map_err(|_| SessionError::Closed)?;
 
-    loop {
-        debug!("Waiting for connect request");
-        let url = loop {
-            match recv.recv().await.ok_or(SessionError::Closed)? {
-                Request::Connect { url } => break url,
-                _ => debug!("Received non-Connect request while not connected"),
-            }
-        };
-
-        debug!("Connecting to {url}");
-        send.send(Event::Connecting {
-            info: RemoteServerInfo::Connecting { url: url.clone() },
-        })
+    let conn = endpoint
+        .connect(url)
         .await
-        .map_err(|_| SessionError::Closed)?;
-        let conn = endpoint
-            .connect(url)
-            .await
-            .map_err(|err| SessionError::Connecting(err.into()))?;
+        .map_err(|err| SessionError::Connecting(err.into()))?;
 
-        if let Err(reason) = handle_session::<C2S, S2C>(conn, &streams, &mut send, &mut recv).await
-        {
-            send.send(Event::Disconnected { reason })
-                .await
-                .map_err(|_| SessionError::Closed)?;
-        }
-    }
+    handle_session::<C2S, S2C>(conn, streams, &mut send, &mut recv).await
 }
 
 async fn handle_session<C2S, S2C>(
