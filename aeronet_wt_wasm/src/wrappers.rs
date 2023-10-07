@@ -127,7 +127,7 @@ impl WebTransportOptions {
 }
 
 /// Source of a [`WebTransportError`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, thiserror::Error)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
 pub enum WebTransportErrorSource {
     /// Stream error.
     #[error("stream")]
@@ -139,7 +139,7 @@ pub enum WebTransportErrorSource {
 
 /// Represents an error related to the API, which can arise from server errors, network connection
 /// problems, or client-initiated abort operations.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 #[error("web transport {source} error (code {stream_error_code:?})")]
 pub struct WebTransportError {
     /// Description of this error.
