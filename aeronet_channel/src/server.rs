@@ -6,12 +6,13 @@ use rustc_hash::FxHashMap;
 
 use crate::{shared::CHANNEL_BUF, ChannelTransportClient, DisconnectedError};
 
-#[derive(Debug)]
-struct ClientInfo<C2S, S2C> {
-    send: Sender<S2C>,
-    recv: Receiver<C2S>,
-}
-
+/// Server-side transport layer implementation for [`aeronet`] using in-memory channels.
+///
+/// This is the entry point to the entire crate, as you must first create a server before creating
+/// a client. Use [`ChannelTransportServer::new`] to create a new server,then use
+/// [`ChannelTransportServer::connect`] to create and connect a client.
+/// 
+/// If this server is dropped, all clients will automatically be considered disconnected.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelTransportServer<C2S, S2C> {
@@ -20,11 +21,18 @@ pub struct ChannelTransportServer<C2S, S2C> {
     queued_recv: VecDeque<ServerEvent<C2S>>,
 }
 
+#[derive(Debug)]
+struct ClientInfo<C2S, S2C> {
+    send: Sender<S2C>,
+    recv: Receiver<C2S>,
+}
+
 impl<C2S, S2C> ChannelTransportServer<C2S, S2C>
 where
     C2S: Message,
     S2C: Message,
 {
+    /// Creates a new server with zero connected clients.
     pub fn new() -> Self {
         Self {
             clients: FxHashMap::default(),
@@ -33,6 +41,10 @@ where
         }
     }
 
+    /// Creates and connects a client to this server.
+    /// 
+    /// The returned transport client also contains a [`ClientId`] which you can use to disconnect
+    /// it later using [`ServerTransport::disconnect`].
     pub fn connect(&mut self) -> ChannelTransportClient<C2S, S2C> {
         let (send_c2s, recv_c2s) = crossbeam_channel::bounded::<C2S>(CHANNEL_BUF);
         let (send_s2c, recv_s2c) = crossbeam_channel::bounded::<S2C>(CHANNEL_BUF);

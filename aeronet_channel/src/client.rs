@@ -3,6 +3,17 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
 use crate::DisconnectedError;
 
+/// Client-side transport layer implementation for [`aeronet`] using in-memory channels.
+///
+/// A client can only be created by connecting to an existing [`ChannelTransportServer`] using
+/// [`ChannelTransportServer::connect`].
+/// 
+/// If this client is dropped, it is considered disconnected on the server side.
+/// If the server is dropped, this client will not be considered connected by
+/// [`ClientTransport::connected`].
+/// 
+/// [`ChannelTransportServer`]: crate::ChannelTransportServer
+/// [`ChannelTransportServer::connect`]: crate::ChannelTransportServer::connect
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelTransportClient<C2S, S2C> {
@@ -13,6 +24,12 @@ pub struct ChannelTransportClient<C2S, S2C> {
 }
 
 impl<C2S, S2C> ChannelTransportClient<C2S, S2C> {
+    /// Gets the server-side client ID of this client.
+    /// 
+    /// This can be used to disconnect the client from the server using
+    /// [`ChannelTransportServer::disconnect`].
+    /// 
+    /// [`ChannelTransportServer::disconnect`]: aeronet::ServerTransport::disconnect
     pub fn id(&self) -> ClientId {
         self.id
     }
