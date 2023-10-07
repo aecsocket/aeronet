@@ -31,8 +31,8 @@ impl<C2S, S2C> WebTransportClient<C2S, S2C> {
     /// Requests the client to connect to a given URL.
     ///
     /// If the client is [connected], this request has no effect.
-    ///
-    /// [connected]: ClientTransport::is_connected
+    /// 
+    /// [connected]: aeronet::ClientTransport::connected
     pub fn connect(&self, url: impl Into<String>) {
         let _ = self.send.try_send(Request::Connect { url: url.into() });
     }
@@ -41,7 +41,7 @@ impl<C2S, S2C> WebTransportClient<C2S, S2C> {
     ///
     /// If the client is not [connected], this request has no effect.
     ///
-    /// [connected]: ClientTransport::is_connected
+    /// [connected]: aeronet::ClientTransport::connected
     pub fn disconnect(&self) {
         let _ = self.send.try_send(Request::Disconnect);
     }

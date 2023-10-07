@@ -138,7 +138,7 @@ pub struct ToServer<C2S> {
 /// # fn system_that_uses_the_client() {}
 /// ```
 ///
-/// [connected]: ClientTransport::is_connected
+/// [connected]: crate::ClientTransport::connected
 pub fn client_connected<C2S, S2C, T>(client: Option<Res<T>>) -> bool
 where
     C2S: Message,

@@ -15,7 +15,7 @@ use crate::{
 
 /// Details on a client which is connected to this server through the WebTransport protocol.
 ///
-/// Info for a specific client can be obtained using [`WebTransportServer::client_info`].
+/// Info for a specific client can be obtained using [`aeronet::ServerTransport::client_info`].
 #[derive(Debug, Clone)]
 pub enum RemoteClientInfo {
     /// The client has requested a connection, and has provided some initial information,
@@ -34,7 +34,7 @@ pub enum RemoteClientInfo {
 }
 
 impl RemoteClientInfo {
-    /// Creates a [`RemoteClientInfo::Request`] from a [`SessionRequest`].
+    /// Creates a [`RemoteClientInfo::Connecting`] from a [`SessionRequest`].
     pub fn from_request(req: &SessionRequest) -> Self {
         Self::Connecting {
             authority: req.authority().to_owned(),
