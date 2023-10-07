@@ -99,6 +99,14 @@ impl WebTransportOptions {
         self
     }
 
+    #[doc = "Change the `congestionControl` field of this object."]
+    pub fn congestion_control(&mut self, val: &str) -> &mut Self {
+        let r = ::js_sys::Reflect::set(self.as_ref(), &JsValue::from("congestionControl"), &JsValue::from(val));
+        debug_assert!(r.is_ok(), "setting properties should never fail on our dictionary objects");
+        let _ = r;
+        self
+    }
+
     #[doc = "Change the `requireUnreliable` field of this object."]
     pub fn require_unreliable(&mut self, val: bool) -> &mut Self {
         let r = ::js_sys::Reflect::set(self.as_ref(), &JsValue::from("requireUnreliable"), &JsValue::from(val));

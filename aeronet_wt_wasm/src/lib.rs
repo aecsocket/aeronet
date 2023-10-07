@@ -4,3 +4,7 @@
 
 mod bindings;
 mod client;
+mod wrappers;
+
+pub use client::WebTransportClient;
+pub use wrappers::{CongestionControl, ServerCertificateHash, ServerCertificateHashAlgorithm, WebTransportOptions};
