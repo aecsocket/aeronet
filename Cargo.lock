@@ -88,7 +88,7 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 
 [[package]]
 name = "aeronet"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "bevy",
@@ -101,7 +101,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_channel"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "aeronet",
  "anyhow",
@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_wt_native"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "aeronet",
  "anyhow",
@@ -134,7 +134,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_wt_wasm"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "aeronet",
  "anyhow",
@@ -2372,9 +2372,9 @@ checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 
 [[package]]
 name = "ls-qpack"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c9cc09e1708f1d8b7bea73a87192bf110ebe890585307d4a8b1c12c0a2d2bab"
+checksum = "869de947fe9a873891d6c50d19ef327a4a8cf10a1e03e8f4a75e836ca1a7a606"
 dependencies = [
  "libc",
  "ls-qpack-sys",
@@ -2382,9 +2382,9 @@ dependencies = [
 
 [[package]]
 name = "ls-qpack-sys"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf41337c03c786bceca7954ab1037254886c09df8dd413e5faf9401cfb5c3c55"
+checksum = "129f83365de45553cbb7a903d3ac13ff524b9fbee719c38ddf858693f728e26c"
 dependencies = [
  "bindgen 0.66.1",
  "cmake",
@@ -4400,13 +4400,12 @@ dependencies = [
 
 [[package]]
 name = "wtransport"
-version = "0.1.4"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebd6ad0de90ad2a0f51ebf0339045e1222363bdf20413dd79355db2c8bd780e2"
+checksum = "2fa96a6f79c307047127eb1674947bc583e95107833ff3a7d8f86eb6dfce6dbd"
 dependencies = [
  "bytes",
  "quinn",
- "quinn-proto",
  "rustls",
  "rustls-native-certs",
  "rustls-pemfile",
@@ -4420,9 +4419,9 @@ dependencies = [
 
 [[package]]
 name = "wtransport-proto"
-version = "0.1.4"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7960a5ce6ce2defbdcf4d910229030032373e987f203b5b04f7429b6b3d105ef"
+checksum = "754c71e12f250ffb11247e254fee5d6d52c6d2564211cc9577f74ec63cd3587b"
 dependencies = [
  "ls-qpack",
  "octets",

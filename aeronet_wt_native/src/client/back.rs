@@ -3,7 +3,7 @@ use std::{convert::Infallible, io};
 use aeronet::{Message, SessionError, TryFromBytes, TryIntoBytes};
 use tokio::sync::mpsc;
 use tracing::debug;
-use wtransport::{endpoint::Client, ClientConfig, Connection, Endpoint};
+use wtransport::{endpoint::endpoint_side::Client, ClientConfig, Connection, Endpoint};
 
 use crate::{
     client::RemoteServerInfo,
