@@ -8,6 +8,6 @@ mod wrappers;
 
 pub use client::WebTransportClient;
 pub use wrappers::{
-    CongestionControl, ServerCertificateHash, ServerCertificateHashAlgorithm, WebTransportError,
-    WebTransportErrorSource, WebTransportOptions,
+    CongestionControl, ServerCertificateHash, ServerCertificateHashAlgorithm,
+    WebTransportErrorSource, WebTransportErrorUnused, WebTransportOptions,
 };

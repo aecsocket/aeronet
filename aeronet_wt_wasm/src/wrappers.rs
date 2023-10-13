@@ -1,5 +1,6 @@
 // https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport
 
+use js_sys::{Array, Object, Reflect, Uint8Array};
 use wasm_bindgen::JsValue;
 
 type JsWebTransportOptions = crate::bindings::WebTransportOptions;
@@ -54,16 +55,16 @@ pub struct ServerCertificateHash {
 }
 
 impl ServerCertificateHash {
-    pub(crate) fn as_js(&self) -> js_sys::Object {
-        let res = js_sys::Object::new();
+    pub(crate) fn as_js(&self) -> Object {
+        let res = Object::new();
 
         let algorithm = match self.algorithm {
             ServerCertificateHashAlgorithm::Sha256 => "sha-256",
         };
-        let _ = js_sys::Reflect::set(&res, &JsValue::from("algorithm"), &JsValue::from(algorithm));
+        let _ = Reflect::set(&res, &JsValue::from("algorithm"), &JsValue::from(algorithm));
 
-        let value = js_sys::Uint8Array::from(self.value.as_slice());
-        let _ = js_sys::Reflect::set(&res, &JsValue::from("value"), &value);
+        let value = Uint8Array::from(self.value.as_slice());
+        let _ = Reflect::set(&res, &JsValue::from("value"), &value);
 
         res
     }
@@ -114,9 +115,8 @@ impl WebTransportOptions {
 
         res.require_unreliable(self.require_unreliable);
 
-        let hashes = js_sys::Array::new_with_length(
-            self.server_certificate_hashes.len().try_into().unwrap(),
-        );
+        let hashes =
+            Array::new_with_length(self.server_certificate_hashes.len().try_into().unwrap());
         for (i, cert) in self.server_certificate_hashes.iter().enumerate() {
             hashes.set(i.try_into().unwrap(), cert.as_js().into());
         }
@@ -141,7 +141,7 @@ pub enum WebTransportErrorSource {
 /// problems, or client-initiated abort operations.
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("web transport {source} error (code {stream_error_code:?})")]
-pub struct WebTransportError {
+pub struct WebTransportErrorUnused {
     /// Description of this error.
     pub message: String,
     /// Source of the error.
@@ -150,7 +150,7 @@ pub struct WebTransportError {
     pub stream_error_code: Option<u8>,
 }
 
-impl WebTransportError {
+impl WebTransportErrorUnused {
     pub(crate) fn from_js(js: JsValue) -> Self {
         let js = JsWebTransportError::from(js);
 

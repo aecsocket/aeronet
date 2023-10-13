@@ -36,6 +36,8 @@ features = [
     "Blob",
     "Url",
     "Worker",
+    "ReadableStreamDefaultReader",
+    "MessageEvent",
 ]
 
 [dev-dependencies]

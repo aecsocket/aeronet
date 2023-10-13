@@ -135,7 +135,7 @@ where
 /// Allows converting a [`Message`] into a [`StreamMessage`].
 ///
 /// This is automatically implemented for all types.
-/// 
+///
 /// [`Message`]: aeronet::Message
 pub trait OnStream<S>: Sized {
     /// Converts this into a [`StreamMessage`] by providing the stream along which the

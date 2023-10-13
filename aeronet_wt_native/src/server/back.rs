@@ -4,7 +4,7 @@ use aeronet::{ClientId, Message, SessionError, TryFromBytes, TryIntoBytes};
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, debug_span, Instrument};
 use wtransport::{
-    endpoint::{IncomingSession, endpoint_side::Server},
+    endpoint::{endpoint_side::Server, IncomingSession},
     Connection, Endpoint, ServerConfig,
 };
 
