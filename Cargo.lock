@@ -133,6 +133,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "aeronet_wt_wasm"
+version = "0.2.0"
+dependencies = [
+ "aeronet",
+ "anyhow",
+ "bevy",
+ "bevy_egui",
+ "crossbeam-channel",
+ "js-sys",
+ "thiserror",
+ "tracing",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

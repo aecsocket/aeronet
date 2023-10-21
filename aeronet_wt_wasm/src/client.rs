@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use aeronet::{
-    ClientEvent, ClientTransport, Message, RecvError, SessionError, TryFromBytes, TryIntoBytes,
+    ClientEvent, ClientTransport, Message, SessionError, TryFromBytes, TryIntoBytes,
 };
 use crossbeam_channel::{Receiver, Sender};
 use js_sys::{Reflect, Uint8Array};
@@ -30,18 +30,29 @@ implementation notes:
 
 const CHANNEL_BUF: usize = 128;
 
-pub struct WebTransportClient<C2S, S2C> {
-    transport: WebTransport,
-    recv_events: Receiver<ClientEvent<S2C>>,
-    send_events: Sender<ClientEvent<S2C>>,
-    writer: WritableStreamDefaultWriter,
-    _phantom_c2s: PhantomData<C2S>,
-}
-
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum WebTransportError {
     #[error("failed to create transport")]
     CreateTransport,
+}
+
+struct Inner<C2S, S2C> {
+    transport: WebTransport,
+    recv_events: Receiver<ClientEvent<S2C>>,
+    send_events: Sender<ClientEvent<S2C>>,
+    writer: WritableStreamDefaultWriter,
+    events: Vec<ClientEvent<S2C>>,
+    _phantom_c2s: PhantomData<C2S>,
+}
+
+impl<C2S, S2C> Drop for Inner<C2S, S2C> {
+    fn drop(&mut self) {
+        self.transport.close();
+    }
+}
+
+pub struct WebTransportClient<C2S, S2C> {
+    inner: Option<Inner<C2S, S2C>>,
 }
 
 impl<C2S, S2C> WebTransportClient<C2S, S2C>
@@ -49,9 +60,20 @@ where
     C2S: Message,
     S2C: Message + TryFromBytes,
 {
-    pub async fn new(
+    pub fn new() -> Self {
+        Self {
+            inner: None,
+        }
+    }
+
+    pub async fn connect(
+        &mut self,
         url: impl AsRef<str>,
-    ) -> Result<Self, WebTransportError> {
+    ) -> Result<(), WebTransportError> {
+        if self.inner.is_some() {
+            return Ok(());
+        }
+
         let url = url.as_ref();
         let transport = WebTransport::new(url).map_err(|_| WebTransportError::CreateTransport)?;
         JsFuture::from(transport.ready())
@@ -74,14 +96,16 @@ where
         }
 
         let writer = transport.datagrams().writable().get_writer().unwrap();
-
-        Ok(Self {
+        
+        self.inner = Some(Inner {
             transport,
             recv_events,
             send_events,
             writer,
+            events: Vec::new(),
             _phantom_c2s: PhantomData::default(),
-        })
+        });
+        Ok(())
     }
 
     async fn recv_from_reader(reader: ReadableStreamDefaultReader) -> Result<S2C, SessionError> {
@@ -108,12 +132,6 @@ where
     }
 }
 
-impl<C2S, S2C> Drop for WebTransportClient<C2S, S2C> {
-    fn drop(&mut self) {
-        self.transport.close();
-    }
-}
-
 impl<C2S, S2C> ClientTransport<C2S, S2C> for WebTransportClient<C2S, S2C>
 where
     C2S: Message + TryIntoBytes,
@@ -124,14 +142,26 @@ where
     // but it has ~0 compatibility with anything (as of now)
     type Info = ();
 
-    fn recv(&mut self) -> Result<ClientEvent<S2C>, RecvError> {
-        self.recv_events.try_recv().map_err(|err| match err {
+    fn recv(&mut self) {
+        let Some(Inner { recv_events, events, .. }) = self.inner else {
+            return;
+        };
+
+        recv_events.try_recv().map_err(|err| match err {
             crossbeam_channel::TryRecvError::Empty => RecvError::Empty,
             _ => RecvError::Closed,
-        })
+        });
+    }
+
+    fn take_events(&mut self) -> impl Iterator<Item = ClientEvent<S2C>> + '_ {
+        std::iter::empty()
     }
 
     fn send(&mut self, msg: impl Into<C2S>) {
+        let Some(Inner { writer, send_events, .. }) = self.inner else {
+            return;
+        };
+
         if let Err(reason) = (|| {
             let msg: C2S = msg.into();
             let payload = msg
@@ -140,18 +170,19 @@ where
             let chunk = Uint8Array::new_with_length(payload.len().try_into().unwrap());
             chunk.copy_from(&payload);
 
-            let fut = JsFuture::from(self.writer.write_with_chunk(&chunk.into()));
+            let fut = JsFuture::from(writer.write_with_chunk(&chunk.into()));
             wasm_bindgen_futures::spawn_local(async move {
                 fut.await;
             });
             Ok::<_, SessionError>(())
         })() {
             // TODO just an error event maybe? or force dc?
-            let _ = self.send_events.send(ClientEvent::Disconnected { reason });
+            let _ = send_events.send(ClientEvent::Disconnected { reason });
         }
     }
 
     fn info(&self) -> Option<Self::Info> {
+        
         todo!()
     }
 
