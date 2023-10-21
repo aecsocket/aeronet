@@ -1,7 +1,7 @@
 use aeronet::{ClientEvent, ClientTransport, Message, TryFromBytes, TryIntoBytes};
 use tokio::sync::mpsc;
 
-use crate::{ClientStream, SendOn, EndpointInfo};
+use crate::{ClientStream, EndpointInfo, SendOn};
 
 use super::{Event, Request};
 

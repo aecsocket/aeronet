@@ -1,10 +1,8 @@
-use aeronet::{
-    ClientId, Message, ServerEvent, ServerTransport, TryFromBytes, TryIntoBytes,
-};
+use aeronet::{ClientId, Message, ServerEvent, ServerTransport, TryFromBytes, TryIntoBytes};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 
-use crate::{SendOn, ServerStream, EndpointInfo};
+use crate::{EndpointInfo, SendOn, ServerStream};
 
 use super::{Event, Request};
 
@@ -50,7 +48,8 @@ where
                 Event::Disconnected { client, reason } => {
                     debug_assert!(self.clients.contains_key(&client));
                     self.clients.remove(&client);
-                    self.events.push(ServerEvent::Disconnected { client, reason });
+                    self.events
+                        .push(ServerEvent::Disconnected { client, reason });
                 }
             }
         }

@@ -23,7 +23,7 @@ pub trait ClientTransport<C2S: Message, S2C: Message> {
     type Info;
 
     /// Instructs the transport to receive incoming events and update its internal state.
-    /// 
+    ///
     /// This should be called before [`ClientTransport::take_events`].
     fn recv(&mut self);
 

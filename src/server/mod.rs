@@ -29,8 +29,8 @@ where
     type ClientInfo;
 
     /// Instructs the transport to receive incoming events and update its internal state.
-    /// 
-    /// This should be called before [`ClientTransport::take_events`].
+    ///
+    /// This should be called before [`ServerTransport::take_events`].
     fn recv(&mut self);
 
     /// Takes ownership of all queued events in this transport.
