@@ -77,6 +77,7 @@ where
 
     fn recv(&mut self) {
         for client in self.clients_to_remove.drain(..) {
+            debug_assert!(self.clients.contains_key(&client));
             self.clients.remove(&client);
         }
 

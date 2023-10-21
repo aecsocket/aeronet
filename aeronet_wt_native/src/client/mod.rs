@@ -3,33 +3,12 @@ pub mod front;
 
 use aeronet::{Message, SessionError, TryFromBytes, TryIntoBytes};
 use tokio::sync::mpsc;
-use wtransport::{ClientConfig, Connection};
+use wtransport::ClientConfig;
 
 use crate::{
     shared::CHANNEL_BUF, ClientStream, EndpointInfo, SendOn, TransportStreams, WebTransportClient,
     WebTransportClientBackend,
 };
-
-/// Details on the server which this client is connected to through the WebTransport protocol.
-///
-/// Info for a client transport can be obtained using [`WebTransportClient::info`].
-#[derive(Debug, Clone)]
-pub enum RemoteServerInfo {
-    /// The client has started a connection, but no further info is known.
-    Connecting {
-        /// The URL of the connection request.
-        url: String,
-    },
-    /// The client has successfully established a connection, and full endpoint info is now
-    /// available.
-    Connected(EndpointInfo),
-}
-
-impl RemoteServerInfo {
-    pub fn from_connection(conn: &Connection) -> Self {
-        Self::Connected(EndpointInfo::from_connection(conn))
-    }
-}
 
 /// Creates a client-side transport using the WebTransport protocol.
 ///
@@ -56,6 +35,7 @@ where
         send: send_f2b,
         recv: recv_b2f,
         info: None,
+        events: Vec::new(),
     };
 
     let backend = WebTransportClientBackend::<C2S, S2C> {
@@ -77,8 +57,8 @@ pub(crate) enum Request<C2S> {
 
 #[derive(Debug)]
 pub(crate) enum Event<S2C> {
-    Connected,
-    UpdateInfo { info: RemoteServerInfo },
+    Connected { info: EndpointInfo },
+    UpdateInfo { info: EndpointInfo },
     Recv { msg: S2C },
     Disconnected { reason: SessionError },
 }

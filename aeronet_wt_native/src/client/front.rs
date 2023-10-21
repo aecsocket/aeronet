@@ -1,11 +1,9 @@
-use std::iter;
-
-use aeronet::{ClientEvent, ClientTransport, Message, RecvError, TryFromBytes, TryIntoBytes};
+use aeronet::{ClientEvent, ClientTransport, Message, TryFromBytes, TryIntoBytes};
 use tokio::sync::mpsc;
 
-use crate::{ClientStream, SendOn};
+use crate::{ClientStream, SendOn, EndpointInfo};
 
-use super::{Event, RemoteServerInfo, Request};
+use super::{Event, Request};
 
 /// Client-side transport layer implementation for [`aeronet`] using the WebTransport protocol.
 ///
@@ -26,7 +24,8 @@ use super::{Event, RemoteServerInfo, Request};
 pub struct WebTransportClient<C2S, S2C> {
     pub(crate) send: mpsc::Sender<Request<C2S>>,
     pub(crate) recv: mpsc::Receiver<Event<S2C>>,
-    pub(crate) info: Option<RemoteServerInfo>,
+    pub(crate) info: Option<EndpointInfo>,
+    pub(crate) events: Vec<ClientEvent<S2C>>,
 }
 
 impl<C2S, S2C> WebTransportClient<C2S, S2C> {
@@ -54,42 +53,34 @@ where
     C2S: Message + TryIntoBytes + SendOn<ClientStream>,
     S2C: Message + TryFromBytes,
 {
-    type Info = RemoteServerInfo;
+    type Info = EndpointInfo;
 
     fn recv(&mut self) {
-        
+        while let Ok(event) = self.recv.try_recv() {
+            match event {
+                Event::Connected { info } => {
+                    debug_assert!(self.info.is_none());
+                    self.info = Some(info);
+                    self.events.push(ClientEvent::Connected);
+                }
+                Event::UpdateInfo { info } => {
+                    debug_assert!(self.info.is_some());
+                    self.info = Some(info);
+                }
+                Event::Recv { msg } => {
+                    self.events.push(ClientEvent::Recv { msg });
+                }
+                Event::Disconnected { reason } => {
+                    debug_assert!(self.info.is_some());
+                    self.info = None;
+                    self.events.push(ClientEvent::Disconnected { reason });
+                }
+            }
+        }
     }
 
     fn take_events(&mut self) -> impl Iterator<Item = ClientEvent<S2C>> {
-        match self.recv.try_recv() {
-            Ok(Event::Connected { info }) => {
-                self.info = Some(info);
-                iter::once()
-            }
-        }
-
-        loop {
-            match self.recv.try_recv() {
-                // non-returning
-                Ok(Event::UpdateInfo { info }) => {
-                    *self.info.as_mut().unwrap() = info;
-                }
-                // returning
-                Ok(Event::Connecting { info }) => {
-                    self.info = Some(info);
-                }
-                Ok(Event::Connected) => {
-                    return Ok(ClientEvent::Connected);
-                }
-                Ok(Event::Recv { msg }) => return Ok(ClientEvent::Recv { msg }),
-                Ok(Event::Disconnected { reason }) => {
-                    self.info = None;
-                    return Ok(ClientEvent::Disconnected { reason });
-                }
-                Err(mpsc::error::TryRecvError::Empty) => return Err(RecvError::Empty),
-                Err(_) => return Err(RecvError::Closed),
-            }
-        }
+        self.events.drain(..)
     }
 
     fn send(&mut self, msg: impl Into<C2S>) {

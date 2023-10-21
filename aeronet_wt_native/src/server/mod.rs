@@ -1,53 +1,15 @@
 pub mod back;
 pub mod front;
 
-use std::collections::HashMap;
-
 use aeronet::{ClientId, Message, SessionError, TryFromBytes, TryIntoBytes};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
-use wtransport::{endpoint::SessionRequest, Connection, ServerConfig};
+use wtransport::ServerConfig;
 
 use crate::{
     shared::CHANNEL_BUF, EndpointInfo, SendOn, ServerStream, TransportStreams, WebTransportServer,
     WebTransportServerBackend,
 };
-
-/// Details on a client which is connected to this server through the WebTransport protocol.
-///
-/// Info for a specific client can be obtained using [`aeronet::ServerTransport::client_info`].
-#[derive(Debug, Clone)]
-pub enum RemoteClientInfo {
-    /// The client has requested a connection, and has provided some initial information,
-    /// but the request has not been accepted yet.
-    Connecting {
-        /// See [`SessionRequest::authority`].
-        authority: String,
-        /// See [`SessionRequest::path`].
-        path: String,
-        /// See [`SessionRequest::headers`].
-        headers: HashMap<String, String>,
-    },
-    /// The client has successfully established a connection, and full endpoint info is now
-    /// available.
-    Connected(EndpointInfo),
-}
-
-impl RemoteClientInfo {
-    /// Creates a [`RemoteClientInfo::Connecting`] from a [`SessionRequest`].
-    pub fn from_request(req: &SessionRequest) -> Self {
-        Self::Connecting {
-            authority: req.authority().to_owned(),
-            path: req.path().to_owned(),
-            headers: req.headers().clone(),
-        }
-    }
-
-    /// Creates a [`RemoteClientInfo::Connected`] from a [`Connection`].
-    pub fn from_connection(conn: &Connection) -> Self {
-        Self::Connected(EndpointInfo::from_connection(conn))
-    }
-}
 
 /// Creates a server-side transport using the WebTransport protocol.
 ///
@@ -74,6 +36,7 @@ where
         send: send_f2b.clone(),
         recv: recv_b2f,
         clients: FxHashMap::default(),
+        events: Vec::new(),
     };
 
     let backend = WebTransportServerBackend::<C2S, S2C> {
@@ -100,16 +63,13 @@ pub(crate) enum Request<S2C> {
 
 #[derive(Debug)]
 pub(crate) enum Event<C2S> {
-    Incoming {
-        client: ClientId,
-        info: RemoteClientInfo,
-    },
     Connected {
         client: ClientId,
+        info: EndpointInfo,
     },
     UpdateInfo {
         client: ClientId,
-        info: RemoteClientInfo,
+        info: EndpointInfo,
     },
     Recv {
         client: ClientId,

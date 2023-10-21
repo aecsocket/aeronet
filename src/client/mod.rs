@@ -22,23 +22,12 @@ pub trait ClientTransport<C2S: Message, S2C: Message> {
     /// The info that [`ClientTransport::info`] provides.
     type Info;
 
+    /// Instructs the transport to receive incoming events and update its internal state.
+    /// 
+    /// This should be called before [`ClientTransport::take_events`].
     fn recv(&mut self);
 
     /// Takes ownership of all queued events in this transport.
-    ///
-    /// # Usage
-    ///
-    /// ```
-    /// # use aeronet::{Message, RecvError, ClientTransport, ClientEvent};
-    /// # fn update<C2S: Message, S2C: Message, T: ClientTransport<C2S, S2C>>(mut transport: T) {
-    /// for event in transport.take_events() {
-    ///     match event {
-    ///         ClientEvent::Recv { msg } => println!("Received a message"),
-    ///         _ => {},
-    ///     }
-    /// }
-    /// # }
-    /// ```
     fn take_events(&mut self) -> impl Iterator<Item = ClientEvent<S2C>> + '_;
 
     /// Sends a message to the connected server.

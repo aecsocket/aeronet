@@ -10,10 +10,10 @@ use wtransport::{
 
 use crate::{
     shared::{open_streams, recv_datagram, send_out},
-    ServerStream, TransportStream, TransportStreams,
+    ServerStream, TransportStream, TransportStreams, EndpointInfo,
 };
 
-use super::{Event, RemoteClientInfo, Request, CHANNEL_BUF};
+use super::{Event, Request, CHANNEL_BUF};
 
 /// Runs the actual logic behind a [`crate::WebTransportServer`], intended to be run in an async
 /// [`tokio`] runtime.
@@ -113,7 +113,7 @@ where
     loop {
         send.send(Event::UpdateInfo {
             client,
-            info: RemoteClientInfo::from_connection(&conn),
+            info: EndpointInfo::from_connection(&conn),
         })
         .await
         .map_err(|_| SessionError::Closed)?;
@@ -172,12 +172,6 @@ where
         req.authority(),
         req.path()
     );
-    send.send(Event::Incoming {
-        client,
-        info: RemoteClientInfo::from_request(&req),
-    })
-    .await
-    .map_err(|_| SessionError::Closed)?;
 
     let conn = req
         .accept()
@@ -186,7 +180,7 @@ where
 
     let remote_addr = conn.remote_address();
     debug!("Connected from {remote_addr}");
-    send.send(Event::Connected { client })
+    send.send(Event::Connected { client, info: EndpointInfo::from_connection(&conn) })
         .await
         .map_err(|_| SessionError::Closed)?;
 

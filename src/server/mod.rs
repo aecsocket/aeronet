@@ -28,21 +28,12 @@ where
     /// The info that [`ServerTransport::client_info`] provides.
     type ClientInfo;
 
+    /// Instructs the transport to receive incoming events and update its internal state.
+    /// 
+    /// This should be called before [`ClientTransport::take_events`].
     fn recv(&mut self);
 
     /// Takes ownership of all queued events in this transport.
-    ///
-    /// # Usage
-    ///
-    /// ```
-    /// # use aeronet::{Message, RecvError, ServerTransport, ServerEvent};
-    /// # fn update<C2S: Message, S2C: Message, T: ServerTransport<C2S, S2C>>(mut transport: T) {
-    /// for event in transport.take_events() {
-    ///     ServerEvent::Connected { client } => println!("Client {client} connected"),
-    ///     _ => {},
-    /// }
-    /// # }
-    /// ```
     fn take_events(&mut self) -> impl Iterator<Item = ServerEvent<C2S>> + '_;
 
     /// Sends a message to a connected client.

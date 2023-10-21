@@ -6,9 +6,8 @@ use tracing::debug;
 use wtransport::{endpoint::endpoint_side::Client, ClientConfig, Connection, Endpoint};
 
 use crate::{
-    client::RemoteServerInfo,
     shared::{open_streams, recv_datagram, send_out, CHANNEL_BUF},
-    ClientStream, TransportStream, TransportStreams,
+    ClientStream, TransportStream, TransportStreams, EndpointInfo,
 };
 
 use super::{Event, Request};
@@ -112,13 +111,16 @@ where
         open_streams::<C2S, S2C, ClientStream>(streams, &mut conn, send_in, send_err).await?;
 
     debug!("Connected to {}", conn.remote_address());
-    send.send(Event::Connected)
+    // although we are going to send the endpoint info literally immediately after this Connected
+    // is sent, we are contractually obligated to make sure that `info` returns something after a
+    // Connected is received
+    send.send(Event::Connected { info: EndpointInfo::from_connection(&conn)})
         .await
         .map_err(|_| SessionError::Closed)?;
 
     loop {
         send.send(Event::UpdateInfo {
-            info: RemoteServerInfo::from_connection(&conn),
+            info: EndpointInfo::from_connection(&conn),
         })
         .await
         .map_err(|_| SessionError::Closed)?;
