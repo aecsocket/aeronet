@@ -1,12 +1,17 @@
-use std::{marker::PhantomData, sync::mpsc};
+use std::marker::PhantomData;
 
-use aeronet::{ClientEvent, ClientTransport, Message, RecvError, SessionError, TryFromBytes};
-use js_sys::{Array, Reflect, Uint8Array};
-use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
+use aeronet::{
+    ClientEvent, ClientTransport, Message, RecvError, SessionError, TryFromBytes, TryIntoBytes,
+};
+use crossbeam_channel::{Receiver, Sender};
+use js_sys::{Reflect, Uint8Array};
+use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Blob, MessageEvent, ReadableStreamDefaultReader, Url, Worker};
+use web_sys::{
+    ReadableStreamDefaultReader, WritableStreamDefaultWriter,
+};
 
-use crate::{bindings::WebTransport, WebTransportErrorUnused, WebTransportOptions};
+use crate::bindings::WebTransport;
 
 /*
 implementation notes:
@@ -19,12 +24,17 @@ implementation notes:
   * this is because we can't use getReader().read() from rust yet
 * on the rust side:
   * uhhhh idk?
+
+  I LIED it doesnt work this way anymore
 */
+
+const CHANNEL_BUF: usize = 128;
 
 pub struct WebTransportClient<C2S, S2C> {
     transport: WebTransport,
-    worker: Worker,
-    recv_s2c: mpsc::Receiver<ClientEvent<S2C>>,
+    recv_events: Receiver<ClientEvent<S2C>>,
+    send_events: Sender<ClientEvent<S2C>>,
+    writer: WritableStreamDefaultWriter,
     _phantom_c2s: PhantomData<C2S>,
 }
 
@@ -32,8 +42,6 @@ pub struct WebTransportClient<C2S, S2C> {
 pub enum WebTransportError {
     #[error("failed to create transport")]
     CreateTransport,
-    #[error("failed to create worker")]
-    CreateWorker,
 }
 
 impl<C2S, S2C> WebTransportClient<C2S, S2C>
@@ -41,43 +49,46 @@ where
     C2S: Message,
     S2C: Message + TryFromBytes,
 {
-    pub fn new(
+    pub async fn new(
         url: impl AsRef<str>,
-        options: WebTransportOptions,
     ) -> Result<Self, WebTransportError> {
         let url = url.as_ref();
-        let transport =
-            create_transport(url, options).map_err(|_| WebTransportError::CreateTransport)?;
-        let worker = create_worker().map_err(|_| WebTransportError::CreateWorker)?;
+        let transport = WebTransport::new(url).map_err(|_| WebTransportError::CreateTransport)?;
+        JsFuture::from(transport.ready())
+            .await
+            .map_err(|_| WebTransportError::CreateTransport)?;
 
-        let (send_s2c, recv_s2c) = mpsc::channel::<ClientEvent<S2C>>();
+        let (send_events, recv_events) = crossbeam_channel::bounded::<ClientEvent<S2C>>(CHANNEL_BUF);
         let reader = ReadableStreamDefaultReader::from(JsValue::from(
             transport.datagrams().readable().get_reader(),
         ));
 
-        wasm_bindgen_futures::spawn_local(async move {
-            let _ = match Self::recv_from_reader(reader).await {
-                Ok(msg) => send_s2c.send(ClientEvent::Recv { msg }),
-                Err(reason) => send_s2c.send(ClientEvent::Disconnected { reason }),
-            };
-        });
+        {
+            let send_events = send_events.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                let _ = match Self::recv_from_reader(reader).await {
+                    Ok(msg) => send_events.send(ClientEvent::Recv { msg }),
+                    Err(reason) => send_events.send(ClientEvent::Disconnected { reason }),
+                };
+            });
+        }
+
+        let writer = transport.datagrams().writable().get_writer().unwrap();
 
         Ok(Self {
             transport,
-            worker,
-            recv_s2c,
+            recv_events,
+            send_events,
+            writer,
             _phantom_c2s: PhantomData::default(),
         })
     }
 
-    async fn recv_from_reader(
-        reader: ReadableStreamDefaultReader,
-    ) -> Result<S2C, SessionError> {
+    async fn recv_from_reader(reader: ReadableStreamDefaultReader) -> Result<S2C, SessionError> {
         let (payload, done) = JsFuture::from(reader.read())
             .await
             .and_then(|js| {
-                let value =
-                    Uint8Array::from(Reflect::get(&js, &JsValue::from("value")).unwrap());
+                let value = Uint8Array::from(Reflect::get(&js, &JsValue::from("value")).unwrap());
                 let done = Reflect::get(&js, &JsValue::from("done"))
                     .unwrap()
                     .as_bool()
@@ -100,26 +111,44 @@ where
 impl<C2S, S2C> Drop for WebTransportClient<C2S, S2C> {
     fn drop(&mut self) {
         self.transport.close();
-        self.worker.terminate();
     }
 }
 
 impl<C2S, S2C> ClientTransport<C2S, S2C> for WebTransportClient<C2S, S2C>
 where
-    C2S: Message,
+    C2S: Message + TryIntoBytes,
     S2C: Message,
 {
+    // technically there is this
+    // https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/getStats
+    // but it has ~0 compatibility with anything (as of now)
     type Info = ();
 
     fn recv(&mut self) -> Result<ClientEvent<S2C>, RecvError> {
-        self.recv_s2c.try_recv().map_err(|err| match err {
-            mpsc::TryRecvError::Empty => RecvError::Empty,
+        self.recv_events.try_recv().map_err(|err| match err {
+            crossbeam_channel::TryRecvError::Empty => RecvError::Empty,
             _ => RecvError::Closed,
         })
     }
 
     fn send(&mut self, msg: impl Into<C2S>) {
-        todo!()
+        if let Err(reason) = (|| {
+            let msg: C2S = msg.into();
+            let payload = msg
+                .try_into_bytes()
+                .map_err(|err| SessionError::Transport(anyhow::anyhow!("send err")))?; // TODO
+            let chunk = Uint8Array::new_with_length(payload.len().try_into().unwrap());
+            chunk.copy_from(&payload);
+
+            let fut = JsFuture::from(self.writer.write_with_chunk(&chunk.into()));
+            wasm_bindgen_futures::spawn_local(async move {
+                fut.await;
+            });
+            Ok::<_, SessionError>(())
+        })() {
+            // TODO just an error event maybe? or force dc?
+            let _ = self.send_events.send(ClientEvent::Disconnected { reason });
+        }
     }
 
     fn info(&self) -> Option<Self::Info> {
@@ -129,51 +158,4 @@ where
     fn connected(&self) -> bool {
         todo!()
     }
-}
-
-fn create_transport(
-    url: &str,
-    options: WebTransportOptions,
-) -> Result<WebTransport, WebTransportErrorUnused> {
-    let options = options.as_js();
-    WebTransport::new_with_options(url, &options).map_err(|js| WebTransportErrorUnused::from_js(js))
-}
-
-const WORKER_SCRIPT: &str = "
-let reader = null;
-
-function sleep(ms) {
-    return new Promise(res => setTimeout(res, ms));
-}
-
-self.onmessage = function(event) {
-    if (event.data) {
-        reader = event.data.getReader();
-    }
-};
-
-async function read() {
-    while (true) {
-        if (reader) {
-            const { value, done } = await reader.read();
-            if (done) {
-                break;
-            }
-            self.postMessage(value);
-        } else {
-            await sleep(100);
-        }
-    }
-}
-
-read();
-";
-
-fn create_worker() -> Result<Worker, JsValue> {
-    let script = Array::new();
-    script.push(&JsValue::from(WORKER_SCRIPT));
-    let blob = Blob::new_with_str_sequence(&script)?;
-    let script_url = Url::create_object_url_with_blob(&blob)?;
-    let worker = Worker::new(&script_url)?;
-    Ok(worker)
 }

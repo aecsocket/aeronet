@@ -88,7 +88,7 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 
 [[package]]
 name = "aeronet"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bevy",
@@ -101,7 +101,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_channel"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "aeronet",
  "anyhow",
@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_wt_native"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "aeronet",
  "anyhow",
@@ -130,22 +130,6 @@ dependencies = [
  "tokio",
  "tracing",
  "wtransport",
-]
-
-[[package]]
-name = "aeronet_wt_wasm"
-version = "0.1.4"
-dependencies = [
- "aeronet",
- "anyhow",
- "bevy",
- "bevy_egui",
- "js-sys",
- "thiserror",
- "tracing",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
 ]
 
 [[package]]

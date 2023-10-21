@@ -11,7 +11,7 @@ use crate::TransportStream;
 ///
 /// On the client side, this represents the client's connection to the server.
 ///
-/// On the server side, this reprensets the server's connection to a specific client.
+/// On the server side, this represents the server's connection to a specific client.
 #[derive(Debug, Clone)]
 pub struct EndpointInfo {
     /// See [`Connection::max_datagram_size`].

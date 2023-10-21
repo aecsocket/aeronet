@@ -1,7 +1,7 @@
 #[cfg(feature = "bevy")]
 pub mod plugin;
 
-use crate::{Message, RecvError, SessionError};
+use crate::{Message, SessionError};
 
 /// A client-to-server layer responsible for sending user messages to the other side.
 ///
@@ -22,28 +22,24 @@ pub trait ClientTransport<C2S: Message, S2C: Message> {
     /// The info that [`ClientTransport::info`] provides.
     type Info;
 
-    /// Attempts to receive a queued event from the transport.
+    fn recv(&mut self);
+
+    /// Takes ownership of all queued events in this transport.
     ///
     /// # Usage
     ///
     /// ```
     /// # use aeronet::{Message, RecvError, ClientTransport, ClientEvent};
     /// # fn update<C2S: Message, S2C: Message, T: ClientTransport<C2S, S2C>>(mut transport: T) {
-    /// loop {
-    ///     match transport.recv() {
-    ///         Ok(ClientEvent::Recv { msg }) => println!("Received a message"),
-    ///         Ok(_) => {},
-    ///         // ...
-    ///         Err(RecvError::Empty) => break,
-    ///         Err(RecvError::Closed) => {
-    ///             println!("Client closed");
-    ///             return;
-    ///         }
+    /// for event in transport.take_events() {
+    ///     match event {
+    ///         ClientEvent::Recv { msg } => println!("Received a message"),
+    ///         _ => {},
     ///     }
     /// }
     /// # }
     /// ```
-    fn recv(&mut self) -> Result<ClientEvent<S2C>, RecvError>;
+    fn take_events(&mut self) -> impl Iterator<Item = ClientEvent<S2C>> + '_;
 
     /// Sends a message to the connected server.
     fn send(&mut self, msg: impl Into<C2S>);
@@ -65,10 +61,6 @@ pub trait ClientTransport<C2S: Message, S2C: Message> {
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
 pub enum ClientEvent<S2C> {
-    /// The client has started connecting to a server at the app's request.
-    ///
-    /// This event may not be sent in some implementations.
-    Connecting,
     /// The client successfully connected to the server that was requested when creating the
     /// transport.
     ///

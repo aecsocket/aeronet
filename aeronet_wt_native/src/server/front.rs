@@ -32,7 +32,7 @@ where
 {
     type ClientInfo = RemoteClientInfo;
 
-    fn recv(&mut self) -> Result<ServerEvent<C2S>, RecvError> {
+    fn take_events(&mut self) -> Result<ServerEvent<C2S>, RecvError> {
         loop {
             match self.recv.try_recv() {
                 // non-returning

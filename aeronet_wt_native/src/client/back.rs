@@ -87,11 +87,6 @@ where
     S2C: Message + TryFromBytes,
 {
     debug!("Connecting to {url}");
-    send.send(Event::Connecting {
-        info: RemoteServerInfo::Connecting { url: url.clone() },
-    })
-    .await
-    .map_err(|_| SessionError::Closed)?;
 
     let conn = endpoint
         .connect(url)

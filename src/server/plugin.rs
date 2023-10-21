@@ -4,16 +4,13 @@ use bevy::prelude::*;
 
 use crate::Message;
 
-use super::{ClientId, RecvError, ServerEvent, ServerTransport, SessionError};
+use super::{ClientId, ServerEvent, ServerTransport, SessionError};
 
 /// Handles [`ServerTransport`]s of type `T`.
 ///
 /// This handles receiving data from the transport and forwarding it to the app via events,
 /// as well as sending data to the transport by reading from events. The events provided are:
 /// * Incoming
-///   * [`RemoteClientConnecting`] when a client requests a connection
-///     * Transport implementations are not required to send this event, so don't rely on it
-///       on main logic
 ///   * [`RemoteClientConnected`] when a client fully connects
 ///     * Use this to run logic when a client fully connects e.g. loading player data
 ///   * [`FromClient`] when a client sends data to the server
@@ -60,8 +57,7 @@ where
     T: ServerTransport<C2S, S2C> + Resource,
 {
     fn build(&self, app: &mut App) {
-        app.add_event::<RemoteClientConnecting>()
-            .add_event::<RemoteClientConnected>()
+        app.add_event::<RemoteClientConnected>()
             .add_event::<FromClient<C2S>>()
             .add_event::<RemoteClientDisconnected>()
             .add_event::<ToClient<S2C>>()
@@ -92,13 +88,6 @@ pub enum ServerTransportSet {
     Recv,
     /// Sends requests from the app to connected clients.
     Send,
-}
-
-/// See [`ServerEvent::Connecting`].
-#[derive(Debug, Clone, Event)]
-pub struct RemoteClientConnecting {
-    /// See [`ServerEvent::Connecting::client`].
-    pub client: ClientId,
 }
 
 /// See [`ServerEvent::Connected`].
@@ -143,9 +132,7 @@ pub struct DisconnectClient {
 }
 
 fn recv<C2S, S2C, T>(
-    mut commands: Commands,
     mut server: ResMut<T>,
-    mut connecting: EventWriter<RemoteClientConnecting>,
     mut connected: EventWriter<RemoteClientConnected>,
     mut from_client: EventWriter<FromClient<C2S>>,
     mut disconnected: EventWriter<RemoteClientDisconnected>,
@@ -154,24 +141,17 @@ fn recv<C2S, S2C, T>(
     S2C: Message,
     T: ServerTransport<C2S, S2C> + Resource,
 {
-    loop {
-        match server.recv() {
-            Ok(ServerEvent::Connecting { client }) => {
-                connecting.send(RemoteClientConnecting { client });
-            }
-            Ok(ServerEvent::Connected { client }) => {
+    server.recv();
+    for event in server.take_events() {
+        match event {
+            ServerEvent::Connected { client } => {
                 connected.send(RemoteClientConnected { client });
             }
-            Ok(ServerEvent::Recv { client, msg }) => {
+            ServerEvent::Recv { client, msg } => {
                 from_client.send(FromClient { client, msg });
             }
-            Ok(ServerEvent::Disconnected { client, reason }) => {
+            ServerEvent::Disconnected { client, reason } => {
                 disconnected.send(RemoteClientDisconnected { client, reason });
-            }
-            Err(RecvError::Empty) => break,
-            Err(RecvError::Closed) => {
-                commands.remove_resource::<T>();
-                break;
             }
         }
     }

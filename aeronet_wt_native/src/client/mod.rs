@@ -77,7 +77,6 @@ pub(crate) enum Request<C2S> {
 
 #[derive(Debug)]
 pub(crate) enum Event<S2C> {
-    Connecting { info: RemoteServerInfo },
     Connected,
     UpdateInfo { info: RemoteServerInfo },
     Recv { msg: S2C },

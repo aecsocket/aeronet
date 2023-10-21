@@ -3,7 +3,7 @@ pub mod plugin;
 
 use std::fmt::Display;
 
-use crate::{Message, RecvError, SessionError};
+use crate::{Message, SessionError};
 
 /// A server-to-client layer responsible for sending user messages to the other side.
 ///
@@ -28,28 +28,22 @@ where
     /// The info that [`ServerTransport::client_info`] provides.
     type ClientInfo;
 
-    /// Attempts to receive a queued event from the transport.
+    fn recv(&mut self);
+
+    /// Takes ownership of all queued events in this transport.
     ///
     /// # Usage
     ///
     /// ```
     /// # use aeronet::{Message, RecvError, ServerTransport, ServerEvent};
     /// # fn update<C2S: Message, S2C: Message, T: ServerTransport<C2S, S2C>>(mut transport: T) {
-    /// loop {
-    ///     match transport.recv() {
-    ///         Ok(ServerEvent::Connected { client }) => println!("Client {client} connected"),
-    ///         Ok(_) => {},
-    ///         // ...
-    ///         Err(RecvError::Empty) => break,
-    ///         Err(RecvError::Closed) => {
-    ///             println!("Server closed");
-    ///             return;
-    ///         }
-    ///     }
+    /// for event in transport.take_events() {
+    ///     ServerEvent::Connected { client } => println!("Client {client} connected"),
+    ///     _ => {},
     /// }
     /// # }
     /// ```
-    fn recv(&mut self) -> Result<ServerEvent<C2S>, RecvError>;
+    fn take_events(&mut self) -> impl Iterator<Item = ServerEvent<C2S>> + '_;
 
     /// Sends a message to a connected client.
     fn send(&mut self, client: ClientId, msg: impl Into<S2C>);
@@ -76,13 +70,6 @@ where
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
 pub enum ServerEvent<C2S> {
-    /// A client requested a connection and has been assigned a client ID.
-    ///
-    /// This event may not be sent in some implementations.
-    Connecting {
-        /// The ID assigned to the incoming connection.
-        client: ClientId,
-    },
     /// A client has established a connection to the server and can now send/receive data.
     ///
     /// This should be used as a signal to start client setup, such as loading the client's data

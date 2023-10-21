@@ -1,4 +1,4 @@
-use aeronet::{ClientEvent, ClientId, ClientTransport, Message, RecvError, SessionError};
+use aeronet::{ClientEvent, ClientId, ClientTransport, Message, SessionError};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
 use crate::DisconnectedError;
@@ -21,6 +21,7 @@ pub struct ChannelTransportClient<C2S, S2C> {
     pub(crate) send: Sender<C2S>,
     pub(crate) recv: Receiver<S2C>,
     pub(crate) connected: bool,
+    pub(crate) events: Vec<ClientEvent<S2C>>,
 }
 
 impl<C2S, S2C> ChannelTransportClient<C2S, S2C> {
@@ -42,21 +43,22 @@ where
 {
     type Info = ();
 
-    fn recv(&mut self) -> Result<ClientEvent<S2C>, RecvError> {
-        match self.recv.try_recv() {
-            Ok(msg) => Ok(ClientEvent::Recv { msg }),
-            Err(TryRecvError::Empty) => Err(RecvError::Empty),
-            Err(TryRecvError::Disconnected) => {
-                if self.connected {
-                    self.connected = false;
-                    Ok(ClientEvent::Disconnected {
-                        reason: SessionError::Transport(DisconnectedError.into()),
-                    })
-                } else {
-                    Err(RecvError::Empty)
-                }
+    fn recv(&mut self) {
+        self.events
+            .extend(self.recv.try_iter().map(|msg| ClientEvent::Recv { msg }));
+
+        if self.connected {
+            if let Err(TryRecvError::Disconnected) = self.recv.try_recv() {
+                self.connected = false;
+                self.events.push(ClientEvent::Disconnected {
+                    reason: SessionError::Transport(DisconnectedError.into()),
+                });
             }
         }
+    }
+
+    fn take_events(&mut self) -> impl Iterator<Item = ClientEvent<S2C>> + '_ {
+        self.events.drain(..)
     }
 
     fn send(&mut self, msg: impl Into<C2S>) {

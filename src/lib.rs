@@ -20,17 +20,17 @@ mod runtime;
 pub use client::{ClientEvent, ClientTransport};
 pub use message::{Message, TryFromBytes, TryIntoBytes};
 pub use server::{ClientId, ServerEvent, ServerTransport};
-pub use transport::{RecvError, RemoteAddr, Rtt, SessionError};
+pub use transport::{RemoteAddr, Rtt, SessionError};
 
 #[cfg(feature = "bevy")]
 pub use client::plugin::{
     client_connected, ClientTransportPlugin, ClientTransportSet, FromServer, LocalClientConnected,
-    LocalClientConnecting, LocalClientDisconnected, ToServer,
+    LocalClientDisconnected, ToServer,
 };
 #[cfg(feature = "bevy")]
 pub use server::plugin::{
-    DisconnectClient, FromClient, RemoteClientConnected, RemoteClientConnecting,
-    RemoteClientDisconnected, ServerTransportPlugin, ServerTransportSet, ToClient,
+    DisconnectClient, FromClient, RemoteClientConnected, RemoteClientDisconnected,
+    ServerTransportPlugin, ServerTransportSet, ToClient,
 };
 
 #[cfg(feature = "bevy-tokio-rt")]

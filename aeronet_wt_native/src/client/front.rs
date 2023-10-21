@@ -1,3 +1,5 @@
+use std::iter;
+
 use aeronet::{ClientEvent, ClientTransport, Message, RecvError, TryFromBytes, TryIntoBytes};
 use tokio::sync::mpsc;
 
@@ -54,7 +56,18 @@ where
 {
     type Info = RemoteServerInfo;
 
-    fn recv(&mut self) -> Result<ClientEvent<S2C>, RecvError> {
+    fn recv(&mut self) {
+        
+    }
+
+    fn take_events(&mut self) -> impl Iterator<Item = ClientEvent<S2C>> {
+        match self.recv.try_recv() {
+            Ok(Event::Connected { info }) => {
+                self.info = Some(info);
+                iter::once()
+            }
+        }
+
         loop {
             match self.recv.try_recv() {
                 // non-returning
