@@ -1,8 +1,9 @@
 use aeronet::{ClientId, Message, ServerEvent, ServerTransport, TryFromBytes, TryIntoBytes};
+use aeronet_wt_stream::{OnStream, Streams};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 
-use crate::{EndpointInfo, SendOn, ServerStream};
+use crate::EndpointInfo;
 
 use super::{Event, Request};
 
@@ -19,17 +20,18 @@ use super::{Event, Request};
 /// dropped.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct WebTransportServer<C2S, S2C> {
+pub struct WebTransportServer<C2S, S2C, S> {
     pub(crate) send: broadcast::Sender<Request<S2C>>,
     pub(crate) recv: mpsc::Receiver<Event<C2S>>,
     pub(crate) clients: FxHashMap<ClientId, EndpointInfo>,
     pub(crate) events: Vec<ServerEvent<C2S>>,
 }
 
-impl<C2S, S2C> ServerTransport<C2S, S2C> for WebTransportServer<C2S, S2C>
+impl<C2S, S2C, S> ServerTransport<C2S, S2C> for WebTransportServer<C2S, S2C>
 where
     C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + SendOn<ServerStream>,
+    S2C: Message + TryIntoBytes + OnStream<S>,
+    S: Streams,
 {
     type ClientInfo = EndpointInfo;
 

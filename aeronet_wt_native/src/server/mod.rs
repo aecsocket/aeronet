@@ -2,12 +2,13 @@ pub mod back;
 pub mod front;
 
 use aeronet::{ClientId, Message, SessionError, TryFromBytes, TryIntoBytes};
+use aeronet_wt_stream::{Streams, OnStream, StreamId};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 use wtransport::ServerConfig;
 
 use crate::{
-    shared::CHANNEL_BUF, EndpointInfo, SendOn, ServerStream, TransportStreams, WebTransportServer,
+    shared::CHANNEL_BUF, EndpointInfo, WebTransportServer,
     WebTransportServerBackend,
 };
 
@@ -20,16 +21,16 @@ use crate::{
 /// first available (this function does not automatically start the backend,
 /// because we have no guarantees about the current Tokio runtime at this
 /// point).
-pub fn create_server<C2S, S2C>(
+pub fn create_server<C2S, S2C, S>(
     config: ServerConfig,
-    streams: TransportStreams,
 ) -> (
     WebTransportServer<C2S, S2C>,
     WebTransportServerBackend<C2S, S2C>,
 )
 where
     C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + SendOn<ServerStream> + Clone,
+    S2C: Message + TryIntoBytes + OnStream<S> + Clone,
+    S: Streams,
 {
     let (send_b2f, recv_b2f) = mpsc::channel::<Event<C2S>>(CHANNEL_BUF);
     let (send_f2b, _) = broadcast::channel::<Request<S2C>>(CHANNEL_BUF);
@@ -43,7 +44,6 @@ where
 
     let backend = WebTransportServerBackend::<C2S, S2C> {
         config,
-        streams,
         send_b2f,
         send_f2b,
     };
@@ -55,7 +55,7 @@ where
 pub(crate) enum Request<S2C> {
     Send {
         client: ClientId,
-        stream: ServerStream,
+        stream: StreamId,
         msg: S2C,
     },
     Disconnect {

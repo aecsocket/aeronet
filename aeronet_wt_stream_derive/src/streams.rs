@@ -1,5 +1,3 @@
-use std::fmt;
-
 use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::quote;
 use syn::{Data, DataEnum, DeriveInput, Error, Meta, Result};
@@ -9,28 +7,17 @@ pub fn derive(node: &DeriveInput) -> Result<TokenStream> {
         Data::Enum(data) => on_enum(node, data),
         _ => Err(Error::new_spanned(
             node,
-            "non-enum as Stream is not supported",
+            "non-enum as Streams is not supported",
         )),
     }
 }
 
-const STREAM: &str = "stream";
+const STREAM_KIND: &str = "stream_kind";
 
 #[derive(Debug, Clone, Copy)]
 enum StreamId {
     Datagram,
-    Uni(usize),
     Bi(usize),
-}
-
-impl fmt::Display for StreamId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Datagram => write!(f, "Datagram"),
-            Self::Uni(_) => write!(f, "Uni"),
-            Self::Bi(_) => write!(f, "Bi"),
-        }
-    }
 }
 
 struct Variant<'a> {
@@ -43,19 +30,15 @@ fn on_enum(node: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
     let generics = &node.generics;
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
-    let (variants, num_uni, num_bi) = variants(data)?;
+    let (variants, num_bi) = variants(data)?;
     let match_body = match_body(&variants);
 
     Ok(quote! {
-        impl #impl_generics ::aeronet_wt_stream::Stream for #name #type_generics #where_clause {
+        impl #impl_generics ::aeronet_wt_stream::Streams for #name #type_generics #where_clause {
             fn stream_id(&self) -> ::aeronet_wt_stream::StreamId {
                 match self {
                     #(#match_body),*
                 }
-            }
-
-            fn num_uni() -> usize {
-                #num_uni
             }
 
             fn num_bi() -> usize {
@@ -65,8 +48,7 @@ fn on_enum(node: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
     })
 }
 
-fn variants(data: &DataEnum) -> Result<(Vec<Variant<'_>>, usize, usize)> {
-    let mut num_uni = 0;
+fn variants(data: &DataEnum) -> Result<(Vec<Variant<'_>>, usize)> {
     let mut num_bi = 0;
 
     let variants = data
@@ -76,27 +58,31 @@ fn variants(data: &DataEnum) -> Result<(Vec<Variant<'_>>, usize, usize)> {
             let mut stream_id = None;
 
             for attr in &node.attrs {
-                if attr.path().is_ident(STREAM) {
+                if attr.path().is_ident(STREAM_KIND) {
                     if stream_id.is_some() {
-                        return Err(Error::new_spanned(attr, "duplicate #[stream] attribute"));
+                        return Err(Error::new_spanned(
+                            attr,
+                            "duplicate #[stream_kind] attribute",
+                        ));
                     }
                     let Meta::List(list) = &attr.meta else {
-                        return Err(Error::new_spanned(attr, "missing kind in #[stream(kind)]"));
+                        return Err(Error::new_spanned(
+                            attr,
+                            "missing kind in #[stream_kind(kind)]",
+                        ));
                     };
                     // TODO this `.clone()` sucks
                     let Some(TokenTree::Ident(kind_ident)) = list.tokens.clone().into_iter().next()
                     else {
-                        return Err(Error::new_spanned(attr, "missing kind in #[stream(kind)]"));
+                        return Err(Error::new_spanned(
+                            attr,
+                            "missing kind in #[stream_kind(kind)]",
+                        ));
                     };
 
                     let kind = kind_ident.to_string();
                     stream_id = Some(match kind.as_str() {
                         "Datagram" => StreamId::Datagram,
-                        "Uni" => {
-                            let id = StreamId::Uni(num_uni);
-                            num_uni += 1;
-                            id
-                        }
                         "Bi" => {
                             let id = StreamId::Bi(num_bi);
                             num_bi += 1;
@@ -117,11 +103,11 @@ fn variants(data: &DataEnum) -> Result<(Vec<Variant<'_>>, usize, usize)> {
                     ident: &node.ident,
                     stream_id,
                 }),
-                None => Err(Error::new_spanned(node, "missing #[stream] attribute")),
+                None => Err(Error::new_spanned(node, "missing #[stream_kind] attribute")),
             }
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok((variants, num_uni, num_bi))
+    Ok((variants, num_bi))
 }
 
 fn match_body(variants: &Vec<Variant<'_>>) -> Vec<TokenStream> {
@@ -131,7 +117,6 @@ fn match_body(variants: &Vec<Variant<'_>>) -> Vec<TokenStream> {
             let pattern = variant.ident;
             let stream_id = match variant.stream_id {
                 StreamId::Datagram => quote! { Datagram },
-                StreamId::Uni(i) => quote! { Uni(#i) },
                 StreamId::Bi(i) => quote! { Bi(#i) },
             };
             quote! {

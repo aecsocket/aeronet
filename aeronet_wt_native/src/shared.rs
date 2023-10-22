@@ -1,4 +1,5 @@
 use aeronet::{Message, SessionError, TryFromBytes, TryIntoBytes};
+use aeronet_wt_stream::Streams;
 use anyhow::Result;
 use tokio::sync::mpsc;
 use wtransport::{
@@ -7,53 +8,36 @@ use wtransport::{
     Connection, SendStream,
 };
 
-use crate::{stream::TransportSide, StreamError, StreamId, TransportStream, TransportStreams};
+use crate::{StreamError, StreamId};
 
 pub(crate) const CHANNEL_BUF: usize = 128;
 const RECV_BUF: usize = 65536;
 
-pub(crate) async fn open_streams<S, R, Side>(
-    streams: &TransportStreams,
+pub(crate) async fn open_streams<S, R, Stream>(
     conn: &mut Connection,
     send_in: mpsc::Sender<R>,
     send_err: mpsc::Sender<SessionError>,
-) -> Result<(Vec<mpsc::Sender<S>>, Vec<mpsc::Sender<S>>), SessionError>
+) -> Result<Vec<mpsc::Sender<S>>, SessionError>
 where
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
-    Side: TransportSide,
+    Stream: Streams,
 {
     let mut streams_bi = Vec::new();
-    for stream_id in 0..streams.bi {
-        let stream = TransportStream::Bi(StreamId(stream_id));
+    for id in 0..Stream::num_bi() {
+        let stream = StreamId::Bi(id);
         let send = open_bi::<S, R>(conn, stream, send_in.clone(), send_err.clone())
             .await
             .map_err(|err| SessionError::Transport(err.on(stream).into()))?;
         streams_bi.push(send);
     }
 
-    let mut streams_uni_out = Vec::new();
-    for stream_id in 0..Side::num_uni_out_streams(streams) {
-        let stream = Side::uni_out_stream(StreamId(stream_id));
-        let send = open_uni_out::<S>(conn, stream, send_err.clone())
-            .await
-            .map_err(|err| SessionError::Transport(err.on(stream).into()))?;
-        streams_uni_out.push(send);
-    }
-
-    for stream_id in 0..Side::num_uni_in_streams(streams) {
-        let stream = Side::uni_in_stream(StreamId(stream_id));
-        open_uni_in::<R>(conn, stream, send_in.clone(), send_err.clone())
-            .await
-            .map_err(|err| SessionError::Transport(err.on(stream).into()))?;
-    }
-
-    Ok((streams_bi, streams_uni_out))
+    Ok(streams_bi)
 }
 
 async fn open_bi<S, R>(
     conn: &mut Connection,
-    stream: TransportStream,
+    stream: StreamId,
     send_in: mpsc::Sender<R>,
     send_err: mpsc::Sender<SessionError>,
 ) -> Result<mpsc::Sender<S>, StreamError>
@@ -95,7 +79,7 @@ where
 
 async fn open_uni_out<S>(
     conn: &mut Connection,
-    stream: TransportStream,
+    stream: StreamId,
     send_err: mpsc::Sender<SessionError>,
 ) -> Result<mpsc::Sender<S>, StreamError>
 where
@@ -128,7 +112,7 @@ where
 
 async fn open_uni_in<R>(
     conn: &mut Connection,
-    stream: TransportStream,
+    stream: StreamId,
     send_in: mpsc::Sender<R>,
     send_err: mpsc::Sender<SessionError>,
 ) -> Result<(), StreamError>
@@ -179,8 +163,7 @@ async fn send_stream<S: TryIntoBytes>(
 pub(crate) async fn send_out<S>(
     conn: &mut Connection,
     streams_bi: &mut [mpsc::Sender<S>],
-    streams_uni: &mut [mpsc::Sender<S>],
-    stream: TransportStream,
+    stream: StreamId,
     msg: S,
 ) -> Result<(), StreamError>
 where
@@ -195,16 +178,13 @@ where
     }
 
     match stream {
-        TransportStream::Datagram => {
+        StreamId::Datagram => {
             let buf = into_payload(msg)?;
             conn.send_datagram(buf)
                 .map_err(|err| StreamError::Send(err.into()))?;
         }
-        TransportStream::Bi(i) => {
+        StreamId::Bi(i) => {
             on_stream::<S>(&mut streams_bi[i.0], msg).await?;
-        }
-        TransportStream::UniC2S(i) | TransportStream::UniS2C(i) => {
-            on_stream::<S>(&mut streams_uni[i.0], msg).await?;
         }
     }
     Ok(())

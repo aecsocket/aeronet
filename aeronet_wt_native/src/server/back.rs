@@ -10,7 +10,7 @@ use wtransport::{
 
 use crate::{
     shared::{open_streams, recv_datagram, send_out},
-    EndpointInfo, ServerStream, TransportStream, TransportStreams,
+    EndpointInfo,
 };
 
 use super::{Event, Request, CHANNEL_BUF};
@@ -23,7 +23,6 @@ use super::{Event, Request, CHANNEL_BUF};
 /// handle the rest.
 pub struct WebTransportServerBackend<C2S, S2C> {
     pub(crate) config: ServerConfig,
-    pub(crate) streams: TransportStreams,
     pub(crate) send_b2f: mpsc::Sender<Event<C2S>>,
     pub(crate) send_f2b: broadcast::Sender<Request<S2C>>,
 }
@@ -37,14 +36,13 @@ where
     pub async fn start(self) -> Result<(), io::Error> {
         let Self {
             config,
-            streams,
             send_b2f,
             send_f2b,
         } = self;
 
         let endpoint = Endpoint::server(config)?;
         debug!("Started WebTransport server backend");
-        listen::<C2S, S2C>(endpoint, streams, send_b2f, send_f2b).await;
+        listen::<C2S, S2C>(endpoint, send_b2f, send_f2b).await;
         debug!("Stopped WebTransport server backend");
         Ok(())
     }
