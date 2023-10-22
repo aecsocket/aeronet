@@ -83,7 +83,10 @@ async fn listen<C2S, S2C>(
                 let conn = match accept_session::<C2S>(&mut send, client, req).await {
                     Ok(conn) => conn,
                     Err(err) => {
-                        debug!("Failed to establish connection: {:#}", anyhow::Error::new(err));
+                        debug!(
+                            "Failed to establish connection: {:#}",
+                            anyhow::Error::new(err)
+                        );
                         return;
                     }
                 };

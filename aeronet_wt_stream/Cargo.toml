@@ -1,0 +1,14 @@
+[package]
+name = "aeronet_wt_stream"
+version = "0.2.0"
+edition = "2021"
+description = "Stream types for the WebTransport implementations for aeronet"
+authors = [ "aecsocket <aecsocket@tutanota.com>" ]
+repository = "https://github.com/aecsocket/aeronet"
+keywords = [ "gamedev", "network", "bevy" ]
+categories = [ "game-development", "network-programming" ]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+aeronet = { path = "..", version = "0.2.0", features = [ "bevy-tokio-rt" ] }
+aeronet_wt_stream_derive = { path = "../aeronet_wt_stream_derive", verison = "0.2.0" }

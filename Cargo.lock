@@ -100,24 +100,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "aeronet_channel"
-version = "0.2.0"
-dependencies = [
- "aeronet",
- "anyhow",
- "bevy",
- "bevy_egui",
- "crossbeam-channel",
- "rustc-hash",
- "thiserror",
- "tracing",
-]
-
-[[package]]
 name = "aeronet_wt_native"
 version = "0.2.0"
 dependencies = [
  "aeronet",
+ "aeronet_wt_stream",
+ "aeronet_wt_stream_derive",
  "anyhow",
  "base64 0.21.3",
  "bevy",
@@ -133,20 +121,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "aeronet_wt_wasm"
+name = "aeronet_wt_stream"
 version = "0.2.0"
 dependencies = [
  "aeronet",
- "anyhow",
- "bevy",
- "bevy_egui",
- "crossbeam-channel",
- "js-sys",
- "thiserror",
- "tracing",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
+ "aeronet_wt_stream_derive",
+]
+
+[[package]]
+name = "aeronet_wt_stream_derive"
+version = "0.2.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.29",
 ]
 
 [[package]]
