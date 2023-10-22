@@ -5,18 +5,20 @@ use std::fmt::Display;
 
 use crate::{Message, SessionError};
 
-/// A server-to-client layer responsible for sending user messages to the other side.
+/// A server-to-client layer responsible for sending user messages to the other
+/// side.
 ///
-/// The server transport accepts incoming connections, sending and receiving messages, and handling
-/// disconnections and errors.
+/// The server transport accepts incoming connections, sending and receiving
+/// messages, and handling disconnections and errors.
 ///
 /// Different transport implementations will use different methods to
-/// transport the data across, such as through memory or over a network. This means that a
-/// transport does not necessarily work over the internet! If you want to get details such as
-/// RTT or remote address, see [`Rtt`] and [`RemoteAddr`].
+/// transport the data across, such as through memory or over a network. This
+/// means that a transport does not necessarily work over the internet! If you
+/// want to get details such as RTT or remote address, see [`Rtt`] and
+/// [`RemoteAddr`].
 ///
-/// The type parameters allows configuring which types of messages are sent and received by this
-/// transport (see [`Message`]).
+/// The type parameters allows configuring which types of messages are sent and
+/// received by this transport (see [`Message`]).
 ///
 /// [`Rtt`]: crate::Rtt
 /// [`RemoteAddr`]: crate::RemoteAddr
@@ -28,7 +30,8 @@ where
     /// The info that [`ServerTransport::client_info`] provides.
     type ClientInfo;
 
-    /// Instructs the transport to receive incoming events and update its internal state.
+    /// Instructs the transport to receive incoming events and update its
+    /// internal state.
     ///
     /// This should be called before [`ServerTransport::take_events`].
     fn recv(&mut self);
@@ -41,7 +44,8 @@ where
 
     /// Forces a client to disconnect from the server.
     ///
-    /// This will issue a [`ServerEvent::Disconnected`] with reason [`SessionError::ForceDisconnect`].
+    /// This will issue a [`ServerEvent::Disconnected`] with reason
+    /// [`SessionError::ForceDisconnect`].
     fn disconnect(&mut self, client: ClientId);
 
     /// Gets transport info on a connected client.
@@ -55,16 +59,18 @@ where
 
 /// An event received from a [`ServerTransport`].
 ///
-/// Under Bevy this also implements `Event`, however this type cannot be used in an event
-/// reader or writer using the inbuilt plugins. `Event` is implemented to allow user code to use
-/// this type as an event if they wish to manually implement transport handling.
+/// Under Bevy this also implements `Event`, however this type cannot be used in
+/// an event reader or writer using the inbuilt plugins. `Event` is implemented
+/// to allow user code to use this type as an event if they wish to manually
+/// implement transport handling.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
 pub enum ServerEvent<C2S> {
-    /// A client has established a connection to the server and can now send/receive data.
+    /// A client has established a connection to the server and can now
+    /// send/receive data.
     ///
-    /// This should be used as a signal to start client setup, such as loading the client's data
-    /// from a database.
+    /// This should be used as a signal to start client setup, such as loading
+    /// the client's data from a database.
     Connected {
         /// The ID of the connected client.
         client: ClientId,
@@ -78,10 +84,12 @@ pub enum ServerEvent<C2S> {
     },
     /// A client was lost and the connection was closed for any reason.
     ///
-    /// This is called for both transport errors (such as losing connection) and for the transport
-    /// forcefully disconnecting the client via [`ServerTransport::disconnect`].
+    /// This is called for both transport errors (such as losing connection) and
+    /// for the transport forcefully disconnecting the client via
+    /// [`ServerTransport::disconnect`].
     ///
-    /// This should be used as a signal to start client teardown and removing them from the app.
+    /// This should be used as a signal to start client teardown and removing
+    /// them from the app.
     Disconnected {
         /// The ID of the disconnected client.
         client: ClientId,
@@ -92,17 +100,18 @@ pub enum ServerEvent<C2S> {
 
 /// A unique identifier for a client connected to a server.
 ///
-/// This uses a [`usize`] under the hood, however it is up to the implementation on how to use this
-/// exactly. One possible approach is to use an auto-incrementing integer and store that in a hash
-/// map.
+/// This uses a [`usize`] under the hood, however it is up to the implementation
+/// on how to use this exactly. One possible approach is to use an
+/// auto-incrementing integer and store that in a hash map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ClientId(usize);
 
 impl ClientId {
     /// Creates an ID from the raw generational index.
     ///
-    /// Passing an arbitrary value which was not previously made from [`Self::into_raw`] may
-    /// result in a client ID which does not point to a valid client.
+    /// Passing an arbitrary value which was not previously made from
+    /// [`Self::into_raw`] may result in a client ID which does not point to
+    /// a valid client.
     pub fn from_raw(raw: usize) -> Self {
         Self(raw)
     }

@@ -3,9 +3,10 @@
 #![doc = include_str!("../README.md")]
 //! # Getting started
 //!
-//! First, you will need a transport implementation to use. Select one from the list above that
-//! suits your needs. Afterwards, use the [`ClientTransport`] and [`ServerTransport`] traits to
-//! interact with the transport, to do functions such as sending and receiving data.
+//! First, you will need a transport implementation to use. Select one from the
+//! list above that suits your needs. Afterwards, use the [`ClientTransport`]
+//! and [`ServerTransport`] traits to interact with the transport, to do
+//! functions such as sending and receiving data.
 
 pub mod error;
 

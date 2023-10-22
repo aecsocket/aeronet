@@ -12,11 +12,12 @@ use crate::{
 
 use super::{Event, Request};
 
-/// Runs the actual logic behind a [`crate::WebTransportClient`], intended to be run in an async
-/// [`tokio`] runtime.
+/// Runs the actual logic behind a [`crate::WebTransportClient`], intended to be
+/// run in an async [`tokio`] runtime.
 ///
-/// The only thing you should do with this struct is to run [`WebTransportClientBackend::start`]
-/// in an async task - the frontend will handle the rest.
+/// The only thing you should do with this struct is to run
+/// [`WebTransportClientBackend::start`] in an async task - the frontend will
+/// handle the rest.
 pub struct WebTransportClientBackend<C2S, S2C> {
     pub(crate) config: ClientConfig,
     pub(crate) streams: TransportStreams,
@@ -111,9 +112,9 @@ where
         open_streams::<C2S, S2C, ClientStream>(streams, &mut conn, send_in, send_err).await?;
 
     debug!("Connected to {}", conn.remote_address());
-    // although we are going to send the endpoint info literally immediately after this Connected
-    // is sent, we are contractually obligated to make sure that `info` returns something after a
-    // Connected is received
+    // although we are going to send the endpoint info literally immediately after
+    // this Connected is sent, we are contractually obligated to make sure that
+    // `info` returns something after a Connected is received
     send.send(Event::Connected {
         info: EndpointInfo::from_connection(&conn),
     })

@@ -5,20 +5,24 @@ use crate::{ClientStream, EndpointInfo, SendOn};
 
 use super::{Event, Request};
 
-/// Client-side transport layer implementation for [`aeronet`] using the WebTransport protocol.
+/// Client-side transport layer implementation for [`aeronet`] using the
+/// WebTransport protocol.
 ///
-/// This is the client-side entry point to the crate, allowing you to connect the
-/// [`crate::WebTransportClientBackend`] to a server, then send and receive data to/from the
-/// backend.
-/// This is the type you should store and pass around in your app whenever you want to interface
-/// with the server. Use [`crate::create_client`] to create one.
+/// This is the client-side entry point to the crate, allowing you to connect
+/// the [`crate::WebTransportClientBackend`] to a server, then send and receive
+/// data to/from the backend.
+/// This is the type you should store and pass around in your app whenever you
+/// want to interface with the server. Use [`crate::create_client`] to create
+/// one.
 ///
 /// # Usage
 ///
-/// After creation, use [`WebTransportClient::connect`] to request a connection to a specified
-/// URL. This request may only work when the client is not yet connected
+/// After creation, use [`WebTransportClient::connect`] to request a connection
+/// to a specified URL. This request may only work when the client is not yet
+/// connected
 ///
-/// When dropped, the backend client is shut down and the current connection is dropped.
+/// When dropped, the backend client is shut down and the current connection is
+/// dropped.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct WebTransportClient<C2S, S2C> {

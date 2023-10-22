@@ -12,11 +12,13 @@ use crate::{
 
 /// Creates a client-side transport using the WebTransport protocol.
 ///
-/// This returns a [`WebTransportClient`], which provides the API of the client and is the type you
-/// should store, pass around, etc; and also a [`WebTransportClientBackend`], which should be started
-/// once using [`WebTransportClientBackend::start`] in an async Tokio runtime when it is first
-/// available (this function does not automatically start the backend, because we have no
-/// guarantees about the current Tokio runtime at this point).
+/// This returns a [`WebTransportClient`], which provides the API of the client
+/// and is the type you should store, pass around, etc; and also a
+/// [`WebTransportClientBackend`], which should be started once using
+/// [`WebTransportClientBackend::start`] in an async Tokio runtime when it is
+/// first available (this function does not automatically start the backend,
+/// because we have no guarantees about the current Tokio runtime at this
+/// point).
 pub fn create_client<C2S, S2C>(
     config: ClientConfig,
     streams: TransportStreams,

@@ -15,11 +15,12 @@ use crate::{
 
 use super::{Event, Request, CHANNEL_BUF};
 
-/// Runs the actual logic behind a [`crate::WebTransportServer`], intended to be run in an async
-/// [`tokio`] runtime.
+/// Runs the actual logic behind a [`crate::WebTransportServer`], intended to be
+/// run in an async [`tokio`] runtime.
 ///
-/// The only thing you should do with this struct is to run [`WebTransportServerBackend::start`]
-/// in an async task - the frontend will handle the rest.
+/// The only thing you should do with this struct is to run
+/// [`WebTransportServerBackend::start`] in an async task - the frontend will
+/// handle the rest.
 pub struct WebTransportServerBackend<C2S, S2C> {
     pub(crate) config: ServerConfig,
     pub(crate) streams: TransportStreams,

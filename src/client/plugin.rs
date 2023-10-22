@@ -6,11 +6,13 @@ use crate::{ClientEvent, ClientTransport, Message, SessionError};
 
 /// Handles [`ClientTransport`]s of type `T`.
 ///
-/// This handles receiving data from the transport and forwarding it to the app via events,
-/// as well as sending data to the transport by reading from events. The events provided are:
+/// This handles receiving data from the transport and forwarding it to the app
+/// via events, as well as sending data to the transport by reading from events.
+/// The events provided are:
 /// * Incoming
 ///   * [`LocalClientConnected`] when the client fully connects to the server
-///     * Use this to run logic when connection is complete e.g. loading the level
+///     * Use this to run logic when connection is complete e.g. loading the
+///       level
 ///   * [`FromServer`] when the server sends data to this client
 ///   * [`LocalClientDisconnected`] when the client loses connection
 ///     * Use this to run logic to transition out of the game state
@@ -19,16 +21,16 @@ use crate::{ClientEvent, ClientTransport, Message, SessionError};
 ///
 /// # Usage
 ///
-/// This plugin is not *required* to use the server transports. Using the plugin actually poses
-/// the following limitations:
+/// This plugin is not *required* to use the server transports. Using the plugin
+/// actually poses the following limitations:
 /// * You do not get ownership of incoming messages
-///   * This means you are unable to mutate the messages before sending them to the rest of the app
-///     via [`FromServer`]
+///   * This means you are unable to mutate the messages before sending them to
+///     the rest of the app via [`FromServer`]
 /// * The transport implementation must implement [`Resource`]
 ///   * All inbuilt transports implement [`Resource`]
 ///
-/// If these are unsuitable for your use case, consider manually using the transport APIs from your
-/// app, bypassing the plugin altogether.
+/// If these are unsuitable for your use case, consider manually using the
+/// transport APIs from your app, bypassing the plugin altogether.
 ///
 /// ```
 /// use bevy::prelude::*;

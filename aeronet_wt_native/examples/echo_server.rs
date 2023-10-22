@@ -6,7 +6,7 @@ use aeronet::{
 };
 use aeronet_wt_native::{
     wtransport::{tls::Certificate, ServerConfig},
-    OnStream, ServerStream, StreamMessage, TransportStreams, WebTransportServer,
+    ServerStream, StreamMessage, TransportStreams, WebTransportServer,
 };
 use anyhow::Result;
 use bevy::{
@@ -38,7 +38,11 @@ type Server = WebTransportServer<AppMessage, StreamMessage<ServerStream, AppMess
 
 // logic
 
-// chromium --webtransport-developer-mode --ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
+/*
+chromium \
+--webtransport-developer-mode \
+--ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
+*/
 
 fn main() {
     App::new()

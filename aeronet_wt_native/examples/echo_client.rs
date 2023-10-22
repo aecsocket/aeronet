@@ -6,8 +6,12 @@ use aeronet_wt_stream::{OnStream, Stream};
 pub enum AppStream {
     #[stream(Datagram)]
     LowPriority,
+    #[stream(Uni)]
+    UniHighPriority,
     #[stream(Bi)]
     HighPriority,
+    #[stream(Bi)]
+    HighPriority2,
 }
 
 #[derive(Debug, Clone, OnStream)]
@@ -22,5 +26,5 @@ pub enum C2S {
 }
 
 fn main() {
-    let x = C2S::Move(4.0).on_stream().kind();
+    let _ = C2S::Move(4.0).on_stream().stream_id();
 }

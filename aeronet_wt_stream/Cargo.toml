@@ -10,5 +10,5 @@ categories = [ "game-development", "network-programming" ]
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-aeronet = { path = "..", version = "0.2.0", features = [ "bevy-tokio-rt" ] }
+aeronet = { path = "..", version = "0.2.0" }
 aeronet_wt_stream_derive = { path = "../aeronet_wt_stream_derive", verison = "0.2.0" }
