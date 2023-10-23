@@ -64,12 +64,17 @@ write the same code for all networking without worrying about the underlying tra
 to deliver your messages.
 
 ```rust,ignore
-App::new()
-    .add_plugins((
-        ClientTransportPlugin::<C2S, S2C, MyClientTransport<_, _>>::default(),
-    ))
-    .add_systems(Update, on_recv)
-    .run();
+use bevy::prelude::*;
+use aeronet::ClientTransportPlugin;
+
+fn main() {
+    App::new()
+        .add_plugins((
+            ClientTransportPlugin::<C2S, S2C, MyClientTransport<_, _>>::default(),
+        ))
+        .add_systems(Update, on_recv)
+        .run();
+}
 
 fn on_recv(
     mut recv: EventReader<FromServer<S2C>>,

@@ -16,3 +16,6 @@ proc-macro = true
 proc-macro2 = "1.0.69"
 syn = "2.0.38"
 quote = "1.0.33"
+
+[package.metadata.docs.rs]
+all-features = true
