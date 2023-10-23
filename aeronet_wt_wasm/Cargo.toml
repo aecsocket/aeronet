@@ -17,6 +17,7 @@ bevy = [ "dep:bevy", "aeronet/bevy" ]
 
 [dependencies]
 aeronet = { path = "..", version = "0.2.0" }
+aeronet_wt_core = { path = "../aeronet_wt_core", version = "0.2.0" }
 tracing = "0.1.40"
 thiserror = "1.0.50"
 anyhow = "1.0.75"

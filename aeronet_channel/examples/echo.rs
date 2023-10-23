@@ -61,10 +61,7 @@ fn main() {
         .init_resource::<ClientState>()
         .init_resource::<ServerState>()
         .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            (handle_client, handle_server, client_ui, server_ui),
-        )
+        .add_systems(Update, (handle_client, handle_server, client_ui, server_ui))
         .run();
 }
 

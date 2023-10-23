@@ -5,4 +5,6 @@
 mod bindings;
 mod client;
 
+pub use aeronet_wt_core::*;
+
 pub use client::WebTransportClient;

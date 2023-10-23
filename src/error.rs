@@ -20,7 +20,7 @@ impl<E: std::error::Error> Display for PrettyError<'_, E> {
         if f.alternate() {
             let mut cur = self.0.source();
             while let Some(source) = cur {
-                write!(f, ": {}", source)?;
+                write!(f, ": {source}")?;
                 cur = source.source();
             }
         }

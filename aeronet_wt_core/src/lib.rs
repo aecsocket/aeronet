@@ -7,7 +7,7 @@ pub use aeronet_wt_core_derive::*;
 /// A side-agnostic type representing a kind of method used for data transport.
 ///
 /// See the [module-level docs] and variant docs for info.
-/// 
+///
 /// [module-level docs]: self
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChannelKind {
@@ -44,12 +44,12 @@ pub enum ChannelKind {
 
 /// A side-agnostic type representing an instance of a method used for data
 /// transport.
-/// 
+///
 /// See the [module-level docs] for info.
 ///
 /// This type allows specifying exactly what instance of [`ChannelId::Stream`]
 /// this value represents.
-/// 
+///
 /// [module-level docs]: self
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChannelId {

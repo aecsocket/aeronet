@@ -18,7 +18,7 @@ mod on_channel;
 /// ## Struct
 ///
 /// The struct requires the attribute `#[channel_kind(..)]`.
-/// 
+///
 /// ```ignore
 /// #[derive(Channels)]
 /// #[channel_kind(Datagram)]
@@ -28,7 +28,7 @@ mod on_channel;
 /// ## Enum
 ///
 /// All variants require the attribute `#[channel_kind(..)]`.
-/// 
+///
 /// ```ignore
 /// #[derive(Channels)]
 /// enum AppChannel {
@@ -59,7 +59,7 @@ pub fn derive_channels(input: TokenStream) -> TokenStream {
 ///
 /// The type requires the attributes `#[channel_type(..)]` and
 /// `#[on_channel(..)]`.
-/// 
+///
 /// ```ignore
 /// #[derive(Channels)]
 /// #[channel_kind(Datagram)]
@@ -76,7 +76,7 @@ pub fn derive_channels(input: TokenStream) -> TokenStream {
 /// The type requires the attribute `#[channel_type(..)]`.
 ///
 /// All variants require the attribute `#[on_channel(..)]`.
-/// 
+///
 /// ```ignore
 /// #[derive(Channels)]
 /// enum AppChannel {

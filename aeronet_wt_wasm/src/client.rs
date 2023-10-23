@@ -137,6 +137,8 @@ where
     C2S: Message + TryIntoBytes,
     S2C: Message,
 {
+    type EventIter<'a> = std::vec::Drain<'a, ClientEvent<S2C>> where Self: 'a;
+
     // technically there is this
     // https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/getStats
     // but it has ~0 compatibility with anything (as of now)
@@ -153,8 +155,9 @@ where
         });
     }
 
-    fn take_events(&mut self) -> impl Iterator<Item = ClientEvent<S2C>> + '_ {
-        std::iter::empty()
+    fn take_events(&mut self) -> Self::EventIter<'_> {
+        todo!()
+        //std::iter::empty()
     }
 
     fn send(&mut self, msg: impl Into<C2S>) {

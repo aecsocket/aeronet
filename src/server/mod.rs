@@ -104,11 +104,13 @@ impl ClientId {
     /// Passing an arbitrary value which was not previously made from
     /// [`Self::into_raw`] may result in a client ID which does not point to
     /// a valid client.
+    #[must_use]
     pub fn from_raw(raw: usize) -> Self {
         Self(raw)
     }
 
     /// Converts an ID into its raw value.
+    #[must_use]
     pub fn into_raw(self) -> usize {
         self.0
     }

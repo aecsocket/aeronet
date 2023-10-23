@@ -34,7 +34,7 @@ use super::{ClientId, ServerEvent, ServerTransport, SessionError};
 ///
 /// If these are unsuitable for your use case, consider manually using the
 /// transport APIs from your app, bypassing the plugin altogether.
-/// 
+///
 /// ```
 /// use bevy::prelude::*;
 /// use aeronet::ServerTransportPlugin;
