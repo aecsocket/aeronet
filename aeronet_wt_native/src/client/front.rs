@@ -69,6 +69,8 @@ where
     S2C: Message + TryFromBytes,
     C: Channels,
 {
+    type EventIter<'a> = std::vec::Drain<'a, ClientEvent<S2C>> where Self: 'a;
+
     type Info = EndpointInfo;
 
     fn recv(&mut self) {
@@ -95,7 +97,7 @@ where
         }
     }
 
-    fn take_events(&mut self) -> impl Iterator<Item = ClientEvent<S2C>> {
+    fn take_events(&mut self) -> Self::EventIter<'_> {
         self.events.drain(..)
     }
 

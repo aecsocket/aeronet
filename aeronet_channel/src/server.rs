@@ -1,5 +1,6 @@
 use aeronet::{ClientId, Message, ServerEvent, ServerTransport, SessionError};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
+use derivative::Derivative;
 use rustc_hash::FxHashMap;
 
 use crate::{shared::CHANNEL_BUF, ChannelTransportClient, DisconnectedError};
@@ -11,7 +12,8 @@ use crate::{shared::CHANNEL_BUF, ChannelTransportClient, DisconnectedError};
 /// [`ChannelTransportServer::connect`] to create and connect a client.
 ///
 /// If this server is dropped, all clients will automatically be considered disconnected.
-#[derive(Debug)]
+#[derive(Debug, Derivative)]
+#[derivative(Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelTransportServer<C2S, S2C> {
     clients: FxHashMap<ClientId, ClientInfo<C2S, S2C>>,
@@ -33,12 +35,7 @@ where
 {
     /// Creates a new server with zero connected clients.
     pub fn new() -> Self {
-        Self {
-            clients: FxHashMap::default(),
-            clients_to_remove: Vec::new(),
-            next_client: 0,
-            events: Vec::new(),
-        }
+        Self::default()
     }
 
     /// Creates and connects a client to this server.
@@ -73,6 +70,8 @@ where
     C2S: Message,
     S2C: Message,
 {
+    type EventIter<'a> = std::vec::Drain<'a, ServerEvent<C2S>>;
+
     type ClientInfo = ();
 
     fn recv(&mut self) {
@@ -83,22 +82,19 @@ where
 
         for (client, ClientInfo { recv, .. }) in self.clients.iter() {
             self.events
-                .extend(recv.try_iter().map(|msg| ServerEvent::Recv {
-                    client: *client,
-                    msg,
-                }));
+                .extend(recv.try_iter().map(|msg| ServerEvent::Recv(*client, msg)));
 
             if let Err(TryRecvError::Disconnected) = recv.try_recv() {
-                self.events.push(ServerEvent::Disconnected {
-                    client: *client,
-                    reason: SessionError::Transport(DisconnectedError.into()),
-                });
+                self.events.push(ServerEvent::Disconnected(
+                    *client,
+                    SessionError::Transport(DisconnectedError.into()),
+                ));
                 self.clients_to_remove.push(*client);
             }
         }
     }
 
-    fn take_events(&mut self) -> impl Iterator<Item = ServerEvent<C2S>> + '_ {
+    fn take_events(&mut self) -> Self::EventIter<'_> {
         self.events.drain(..)
     }
 

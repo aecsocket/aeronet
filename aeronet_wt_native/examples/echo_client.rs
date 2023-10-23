@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use aeronet::{
-    AsyncRuntime, ClientTransport, ClientTransportPlugin, ToServer, TryFromBytes, TryIntoBytes, LocalClientConnected, LocalClientDisconnected, FromServer,
+    AsyncRuntime, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
+    LocalClientDisconnected, ToServer, TryFromBytes, TryIntoBytes,
 };
 use aeronet_wt_native::{Channels, OnChannel, WebTransportClient};
 use anyhow::Result;
@@ -131,7 +132,7 @@ fn ui(
                     ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
                 }
             });
-        
+
         let buf_resp = ui
             .horizontal(|ui| {
                 ui.label("Send");

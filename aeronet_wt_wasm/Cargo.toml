@@ -17,8 +17,8 @@ bevy = [ "dep:bevy", "aeronet/bevy" ]
 
 [dependencies]
 aeronet = { path = "..", version = "0.2.0" }
-tracing = "0.1.37"
-thiserror = "1.0.47"
+tracing = "0.1.40"
+thiserror = "1.0.50"
 anyhow = "1.0.75"
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"

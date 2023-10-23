@@ -7,8 +7,8 @@ A *light-as-air* client/server networking library with first-class support for B
 consistent API which can be implemented by different transport mechanisms.
 
 Aeronet's main feature is the transport - an interface for sending data to and receiving data from
-an endpoint, either the client or the server. You write your code against this interface (or use
-the Bevy plugin which provides events used by the transport), and you don't have to worry about the
+an endpoint, either the client or the server. You write your code against this interface (or use the
+Bevy plugin which provides events used by the transport), and you don't have to worry about the
 underlying mechanism used to transport your data.
 
 # Transports
@@ -16,11 +16,9 @@ underlying mechanism used to transport your data.
 * [`aeronet_channel`](https://crates.io/crates/aeronet_channel) via in-memory MPSC channels, useful
   for local singleplayer servers
 * [`aeronet_wt_native`](https://crates.io/crates/aeronet_wt_native) via a Rust implementation of
-  [WebTransport](https://developer.chrome.com/en/articles/webtransport/), useful for a generic
-  client-server architecture with support for WASM clients
+  WebTransport, useful for a generic client-server architecture with support for WASM clients
 * [`aeronet_wt_wasm`](https://crates.io/crates/aeronet_wt_wasm) via the browser's implementation of
-  [WebTransport](https://developer.chrome.com/en/articles/webtransport/), useful for a WASM app
-  which requires a networking client
+  WebTransport, useful for a WASM app which requires a networking client
 
 # Getting started
 
@@ -46,9 +44,9 @@ assert_is_message::<C2S>();
 assert_is_message::<S2C>();
 ```
 
-Then, you will need a transport implementation to use. Select one from the list above that
-suits your needs. Afterwards, use the [`ClientTransport`] and [`ServerTransport`] traits to
-interact with the transport, to do functions such as sending and receiving data.
+Then, you will need a transport implementation to use. Select one from the list above that suits
+your needs. Afterwards, use the [`ClientTransport`] and [`ServerTransport`] traits to interact with
+the transport, to do functions such as sending and receiving data.
 
 ```rust,ignore
 let client = MyClientTransport::<C2S, S2C>::new();
@@ -76,7 +74,7 @@ App::new()
 fn on_recv(
     mut recv: EventReader<FromServer<S2C>>,
 ) {
-    for FromServer { msg } in recv.iter() {
+    for FromServer(msg) in recv.iter() {
         println!("Got a message from the server: {msg:?}");
     }
 }

@@ -38,6 +38,8 @@ where
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: Channels,
 {
+    type EventIter<'a> = std::vec::Drain<'a, ServerEvent<C2S>> where Self: 'a;
+
     type ClientInfo = EndpointInfo;
 
     fn recv(&mut self) {
@@ -64,7 +66,7 @@ where
         }
     }
 
-    fn take_events(&mut self) -> impl Iterator<Item = ServerEvent<C2S>> {
+    fn take_events(&mut self) -> Self::EventIter<'_> {
         self.events.drain(..)
     }
 

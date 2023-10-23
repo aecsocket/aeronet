@@ -11,7 +11,7 @@ mod on_channel;
 /// Defines the different app-specific channels used by messages in this app.
 ///
 /// * `#[channel_kind(kind)]` determines which kind of channel this variant
-///   represents, where `kind` is a variant of [`ChannelKind`].
+///   represents, where `kind` is a variant of `ChannelKind`.
 ///
 /// # Usage
 ///
@@ -36,7 +36,6 @@ mod on_channel;
 ///     HighPriority,
 /// }
 /// ```
-/// [`ChannelKind`]: aeronet_wt_core::ChannelKind
 #[proc_macro_derive(Channels, attributes(channel_kind))]
 pub fn derive_channels(input: TokenStream) -> TokenStream {
     let node = parse_macro_input!(input as DeriveInput);
@@ -94,7 +93,6 @@ pub fn derive_channels(input: TokenStream) -> TokenStream {
 ///     Chat { msg: String },
 /// }
 /// ```
-/// [`Channels`]: aeronet_wt_core::Channels
 #[proc_macro_derive(OnChannel, attributes(channel_type, on_channel))]
 pub fn derive_on_channel(input: TokenStream) -> TokenStream {
     let node = parse_macro_input!(input as DeriveInput);

@@ -41,23 +41,26 @@ where
     C2S: Message,
     S2C: Message,
 {
+    type EventIter<'a> = std::vec::Drain<'a, ClientEvent<S2C>>;
+
     type Info = ();
 
     fn recv(&mut self) {
         self.events
-            .extend(self.recv.try_iter().map(|msg| ClientEvent::Recv { msg }));
+            .extend(self.recv.try_iter().map(|msg| ClientEvent::Recv(msg)));
 
         if self.connected {
             if let Err(TryRecvError::Disconnected) = self.recv.try_recv() {
                 self.connected = false;
-                self.events.push(ClientEvent::Disconnected {
-                    reason: SessionError::Transport(DisconnectedError.into()),
-                });
+                self.events
+                    .push(ClientEvent::Disconnected(SessionError::Transport(
+                        DisconnectedError.into(),
+                    )));
             }
         }
     }
 
-    fn take_events(&mut self) -> impl Iterator<Item = ClientEvent<S2C>> + '_ {
+    fn take_events(&mut self) -> Self::EventIter<'_> {
         self.events.drain(..)
     }
 

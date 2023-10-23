@@ -78,8 +78,8 @@ async fn listen<C2S, S2C, C>(
 
 async fn connect<C2S, S2C, C>(
     endpoint: &Endpoint<Client>,
-    mut send: &mut mpsc::Sender<Event<S2C>>,
-    mut recv: &mut mpsc::Receiver<Request<C2S>>,
+    send: &mut mpsc::Sender<Event<S2C>>,
+    recv: &mut mpsc::Receiver<Request<C2S>>,
     url: String,
 ) -> Result<Infallible, SessionError>
 where
@@ -94,7 +94,7 @@ where
         .await
         .map_err(|err| SessionError::Connecting(err.into()))?;
 
-    handle_session::<C2S, S2C, C>(conn, &mut send, &mut recv).await
+    handle_session::<C2S, S2C, C>(conn, send, recv).await
 }
 
 async fn handle_session<C2S, S2C, C>(

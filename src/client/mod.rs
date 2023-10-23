@@ -22,6 +22,11 @@ use crate::{Message, SessionError};
 /// [`Rtt`]: crate::Rtt
 /// [`RemoteAddr`]: crate::RemoteAddr
 pub trait ClientTransport<C2S: Message, S2C: Message> {
+    /// Iterator type over this transport's events.
+    type EventIter<'a>: Iterator<Item = ClientEvent<S2C>> + 'a
+    where
+        Self: 'a;
+
     /// The info that [`ClientTransport::info`] provides.
     type Info;
 
@@ -32,7 +37,7 @@ pub trait ClientTransport<C2S: Message, S2C: Message> {
     fn recv(&mut self);
 
     /// Takes ownership of all queued events in this transport.
-    fn take_events(&mut self) -> impl Iterator<Item = ClientEvent<S2C>> + '_;
+    fn take_events(&mut self) -> Self::EventIter<'_>;
 
     /// Sends a message to the connected server.
     fn send(&mut self, msg: impl Into<C2S>);

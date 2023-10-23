@@ -3,8 +3,8 @@
 [![crates.io](https://img.shields.io/crates/v/aeronet_wt_native.svg)](https://crates.io/crates/aeronet_wt_native)
 [![docs.rs](https://img.shields.io/docsrs/aeronet_wt_native)](https://docs.rs/aeronet_wt_native)
 
-A [WebTransport](https://developer.chrome.com/en/articles/webtransport/) transport implementation
-of aeronet, which uses the QUIC protocol under the hood to provide reliable streams and unreliable
+A [WebTransport](https://developer.chrome.com/en/articles/webtransport/) transport implementation of
+aeronet, which uses the QUIC protocol under the hood to provide reliable streams and unreliable
 datagrams.
 
 This transport can be used in a native app to provide a client and server transport using
@@ -19,8 +19,8 @@ The client and server implementations can be used separately, but have a similar
 
 The creation process will return `(WebTransport*, WebTransport*Backend)` - a frontend and backend
 object respectively. You should call `listen` on the backend in an async Tokio task as soon as
-possible to start the server, then store and use the frontend within your app to interact with
-the backend.
+possible to start the server, then store and use the frontend within your app to interact with the
+backend.
 
 ```rust
 use aeronet::{Message, TryIntoBytes, TryFromBytes};

@@ -124,7 +124,7 @@ fn on_channel(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<&TokenStream
     ))
 }
 
-fn match_body(variants: &Vec<Variant<'_>>) -> Vec<TokenStream> {
+fn match_body(variants: &[Variant<'_>]) -> Vec<TokenStream> {
     variants
         .iter()
         .map(|variant| {

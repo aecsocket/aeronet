@@ -27,6 +27,11 @@ where
     C2S: Message,
     S2C: Message,
 {
+    /// Iterator type over this transport's events.
+    type EventIter<'a>: Iterator<Item = ServerEvent<C2S>> + 'a
+    where
+        Self: 'a;
+
     /// The info that [`ServerTransport::client_info`] provides.
     type ClientInfo;
 
@@ -37,7 +42,7 @@ where
     fn recv(&mut self);
 
     /// Takes ownership of all queued events in this transport.
-    fn take_events(&mut self) -> impl Iterator<Item = ServerEvent<C2S>> + '_;
+    fn take_events(&mut self) -> Self::EventIter<'_>;
 
     /// Sends a message to a connected client.
     fn send(&mut self, client: ClientId, msg: impl Into<S2C>);

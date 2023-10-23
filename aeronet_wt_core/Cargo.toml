@@ -11,6 +11,6 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 aeronet = { path = "..", version = "0.2.0" }
-aeronet_wt_core_derive = { path = "../aeronet_wt_core_derive", verison = "0.2.0" }
-thiserror = "1.0"
-anyhow = "1.0"
+aeronet_wt_core_derive = { path = "../aeronet_wt_core_derive", version = "0.2.0" }
+thiserror = "1.0.50"
+anyhow = "1.0.75"

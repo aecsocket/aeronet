@@ -14,9 +14,8 @@ without caring about if the server you're connected to is remote or local.
 # Getting started
 
 This transport implementation tightly couples the client and server, due to the way that MPSC
-channels work. The entry point is [`ChannelTransportServer::new`], from which you can create
-and connect a [`ChannelTransportClient`] using [`ChannelTransportServer::connect`]:
-
+channels work. The entry point is [`ChannelTransportServer::new`], from which you can create and
+connect a [`ChannelTransportClient`] using [`ChannelTransportServer::connect`]:
 ```rust
 use aeronet::Message;
 use aeronet_channel::ChannelTransportServer;
@@ -31,5 +30,5 @@ where
 }
 ```
 
-Both sides will be bound to each other, and can be used and stored independently.
-Dropping either side will automatically disconnect the connection.
+Both sides will be bound to each other, and can be used and store independently. Dropping either
+side will automatically disconnect the connection.

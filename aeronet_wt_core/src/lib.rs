@@ -6,21 +6,9 @@ pub use aeronet_wt_core_derive::*;
 
 /// A side-agnostic type representing a kind of method used for data transport.
 ///
-/// WebTransport uses the QUIC protocol internally, which allows using different
-/// methods of data transport for different situations, trading off reliability
-/// and ordering for speed. See the variant documentation for a description
-/// of each method.
-///
-/// Different methods may provide guarantees on:
-/// * **reliability** - ensuring that the message reaches the other side
-/// * **ordering** - ensuring that messages are received in the other they are
-///   sent
-/// * **head-of-line blocking** - some messages may not be received until a
-///   different message sent earlier is received
-///
-/// QUIC and WebTransport also supports unidirectional streams, however
-/// implementing thse heavily complicates the API surface, and bidirectional
-/// streams ([`ChannelKind::Stream`]) are usually a good replacement.
+/// See the [module-level docs] and variant docs for info.
+/// 
+/// [module-level docs]: self
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChannelKind {
     /// Sends and receives messages unreliably and unordered in a
@@ -56,11 +44,13 @@ pub enum ChannelKind {
 
 /// A side-agnostic type representing an instance of a method used for data
 /// transport.
-///
-/// See [`ChannelKind`] for a description of the different transport methods.
+/// 
+/// See the [module-level docs] for info.
 ///
 /// This type allows specifying exactly what instance of [`ChannelId::Stream`]
 /// this value represents.
+/// 
+/// [module-level docs]: self
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChannelId {
     /// See [`ChannelKind::Datagram`].
