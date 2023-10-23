@@ -2,22 +2,25 @@ use bevy::prelude::*;
 
 /// Wrapper resource around an async [`tokio`] runtime.
 ///
-/// Some transports may require an async runtime for handling connections, and Bevy does not
-/// provide one by default. This provides a [`tokio::runtime::Runtime`] wrapped in a
-/// [`Resource`] which can be injected into any system.
+/// Some transports may require an async runtime for handling connections, and
+/// Bevy does not provide one by default. This provides a
+/// [`tokio::runtime::Runtime`] wrapped in a [`Resource`] which can be injected
+/// into any system.
 ///
 /// # Usage
 ///
-/// To insert into a [`World`], initialize the resource using [`App::init_resource`]:
-/// ```
-/// use bevy::prelude::*;
-/// use aeronet::AsyncRuntime;
+/// To insert into a [`World`], initialize the resource using
+/// [`App::init_resource`]:
 ///
-/// App::new()
-///     .init_resource::<AsyncRuntime>();
+/// ```
+/// use aeronet::AsyncRuntime;
+/// use bevy::prelude::*;
+///
+/// App::new().init_resource::<AsyncRuntime>();
 /// ```
 ///
 /// Then add the [`AsyncRuntime`] as a [`Res`] system parameter:
+///
 /// ```
 /// # use bevy::prelude::*;
 /// # use aeronet::AsyncRuntime;

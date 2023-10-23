@@ -4,18 +4,30 @@ use aeronet::{
     AsyncRuntime, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
     LocalClientDisconnected, ToServer, TryFromBytes, TryIntoBytes,
 };
-use aeronet_wt_native::{
-    wtransport::ClientConfig, ClientStream, OnStream, StreamMessage, TransportStreams,
-    WebTransportClient,
-};
+use aeronet_wt_native::{Channels, OnChannel, WebTransportClient};
 use anyhow::Result;
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use wtransport::ClientConfig;
 
 // config
 
-#[derive(Debug, Clone)]
-pub struct AppMessage(pub String);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Channels)]
+#[channel_kind(Datagram)]
+struct AppChannel;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, OnChannel)]
+#[channel_type(AppChannel)]
+#[on_channel(AppChannel)]
+struct AppMessage(String);
+
+impl TryFromBytes for AppMessage {
+    fn try_from_bytes(buf: &[u8]) -> Result<Self> {
+        String::from_utf8(buf.to_owned().into_iter().collect())
+            .map(AppMessage)
+            .map_err(Into::into)
+    }
+}
 
 impl TryIntoBytes for AppMessage {
     fn try_into_bytes(self) -> Result<Vec<u8>> {
@@ -23,15 +35,7 @@ impl TryIntoBytes for AppMessage {
     }
 }
 
-impl TryFromBytes for AppMessage {
-    fn try_from_bytes(payload: &[u8]) -> Result<Self> {
-        String::from_utf8(payload.to_owned().into_iter().collect())
-            .map(|s| AppMessage(s))
-            .map_err(|err| err.into())
-    }
-}
-
-type Client = WebTransportClient<StreamMessage<ClientStream, AppMessage>, AppMessage>;
+type Client = WebTransportClient<AppMessage, AppMessage, AppChannel>;
 
 // logic
 
@@ -48,28 +52,28 @@ fn main() {
         .init_resource::<AsyncRuntime>()
         .init_resource::<UiState>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (recv, ui))
+        .add_systems(Update, (ui, recv))
         .run();
 }
 
 fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
-    let streams = TransportStreams::default();
-    match create(rt.as_ref(), streams) {
+    match create(rt.as_ref()) {
         Ok(client) => {
+            info!("Created client");
             commands.insert_resource(client);
         }
-        Err(err) => panic!("Failed to create client: {err:#}"),
+        Err(err) => panic!("Failed to create server: {err:#}"),
     }
 }
 
-fn create(rt: &AsyncRuntime, streams: TransportStreams) -> Result<Client> {
+fn create(rt: &AsyncRuntime) -> Result<Client> {
     let config = ClientConfig::builder()
         .with_bind_default()
         .with_no_cert_validation()
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    let (front, back) = aeronet_wt_native::create_client(config, streams);
+    let (front, back) = aeronet_wt_native::create_client(config);
     rt.0.spawn(async move {
         back.start().await.unwrap();
     });
@@ -93,7 +97,7 @@ impl UiState {
 fn ui(
     mut egui: EguiContexts,
     mut state: ResMut<UiState>,
-    mut send: EventWriter<ToServer<StreamMessage<ClientStream, AppMessage>>>,
+    mut send: EventWriter<ToServer<AppMessage>>,
     client: Res<Client>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
@@ -113,7 +117,7 @@ fn ui(
                 .inner
                 .response;
 
-            if url_resp.lost_focus() {
+            if url_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 let url = state.url.clone();
                 state.url.clear();
                 state.push(format!("Connecting to {url:?}"));
@@ -140,10 +144,7 @@ fn ui(
             let buf = state.buf.clone();
             state.buf.clear();
             state.push(format!("> {}", buf));
-            send.send(ToServer {
-                msg: AppMessage(buf).on(ClientStream::Datagram),
-            });
-
+            send.send(ToServer(AppMessage(buf)));
             ui.memory_mut(|m| m.request_focus(buf_resp.id));
         }
     });
@@ -159,14 +160,14 @@ fn recv(
         state.push("Client connected");
     }
 
-    for LocalClientDisconnected { reason } in disconnected.iter() {
+    for LocalClientDisconnected(reason) in disconnected.iter() {
         state.push(format!(
             "Client disconnected: {:#}",
             aeronet::error::as_pretty(reason),
         ));
     }
 
-    for FromServer { msg } in recv.iter() {
+    for FromServer(msg) in recv.iter() {
         state.push(format!("< {}", msg.0));
     }
 }

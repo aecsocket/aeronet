@@ -5,8 +5,8 @@
 
 # NOTE: THIS IS WORK IN PROGRESS! This literally *does not work* yet!
 
-A [WebTransport](https://developer.chrome.com/en/articles/webtransport/) transport implementation
-of aeronet, which uses the QUIC protocol under the hood to provide reliable streams and unreliable
+A [WebTransport](https://developer.chrome.com/en/articles/webtransport/) transport implementation of
+aeronet, which uses the QUIC protocol under the hood to provide reliable streams and unreliable
 datagrams.
 
 This transport can be used in a WASM app to provide a client transport using the browser's

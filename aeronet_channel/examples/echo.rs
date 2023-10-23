@@ -23,12 +23,11 @@ impl TryFromBytes for AppMessage {
     fn try_from_bytes(payload: &[u8]) -> Result<Self> {
         String::from_utf8(payload.to_owned().into_iter().collect())
             .map(|s| AppMessage(s))
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 }
 
 type Client = ChannelTransportClient<AppMessage, AppMessage>;
-
 type Server = ChannelTransportServer<AppMessage, AppMessage>;
 
 // resources
@@ -62,10 +61,7 @@ fn main() {
         .init_resource::<ClientState>()
         .init_resource::<ServerState>()
         .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            (handle_client, handle_server, client_ui, server_ui).chain(),
-        )
+        .add_systems(Update, (handle_client, handle_server, client_ui, server_ui))
         .run();
 }
 
@@ -86,14 +82,14 @@ fn handle_client(
         state.scrollback.push("Client connected".into());
     }
 
-    for LocalClientDisconnected { reason } in disconnected.iter() {
+    for LocalClientDisconnected(reason) in disconnected.iter() {
         state.scrollback.push(format!(
             "Client disconnected: {:#}",
             aeronet::error::as_pretty(reason),
         ));
     }
 
-    for FromServer { msg } in recv.iter() {
+    for FromServer(msg) in recv.iter() {
         state.scrollback.push(format!("< {}", msg.0));
     }
 }
@@ -104,18 +100,18 @@ fn handle_server(
     mut recv: EventReader<FromClient<AppMessage>>,
     mut state: ResMut<ServerState>,
 ) {
-    for RemoteClientConnected { client } in connected.iter() {
+    for RemoteClientConnected(client) in connected.iter() {
         state.scrollback.push(format!("Client {client} connected"));
     }
 
-    for RemoteClientDisconnected { client, reason } in disconnected.iter() {
+    for RemoteClientDisconnected(client, reason) in disconnected.iter() {
         state.scrollback.push(format!(
             "Client {client} disconnected: {:#}",
             aeronet::error::as_pretty(reason),
         ));
     }
 
-    for FromClient { client, msg } in recv.iter() {
+    for FromClient(client, msg) in recv.iter() {
         state.scrollback.push(format!("{client} < {}", msg.0));
     }
 }
@@ -161,9 +157,7 @@ fn client_ui(
 
         if let Some(buf) = buf_text_edit(ui, &mut state.buf) {
             state.scrollback.push(format!("> {buf}"));
-            send.send(ToServer {
-                msg: AppMessage(buf),
-            });
+            send.send(ToServer(AppMessage(buf)));
         }
     });
 }
@@ -188,10 +182,7 @@ fn server_ui(
         if let Some(buf) = buf_text_edit(ui, &mut state.buf) {
             let target_client = state.target_client;
             state.scrollback.push(format!("{target_client} > {buf}"));
-            send.send(ToClient {
-                client: ClientId::from_raw(target_client),
-                msg: AppMessage(buf),
-            });
+            send.send(ToClient(ClientId::from_raw(target_client), AppMessage(buf)));
         }
     });
 }

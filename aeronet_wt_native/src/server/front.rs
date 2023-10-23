@@ -1,70 +1,78 @@
-use aeronet::{
-    ClientId, Message, RecvError, ServerEvent, ServerTransport, TryFromBytes, TryIntoBytes,
-};
-use anyhow::Result;
+use aeronet::{ClientId, Message, ServerEvent, ServerTransport, TryFromBytes, TryIntoBytes};
+use aeronet_wt_core::{Channels, OnChannel};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 
-use crate::{SendOn, ServerStream};
+use crate::EndpointInfo;
 
-use super::{Event, RemoteClientInfo, Request};
+use super::{Event, Request};
 
-/// Server-side transport layer implementation for [`aeronet`] using the WebTransport protocol.
+/// Server-side transport layer implementation for [`aeronet`] using the
+/// WebTransport protocol.
 ///
-/// This is the server-side entry point to the crate, allowing you to interface with the clients
-/// by receiving and sending data and commands to the [`crate::WebTransportServerBackend`].
-/// This is the type you should store and pass around in your app whenever you want to interface
-/// with the server. Use [`crate::create_server`] to create one.
+/// This is the server-side entry point to the crate, allowing you to interface
+/// with the clients by receiving and sending data and commands to the
+/// [`crate::WebTransportServerBackend`]. This is the type you should store and
+/// pass around in your app whenever you want to interface with the server. Use
+/// [`crate::create_server`] to create one.
 ///
-/// When dropped, the backend server is shut down and all client connections are dropped.
+/// When dropped, the backend server is shut down and all client connections are
+/// dropped.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct WebTransportServer<C2S, S2C> {
-    pub(crate) send: broadcast::Sender<Request<S2C>>,
-    pub(crate) recv: mpsc::Receiver<Event<C2S>>,
-    pub(crate) clients: FxHashMap<ClientId, RemoteClientInfo>,
-}
-
-impl<C2S, S2C> ServerTransport<C2S, S2C> for WebTransportServer<C2S, S2C>
+pub struct WebTransportServer<C2S, S2C, C>
 where
     C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + SendOn<ServerStream>,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: Channels,
 {
-    type ClientInfo = RemoteClientInfo;
+    pub(crate) send: broadcast::Sender<Request<S2C>>,
+    pub(crate) recv: mpsc::Receiver<Event<C2S>>,
+    pub(crate) clients: FxHashMap<ClientId, EndpointInfo>,
+    pub(crate) events: Vec<ServerEvent<C2S>>,
+}
 
-    fn recv(&mut self) -> Result<ServerEvent<C2S>, RecvError> {
-        loop {
-            match self.recv.try_recv() {
-                // non-returning
-                Ok(Event::UpdateInfo { client, info }) => {
-                    *self.clients.get_mut(&client).unwrap() = info;
-                }
-                // returning
-                Ok(Event::Incoming { client, info }) => {
+impl<C2S, S2C, C> ServerTransport<C2S, S2C> for WebTransportServer<C2S, S2C, C>
+where
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: Channels,
+{
+    type EventIter<'a> = std::vec::Drain<'a, ServerEvent<C2S>> where Self: 'a;
+
+    type ClientInfo = EndpointInfo;
+
+    fn recv(&mut self) {
+        while let Ok(event) = self.recv.try_recv() {
+            match event {
+                Event::Connected(client, info) => {
+                    debug_assert!(!self.clients.contains_key(&client));
                     self.clients.insert(client, info);
-                    return Ok(ServerEvent::Connecting { client });
+                    self.events.push(ServerEvent::Connected(client));
                 }
-                Ok(Event::Connected { client }) => {
-                    return Ok(ServerEvent::Connected { client });
+                Event::UpdateInfo(client, info) => {
+                    debug_assert!(self.clients.contains_key(&client));
+                    self.clients.insert(client, info);
                 }
-                Ok(Event::Recv { client, msg }) => return Ok(ServerEvent::Recv { client, msg }),
-                Ok(Event::Disconnected { client, reason }) => {
+                Event::Recv(client, msg) => {
+                    self.events.push(ServerEvent::Recv(client, msg));
+                }
+                Event::Disconnected(client, reason) => {
+                    debug_assert!(self.clients.contains_key(&client));
                     self.clients.remove(&client);
-                    return Ok(ServerEvent::Disconnected { client, reason });
+                    self.events.push(ServerEvent::Disconnected(client, reason));
                 }
-                Err(mpsc::error::TryRecvError::Empty) => return Err(RecvError::Empty),
-                Err(_) => return Err(RecvError::Closed),
             }
         }
     }
 
+    fn take_events(&mut self) -> Self::EventIter<'_> {
+        self.events.drain(..)
+    }
+
     fn send(&mut self, client: ClientId, msg: impl Into<S2C>) {
         let msg = msg.into();
-        let _ = self.send.send(Request::Send {
-            client,
-            stream: msg.stream(),
-            msg,
-        });
+        let _ = self.send.send(Request::Send { client, msg });
     }
 
     fn disconnect(&mut self, client: ClientId) {

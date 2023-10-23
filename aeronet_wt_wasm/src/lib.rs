@@ -4,10 +4,7 @@
 
 mod bindings;
 mod client;
-mod wrappers;
+
+pub use aeronet_wt_core::*;
 
 pub use client::WebTransportClient;
-pub use wrappers::{
-    CongestionControl, ServerCertificateHash, ServerCertificateHashAlgorithm,
-    WebTransportErrorSource, WebTransportErrorUnused, WebTransportOptions,
-};

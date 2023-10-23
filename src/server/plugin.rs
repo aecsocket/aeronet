@@ -4,18 +4,17 @@ use bevy::prelude::*;
 
 use crate::Message;
 
-use super::{ClientId, RecvError, ServerEvent, ServerTransport, SessionError};
+use super::{ClientId, ServerEvent, ServerTransport, SessionError};
 
 /// Handles [`ServerTransport`]s of type `T`.
 ///
-/// This handles receiving data from the transport and forwarding it to the app via events,
-/// as well as sending data to the transport by reading from events. The events provided are:
+/// This handles receiving data from the transport and forwarding it to the app
+/// via events, as well as sending data to the transport by reading from events.
+/// The events provided are:
 /// * Incoming
-///   * [`RemoteClientConnecting`] when a client requests a connection
-///     * Transport implementations are not required to send this event, so don't rely on it
-///       on main logic
 ///   * [`RemoteClientConnected`] when a client fully connects
-///     * Use this to run logic when a client fully connects e.g. loading player data
+///     * Use this to run logic when a client fully connects e.g. loading player
+///       data
 ///   * [`FromClient`] when a client sends data to the server
 ///   * [`RemoteClientDisconnected`] when a client loses connection
 ///     * Use this to run logic when a client is dropped
@@ -25,16 +24,17 @@ use super::{ClientId, RecvError, ServerEvent, ServerTransport, SessionError};
 ///
 /// # Usage
 ///
-/// This plugin is not *required* to use the server transports. Using the plugin actually poses
-/// the following limitations:
+/// This plugin is not *required* to use the server transports. Using the plugin
+/// actually poses the following limitations:
 /// * You do not get ownership of incoming messages
-///   * This means you are unable to mutate the messages before sending them to the rest of the app
-///     via [`FromClient`]
+///   * This means you are unable to mutate the messages before sending them to
+///     the rest of the app via [`FromClient`]
 /// * The transport implementation must implement [`Resource`]
 ///   * All inbuilt transports implement [`Resource`]
 ///
-/// If these are unsuitable for your use case, consider manually using the transport APIs from your
-/// app, bypassing the plugin altogether.
+/// If these are unsuitable for your use case, consider manually using the
+/// transport APIs from your app, bypassing the plugin altogether.
+///
 /// ```
 /// use bevy::prelude::*;
 /// use aeronet::ServerTransportPlugin;
@@ -60,8 +60,7 @@ where
     T: ServerTransport<C2S, S2C> + Resource,
 {
     fn build(&self, app: &mut App) {
-        app.add_event::<RemoteClientConnecting>()
-            .add_event::<RemoteClientConnected>()
+        app.add_event::<RemoteClientConnected>()
             .add_event::<FromClient<C2S>>()
             .add_event::<RemoteClientDisconnected>()
             .add_event::<ToClient<S2C>>()
@@ -94,58 +93,28 @@ pub enum ServerTransportSet {
     Send,
 }
 
-/// See [`ServerEvent::Connecting`].
-#[derive(Debug, Clone, Event)]
-pub struct RemoteClientConnecting {
-    /// See [`ServerEvent::Connecting::client`].
-    pub client: ClientId,
-}
-
 /// See [`ServerEvent::Connected`].
 #[derive(Debug, Clone, Event)]
-pub struct RemoteClientConnected {
-    /// See [`ServerEvent::Connected::client`].
-    pub client: ClientId,
-}
+pub struct RemoteClientConnected(pub ClientId);
 
 /// See [`ServerEvent::Recv`].
 #[derive(Debug, Clone, Event)]
-pub struct FromClient<C2S> {
-    /// See [`ServerEvent::Recv::client`].
-    pub client: ClientId,
-    /// See [`ServerEvent::Recv::msg`].
-    pub msg: C2S,
-}
+pub struct FromClient<C2S>(pub ClientId, pub C2S);
 
 /// See [`ServerEvent::Disconnected`].
 #[derive(Debug, Event)]
-pub struct RemoteClientDisconnected {
-    /// See [`ServerEvent::Disconnected::client`].
-    pub client: ClientId,
-    /// See [`ServerEvent::Disconnected::reason`].
-    pub reason: SessionError,
-}
+pub struct RemoteClientDisconnected(pub ClientId, pub SessionError);
 
 /// Sends a message to a connected client using [`ServerTransport::send`].
 #[derive(Debug, Event)]
-pub struct ToClient<S2C> {
-    /// The ID of the client to send to.
-    pub client: ClientId,
-    /// The message to send.
-    pub msg: S2C,
-}
+pub struct ToClient<S2C>(pub ClientId, pub S2C);
 
 /// Forcefully disconnects a client using [`ServerTransport::disconnect`].
 #[derive(Debug, Clone, Event)]
-pub struct DisconnectClient {
-    /// The ID of the client to disconnect.
-    pub client: ClientId,
-}
+pub struct DisconnectClient(pub ClientId);
 
 fn recv<C2S, S2C, T>(
-    mut commands: Commands,
     mut server: ResMut<T>,
-    mut connecting: EventWriter<RemoteClientConnecting>,
     mut connected: EventWriter<RemoteClientConnected>,
     mut from_client: EventWriter<FromClient<C2S>>,
     mut disconnected: EventWriter<RemoteClientDisconnected>,
@@ -154,24 +123,17 @@ fn recv<C2S, S2C, T>(
     S2C: Message,
     T: ServerTransport<C2S, S2C> + Resource,
 {
-    loop {
-        match server.recv() {
-            Ok(ServerEvent::Connecting { client }) => {
-                connecting.send(RemoteClientConnecting { client });
+    server.recv();
+    for event in server.take_events() {
+        match event {
+            ServerEvent::Connected(client) => {
+                connected.send(RemoteClientConnected(client));
             }
-            Ok(ServerEvent::Connected { client }) => {
-                connected.send(RemoteClientConnected { client });
+            ServerEvent::Recv(client, msg) => {
+                from_client.send(FromClient(client, msg));
             }
-            Ok(ServerEvent::Recv { client, msg }) => {
-                from_client.send(FromClient { client, msg });
-            }
-            Ok(ServerEvent::Disconnected { client, reason }) => {
-                disconnected.send(RemoteClientDisconnected { client, reason });
-            }
-            Err(RecvError::Empty) => break,
-            Err(RecvError::Closed) => {
-                commands.remove_resource::<T>();
-                break;
+            ServerEvent::Disconnected(client, reason) => {
+                disconnected.send(RemoteClientDisconnected(client, reason));
             }
         }
     }
@@ -186,11 +148,11 @@ fn send<C2S, S2C, T>(
     S2C: Message + Clone,
     T: ServerTransport<C2S, S2C> + Resource,
 {
-    for ToClient { client, msg } in to_client.iter() {
+    for ToClient(client, msg) in to_client.iter() {
         server.send(*client, msg.clone());
     }
 
-    for DisconnectClient { client } in disconnect.iter() {
+    for DisconnectClient(client) in disconnect.iter() {
         server.disconnect(*client);
     }
 }

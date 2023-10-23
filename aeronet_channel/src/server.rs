@@ -1,7 +1,6 @@
-use std::collections::VecDeque;
-
-use aeronet::{ClientId, Message, RecvError, ServerEvent, ServerTransport, SessionError};
+use aeronet::{ClientId, Message, ServerEvent, ServerTransport, SessionError};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
+use derivative::Derivative;
 use rustc_hash::FxHashMap;
 
 use crate::{shared::CHANNEL_BUF, ChannelTransportClient, DisconnectedError};
@@ -13,12 +12,14 @@ use crate::{shared::CHANNEL_BUF, ChannelTransportClient, DisconnectedError};
 /// [`ChannelTransportServer::connect`] to create and connect a client.
 ///
 /// If this server is dropped, all clients will automatically be considered disconnected.
-#[derive(Debug)]
+#[derive(Debug, Derivative)]
+#[derivative(Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelTransportServer<C2S, S2C> {
     clients: FxHashMap<ClientId, ClientInfo<C2S, S2C>>,
+    clients_to_remove: Vec<ClientId>,
     next_client: usize,
-    queued_recv: VecDeque<ServerEvent<C2S>>,
+    events: Vec<ServerEvent<C2S>>,
 }
 
 #[derive(Debug)]
@@ -34,11 +35,7 @@ where
 {
     /// Creates a new server with zero connected clients.
     pub fn new() -> Self {
-        Self {
-            clients: FxHashMap::default(),
-            next_client: 0,
-            queued_recv: VecDeque::new(),
-        }
+        Self::default()
     }
 
     /// Creates and connects a client to this server.
@@ -57,6 +54,7 @@ where
             send: send_c2s,
             recv: recv_s2c,
             connected: true,
+            events: Vec::new(),
         };
         let our_client = ClientInfo {
             send: send_s2c,
@@ -72,35 +70,32 @@ where
     C2S: Message,
     S2C: Message,
 {
+    type EventIter<'a> = std::vec::Drain<'a, ServerEvent<C2S>>;
+
     type ClientInfo = ();
 
-    fn recv(&mut self) -> Result<ServerEvent<C2S>, RecvError> {
-        // buffer up events so that, on recv, we'll iterate the client map once, buffer the events,
-        // then send them out on the next few recv calls
-        // this has the disadvantage that the first recv will always be RecvError::Empty
-        if let Some(event) = self.queued_recv.pop_front() {
-            return Ok(event);
+    fn recv(&mut self) {
+        for client in self.clients_to_remove.drain(..) {
+            debug_assert!(self.clients.contains_key(&client));
+            self.clients.remove(&client);
         }
 
         for (client, ClientInfo { recv, .. }) in self.clients.iter() {
-            match recv.try_recv() {
-                Ok(msg) => {
-                    self.queued_recv.push_back(ServerEvent::Recv {
-                        client: *client,
-                        msg,
-                    });
-                }
-                Err(TryRecvError::Empty) => {}
-                Err(TryRecvError::Disconnected) => {
-                    self.queued_recv.push_back(ServerEvent::Disconnected {
-                        client: *client,
-                        reason: SessionError::Transport(DisconnectedError.into()),
-                    })
-                }
+            self.events
+                .extend(recv.try_iter().map(|msg| ServerEvent::Recv(*client, msg)));
+
+            if let Err(TryRecvError::Disconnected) = recv.try_recv() {
+                self.events.push(ServerEvent::Disconnected(
+                    *client,
+                    SessionError::Transport(DisconnectedError.into()),
+                ));
+                self.clients_to_remove.push(*client);
             }
         }
+    }
 
-        Err(RecvError::Empty)
+    fn take_events(&mut self) -> Self::EventIter<'_> {
+        self.events.drain(..)
     }
 
     fn send(&mut self, client: ClientId, msg: impl Into<S2C>) {
