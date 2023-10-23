@@ -16,6 +16,7 @@ without caring about if the server you're connected to is remote or local.
 This transport implementation tightly couples the client and server, due to the way that MPSC
 channels work. The entry point is [`ChannelTransportServer::new`], from which you can create and
 connect a [`ChannelTransportClient`] using [`ChannelTransportServer::connect`]:
+
 ```rust
 use aeronet::Message;
 use aeronet_channel::ChannelTransportServer;

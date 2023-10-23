@@ -76,7 +76,7 @@ impl From<ChannelId> for ChannelKind {
 ///
 /// This should be derived - see [`aeronet_wt_core_derive::Channels`].
 /// Otherwise, transport implementations may panic from invalid parameters.
-pub trait Channels {
+pub trait Channels: 'static {
     /// Gets the ID of this channel variant.
     fn channel_id(&self) -> ChannelId;
 

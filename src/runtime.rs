@@ -11,6 +11,7 @@ use bevy::prelude::*;
 ///
 /// To insert into a [`World`], initialize the resource using
 /// [`App::init_resource`]:
+/// 
 /// ```
 /// use aeronet::AsyncRuntime;
 /// use bevy::prelude::*;
@@ -19,6 +20,7 @@ use bevy::prelude::*;
 /// ```
 ///
 /// Then add the [`AsyncRuntime`] as a [`Res`] system parameter:
+/// 
 /// ```
 /// # use bevy::prelude::*;
 /// # use aeronet::AsyncRuntime;
