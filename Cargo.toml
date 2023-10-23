@@ -37,8 +37,8 @@ all-features = true
 resolver = "2"
 members = [
     #"aeronet_channel",
-    "aeronet_wt_stream",
-    "aeronet_wt_stream_derive",
+    "aeronet_wt_core",
+    "aeronet_wt_core_derive",
     "aeronet_wt_native",
     #"aeronet_wt_wasm",
 ]

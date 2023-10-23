@@ -5,7 +5,7 @@ use anyhow::Result;
 /// This is a marker trait that ensures that data sent between transports is:
 /// * [`Send`]
 /// * [`Sync`]
-/// * has lifetime `'static`
+/// * `'static`
 ///
 /// The user defines which types of messages their transport uses, and this
 /// trait acts as a minimum bound for all message types. However, for different

@@ -2,11 +2,12 @@ pub mod back;
 pub mod front;
 
 use aeronet::{Message, SessionError, TryFromBytes, TryIntoBytes};
+use aeronet_wt_core::{Channels, OnChannel};
 use tokio::sync::mpsc;
 use wtransport::ClientConfig;
 
 use crate::{
-    shared::CHANNEL_BUF, ClientStream, EndpointInfo, SendOn, TransportStreams, WebTransportClient,
+    shared::CHANNEL_BUF, EndpointInfo, WebTransportClient,
     WebTransportClientBackend,
 };
 
@@ -19,16 +20,16 @@ use crate::{
 /// first available (this function does not automatically start the backend,
 /// because we have no guarantees about the current Tokio runtime at this
 /// point).
-pub fn create_client<C2S, S2C>(
+pub fn create_client<C2S, S2C, C>(
     config: ClientConfig,
-    streams: TransportStreams,
 ) -> (
     WebTransportClient<C2S, S2C>,
     WebTransportClientBackend<C2S, S2C>,
 )
 where
-    C2S: Message + TryIntoBytes + SendOn<ClientStream>,
+    C2S: Message + TryIntoBytes + OnChannel,
     S2C: Message + TryFromBytes,
+    C: Channels
 {
     let (send_b2f, recv_b2f) = mpsc::channel::<Event<S2C>>(CHANNEL_BUF);
     let (send_f2b, recv_f2b) = mpsc::channel::<Request<C2S>>(CHANNEL_BUF);
@@ -42,7 +43,6 @@ where
 
     let backend = WebTransportClientBackend::<C2S, S2C> {
         config,
-        streams,
         send: send_b2f,
         recv: recv_f2b,
     };

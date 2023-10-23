@@ -1,33 +1,33 @@
-use aeronet_wt_stream::{OnStream, Streams};
+use aeronet::{TryFromBytes, TryIntoBytes};
+use aeronet_wt_native::{OnChannel, Channels};
+use anyhow::Result;
 
 // config
 
-#[derive(Debug, Clone, Copy, Hash, Streams)]
-pub enum AppStream {
-    #[stream_kind(Datagram)]
-    LowPriority,
-    #[stream_kind(Bi)]
-    HighPriority,
-    #[stream_kind(Bi)]
-    HighPriority2,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Channels)]
+#[channel_kind(Datagram)]
+struct AppChannel;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, OnChannel)]
+#[channel_type(AppChannel)]
+#[on_channel(AppChannel)]
+struct AppMessage(String);
+
+impl TryFromBytes for AppMessage {
+    fn try_from_bytes(buf: &[u8]) -> Result<Self> {
+        String::from_utf8(buf.to_owned().into_iter().collect())
+            .map(AppMessage)
+            .map_err(Into::into)
+    }
 }
 
-#[derive(Debug, Clone, OnStream)]
-#[stream_type(AppStream)]
-pub enum C2S {
-    #[stream_variant(LowPriority)]
-    Move(f32),
-    #[stream_variant(HighPriority)]
-    Shoot,
-    #[stream_variant(HighPriority)]
-    Chat { msg: String },
+impl TryIntoBytes for AppMessage {
+    fn try_into_bytes(self) -> Result<Vec<u8>> {
+        Ok(self.0.into_bytes())
+    }
 }
 
-#[derive(OnStream)]
-#[stream_type(AppStream)]
-#[stream_variant(LowPriority)]
-pub struct Message(pub String);
+// logic
 
 fn main() {
-    let _ = C2S::Move(4.0).on_stream().stream_id();
 }

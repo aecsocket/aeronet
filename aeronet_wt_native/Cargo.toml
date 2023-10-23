@@ -14,7 +14,7 @@ bevy = [ "dep:bevy", "aeronet/bevy" ]
 
 [dependencies]
 aeronet = { path = "..", version = "0.2.0", features = [ "bevy-tokio-rt" ] }
-aeronet_wt_stream = { path = "../aeronet_wt_stream", version = "0.2.0" }
+aeronet_wt_core = { path = "../aeronet_wt_core", version = "0.2.0" }
 tracing = "0.1.37"
 thiserror = "1.0.47"
 anyhow = "1.0.75"
@@ -30,7 +30,8 @@ ring = "0.17.0"
 time = "0.3.21"
 bevy = "0.11.3"
 bevy_egui = "0.22.0"
-aeronet_wt_stream_derive = { path = "../aeronet_wt_stream_derive" }
+# todo remove this
+aeronet_wt_core_derive = { path = "../aeronet_wt_core_derive" }
 
 [package.metadata.docs.rs]
 all-features = true

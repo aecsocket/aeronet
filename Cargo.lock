@@ -100,12 +100,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "aeronet_wt_core"
+version = "0.2.0"
+dependencies = [
+ "aeronet",
+ "aeronet_wt_core_derive",
+ "anyhow",
+ "thiserror",
+]
+
+[[package]]
+name = "aeronet_wt_core_derive"
+version = "0.2.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.29",
+]
+
+[[package]]
 name = "aeronet_wt_native"
 version = "0.2.0"
 dependencies = [
  "aeronet",
- "aeronet_wt_stream",
- "aeronet_wt_stream_derive",
+ "aeronet_wt_core",
+ "aeronet_wt_core_derive",
  "anyhow",
  "base64 0.21.3",
  "bevy",
@@ -118,23 +137,6 @@ dependencies = [
  "tokio",
  "tracing",
  "wtransport",
-]
-
-[[package]]
-name = "aeronet_wt_stream"
-version = "0.2.0"
-dependencies = [
- "aeronet",
- "aeronet_wt_stream_derive",
-]
-
-[[package]]
-name = "aeronet_wt_stream_derive"
-version = "0.2.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.29",
 ]
 
 [[package]]

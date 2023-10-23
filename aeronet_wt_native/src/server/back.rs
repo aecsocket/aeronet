@@ -1,6 +1,7 @@
 use std::{convert::Infallible, io};
 
 use aeronet::{ClientId, Message, SessionError, TryFromBytes, TryIntoBytes};
+use aeronet_wt_core::{Channels, ChannelId, OnChannel};
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, debug_span, Instrument};
 use wtransport::{
@@ -9,7 +10,7 @@ use wtransport::{
 };
 
 use crate::{
-    shared::{open_streams, recv_datagram, send_out},
+    shared::{open_channels, recv_datagram, send_out},
     EndpointInfo,
 };
 
@@ -21,16 +22,22 @@ use super::{Event, Request, CHANNEL_BUF};
 /// The only thing you should do with this struct is to run
 /// [`WebTransportServerBackend::start`] in an async task - the frontend will
 /// handle the rest.
-pub struct WebTransportServerBackend<C2S, S2C> {
+pub struct WebTransportServerBackend<C2S, S2C, C>
+where
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: Channels,
+{
     pub(crate) config: ServerConfig,
     pub(crate) send_b2f: mpsc::Sender<Event<C2S>>,
     pub(crate) send_f2b: broadcast::Sender<Request<S2C>>,
 }
 
-impl<C2S, S2C> WebTransportServerBackend<C2S, S2C>
+impl<C2S, S2C, C> WebTransportServerBackend<C2S, S2C, C>
 where
     C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + Clone,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C> + Clone,
+    C: Channels,
 {
     /// Starts the server logic which interfaces with clients.
     pub async fn start(self) -> Result<(), io::Error> {
@@ -42,20 +49,20 @@ where
 
         let endpoint = Endpoint::server(config)?;
         debug!("Started WebTransport server backend");
-        listen::<C2S, S2C>(endpoint, send_b2f, send_f2b).await;
+        listen::<C2S, S2C, C>(endpoint, send_b2f, send_f2b).await;
         debug!("Stopped WebTransport server backend");
         Ok(())
     }
 }
 
-async fn listen<C2S, S2C>(
+async fn listen<C2S, S2C, C>(
     endpoint: Endpoint<Server>,
-    streams: TransportStreams,
     send_evt: mpsc::Sender<Event<C2S>>,
     send_req: broadcast::Sender<Request<S2C>>,
 ) where
     C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + Clone,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C> + Clone,
+    C: Channels,
 {
     let (send_close, mut recv_close) = mpsc::channel::<()>(1);
     for client in 0.. {
@@ -67,7 +74,6 @@ async fn listen<C2S, S2C>(
 
         let client = ClientId::from_raw(client);
 
-        let streams = streams.clone();
         let mut send = send_evt.clone();
         let recv = send_req.subscribe();
 
@@ -89,7 +95,7 @@ async fn listen<C2S, S2C>(
                         return;
                     }
                 };
-                let reason = handle_session::<C2S, S2C>(streams, send.clone(), recv, client, conn)
+                let reason = handle_session::<C2S, S2C, C>(send.clone(), recv, client, conn)
                     .await
                     .unwrap_err();
                 if send
@@ -105,8 +111,7 @@ async fn listen<C2S, S2C>(
     }
 }
 
-async fn handle_session<C2S, S2C>(
-    streams: TransportStreams,
+async fn handle_session<C2S, S2C, C>(
     send: mpsc::Sender<Event<C2S>>,
     mut recv: broadcast::Receiver<Request<S2C>>,
     client: ClientId,
@@ -114,12 +119,12 @@ async fn handle_session<C2S, S2C>(
 ) -> Result<Infallible, SessionError>
 where
     C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + Clone,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C> + Clone,
+    C: Channels,
 {
     let (send_in, mut recv_in) = mpsc::channel::<C2S>(CHANNEL_BUF);
     let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
-    let (mut streams_bi, mut streams_uni_out) =
-        open_streams::<S2C, C2S, ServerStream>(&streams, &mut conn, send_in, send_err).await?;
+    let mut streams_bi = open_channels::<S2C, C2S, C>(&mut conn, send_in, send_err).await?;
 
     loop {
         send.send(Event::UpdateInfo {
@@ -133,7 +138,7 @@ where
             result = conn.receive_datagram() => {
                 let msg = recv_datagram::<C2S>(result)
                     .await
-                    .map_err(|err| SessionError::Transport(err.on(TransportStream::Datagram).into()))?;
+                    .map_err(|err| SessionError::Transport(err.on(ChannelId::Datagram).into()))?;
                 send.send(Event::Recv { client, msg })
                     .await
                     .map_err(|_| SessionError::Closed)?;
@@ -149,10 +154,11 @@ where
             result = recv.recv() => {
                 let req = result.map_err(|_| SessionError::Closed)?;
                 match req {
-                    Request::Send { client: target, stream, msg } if target == client => {
-                        send_out::<S2C>(&mut conn, &mut streams_bi, &mut streams_uni_out, stream.into(), msg)
+                    Request::Send { client: target, msg } if target == client => {
+                        let channel = msg.channel().channel_id();
+                        send_out::<S2C>(&mut conn, &mut streams_bi, channel, msg)
                             .await
-                            .map_err(|err| SessionError::Transport(err.on(stream.into()).into()))?;
+                            .map_err(|err| SessionError::Transport(err.on(channel).into()))?;
                     }
                     Request::Disconnect { client: target } if target == client => {
                         return Err(SessionError::ForceDisconnect);

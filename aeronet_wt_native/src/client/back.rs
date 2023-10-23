@@ -6,7 +6,7 @@ use tracing::debug;
 use wtransport::{endpoint::endpoint_side::Client, ClientConfig, Connection, Endpoint};
 
 use crate::{
-    shared::{open_streams, recv_datagram, send_out, CHANNEL_BUF},
+    shared::{open_channels, recv_datagram, send_out, CHANNEL_BUF},
     ClientStream, EndpointInfo, TransportStream, TransportStreams,
 };
 
@@ -109,7 +109,7 @@ where
     let (send_in, mut recv_in) = mpsc::channel::<S2C>(CHANNEL_BUF);
     let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
     let (mut streams_bi, mut streams_uni_out) =
-        open_streams::<C2S, S2C, ClientStream>(streams, &mut conn, send_in, send_err).await?;
+        open_channels::<C2S, S2C, ClientStream>(streams, &mut conn, send_in, send_err).await?;
 
     debug!("Connected to {}", conn.remote_address());
     // although we are going to send the endpoint info literally immediately after

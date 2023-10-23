@@ -10,7 +10,8 @@ use bevy::prelude::*;
 /// # Usage
 ///
 /// To insert into a [`World`], initialize the resource using
-/// [`App::init_resource`]: ```
+/// [`App::init_resource`]:
+/// ```
 /// use aeronet::AsyncRuntime;
 /// use bevy::prelude::*;
 ///

@@ -23,7 +23,7 @@ impl TryFromBytes for AppMessage {
     fn try_from_bytes(payload: &[u8]) -> Result<Self> {
         String::from_utf8(payload.to_owned().into_iter().collect())
             .map(|s| AppMessage(s))
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 }
 

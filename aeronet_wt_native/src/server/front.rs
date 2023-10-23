@@ -1,5 +1,5 @@
 use aeronet::{ClientId, Message, ServerEvent, ServerTransport, TryFromBytes, TryIntoBytes};
-use aeronet_wt_stream::{OnStream, Streams};
+use aeronet_wt_core::{OnChannel, Channels};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 
@@ -20,18 +20,23 @@ use super::{Event, Request};
 /// dropped.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct WebTransportServer<C2S, S2C, S> {
+pub struct WebTransportServer<C2S, S2C, C>
+where
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: Channels,
+{
     pub(crate) send: broadcast::Sender<Request<S2C>>,
     pub(crate) recv: mpsc::Receiver<Event<C2S>>,
     pub(crate) clients: FxHashMap<ClientId, EndpointInfo>,
     pub(crate) events: Vec<ServerEvent<C2S>>,
 }
 
-impl<C2S, S2C, S> ServerTransport<C2S, S2C> for WebTransportServer<C2S, S2C>
+impl<C2S, S2C, C> ServerTransport<C2S, S2C> for WebTransportServer<C2S, S2C, C>
 where
     C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnStream<S>,
-    S: Streams,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: Channels,
 {
     type ClientInfo = EndpointInfo;
 
@@ -68,7 +73,6 @@ where
         let msg = msg.into();
         let _ = self.send.send(Request::Send {
             client,
-            stream: msg.stream(),
             msg,
         });
     }

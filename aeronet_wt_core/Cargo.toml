@@ -1,18 +1,16 @@
 [package]
-name = "aeronet_wt_stream_derive"
+name = "aeronet_wt_core"
 version = "0.2.0"
 edition = "2021"
-description = "Derive macros for aeronet_wt_streams"
+description = "Core types for the WebTransport implementations for aeronet"
 authors = [ "aecsocket <aecsocket@tutanota.com>" ]
 repository = "https://github.com/aecsocket/aeronet"
 keywords = [ "gamedev", "network", "bevy" ]
 categories = [ "game-development", "network-programming" ]
 license = "MIT OR Apache-2.0"
 
-[lib]
-proc-macro = true
-
 [dependencies]
-proc-macro2 = "1.0"
-syn = "2.0"
-quote = "1.0"
+aeronet = { path = "..", version = "0.2.0" }
+aeronet_wt_core_derive = { path = "../aeronet_wt_core_derive", verison = "0.2.0" }
+thiserror = "1.0"
+anyhow = "1.0"

@@ -2,15 +2,12 @@ pub mod back;
 pub mod front;
 
 use aeronet::{ClientId, Message, SessionError, TryFromBytes, TryIntoBytes};
-use aeronet_wt_stream::{Streams, OnStream, StreamId};
+use aeronet_wt_core::{OnChannel, Channels};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 use wtransport::ServerConfig;
 
-use crate::{
-    shared::CHANNEL_BUF, EndpointInfo, WebTransportServer,
-    WebTransportServerBackend,
-};
+use crate::{shared::CHANNEL_BUF, EndpointInfo, WebTransportServer, WebTransportServerBackend};
 
 /// Creates a server-side transport using the WebTransport protocol.
 ///
@@ -21,28 +18,28 @@ use crate::{
 /// first available (this function does not automatically start the backend,
 /// because we have no guarantees about the current Tokio runtime at this
 /// point).
-pub fn create_server<C2S, S2C, S>(
+pub fn create_server<C2S, S2C, C>(
     config: ServerConfig,
 ) -> (
-    WebTransportServer<C2S, S2C>,
-    WebTransportServerBackend<C2S, S2C>,
+    WebTransportServer<C2S, S2C, C>,
+    WebTransportServerBackend<C2S, S2C, C>,
 )
 where
     C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnStream<S> + Clone,
-    S: Streams,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C> + Clone,
+    C: Channels,
 {
     let (send_b2f, recv_b2f) = mpsc::channel::<Event<C2S>>(CHANNEL_BUF);
     let (send_f2b, _) = broadcast::channel::<Request<S2C>>(CHANNEL_BUF);
 
-    let frontend = WebTransportServer::<C2S, S2C> {
+    let frontend = WebTransportServer::<C2S, S2C, C> {
         send: send_f2b.clone(),
         recv: recv_b2f,
         clients: FxHashMap::default(),
         events: Vec::new(),
     };
 
-    let backend = WebTransportServerBackend::<C2S, S2C> {
+    let backend = WebTransportServerBackend::<C2S, S2C, C> {
         config,
         send_b2f,
         send_f2b,
@@ -55,7 +52,6 @@ where
 pub(crate) enum Request<S2C> {
     Send {
         client: ClientId,
-        stream: StreamId,
         msg: S2C,
     },
     Disconnect {

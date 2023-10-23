@@ -1,7 +1,6 @@
 use std::{net::SocketAddr, time::Duration};
 
 use aeronet::{RemoteAddr, Rtt};
-use aeronet_wt_stream::StreamId;
 use wtransport::Connection;
 
 /// Stores data about a connection to an endpoint of the opposite side, captured
@@ -44,47 +43,5 @@ impl Rtt for EndpointInfo {
 impl RemoteAddr for EndpointInfo {
     fn remote_addr(&self) -> SocketAddr {
         self.remote_addr
-    }
-}
-
-/// An error that occurred while processing a stream.
-#[derive(Debug, thiserror::Error)]
-pub enum StreamError {
-    /// Failed to establish this stream.
-    #[error("failed to open stream")]
-    Open(#[source] anyhow::Error),
-    /// Failed to receive data along this stream, either during deserialization
-    /// or transport.
-    #[error("failed to receive data")]
-    Recv(#[source] anyhow::Error),
-    /// Failed to send data along this stream, either during serialization or
-    /// transport.
-    #[error("failed to send data")]
-    Send(#[source] anyhow::Error),
-    /// The stream was closed by the other side, but the connection is still
-    /// active.
-    #[error("closed")]
-    Closed,
-}
-
-/// A wrapper for [`StreamError`] detailing on which stream the error occurred.
-#[derive(Debug, thiserror::Error)]
-#[error("on {stream:?}")]
-pub struct OnStreamError {
-    /// The stream on which the error occurred.
-    pub stream: StreamId,
-    /// The stream error.
-    #[source]
-    pub source: StreamError,
-}
-
-impl StreamError {
-    /// Wraps this [`StreamError`] into an [`OnStreamError`] by providing which
-    /// stream the error occurred on.
-    pub fn on(self, stream: StreamId) -> OnStreamError {
-        OnStreamError {
-            stream,
-            source: self,
-        }
     }
 }
