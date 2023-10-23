@@ -12,20 +12,20 @@ mod on_channel;
 ///
 /// * `#[channel_kind(kind)]` determines which kind of channel this variant
 ///   represents, where `kind` is a variant of [`ChannelKind`].
-/// 
+///
 /// # Usage
-/// 
+///
 /// ## Struct
-/// 
+///
 /// The struct requires the attribute `#[channel_kind(..)]`.
 /// ```
 /// #[derive(Channels)]
 /// #[channel_kind(Datagram)]
 /// struct AppChannel;
 /// ```
-/// 
+///
 /// ## Enum
-/// 
+///
 /// All variants require the attribute `#[channel_kind(..)]`.
 /// ```
 /// #[derive(Channels)]
@@ -46,31 +46,31 @@ pub fn derive_channels(input: TokenStream) -> TokenStream {
 }
 
 /// Defines along what variant of a [`Channels`] a message is sent.
-/// 
+///
 /// * `#[channel_type(type)]` determines what `type` implementing [`Channels`]
 ///   variants of this type can be sent along.
 /// * `#[on_channel(value)]` determines what value of type `type` this variant
 ///   is sent along.
 ///
 /// # Usage
-/// 
+///
 /// ## Struct
-/// 
+///
 /// The type requires the attributes `#[channel_type(..)]` and
 /// `#[on_channel(..)]`.
 /// ```
 /// #[derive(Channels)]
 /// #[channel_kind(Datagram)]
 /// struct AppChannel;
-/// 
+///
 /// #[derive(OnChannel)]
 /// #[channel_type(AppChannel)]
 /// #[on_channel(AppChannel)]
 /// struct AppMessage(pub String);
 /// ```
-/// 
+///
 /// ## Enum
-/// 
+///
 /// The type requires the attribute `#[channel_type(..)]`.
 ///
 /// All variants require the attribute `#[on_channel(..)]`.
@@ -82,7 +82,7 @@ pub fn derive_channels(input: TokenStream) -> TokenStream {
 ///     #[channel_kind(Stream)]
 ///     HighPriority,
 /// }
-/// 
+///
 /// #[derive(OnChannel)]
 /// #[channel_type(AppChannel)]
 /// enum AppMessage {

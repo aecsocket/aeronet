@@ -1,5 +1,5 @@
 use aeronet::{TryFromBytes, TryIntoBytes};
-use aeronet_wt_native::{OnChannel, Channels};
+use aeronet_wt_native::{Channels, OnChannel};
 use anyhow::Result;
 
 // config
@@ -29,5 +29,4 @@ impl TryIntoBytes for AppMessage {
 
 // logic
 
-fn main() {
-}
+fn main() {}

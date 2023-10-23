@@ -71,17 +71,9 @@ pub enum ServerEvent<C2S> {
     ///
     /// This should be used as a signal to start client setup, such as loading
     /// the client's data from a database.
-    Connected {
-        /// The ID of the connected client.
-        client: ClientId,
-    },
+    Connected(ClientId),
     /// A connected client sent data to the server.
-    Recv {
-        /// The ID of the sender.
-        client: ClientId,
-        /// The message sent by the client.
-        msg: C2S,
-    },
+    Recv(ClientId, C2S),
     /// A client was lost and the connection was closed for any reason.
     ///
     /// This is called for both transport errors (such as losing connection) and
@@ -90,12 +82,7 @@ pub enum ServerEvent<C2S> {
     ///
     /// This should be used as a signal to start client teardown and removing
     /// them from the app.
-    Disconnected {
-        /// The ID of the disconnected client.
-        client: ClientId,
-        /// Why the connection was lost.
-        reason: SessionError,
-    },
+    Disconnected(ClientId, SessionError),
 }
 
 /// A unique identifier for a client connected to a server.
@@ -107,7 +94,7 @@ pub enum ServerEvent<C2S> {
 pub struct ClientId(usize);
 
 impl ClientId {
-    /// Creates an ID from the raw generational index.
+    /// Creates an ID from the raw value provided.
     ///
     /// Passing an arbitrary value which was not previously made from
     /// [`Self::into_raw`] may result in a client ID which does not point to
@@ -116,7 +103,7 @@ impl ClientId {
         Self(raw)
     }
 
-    /// Converts an ID into its raw generational index.
+    /// Converts an ID into its raw value.
     pub fn into_raw(self) -> usize {
         self.0
     }

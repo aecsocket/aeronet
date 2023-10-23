@@ -101,8 +101,7 @@ pub trait Channels {
 /// Note that this trait only determines along which channel an *outgoing*
 /// message is sent; *incoming* messages are simply received without any
 /// channel data.
-pub trait OnChannel
-{
+pub trait OnChannel {
     /// The type of channel that [`OnChannel::channel`] returns.
     type Channel: Channels;
 

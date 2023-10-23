@@ -94,44 +94,23 @@ pub enum ServerTransportSet {
 
 /// See [`ServerEvent::Connected`].
 #[derive(Debug, Clone, Event)]
-pub struct RemoteClientConnected {
-    /// See [`ServerEvent::Connected::client`].
-    pub client: ClientId,
-}
+pub struct RemoteClientConnected(pub ClientId);
 
 /// See [`ServerEvent::Recv`].
 #[derive(Debug, Clone, Event)]
-pub struct FromClient<C2S> {
-    /// See [`ServerEvent::Recv::client`].
-    pub client: ClientId,
-    /// See [`ServerEvent::Recv::msg`].
-    pub msg: C2S,
-}
+pub struct FromClient<C2S>(pub ClientId, pub C2S);
 
 /// See [`ServerEvent::Disconnected`].
 #[derive(Debug, Event)]
-pub struct RemoteClientDisconnected {
-    /// See [`ServerEvent::Disconnected::client`].
-    pub client: ClientId,
-    /// See [`ServerEvent::Disconnected::reason`].
-    pub reason: SessionError,
-}
+pub struct RemoteClientDisconnected(pub ClientId, pub SessionError);
 
 /// Sends a message to a connected client using [`ServerTransport::send`].
 #[derive(Debug, Event)]
-pub struct ToClient<S2C> {
-    /// The ID of the client to send to.
-    pub client: ClientId,
-    /// The message to send.
-    pub msg: S2C,
-}
+pub struct ToClient<S2C>(pub ClientId, pub S2C);
 
 /// Forcefully disconnects a client using [`ServerTransport::disconnect`].
 #[derive(Debug, Clone, Event)]
-pub struct DisconnectClient {
-    /// The ID of the client to disconnect.
-    pub client: ClientId,
-}
+pub struct DisconnectClient(pub ClientId);
 
 fn recv<C2S, S2C, T>(
     mut server: ResMut<T>,
@@ -146,14 +125,14 @@ fn recv<C2S, S2C, T>(
     server.recv();
     for event in server.take_events() {
         match event {
-            ServerEvent::Connected { client } => {
-                connected.send(RemoteClientConnected { client });
+            ServerEvent::Connected(client) => {
+                connected.send(RemoteClientConnected(client));
             }
-            ServerEvent::Recv { client, msg } => {
-                from_client.send(FromClient { client, msg });
+            ServerEvent::Recv(client, msg) => {
+                from_client.send(FromClient(client, msg));
             }
-            ServerEvent::Disconnected { client, reason } => {
-                disconnected.send(RemoteClientDisconnected { client, reason });
+            ServerEvent::Disconnected(client, reason) => {
+                disconnected.send(RemoteClientDisconnected(client, reason));
             }
         }
     }
@@ -168,11 +147,11 @@ fn send<C2S, S2C, T>(
     S2C: Message + Clone,
     T: ServerTransport<C2S, S2C> + Resource,
 {
-    for ToClient { client, msg } in to_client.iter() {
+    for ToClient(client, msg) in to_client.iter() {
         server.send(*client, msg.clone());
     }
 
-    for DisconnectClient { client } in disconnect.iter() {
+    for DisconnectClient(client) in disconnect.iter() {
         server.disconnect(*client);
     }
 }

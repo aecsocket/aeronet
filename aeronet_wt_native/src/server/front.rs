@@ -1,5 +1,5 @@
 use aeronet::{ClientId, Message, ServerEvent, ServerTransport, TryFromBytes, TryIntoBytes};
-use aeronet_wt_core::{OnChannel, Channels};
+use aeronet_wt_core::{Channels, OnChannel};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 
@@ -43,23 +43,22 @@ where
     fn recv(&mut self) {
         while let Ok(event) = self.recv.try_recv() {
             match event {
-                Event::Connected { client, info } => {
+                Event::Connected(client, info) => {
                     debug_assert!(!self.clients.contains_key(&client));
                     self.clients.insert(client, info);
-                    self.events.push(ServerEvent::Connected { client });
+                    self.events.push(ServerEvent::Connected(client));
                 }
-                Event::UpdateInfo { client, info } => {
+                Event::UpdateInfo(client, info) => {
                     debug_assert!(self.clients.contains_key(&client));
                     self.clients.insert(client, info);
                 }
-                Event::Recv { client, msg } => {
-                    self.events.push(ServerEvent::Recv { client, msg });
+                Event::Recv(client, msg) => {
+                    self.events.push(ServerEvent::Recv(client, msg));
                 }
-                Event::Disconnected { client, reason } => {
+                Event::Disconnected(client, reason) => {
                     debug_assert!(self.clients.contains_key(&client));
                     self.clients.remove(&client);
-                    self.events
-                        .push(ServerEvent::Disconnected { client, reason });
+                    self.events.push(ServerEvent::Disconnected(client, reason));
                 }
             }
         }
@@ -71,10 +70,7 @@ where
 
     fn send(&mut self, client: ClientId, msg: impl Into<S2C>) {
         let msg = msg.into();
-        let _ = self.send.send(Request::Send {
-            client,
-            msg,
-        });
+        let _ = self.send.send(Request::Send { client, msg });
     }
 
     fn disconnect(&mut self, client: ClientId) {

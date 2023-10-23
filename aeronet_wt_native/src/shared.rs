@@ -1,5 +1,5 @@
 use aeronet::{Message, SessionError, TryFromBytes, TryIntoBytes};
-use aeronet_wt_core::{Channels, ChannelId};
+use aeronet_wt_core::{ChannelId, Channels};
 use anyhow::Result;
 use tokio::sync::mpsc;
 use wtransport::{

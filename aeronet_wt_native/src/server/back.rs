@@ -1,7 +1,7 @@
 use std::{convert::Infallible, io};
 
 use aeronet::{ClientId, Message, SessionError, TryFromBytes, TryIntoBytes};
-use aeronet_wt_core::{Channels, ChannelId, OnChannel};
+use aeronet_wt_core::{ChannelId, Channels, OnChannel};
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, debug_span, Instrument};
 use wtransport::{
@@ -99,7 +99,7 @@ async fn listen<C2S, S2C, C>(
                     .await
                     .unwrap_err();
                 if send
-                    .send(Event::Disconnected { client, reason })
+                    .send(Event::Disconnected(client, reason))
                     .await
                     .is_err()
                 {
@@ -127,10 +127,10 @@ where
     let mut streams_bi = open_channels::<S2C, C2S, C>(&mut conn, send_in, send_err).await?;
 
     loop {
-        send.send(Event::UpdateInfo {
+        send.send(Event::UpdateInfo(
             client,
-            info: EndpointInfo::from_connection(&conn),
-        })
+            EndpointInfo::from_connection(&conn),
+        ))
         .await
         .map_err(|_| SessionError::Closed)?;
 
@@ -139,12 +139,12 @@ where
                 let msg = recv_datagram::<C2S>(result)
                     .await
                     .map_err(|err| SessionError::Transport(err.on(ChannelId::Datagram).into()))?;
-                send.send(Event::Recv { client, msg })
+                send.send(Event::Recv(client, msg))
                     .await
                     .map_err(|_| SessionError::Closed)?;
             }
             Some(msg) = recv_in.recv() => {
-                send.send(Event::Recv { client, msg })
+                send.send(Event::Recv(client, msg))
                     .await
                     .map_err(|_| SessionError::Closed)?;
             }
@@ -197,10 +197,10 @@ where
 
     let remote_addr = conn.remote_address();
     debug!("Connected from {remote_addr}");
-    send.send(Event::Connected {
+    send.send(Event::Connected(
         client,
-        info: EndpointInfo::from_connection(&conn),
-    })
+        EndpointInfo::from_connection(&conn),
+    ))
     .await
     .map_err(|_| SessionError::Closed)?;
 

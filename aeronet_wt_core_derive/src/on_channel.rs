@@ -44,13 +44,16 @@ fn on_enum(node: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
     let channel_type = channel_type(node, &node.attrs)?;
-    let on_channels = data.variants
+    let on_channels = data
+        .variants
         .iter()
-        .map(|node| on_channel(node, &node.attrs).map(|on_channel| Variant {
-            ident: &node.ident,
-            fields: &node.fields,
-            on_channel,
-        }))
+        .map(|node| {
+            on_channel(node, &node.attrs).map(|on_channel| Variant {
+                ident: &node.ident,
+                fields: &node.fields,
+                on_channel,
+            })
+        })
         .collect::<Result<Vec<_>>>()?;
     let match_body = match_body(&on_channels);
 

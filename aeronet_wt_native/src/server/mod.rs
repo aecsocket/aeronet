@@ -2,7 +2,7 @@ pub mod back;
 pub mod front;
 
 use aeronet::{ClientId, Message, SessionError, TryFromBytes, TryIntoBytes};
-use aeronet_wt_core::{OnChannel, Channels};
+use aeronet_wt_core::{Channels, OnChannel};
 use rustc_hash::FxHashMap;
 use tokio::sync::{broadcast, mpsc};
 use wtransport::ServerConfig;
@@ -50,31 +50,14 @@ where
 
 #[derive(Debug, Clone)]
 pub(crate) enum Request<S2C> {
-    Send {
-        client: ClientId,
-        msg: S2C,
-    },
-    Disconnect {
-        client: ClientId,
-    },
+    Send { client: ClientId, msg: S2C },
+    Disconnect { client: ClientId },
 }
 
 #[derive(Debug)]
 pub(crate) enum Event<C2S> {
-    Connected {
-        client: ClientId,
-        info: EndpointInfo,
-    },
-    UpdateInfo {
-        client: ClientId,
-        info: EndpointInfo,
-    },
-    Recv {
-        client: ClientId,
-        msg: C2S,
-    },
-    Disconnected {
-        client: ClientId,
-        reason: SessionError,
-    },
+    Connected(ClientId, EndpointInfo),
+    UpdateInfo(ClientId, EndpointInfo),
+    Recv(ClientId, C2S),
+    Disconnected(ClientId, SessionError),
 }

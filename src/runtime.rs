@@ -17,7 +17,7 @@ use bevy::prelude::*;
 ///
 /// App::new().init_resource::<AsyncRuntime>();
 /// ```
-/// 
+///
 /// Then add the [`AsyncRuntime`] as a [`Res`] system parameter:
 /// ```
 /// # use bevy::prelude::*;
@@ -30,7 +30,7 @@ use bevy::prelude::*;
 ///
 /// async fn do_the_async_thing() {}
 /// ```
-/// 
+///
 /// If the runtime cannot be created when initialized, the app will panic.
 #[derive(Debug, Resource)]
 pub struct AsyncRuntime(pub tokio::runtime::Runtime);
