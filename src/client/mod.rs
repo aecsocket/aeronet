@@ -62,10 +62,7 @@ pub enum ClientEvent<S2C> {
     /// such as entering the level loading menu in a game.
     Connected,
     /// The connected server sent data to the client.
-    Recv {
-        /// The message sent by the server.
-        msg: S2C,
-    },
+    Recv(S2C),
     /// The connection to the server was closed for any reason.
     ///
     /// This is called for both transport errors (such as losing connection) and
@@ -73,8 +70,5 @@ pub enum ClientEvent<S2C> {
     ///
     /// This should be used as a signal to transition into the next app state,
     /// such as entering the main menu after exiting a server.
-    Disconnected {
-        /// Why the connection was lost.
-        reason: SessionError,
-    },
+    Disconnected(SessionError),
 }

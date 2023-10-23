@@ -64,16 +64,13 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands, mut exit: EventWriter<AppExit>, rt: Res<AsyncRuntime>) {
+fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
     match create(rt.as_ref()) {
         Ok(server) => {
             info!("Created server");
             commands.insert_resource(server);
         }
-        Err(err) => {
-            error!("Failed to create server: {err:#}");
-            exit.send(AppExit);
-        }
+        Err(err) => panic!("Failed to create server: {err:#}"),
     }
 }
 

@@ -1,4 +1,5 @@
 use aeronet::{ClientEvent, ClientTransport, Message, TryFromBytes, TryIntoBytes};
+use aeronet_wt_core::{Channels, OnChannel};
 use tokio::sync::mpsc;
 
 use crate::EndpointInfo;
@@ -25,21 +26,31 @@ use super::{Event, Request};
 /// dropped.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct WebTransportClient<C2S, S2C> {
+pub struct WebTransportClient<C2S, S2C, C>
+where
+    C2S: Message + TryIntoBytes + OnChannel<Channel = C>,
+    S2C: Message + TryFromBytes,
+    C: Channels,
+{
     pub(crate) send: mpsc::Sender<Request<C2S>>,
     pub(crate) recv: mpsc::Receiver<Event<S2C>>,
     pub(crate) info: Option<EndpointInfo>,
     pub(crate) events: Vec<ClientEvent<S2C>>,
 }
 
-impl<C2S, S2C> WebTransportClient<C2S, S2C> {
+impl<C2S, S2C, C> WebTransportClient<C2S, S2C, C>
+where
+    C2S: Message + TryIntoBytes + OnChannel<Channel = C>,
+    S2C: Message + TryFromBytes,
+    C: Channels,
+{
     /// Requests the client to connect to a given URL.
     ///
     /// If the client is [connected], this request has no effect.
     ///
     /// [connected]: aeronet::ClientTransport::connected
     pub fn connect(&self, url: impl Into<String>) {
-        let _ = self.send.try_send(Request::Connect { url: url.into() });
+        let _ = self.send.try_send(Request::Connect(url.into()));
     }
 
     /// Requests the client to disconnect from the current connection.
@@ -52,32 +63,33 @@ impl<C2S, S2C> WebTransportClient<C2S, S2C> {
     }
 }
 
-impl<C2S, S2C> ClientTransport<C2S, S2C> for WebTransportClient<C2S, S2C>
+impl<C2S, S2C, C> ClientTransport<C2S, S2C> for WebTransportClient<C2S, S2C, C>
 where
-    C2S: Message + TryIntoBytes + SendOn<ClientStream>,
+    C2S: Message + TryIntoBytes + OnChannel<Channel = C>,
     S2C: Message + TryFromBytes,
+    C: Channels,
 {
     type Info = EndpointInfo;
 
     fn recv(&mut self) {
         while let Ok(event) = self.recv.try_recv() {
             match event {
-                Event::Connected { info } => {
+                Event::Connected(info) => {
                     debug_assert!(self.info.is_none());
                     self.info = Some(info);
                     self.events.push(ClientEvent::Connected);
                 }
-                Event::UpdateInfo { info } => {
+                Event::UpdateInfo(info) => {
                     debug_assert!(self.info.is_some());
                     self.info = Some(info);
                 }
-                Event::Recv { msg } => {
-                    self.events.push(ClientEvent::Recv { msg });
+                Event::Recv(msg) => {
+                    self.events.push(ClientEvent::Recv(msg));
                 }
-                Event::Disconnected { reason } => {
+                Event::Disconnected(reason) => {
                     debug_assert!(self.info.is_some());
                     self.info = None;
-                    self.events.push(ClientEvent::Disconnected { reason });
+                    self.events.push(ClientEvent::Disconnected(reason));
                 }
             }
         }
@@ -89,10 +101,7 @@ where
 
     fn send(&mut self, msg: impl Into<C2S>) {
         let msg = msg.into();
-        let _ = self.send.try_send(Request::Send {
-            stream: msg.stream(),
-            msg,
-        });
+        let _ = self.send.try_send(Request::Send(msg));
     }
 
     fn info(&self) -> Option<Self::Info> {

@@ -6,10 +6,7 @@ use aeronet_wt_core::{Channels, OnChannel};
 use tokio::sync::mpsc;
 use wtransport::ClientConfig;
 
-use crate::{
-    shared::CHANNEL_BUF, EndpointInfo, WebTransportClient,
-    WebTransportClientBackend,
-};
+use crate::{shared::CHANNEL_BUF, EndpointInfo, WebTransportClient, WebTransportClientBackend};
 
 /// Creates a client-side transport using the WebTransport protocol.
 ///
@@ -23,25 +20,25 @@ use crate::{
 pub fn create_client<C2S, S2C, C>(
     config: ClientConfig,
 ) -> (
-    WebTransportClient<C2S, S2C>,
-    WebTransportClientBackend<C2S, S2C>,
+    WebTransportClient<C2S, S2C, C>,
+    WebTransportClientBackend<C2S, S2C, C>,
 )
 where
-    C2S: Message + TryIntoBytes + OnChannel,
+    C2S: Message + TryIntoBytes + OnChannel<Channel = C>,
     S2C: Message + TryFromBytes,
-    C: Channels
+    C: Channels,
 {
     let (send_b2f, recv_b2f) = mpsc::channel::<Event<S2C>>(CHANNEL_BUF);
     let (send_f2b, recv_f2b) = mpsc::channel::<Request<C2S>>(CHANNEL_BUF);
 
-    let frontend = WebTransportClient::<C2S, S2C> {
+    let frontend = WebTransportClient::<C2S, S2C, C> {
         send: send_f2b,
         recv: recv_b2f,
         info: None,
         events: Vec::new(),
     };
 
-    let backend = WebTransportClientBackend::<C2S, S2C> {
+    let backend = WebTransportClientBackend::<C2S, S2C, C> {
         config,
         send: send_b2f,
         recv: recv_f2b,
@@ -52,15 +49,15 @@ where
 
 #[derive(Debug, Clone)]
 pub(crate) enum Request<C2S> {
-    Connect { url: String },
-    Send { stream: ClientStream, msg: C2S },
+    Connect(String),
+    Send(C2S),
     Disconnect,
 }
 
 #[derive(Debug)]
 pub(crate) enum Event<S2C> {
-    Connected { info: EndpointInfo },
-    UpdateInfo { info: EndpointInfo },
-    Recv { msg: S2C },
-    Disconnected { reason: SessionError },
+    Connected(EndpointInfo),
+    UpdateInfo(EndpointInfo),
+    Recv(S2C),
+    Disconnected(SessionError),
 }

@@ -124,7 +124,7 @@ where
 {
     let (send_in, mut recv_in) = mpsc::channel::<C2S>(CHANNEL_BUF);
     let (send_err, mut recv_err) = mpsc::channel::<SessionError>(CHANNEL_BUF);
-    let mut streams_bi = open_channels::<S2C, C2S, C>(&mut conn, send_in, send_err).await?;
+    let mut streams = open_channels::<S2C, C2S, C>(&mut conn, send_in, send_err).await?;
 
     loop {
         send.send(Event::UpdateInfo(
@@ -156,7 +156,7 @@ where
                 match req {
                     Request::Send { client: target, msg } if target == client => {
                         let channel = msg.channel().channel_id();
-                        send_out::<S2C>(&mut conn, &mut streams_bi, channel, msg)
+                        send_out::<S2C>(&mut conn, &mut streams, channel, msg)
                             .await
                             .map_err(|err| SessionError::Transport(err.on(channel).into()))?;
                     }

@@ -95,24 +95,15 @@ pub struct LocalClientConnected;
 
 /// See [`ClientEvent::Recv`].
 #[derive(Debug, Clone, Event)]
-pub struct FromServer<S2C> {
-    /// See [`ClientEvent::Recv::msg`].
-    pub msg: S2C,
-}
+pub struct FromServer<S2C>(pub S2C);
 
 /// See [`ClientEvent::Disconnected`].
 #[derive(Debug, Event)]
-pub struct LocalClientDisconnected {
-    /// See [`ClientEvent::Disconnected::reason`].
-    pub reason: SessionError,
-}
+pub struct LocalClientDisconnected(pub SessionError);
 
 /// Sends a message to a connected client using [`ClientTransport::send`].
 #[derive(Debug, Event)]
-pub struct ToServer<C2S> {
-    /// The message to send.
-    pub msg: C2S,
-}
+pub struct ToServer<C2S>(pub C2S);
 
 /// System to check if the client transport `T` is [connected].
 ///
@@ -162,11 +153,11 @@ fn recv<C2S, S2C, T>(
             ClientEvent::Connected => {
                 connected.send(LocalClientConnected);
             }
-            ClientEvent::Recv { msg } => {
-                from_server.send(FromServer { msg });
+            ClientEvent::Recv(msg) => {
+                from_server.send(FromServer(msg));
             }
-            ClientEvent::Disconnected { reason } => {
-                disconnected.send(LocalClientDisconnected { reason });
+            ClientEvent::Disconnected(reason) => {
+                disconnected.send(LocalClientDisconnected(reason));
             }
         }
     }
@@ -178,7 +169,7 @@ where
     S2C: Message,
     T: ClientTransport<C2S, S2C> + Resource,
 {
-    for ToServer { msg } in to_server.iter() {
+    for ToServer(msg) in to_server.iter() {
         client.send(msg.clone());
     }
 }
