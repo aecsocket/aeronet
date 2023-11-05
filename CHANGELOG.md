@@ -1,3 +1,16 @@
+# 0.3.0
+
+No major features in this version, since I'm still working on a large rework of API for 0.4.0.
+
+## Bevy 0.12
+
+Dependencies of this crate have been updated to use Bevy 0.12. This is the main feature of this
+release.
+
+## `src` -> `aeronet/src`
+
+The core `aeronet` crate has been put into its own directory. Just for code organisation.
+
 # 0.2.0
 
 ## WebTransport channels API
