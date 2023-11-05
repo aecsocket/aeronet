@@ -1,11 +1,9 @@
 #![warn(clippy::all)]
-#![warn(missing_docs)]
+//#![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
 
 mod client;
 mod server;
-mod shared;
 
-pub use client::ChannelTransportClient;
-pub use server::ChannelTransportServer;
-pub use shared::DisconnectedError;
+pub use client::{ClientState, ChannelClient, Connected, Disconnected};
+pub use server::{ChannelServer, ClientKey};

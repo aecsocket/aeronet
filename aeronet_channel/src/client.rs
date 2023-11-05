@@ -1,86 +1,90 @@
-use aeronet::{ClientEvent, ClientId, ClientTransport, Message, SessionError};
+use std::marker::PhantomData;
+
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
-use crate::DisconnectedError;
+use crate::{ChannelServer, server, ClientKey};
 
-/// Client-side transport layer implementation for [`aeronet`] using in-memory
-/// channels.
-///
-/// A client can only be created by connecting to an existing
-/// [`ChannelTransportServer`] using [`ChannelTransportServer::connect`].
-///
-/// If this client is dropped, it is considered disconnected on the server side.
-/// If the server is dropped, this client will not be considered connected by
-/// [`ClientTransport::connected`].
-///
-/// [`ChannelTransportServer`]: crate::ChannelTransportServer
-/// [`ChannelTransportServer::connect`]: crate::ChannelTransportServer::connect
-#[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct ChannelTransportClient<C2S, S2C> {
-    pub(crate) id: ClientId,
-    pub(crate) send: Sender<C2S>,
-    pub(crate) recv: Receiver<S2C>,
-    pub(crate) connected: bool,
-    pub(crate) events: Vec<ClientEvent<S2C>>,
+pub enum ChannelClient<C2S, S2C> {
+    Disconnected(ClientState<C2S, S2C, Disconnected>),
+    Connected(ClientState<C2S, S2C, Connected<C2S, S2C>>),
 }
 
-impl<C2S, S2C> ChannelTransportClient<C2S, S2C> {
-    /// Gets the server-side client ID of this client.
-    ///
-    /// This can be used to disconnect the client from the server using
-    /// [`ChannelTransportServer::disconnect`].
-    ///
-    /// [`ChannelTransportServer::disconnect`]: aeronet::ServerTransport::disconnect
-    pub fn id(&self) -> ClientId {
-        self.id
+pub struct ClientState<C2S, S2C, S> {
+    state: S,
+    phantom_c2s: PhantomData<C2S>,
+    phantom_s2c: PhantomData<S2C>,
+}
+
+pub struct Disconnected;
+
+impl<C2S, S2C> ClientState<C2S, S2C, Disconnected> {
+    pub fn new() -> Self {
+        Self {
+            state: Disconnected,
+            phantom_c2s: PhantomData::default(),
+            phantom_s2c: PhantomData::default(),
+        }
+    }
+
+    pub fn connect(self, server: &mut ChannelServer<C2S, S2C>) -> ClientState<C2S, S2C, Connected<C2S, S2C>> {
+        let (send_c2s, recv_c2s) = crossbeam_channel::unbounded::<C2S>();
+        let (send_s2c, recv_s2c) = crossbeam_channel::unbounded::<S2C>();
+
+        let remote_state = server::ClientState {
+            send_s2c,
+            recv_c2s,
+        };
+        let key = server.clients.insert(remote_state);
+        let state = Connected {
+            key,
+            send_c2s,
+            recv_s2c,
+            msgs: Vec::new(),
+        };
+
+        ClientState {
+            state,
+            phantom_c2s: self.phantom_c2s,
+            phantom_s2c: self.phantom_s2c,
+        }
     }
 }
 
-impl<C2S, S2C> ClientTransport<C2S, S2C> for ChannelTransportClient<C2S, S2C>
-where
-    C2S: Message,
-    S2C: Message,
-{
-    type EventIter<'a> = std::vec::Drain<'a, ClientEvent<S2C>>;
+pub struct Connected<C2S, S2C> {
+    key: ClientKey,
+    send_c2s: Sender<C2S>,
+    recv_s2c: Receiver<S2C>,
+    msgs: Vec<S2C>,
+}
 
-    type Info = ();
+impl<C2S, S2C> ClientState<C2S, S2C, Connected<C2S, S2C>> {
+    pub fn disconnect(self) -> ClientState<C2S, S2C, Disconnected> {
+        ClientState {
+            state: Disconnected,
+            phantom_c2s: self.phantom_c2s,
+            phantom_s2c: self.phantom_s2c,
+        }
+    }
 
-    fn recv(&mut self) {
-        self.events
-            .extend(self.recv.try_iter().map(|msg| ClientEvent::Recv(msg)));
-
-        if self.connected {
-            if let Err(TryRecvError::Disconnected) = self.recv.try_recv() {
-                self.connected = false;
-                self.events
-                    .push(ClientEvent::Disconnected(SessionError::Transport(
-                        DisconnectedError.into(),
-                    )));
+    pub fn recv(mut self) -> (ChannelClient<C2S, S2C>, impl Iterator<Item = S2C>) {
+        let mut msgs = Vec::new();
+        loop {
+            match self.state.recv_s2c.try_recv() {
+                Ok(msg) => msgs.push(msg),
+                Err(TryRecvError::Empty) => break,
             }
         }
-    }
 
-    fn take_events(&mut self) -> Self::EventIter<'_> {
-        self.events.drain(..)
-    }
+        self.state.msgs.extend(self.state.recv_s2c.try_iter());
 
-    fn send(&mut self, msg: impl Into<C2S>) {
-        let msg = msg.into();
-        // if this channel is disconnected, we'll catch it on the next `recv`
-        // so don't do anything here
-        let _ = self.send.send(msg);
-    }
-
-    fn info(&self) -> Option<Self::Info> {
-        if self.connected {
-            Some(())
-        } else {
-            None
+        match self.state.recv_s2c.try_recv() {
+            Err(TryRecvError::Disconnected) => (ChannelClient::Disconnected(self.disconnect()), self.state.msgs.drain(..)),
+            _ => {
+                // if a server sends a message right after we've consumed all
+                // its events, this is possible, but we drop it
+                // kind of bad but idk
+                (ChannelClient::Connected(self), self.state.msgs.drain(..))
+            },
         }
-    }
-
-    fn connected(&self) -> bool {
-        self.connected
     }
 }

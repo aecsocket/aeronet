@@ -162,7 +162,7 @@ dependencies = [
  "bevy_egui",
  "crossbeam-channel",
  "derivative",
- "rustc-hash",
+ "slotmap",
  "thiserror",
  "tracing",
 ]

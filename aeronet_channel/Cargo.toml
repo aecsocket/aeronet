@@ -17,9 +17,9 @@ aeronet = { path = "../aeronet", version = "0.3.0" }
 tracing = "0.1.40"
 thiserror = "1.0.50"
 anyhow = "1.0.75"
-rustc-hash = "1.1.0"
 crossbeam-channel = "0.5.8"
 derivative = "2.2.0"
+slotmap = "1.0.6"
 bevy = { version = "0.12.0", default-features = false, optional = true }
 
 [dev-dependencies]
