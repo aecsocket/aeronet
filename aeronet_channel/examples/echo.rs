@@ -78,11 +78,11 @@ fn handle_client(
     mut recv: EventReader<FromServer<AppMessage>>,
     mut state: ResMut<ClientState>,
 ) {
-    for LocalClientConnected in connected.iter() {
+    for LocalClientConnected in connected.read() {
         state.scrollback.push("Client connected".into());
     }
 
-    for LocalClientDisconnected(reason) in disconnected.iter() {
+    for LocalClientDisconnected(reason) in disconnected.read() {
         state.scrollback.push(format!(
             "Client disconnected: {:#}",
             aeronet::error::as_pretty(reason),
@@ -100,18 +100,18 @@ fn handle_server(
     mut recv: EventReader<FromClient<AppMessage>>,
     mut state: ResMut<ServerState>,
 ) {
-    for RemoteClientConnected(client) in connected.iter() {
+    for RemoteClientConnected(client) in connected.read() {
         state.scrollback.push(format!("Client {client} connected"));
     }
 
-    for RemoteClientDisconnected(client, reason) in disconnected.iter() {
+    for RemoteClientDisconnected(client, reason) in disconnected.read() {
         state.scrollback.push(format!(
             "Client {client} disconnected: {:#}",
             aeronet::error::as_pretty(reason),
         ));
     }
 
-    for FromClient(client, msg) in recv.iter() {
+    for FromClient(client, msg) in recv.read() {
         state.scrollback.push(format!("{client} < {}", msg.0));
     }
 }
