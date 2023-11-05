@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_wt_wasm"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "WASM WebTransport transport implementation for aeronet"
 authors = [ "aecsocket <aecsocket@tutanota.com>" ]
@@ -16,8 +16,8 @@ crate-type = [ "rlib", "cdylib" ]
 bevy = [ "dep:bevy", "aeronet/bevy" ]
 
 [dependencies]
-aeronet = { path = "..", version = "0.2.0" }
-aeronet_wt_core = { path = "../aeronet_wt_core", version = "0.2.0" }
+aeronet = { path = "../aeronet", version = "0.3.0" }
+aeronet_wt_core = { path = "../aeronet_wt_core", version = "0.3.0" }
 tracing = "0.1.40"
 thiserror = "1.0.50"
 anyhow = "1.0.75"
@@ -25,7 +25,7 @@ wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"
 js-sys = "0.3.64"
 crossbeam-channel = "0.5.8"
-bevy = { version = "0.11.3", default-features = false, optional = true }
+bevy = { version = "0.12.0", default-features = false, optional = true }
 
 [dependencies.web-sys]
 version = "0.3.64"
@@ -44,7 +44,7 @@ features = [
 ]
 
 [dev-dependencies]
-bevy = "0.11.3"
+bevy = "0.12.0"
 bevy_egui = "0.22.0"
 
 [package.metadata.docs.rs]

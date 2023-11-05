@@ -61,11 +61,11 @@ where
             .add_event::<FromServer<S2C>>()
             .add_event::<LocalClientDisconnected>()
             .add_event::<ToServer<C2S>>()
-            .configure_set(
+            .configure_sets(
                 PreUpdate,
                 ClientTransportSet::Recv.run_if(resource_exists::<T>()),
             )
-            .configure_set(
+            .configure_sets(
                 PostUpdate,
                 ClientTransportSet::Send.run_if(resource_exists::<T>()),
             )
@@ -169,7 +169,7 @@ where
     S2C: Message,
     T: ClientTransport<C2S, S2C> + Resource,
 {
-    for ToServer(msg) in to_server.iter() {
+    for ToServer(msg) in to_server.read() {
         client.send(msg.clone());
     }
 }

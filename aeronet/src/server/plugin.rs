@@ -65,11 +65,11 @@ where
             .add_event::<RemoteClientDisconnected>()
             .add_event::<ToClient<S2C>>()
             .add_event::<DisconnectClient>()
-            .configure_set(
+            .configure_sets(
                 PreUpdate,
                 ServerTransportSet::Recv.run_if(resource_exists::<T>()),
             )
-            .configure_set(
+            .configure_sets(
                 PostUpdate,
                 ServerTransportSet::Send.run_if(resource_exists::<T>()),
             )
@@ -148,11 +148,11 @@ fn send<C2S, S2C, T>(
     S2C: Message + Clone,
     T: ServerTransport<C2S, S2C> + Resource,
 {
-    for ToClient(client, msg) in to_client.iter() {
+    for ToClient(client, msg) in to_client.read() {
         server.send(*client, msg.clone());
     }
 
-    for DisconnectClient(client) in disconnect.iter() {
+    for DisconnectClient(client) in disconnect.read() {
         server.disconnect(*client);
     }
 }

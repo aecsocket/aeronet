@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_wt_core_derive"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Derive macros for aeronet_wt_core"
 authors = [ "aecsocket <aecsocket@tutanota.com>" ]

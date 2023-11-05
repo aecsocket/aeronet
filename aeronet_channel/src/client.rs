@@ -3,10 +3,11 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
 use crate::DisconnectedError;
 
-/// Client-side transport layer implementation for [`aeronet`] using in-memory channels.
+/// Client-side transport layer implementation for [`aeronet`] using in-memory
+/// channels.
 ///
-/// A client can only be created by connecting to an existing [`ChannelTransportServer`] using
-/// [`ChannelTransportServer::connect`].
+/// A client can only be created by connecting to an existing
+/// [`ChannelTransportServer`] using [`ChannelTransportServer::connect`].
 ///
 /// If this client is dropped, it is considered disconnected on the server side.
 /// If the server is dropped, this client will not be considered connected by

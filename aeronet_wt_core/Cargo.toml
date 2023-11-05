@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_wt_core"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Core types for the WebTransport implementations for aeronet"
 authors = [ "aecsocket <aecsocket@tutanota.com>" ]
@@ -10,8 +10,8 @@ categories = [ "game-development", "network-programming" ]
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-aeronet = { path = "..", version = "0.2.0" }
-aeronet_wt_core_derive = { path = "../aeronet_wt_core_derive", version = "0.2.0" }
+aeronet = { path = "../aeronet", version = "0.3.0" }
+aeronet_wt_core_derive = { path = "../aeronet_wt_core_derive", version = "0.3.0" }
 thiserror = "1.0.50"
 anyhow = "1.0.75"
 
