@@ -156,18 +156,18 @@ fn recv(
     mut recv: EventReader<FromServer<AppMessage>>,
     mut state: ResMut<UiState>,
 ) {
-    for LocalClientConnected in connected.iter() {
+    for LocalClientConnected in connected.read() {
         state.push("Client connected");
     }
 
-    for LocalClientDisconnected(reason) in disconnected.iter() {
+    for LocalClientDisconnected(reason) in disconnected.read() {
         state.push(format!(
             "Client disconnected: {:#}",
             aeronet::error::as_pretty(reason),
         ));
     }
 
-    for FromServer(msg) in recv.iter() {
+    for FromServer(msg) in recv.read() {
         state.push(format!("< {}", msg.0));
     }
 }

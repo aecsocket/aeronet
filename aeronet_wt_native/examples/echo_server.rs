@@ -98,12 +98,12 @@ fn log(
     mut connected: EventReader<RemoteClientConnected>,
     mut disconnected: EventReader<RemoteClientDisconnected>,
 ) {
-    for RemoteClientConnected(client) in connected.iter() {
+    for RemoteClientConnected(client) in connected.read() {
         info!("Client {client} connected");
         info!("  Info: {:?}", server.client_info(*client));
     }
 
-    for RemoteClientDisconnected(client, reason) in disconnected.iter() {
+    for RemoteClientDisconnected(client, reason) in disconnected.read() {
         info!(
             "Client {client} disconnected: {:#}",
             aeronet::error::as_pretty(reason),
@@ -118,7 +118,7 @@ fn reply(
     mut disconnect: EventWriter<DisconnectClient>,
     mut exit: EventWriter<AppExit>,
 ) {
-    for FromClient(client, msg) in recv.iter() {
+    for FromClient(client, msg) in recv.read() {
         info!("From {client}: {:?}", msg.0);
         match msg.0.as_str() {
             "dc" => disconnect.send(DisconnectClient(*client)),

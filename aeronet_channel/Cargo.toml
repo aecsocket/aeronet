@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_channel"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "In-memory MPSC channel transport implementation for aeronet"
 authors = [ "aecsocket <aecsocket@tutanota.com>" ]
@@ -13,17 +13,17 @@ license = "MIT OR Apache-2.0"
 bevy = [ "dep:bevy", "aeronet/bevy" ]
 
 [dependencies]
-aeronet = { path = "..", version = "0.2.0" }
+aeronet = { path = "../aeronet", version = "0.3.0" }
 tracing = "0.1.40"
 thiserror = "1.0.50"
 anyhow = "1.0.75"
 rustc-hash = "1.1.0"
 crossbeam-channel = "0.5.8"
 derivative = "2.2.0"
-bevy = { version = "0.11.3", default-features = false, optional = true }
+bevy = { version = "0.12.0", default-features = false, optional = true }
 
 [dev-dependencies]
-bevy = "0.11.3"
+bevy = "0.12.0"
 bevy_egui = "0.22.0"
 
 [package.metadata.docs.rs]
