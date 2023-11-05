@@ -1,4 +1,4 @@
-use anyhow::Result;
+use std::error::Error;
 
 /// Data that can be sent to and received by a transport.
 ///
@@ -42,8 +42,15 @@ implement [`serde::Serialize`].
 "##
 )]
 pub trait TryIntoBytes {
+    /// Error type for [`TryIntoBytes::try_into_bytes`].
+    type Error: Error + Send + Sync + 'static;
+
     /// Performs the conversion.
-    fn try_into_bytes(self) -> Result<Vec<u8>>;
+    /// 
+    /// # Errors
+    /// 
+    /// Errors if the conversion could not be performed.
+    fn try_into_bytes(self) -> Result<Vec<u8>, Self::Error>;
 }
 
 /// Data that can potentially be converted from a sequence of bytes into this
@@ -66,8 +73,15 @@ implement [`serde::de::DeserializeOwned`].
 "##
 )]
 pub trait TryFromBytes: Sized {
+    /// Error type for [`TryFromBytes::try_from_bytes`].
+    type Error: Error + Send + Sync + 'static;
+
     /// Performs the conversion.
-    fn try_from_bytes(buf: &[u8]) -> Result<Self>;
+    /// 
+    /// # Errors
+    /// 
+    /// Errors if the conversion could not be performed.
+    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>;
 }
 
 #[cfg(feature = "bincode")]
@@ -75,8 +89,10 @@ impl<T> TryIntoBytes for T
 where
     T: serde::Serialize,
 {
-    fn try_into_bytes(self) -> Result<Vec<u8>> {
-        bincode::serialize(&self).map_err(anyhow::Error::new)
+    type Error = bincode::Error;
+
+    fn try_into_bytes(self) -> Result<Vec<u8>, Self::Error> {
+        bincode::serialize(&self)
     }
 }
 
@@ -85,7 +101,9 @@ impl<T> TryFromBytes for T
 where
     T: serde::de::DeserializeOwned,
 {
-    fn try_from_bytes(buf: &[u8]) -> Result<Self> {
-        bincode::deserialize(buf).map_err(anyhow::Error::new)
+    type Error = bincode::Error;
+
+    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
+        bincode::deserialize(buf)
     }
 }

@@ -4,7 +4,7 @@
 //! you may only have access to an error behind a shared reference. Use
 //! [`as_pretty`] to wrap that reference a [`PrettyError`], making the
 //! alternative [`Display`] impl format the entire error chain, in the
-//! same style as [`anyhow::Error`].
+//! same style as [`anyhow`](https://docs.rs/anyhow).
 
 use std::fmt::Display;
 
