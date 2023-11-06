@@ -18,14 +18,8 @@ pub trait TransportServer<C2S, S2C> {
 }
 
 pub enum ServerSignal<Client, Error, C2S> {
-    Recv {
-        from: Client,
-        msg: C2S,
-    },
-    Disconnected {
-        client: Client,
-        reason: Error,
-    },
+    Recv { from: Client, msg: C2S },
+    Disconnected { client: Client, reason: Error },
 }
 
 //

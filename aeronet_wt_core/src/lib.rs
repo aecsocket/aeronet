@@ -6,9 +6,7 @@ pub use aeronet_wt_core_derive::*;
 
 /// A side-agnostic type representing a kind of method used for data transport.
 ///
-/// See the [module-level docs] and variant docs for info.
-///
-/// [module-level docs]: self
+/// See the [crate docs](crate) and variant docs for info.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChannelKind {
     /// Sends and receives messages unreliably and unordered in a
@@ -37,7 +35,7 @@ pub enum ChannelKind {
     /// events which are important e.g. a player's chat message or level data.
     ///
     /// To avoid head-of-line blocking, multiple instances of a stream may
-    /// exist on the same connection. However, this type does not represent the
+    /// exist on the same connection. However, this type cannot represent the
     /// difference between them. If you need this feature, see [`ChannelId`].
     Stream,
 }
@@ -45,12 +43,10 @@ pub enum ChannelKind {
 /// A side-agnostic type representing an instance of a method used for data
 /// transport.
 ///
-/// See the [module-level docs] for info.
+/// See the [crate docs](crate) for info.
 ///
 /// This type allows specifying exactly what instance of [`ChannelId::Stream`]
 /// this value represents.
-///
-/// [module-level docs]: self
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChannelId {
     /// See [`ChannelKind::Datagram`].
@@ -74,14 +70,28 @@ impl From<ChannelId> for ChannelKind {
 
 /// Holds variants for the different types of channels used by an app.
 ///
-/// This should be derived - see [`aeronet_wt_core_derive::Channels`].
-/// Otherwise, transport implementations may panic from invalid parameters.
-pub trait Channels: 'static {
-    /// Gets the ID of this channel variant.
-    fn channel_id(&self) -> ChannelId;
+/// # Safety
+///
+/// This should be derived rather than implemented manually - see
+/// [`aeronet_wt_core_derive::Channels`]. Otherwise, transport implementations
+/// may panic.
+pub unsafe trait Channels: 'static {
+    /// The number of different [`ChannelId::Stream`] variants that may be
+    /// returned by [`Channels::channel_id`].
+    const NUM_STREAMS: usize;
 
-    /// Gets the number of [`ChannelKind::Stream`] variants in this type.
-    fn num_streams() -> usize;
+    /// Gets the ID of this channel variant.
+    ///
+    /// # Safety
+    ///
+    /// * If this returns a [`ChannelId::Datagram`], this is always safe.
+    /// * If this returns a [`ChannelId::Stream`]:
+    ///   * this must return a unique value for each variant of this type
+    ///   * the index of the stream must be an incrementing integer starting
+    ///     from 0
+    ///   * the index of the stream must not be equal to or exceed
+    ///     [`Channels::NUM_STREAMS`]
+    fn channel_id(&self) -> ChannelId;
 }
 
 /// A message which is sent on a specific variant of [`Channels`].
@@ -101,43 +111,18 @@ pub trait OnChannel {
 
 /// An error that occurred while processing a channel.
 #[derive(Debug, thiserror::Error)]
-pub enum ChannelError {
-    /// Failed to establish this channel.
-    #[error("failed to open channel")]
-    Open(#[source] anyhow::Error),
-    /// Failed to receive data along this channel, either during
-    /// deserialization or transport.
-    #[error("failed to receive data")]
-    Recv(#[source] anyhow::Error),
-    /// Failed to send data along this channel, either during serialization or
-    /// transport.
-    #[error("failed to send data")]
-    Send(#[source] anyhow::Error),
-    /// The stream was closed by the other side, but the connection is still
-    /// active.
-    #[error("closed")]
-    Closed,
-}
-
-/// A wrapper for [`ChannelError`] detailing on which channel the error
-/// occurred.
-#[derive(Debug, thiserror::Error)]
 #[error("on {channel:?}")]
-pub struct OnChannelError {
-    /// The channel on which the error occurred.
+pub struct ChannelError<T> {
+    /// The channel on which this error occurred.
     pub channel: ChannelId,
-    /// The error.
+    /// The underlying error.
     #[source]
-    pub source: ChannelError,
+    pub source: T,
 }
 
-impl ChannelError {
-    /// Wraps this [`ChannelError`] into an [`OnChannelError`] by providing
-    /// which channel the error occurred on.
-    pub fn on(self, channel: ChannelId) -> OnChannelError {
-        OnChannelError {
-            channel,
-            source: self,
-        }
+impl<T> ChannelError<T> {
+    /// Creates a new [`ChannelError`] on the given channel.
+    pub fn new(channel: ChannelId, source: T) -> Self {
+        Self { channel, source }
     }
 }

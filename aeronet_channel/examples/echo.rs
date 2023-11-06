@@ -1,7 +1,7 @@
-use std::{string::FromUtf8Error, convert::Infallible};
+use std::{convert::Infallible, string::FromUtf8Error};
 
 use aeronet::{TryFromBytes, TryIntoBytes};
-use aeronet_channel::{TransportClient, ChannelClient, ChannelServer};
+use aeronet_channel::{ChannelClient, ChannelServer, TransportClient};
 use bevy::{log::LogPlugin, prelude::*};
 
 // config

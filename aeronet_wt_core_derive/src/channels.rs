@@ -41,13 +41,11 @@ fn on_struct(node: &DeriveInput) -> Result<TokenStream> {
     let channel_id_body = channel_id.fqn();
 
     Ok(quote! {
-        impl #impl_generics ::aeronet_wt_core::Channels for #name #type_generics #where_clause {
+        unsafe impl #impl_generics ::aeronet_wt_core::Channels for #name #type_generics #where_clause {
+            const NUM_STREAMS: usize = #num_streams;
+
             fn channel_id(&self) -> ::aeronet_wt_core::ChannelId {
                 #channel_id_body
-            }
-
-            fn num_streams() -> usize {
-                #num_streams
             }
         }
     })
@@ -84,15 +82,13 @@ fn on_enum(node: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         .collect::<Vec<_>>();
 
     Ok(quote! {
-        impl #impl_generics ::aeronet_wt_core::Channels for #name #type_generics #where_clause {
+        unsafe impl #impl_generics ::aeronet_wt_core::Channels for #name #type_generics #where_clause {
+            const NUM_STREAMS: usize = #num_streams;
+           
             fn channel_id(&self) -> ::aeronet_wt_core::ChannelId {
                 match self {
                     #(#match_body),*
                 }
-            }
-
-            fn num_streams() -> usize {
-                #num_streams
             }
         }
     })

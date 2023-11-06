@@ -9,15 +9,16 @@ use crate::{server, ChannelServer, ClientKey};
 pub trait TransportClient<C2S, S2C> {
     type Error: Error + Send + Sync + 'static;
 
-    type S2CIter: Iterator<Item = S2C>;
+    type S2CIter<'a>: Iterator<Item = S2C> + 'a
+    where
+        Self: 'a;
 
     fn send<M: Into<C2S>>(&mut self, msg: M) -> Result<(), Self::Error>;
 
-    fn recv(&mut self) -> (Self::S2CIter, Result<(), Self::Error>);
+    fn recv(&mut self) -> (Self::S2CIter<'_>, Result<(), Self::Error>);
 
     fn disconnect(&mut self) -> Result<(), Self::Error>;
 }
-
 
 //
 
@@ -84,13 +85,20 @@ impl<C2S, S2C> Connected<C2S, S2C> {
         }
     }
 
-    pub fn recv(self) -> (impl Iterator<Item = S2C>, Result<Self, Disconnected<C2S, S2C>>) {
+    pub fn recv(
+        self,
+    ) -> (
+        impl Iterator<Item = S2C>,
+        Result<Self, Disconnected<C2S, S2C>>,
+    ) {
         let mut msgs = Vec::<S2C>::new();
         loop {
             match self.recv_s2c.try_recv() {
                 Ok(msg) => msgs.push(msg),
                 Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => return (msgs.into_iter(), Err(self.disconnect())),
+                Err(TryRecvError::Disconnected) => {
+                    return (msgs.into_iter(), Err(self.disconnect()))
+                }
             }
         }
         (msgs.into_iter(), Ok(self))
@@ -139,7 +147,7 @@ impl<C2S, S2C> ChannelClient<C2S, S2C> {
 impl<C2S, S2C> TransportClient<C2S, S2C> for ChannelClient<C2S, S2C> {
     type Error = ChannelClientError;
 
-    type S2CIter = std::vec::IntoIter<S2C>;
+    type S2CIter<'a> = std::vec::IntoIter<S2C> where Self: 'a;
 
     fn send<M: Into<C2S>>(&mut self, msg: M) -> Result<(), Self::Error> {
         replace_with_or_abort_and_return(self, |this| match this {
@@ -157,7 +165,7 @@ impl<C2S, S2C> TransportClient<C2S, S2C> for ChannelClient<C2S, S2C> {
         })
     }
 
-    fn recv(&mut self) -> (Self::S2CIter, Result<(), Self::Error>) {
+    fn recv(&mut self) -> (Self::S2CIter<'_>, Result<(), Self::Error>) {
         replace_with_or_abort_and_return(self, |this| match this {
             Self::Connected(client) => match client.recv() {
                 (msgs, Ok(client)) => {
@@ -171,7 +179,13 @@ impl<C2S, S2C> TransportClient<C2S, S2C> for ChannelClient<C2S, S2C> {
                     ((msgs, Err(ChannelClientError::Disconnected)), this)
                 }
             },
-            Self::Disconnected(_) => ((Vec::new().into_iter(), Err(ChannelClientError::Disconnected)), this),
+            Self::Disconnected(_) => (
+                (
+                    Vec::new().into_iter(),
+                    Err(ChannelClientError::Disconnected),
+                ),
+                this,
+            ),
         })
     }
 

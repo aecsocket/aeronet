@@ -1,7 +1,23 @@
+use std::error::Error;
+
 #[cfg(feature = "bevy")]
 pub mod plugin;
 
 use crate::{Message, SessionError};
+
+pub trait TransportClient<C2S, S2C> {
+    type Error: Error + Send + Sync + 'static;
+
+    type S2CIter<'a>: Iterator<Item = S2C> + 'a
+    where
+        Self: 'a;
+
+    fn send<M: Into<C2S>>(&mut self, msg: M) -> Result<(), Self::Error>;
+
+    fn recv(&mut self) -> (Self::S2CIter<'_>, Result<(), Self::Error>);
+
+    fn disconnect(&mut self) -> Result<(), Self::Error>;
+}
 
 /// A client-to-server layer responsible for sending user messages to the other
 /// side.

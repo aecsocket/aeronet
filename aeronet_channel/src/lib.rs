@@ -5,5 +5,8 @@
 mod client;
 mod server;
 
-pub use client::{TransportClient, ChannelClient, Connected as ConnectedClient, Disconnected as DisconnectedClient};
+pub use client::{
+    ChannelClient, Connected as ConnectedClient, Disconnected as DisconnectedClient,
+    TransportClient,
+};
 pub use server::{ChannelServer, ClientKey};

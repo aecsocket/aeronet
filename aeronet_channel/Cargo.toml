@@ -1,34 +1,36 @@
 [package]
 name = "aeronet_channel"
-version = "0.3.0"
-edition = "2021"
 description = "In-memory MPSC channel transport implementation for aeronet"
-authors = [ "aecsocket <aecsocket@tutanota.com>" ]
-repository = "https://github.com/aecsocket/aeronet"
-keywords = [ "gamedev", "network", "bevy" ]
-categories = [ "game-development", "network-programming" ]
-license = "MIT OR Apache-2.0"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
 bevy = [ "dep:bevy", "aeronet/bevy" ]
 
 [dependencies]
-aeronet = { path = "../aeronet", version = "0.3.0" }
-tracing = "0.1.40"
-thiserror = "1.0.50"
-anyhow = "1.0.75"
-crossbeam-channel = "0.5.8"
-derivative = "2.2.0"
-slotmap = "1.0.6"
-replace_with = "0.1.7"
-bevy = { version = "0.12.0", default-features = false, optional = true }
+aeronet.workspace = true
+
+derivative.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+crossbeam-channel.workspace = true
+slotmap.workspace = true
+replace_with.workspace = true
+
+bevy = { workspace = true, optional = true }
 
 [dev-dependencies]
-bevy = "0.12.0"
-bevy_egui = "0.23.0"
-
-[package.metadata.docs.rs]
-all-features = true
+bevy = { workspace = true, default-features = true }
+bevy_egui.workspace = true
 
 [[example]]
 name = "echo"
