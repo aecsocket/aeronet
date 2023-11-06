@@ -11,12 +11,13 @@ pub trait TransportClient<C2S, S2C> {
 
     type S2CIter: Iterator<Item = S2C>;
 
-    fn disconnect(&mut self) -> Result<(), Self::Error>;
-
     fn send<M: Into<C2S>>(&mut self, msg: M) -> Result<(), Self::Error>;
 
     fn recv(&mut self) -> (Self::S2CIter, Result<(), Self::Error>);
+
+    fn disconnect(&mut self) -> Result<(), Self::Error>;
 }
+
 
 //
 
@@ -140,16 +141,6 @@ impl<C2S, S2C> TransportClient<C2S, S2C> for ChannelClient<C2S, S2C> {
 
     type S2CIter = std::vec::IntoIter<S2C>;
 
-    fn disconnect(&mut self) -> Result<(), Self::Error> {
-        replace_with_or_abort_and_return(self, |this| match this {
-            Self::Connected(client) => {
-                let this = Self::from(client.disconnect());
-                (Ok(()), this)
-            }
-            Self::Disconnected(_) => (Err(ChannelClientError::Disconnected), this),
-        })
-    }
-
     fn send<M: Into<C2S>>(&mut self, msg: M) -> Result<(), Self::Error> {
         replace_with_or_abort_and_return(self, |this| match this {
             Self::Connected(client) => match client.send(msg) {
@@ -181,6 +172,16 @@ impl<C2S, S2C> TransportClient<C2S, S2C> for ChannelClient<C2S, S2C> {
                 }
             },
             Self::Disconnected(_) => ((Vec::new().into_iter(), Err(ChannelClientError::Disconnected)), this),
+        })
+    }
+
+    fn disconnect(&mut self) -> Result<(), Self::Error> {
+        replace_with_or_abort_and_return(self, |this| match this {
+            Self::Connected(client) => {
+                let this = Self::from(client.disconnect());
+                (Ok(()), this)
+            }
+            Self::Disconnected(_) => (Err(ChannelClientError::Disconnected), this),
         })
     }
 }
