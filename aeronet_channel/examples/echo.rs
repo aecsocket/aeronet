@@ -1,34 +1,41 @@
-use aeronet::{
-    ClientId, ClientTransportPlugin, FromClient, FromServer, LocalClientConnected,
-    LocalClientDisconnected, RemoteClientConnected, RemoteClientDisconnected,
-    ServerTransportPlugin, ToClient, ToServer, TryFromBytes, TryIntoBytes,
-};
-use aeronet_channel::{ChannelTransportClient, ChannelTransportServer, ClientState, ChannelServer, Disconnected, Connected, ChannelClient};
-use anyhow::Result;
+use std::{string::FromUtf8Error, convert::Infallible};
+
+use aeronet::{TryFromBytes, TryIntoBytes};
+use aeronet_channel::{TransportClient, ChannelClient, ChannelServer};
 use bevy::{log::LogPlugin, prelude::*};
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 // config
 
 #[derive(Debug, Clone)]
 pub struct AppMessage(pub String);
 
+impl<T> From<T> for AppMessage
+where
+    T: Into<String>,
+{
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
+
 impl TryIntoBytes for AppMessage {
-    fn try_into_bytes(self) -> Result<Vec<u8>> {
+    type Error = Infallible;
+
+    fn try_into_bytes(self) -> Result<Vec<u8>, Self::Error> {
         Ok(self.0.into_bytes())
     }
 }
 
 impl TryFromBytes for AppMessage {
-    fn try_from_bytes(payload: &[u8]) -> Result<Self> {
-        String::from_utf8(payload.to_owned().into_iter().collect())
-            .map(|s| AppMessage(s))
-            .map_err(Into::into)
+    type Error = FromUtf8Error;
+
+    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
+        String::from_utf8(buf.to_owned().into_iter().collect()).map(|s| AppMessage(s))
     }
 }
 
-type Client = ChannelTransportClient<AppMessage, AppMessage>;
-type Server = ChannelTransportServer<AppMessage, AppMessage>;
+type Client = ChannelClient<AppMessage, AppMessage>;
+type Server = ChannelServer<AppMessage, AppMessage>;
 
 // resources
 
@@ -49,35 +56,21 @@ struct ServerState {
 
 fn main() {
     App::new()
-        .add_plugins((
-            DefaultPlugins.set(LogPlugin {
-                level: tracing::Level::DEBUG,
-                ..default()
-            }),
-        ))
+        .add_plugins((DefaultPlugins.set(LogPlugin {
+            level: tracing::Level::DEBUG,
+            ..default()
+        }),))
         .add_systems(Startup, setup)
         .run();
 }
 
 fn setup(mut commands: Commands) {
-    // create a disconnected client
-    // this client can only `connect`, no `recv` or `disconnect` available
-    let client: Client<AppMessage, AppMessage, Disconnected> = Client::<_, _, _>::new();
+    let mut server = Server::new();
+    let client = Client::new().connect(&mut server);
+    commands.insert_resource(server);
+    commands.insert_resource(Client::from(client));
+}
 
-    // connect this client to a server
-    let mut server: ChannelServer<AppMessage, AppMessage> = ChannelServer::new();
-    let client: Client<AppMessage, AppMessage, Connected<_, _>> = client.connect(&mut server);
-    // can now `disconnect` and `recv`
-
-    // use `recv` to get back a tuple of:
-    // * an enum which holds either a Connected or Disconnected client
-    //   since `recv` might pick up if the client is disconnected, in which case
-    //   it gives back a disconnected client
-    // * an iterator of the events
-    let (client, events): (ChannelClient<_, _>, _) = client.recv();
-
-    if let ChannelClient::Connected(client) = client {
-        // type-safe disconnect
-        client.disconnect();
-    }
+fn recv(mut client: ResMut<Client>) {
+    client.send("abc");
 }

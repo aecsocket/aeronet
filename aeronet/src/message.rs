@@ -46,9 +46,9 @@ pub trait TryIntoBytes {
     type Error: Error + Send + Sync + 'static;
 
     /// Performs the conversion.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Errors if the conversion could not be performed.
     fn try_into_bytes(self) -> Result<Vec<u8>, Self::Error>;
 }
@@ -77,9 +77,9 @@ pub trait TryFromBytes: Sized {
     type Error: Error + Send + Sync + 'static;
 
     /// Performs the conversion.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Errors if the conversion could not be performed.
     fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>;
 }

@@ -159,9 +159,10 @@ dependencies = [
  "aeronet",
  "anyhow",
  "bevy 0.12.0",
- "bevy_egui",
+ "bevy_egui 0.23.0",
  "crossbeam-channel",
  "derivative",
+ "replace_with",
  "slotmap",
  "thiserror",
  "tracing",
@@ -195,7 +196,7 @@ dependencies = [
  "anyhow",
  "base64 0.21.5",
  "bevy 0.12.0",
- "bevy_egui",
+ "bevy_egui 0.22.0",
  "rcgen",
  "ring 0.17.5",
  "rustc-hash",
@@ -812,6 +813,19 @@ checksum = "fb1c1f6ad293c60fd8559c4502cda5e832e92b0e0f3d994929b33f24d4352d70"
 dependencies = [
  "arboard",
  "bevy 0.11.3",
+ "egui",
+ "thread_local",
+ "webbrowser",
+]
+
+[[package]]
+name = "bevy_egui"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85450af551b7e1cb766f710763b60a12a82ffd6323945a8f776c6334c59ccdc1"
+dependencies = [
+ "arboard",
+ "bevy 0.12.0",
  "egui",
  "thread_local",
  "webbrowser",
@@ -3874,6 +3888,12 @@ name = "renderdoc-sys"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "216080ab382b992234dda86873c18d4c48358f5cfcb70fd693d7f6f2131b628b"
+
+[[package]]
+name = "replace_with"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a8614ee435691de62bcffcf4a66d91b3594bf1428a5722e79103249a095690"
 
 [[package]]
 name = "ring"
