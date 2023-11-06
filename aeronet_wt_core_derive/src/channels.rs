@@ -84,7 +84,7 @@ fn on_enum(node: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
     Ok(quote! {
         unsafe impl #impl_generics ::aeronet_wt_core::Channels for #name #type_generics #where_clause {
             const NUM_STREAMS: usize = #num_streams;
-           
+
             fn channel_id(&self) -> ::aeronet_wt_core::ChannelId {
                 match self {
                     #(#match_body),*

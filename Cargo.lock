@@ -120,7 +120,6 @@ version = "0.4.0"
 dependencies = [
  "aeronet",
  "aeronet_wt_core_derive",
- "anyhow",
  "thiserror",
 ]
 
