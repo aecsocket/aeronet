@@ -18,12 +18,13 @@ bevy = [ "dep:bevy", "aeronet/bevy" ]
 [dependencies]
 aeronet = { workspace = true, features = [ "bevy-tokio-rt" ] }
 aeronet_wt_core.workspace = true
+
+derivative.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
-anyhow.workspace = true
-bevy = { version = "0.12.0", default-features = false, optional = true }
+bevy = { workspace = true, default-features = false, optional = true }
+tokio = { workspace = true, default-features = false, features = [ "rt" ] }
 wtransport = { version = "0.1.6", features = [ "dangerous-configuration" ] }
-tokio = { version = "1.32", default-features = false, features = [ "rt" ] }
 
 [dev-dependencies]
 base64 = "0.21.5"
@@ -32,6 +33,7 @@ ring = "0.17.5"
 time = "0.3.30"
 bevy.workspace = true
 bevy_egui.workspace = true
+anyhow.workspace = true
 
 [[example]]
 name = "echo_client"

@@ -65,8 +65,17 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    let mut server = Server::new();
-    let client = Client::new().connect(&mut server);
+    let mut server = ChannelServer::new();
+    let mut client = ChannelClient::from(ChannelClient::new());
+    client.connect(&mut server).unwrap();
+
+    client.send("hello").unwrap();
+    let (msgs, _) = client.recv();
+    for msg in msgs {
+        println!("Received {msg:?}");
+    }
+    client.disconnect().unwrap();
+
     commands.insert_resource(server);
     commands.insert_resource(Client::from(client));
 }

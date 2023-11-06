@@ -2,10 +2,10 @@
 resolver = "2"
 members = [
     "aeronet",
-    "aeronet_channel",
+    #"aeronet_channel",
     "aeronet_wt_core",
     "aeronet_wt_core_derive",
-    #"aeronet_wt_native",
+    "aeronet_wt_native",
     #"aeronet_wt_wasm",
 ]
 
@@ -26,7 +26,7 @@ aeronet_wt_core = { version = "0.4.0", path = "aeronet_wt_core" }
 derivative = "2.2.0"
 tracing = "0.1.40"
 thiserror = "1.0.50"
-anyhow = "1.0.75" # TODO remove this
+anyhow = "1.0.75"
 
 proc-macro2 = "1.0.69"
 syn = "2.0.38"
