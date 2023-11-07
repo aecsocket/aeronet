@@ -1,10 +1,9 @@
-use std::{time::Duration, string::FromUtf8Error, convert::Infallible};
+use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
-use aeronet::{
-    AsyncRuntime, 
-    TryFromBytes, TryIntoBytes,
+use aeronet::{AsyncRuntime, TryFromBytes, TryIntoBytes};
+use aeronet_wt_native::{
+    Channels, Creating, Disconnected, OnChannel, Transition, WebTransportClient,
 };
-use aeronet_wt_native::{Channels, OnChannel, Creating, Transition, Disconnected, WebTransportClient};
 use bevy::{log::LogPlugin, prelude::*};
 use wtransport::ClientConfig;
 
@@ -19,7 +18,10 @@ struct AppChannel;
 #[on_channel(AppChannel)]
 struct AppMessage(String);
 
-impl<T> From<T> for AppMessage where T: Into<String> {
+impl<T> From<T> for AppMessage
+where
+    T: Into<String>,
+{
     fn from(value: T) -> Self {
         Self(value.into())
     }
@@ -29,8 +31,7 @@ impl TryFromBytes for AppMessage {
     type Error = FromUtf8Error;
 
     fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
-        String::from_utf8(buf.to_owned().into_iter().collect())
-            .map(AppMessage)
+        String::from_utf8(buf.to_owned().into_iter().collect()).map(AppMessage)
     }
 }
 
@@ -46,12 +47,10 @@ impl TryIntoBytes for AppMessage {
 
 fn main() {
     App::new()
-        .add_plugins((
-            DefaultPlugins.set(LogPlugin {
-                level: tracing::Level::DEBUG,
-                ..default()
-            }),
-        ))
+        .add_plugins((DefaultPlugins.set(LogPlugin {
+            level: tracing::Level::DEBUG,
+            ..default()
+        }),))
         .init_resource::<AsyncRuntime>()
         .add_systems(Startup, setup)
         .run();
@@ -75,7 +74,6 @@ fn update(mut client: ResMut<WebTransportClient>) {
             *client = match state.poll() {
                 Transition::Pending(state) => WebTransportClient::from(state),
                 Transition::Ready(Ok(state)) => WebTransportClient::from(state),
-                
             }
         }
     }

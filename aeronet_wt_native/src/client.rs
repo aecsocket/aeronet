@@ -18,7 +18,7 @@ pub enum Transition<T, R> {
     Ready(R),
 }
 
-use Transition::{Ready, Pending};
+use Transition::{Pending, Ready};
 
 //
 

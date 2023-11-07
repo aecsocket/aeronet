@@ -22,6 +22,7 @@ aeronet_wt_core.workspace = true
 derivative.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
+futures.workspace = true
 bevy = { workspace = true, default-features = false, optional = true }
 tokio = { workspace = true, default-features = false, features = [ "rt" ] }
 wtransport = { version = "0.1.6", features = [ "dangerous-configuration" ] }

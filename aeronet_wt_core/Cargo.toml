@@ -15,5 +15,3 @@ all-features = true
 [dependencies]
 aeronet.workspace = true
 aeronet_wt_core_derive.workspace = true
-
-thiserror.workspace = true

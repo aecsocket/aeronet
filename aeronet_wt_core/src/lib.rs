@@ -108,21 +108,3 @@ pub trait OnChannel {
     /// Gets the channel variant along which this message is sent.
     fn channel(&self) -> Self::Channel;
 }
-
-/// An error that occurred while processing a channel.
-#[derive(Debug, thiserror::Error)]
-#[error("on {channel:?}")]
-pub struct ChannelError<T> {
-    /// The channel on which this error occurred.
-    pub channel: ChannelId,
-    /// The underlying error.
-    #[source]
-    pub source: T,
-}
-
-impl<T> ChannelError<T> {
-    /// Creates a new [`ChannelError`] on the given channel.
-    pub fn new(channel: ChannelId, source: T) -> Self {
-        Self { channel, source }
-    }
-}
