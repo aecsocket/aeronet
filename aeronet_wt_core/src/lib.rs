@@ -75,7 +75,7 @@ impl From<ChannelId> for ChannelKind {
 /// This should be derived rather than implemented manually - see
 /// [`aeronet_wt_core_derive::Channels`]. Otherwise, transport implementations
 /// may panic.
-pub unsafe trait Channels: 'static {
+pub unsafe trait Channels: Send + Sync + 'static {
     /// The number of different [`ChannelId::Stream`] variants that may be
     /// returned by [`Channels::channel_id`].
     const NUM_STREAMS: usize;

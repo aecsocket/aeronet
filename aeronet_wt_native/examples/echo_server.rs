@@ -1,13 +1,10 @@
-use std::time::Duration;
+use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
-use aeronet::{
-    AsyncRuntime, DisconnectClient, FromClient, RemoteClientConnected, RemoteClientDisconnected,
-    ServerTransport, ServerTransportPlugin, ToClient, TryFromBytes, TryIntoBytes,
-};
-use aeronet_wt_native::{Channels, OnChannel, WebTransportServer};
+use aeronet::{AsyncRuntime, TryFromBytes, TryIntoBytes};
+use aeronet_wt_native::{Channels, Closed, OnChannel, ClientKey};
 use anyhow::Result;
 use bevy::{
-    app::{AppExit, ScheduleRunnerPlugin},
+    app::ScheduleRunnerPlugin,
     log::LogPlugin,
     prelude::*,
 };
@@ -24,21 +21,29 @@ struct AppChannel;
 #[on_channel(AppChannel)]
 struct AppMessage(String);
 
-impl TryFromBytes for AppMessage {
-    fn try_from_bytes(buf: &[u8]) -> Result<Self> {
-        String::from_utf8(buf.to_owned().into_iter().collect())
-            .map(AppMessage)
-            .map_err(Into::into)
+impl<T> From<T> for AppMessage where T: Into<String> {
+    fn from(value: T) -> Self {
+        Self(value.into())
     }
 }
 
 impl TryIntoBytes for AppMessage {
-    fn try_into_bytes(self) -> Result<Vec<u8>> {
+    type Error = Infallible;
+
+    fn try_into_bytes(self) -> Result<Vec<u8>, Self::Error> {
         Ok(self.0.into_bytes())
     }
 }
 
-type Server = WebTransportServer<AppMessage, AppMessage, AppChannel>;
+impl TryFromBytes for AppMessage {
+    type Error = FromUtf8Error;
+
+    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
+        String::from_utf8(buf.to_owned().into_iter().collect()).map(AppMessage)
+    }
+}
+
+type WebTransportServer = aeronet_wt_native::WebTransportServer<AppMessage, AppMessage, AppChannel>;
 
 // logic
 
@@ -56,11 +61,10 @@ fn main() {
                 ..default()
             },
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
-            ServerTransportPlugin::<_, _, Server>::default(),
         ))
         .init_resource::<AsyncRuntime>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (reply, log))
+        .add_systems(Update, poll_server)
         .run();
 }
 
@@ -74,59 +78,30 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
     }
 }
 
-fn create(rt: &AsyncRuntime) -> Result<Server> {
-    let cert = Certificate::load(
-        "./aeronet_wt_native/examples/cert.pem",
-        "./aeronet_wt_native/examples/key.pem",
-    )?;
+fn create(rt: &AsyncRuntime) -> Result<WebTransportServer> {
+    let cert = tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(Certificate::load(
+            "./aeronet_wt_native/examples/cert.pem",
+            "./aeronet_wt_native/examples/key.pem",
+        ))?;
+
+    let server = Closed::new();
 
     let config = ServerConfig::builder()
         .with_bind_default(25565)
         .with_certificate(cert)
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
+    let (server, backend) = server.create(config);
+    rt.0.spawn(backend);
 
-    let (front, back) = aeronet_wt_native::create_server(config);
-    rt.0.spawn(async move {
-        back.start().await.unwrap();
-    });
-    Ok(front)
+    Ok(WebTransportServer::from(server))
 }
 
-fn log(
-    server: Res<Server>,
-    mut connected: EventReader<RemoteClientConnected>,
-    mut disconnected: EventReader<RemoteClientDisconnected>,
-) {
-    for RemoteClientConnected(client) in connected.read() {
-        info!("Client {client} connected");
-        info!("  Info: {:?}", server.client_info(*client));
-    }
-
-    for RemoteClientDisconnected(client, reason) in disconnected.read() {
-        info!(
-            "Client {client} disconnected: {:#}",
-            aeronet::error::as_pretty(reason),
-        );
-        info!("  Info: {:?}", server.client_info(*client));
-    }
-}
-
-fn reply(
-    mut recv: EventReader<FromClient<AppMessage>>,
-    mut send: EventWriter<ToClient<AppMessage>>,
-    mut disconnect: EventWriter<DisconnectClient>,
-    mut exit: EventWriter<AppExit>,
-) {
-    for FromClient(client, msg) in recv.read() {
-        info!("From {client}: {:?}", msg.0);
-        match msg.0.as_str() {
-            "dc" => disconnect.send(DisconnectClient(*client)),
-            "stop" => exit.send(AppExit),
-            msg => {
-                let msg = format!("You sent: {}", msg);
-                send.send(ToClient(*client, AppMessage(msg)));
-            }
-        }
-    }
+fn poll_server(mut server: ResMut<WebTransportServer>) {
+    let _ = server.poll();
+    let x = server.send(ClientKey::from_raw(0), "hi");
+    println!("server = {:?}", server.as_ref());
+    println!("  {x:?}");
 }

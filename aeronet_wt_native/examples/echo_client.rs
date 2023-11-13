@@ -2,7 +2,7 @@ use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{AsyncRuntime, TryFromBytes, TryIntoBytes};
 use aeronet_wt_native::{
-    Channels, Creating, Disconnected, OnChannel, Transition, WebTransportClient,
+    Channels, Disconnected, OnChannel, Opening, Transition, WebTransportClient,
 };
 use bevy::{log::LogPlugin, prelude::*};
 use wtransport::ClientConfig;
@@ -63,7 +63,7 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    let (client, backend) = Creating::new(config);
+    let (client, backend) = Opening::new(config);
     rt.0.spawn(backend.start());
     commands.insert_resource(WebTransportClient::from(client));
 }
