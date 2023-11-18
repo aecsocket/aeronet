@@ -120,7 +120,7 @@ where
 }
 
 #[derive(Debug, Clone)]
-enum ClientState {
+pub(super) enum ClientState {
     Incoming,
     Accepted,
     Connected(EndpointInfo),

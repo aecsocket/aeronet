@@ -1,22 +1,5 @@
 use std::{net::SocketAddr, time::Duration};
 
-/// The reason why this side disconnected from the other side.
-#[derive(Debug, thiserror::Error)]
-pub enum SessionError {
-    /// This side was closed and all open connections have been dropped.
-    #[error("transport closed")]
-    Closed,
-    /// This side forced a disconnect from the other side.
-    #[error("forced disconnect")]
-    ForceDisconnect,
-    /// This side failed to establish a connection to the other side.
-    #[error("failed to connect")]
-    Connecting(#[source] anyhow::Error),
-    /// There was an error in transport (receiving or sending data).
-    #[error("transport error")]
-    Transport(#[source] anyhow::Error),
-}
-
 /// Allows access to the round-trip time of a connection.
 pub trait Rtt {
     /// Gets the round-trip time to the connected endpoint.

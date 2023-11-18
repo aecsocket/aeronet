@@ -3,7 +3,7 @@ use std::error::Error;
 #[cfg(feature = "bevy")]
 pub mod plugin;
 
-use crate::{Message, SessionError};
+use crate::Message;
 
 pub trait TransportClient<C2S, S2C> {
     type Error: Error + Send + Sync + 'static;
@@ -68,13 +68,11 @@ pub trait ClientTransport<C2S: Message, S2C: Message> {
 }
 
 /// An event received from a [`ClientTransport`].
-///
-/// Under Bevy this also implements `Event`, however this type cannot be used in
-/// an event reader or writer using the inbuilt plugins. `Event` is implemented
-/// to allow user code to use this type as an event if they wish to manually
-/// implement transport handling.
+/// 
+/// These may be polled using [`ClientTransport::poll`], and give information
+/// on anything which changed in respect to the client after the last polling
+/// operation.
 #[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
 pub enum ClientEvent<S2C> {
     /// The client successfully connected to the server that was requested when
     /// creating the transport.

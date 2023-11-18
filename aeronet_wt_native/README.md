@@ -10,3 +10,9 @@ datagrams.
 This transport can be used in a native app to provide a client and server transport using
 [`wtransport`](https://crates.io/crates/wtransport) as the WebTransport protocol implementation.
 Using this requires the [`tokio`](https://crates.io/crates/tokio) async runtime.
+
+# Notes
+
+- `TryIntoBytes` and `TryFromBytes` work on literally the raw bytes that are transported along
+  WebTransport
+  - Does no message batching on its own, or modify the bytes in any way
