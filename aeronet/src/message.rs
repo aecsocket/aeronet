@@ -1,4 +1,4 @@
-use std::{error::Error, convert::Infallible};
+use std::error::Error;
 
 /// Data that can be sent to and received by a transport.
 ///
@@ -54,19 +54,6 @@ pub trait TryIntoBytes {
     ///
     /// Errors if the conversion could not be performed.
     fn try_into_bytes(&self) -> Result<Self::Output<'_>, Self::Error>;
-}
-
-impl<T> TryIntoBytes for T
-where
-    T: AsRef<[u8]>
-{
-    type Output<'a> = &'a Self;
-
-    type Error = Infallible;
-
-    fn try_into_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
-        Ok(self)
-    }
 }
 
 /// Data that can potentially be converted from a sequence of bytes into this
@@ -126,5 +113,33 @@ where
 
     fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
         bincode::deserialize(buf)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, PartialEq)]
+    #[cfg_attr(feature = "bincode", derive(serde::Serialize, serde::Deserialize))]
+    struct Value {
+        x: u32,
+        y: i32,
+    }
+
+    #[test]
+    fn type_is_message() {
+        assert_message::<Value>();
+    }
+
+    fn assert_message<T: Message>() {}
+
+    #[test]
+    #[cfg(feature = "bincode")]
+    fn bincode_serde() {
+        let value = Value { x: 4, y: -2 };
+        let bytes = value.try_into_bytes().unwrap();
+        let value = Value::try_from_bytes(&bytes).unwrap();
+        assert_eq!(Value { x: 4, y: -2 }, value);
     }
 }

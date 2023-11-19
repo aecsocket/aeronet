@@ -1,9 +1,8 @@
-#![warn(clippy::all)]
-#![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
 
 pub mod error;
 
+mod channel;
 //mod client;
 mod message;
 //mod server;
@@ -12,6 +11,7 @@ mod transport;
 #[cfg(feature = "bevy-tokio-rt")]
 mod runtime;
 
+pub use channel::{ChannelKind, ChannelKey, OnChannel};
 //pub use client::{ClientEvent, ClientTransport};
 pub use message::{Message, TryFromBytes, TryIntoBytes};
 //pub use server::{ClientId, ServerEvent, ServerTransport};
