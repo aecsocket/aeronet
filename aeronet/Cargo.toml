@@ -29,6 +29,8 @@ bevy-tokio-rt = [ "bevy", "dep:tokio" ]
 bincode = [ "dep:serde", "dep:bincode" ]
 
 [dependencies]
+aeronet_derive.workspace = true
+
 derivative.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true

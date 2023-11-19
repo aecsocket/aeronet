@@ -43,7 +43,9 @@ implement [`serde::Serialize`].
 pub trait TryIntoBytes {
     /// Output type of [`TryIntoBytes::try_into_bytes`], which can be
     /// converted into a slice of bytes.
-    type Output<'a>: AsRef<[u8]> where Self: 'a;
+    type Output<'a>: AsRef<[u8]>
+    where
+        Self: 'a;
 
     /// Error type for [`TryIntoBytes::try_into_bytes`].
     type Error: Error + Send + Sync + 'static;
@@ -62,7 +64,7 @@ pub trait TryIntoBytes {
 /// The transport implementation may wish to handle messages as a byte sequence,
 /// for example if it communicates over a network. This trait can be used as a
 /// bound to ensure that messages can be created from a byte form.
-/// 
+///
 /// Note that this trait only requires a *reference* to the bytes rather than
 /// ownership of them. This should be fine in most use-cases, but is still
 /// something to be aware of.

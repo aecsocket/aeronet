@@ -1,0 +1,26 @@
+[package]
+name = "aeronet_derive"
+description = "Derive macros for aeronet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+proc-macro = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+proc-macro2.workspace = true
+syn.workspace = true
+quote.workspace = true
+const_format.workspace = true
