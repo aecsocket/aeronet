@@ -1,13 +1,9 @@
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{AsyncRuntime, TryFromBytes, TryIntoBytes};
-use aeronet_wt_native::{Channels, Closed, OnChannel, ClientKey};
+use aeronet_wt_native::{Channels, ClientKey, Closed, OnChannel};
 use anyhow::Result;
-use bevy::{
-    app::ScheduleRunnerPlugin,
-    log::LogPlugin,
-    prelude::*,
-};
+use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
 
 // config
@@ -21,7 +17,10 @@ struct AppChannel;
 #[on_channel(AppChannel)]
 struct AppMessage(String);
 
-impl<T> From<T> for AppMessage where T: Into<String> {
+impl<T> From<T> for AppMessage
+where
+    T: Into<String>,
+{
     fn from(value: T) -> Self {
         Self(value.into())
     }

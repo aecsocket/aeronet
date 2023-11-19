@@ -3,22 +3,28 @@ name = "aeronet_wt_native"
 description = "Native WebTransport transport implementation for aeronet"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [package.metadata.docs.rs]
 all-features = true
 
 [features]
+## Enables [`bevy`](https://docs.rs/bevy) support.
 bevy = [ "dep:bevy", "aeronet/bevy" ]
+
+## Enables [`rustls/dangerous-configuration`](https://docs.rs/rustls/latest/rustls/#crate-features).
 dangerous-configuration = [ "wtransport/dangerous-configuration" ]
 
 [dependencies]
 aeronet = { workspace = true, features = [ "bevy-tokio-rt" ] }
-aeronet_wt_core.workspace = true
 
 derivative.workspace = true
 tracing.workspace = true
@@ -27,23 +33,25 @@ futures.workspace = true
 rustc-hash.workspace = true
 replace_with.workspace = true
 either.workspace = true
-bevy = { workspace = true, default-features = false, optional = true }
 tokio = { workspace = true, default-features = false, features = [ "rt" ] }
 wtransport.workspace = true
 
+bevy = { workspace = true, default-features = false, optional = true }
+
 [dev-dependencies]
-base64 = "0.21.5"
-rcgen = "0.11.3"
-ring = "0.17.5"
-time = "0.3.30"
 bevy.workspace = true
 bevy_egui.workspace = true
 anyhow.workspace = true
 
+base64.workspace = true
+rcgen.workspace = true
+ring.workspace = true
+time.workspace = true
+
 [[example]]
 name = "echo_client"
 path = "examples/echo_client.rs"
-required-features = [ "bevy" ]
+required-features = [ "bevy", "dangerous-configuration" ]
 
 [[example]]
 name = "echo_server"

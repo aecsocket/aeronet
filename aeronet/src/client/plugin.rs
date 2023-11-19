@@ -2,8 +2,6 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 
-use crate::{ClientEvent, ClientTransport, Message, SessionError};
-
 /// Handles [`ClientTransport`]s of type `T`.
 ///
 /// This handles receiving data from the transport and forwarding it to the app
