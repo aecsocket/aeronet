@@ -48,12 +48,6 @@ impl RemoteAddr for EndpointInfo {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ChannelId {
-    Datagram,
-    Stream(usize),
-}
-
 /// Error that occurs when processing a WebTransport transport implementation.
 #[derive(Debug, thiserror::Error)]
 pub enum WebTransportError<S, R, C>
@@ -74,48 +68,38 @@ where
     /// Failed to accept an incoming session.
     #[error("failed to accept incoming session")]
     AcceptSession(#[source] ConnectionError),
-    #[error("failed to establish channel {channel}")]
-    Establish {
+    /// An error occurred while processing a channel.
+    #[error("on {channel}")]
+    OnChannel {
         /// The channel on which the error occurred.
         channel: C,
         /// The error that occurred.
         #[source]
-        source: ChannelEstablishError,
+        source: ChannelError<S, R>,
     },
-    /// An error occurred while sending on an app channel.
-    #[error("sending on {channel:?}")]
-    Send {
-        /// The channel on which the error occurred.
-        channel: C,
-        /// The error that occurred.
-        #[source]
-        source: ChannelSendError<S>,
-    },
-    #[error("receiving on {channel:?}")]
-    Recv {
-        channel: ChannelId,
-        #[source]
-        source: ChannelRecvError<R>,
-    }
 }
 
+/// Error that occurs while processing a channel, either datagrams or QUIC
+/// streams.
 #[derive(Debug, thiserror::Error)]
-pub enum ChannelEstablishError {
+pub enum ChannelError<S, R>
+where
+    S: Message + TryIntoBytes,
+    R: Message + TryFromBytes,
+{
+    // establish
     /// Failed to request to open a bidirectional stream.
     #[error("failed to request to open stream")]
     RequestOpenStream(#[source] ConnectionError),
     /// Failed to open a bidirectional stream.
     #[error("failed to open stream")]
     OpenStream(#[source] StreamOpeningError),
-}
+    /// Failed to accept an incoming bidirectional stream request.
+    #[error("failed to open stream")]
+    AcceptStream(#[source] ConnectionError),
 
-/// Error that occurrs when sending data on a specific channel.
-#[derive(Debug, thiserror::Error)]
-pub enum ChannelSendError<S>
-where
-    S: Message + TryIntoBytes,
-{
-    /// Failed to send a datagram.
+    // send
+    /// Failed to send a datagram to the other side.
     #[error("failed to send datagram")]
     SendDatagram(#[source] SendDatagramError),
     /// Failed to write into a bidirectional stream.
@@ -124,14 +108,9 @@ where
     /// Failed to serialize data using [`TryIntoBytes::try_into_bytes`].
     #[error("failed to serialize data")]
     Serialize(#[source] S::Error),
-}
 
-/// Error that occurrs when sending data on a specific channel.
-#[derive(Debug, thiserror::Error)]
-pub enum ChannelRecvError<R>
-where
-    R: Message + TryFromBytes,
-{
+    // receive
+    /// Failed to receive a datagram from the other side.
     #[error("failed to recv datagram")]
     RecvDatagram(#[source] ConnectionError),
     /// Failed to read from a bidirectional stream.
@@ -148,21 +127,9 @@ where
     R: Message + TryFromBytes,
     C: ChannelKey,
 {
-    /// Creates a [`WebTransportError::Establish`] given the channel and source
+    /// Creates a [`WebTransportError::OnChannel`] given the channel and source
     /// error.
-    pub fn establish(channel: C, source: ChannelEstablishError) -> Self {
-        Self::Establish { channel, source }
-    }
-
-    /// Creates a [`WebTransportError::Sending`] given the channel and source
-    /// error.
-    pub fn send(channel: C, source: ChannelSendError<S>) -> Self {
-        Self::Send { channel, source }
-    }
-
-    /// Creates a [`WebTransportError::Receiving`] given the channel and source
-    /// error.
-    pub fn recv(channel: ChannelId, source: ChannelRecvError<R>) -> Self {
-        Self::Recv { channel, source }
+    pub fn on(channel: C, source: ChannelError<S, R>) -> Self {
+        Self::OnChannel { channel, source }
     }
 }

@@ -43,7 +43,7 @@ implement [`serde::Serialize`].
 pub trait TryIntoBytes {
     /// Output type of [`TryIntoBytes::try_into_bytes`], which can be
     /// converted into a slice of bytes.
-    type Output<'a>: AsRef<[u8]>
+    type Output<'a>: AsRef<[u8]> + Send
     where
         Self: 'a;
 

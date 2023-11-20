@@ -125,7 +125,7 @@ dependencies = [
  "rcgen",
  "replace_with",
  "ring 0.17.5",
- "rustc-hash",
+ "slotmap",
  "thiserror",
  "time",
  "tokio",
