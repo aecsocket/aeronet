@@ -1,7 +1,7 @@
 use const_format::formatcp;
 use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
-use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Meta, Result};
+use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Meta, Result, Fields};
 
 use crate::CHANNEL_KIND;
 
@@ -25,12 +25,16 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
 
     Ok(quote! {
         unsafe impl #impl_generics ::aeronet::ChannelKey for #name #type_generics #where_clause {
-            const ALL: &'static [::aeronet::ChannelKind] = &[
-                #channel_kind
+            const ALL: &'static [Self] = &[
+                Self
             ];
 
             fn index(&self) -> usize {
                 0
+            }
+
+            fn kind(&self) -> ::aeronet::ChannelKind {
+                #channel_kind
             }
         }
     })
@@ -50,6 +54,13 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         .variants
         .iter()
         .map(|variant| {
+            if !matches!(variant.fields, Fields::Unit) {
+                return Err(Error::new_spanned(
+                    &variant.fields, 
+                    "variant must not have fields",
+                ));
+            }
+
             parse_channel_kind(variant, &variant.attrs).map(|kind| Variant {
                 ident: &variant.ident,
                 kind,
@@ -57,11 +68,14 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let channel_kinds = variants
+    let all_variants = variants
         .iter()
-        .map(|variant| &variant.kind)
+        .map(|variant| {
+            let pattern = variant.ident;
+            quote! { Self::#pattern }
+        })
         .collect::<Vec<_>>();
-    let match_body = variants
+    let index_body = variants
         .iter()
         .enumerate()
         .map(|(index, variant)| {
@@ -69,16 +83,30 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
             quote! { Self::#pattern => #index }
         })
         .collect::<Vec<_>>();
+    let kind_body = variants
+        .iter()
+        .map(|variant| {
+            let pattern = variant.ident;
+            let kind = &variant.kind;
+            quote! { Self::#pattern => #kind }
+        })
+        .collect::<Vec<_>>();
 
     Ok(quote! {
         unsafe impl #impl_generics ::aeronet::ChannelKey for #name #type_generics #where_clause {
-            const ALL: &'static [::aeronet::ChannelKind] = &[
-                #(#channel_kinds),*
+            const ALL: &'static [Self] = &[
+                #(#all_variants),*
             ];
 
             fn index(&self) -> usize {
                 match *self {
-                    #(#match_body),*
+                    #(#index_body),*
+                }
+            }
+
+            fn kind(&self) -> ::aeronet::ChannelKind {
+                match *self {
+                    #(#kind_body),*
                 }
             }
         }

@@ -46,7 +46,11 @@ where
         }
     });
     let channels = try_join_all(channels).await?;
-    Ok(ChannelsState { channels, recv_streams, recv_err })
+    Ok(ChannelsState {
+        channels,
+        recv_streams,
+        recv_err,
+    })
 }
 
 async fn establish_channel<S, R, C, const OPENS: bool>(

@@ -89,11 +89,21 @@ pub enum ChannelKind {
 /// [`aeronet_derive::ChannelKey`]. Otherwise, transport implementations may
 /// panic.
 pub unsafe trait ChannelKey: Send + Sync + Sized + Clone + 'static {
-    /// The set of all kinds of channels that this type may represent.
+    /// The set of all valid variants of [`ChannelKey`].
+    /// 
+    /// # Safety
+    /// 
+    /// This must include *every representable value* of this type.
     const ALL: &'static [Self];
 
+    /// The index of this value in [`ChannelKey::ALL`].
+    /// 
+    /// # Safety
+    /// 
+    /// This index must point to a valid index and must point to this value.
     fn index(&self) -> usize;
 
+    /// The kind of channel that this key represents.
     fn kind(&self) -> ChannelKind;
 }
 
