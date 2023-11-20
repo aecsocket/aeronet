@@ -4,9 +4,9 @@ use aeronet::{ChannelKey, Message, OnChannel, TryFromBytes, TryIntoBytes};
 use derivative::Derivative;
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot};
-use wtransport::{endpoint::IncomingSession, Connection, Endpoint, ServerConfig};
+use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
-use crate::{common, ChannelError, EndpointInfo};
+use crate::{common, EndpointInfo};
 
 slotmap::new_key_type! {
     pub struct ClientKey;
@@ -34,8 +34,6 @@ type WebTransportError<C2S, S2C, C> = crate::WebTransportError<S2C, C2S, C>;
 
 type ServerEvent<C2S, S2C, C> =
     aeronet::ServerEvent<C2S, ClientKey, WebTransportError<C2S, S2C, C>>;
-
-type ChannelState<C2S, S2C, C> = common::ChannelState<S2C, C2S, C>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -221,8 +219,8 @@ async fn handle_session<C2S, S2C, C>(
         }
     };
 
-    let channels = match common::open_channels::<S2C, C2S, C, true>(&conn).await {
-        Ok(channels) => channels,
+    let channels_state = match common::establish_channels::<S2C, C2S, C, true>(&conn).await {
+        Ok(state) => state,
         Err(err) => {
             let _ = send_connected.send(Err(err));
             return;
@@ -245,69 +243,7 @@ async fn handle_session<C2S, S2C, C>(
         return;
     }
 
-    if let Err(err) =
-        handle_connection::<C2S, S2C, C>(conn, channels, send_info, send_c2s, recv_s2c).await
-    {
+    if let Err(err) = common::handle_connection::<S2C, C2S, C>(conn, channels_state, send_info, send_c2s, recv_s2c).await {
         let _ = send_err.send(err);
-    }
-}
-
-async fn handle_connection<C2S, S2C, C>(
-    conn: Connection,
-    channels: Vec<ChannelState<C2S, S2C, C>>,
-    send_info: mpsc::UnboundedSender<EndpointInfo>,
-    send_c2s: mpsc::UnboundedSender<C2S>,
-    mut recv_s2c: mpsc::UnboundedReceiver<S2C>,
-) -> Result<(), WebTransportError<C2S, S2C, C>>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    loop {
-        let _ = send_info.send(EndpointInfo::from_connection(&conn));
-        tokio::select! {
-            result = conn.receive_datagram() => {
-                let datagram = result
-                    .map_err(|err| WebTransportError::OnDatagram(ChannelError::RecvDatagram(err)))?;
-                let msg = C2S::try_from_bytes(&datagram)
-                    .map_err(|err| WebTransportError::OnDatagram(ChannelError::Deserialize(err)))?;
-                let _ = send_c2s.send(msg);
-            }
-            result = recv_s2c.recv() => {
-                let Some(msg) = result else {
-                    // frontend closed
-                    return Ok(());
-                };
-                let _ = send::<C2S, S2C, C>(&conn, &channels, msg).await?;
-            }
-        }
-    }
-}
-
-async fn send<C2S, S2C, C>(
-    conn: &Connection,
-    channels: &[ChannelState<C2S, S2C, C>],
-    msg: S2C,
-) -> Result<(), WebTransportError<C2S, S2C, C>>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    match &channels[msg.channel().index()] {
-        ChannelState::Datagram { channel } => {
-            let serialized = msg.try_into_bytes().map_err(|err| {
-                WebTransportError::OnChannel(channel.clone(), ChannelError::Serialize(err))
-            })?;
-            let bytes = serialized.as_ref();
-            conn.send_datagram(bytes).map_err(|err| {
-                WebTransportError::OnChannel(channel.clone(), ChannelError::SendDatagram(err))
-            })
-        }
-        ChannelState::Stream { send_s, .. } => {
-            let _ = send_s.send(msg);
-            Ok(())
-        }
     }
 }
