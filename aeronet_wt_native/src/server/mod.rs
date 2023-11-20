@@ -1,28 +1,12 @@
-use std::{io, marker::PhantomData, net::SocketAddr};
+use std::{io, future::Future, net::SocketAddr};
 
-use aeronet::{ChannelKey, ChannelKind, Message, OnChannel, TryFromBytes, TryIntoBytes};
+use aeronet::{ChannelKey, Message, OnChannel, TryFromBytes, TryIntoBytes};
 use derivative::Derivative;
-use futures::future::{try_join_all, Pending};
-use rustc_hash::FxHashMap;
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot};
-use wtransport::{
-    endpoint::{endpoint_side, IncomingSession},
-    Connection, ServerConfig,
-};
+use wtransport::{endpoint::IncomingSession, Connection, Endpoint, ServerConfig};
 
-use crate::{
-    ChannelError, EndpointInfo,
-};
-
-// pub fn create_server<C2S, S2C, C>(config: ServerConfig) ->
-// (WebTransportServer<C2S, S2C, C>, impl Future<Output = ()> + Send) where
-//     C2S: Message + TryFromBytes,
-//     S2C: Message + TryIntoBytes + Clone + OnChannel<Channel = C>,
-//     C: ChannelKey,
-// {
-//     let (send_result, recv_result) = oneshot::channel();
-// }
+use crate::{common, ChannelError, EndpointInfo};
 
 slotmap::new_key_type! {
     pub struct ClientKey;
@@ -34,6 +18,16 @@ pub struct NoClientError {
     pub client: ClientKey,
 }
 
+pub fn create_server<C2S, S2C, C>(config: ServerConfig) -> impl Future<Output = ()> + Send
+where
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: ChannelKey,
+{
+    let (send_open, recv_open) = oneshot::channel();
+    backend::<C2S, S2C, C>(config, send_open)
+}
+
 // state machine
 
 type WebTransportError<C2S, S2C, C> = crate::WebTransportError<S2C, C2S, C>;
@@ -41,7 +35,7 @@ type WebTransportError<C2S, S2C, C> = crate::WebTransportError<S2C, C2S, C>;
 type ServerEvent<C2S, S2C, C> =
     aeronet::ServerEvent<C2S, ClientKey, WebTransportError<C2S, S2C, C>>;
 
-type Endpoint = wtransport::Endpoint<endpoint_side::Server>;
+type ChannelState<C2S, S2C, C> = common::ChannelState<S2C, C2S, C>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -52,10 +46,10 @@ where
     C: ChannelKey,
 {
     #[derivative(Debug = "ignore")]
-    recv_result: oneshot::Receiver<Result<Open<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>>,
+    recv_open: oneshot::Receiver<OpenResult<C2S, S2C, C>>,
 }
 
-// open
+type OpenResult<C2S, S2C, C> = Result<Open<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -69,6 +63,9 @@ where
     clients: SlotMap<ClientKey, ClientState<C2S, S2C, C>>,
     #[derivative(Debug = "ignore")]
     recv_client: mpsc::UnboundedReceiver<PendingClient<C2S, S2C, C>>,
+    // TODO this needs to be improved
+    #[derivative(Debug = "ignore")]
+    send_closed: mpsc::Sender<()>,
 }
 
 #[derive(Derivative)]
@@ -80,8 +77,11 @@ where
     C: ChannelKey,
 {
     #[derivative(Debug = "ignore")]
-    recv_incoming: oneshot::Receiver<Result<IncomingClient<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>>,
+    recv_incoming: oneshot::Receiver<IncomingClientResult<C2S, S2C, C>>,
 }
+
+type IncomingClientResult<C2S, S2C, C> =
+    Result<IncomingClient<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -96,8 +96,11 @@ where
     origin: Option<String>,
     user_agent: Option<String>,
     #[derivative(Debug = "ignore")]
-    recv_connected: oneshot::Receiver<Result<ConnectedClient<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>>,
+    recv_connected: oneshot::Receiver<ConnectedClientResult<C2S, S2C, C>>,
 }
+
+type ConnectedClientResult<C2S, S2C, C> =
+    Result<ConnectedClient<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -109,7 +112,13 @@ where
 {
     info: EndpointInfo,
     #[derivative(Debug = "ignore")]
-    recv_c2s: mpsc::UnboundedReceiver<Result<C2S, WebTransportError<C2S, S2C, C>>>,
+    recv_info: mpsc::UnboundedReceiver<EndpointInfo>,
+    #[derivative(Debug = "ignore")]
+    recv_c2s: mpsc::UnboundedReceiver<C2S>,
+    #[derivative(Debug = "ignore")]
+    send_s2c: mpsc::UnboundedSender<S2C>,
+    #[derivative(Debug = "ignore")]
+    recv_err: oneshot::Receiver<WebTransportError<C2S, S2C, C>>,
 }
 
 #[derive(Debug)]
@@ -128,9 +137,8 @@ where
 
 async fn backend<C2S, S2C, C>(
     config: ServerConfig,
-    send_result: oneshot::Sender<Result<Open<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>>,
-)
-where
+    send_open: oneshot::Sender<OpenResult<C2S, S2C, C>>,
+) where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
@@ -138,25 +146,31 @@ where
     let endpoint = match Endpoint::server(config).map_err(WebTransportError::CreateEndpoint) {
         Ok(endpoint) => endpoint,
         Err(err) => {
-            let _ = send_result.send(Err(err));
+            let _ = send_open.send(Err(err));
             return;
         }
     };
 
     let (send_client, recv_client) = mpsc::unbounded_channel();
+    let (send_closed, mut recv_closed) = mpsc::channel(1);
     let open = Open::<C2S, S2C, C> {
         local_addr: endpoint.local_addr(),
-        clients: FxHashMap::default(),
+        clients: SlotMap::default(),
         recv_client,
+        send_closed,
     };
-    let _ = send_result.send(Ok(open));
+    if let Err(_) = send_open.send(Ok(open)) {
+        // frontend closed
+        return;
+    }
 
     loop {
-        let session = endpoint.accept().await;
-        let (send_incoming, recv_incoming) = oneshot::channel();
-        let client_state = PendingClient {
-            recv_incoming,
+        let session = tokio::select! {
+            session = endpoint.accept() => session,
+            _ = recv_closed.recv() => return,
         };
+        let (send_incoming, recv_incoming) = oneshot::channel();
+        let client_state = PendingClient { recv_incoming };
         if let Err(_) = send_client.send(client_state) {
             // frontend closed
             return;
@@ -168,9 +182,8 @@ where
 
 async fn handle_session<C2S, S2C, C>(
     session: IncomingSession,
-    send_incoming: oneshot::Sender<Result<IncomingClient<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>>,
-)
-where
+    send_incoming: oneshot::Sender<IncomingClientResult<C2S, S2C, C>>,
+) where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
@@ -196,7 +209,11 @@ where
         return;
     }
 
-    let conn = match session.accept().await.map_err(WebTransportError::AcceptSession) {
+    let conn = match session
+        .accept()
+        .await
+        .map_err(WebTransportError::AcceptSession)
+    {
         Ok(conn) => conn,
         Err(err) => {
             let _ = send_connected.send(Err(err));
@@ -204,43 +221,93 @@ where
         }
     };
 
-    let (send_c2s, recv_c2s) = ;
-    let connected = ConnectedClient {
-        info: EndpointInfo::from_connection(&conn),
-        recv_c2s,
-    }
-
-    let conn = match accept_session::<C2S, S2C, C>(session).await {
-        Ok(conn) => conn,
+    let channels = match common::open_channels::<S2C, C2S, C, true>(&conn).await {
+        Ok(channels) => channels,
         Err(err) => {
-            let _ = send_incoming.send(Err(err));
+            let _ = send_connected.send(Err(err));
             return;
         }
     };
 
+    let (send_c2s, recv_c2s) = mpsc::unbounded_channel();
+    let (send_s2c, recv_s2c) = mpsc::unbounded_channel();
+    let (send_info, recv_info) = mpsc::unbounded_channel();
+    let (send_err, recv_err) = oneshot::channel();
+    let connected = ConnectedClient {
+        info: EndpointInfo::from_connection(&conn),
+        recv_info,
+        recv_c2s,
+        send_s2c,
+        recv_err,
+    };
+    if let Err(_) = send_connected.send(Ok(connected)) {
+        // frontend closed
+        return;
+    }
 
+    if let Err(err) =
+        handle_connection::<C2S, S2C, C>(conn, channels, send_info, send_c2s, recv_s2c).await
+    {
+        let _ = send_err.send(err);
+    }
 }
 
-async fn accept_session<C2S, S2C, C>(
-    session: IncomingSession,
-) -> Result<Connection, WebTransportError<C2S, S2C, C>>
+async fn handle_connection<C2S, S2C, C>(
+    conn: Connection,
+    channels: Vec<ChannelState<C2S, S2C, C>>,
+    send_info: mpsc::UnboundedSender<EndpointInfo>,
+    send_c2s: mpsc::UnboundedSender<C2S>,
+    mut recv_s2c: mpsc::UnboundedReceiver<S2C>,
+) -> Result<(), WebTransportError<C2S, S2C, C>>
 where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
 {
-    let session = session.await.map_err(WebTransportError::IncomingSession)?;
+    loop {
+        let _ = send_info.send(EndpointInfo::from_connection(&conn));
+        tokio::select! {
+            result = conn.receive_datagram() => {
+                let datagram = result
+                    .map_err(|err| WebTransportError::OnDatagram(ChannelError::RecvDatagram(err)))?;
+                let msg = C2S::try_from_bytes(&datagram)
+                    .map_err(|err| WebTransportError::OnDatagram(ChannelError::Deserialize(err)))?;
+                let _ = send_c2s.send(msg);
+            }
+            result = recv_s2c.recv() => {
+                let Some(msg) = result else {
+                    // frontend closed
+                    return Ok(());
+                };
+                let _ = send::<C2S, S2C, C>(&conn, &channels, msg).await?;
+            }
+        }
+    }
+}
 
-    let _ = send_sig.send(Signal::Incoming {
-        authority: session.authority().to_owned(),
-        path: session.path().to_owned(),
-        origin: session.origin().map(ToOwned::to_owned),
-        user_agent: session.user_agent().map(ToOwned::to_owned),
-    });
-
-    let session = session
-        .accept()
-        .await
-        .map_err(WebTransportError::AcceptSession)?;
-    Ok(session)
+async fn send<C2S, S2C, C>(
+    conn: &Connection,
+    channels: &[ChannelState<C2S, S2C, C>],
+    msg: S2C,
+) -> Result<(), WebTransportError<C2S, S2C, C>>
+where
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: ChannelKey,
+{
+    match &channels[msg.channel().index()] {
+        ChannelState::Datagram { channel } => {
+            let serialized = msg.try_into_bytes().map_err(|err| {
+                WebTransportError::OnChannel(channel.clone(), ChannelError::Serialize(err))
+            })?;
+            let bytes = serialized.as_ref();
+            conn.send_datagram(bytes).map_err(|err| {
+                WebTransportError::OnChannel(channel.clone(), ChannelError::SendDatagram(err))
+            })
+        }
+        ChannelState::Stream { send_s, .. } => {
+            let _ = send_s.send(msg);
+            Ok(())
+        }
+    }
 }

@@ -92,6 +92,8 @@ pub unsafe trait ChannelKey: Send + Sync + Sized + Clone + 'static {
     /// The set of all kinds of channels that this type may represent.
     const ALL: &'static [Self];
 
+    fn index(&self) -> usize;
+
     fn kind(&self) -> ChannelKind;
 }
 

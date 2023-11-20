@@ -68,15 +68,13 @@ where
     /// Failed to accept an incoming session.
     #[error("failed to accept incoming session")]
     AcceptSession(#[source] ConnectionError),
+    /// An error occurred while processing datagrams not bound to a specific
+    /// channel.
+    #[error("on datagram channel")]
+    OnDatagram(#[source] ChannelError<S, R>),
     /// An error occurred while processing a channel.
-    #[error("on {channel}")]
-    OnChannel {
-        /// The channel on which the error occurred.
-        channel: C,
-        /// The error that occurred.
-        #[source]
-        source: ChannelError<S, R>,
-    },
+    #[error("on {0}")]
+    OnChannel(C, #[source] ChannelError<S, R>),
 }
 
 /// Error that occurs while processing a channel, either datagrams or QUIC
@@ -119,17 +117,4 @@ where
     /// Failed to deserialize data using [`TryFromBytes::try_from_bytes`].
     #[error("failed to deserialize data")]
     Deserialize(#[source] R::Error),
-}
-
-impl<S, R, C> WebTransportError<S, R, C>
-where
-    S: Message + TryIntoBytes,
-    R: Message + TryFromBytes,
-    C: ChannelKey,
-{
-    /// Creates a [`WebTransportError::OnChannel`] given the channel and source
-    /// error.
-    pub fn on(channel: C, source: ChannelError<S, R>) -> Self {
-        Self::OnChannel { channel, source }
-    }
 }

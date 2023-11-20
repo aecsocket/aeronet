@@ -18,10 +18,10 @@ where
     },
     Stream {
         channel: C,
-        send: mpsc::UnboundedSender<S>,
-        recv: mpsc::UnboundedReceiver<R>,
+        send_s: mpsc::UnboundedSender<S>,
+        recv_r: mpsc::UnboundedReceiver<R>,
         recv_err: oneshot::Receiver<ChannelError<S, R>>,
-    }
+    },
 }
 
 pub(super) async fn open_channels<S, R, C, const OPENS: bool>(
@@ -35,7 +35,7 @@ where
     try_join_all(C::ALL.iter().map(|channel| async move {
         open_channel::<S, R, C, OPENS>(conn, channel.clone())
             .await
-            .map_err(|err| WebTransportError::on(channel.clone(), err))
+            .map_err(|err| WebTransportError::OnChannel(channel.clone(), err))
     }))
     .await
 }
@@ -52,7 +52,9 @@ where
     let kind = channel.kind();
     match kind {
         ChannelKind::Unreliable => Ok(ChannelState::Datagram { channel }),
-        ChannelKind::ReliableUnordered | ChannelKind::ReliableOrdered => open_stream::<S, R, C, OPENS>(conn, channel).await,
+        ChannelKind::ReliableUnordered | ChannelKind::ReliableOrdered => {
+            open_stream::<S, R, C, OPENS>(conn, channel).await
+        }
     }
 }
 
@@ -86,8 +88,8 @@ where
 
     Ok(ChannelState::Stream {
         channel,
-        send: send_s,
-        recv: recv_r,
+        send_s,
+        recv_r,
         recv_err,
     })
 }
