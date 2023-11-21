@@ -5,7 +5,7 @@ use wtransport::{ServerConfig, Endpoint, endpoint::IncomingSession};
 
 use crate::{common, EndpointInfo};
 
-use super::{OpenResult, WebTransportError, Open, PendingClient, IncomingClientResult, IncomingClient, ConnectedClient};
+use super::{OpenResult, WebTransportError, OpenServer, PendingClient, IncomingClientResult, IncomingClient, ConnectedClient};
 
 pub(super) async fn listen<C2S, S2C, C>(
     config: ServerConfig,
@@ -25,7 +25,7 @@ pub(super) async fn listen<C2S, S2C, C>(
 
     let (send_client, recv_client) = mpsc::unbounded_channel();
     let (send_closed, mut recv_closed) = mpsc::channel(1);
-    let open = Open::<C2S, S2C, C> {
+    let open = OpenServer::<C2S, S2C, C> {
         local_addr: endpoint.local_addr(),
         clients: SlotMap::default(),
         recv_client,

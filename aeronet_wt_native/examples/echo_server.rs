@@ -1,15 +1,14 @@
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
-use aeronet::{AsyncRuntime, TryFromBytes, TryIntoBytes};
-use aeronet_wt_native::{Channels, ClientKey, Closed, OnChannel};
+use aeronet::{AsyncRuntime, TryFromBytes, TryIntoBytes, ChannelKey, OnChannel};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
 
 // config
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Channels)]
-#[channel_kind(Datagram)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ChannelKey)]
+#[channel_kind(Unreliable)]
 struct AppChannel;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, OnChannel)]
@@ -27,9 +26,11 @@ where
 }
 
 impl TryIntoBytes for AppMessage {
+    type Output<'a> = Vec<u8>;
+
     type Error = Infallible;
 
-    fn try_into_bytes(self) -> Result<Vec<u8>, Self::Error> {
+    fn try_into_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
         Ok(self.0.into_bytes())
     }
 }
@@ -85,14 +86,13 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportServer> {
             "./aeronet_wt_native/examples/key.pem",
         ))?;
 
-    let server = Closed::new();
-
     let config = ServerConfig::builder()
         .with_bind_default(25565)
         .with_certificate(cert)
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
-    let (server, backend) = server.create(config);
+
+    let (server, backend) = WebTransportServer::open(config);
     rt.0.spawn(backend);
 
     Ok(WebTransportServer::from(server))

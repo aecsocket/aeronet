@@ -1,5 +1,6 @@
 // from
 // https://raw.githubusercontent.com/BiagioFesta/wtransport/master/wtransport/examples/gencert.rs
+//!
 
 use base64::{engine::general_purpose::STANDARD as Base64Engine, Engine};
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, PKCS_ECDSA_P256_SHA256};
