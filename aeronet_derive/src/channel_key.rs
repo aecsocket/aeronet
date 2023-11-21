@@ -54,12 +54,12 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         .variants
         .iter()
         .map(|variant| {
-            if !matches!(variant.fields, Fields::Unit) {
+            let Fields::Unit = variant.fields else {
                 return Err(Error::new_spanned(
                     &variant.fields, 
                     "variant must not have fields",
                 ));
-            }
+            };
 
             parse_channel_kind(variant, &variant.attrs).map(|kind| Variant {
                 ident: &variant.ident,

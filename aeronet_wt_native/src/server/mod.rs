@@ -1,9 +1,10 @@
 mod backend;
 
-use std::{future::Future, io, net::SocketAddr};
+use std::{mem, future::Future, io, net::SocketAddr};
 
 use aeronet::{ChannelKey, Message, OnChannel, TryFromBytes, TryIntoBytes};
 use derivative::Derivative;
+use replace_with::replace_with_or_abort_and_return;
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot};
 use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
@@ -24,15 +25,72 @@ pub struct NoClientError {
     pub client: ClientKey,
 }
 
-pub fn create_server<C2S, S2C, C>(config: ServerConfig) -> impl Future<Output = ()> + Send
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ExpectedStateError {
+    #[error("expected state Closed")]
+    Closed,
+    #[error("expected state Open")]
+    Open,
+}
+
+pub struct WebTransportServer<C2S, S2C, C>
 where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
 {
-    let (send_open, recv_open) = oneshot::channel();
-    backend::listen::<C2S, S2C, C>(config, send_open)
+    state: State<C2S, S2C, C>,
 }
+
+impl<C2S, S2C, C> WebTransportServer<C2S, S2C, C>
+where
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: ChannelKey,
+{
+    pub fn new() -> Self {
+        Self { state: State::Closed }
+    }
+
+    pub fn open(&mut self, config: ServerConfig) -> Result<impl Future<Output = ()> + Send, ExpectedStateError> {
+        let State::Closed = self.state else {
+            return Err(ExpectedStateError::Closed);
+        };
+
+        let (send_open, recv_open) = oneshot::channel();
+        self.state = State::Opening(Opening { recv_open });
+        Ok(backend::listen::<C2S, S2C, C>(config, send_open))
+    }
+
+    pub fn poll(&mut self) {
+        match &mut self.state {
+            State::Closed => {},
+            State::Opening(state) => match state.recv_open.try_recv() {
+                Ok(open) => {
+                    mem::replace(&mut self.state, State::Open(open));
+                },
+                Err(oneshot::error::TryRecvError::Empty) => {},
+                Err(oneshot::error::TryRecvError::Closed) => {
+                    mem::replace(&mut self.state, State::Closed);
+                }
+            }
+            State::Open(state) => {},
+        }
+    }
+}
+
+#[derive(Debug)]
+enum State<C2S, S2C, C>
+where
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: ChannelKey,
+{
+    Closed,
+    Opening(Opening<C2S, S2C, C>),
+    Open(Open<C2S, S2C, C>),
+}
+
 
 // state machine
 
