@@ -4,7 +4,7 @@
 
 //mod client;
 mod common;
-mod server;
+pub mod server;
 mod transport;
 
 pub use wtransport;

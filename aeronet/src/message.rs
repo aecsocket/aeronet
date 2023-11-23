@@ -6,7 +6,7 @@ use std::error::Error;
 /// * [`Send`]
 /// * [`Sync`]
 /// * `'static`
-/// 
+///
 /// This trait is automatically implemented for all types matching these
 /// criteria.
 ///

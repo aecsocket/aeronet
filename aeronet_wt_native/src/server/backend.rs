@@ -6,7 +6,7 @@ use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 use crate::{common, EndpointInfo};
 
 use super::{
-    ConnectedClient, IncomingClient, IncomingClientResult, OpenResult, OpenServer, PendingClient,
+    ConnectedClient, AcceptedClient, AcceptedClientResult, OpenResult, OpenServer, IncomingClient,
     WebTransportError,
 };
 
@@ -44,20 +44,20 @@ pub(super) async fn listen<C2S, S2C, C>(
             session = endpoint.accept() => session,
             _ = recv_closed.recv() => return,
         };
-        let (send_incoming, recv_incoming) = oneshot::channel();
-        let client_state = PendingClient { recv_incoming };
+        let (send_accepted, recv_accepted) = oneshot::channel();
+        let client_state = IncomingClient { recv_accepted };
         if let Err(_) = send_client.send(client_state) {
             // frontend closed
             return;
         };
 
-        tokio::spawn(handle_session::<C2S, S2C, C>(session, send_incoming));
+        tokio::spawn(handle_session::<C2S, S2C, C>(session, send_accepted));
     }
 }
 
 async fn handle_session<C2S, S2C, C>(
     session: IncomingSession,
-    send_incoming: oneshot::Sender<IncomingClientResult<C2S, S2C, C>>,
+    send_accepted: oneshot::Sender<AcceptedClientResult<C2S, S2C, C>>,
 ) where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
@@ -66,20 +66,20 @@ async fn handle_session<C2S, S2C, C>(
     let session = match session.await.map_err(WebTransportError::IncomingSession) {
         Ok(session) => session,
         Err(err) => {
-            let _ = send_incoming.send(Err(err));
+            let _ = send_accepted.send(Err(err));
             return;
         }
     };
 
     let (send_connected, recv_connected) = oneshot::channel();
-    let incoming = IncomingClient {
+    let accepted = AcceptedClient {
         authority: session.authority().to_owned(),
         path: session.path().to_owned(),
         origin: session.origin().map(|s| s.to_owned()),
         user_agent: session.user_agent().map(|s| s.to_owned()),
         recv_connected,
     };
-    if let Err(_) = send_incoming.send(Ok(incoming)) {
+    if let Err(_) = send_accepted.send(Ok(accepted)) {
         // frontend closed
         return;
     }
