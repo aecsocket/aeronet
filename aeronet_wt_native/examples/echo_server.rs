@@ -1,6 +1,6 @@
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
-use aeronet::{AsyncRuntime, TryFromBytes, TryIntoBytes, ChannelKey, OnChannel};
+use aeronet::{AsyncRuntime, ChannelKey, OnChannel, TransportServer, TryFromBytes, TryIntoBytes};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
@@ -92,14 +92,14 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportServer> {
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    let (server, backend) = WebTransportServer::open(config);
+    let (server, backend) = WebTransportServer::new_open(config);
     rt.0.spawn(backend);
 
     Ok(WebTransportServer::from(server))
 }
 
 fn poll_server(mut server: ResMut<WebTransportServer>) {
-    let _ = server.poll();
+    let _ = server.recv();
     let x = server.send(ClientKey::from_raw(0), "hi");
     println!("server = {:?}", server.as_ref());
     println!("  {x:?}");

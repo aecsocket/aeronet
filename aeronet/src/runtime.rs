@@ -47,3 +47,16 @@ impl FromWorld for AsyncRuntime {
         Self(rt)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn async_runtime_resource() {
+        let mut app = App::new();
+        app.init_resource::<AsyncRuntime>();
+
+        app.update();
+    }
+}

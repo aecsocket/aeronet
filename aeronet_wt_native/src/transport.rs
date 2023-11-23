@@ -8,6 +8,12 @@ use wtransport::{
     Connection,
 };
 
+slotmap::new_key_type! {
+    /// Key type used to uniquely identify a client connected to a
+    /// [`WebTransportServer`].
+    pub struct ClientKey;
+}
+
 /// Statistics on the network state of a [`Connection`] managed by an endpoint.
 ///
 /// This serves as a snapshot of network stats, not a live updating value.
@@ -59,6 +65,9 @@ where
     /// The backend that handles connections asynchronously was shut down.
     #[error("backend closed")]
     BackendClosed,
+    /// Attempted to open the backend while it was already open.
+    #[error("backend already open")]
+    BackendOpen,
     /// Failed to create the [`wtransport::Endpoint`].
     #[error("failed to create endpoint")]
     CreateEndpoint(#[source] io::Error),
@@ -73,8 +82,15 @@ where
     #[error("on datagram channel")]
     OnDatagram(#[source] ChannelError<S, R>),
     /// An error occurred while processing a channel.
-    #[error("on {0}")]
+    #[error("on {0:?}")]
     OnChannel(C, #[source] ChannelError<S, R>),
+    /// Attempted to perform an operation on a client which does not exist.
+    #[error("no client with key {0:?}")]
+    NoClient(ClientKey),
+    /// Attempted to perform an operation on a client which is not connected
+    /// yet.
+    #[error("client {0:?} has not connected yet")]
+    NotConnected(ClientKey),
 }
 
 /// Error that occurs while processing a channel, either datagrams or QUIC

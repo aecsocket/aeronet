@@ -90,16 +90,16 @@ pub enum ChannelKind {
 /// panic.
 pub unsafe trait ChannelKey: Send + Sync + Sized + Clone + 'static {
     /// The set of all valid variants of [`ChannelKey`].
-    /// 
+    ///
     /// # Safety
-    /// 
+    ///
     /// This must include *every representable value* of this type.
     const ALL: &'static [Self];
 
     /// The index of this value in [`ChannelKey::ALL`].
-    /// 
+    ///
     /// # Safety
-    /// 
+    ///
     /// This index must point to a valid index and must point to this value.
     fn index(&self) -> usize;
 

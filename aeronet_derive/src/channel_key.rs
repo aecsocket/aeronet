@@ -1,7 +1,7 @@
 use const_format::formatcp;
 use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
-use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Meta, Result, Fields};
+use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Fields, Meta, Result};
 
 use crate::CHANNEL_KIND;
 
@@ -56,7 +56,7 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         .map(|variant| {
             let Fields::Unit = variant.fields else {
                 return Err(Error::new_spanned(
-                    &variant.fields, 
+                    &variant.fields,
                     "variant must not have fields",
                 ));
             };

@@ -6,6 +6,9 @@ use std::error::Error;
 /// * [`Send`]
 /// * [`Sync`]
 /// * `'static`
+/// 
+/// This trait is automatically implemented for all types matching these
+/// criteria.
 ///
 /// The user defines which types of messages their transport uses, and this
 /// trait acts as a minimum bound for all message types. However, for different
@@ -16,9 +19,6 @@ use std::error::Error;
 ///   sequence
 /// * [`TryFromBytes`] if the message should be able to be constructed from a
 ///   byte sequence
-///
-/// This trait is automatically implemented for all types matching these
-/// criteria.
 pub trait Message: Send + Sync + 'static {}
 
 impl<T> Message for T where T: Send + Sync + 'static {}

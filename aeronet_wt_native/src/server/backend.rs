@@ -1,11 +1,14 @@
-use aeronet::{Message, TryFromBytes, TryIntoBytes, OnChannel, ChannelKey};
+use aeronet::{ChannelKey, Message, OnChannel, TryFromBytes, TryIntoBytes};
 use slotmap::SlotMap;
-use tokio::sync::{oneshot, mpsc};
-use wtransport::{ServerConfig, Endpoint, endpoint::IncomingSession};
+use tokio::sync::{mpsc, oneshot};
+use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
 use crate::{common, EndpointInfo};
 
-use super::{OpenResult, WebTransportError, OpenServer, PendingClient, IncomingClientResult, IncomingClient, ConnectedClient};
+use super::{
+    ConnectedClient, IncomingClient, IncomingClientResult, OpenResult, OpenServer, PendingClient,
+    WebTransportError,
+};
 
 pub(super) async fn listen<C2S, S2C, C>(
     config: ServerConfig,

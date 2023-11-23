@@ -31,11 +31,11 @@ mod on_channel;
 /// All variants require the attribute `#[channel_kind(..)]`.
 ///
 /// ```ignore
-/// #[derive(Channels)]
+/// #[derive(ChannelKey)]
 /// enum AppChannel {
-///     #[channel_kind(Datagram)]
+///     #[channel_kind(Unreliable)]
 ///     LowPriority,
-///     #[channel_kind(Stream)]
+///     #[channel_kind(ReliableOrdered)]
 ///     HighPriority,
 /// }
 /// ```
