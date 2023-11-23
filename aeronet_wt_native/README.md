@@ -11,8 +11,10 @@ This transport can be used in a native app to provide a client and server transp
 [`wtransport`](https://crates.io/crates/wtransport) as the WebTransport protocol implementation.
 Using this requires the [`tokio`](https://crates.io/crates/tokio) async runtime.
 
-# Notes
+# Transport
 
-- `TryIntoBytes` and `TryFromBytes` work on literally the raw bytes that are transported along
-  WebTransport
-  - Does no message batching on its own, or modify the bytes in any way
+Before a message (of a user-specified type) can be transported along a WebTransport connection, it
+must first be converted to/from its serialized byte form. This is achieved using
+[`aeronet::TryIntoBytes`] and [`aeronet::TryFromBytes`]. The transport will not process the bytes
+any further than converting the bytes using these functions - the implementation will not do any
+higher-level functions such as message batching.

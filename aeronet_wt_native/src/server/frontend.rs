@@ -1,24 +1,86 @@
 use std::future::Future;
 
-use aeronet::{Message, TryFromBytes, TryIntoBytes, OnChannel, ChannelKey};
-use tokio::sync::oneshot;
+use aeronet::{ChannelKey, Message, OnChannel, TransportServer, TryFromBytes, TryIntoBytes};
+use tokio::sync::{oneshot, mpsc};
 use wtransport::ServerConfig;
 
-use crate::ClientKey;
+use crate::{ClientKey, EndpointInfo};
 
-use super::{OpeningServer, OpenServer, WebTransportError, backend};
+use super::{backend, OpenServer, OpeningServer, WebTransportError, Client};
 
+/// An event which is raised by a [`WebTransportServer`].
 pub enum ServerEvent<C2S, S2C, C>
 where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
 {
-    Incoming(ClientKey),
-    Accepted(ClientKey),
-    Connected(ClientKey),
-    Recv(ClientKey, C2S),
-    Disconnected(ClientKey, WebTransportError<C2S, S2C, C>),
+    /// A client has requested to connect.
+    /// 
+    /// No further data is known about the client yet.
+    Incoming {
+        /// The key of the client.
+        client: ClientKey,
+    },
+    /// The server has accepted a client's request to connect.
+    Accepted {
+        /// The key of the client.
+        client: ClientKey,
+        /// See [`wtransport::endpoint::SessionRequest::authority`].
+        authority: String,
+        /// See [`wtransport::endpoint::SessionRequest::path`].
+        path: String,
+        /// See [`wtransport::endpoint::SessionRequest::origin`].
+        origin: Option<String>,
+        /// See [`wtransport::endpoint::SessionRequest::user_agent`].
+        user_agent: Option<String>,
+    },
+    /// A client has fully established a connection to the server (including
+    /// opening streams) and the connection is ready for messages.
+    /// 
+    /// This is equivalent to [`aeronet::ServerEvent::Connected`].
+    Connected {
+        /// The key of the client.
+        client: ClientKey,
+    },
+    /// A client sent a message to the server.
+    /// 
+    /// This is equivalent to [`aeronet::ServerEvent::Recv`].
+    Recv {
+        /// The key of the client which sent the message.
+        from: ClientKey,
+        /// The message.
+        msg: C2S,
+    },
+    /// A client has lost connection from this server, which cannot be recovered
+    /// from.
+    /// 
+    /// This is equivalent to [`aeronet::ServerEvent::Disconnected`].
+    Disconnected {
+        /// The key of the client.
+        client: ClientKey,
+        /// The reason why the client lost connection.
+        cause: WebTransportError<C2S, S2C, C>,
+    },
+}
+
+impl<C2S, S2C, C> From<ServerEvent<C2S, S2C, C>>
+    for Option<aeronet::ServerEvent<C2S, ClientKey, WebTransportError<C2S, S2C, C>>>
+where
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: ChannelKey,
+{
+    fn from(value: ServerEvent<C2S, S2C, C>) -> Self {
+        match value {
+            ServerEvent::Connected { client } => Some(aeronet::ServerEvent::Connected { client }),
+            ServerEvent::Recv { from, msg } => Some(aeronet::ServerEvent::Recv { from, msg }),
+            ServerEvent::Disconnected { client, cause } => {
+                Some(aeronet::ServerEvent::Disconnected { client, cause })
+            }
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -74,33 +136,6 @@ where
     }
 }
 
-pub enum EventIter<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    None,
-    One(ServerEvent<C2S, ClientKey, WebTransportError<C2S, S2C, C>>),
-    Many(Vec<ServerEvent<C2S, ClientKey, WebTransportError<C2S, S2C, C>>>),
-}
-
-impl<C2S, S2C, C> Iterator for EventIter<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    type Item = ServerEvent<C2S, ClientKey, WebTransportError<C2S, S2C, C>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match mem::replace(self, Self::None) {
-            Self::None => None,
-            Self::One(event) => Some(event),
-        }
-    }
-}
-
 impl<C2S, S2C, C> TransportServer<C2S, S2C> for WebTransportServer<C2S, S2C, C>
 where
     C2S: Message + TryFromBytes,
@@ -113,6 +148,8 @@ where
 
     type ConnectionInfo = EndpointInfo;
 
+    type Event = ServerEvent<C2S, S2C, C>;
+
     type RecvIter<'a> = EventIter<C2S, S2C, C>;
 
     fn connection_info(&self, client: Self::Client) -> Option<Self::ConnectionInfo> {
@@ -120,10 +157,11 @@ where
             return None;
         };
 
-        server.clients.get(client).and_then(|client| match client {
-            Client::Connected(client) => Some(client.info.clone()),
-            _ => None,
-        })
+        let Some(Client::Connected(client)) = server.clients.get(client) else {
+            return None;
+        };
+
+        Some(client.info.clone())
     }
 
     fn send<M: Into<S2C>>(
@@ -206,6 +244,34 @@ where
         match server.clients.remove(target) {
             Some(_) => Ok(()),
             None => Err(WebTransportError::NoClient(target)),
+        }
+    }
+}
+
+pub enum EventIter<C2S, S2C, C>
+where
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: ChannelKey,
+{
+    None,
+    One(std::iter::Once<ServerEvent<C2S, S2C, C>>),
+    Many(std::vec::IntoIter<ServerEvent<C2S, S2C, C>>),
+}
+
+impl<C2S, S2C, C> Iterator for EventIter<C2S, S2C, C>
+where
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: ChannelKey,
+{
+    type Item = ServerEvent<C2S, S2C, C>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::None => None,
+            Self::One(iter) => iter.next(),
+            Self::Many(iter) => iter.next(),
         }
     }
 }

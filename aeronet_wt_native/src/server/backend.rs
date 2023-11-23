@@ -6,7 +6,7 @@ use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 use crate::{common, EndpointInfo};
 
 use super::{
-    ConnectedClient, AcceptedClient, AcceptedClientResult, OpenResult, OpenServer, IncomingClient,
+    AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, OpenResult, OpenServer,
     WebTransportError,
 };
 

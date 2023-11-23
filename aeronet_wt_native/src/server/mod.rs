@@ -1,7 +1,7 @@
 mod backend;
 mod frontend;
 
-pub use frontend::WebTransportServer;
+pub use frontend::{WebTransportServer, ServerEvent};
 
 use std::{io, net::SocketAddr};
 

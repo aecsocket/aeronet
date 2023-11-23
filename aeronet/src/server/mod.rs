@@ -10,19 +10,18 @@ use crate::Message;
 /// the clients connected to this server.
 ///
 /// # Events
-/// 
+///
 /// The transport must be continuously polled for events and to update its
 /// internal state using [`TransportServer::recv`]. This will return the events
 /// which it has raised since the last `recv` call.
-/// 
+///
 /// `recv` returns an iterator, and the item type may be used in two ways:
-/// * converted into a generic [`ServerEvent`] via
-///   [`IntoServerEvent::into_server_event`]
+/// * converted into a generic [`ServerEvent`] via [`Into::into`]
 ///   * useful for generic code which must abstract over all transport
 ///     implementations
-/// * used as-is, if you know the concrete type of transport 
-///   * transports may expose their own event type, which allows you to
-///     listen to more event types
+/// * used as-is, if you know the concrete type of transport
+///   * transports may expose their own event type, which allows you to listen
+///     to more event types
 ///
 /// # Transport
 ///
@@ -60,7 +59,7 @@ where
     type ConnectionInfo;
 
     /// Type of event raised by this server.
-    type Event: IntoServerEvent<C2S, Self::Client, Self::Error>;
+    type Event: Into<Option<ServerEvent<C2S, Self::Client, Self::Error>>>;
 
     /// Iterator over events raised by this server, returned by
     /// [`TransportServer::recv`].
@@ -124,18 +123,33 @@ where
     fn disconnect(&mut self, target: Self::Client) -> Result<(), Self::Error>;
 }
 
-pub trait IntoServerEvent<C2S, C, E> {
-    fn into_server_event(self) -> ServerEvent<C2S, C, E>;
-}
-
+/// An event which is raised by a [`TransportServer`].
 pub enum ServerEvent<C2S, C, E> {
-    Connected(C),
-    Recv(C, C2S),
-    Disconnected(C, E),
-}
-
-impl<C2S, C, E> IntoServerEvent<C2S, C, E> for ServerEvent<C2S, C, E> {
-    fn into_server_event(self) -> ServerEvent<C2S, C, E> {
-        self
-    }
+    /// A client has fully connected to this server.
+    ///
+    /// See [`TransportServer`] for the definition of "connected".
+    ///
+    /// Use this event to do client setup logic, e.g. start loading player data.
+    Connected {
+        /// The key of the connected client.
+        client: C,
+    },
+    /// A client sent a message to this server.
+    Recv {
+        /// The key of the client which sent the message.
+        from: C,
+        /// The message.
+        msg: C2S,
+    },
+    /// A client has lost connection from this server, which cannot be recovered
+    /// from.
+    ///
+    /// Use this event to do client teardown logic, e.g. removing the player
+    /// from the world.
+    Disconnected {
+        /// The key of the client.
+        client: C,
+        /// The reason why the client lost connection.
+        cause: E,
+    },
 }
