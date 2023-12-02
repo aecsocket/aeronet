@@ -1,6 +1,9 @@
+//!
+
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{AsyncRuntime, ChannelKey, OnChannel, TransportServer, TryFromBytes, TryIntoBytes};
+use aeronet_wt_native::ServerEvent;
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
@@ -26,12 +29,12 @@ where
 }
 
 impl TryIntoBytes for AppMessage {
-    type Output<'a> = Vec<u8>;
+    type Output<'a> = &'a [u8];
 
     type Error = Infallible;
 
     fn try_into_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
-        Ok(self.0.into_bytes())
+        Ok(self.0.as_bytes())
     }
 }
 
@@ -49,6 +52,7 @@ type WebTransportServer = aeronet_wt_native::WebTransportServer<AppMessage, AppM
 
 /*
 chromium \
+brave \
 --webtransport-developer-mode \
 --ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
 */
@@ -92,15 +96,22 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportServer> {
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    let (server, backend) = WebTransportServer::new_open(config);
+    let (server, backend) = WebTransportServer::open(config);
     rt.0.spawn(backend);
 
     Ok(WebTransportServer::from(server))
 }
 
 fn poll_server(mut server: ResMut<WebTransportServer>) {
-    let _ = server.recv();
-    let x = server.send(ClientKey::from_raw(0), "hi");
-    println!("server = {:?}", server.as_ref());
-    println!("  {x:?}");
+    for event in server.recv() {
+        match event {
+            ServerEvent::Opened => info!("Opened server for connections"),
+            ServerEvent::Incoming { client } => info!("{client:?} incoming"),
+            ServerEvent::Accepted { client, authority, path, .. } => info!("Client {client:?} accepted from {authority}{path}"),
+            ServerEvent::Connected { client } => info!("{client:?} connected"),
+            ServerEvent::Recv { from, msg } => info!("{from:?} > {msg:?}"),
+            ServerEvent::Disconnected { client, cause } => info!("{client:?} disconnected: {:#}", aeronet::error::as_pretty(&cause)),
+            ServerEvent::Closed { cause } => info!("Server closed: {:#}", aeronet::error::as_pretty(&cause))
+        }
+    }
 }

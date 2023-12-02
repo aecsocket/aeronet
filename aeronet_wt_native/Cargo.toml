@@ -31,8 +31,6 @@ tracing.workspace = true
 thiserror.workspace = true
 futures.workspace = true
 slotmap.workspace = true
-replace_with.workspace = true
-either.workspace = true
 tokio = { workspace = true, default-features = false, features = [ "rt" ] }
 wtransport.workspace = true
 

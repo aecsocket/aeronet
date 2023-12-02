@@ -1,6 +1,7 @@
 use aeronet::{ChannelKey, Message, OnChannel, TryFromBytes, TryIntoBytes};
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot};
+use tracing::debug;
 use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
 use crate::{common, EndpointInfo};
@@ -10,7 +11,7 @@ use super::{
     WebTransportError,
 };
 
-pub(super) async fn listen<C2S, S2C, C>(
+pub(super) async fn start<C2S, S2C, C>(
     config: ServerConfig,
     send_open: oneshot::Sender<OpenResult<C2S, S2C, C>>,
 ) where
@@ -18,6 +19,7 @@ pub(super) async fn listen<C2S, S2C, C>(
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
 {
+    debug!("Starting backend");
     let endpoint = match Endpoint::server(config).map_err(WebTransportError::CreateEndpoint) {
         Ok(endpoint) => endpoint,
         Err(err) => {
@@ -25,6 +27,7 @@ pub(super) async fn listen<C2S, S2C, C>(
             return;
         }
     };
+    debug!("Created endpoint");
 
     let (send_client, recv_client) = mpsc::unbounded_channel();
     let (send_closed, mut recv_closed) = mpsc::channel(1);
@@ -35,19 +38,22 @@ pub(super) async fn listen<C2S, S2C, C>(
         send_closed,
     };
     if let Err(_) = send_open.send(Ok(open)) {
-        // frontend closed
+        debug!("Frontend closed");
         return;
     }
 
     loop {
+        debug!("Listening for incoming sessions");
         let session = tokio::select! {
             session = endpoint.accept() => session,
             _ = recv_closed.recv() => return,
         };
+        debug!("Incoming session");
+
         let (send_accepted, recv_accepted) = oneshot::channel();
         let client_state = IncomingClient { recv_accepted };
         if let Err(_) = send_client.send(client_state) {
-            // frontend closed
+            debug!("Frontend closed");
             return;
         };
 
@@ -71,6 +77,8 @@ async fn handle_session<C2S, S2C, C>(
         }
     };
 
+    debug!("Session accepted on {}{}", session.authority(), session.path());
+
     let (send_connected, recv_connected) = oneshot::channel();
     let accepted = AcceptedClient {
         authority: session.authority().to_owned(),
@@ -80,7 +88,7 @@ async fn handle_session<C2S, S2C, C>(
         recv_connected,
     };
     if let Err(_) = send_accepted.send(Ok(accepted)) {
-        // frontend closed
+        debug!("Frontend closed");
         return;
     }
 
@@ -116,10 +124,11 @@ async fn handle_session<C2S, S2C, C>(
         recv_err,
     };
     if let Err(_) = send_connected.send(Ok(connected)) {
-        // frontend closed
+        debug!("Frontend closed");
         return;
     }
 
+    debug!("Starting connection loop");
     if let Err(err) = common::handle_connection::<S2C, C2S, C>(
         conn,
         channels_state,
@@ -129,6 +138,9 @@ async fn handle_session<C2S, S2C, C>(
     )
     .await
     {
+        debug!("Disconnected with error");
         let _ = send_err.send(err);
+    } else {
+        debug!("Disconnected without error");
     }
 }

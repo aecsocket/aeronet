@@ -1,34 +1,14 @@
-// #[cfg(feature = "bevy")]
-// mod plugin;
-
-// #[cfg(feature = "bevy")]
-// pub use plugin::*;
-
 use crate::Message;
 
 /// Allows listening for client connections, and transporting messages to/from
 /// the clients connected to this server.
 ///
-/// # Events
-///
-/// The transport must be continuously polled for events and to update its
-/// internal state using [`TransportServer::recv`]. This will return the events
-/// which it has raised since the last `recv` call.
-///
-/// `recv` returns an iterator, and the item type may be used in two ways:
-/// * converted into a generic [`ServerEvent`] via [`Into::into`]
-///   * useful for generic code which must abstract over all transport
-///     implementations
-/// * used as-is, if you know the concrete type of transport
-///   * transports may expose their own event type, which allows you to listen
-///     to more event types
-///
 /// # Transport
 ///
 /// This trait does not necessarily represent a **networked** server, which is
 /// one that communicates to other computers probably using the internet.
-/// Instead, a transport server may also be working using in-memory channels or
-/// some other non-networked method.
+/// Instead, a transport server may also work using in-memory channels or some
+/// other non-networked method.
 ///
 /// # Connection
 ///
@@ -104,6 +84,20 @@ where
     fn send<M: Into<S2C>>(&mut self, to: Self::Client, msg: M) -> Result<(), Self::Error>;
 
     /// Polls events and receives messages from this transport.
+    /// 
+    /// This will consume messages and events from connected clients. Events
+    /// must be continuously received to allow this transport to do its internal
+    /// work.
+    /// 
+    /// This returns an iterator over the events received, which may be used in
+    /// two ways:
+    /// * converted into a generic [`ServerEvent`] via its [`Into`]
+    /// implementation
+    ///   * useful for generic code which must abstract over different transport
+    ///     implementations
+    /// * used as-is, if you know the concrete type of the transport
+    ///   * transports may expose their own event tyoe, which allows you to
+    ///     listen to specialized events
     fn recv(&mut self) -> Self::RecvIter<'_>;
 
     /// Forces a client to disconnect from this server.
@@ -124,6 +118,7 @@ where
 }
 
 /// An event which is raised by a [`TransportServer`].
+#[derive(Debug, Clone)]
 pub enum ServerEvent<C2S, C, E> {
     /// A client has fully connected to this server.
     ///

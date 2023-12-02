@@ -1,6 +1,7 @@
 use aeronet::{ChannelKey, ChannelKind, Message, OnChannel, TryFromBytes, TryIntoBytes};
 use futures::future::try_join_all;
 use tokio::sync::mpsc;
+use tracing::debug;
 use wtransport::{datagram::Datagram, error::ConnectionError, Connection, RecvStream, SendStream};
 
 use crate::{ChannelError, EndpointInfo, WebTransportError};
@@ -157,14 +158,14 @@ where
 
     loop {
         if let Err(_) = send_info.send(EndpointInfo::from_connection(&conn)) {
-            // frontend closed
+            debug!("Frontend closed");
             return Ok(());
         }
 
         tokio::select! {
             result = recv_s.recv() => {
                 let Some(msg) = result else {
-                    // frontend closed
+                    debug!("Frontend closed");
                     return Ok(());
                 };
                 let _ = send::<S, R, C>(&conn, &mut channels, msg).await?;
@@ -173,18 +174,10 @@ where
                 let _ = recv_datagram(result, &send_r)
                     .map_err(|err| WebTransportError::OnDatagram(err))?;
             }
-            result = recv_streams.recv() => {
-                let Some(msg) = result else {
-                    // all streams closed
-                    return Ok(());
-                };
+            Some(msg) = recv_streams.recv() => {
                 let _ = send_r.send(msg);
             }
-            result = recv_err.recv() => {
-                let Some(err) = result else {
-                    // all streams closed
-                    return Ok(());
-                };
+            Some(err) = recv_err.recv() => {
                 return Err(err);
             }
         }

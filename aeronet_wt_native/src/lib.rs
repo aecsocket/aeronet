@@ -2,11 +2,11 @@
 //#![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
 
-//mod client;
+mod client;
 mod common;
-pub mod server;
+mod server;
 mod transport;
 
 pub use wtransport;
 
-pub use {server::*, transport::*};
+pub use {client::*, server::*, transport::*};
