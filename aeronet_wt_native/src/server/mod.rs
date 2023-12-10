@@ -2,6 +2,7 @@ mod backend;
 mod frontend;
 
 pub use frontend::*;
+
 use wtransport::ServerConfig;
 
 use std::{future::Future, io, net::SocketAddr, task::Poll};
@@ -101,6 +102,8 @@ where
 
 type WebTransportError<C2S, S2C, C> = crate::WebTransportError<S2C, C2S, C>;
 
+/// A [`WebTransportServer`] in the process of opening (setting up endpoint for
+/// listening).
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct OpeningServer<C2S, S2C, C>
@@ -119,7 +122,13 @@ where
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
 {
-    pub fn new(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
+    /// Starts opening a server.
+    /// 
+    /// This returns:
+    /// * the server frontend, which you must store and use
+    /// * the backend future, which you must run on an async runtime as soon
+    ///   as possible
+    pub fn open(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel();
         (
             Self { recv_open },
@@ -127,6 +136,13 @@ where
         )
     }
 
+    /// Polls the current state of the server, checking if it has opened yet.
+    /// 
+    /// This will be ready once the backend has set up its endpoint for
+    /// listening to client connections, and is ready to handle them.
+    /// 
+    /// If this returns [`Poll::Ready`], you must drop this value and start
+    /// using the new state.
     pub fn poll(&mut self) -> Poll<OpenResult<C2S, S2C, C>> {
         match self.recv_open.try_recv() {
             Ok(result) => Poll::Ready(result),
@@ -136,6 +152,7 @@ where
     }
 }
 
+/// A [`WebTransportServer`] which is ready and listening for connections.
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct OpenServer<C2S, S2C, C>
@@ -149,6 +166,7 @@ where
     #[derivative(Debug = "ignore")]
     recv_client: mpsc::UnboundedReceiver<IncomingClient<C2S, S2C, C>>,
     #[derivative(Debug = "ignore")]
+    #[allow(dead_code)]
     send_closed: mpsc::Sender<()>,
 }
 
@@ -160,14 +178,18 @@ where
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
 {
+    /// Gets the local [`SocketAddr`] the underlying socket is bound to.
     pub fn local_addr(&self) -> Result<SocketAddr, &io::Error> {
         self.local_addr.as_ref().map(|addr| *addr)
     }
 
+    /// Gets the keys of all clients which are currently connected to the
+    /// server.
     pub fn clients(&self) -> impl Iterator<Item = ClientKey> + '_ {
         self.clients.keys()
     }
 
+    /// See [`aeronet::TransportServer::connection_info`].
     pub fn connection_info(&self, client: ClientKey) -> Option<EndpointInfo> {
         self.clients
             .get(client)
@@ -177,6 +199,7 @@ where
             })
     }
 
+    /// See [`aeronet::TransportServer::send`].
     pub fn send<M: Into<S2C>>(&self, to: ClientKey, msg: M) -> Result<(), WebTransportError<C2S, S2C, C>> {
         let Some(client) = self.clients.get(to) else {
             return Err(WebTransportError::NoClient(to));
@@ -189,6 +212,7 @@ where
         client.send_s2c.send(msg).map_err(|_| WebTransportError::NotConnected(to))
     }
 
+    /// See [`aeronet::TransportServer::disconnect`].
     pub fn disconnect(&mut self, target: ClientKey) -> Result<(), WebTransportError<C2S, S2C, C>> {
         match self.clients.remove(target) {
             Some(_) => Ok(()),
@@ -196,6 +220,7 @@ where
         }
     }
 
+    /// See [`aeronet::TransportServer::recv`].
     pub fn recv(&mut self) -> Result<std::vec::IntoIter<ServerEvent<C2S, S2C, C>>, WebTransportError<C2S, S2C, C>> {
         let mut events = Vec::new();
         loop {

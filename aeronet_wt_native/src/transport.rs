@@ -3,7 +3,7 @@ use std::{io, net::SocketAddr, time::Duration};
 use aeronet::{ChannelKey, Message, RemoteAddr, Rtt, TryFromBytes, TryIntoBytes};
 use wtransport::{
     error::{
-        ConnectionError, SendDatagramError, StreamOpeningError, StreamReadError, StreamWriteError,
+        ConnectionError, SendDatagramError, StreamOpeningError, StreamReadError, StreamWriteError, ConnectingError,
     },
     Connection,
 };
@@ -70,7 +70,10 @@ where
     BackendOpen,
     /// Failed to create the [`wtransport::Endpoint`].
     #[error("failed to create endpoint")]
-    CreateEndpoint(#[source] io::Error),
+    Endpoint(#[source] io::Error),
+    /// Failed to connect the endpoint to the given URL.
+    #[error("failed to connect to URL")]
+    Connect(#[source] ConnectingError),
     /// Failed to receive an incoming session.
     #[error("failed to receive incoming session")]
     IncomingSession(#[source] ConnectionError),

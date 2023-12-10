@@ -1,13 +1,15 @@
 use std::{future::Future, task::Poll};
 
 use aeronet::{ChannelKey, Message, OnChannel, TransportServer, TryFromBytes, TryIntoBytes};
-use tokio::sync::oneshot;
 use wtransport::ServerConfig;
 
 use crate::{ClientKey, EndpointInfo, ServerEvent, OpeningServer, OpenServer};
 
-use super::{WebTransportError, Client, backend};
+use super::{WebTransportError, Client};
 
+/// An implementation of [`TransportServer`] using the WebTransport protocol.
+/// 
+/// See the [crate-level documentation](crate) for implementation details.
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub enum WebTransportServer<C2S, S2C, C>
@@ -16,8 +18,12 @@ where
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
 {
+    /// The server is not attempting to listen to connections.
     Closed,
+    /// The server is starting its endpoint, but is not ready to receive
+    /// connections yet.
     Opening(OpeningServer<C2S, S2C, C>),
+    /// The server is ready to communicate with clients.
     Open(OpenServer<C2S, S2C, C>),
 }
 
@@ -27,11 +33,12 @@ where
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
 {
+    /// Starts opening a server and wraps it in a [`WebTransportServer`].
+    /// 
+    /// See [`OpeningServer::open`].
     pub fn open(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
-        let (send_open, recv_open) = oneshot::channel();
-        let frontend = Self::Opening(OpeningServer { recv_open });
-        let backend = backend::start(config, send_open);
-        (frontend, backend)
+        let (frontend, backend) = OpeningServer::open(config);
+        (Self::Opening(frontend), backend)
     }
 }
 
@@ -49,7 +56,7 @@ where
 
     type Event = ServerEvent<C2S, S2C, C>;
 
-    type RecvIter<'a> = ServerEventIter<C2S, S2C, C>;
+    type RecvIter<'a> = std::vec::IntoIter<Self::Event>;
 
     fn connection_info(&self, client: Self::Client) -> Option<Self::ConnectionInfo> {
         let WebTransportServer::Open(server) = self else {
@@ -86,23 +93,23 @@ where
 
     fn recv(&mut self) -> Self::RecvIter<'_> {
         match self {
-            WebTransportServer::Closed => ServerEventIter::None,
+            WebTransportServer::Closed => vec![].into_iter(),
             WebTransportServer::Opening(server) => match server.poll() {
-                Poll::Pending => ServerEventIter::None,
+                Poll::Pending => vec![].into_iter(),
                 Poll::Ready(Ok(open)) => {
                     *self = WebTransportServer::Open(open);
-                    ServerEventIter::from(ServerEvent::Opened)
+                    vec![ServerEvent::Opened].into_iter()
                 }
                 Poll::Ready(Err(cause)) => {
                     *self = WebTransportServer::Closed;
-                    ServerEventIter::from(ServerEvent::Closed { cause })
+                    vec![ServerEvent::Closed { cause }].into_iter()
                 }
             }
             WebTransportServer::Open(server) => match server.recv() {
-                Ok(events) => ServerEventIter::from(events),
+                Ok(events) => events,
                 Err(cause) => {
                     *self = WebTransportServer::Closed;
-                    ServerEventIter::from(ServerEvent::Closed { cause })
+                    vec![ServerEvent::Closed { cause }].into_iter()
                 }
             }
         }
@@ -116,56 +123,6 @@ where
         match server.clients.remove(target) {
             Some(_) => Ok(()),
             None => Err(WebTransportError::NoClient(target)),
-        }
-    }
-}
-
-pub enum ServerEventIter<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    None,
-    One(std::iter::Once<ServerEvent<C2S, S2C, C>>),
-    Some(std::vec::IntoIter<ServerEvent<C2S, S2C, C>>),
-}
-
-impl<C2S, S2C, C> From<ServerEvent<C2S, S2C, C>> for ServerEventIter<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    fn from(value: ServerEvent<C2S, S2C, C>) -> Self {
-        Self::One(std::iter::once(value))
-    }
-}
-
-impl<C2S, S2C, C> From<std::vec::IntoIter<ServerEvent<C2S, S2C, C>>> for ServerEventIter<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    fn from(value: std::vec::IntoIter<ServerEvent<C2S, S2C, C>>) -> Self {
-        Self::Some(value)
-    }
-}
-
-impl<C2S, S2C, C> Iterator for ServerEventIter<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    type Item = ServerEvent<C2S, S2C, C>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::None => None,
-            Self::One(iter) => iter.next(),
-            Self::Some(iter) => iter.next(),
         }
     }
 }

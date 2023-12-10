@@ -20,7 +20,7 @@ pub(super) async fn start<C2S, S2C, C>(
     C: ChannelKey,
 {
     debug!("Starting backend");
-    let endpoint = match Endpoint::server(config).map_err(WebTransportError::CreateEndpoint) {
+    let endpoint = match Endpoint::server(config).map_err(WebTransportError::Endpoint) {
         Ok(endpoint) => endpoint,
         Err(err) => {
             let _ = send_open.send(Err(err));
@@ -31,7 +31,7 @@ pub(super) async fn start<C2S, S2C, C>(
 
     let (send_client, recv_client) = mpsc::unbounded_channel();
     let (send_closed, mut recv_closed) = mpsc::channel(1);
-    let open = OpenServer::<C2S, S2C, C> {
+    let open = OpenServer {
         local_addr: endpoint.local_addr(),
         clients: SlotMap::default(),
         recv_client,
@@ -104,6 +104,7 @@ async fn handle_session<C2S, S2C, C>(
         }
     };
 
+    debug!("Establishing channels");
     let channels_state = match common::establish_channels::<S2C, C2S, C, true>(&conn).await {
         Ok(state) => state,
         Err(err) => {
