@@ -45,17 +45,64 @@ assert_is_message::<S2C>();
 ```
 
 Then, you will need a transport implementation to use. Select one from the list above that suits
-your needs. Afterwards, use the [`ClientTransport`] and [`ServerTransport`] traits to interact with
+your needs. Afterwards, use the [`TransportClient`] and [`TransportServer`] traits to interact with
 the transport, to do functions such as sending and receiving data.
 
-```rust,ignore
-let client = MyClientTransport::<C2S, S2C>::new();
+```rust
+use std::time::Duration;
+use aeronet::{TransportClient, Rtt};
 
+#[derive(Debug, Clone)]
+pub enum C2S {
+    Move(f32),
+    Shoot,
+}
+
+# fn run<Client, ConnInfo>(mut client: Client)
+# where
+#     Client: TransportClient<C2S, (), ConnectionInfo = ConnInfo>,
+#     ConnInfo: Rtt,
+# {
 client.send(C2S::Shoot);
 
-let rtt: Duration = client.info().rtt();
-println!("Latency to server: {rtt}");
+if let Some(conn_info) = client.connection_info() {
+    let rtt: Duration = conn_info.rtt();
+    println!("Latency to server: {rtt:?}");
+}
+# }
 ```
+
+# Architecture
+
+## Transport
+
+The traits defined in this crate lay out a **client/server** architecture - one central server which
+multiple clients can connect to. The most popular alternative is **peer-to-peer**, but explaining
+the differences, advantages, and disadvantages of these architectures are outside the scope of this.
+
+A transport is not necessarily **networked** - that is, one that communicates to other computers,
+probably using the internet. Instead, transport can also work using something as simple as in-memory
+channels or some other non-networked method.
+
+Transport traits also provide no guarantees about in what form the messages are transported. The
+memory (and therefore ownership) of the value may be sent directly, in the case of an in-memory
+MPSC channel, or may have to be serialized to/from a byte form before being transported. In this
+case, [`TryFromBytes`] and [`TryIntoBytes`] are useful to look at.
+
+The method used to transport the data itself (i.e. unreliable, reliable ordered, etc.) is also
+exposed by this crate - see [`ChannelKind`] for more info.
+
+## Connection
+
+This crate abstracts over the complexities of connection by defining two states:
+* **connected** - a client has fully established a connection to a server, including opening the
+  correct streams and channels and all other setup, and messages can now be exchanged between the
+  two
+* **not connected** - any state which isn't connected
+
+Although the networking implementation is likely to be much more complex, including encryption,
+handshakes, etc., these two states can be used as a basic contract for networking code. However,
+the implementation may also choose to expose some of these details itself.
 
 # With Bevy
 

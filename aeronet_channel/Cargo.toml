@@ -9,6 +9,9 @@ keywords.workspace = true
 categories.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [package.metadata.docs.rs]
 all-features = true
 

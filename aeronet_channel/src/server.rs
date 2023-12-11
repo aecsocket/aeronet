@@ -1,13 +1,19 @@
+use std::mem;
+
 use aeronet::{Message, ServerEvent, TransportServer};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use slotmap::SlotMap;
 
 use crate::{ChannelError, ClientKey};
 
+/// Implementation of [`TransportServer`] using in-memory MPSC channels.
+///
+/// See the [crate-level docs](crate).
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelServer<C2S, S2C> {
     pub(super) clients: SlotMap<ClientKey, ClientState<C2S, S2C>>,
+    pub(super) event_buf: Vec<ServerEvent<C2S, ClientKey, ChannelError>>,
 }
 
 #[derive(Debug)]
@@ -17,9 +23,11 @@ pub(super) struct ClientState<C2S, S2C> {
 }
 
 impl<C2S, S2C> ChannelServer<C2S, S2C> {
+    /// Creates a new server with no clients connected.
     pub fn new() -> Self {
         Self {
             clients: SlotMap::default(),
+            event_buf: Vec::default(),
         }
     }
 }
@@ -54,7 +62,8 @@ where
     }
 
     fn recv(&mut self) -> Self::RecvIter<'_> {
-        let mut events = Vec::new();
+        let mut events = mem::replace(&mut self.event_buf, Vec::new());
+
         let mut to_remove = Vec::new();
         for (client, state) in self.clients.iter() {
             loop {
@@ -82,7 +91,13 @@ where
     fn disconnect<C: Into<Self::Client>>(&mut self, client: C) -> Result<(), Self::Error> {
         let client = client.into();
         match self.clients.remove(client) {
-            Some(_) => Ok(()),
+            Some(_) => {
+                self.event_buf.push(ServerEvent::Disconnected {
+                    client,
+                    cause: ChannelError::ForceDisconnect,
+                });
+                Ok(())
+            }
             None => Err(ChannelError::NoClient(client)),
         }
     }

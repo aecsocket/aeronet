@@ -9,7 +9,7 @@ use super::{WebTransportError, Client};
 
 /// An implementation of [`TransportServer`] using the WebTransport protocol.
 /// 
-/// See the [crate-level documentation](crate) for implementation details.
+/// See the [crate-level docs](crate).
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub enum WebTransportServer<C2S, S2C, C>

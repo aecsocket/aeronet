@@ -2,12 +2,7 @@ use crate::Message;
 
 /// Allows connecting to a server, and transporting messages to/from the server.
 ///
-/// # Transport
-///
-/// This trait does not necessarily represent a **networked** client, which is
-/// one that communicates to other computers probably using the internet.
-/// Instead, a transport client may also work using in-memory channels or some
-/// other non-networked method.
+/// See the [crate-level docs](crate).
 pub trait TransportClient<C2S, S2C>
 where
     C2S: Message,
@@ -35,17 +30,9 @@ where
 
     /// Gets the current connection information and statistics if this client
     /// is connected.
-    ///
-    /// See [`TransportServer`] for the definition of "connected".
-    ///
-    /// [`TransportServer`]: crate::TransportServer
     fn connection_info(&self) -> Option<Self::ConnectionInfo>;
 
     /// Gets if this client is currently connected.
-    ///
-    /// See [`TransportServer`] for the definition of "connected".
-    ///
-    /// [`TransportServer`]: crate::TransportServer
     fn connected(&self) -> bool {
         self.connection_info().is_some()
     }
@@ -93,7 +80,7 @@ where
     /// disconnected in any way, so you must use your own mechanism for graceful
     /// disconnection if you need this feature.
     ///
-    /// Disconnecting a client using this function will not raise a
+    /// Disconnecting using this function will also raise a
     /// [`ClientEvent::Disconnected`].
     ///
     /// # Errors

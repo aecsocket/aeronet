@@ -19,7 +19,13 @@ pub enum ChannelError {
     /// dropped and closing the MPSC channels.
     #[error("disconnected")]
     Disconnected,
+    /// The client was forcefully disconnected from the server, by the server.
+    #[error("force disconnect")]
+    ForceDisconnect,
     /// This client is already connected to a server.
     #[error("already connected")]
-    Connected,
+    AlreadyConnected,
+    /// This client is already disconnected.
+    #[error("already disconnected")]
+    AlreadyDisconnected,
 }

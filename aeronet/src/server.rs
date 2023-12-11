@@ -3,35 +3,7 @@ use crate::Message;
 /// Allows listening for client connections, and transporting messages to/from
 /// the clients connected to this server.
 ///
-/// # Transport
-///
-/// This trait does not necessarily represent a **networked** server, which is
-/// one that communicates to other computers probably using the internet.
-/// Instead, a transport server may also work using in-memory channels or some
-/// other non-networked method.
-///
-/// This trait also provides no guarantees about how the messages are
-/// transported. The values may be sent directly (in the case of in-memory MPSC
-/// channels), or may have to be serialized to/from a byte form before being
-/// transported. In this case, [`TryFromBytes`] and [`TryIntoBytes`] may be
-/// useful.
-///
-/// # Connection
-///
-/// Although clients may go through several different stages of connection,
-/// this trait abstracts over this process and only represents clients as either
-/// **connected** or **not connected**.
-///
-/// A client is considered connected if the transport between this server and
-/// the client has been finalized - this means that all setup, such as opening
-/// streams and configuration, has been finished, and both sides can now send
-/// messages to each other.
-///
-/// Note that implementations of this transport *may* expose more info on the
-/// current connection state (e.g. "client incoming") but is not required to.
-///
-/// [`TryFromBytes`]: crate::TryFromBytes
-/// [`TryIntoBytes`]: crate::TryIntoBytes
+/// See the [crate-level docs](crate).
 pub trait TransportServer<C2S, S2C>
 where
     C2S: Message,
@@ -63,8 +35,6 @@ where
     /// Gets the current connection information and statistics on a connected
     /// client.
     ///
-    /// See [`TransportServer`] for the definition of "connected".
-    ///
     /// The data that this function returns is left up to the implementation,
     /// but in general this allows accessing:
     /// * the round-trip time, or ping ([`crate::Rtt`])
@@ -72,8 +42,6 @@ where
     fn connection_info(&self, client: Self::Client) -> Option<Self::ConnectionInfo>;
 
     /// Gets if the given client is currently connected.
-    ///
-    /// See [`TransportServer`] for the definition of "connected".
     fn connected(&self, client: Self::Client) -> bool {
         self.connection_info(client).is_some()
     }
@@ -121,7 +89,7 @@ where
     /// disconnected in any way, so you must use your own mechanism for graceful
     /// disconnection if you need this feature.
     ///
-    /// Disconnecting a client using this function will not raise a
+    /// Disconnecting a client using this function will also raise a
     /// [`ServerEvent::Disconnected`].
     ///
     /// # Errors
