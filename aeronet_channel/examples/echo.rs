@@ -16,10 +16,7 @@ use bevy_egui::{
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AppMessage(String);
 
-impl<T> From<T> for AppMessage
-where
-    T: Into<String>,
-{
+impl<T: Into<String>> From<T> for AppMessage {
     fn from(value: T) -> Self {
         Self(value.into())
     }
@@ -135,13 +132,15 @@ fn update_client<const N: usize>(mut egui: EguiContexts, mut state: ResMut<Clien
         if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             let buf = state.buf.clone();
             state.buf.clear();
-            if !buf.is_empty() {
-                match state.client.send(buf.clone()) {
-                    Ok(_) => state.scrollback.push(format!("> {}", buf)),
-                    Err(err) => state
-                        .scrollback
-                        .push(format!("Error: {:#}", aeronet::error::as_pretty(&err))),
-                }
+            if buf.is_empty() {
+                return;
+            }
+            
+            match state.client.send(buf.clone()) {
+                Ok(_) => state.scrollback.push(format!("> {}", buf)),
+                Err(err) => state
+                    .scrollback
+                    .push(format!("Error: {:#}", aeronet::error::as_pretty(&err))),
             }
 
             ui.memory_mut(|m| m.request_focus(resp.id));

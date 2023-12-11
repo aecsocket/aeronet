@@ -68,20 +68,29 @@ impl<C2S, S2C> ConnectedClient<C2S, S2C> {
     }
 }
 
-//
-
+/// Implementation of [`TransportClient`] using in-memory MPSC channels.
+///
+/// See the [crate-level docs](crate).
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub enum ChannelClient<C2S, S2C> {
+    /// Client is not connected to a server.
     Disconnected,
+    /// Client is connected to a server.
     Connected(ConnectedClient<C2S, S2C>),
 }
 
 impl<C2S, S2C> ChannelClient<C2S, S2C> {
+    /// Creates and connects a new client to an existing server.
     pub fn connected(server: &mut ChannelServer<C2S, S2C>) -> Self {
         Self::Connected(ConnectedClient::new(server))
     }
 
+    /// Attempts to connect this client to an existing server.
+    /// 
+    /// # Errors
+    /// 
+    /// Errors if this client is already connected to a server.
     pub fn connect(&mut self, server: &mut ChannelServer<C2S, S2C>) -> Result<(), ChannelError> {
         match self {
             Self::Disconnected => {
