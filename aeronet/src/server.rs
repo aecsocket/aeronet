@@ -62,7 +62,7 @@ where
     /// If an error occurs later during the transport process, the server will
     /// forcefully disconnect the client and emit a
     /// [`ServerEvent::Disconnected`].
-    fn send<M: Into<S2C>>(&mut self, to: Self::Client, msg: M) -> Result<(), Self::Error>;
+    fn send(&mut self, client: Self::Client, msg: impl Into<S2C>) -> Result<(), Self::Error>;
 
     /// Polls events and receives messages from this transport.
     ///
@@ -97,7 +97,7 @@ where
     /// If the server cannot even attempt to disconnect this client (e.g. if the
     /// server knows that this client is already disconnected), this returns an
     /// error.
-    fn disconnect<C: Into<Self::Client>>(&mut self, target: C) -> Result<(), Self::Error>;
+    fn disconnect(&mut self, client: impl Into<Self::Client>) -> Result<(), Self::Error>;
 }
 
 /// An event which is raised by a [`TransportServer`].
@@ -115,7 +115,7 @@ pub enum ServerEvent<C2S, C, E> {
     /// A client sent a message to this server.
     Recv {
         /// The key of the client which sent the message.
-        from: C,
+        client: C,
         /// The message.
         msg: C2S,
     },

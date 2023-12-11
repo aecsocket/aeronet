@@ -53,7 +53,7 @@ where
     /// If an error occurs later during the transport process, the server will
     /// forcefully disconnect the client and emit a
     /// [`ClientEvent::Disconnected`].
-    fn send<M: Into<C2S>>(&mut self, msg: M) -> Result<(), Self::Error>;
+    fn send(&mut self, msg: impl Into<C2S>) -> Result<(), Self::Error>;
 
     /// Polls events and receives messages from this transport.
     ///

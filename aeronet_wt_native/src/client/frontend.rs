@@ -1,6 +1,6 @@
-use aeronet::{Message, TryFromBytes, TryIntoBytes, OnChannel, ChannelKey};
+use aeronet::{ChannelKey, Message, OnChannel, TryFromBytes, TryIntoBytes};
 
-use crate::{ConnectingClient, ConnectedClient, OpeningClient, OpenClient};
+use crate::{ConnectedClient, ConnectingClient, OpenClient, OpeningClient};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]

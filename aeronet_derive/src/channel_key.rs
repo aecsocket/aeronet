@@ -41,14 +41,14 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
 }
 
 fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
-    let name = &input.ident;
-    let generics = &input.generics;
-    let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
-
     struct Variant<'a> {
         ident: &'a Ident,
         kind: TokenStream,
     }
+
+    let name = &input.ident;
+    let generics = &input.generics;
+    let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
     let variants = data
         .variants

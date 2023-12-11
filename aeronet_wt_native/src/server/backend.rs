@@ -77,7 +77,11 @@ async fn handle_session<C2S, S2C, C>(
         }
     };
 
-    debug!("Session accepted on {}{}", session.authority(), session.path());
+    debug!(
+        "Session accepted on {}{}",
+        session.authority(),
+        session.path()
+    );
 
     let (send_connected, recv_connected) = oneshot::channel();
     let accepted = AcceptedClient {

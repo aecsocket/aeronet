@@ -36,15 +36,15 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
 }
 
 fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
-    let name = &input.ident;
-    let generics = &input.generics;
-    let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
-
     struct Variant<'a> {
         ident: &'a Ident,
         fields: &'a Fields,
         on_channel: &'a TokenStream,
     }
+
+    let name = &input.ident;
+    let generics = &input.generics;
+    let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
     let channel_type = parse_channel_type(input, &input.attrs)?;
     let variants = data

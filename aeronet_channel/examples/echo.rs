@@ -103,9 +103,9 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     let mut server = ChannelServer::new();
-    let client1 = ChannelClient::connected(&mut server);
-    let client2 = ChannelClient::connected(&mut server);
-    let client3 = ChannelClient::connected(&mut server);
+    let (client1, _) = ChannelClient::connected(&mut server);
+    let (client2, _) = ChannelClient::connected(&mut server);
+    let (client3, _) = ChannelClient::connected(&mut server);
 
     commands.insert_resource(ServerState::new(server));
     commands.insert_resource(ClientState::<1>::new(client1));
@@ -135,7 +135,7 @@ fn update_client<const N: usize>(mut egui: EguiContexts, mut state: ResMut<Clien
             if buf.is_empty() {
                 return;
             }
-            
+
             match state.client.send(buf.clone()) {
                 Ok(_) => state.scrollback.push(format!("> {}", buf)),
                 Err(err) => state
@@ -154,11 +154,11 @@ fn update_server(mut egui: EguiContexts, mut state: ResMut<ServerState>) {
             ServerEvent::Connected { client } => {
                 state.scrollback.push(format!("{client:?} connected"));
             }
-            ServerEvent::Recv { from, msg } => {
-                state.scrollback.push(format!("{from:?} < {}", msg.0));
+            ServerEvent::Recv { client, msg } => {
+                state.scrollback.push(format!("{client:?} < {}", msg.0));
                 let msg = format!("You sent: {}", msg.0);
-                match state.server.send(from, msg.clone()) {
-                    Ok(_) => state.scrollback.push(format!("{from:?} > {msg}")),
+                match state.server.send(client, msg.clone()) {
+                    Ok(_) => state.scrollback.push(format!("{client:?} > {msg}")),
                     Err(err) => state.scrollback.push(format!(
                         "Failed to send message: {:#}",
                         aeronet::error::as_pretty(&err)

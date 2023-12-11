@@ -25,7 +25,7 @@ where
     /// The server backend has been set up and is ready to accept connections.
     Opened,
     /// A client has requested to connect.
-    /// 
+    ///
     /// No further data is known about the client yet.
     Incoming {
         /// The key of the client.
@@ -46,14 +46,14 @@ where
     },
     /// A client has fully established a connection to the server (including
     /// opening streams) and the connection is ready for messages.
-    /// 
+    ///
     /// This is equivalent to [`aeronet::ServerEvent::Connected`].
     Connected {
         /// The key of the client.
         client: ClientKey,
     },
     /// A client sent a message to the server.
-    /// 
+    ///
     /// This is equivalent to [`aeronet::ServerEvent::Recv`].
     Recv {
         /// The key of the client which sent the message.
@@ -63,7 +63,7 @@ where
     },
     /// A client has lost connection from this server, which cannot be recovered
     /// from.
-    /// 
+    ///
     /// This is equivalent to [`aeronet::ServerEvent::Disconnected`].
     Disconnected {
         /// The key of the client.
@@ -76,7 +76,7 @@ where
     Closed {
         /// The reason why the backend was closed.
         cause: WebTransportError<C2S, S2C, C>,
-    }
+    },
 }
 
 impl<C2S, S2C, C> From<ServerEvent<C2S, S2C, C>>
@@ -123,11 +123,11 @@ where
     C: ChannelKey,
 {
     /// Starts opening a server.
-    /// 
+    ///
     /// This returns:
     /// * the server frontend, which you must store and use
-    /// * the backend future, which you must run on an async runtime as soon
-    ///   as possible
+    /// * the backend future, which you must run on an async runtime as soon as
+    ///   possible
     pub fn open(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel();
         (
@@ -137,17 +137,19 @@ where
     }
 
     /// Polls the current state of the server, checking if it has opened yet.
-    /// 
+    ///
     /// This will be ready once the backend has set up its endpoint for
     /// listening to client connections, and is ready to handle them.
-    /// 
+    ///
     /// If this returns [`Poll::Ready`], you must drop this value and start
     /// using the new state.
     pub fn poll(&mut self) -> Poll<OpenResult<C2S, S2C, C>> {
         match self.recv_open.try_recv() {
             Ok(result) => Poll::Ready(result),
             Err(oneshot::error::TryRecvError::Empty) => Poll::Pending,
-            Err(oneshot::error::TryRecvError::Closed) => Poll::Ready(Err(WebTransportError::BackendClosed)),
+            Err(oneshot::error::TryRecvError::Closed) => {
+                Poll::Ready(Err(WebTransportError::BackendClosed))
+            }
         }
     }
 }
@@ -191,16 +193,18 @@ where
 
     /// See [`aeronet::TransportServer::connection_info`].
     pub fn connection_info(&self, client: ClientKey) -> Option<EndpointInfo> {
-        self.clients
-            .get(client)
-            .and_then(|client| match client {
-                Client::Connected(client) => Some(client.info.clone()),
-                _ => None,
-            })
+        self.clients.get(client).and_then(|client| match client {
+            Client::Connected(client) => Some(client.info.clone()),
+            _ => None,
+        })
     }
 
     /// See [`aeronet::TransportServer::send`].
-    pub fn send<M: Into<S2C>>(&self, to: ClientKey, msg: M) -> Result<(), WebTransportError<C2S, S2C, C>> {
+    pub fn send<M: Into<S2C>>(
+        &self,
+        to: ClientKey,
+        msg: M,
+    ) -> Result<(), WebTransportError<C2S, S2C, C>> {
         let Some(client) = self.clients.get(to) else {
             return Err(WebTransportError::NoClient(to));
         };
@@ -209,7 +213,10 @@ where
         };
 
         let msg = msg.into();
-        client.send_s2c.send(msg).map_err(|_| WebTransportError::NotConnected(to))
+        client
+            .send_s2c
+            .send(msg)
+            .map_err(|_| WebTransportError::NotConnected(to))
     }
 
     /// See [`aeronet::TransportServer::disconnect`].
@@ -221,7 +228,9 @@ where
     }
 
     /// See [`aeronet::TransportServer::recv`].
-    pub fn recv(&mut self) -> Result<std::vec::IntoIter<ServerEvent<C2S, S2C, C>>, WebTransportError<C2S, S2C, C>> {
+    pub fn recv(
+        &mut self,
+    ) -> Result<std::vec::IntoIter<ServerEvent<C2S, S2C, C>>, WebTransportError<C2S, S2C, C>> {
         let mut events = Vec::new();
         loop {
             match self.recv_client.try_recv() {
@@ -253,13 +262,16 @@ where
                     Ok(Err(cause)) => {
                         events.push(ServerEvent::Disconnected { client, cause });
                         to_remove.push(client);
-                    },
-                    Err(oneshot::error::TryRecvError::Empty) => {},
+                    }
+                    Err(oneshot::error::TryRecvError::Empty) => {}
                     Err(oneshot::error::TryRecvError::Closed) => {
-                        events.push(ServerEvent::Disconnected { client, cause: WebTransportError::BackendClosed });
+                        events.push(ServerEvent::Disconnected {
+                            client,
+                            cause: WebTransportError::BackendClosed,
+                        });
                         to_remove.push(client);
-                    },
-                }
+                    }
+                },
                 Client::Accepted(accepted) => match accepted.recv_connected.try_recv() {
                     Ok(Ok(connected)) => {
                         events.push(ServerEvent::Connected { client });
@@ -269,12 +281,15 @@ where
                         events.push(ServerEvent::Disconnected { client, cause });
                         to_remove.push(client);
                     }
-                    Err(oneshot::error::TryRecvError::Empty) => {},
+                    Err(oneshot::error::TryRecvError::Empty) => {}
                     Err(oneshot::error::TryRecvError::Closed) => {
-                        events.push(ServerEvent::Disconnected { client, cause: WebTransportError::BackendClosed });
+                        events.push(ServerEvent::Disconnected {
+                            client,
+                            cause: WebTransportError::BackendClosed,
+                        });
                         to_remove.push(client);
                     }
-                }
+                },
                 Client::Connected(connected) => {
                     loop {
                         match connected.recv_info.try_recv() {
@@ -296,13 +311,19 @@ where
                             events.push(ServerEvent::Disconnected { client, cause });
                             to_remove.push(client);
                         }
-                        Err(oneshot::error::TryRecvError::Empty) => {},
+                        Err(oneshot::error::TryRecvError::Empty) => {}
                         Err(oneshot::error::TryRecvError::Closed) => {
-                            println!("B! {}", match connected.recv_c2s.try_recv() {
-                                Err(x) => format!("{:?}", x),
-                                Ok(_) => "ok".into(),
+                            println!(
+                                "B! {}",
+                                match connected.recv_c2s.try_recv() {
+                                    Err(x) => format!("{:?}", x),
+                                    Ok(_) => "ok".into(),
+                                }
+                            );
+                            events.push(ServerEvent::Disconnected {
+                                client,
+                                cause: WebTransportError::BackendClosed,
                             });
-                            events.push(ServerEvent::Disconnected { client, cause: WebTransportError::BackendClosed });
                             to_remove.push(client);
                         }
                     }

@@ -9,7 +9,7 @@ use crate::{ChannelError, ClientKey};
 /// Implementation of [`TransportServer`] using in-memory MPSC channels.
 ///
 /// See the [crate-level docs](crate).
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelServer<C2S, S2C> {
     pub(super) clients: SlotMap<ClientKey, ClientState<C2S, S2C>>,
@@ -24,6 +24,7 @@ pub(super) struct ClientState<C2S, S2C> {
 
 impl<C2S, S2C> ChannelServer<C2S, S2C> {
     /// Creates a new server with no clients connected.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             clients: SlotMap::default(),
@@ -52,7 +53,7 @@ where
         self.clients.get(client).map(|_| ())
     }
 
-    fn send<M: Into<S2C>>(&mut self, client: Self::Client, msg: M) -> Result<(), Self::Error> {
+    fn send(&mut self, client: Self::Client, msg: impl Into<S2C>) -> Result<(), Self::Error> {
         let msg = msg.into();
         let Some(client) = self.clients.get(client) else {
             return Err(ChannelError::NoClient(client));
@@ -62,13 +63,13 @@ where
     }
 
     fn recv(&mut self) -> Self::RecvIter<'_> {
-        let mut events = mem::replace(&mut self.event_buf, Vec::new());
+        let mut events = mem::take(&mut self.event_buf);
 
         let mut to_remove = Vec::new();
-        for (client, state) in self.clients.iter() {
+        for (client, state) in &self.clients {
             loop {
                 match state.recv_c2s.try_recv() {
-                    Ok(msg) => events.push(ServerEvent::Recv { from: client, msg }),
+                    Ok(msg) => events.push(ServerEvent::Recv { client, msg }),
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         events.push(ServerEvent::Disconnected {
@@ -88,7 +89,7 @@ where
         events.into_iter()
     }
 
-    fn disconnect<C: Into<Self::Client>>(&mut self, client: C) -> Result<(), Self::Error> {
+    fn disconnect(&mut self, client: impl Into<Self::Client>) -> Result<(), Self::Error> {
         let client = client.into();
         match self.clients.remove(client) {
             Some(_) => {

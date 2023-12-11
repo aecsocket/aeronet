@@ -1,11 +1,11 @@
-use aeronet::{Message, TryFromBytes, OnChannel, TryIntoBytes, ChannelKey};
-use tokio::sync::{oneshot, mpsc};
+use aeronet::{ChannelKey, Message, OnChannel, TryFromBytes, TryIntoBytes};
+use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 use wtransport::{ClientConfig, Endpoint};
 
-use crate::{ConnectedClient, common, EndpointInfo, OpenClient, ConnectingClient};
+use crate::{shared, ConnectedClient, ConnectingClient, EndpointInfo, OpenClient};
 
-use super::{WebTransportError, OpenResult};
+use super::{OpenResult, WebTransportError};
 
 pub(super) async fn start<C2S, S2C, C>(
     config: ClientConfig,
@@ -51,26 +51,27 @@ pub(super) async fn start<C2S, S2C, C>(
         };
 
         let (send_connected, recv_connected) = oneshot::channel();
-        let connecting = ConnectingClient {
-            recv_connected,
-        };
+        let connecting = ConnectingClient { recv_connected };
         if let Err(_) = send_connecting.send(connecting) {
             debug!("Frontend closed");
             return;
         }
 
         debug!("Connecting to {}", url);
-        let conn = match endpoint.connect(url).await.map_err(WebTransportError::Connect) {
+        let conn = match endpoint
+            .connect(url)
+            .await
+            .map_err(WebTransportError::Connect)
+        {
             Ok(conn) => conn,
             Err(err) => {
-                let open = 
                 let _ = send_connected.send(Err((err, recv_open)));
                 return;
             }
         };
 
         debug!("Establishing channels");
-        let channels_state = match common::establish_channels::<C2S, S2C, C, false>(&conn).await {
+        let channels_state = match shared::establish_channels::<C2S, S2C, C, false>(&conn).await {
             Ok(state) => state,
             Err(err) => {
                 let _ = send_connected.send(Err(err));
@@ -96,14 +97,15 @@ pub(super) async fn start<C2S, S2C, C>(
         }
 
         debug!("Starting connection loop");
-        if let Err(err) = common::handle_connection::<C2S, S2C, C>(
+        if let Err(err) = shared::handle_connection::<C2S, S2C, C>(
             conn,
             channels_state,
             send_info,
             send_s2c,
             recv_c2s,
         )
-        .await {
+        .await
+        {
             debug!("Disconnected with error");
             let _ = send_err.send(err);
         } else {

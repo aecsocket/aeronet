@@ -3,11 +3,11 @@ mod frontend;
 
 pub use frontend::*;
 
-use std::{future::Future, task::Poll, net::SocketAddr, io};
+use std::{future::Future, io, net::SocketAddr, task::Poll};
 
-use aeronet::{Message, TryFromBytes, TryIntoBytes, OnChannel, ChannelKey};
+use aeronet::{ChannelKey, Message, OnChannel, TryFromBytes, TryIntoBytes};
 use derivative::Derivative;
-use tokio::sync::{oneshot, mpsc};
+use tokio::sync::{mpsc, oneshot};
 use wtransport::ClientConfig;
 
 use crate::EndpointInfo;
@@ -37,11 +37,11 @@ where
     C: ChannelKey,
 {
     /// Starts opening a client, but does not establish any connections yet.
-    /// 
+    ///
     /// This returns:
     /// * the client frontend, which you must store and use
-    /// * the backend future, which you must run on an async runtime as soon
-    ///   as possible
+    /// * the backend future, which you must run on an async runtime as soon as
+    ///   possible
     pub fn open(config: ClientConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel();
         (
@@ -51,17 +51,19 @@ where
     }
 
     /// Polls the current state of the client, checking if it has opened yet.
-    /// 
+    ///
     /// This will be ready once the backend has set up its endpoints and is
     /// ready to connect to a server.
-    /// 
+    ///
     /// If this returns [`Poll::Ready`], you must drop this value and start
     /// using the new state.
     pub fn poll(&mut self) -> Poll<OpenResult<C2S, S2C, C>> {
         match self.recv_open.try_recv() {
             Ok(result) => Poll::Ready(result),
             Err(oneshot::error::TryRecvError::Empty) => Poll::Pending,
-            Err(oneshot::error::TryRecvError::Closed) => Poll::Ready(Err(WebTransportError::BackendClosed)),
+            Err(oneshot::error::TryRecvError::Closed) => {
+                Poll::Ready(Err(WebTransportError::BackendClosed))
+            }
         }
     }
 }
@@ -104,7 +106,9 @@ where
         match self.recv_connected.try_recv() {
             Ok(result) => Poll::Ready(result),
             Err(oneshot::error::TryRecvError::Empty) => Poll::Pending,
-            Err(oneshot::error::TryRecvError::Closed) => Poll::Ready(Err(WebTransportError::BackendClosed)),
+            Err(oneshot::error::TryRecvError::Closed) => {
+                Poll::Ready(Err(WebTransportError::BackendClosed))
+            }
         }
     }
 }
@@ -129,7 +133,8 @@ where
     recv_err: oneshot::Receiver<WebTransportError<C2S, S2C, C>>,
 }
 
-type ConnectedResult<C2S, S2C, C> = Result<ConnectedClient<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>;
+type ConnectedResult<C2S, S2C, C> =
+    Result<ConnectedClient<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>;
 
 impl<C2S, S2C, C> ConnectedClient<C2S, S2C, C>
 where

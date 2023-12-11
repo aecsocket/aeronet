@@ -23,6 +23,8 @@ missing_docs = "warn"
 
 [workspace.lints.clippy]
 all = "warn"
+pedantic = "warn"
+module_name_repetitions = "allow"
 
 [workspace.dependencies]
 aeronet = { version = "0.4.0", path = "aeronet" }

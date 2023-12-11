@@ -16,6 +16,7 @@ workspace = true
 all-features = true
 
 [features]
+## Enables [`bevy`](https://docs.rs/bevy) support.
 bevy = [ "dep:bevy", "aeronet/bevy" ]
 
 [dependencies]
@@ -24,15 +25,15 @@ aeronet.workspace = true
 derivative.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
-
-crossbeam-channel.workspace = true
 slotmap.workspace = true
+crossbeam-channel.workspace = true
 
 bevy = { workspace = true, optional = true }
 
 [dev-dependencies]
 bevy = { workspace = true, default-features = true }
 bevy_egui.workspace = true
+anyhow.workspace = true
 
 [[example]]
 name = "echo"

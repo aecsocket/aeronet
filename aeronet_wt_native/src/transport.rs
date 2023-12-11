@@ -3,7 +3,8 @@ use std::{io, net::SocketAddr, time::Duration};
 use aeronet::{ChannelKey, Message, RemoteAddr, Rtt, TryFromBytes, TryIntoBytes};
 use wtransport::{
     error::{
-        ConnectionError, SendDatagramError, StreamOpeningError, StreamReadError, StreamWriteError, ConnectingError,
+        ConnectingError, ConnectionError, SendDatagramError, StreamOpeningError, StreamReadError,
+        StreamWriteError,
     },
     Connection,
 };

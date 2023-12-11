@@ -3,12 +3,12 @@ use std::{future::Future, task::Poll};
 use aeronet::{ChannelKey, Message, OnChannel, TransportServer, TryFromBytes, TryIntoBytes};
 use wtransport::ServerConfig;
 
-use crate::{ClientKey, EndpointInfo, ServerEvent, OpeningServer, OpenServer};
+use crate::{ClientKey, EndpointInfo, OpenServer, OpeningServer, ServerEvent};
 
-use super::{WebTransportError, Client};
+use super::{Client, WebTransportError};
 
 /// An implementation of [`TransportServer`] using the WebTransport protocol.
-/// 
+///
 /// See the [crate-level docs](crate).
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
@@ -34,7 +34,7 @@ where
     C: ChannelKey,
 {
     /// Starts opening a server and wraps it in a [`WebTransportServer`].
-    /// 
+    ///
     /// See [`OpeningServer::open`].
     pub fn open(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (frontend, backend) = OpeningServer::open(config);
@@ -104,22 +104,23 @@ where
                     *self = WebTransportServer::Closed;
                     vec![ServerEvent::Closed { cause }].into_iter()
                 }
-            }
+            },
             WebTransportServer::Open(server) => match server.recv() {
                 Ok(events) => events,
                 Err(cause) => {
                     *self = WebTransportServer::Closed;
                     vec![ServerEvent::Closed { cause }].into_iter()
                 }
-            }
+            },
         }
     }
 
-    fn disconnect(&mut self, target: Self::Client) -> Result<(), Self::Error> {
+    fn disconnect(&mut self, client: impl Into<Self::Client>) -> Result<(), Self::Error> {
         let WebTransportServer::Open(server) = self else {
             return Err(WebTransportError::BackendClosed);
         };
 
+        let target = target.into();
         match server.clients.remove(target) {
             Some(_) => Ok(()),
             None => Err(WebTransportError::NoClient(target)),

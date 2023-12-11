@@ -107,11 +107,21 @@ fn poll_server(mut server: ResMut<WebTransportServer>) {
         match event {
             ServerEvent::Opened => info!("Opened server for connections"),
             ServerEvent::Incoming { client } => info!("{client:?} incoming"),
-            ServerEvent::Accepted { client, authority, path, .. } => info!("Client {client:?} accepted from {authority}{path}"),
+            ServerEvent::Accepted {
+                client,
+                authority,
+                path,
+                ..
+            } => info!("Client {client:?} accepted from {authority}{path}"),
             ServerEvent::Connected { client } => info!("{client:?} connected"),
             ServerEvent::Recv { from, msg } => info!("{from:?} > {msg:?}"),
-            ServerEvent::Disconnected { client, cause } => info!("{client:?} disconnected: {:#}", aeronet::error::as_pretty(&cause)),
-            ServerEvent::Closed { cause } => info!("Server closed: {:#}", aeronet::error::as_pretty(&cause))
+            ServerEvent::Disconnected { client, cause } => info!(
+                "{client:?} disconnected: {:#}",
+                aeronet::error::as_pretty(&cause)
+            ),
+            ServerEvent::Closed { cause } => {
+                info!("Server closed: {:#}", aeronet::error::as_pretty(&cause))
+            }
         }
     }
 }

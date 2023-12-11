@@ -105,6 +105,7 @@ name = "aeronet_channel"
 version = "0.4.0"
 dependencies = [
  "aeronet",
+ "anyhow",
  "bevy",
  "bevy_egui",
  "crossbeam-channel",

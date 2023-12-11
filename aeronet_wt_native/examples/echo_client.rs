@@ -2,7 +2,7 @@
 
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
-use aeronet::{AsyncRuntime, TryFromBytes, TryIntoBytes, ChannelKey, OnChannel};
+use aeronet::{AsyncRuntime, ChannelKey, OnChannel, TryFromBytes, TryIntoBytes};
 use anyhow::Result;
 use bevy::{log::LogPlugin, prelude::*};
 use wtransport::ClientConfig;
@@ -68,7 +68,6 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
         }
         Err(err) => panic!("Failed to create client: {err:#}"),
     }
-
 
     let (client, backend) = Opening::new(config);
     rt.0.spawn(backend.start());
