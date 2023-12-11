@@ -69,26 +69,26 @@ where
         Some(client.info.clone())
     }
 
-    fn send<M: Into<S2C>>(
+    fn send(
         &mut self,
-        to: Self::Client,
-        msg: M,
+        client: Self::Client,
+        msg: impl Into<S2C>,
     ) -> Result<(), WebTransportError<C2S, S2C, C>> {
         let WebTransportServer::Open(server) = self else {
             return Err(WebTransportError::BackendClosed);
         };
-        let Some(client) = server.clients.get(to) else {
-            return Err(WebTransportError::NoClient(to));
+        let Some(state) = server.clients.get(client) else {
+            return Err(WebTransportError::NoClient(client));
         };
-        let Client::Connected(client) = client else {
-            return Err(WebTransportError::NotConnected(to));
+        let Client::Connected(state) = state else {
+            return Err(WebTransportError::NotConnected(client));
         };
 
         let msg = msg.into();
-        client
+        state
             .send_s2c
             .send(msg)
-            .map_err(|_| WebTransportError::NotConnected(to))
+            .map_err(|_| WebTransportError::NotConnected(client))
     }
 
     fn recv(&mut self) -> Self::RecvIter<'_> {
@@ -120,10 +120,10 @@ where
             return Err(WebTransportError::BackendClosed);
         };
 
-        let target = target.into();
-        match server.clients.remove(target) {
+        let client = client.into();
+        match server.clients.remove(client) {
             Some(_) => Ok(()),
-            None => Err(WebTransportError::NoClient(target)),
+            None => Err(WebTransportError::NoClient(client)),
         }
     }
 }

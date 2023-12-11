@@ -4,7 +4,7 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
-use crate::{common, EndpointInfo};
+use crate::{shared, EndpointInfo};
 
 use super::{
     AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, OpenResult, OpenServer,
@@ -37,7 +37,7 @@ pub(super) async fn start<C2S, S2C, C>(
         recv_client,
         send_closed,
     };
-    if let Err(_) = send_open.send(Ok(open)) {
+    if send_open.send(Ok(open)).is_err() {
         debug!("Frontend closed");
         return;
     }
@@ -52,7 +52,7 @@ pub(super) async fn start<C2S, S2C, C>(
 
         let (send_accepted, recv_accepted) = oneshot::channel();
         let client_state = IncomingClient { recv_accepted };
-        if let Err(_) = send_client.send(client_state) {
+        if send_client.send(client_state).is_err() {
             debug!("Frontend closed");
             return;
         };
@@ -77,21 +77,17 @@ async fn handle_session<C2S, S2C, C>(
         }
     };
 
-    debug!(
-        "Session accepted on {}{}",
-        session.authority(),
-        session.path()
-    );
+    debug!("Session accepted on {}{}", session.authority(), session.path());
 
     let (send_connected, recv_connected) = oneshot::channel();
     let accepted = AcceptedClient {
         authority: session.authority().to_owned(),
         path: session.path().to_owned(),
-        origin: session.origin().map(|s| s.to_owned()),
-        user_agent: session.user_agent().map(|s| s.to_owned()),
+        origin: session.origin().map(ToOwned::to_owned),
+        user_agent: session.user_agent().map(ToOwned::to_owned),
         recv_connected,
     };
-    if let Err(_) = send_accepted.send(Ok(accepted)) {
+    if send_accepted.send(Ok(accepted)).is_err() {
         debug!("Frontend closed");
         return;
     }
@@ -109,7 +105,7 @@ async fn handle_session<C2S, S2C, C>(
     };
 
     debug!("Establishing channels");
-    let channels_state = match common::establish_channels::<S2C, C2S, C, true>(&conn).await {
+    let channels_state = match shared::establish_channels::<S2C, C2S, C, true>(&conn).await {
         Ok(state) => state,
         Err(err) => {
             let _ = send_connected.send(Err(err));
@@ -128,13 +124,13 @@ async fn handle_session<C2S, S2C, C>(
         send_s2c,
         recv_err,
     };
-    if let Err(_) = send_connected.send(Ok(connected)) {
+    if send_connected.send(Ok(connected)).is_err() {
         debug!("Frontend closed");
         return;
     }
 
     debug!("Starting connection loop");
-    if let Err(err) = common::handle_connection::<S2C, C2S, C>(
+    if let Err(err) = shared::handle_connection::<S2C, C2S, C>(
         conn,
         channels_state,
         send_info,

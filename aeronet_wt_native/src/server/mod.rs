@@ -14,7 +14,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{ClientKey, EndpointInfo};
 
-/// An event which is raised by a [`WebTransportServer`].
+/// Event raised by a [`WebTransportServer`].
 #[derive(Debug)]
 pub enum ServerEvent<C2S, S2C, C>
 where
@@ -57,7 +57,7 @@ where
     /// This is equivalent to [`aeronet::ServerEvent::Recv`].
     Recv {
         /// The key of the client which sent the message.
-        from: ClientKey,
+        client: ClientKey,
         /// The message.
         msg: C2S,
     },
@@ -89,7 +89,7 @@ where
     fn from(value: ServerEvent<C2S, S2C, C>) -> Self {
         match value {
             ServerEvent::Connected { client } => Some(aeronet::ServerEvent::Connected { client }),
-            ServerEvent::Recv { from, msg } => Some(aeronet::ServerEvent::Recv { from, msg }),
+            ServerEvent::Recv { client, msg } => Some(aeronet::ServerEvent::Recv { client, msg }),
             ServerEvent::Disconnected { client, cause } => {
                 Some(aeronet::ServerEvent::Disconnected { client, cause })
             }
@@ -98,7 +98,7 @@ where
     }
 }
 
-// server states
+// states
 
 type WebTransportError<C2S, S2C, C> = crate::WebTransportError<S2C, C2S, C>;
 
@@ -246,7 +246,7 @@ where
         }
 
         let mut to_remove = Vec::new();
-        for (client, state) in self.clients.iter_mut() {
+        for (client, state) in &mut self.clients {
             match state {
                 Client::Incoming(incoming) => match incoming.recv_accepted.try_recv() {
                     Ok(Ok(accepted)) => {
@@ -291,35 +291,21 @@ where
                     }
                 },
                 Client::Connected(connected) => {
-                    loop {
-                        match connected.recv_info.try_recv() {
-                            Ok(info) => connected.info = info,
-                            Err(_) => break,
-                        }
+                    while let Ok(info) = connected.recv_info.try_recv() {
+                        connected.info = info;
                     }
 
-                    loop {
-                        match connected.recv_c2s.try_recv() {
-                            Ok(msg) => events.push(ServerEvent::Recv { from: client, msg }),
-                            Err(_) => break,
-                        }
+                    while let Ok(msg) = connected.recv_c2s.try_recv() {
+                        events.push(ServerEvent::Recv { client, msg });
                     }
 
                     match connected.recv_err.try_recv() {
                         Ok(cause) => {
-                            println!("A!");
                             events.push(ServerEvent::Disconnected { client, cause });
                             to_remove.push(client);
                         }
                         Err(oneshot::error::TryRecvError::Empty) => {}
                         Err(oneshot::error::TryRecvError::Closed) => {
-                            println!(
-                                "B! {}",
-                                match connected.recv_c2s.try_recv() {
-                                    Err(x) => format!("{:?}", x),
-                                    Ok(_) => "ok".into(),
-                                }
-                            );
                             events.push(ServerEvent::Disconnected {
                                 client,
                                 cause: WebTransportError::BackendClosed,

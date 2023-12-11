@@ -126,7 +126,7 @@ struct Connected<C2S, S2C> {
     #[derivative(Debug = "ignore")]
     recv_s2c: Receiver<S2C>,
     #[derivative(Debug = "ignore")]
-    fired_connect_event: bool,
+    sent_connect_event: bool,
 }
 
 impl<C2S, S2C> Connected<C2S, S2C> {
@@ -144,7 +144,7 @@ impl<C2S, S2C> Connected<C2S, S2C> {
             Connected {
                 send_c2s,
                 recv_s2c,
-                fired_connect_event: false,
+                sent_connect_event: false,
             },
             key,
         )
@@ -161,8 +161,8 @@ impl<C2S, S2C> Connected<C2S, S2C> {
     fn recv(&mut self) -> (Vec<ClientEvent<S2C>>, Result<(), ChannelError>) {
         let mut msgs = Vec::new();
 
-        if !self.fired_connect_event {
-            self.fired_connect_event = true;
+        if !self.sent_connect_event {
+            self.sent_connect_event = true;
             msgs.push(ClientEvent::Connected);
         }
 

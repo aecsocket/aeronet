@@ -97,6 +97,7 @@ where
     {
         let channel = channel.clone();
         tokio::spawn(async move {
+            #[allow(clippy::large_futures)] // this future is going on the heap anyway
             if let Err(err) = handle_stream::<S, R>(recv_stream, send_r).await {
                 let _ = send_err.send(WebTransportError::OnChannel(channel, err));
             }
@@ -117,7 +118,8 @@ where
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
 {
-    const RECV_CAP: usize = 0x10_000;
+    // TOOD: what is a good value for this?
+    const RECV_CAP: usize = 0x1000;
 
     let mut buf = [0u8; RECV_CAP];
     loop {
@@ -157,7 +159,7 @@ where
     } = channels_state;
 
     loop {
-        if let Err(_) = send_info.send(EndpointInfo::from_connection(&conn)) {
+        if send_info.send(EndpointInfo::from_connection(&conn)).is_err() {
             debug!("Frontend closed");
             return Ok(());
         }
@@ -168,10 +170,10 @@ where
                     debug!("Frontend closed");
                     return Ok(());
                 };
-                let _ = send::<S, R, C>(&conn, &mut channels, msg).await?;
+                send::<S, R, C>(&conn, &mut channels, msg).await?;
             }
             result = conn.receive_datagram() => {
-                let _ = recv_datagram(result, &send_r)
+                recv_datagram(result, &send_r)
                     .map_err(|err| WebTransportError::OnDatagram(err))?;
             }
             Some(msg) = recv_streams.recv() => {
@@ -196,7 +198,7 @@ where
 {
     let (channel, result) = match &mut channels[msg.channel().index()] {
         ChannelState::Datagram { channel } => {
-            (channel.clone(), send_datagram::<S, R>(conn, msg).await)
+            (channel.clone(), send_datagram::<S, R>(conn, &msg))
         }
         ChannelState::Stream {
             channel,
@@ -207,7 +209,7 @@ where
     result.map_err(|err| WebTransportError::OnChannel(channel, err))
 }
 
-async fn send_datagram<S, R>(conn: &Connection, msg: S) -> Result<(), ChannelError<S, R>>
+fn send_datagram<S, R>(conn: &Connection, msg: &S) -> Result<(), ChannelError<S, R>>
 where
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
