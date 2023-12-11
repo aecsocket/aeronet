@@ -63,7 +63,8 @@ pub(super) async fn start<C2S, S2C, C>(
         let conn = match endpoint.connect(url).await.map_err(WebTransportError::Connect) {
             Ok(conn) => conn,
             Err(err) => {
-                let _ = send_connected.send(Err(err));
+                let open = 
+                let _ = send_connected.send(Err((err, recv_open)));
                 return;
             }
         };

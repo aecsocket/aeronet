@@ -8,7 +8,10 @@
 ///   they are sent
 ///
 /// Although it is not a part of the guarantees laid out by the channel kinds,
-/// **head-of-line blocking**
+/// **head-of-line blocking** is also an important factor to consider when
+/// choosing which kind of channel to use. A channel kind with head-of-line
+/// blocking may block when it is awaiting a message sent earlier, in order to
+/// maintain ordering; others may not.
 ///
 /// The transport implementation is guaranteed to provide these channel kinds,
 /// either by using a feature of the underlying transport mechanism (i.e. QUIC
@@ -100,7 +103,8 @@ pub unsafe trait ChannelKey: Send + Sync + Sized + Clone + 'static {
     ///
     /// # Safety
     ///
-    /// This index must point to a valid index and must point to this value.
+    /// This index must point to a valid index in [`ChannelKey::ALL`], and the
+    /// value pointed to must be equivalent to this value.
     fn index(&self) -> usize;
 
     /// The kind of channel that this key represents.
@@ -113,7 +117,7 @@ pub unsafe trait ChannelKey: Send + Sync + Sized + Clone + 'static {
 ///
 /// Note that this trait only determines along which channel an *outgoing*
 /// message is sent; *incoming* messages are simply received without any
-/// channel data.
+/// info on what channel it was received on.
 pub trait OnChannel {
     /// The type of channel key that [`OnChannel::channel_key`] returns.
     type Channel: ChannelKey;
