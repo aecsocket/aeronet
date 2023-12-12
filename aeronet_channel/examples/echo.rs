@@ -61,6 +61,10 @@ impl<const N: usize> ClientState<N> {
             buf: String::new(),
         }
     }
+
+    fn push(&mut self, text: impl Into<String>) {
+        self.scrollback.push(text.into());
+    }
 }
 
 #[derive(Debug, Resource)]
@@ -75,6 +79,10 @@ impl ServerState {
             server,
             scrollback: Vec::new(),
         }
+    }
+
+    fn push(&mut self, text: impl Into<String>) {
+        self.scrollback.push(text.into());
     }
 }
 
@@ -117,14 +125,16 @@ fn setup(mut commands: Commands) {
 const FONT_ID: FontId = FontId::monospace(14.0);
 
 fn update_client<const N: usize>(mut egui: EguiContexts, mut state: ResMut<ClientState<N>>) {
-    let lines = state.client.recv().map(|event| match event {
-        ClientEvent::Connected => format!("Connected"),
-        ClientEvent::Recv { msg } => format!("< {}", msg.0),
-        ClientEvent::Disconnected { cause } => {
-            format!("Disconnected: {:#}", aeronet::error::as_pretty(&cause))
+    for event in state.client.recv() {
+        match event {
+            ClientEvent::Connected => state.push(format!("Connected")),
+            ClientEvent::Recv { msg } => state.push(format!("< {}", msg.0)),
+            ClientEvent::Disconnected { cause } => state.push(format!(
+                "Disconnected: {:#}",
+                aeronet::error::as_pretty(&cause)
+            )),
         }
-    });
-    state.scrollback.extend(lines);
+    }
 
     egui::Window::new(format!("Client {}", N)).show(egui.ctx_mut(), |ui| {
         show_scrollback(ui, &state.scrollback);
@@ -152,26 +162,22 @@ fn update_client<const N: usize>(mut egui: EguiContexts, mut state: ResMut<Clien
 fn update_server(mut egui: EguiContexts, mut state: ResMut<ServerState>) {
     for event in state.server.recv() {
         match event {
-            ServerEvent::Connected { client } => {
-                state.scrollback.push(format!("{client:?} connected"));
-            }
+            ServerEvent::Connected { client } => state.push(format!("{client:?} connected")),
             ServerEvent::Recv { client, msg } => {
-                state.scrollback.push(format!("{client:?} < {}", msg.0));
+                state.push(format!("{client:?} < {}", msg.0));
                 let msg = format!("You sent: {}", msg.0);
                 match state.server.send(client, msg.clone()) {
-                    Ok(_) => state.scrollback.push(format!("{client:?} > {msg}")),
-                    Err(err) => state.scrollback.push(format!(
+                    Ok(_) => state.push(format!("{client:?} > {msg}")),
+                    Err(err) => state.push(format!(
                         "Failed to send message: {:#}",
                         aeronet::error::as_pretty(&err)
                     )),
                 }
             }
-            ServerEvent::Disconnected { client, cause } => {
-                state.scrollback.push(format!(
-                    "{client:?} disconnected: {:#}",
-                    aeronet::error::as_pretty(&cause)
-                ));
-            }
+            ServerEvent::Disconnected { client, cause } => state.push(format!(
+                "{client:?} disconnected: {:#}",
+                aeronet::error::as_pretty(&cause)
+            )),
         }
     }
 

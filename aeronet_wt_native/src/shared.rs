@@ -159,7 +159,10 @@ where
     } = channels_state;
 
     loop {
-        if send_info.send(EndpointInfo::from_connection(&conn)).is_err() {
+        if send_info
+            .send(EndpointInfo::from_connection(&conn))
+            .is_err()
+        {
             debug!("Frontend closed");
             return Ok(());
         }
@@ -197,9 +200,7 @@ where
     C: ChannelKey,
 {
     let (channel, result) = match &mut channels[msg.channel().index()] {
-        ChannelState::Datagram { channel } => {
-            (channel.clone(), send_datagram::<S, R>(conn, &msg))
-        }
+        ChannelState::Datagram { channel } => (channel.clone(), send_datagram::<S, R>(conn, &msg)),
         ChannelState::Stream {
             channel,
             send_stream: send,

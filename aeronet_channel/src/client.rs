@@ -45,7 +45,10 @@ impl<C2S, S2C> ChannelClient<C2S, S2C> {
     /// # Errors
     ///
     /// Errors if this client is already connected to a server.
-    pub fn connect(&mut self, server: &mut ChannelServer<C2S, S2C>) -> Result<ClientKey, ChannelError> {
+    pub fn connect(
+        &mut self,
+        server: &mut ChannelServer<C2S, S2C>,
+    ) -> Result<ClientKey, ChannelError> {
         match self.state {
             State::Disconnected => {
                 let (server, key) = Connected::new(server);
@@ -152,10 +155,9 @@ impl<C2S, S2C> Connected<C2S, S2C> {
 
     fn send(&mut self, msg: impl Into<C2S>) -> Result<(), ChannelError> {
         let msg = msg.into();
-        match self.send_c2s.send(msg) {
-            Ok(()) => Ok(()),
-            Err(_) => Err(ChannelError::Disconnected),
-        }
+        self.send_c2s
+            .send(msg)
+            .map_err(|_| ChannelError::Disconnected)
     }
 
     fn recv(&mut self) -> (Vec<ClientEvent<S2C>>, Result<(), ChannelError>) {

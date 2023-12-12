@@ -5,7 +5,7 @@ use wtransport::ServerConfig;
 
 use crate::{ClientKey, EndpointInfo, ServerEvent};
 
-use super::{Client, WebTransportError};
+use super::{Client, Open, Opening, WebTransportError};
 
 /// An implementation of [`TransportServer`] using the WebTransport protocol.
 ///
@@ -29,8 +29,8 @@ where
     C: ChannelKey,
 {
     Closed,
-    Opening(OpeningServer<C2S, S2C, C>),
-    Open(OpenServer<C2S, S2C, C>),
+    Opening(Opening<C2S, S2C, C>),
+    Open(Open<C2S, S2C, C>),
 }
 
 impl<C2S, S2C, C> WebTransportServer<C2S, S2C, C>

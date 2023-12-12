@@ -24,6 +24,11 @@ pub(super) struct ClientState<C2S, S2C> {
 
 impl<C2S, S2C> ChannelServer<C2S, S2C> {
     /// Creates a new server with no clients connected.
+    ///
+    /// See [`ChannelClient`] on how to create and connect a client to this
+    /// server.
+    ///
+    /// [`ChannelClient`]: crate::ChannelClient
     #[must_use]
     pub fn new() -> Self {
         Self {

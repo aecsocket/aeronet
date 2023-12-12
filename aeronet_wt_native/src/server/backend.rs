@@ -7,7 +7,7 @@ use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 use crate::{shared, EndpointInfo};
 
 use super::{
-    AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, OpenResult, Open,
+    AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, Open, OpenResult,
     WebTransportError,
 };
 
@@ -77,7 +77,11 @@ async fn handle_session<C2S, S2C, C>(
         }
     };
 
-    debug!("Session accepted on {}{}", session.authority(), session.path());
+    debug!(
+        "Session accepted on {}{}",
+        session.authority(),
+        session.path()
+    );
 
     let (send_connected, recv_connected) = oneshot::channel();
     let accepted = AcceptedClient {
