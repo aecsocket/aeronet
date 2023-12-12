@@ -102,11 +102,9 @@ where
 
 type WebTransportError<C2S, S2C, C> = crate::WebTransportError<S2C, C2S, C>;
 
-/// A [`WebTransportServer`] in the process of opening (setting up endpoint for
-/// listening).
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub struct OpeningServer<C2S, S2C, C>
+struct Opening<C2S, S2C, C>
 where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
@@ -116,19 +114,13 @@ where
     recv_open: oneshot::Receiver<OpenResult<C2S, S2C, C>>,
 }
 
-impl<C2S, S2C, C> OpeningServer<C2S, S2C, C>
+impl<C2S, S2C, C> Opening<C2S, S2C, C>
 where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
 {
-    /// Starts opening a server.
-    ///
-    /// This returns:
-    /// * the server frontend, which you must store and use
-    /// * the backend future, which you must run on an async runtime as soon as
-    ///   possible
-    pub fn open(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
+    fn new(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel();
         (
             Self { recv_open },
@@ -136,14 +128,7 @@ where
         )
     }
 
-    /// Polls the current state of the server, checking if it has opened yet.
-    ///
-    /// This will be ready once the backend has set up its endpoint for
-    /// listening to client connections, and is ready to handle them.
-    ///
-    /// If this returns [`Poll::Ready`], you must drop this value and start
-    /// using the new state.
-    pub fn poll(&mut self) -> Poll<OpenResult<C2S, S2C, C>> {
+    fn poll(&mut self) -> Poll<OpenResult<C2S, S2C, C>> {
         match self.recv_open.try_recv() {
             Ok(result) => Poll::Ready(result),
             Err(oneshot::error::TryRecvError::Empty) => Poll::Pending,
@@ -154,10 +139,9 @@ where
     }
 }
 
-/// A [`WebTransportServer`] which is ready and listening for connections.
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub struct OpenServer<C2S, S2C, C>
+struct Open<C2S, S2C, C>
 where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
@@ -172,9 +156,9 @@ where
     send_closed: mpsc::Sender<()>,
 }
 
-type OpenResult<C2S, S2C, C> = Result<OpenServer<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>;
+type OpenResult<C2S, S2C, C> = Result<Open<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>;
 
-impl<C2S, S2C, C> OpenServer<C2S, S2C, C>
+impl<C2S, S2C, C> Open<C2S, S2C, C>
 where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,

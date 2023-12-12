@@ -114,7 +114,7 @@ fn poll_server(mut server: ResMut<WebTransportServer>) {
                 ..
             } => info!("Client {client:?} accepted from {authority}{path}"),
             ServerEvent::Connected { client } => info!("{client:?} connected"),
-            ServerEvent::Recv { from, msg } => info!("{from:?} > {msg:?}"),
+            ServerEvent::Recv { client, msg } => info!("{client:?} > {msg:?}"),
             ServerEvent::Disconnected { client, cause } => info!(
                 "{client:?} disconnected: {:#}",
                 aeronet::error::as_pretty(&cause)

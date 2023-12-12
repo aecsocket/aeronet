@@ -7,7 +7,7 @@ use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 use crate::{shared, EndpointInfo};
 
 use super::{
-    AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, OpenResult, OpenServer,
+    AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, OpenResult, Open,
     WebTransportError,
 };
 
@@ -31,7 +31,7 @@ pub(super) async fn start<C2S, S2C, C>(
 
     let (send_client, recv_client) = mpsc::unbounded_channel();
     let (send_closed, mut recv_closed) = mpsc::channel(1);
-    let open = OpenServer {
+    let open = Open {
         local_addr: endpoint.local_addr(),
         clients: SlotMap::default(),
         recv_client,

@@ -3,7 +3,7 @@ use std::{future::Future, task::Poll};
 use aeronet::{ChannelKey, Message, OnChannel, TransportServer, TryFromBytes, TryIntoBytes};
 use wtransport::ServerConfig;
 
-use crate::{ClientKey, EndpointInfo, OpenServer, OpeningServer, ServerEvent};
+use crate::{ClientKey, EndpointInfo, ServerEvent};
 
 use super::{Client, WebTransportError};
 
@@ -12,18 +12,24 @@ use super::{Client, WebTransportError};
 /// See the [crate-level docs](crate).
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub enum WebTransportServer<C2S, S2C, C>
+pub struct WebTransportServer<C2S, S2C, C>
 where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
 {
-    /// The server is not attempting to listen to connections.
+    state: State<C2S, S2C, C>,
+}
+
+#[derive(Debug)]
+enum State<C2S, S2C, C>
+where
+    C2S: Message + TryFromBytes,
+    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
+    C: ChannelKey,
+{
     Closed,
-    /// The server is starting its endpoint, but is not ready to receive
-    /// connections yet.
     Opening(OpeningServer<C2S, S2C, C>),
-    /// The server is ready to communicate with clients.
     Open(OpenServer<C2S, S2C, C>),
 }
 
