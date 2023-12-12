@@ -63,7 +63,8 @@ where
     R: Message + TryFromBytes,
     C: ChannelKey,
 {
-    /// The backend that handles connections asynchronously was shut down.
+    /// The backend that handles connections asynchronously is shut down or not
+    /// ready for this operation.
     #[error("backend closed")]
     BackendClosed,
     /// Attempted to open the backend while it was already open.
@@ -95,6 +96,9 @@ where
     /// yet.
     #[error("client {0:?} has not connected yet")]
     NotConnected(ClientKey),
+    /// The client was forcefully disconnected by the server.
+    #[error("force disconnect")]
+    ForceDisconnect,
 }
 
 /// Error that occurs while processing a channel, either datagrams or QUIC

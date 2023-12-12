@@ -7,19 +7,18 @@ use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 use crate::{shared, EndpointInfo};
 
 use super::{
-    AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, Open, OpenResult,
-    WebTransportError,
+    AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, OpenServer,
+    OpenServerResult, WebTransportError,
 };
 
 pub(super) async fn start<C2S, S2C, C>(
     config: ServerConfig,
-    send_open: oneshot::Sender<OpenResult<C2S, S2C, C>>,
+    send_open: oneshot::Sender<OpenServerResult<C2S, S2C, C>>,
 ) where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
 {
-    debug!("Starting backend");
     let endpoint = match Endpoint::server(config).map_err(WebTransportError::Endpoint) {
         Ok(endpoint) => endpoint,
         Err(err) => {
@@ -31,7 +30,7 @@ pub(super) async fn start<C2S, S2C, C>(
 
     let (send_client, recv_client) = mpsc::unbounded_channel();
     let (send_closed, mut recv_closed) = mpsc::channel(1);
-    let open = Open {
+    let open = OpenServer {
         local_addr: endpoint.local_addr(),
         clients: SlotMap::default(),
         recv_client,
@@ -77,16 +76,14 @@ async fn handle_session<C2S, S2C, C>(
         }
     };
 
-    debug!(
-        "Session accepted on {}{}",
-        session.authority(),
-        session.path()
-    );
+    let authority = session.authority();
+    let path = session.path();
+    debug!("Session accepted on {authority}{path}");
 
     let (send_connected, recv_connected) = oneshot::channel();
     let accepted = AcceptedClient {
-        authority: session.authority().to_owned(),
-        path: session.path().to_owned(),
+        authority: authority.to_owned(),
+        path: path.to_owned(),
         origin: session.origin().map(ToOwned::to_owned),
         user_agent: session.user_agent().map(ToOwned::to_owned),
         recv_connected,

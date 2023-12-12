@@ -1,10 +1,11 @@
 //!
 
-use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
+use std::{convert::Infallible, string::FromUtf8Error, time::Duration, mem};
 
 use aeronet::{AsyncRuntime, ChannelKey, OnChannel, TryFromBytes, TryIntoBytes};
 use anyhow::Result;
 use bevy::{log::LogPlugin, prelude::*};
+use bevy_egui::{egui, EguiPlugin, EguiContexts};
 use wtransport::ClientConfig;
 
 // config
@@ -18,10 +19,7 @@ struct AppChannel;
 #[on_channel(AppChannel)]
 struct AppMessage(String);
 
-impl<T> From<T> for AppMessage
-where
-    T: Into<String>,
-{
+impl<T: Into<String>> From<T> for AppMessage {
     fn from(value: T) -> Self {
         Self(value.into())
     }
@@ -45,33 +43,35 @@ impl TryFromBytes for AppMessage {
     }
 }
 
+// resources
+
 type WebTransportClient = aeronet_wt_native::WebTransportClient<AppMessage, AppMessage, AppChannel>;
+
+#[derive(Debug, Default, Resource)]
+struct ClientState {
+    scrollback: Vec<String>,
+    buf: String,
+}
 
 // logic
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins.set(LogPlugin {
-            level: tracing::Level::DEBUG,
-            ..default()
-        }),))
+        .add_plugins((
+            DefaultPlugins.set(LogPlugin {
+                level: tracing::Level::DEBUG,
+                ..default()
+            }),
+            EguiPlugin,
+        ))
         .init_resource::<AsyncRuntime>()
-        .add_systems(Startup, setup)
+        .init_resource::<ClientState>()
+        .insert_resource(WebTransportClient::disconnected())
+        .add_systems(
+            Update,
+            (update, ui).chain(),
+        )
         .run();
-}
-
-fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
-    match create(rt.as_ref()) {
-        Ok(client) => {
-            info!("Created client");
-            commands.insert_resource(client);
-        }
-        Err(err) => panic!("Failed to create client: {err:#}"),
-    }
-
-    let (client, backend) = Opening::new(config);
-    rt.0.spawn(backend.start());
-    commands.insert_resource(WebTransportClient::from(client));
 }
 
 fn create(rt: &AsyncRuntime) -> Result<WebTransportClient> {
@@ -81,16 +81,30 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportClient> {
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    let (client, backend) = WebTransportClient::Disconnected;
 }
 
 fn update(mut client: ResMut<WebTransportClient>) {
-    match client {
-        WebTransportClient::Creating(state) => {
-            *client = match state.poll() {
-                Transition::Pending(state) => WebTransportClient::from(state),
-                Transition::Ready(Ok(state)) => WebTransportClient::from(state),
+    
+}
+
+fn ui(mut egui: EguiContexts, mut state: ResMut<ClientState>) {
+    egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
+        show_scrollback(ui, &state.scrollback);
+
+        let buf_resp = ui.text_edit_singleline(&mut state.buf);
+        if buf_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            let buf = mem::take(&mut state.buf);
+            if buf.is_empty() {
+                return;
             }
         }
-    }
+    });
+}
+
+fn show_scrollback(ui: &mut egui::Ui, scrollback: &[String]) {
+    egui::ScrollArea::vertical().show(ui, |ui| {
+        for line in scrollback {
+            ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
+        }
+    });
 }

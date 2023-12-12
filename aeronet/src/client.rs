@@ -22,12 +22,6 @@ where
     /// generic [`ClientEvent`], its [`Into`] impl must return [`None`].
     type Event: Into<Option<ClientEvent<S2C, Self::Error>>>;
 
-    /// Iterator over events raised by this client, returned by
-    /// [`TransportClient::recv`].
-    type RecvIter<'a>: Iterator<Item = Self::Event> + 'a
-    where
-        Self: 'a;
-
     /// Gets the current connection information and statistics if this client
     /// is connected.
     fn connection_info(&self) -> Option<Self::ConnectionInfo>;
@@ -72,7 +66,7 @@ where
     ///     implementations
     ///   * a single event returned from this is not guaranteed to map to a
     ///     specific [`ClientEvent`]
-    fn recv(&mut self) -> Self::RecvIter<'_>;
+    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a;
 
     /// Forces this client to disconnect from its currently connected server.
     ///
@@ -94,8 +88,6 @@ where
 #[derive(Debug, Clone)]
 pub enum ClientEvent<S2C, E> {
     /// This client has fully connected to a server.
-    ///
-    /// See [`TransportServer`] for the definition of "connected".
     ///
     /// Use this event to do setup logic, e.g. start loading the level.
     Connected,

@@ -51,11 +51,12 @@ where
 
     type Event = ServerEvent<C2S, Self::Client, Self::Error>;
 
-    type RecvIter<'a> = std::vec::IntoIter<Self::Event>
-        where Self: 'a;
-
     fn connection_info(&self, client: Self::Client) -> Option<Self::ConnectionInfo> {
         self.clients.get(client).map(|_| ())
+    }
+
+    fn connected_clients(&self) -> impl Iterator<Item = Self::Client> {
+        self.clients.keys()
     }
 
     fn send(&mut self, client: Self::Client, msg: impl Into<S2C>) -> Result<(), Self::Error> {
@@ -63,11 +64,13 @@ where
         let Some(client) = self.clients.get(client) else {
             return Err(ChannelError::NoClient(client));
         };
-        let _ = client.send_s2c.send(msg);
-        Ok(())
+        client
+            .send_s2c
+            .send(msg)
+            .map_err(|_| ChannelError::Disconnected)
     }
 
-    fn recv(&mut self) -> Self::RecvIter<'_> {
+    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a {
         let mut events = mem::take(&mut self.event_buf);
 
         let mut to_remove = Vec::new();

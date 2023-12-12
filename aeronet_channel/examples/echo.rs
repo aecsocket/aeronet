@@ -1,16 +1,13 @@
 //!
 
-use std::{convert::Infallible, string::FromUtf8Error};
+use std::{convert::Infallible, string::FromUtf8Error, mem};
 
 use aeronet::{
     ClientEvent, ServerEvent, TransportClient, TransportServer, TryFromBytes, TryIntoBytes,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::{log::LogPlugin, prelude::*};
-use bevy_egui::{
-    egui::{self, FontId, RichText},
-    EguiContexts, EguiPlugin,
-};
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 // config
 
@@ -102,10 +99,15 @@ fn main() {
             Update,
             (
                 update_client::<1>,
+                client_ui::<1>,
                 update_client::<2>,
+                client_ui::<2>,
                 update_client::<3>,
+                client_ui::<3>,
                 update_server,
-            ),
+                server_ui,
+            )
+            .chain(),
         )
         .run();
 }
@@ -122,9 +124,7 @@ fn setup(mut commands: Commands) {
     commands.insert_resource(ClientState::<3>::new(client3));
 }
 
-const FONT_ID: FontId = FontId::monospace(14.0);
-
-fn update_client<const N: usize>(mut egui: EguiContexts, mut state: ResMut<ClientState<N>>) {
+fn update_client<const N: usize>(mut state: ResMut<ClientState<N>>) {
     for event in state.client.recv() {
         match event {
             ClientEvent::Connected => state.push(format!("Connected")),
@@ -135,14 +135,15 @@ fn update_client<const N: usize>(mut egui: EguiContexts, mut state: ResMut<Clien
             )),
         }
     }
+}
 
+fn client_ui<const N: usize>(mut egui: EguiContexts, mut state: ResMut<ClientState<N>>) {
     egui::Window::new(format!("Client {}", N)).show(egui.ctx_mut(), |ui| {
         show_scrollback(ui, &state.scrollback);
 
-        let resp = ui.text_edit_singleline(&mut state.buf);
-        if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-            let buf = state.buf.clone();
-            state.buf.clear();
+        let buf_resp = ui.text_edit_singleline(&mut state.buf);
+        if buf_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            let buf = mem::take(&mut state.buf);
             if buf.is_empty() {
                 return;
             }
@@ -154,12 +155,12 @@ fn update_client<const N: usize>(mut egui: EguiContexts, mut state: ResMut<Clien
                     .push(format!("Error: {:#}", aeronet::error::as_pretty(&err))),
             }
 
-            ui.memory_mut(|m| m.request_focus(resp.id));
+            ui.memory_mut(|m| m.request_focus(buf_resp.id));
         }
     });
 }
 
-fn update_server(mut egui: EguiContexts, mut state: ResMut<ServerState>) {
+fn update_server(mut state: ResMut<ServerState>) {
     for event in state.server.recv() {
         match event {
             ServerEvent::Connected { client } => state.push(format!("{client:?} connected")),
@@ -169,7 +170,7 @@ fn update_server(mut egui: EguiContexts, mut state: ResMut<ServerState>) {
                 match state.server.send(client, msg.clone()) {
                     Ok(_) => state.push(format!("{client:?} > {msg}")),
                     Err(err) => state.push(format!(
-                        "Failed to send message: {:#}",
+                        "Failed to send message to {client:?}: {:#}",
                         aeronet::error::as_pretty(&err)
                     )),
                 }
@@ -180,7 +181,9 @@ fn update_server(mut egui: EguiContexts, mut state: ResMut<ServerState>) {
             )),
         }
     }
+}
 
+fn server_ui(mut egui: EguiContexts, state: Res<ServerState>) {
     egui::Window::new("Server").show(egui.ctx_mut(), |ui| {
         show_scrollback(ui, &state.scrollback);
     });
@@ -189,7 +192,7 @@ fn update_server(mut egui: EguiContexts, mut state: ResMut<ServerState>) {
 fn show_scrollback(ui: &mut egui::Ui, scrollback: &[String]) {
     egui::ScrollArea::vertical().show(ui, |ui| {
         for line in scrollback {
-            ui.label(RichText::new(line).font(FONT_ID));
+            ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
         }
     });
 }

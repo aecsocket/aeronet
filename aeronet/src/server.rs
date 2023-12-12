@@ -26,12 +26,6 @@ where
     /// generic [`ServerEvent`], its [`Into`] impl must return [`None`].
     type Event: Into<Option<ServerEvent<C2S, Self::Client, Self::Error>>>;
 
-    /// Iterator over events raised by this server, returned by
-    /// [`TransportServer::recv`].
-    type RecvIter<'a>: Iterator<Item = Self::Event> + 'a
-    where
-        Self: 'a;
-
     /// Gets the current connection information and statistics on a connected
     /// client.
     ///
@@ -45,6 +39,13 @@ where
     fn connected(&self, client: Self::Client) -> bool {
         self.connection_info(client).is_some()
     }
+
+    /// Gets all clients connected to this server.
+    ///
+    /// Each client key returned by this iterator is guaranteed to be connected,
+    /// however the implementation may have some clients which *could* be
+    /// connected, but not recognised as connected yet.
+    fn connected_clients(&self) -> impl Iterator<Item = Self::Client>;
 
     /// Attempts to send a message to the given client.
     ///
@@ -81,7 +82,7 @@ where
     ///     implementations
     ///   * a single event returned from this is not guaranteed to map to a
     ///     specific [`ServerEvent`]
-    fn recv(&mut self) -> Self::RecvIter<'_>;
+    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a;
 
     /// Forces a client to disconnect from this server.
     ///

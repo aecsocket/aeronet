@@ -16,10 +16,21 @@ pub struct ChannelClient<C2S, S2C> {
 #[derive(Debug)]
 enum State<C2S, S2C> {
     Disconnected,
-    Connected(Connected<C2S, S2C>),
+    Connected(ConnectedClient<C2S, S2C>),
 }
 
 impl<C2S, S2C> ChannelClient<C2S, S2C> {
+    /// Creates a new client which is not connected to a server.
+    ///
+    /// If you already have a server at the time of creation of this client, use
+    /// [`ChannelClient::connected`] instead. Otherwise, you can connect this
+    /// client later manually using [`ChannelClient::connect`].
+    pub fn disconnected() -> Self {
+        Self {
+            state: State::Disconnected,
+        }
+    }
+
     /// Creates and connects a new client to an existing server.
     ///
     /// This will raise a [`ClientEvent::Connected`].
@@ -29,7 +40,7 @@ impl<C2S, S2C> ChannelClient<C2S, S2C> {
     ///
     /// [`TransportServer::disconnect`]: aeronet::TransportServer::disconnect
     pub fn connected(server: &mut ChannelServer<C2S, S2C>) -> (Self, ClientKey) {
-        let (server, key) = Connected::new(server);
+        let (server, key) = ConnectedClient::new(server);
         (
             Self {
                 state: State::Connected(server),
@@ -51,7 +62,7 @@ impl<C2S, S2C> ChannelClient<C2S, S2C> {
     ) -> Result<ClientKey, ChannelError> {
         match self.state {
             State::Disconnected => {
-                let (server, key) = Connected::new(server);
+                let (server, key) = ConnectedClient::new(server);
                 self.state = State::Connected(server);
                 Ok(key)
             }
@@ -73,10 +84,6 @@ where
 
     type Event = ClientEvent<S2C>;
 
-    type RecvIter<'a> = std::vec::IntoIter<Self::Event>
-    where
-        Self: 'a;
-
     fn connection_info(&self) -> Option<Self::ConnectionInfo> {
         match self.state {
             State::Disconnected => None,
@@ -87,22 +94,19 @@ where
     fn send(&mut self, msg: impl Into<C2S>) -> Result<(), Self::Error> {
         match &mut self.state {
             State::Disconnected => Err(ChannelError::Disconnected),
-            State::Connected(client) => {
-                let msg = msg.into();
-                client.send(msg).map_err(|_| ChannelError::Disconnected)
-            }
+            State::Connected(client) => client.send(msg),
         }
     }
 
-    fn recv(&mut self) -> Self::RecvIter<'_> {
+    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a {
         match &mut self.state {
             State::Disconnected => vec![].into_iter(),
             State::Connected(client) => match client.recv() {
-                (msgs, Ok(())) => msgs.into_iter(),
-                (mut msgs, Err(cause)) => {
+                (events, Ok(())) => events.into_iter(),
+                (mut events, Err(cause)) => {
                     self.state = State::Disconnected;
-                    msgs.push(ClientEvent::Disconnected { cause });
-                    msgs.into_iter()
+                    events.push(ClientEvent::Disconnected { cause });
+                    events.into_iter()
                 }
             },
         }
@@ -123,7 +127,7 @@ where
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct Connected<C2S, S2C> {
+struct ConnectedClient<C2S, S2C> {
     #[derivative(Debug = "ignore")]
     send_c2s: Sender<C2S>,
     #[derivative(Debug = "ignore")]
@@ -132,7 +136,7 @@ struct Connected<C2S, S2C> {
     sent_connect_event: bool,
 }
 
-impl<C2S, S2C> Connected<C2S, S2C> {
+impl<C2S, S2C> ConnectedClient<C2S, S2C> {
     fn new(server: &mut ChannelServer<C2S, S2C>) -> (Self, ClientKey) {
         let (send_c2s, recv_c2s) = crossbeam_channel::unbounded::<C2S>();
         let (send_s2c, recv_s2c) = crossbeam_channel::unbounded::<S2C>();
@@ -144,7 +148,7 @@ impl<C2S, S2C> Connected<C2S, S2C> {
             .push(ServerEvent::Connected { client: key });
 
         (
-            Connected {
+            ConnectedClient {
                 send_c2s,
                 recv_s2c,
                 sent_connect_event: false,
@@ -161,21 +165,23 @@ impl<C2S, S2C> Connected<C2S, S2C> {
     }
 
     fn recv(&mut self) -> (Vec<ClientEvent<S2C>>, Result<(), ChannelError>) {
-        let mut msgs = Vec::new();
+        let mut events = Vec::new();
 
         if !self.sent_connect_event {
             self.sent_connect_event = true;
-            msgs.push(ClientEvent::Connected);
+            events.push(ClientEvent::Connected);
         }
 
         loop {
             match self.recv_s2c.try_recv() {
-                Ok(msg) => msgs.push(ClientEvent::Recv { msg }),
+                Ok(msg) => events.push(ClientEvent::Recv { msg }),
                 Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => return (msgs, Err(ChannelError::Disconnected)),
+                Err(TryRecvError::Disconnected) => {
+                    return (events, Err(ChannelError::Disconnected))
+                }
             }
         }
 
-        (msgs, Ok(()))
+        (events, Ok(()))
     }
 }

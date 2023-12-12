@@ -19,10 +19,7 @@ struct AppChannel;
 #[on_channel(AppChannel)]
 struct AppMessage(String);
 
-impl<T> From<T> for AppMessage
-where
-    T: Into<String>,
-{
+impl<T: Into<String>> From<T> for AppMessage {
     fn from(value: T) -> Self {
         Self(value.into())
     }
@@ -46,6 +43,8 @@ impl TryFromBytes for AppMessage {
     }
 }
 
+// resources
+
 type WebTransportServer = aeronet_wt_native::WebTransportServer<AppMessage, AppMessage, AppChannel>;
 
 // logic
@@ -68,7 +67,7 @@ fn main() {
         ))
         .init_resource::<AsyncRuntime>()
         .add_systems(Startup, setup)
-        .add_systems(Update, poll_server)
+        .add_systems(Update, update_server)
         .run();
 }
 
@@ -96,13 +95,13 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportServer> {
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    let (server, backend) = WebTransportServer::open(config);
+    let (server, backend) = WebTransportServer::opening(config);
     rt.0.spawn(backend);
 
     Ok(WebTransportServer::from(server))
 }
 
-fn poll_server(mut server: ResMut<WebTransportServer>) {
+fn update_server(mut server: ResMut<WebTransportServer>) {
     for event in server.recv() {
         match event {
             ServerEvent::Opened => info!("Opened server for connections"),
@@ -112,9 +111,23 @@ fn poll_server(mut server: ResMut<WebTransportServer>) {
                 authority,
                 path,
                 ..
-            } => info!("Client {client:?} accepted from {authority}{path}"),
-            ServerEvent::Connected { client } => info!("{client:?} connected"),
-            ServerEvent::Recv { client, msg } => info!("{client:?} > {msg:?}"),
+            } => info!("{client:?} accepted from {authority}{path}"),
+            ServerEvent::Connected { client } => {
+                let remote_addr = server.connection_info(client).unwrap().remote_addr;
+                info!("{client:?} connected from {remote_addr}");
+            }
+            ServerEvent::Recv { client, msg } => {
+                info!("{client:?} > {}", msg.0);
+                let msg = format!("You sent: {}", msg.0);
+                match server.send(client, msg.clone()) {
+                    Ok(()) => info!("{client:?} < {}", msg),
+                    Err(err) => warn!(
+                        "Failed to send message to {client:?}: {:#}",
+                        aeronet::error::as_pretty(&err)
+                    ),
+                }
+                let _ = server.disconnect(client);
+            }
             ServerEvent::Disconnected { client, cause } => info!(
                 "{client:?} disconnected: {:#}",
                 aeronet::error::as_pretty(&cause)
