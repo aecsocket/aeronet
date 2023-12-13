@@ -13,7 +13,10 @@ use std::{error::Error, fmt};
 /// See the [module-level docs](self).
 pub struct PrettyError<'a, E>(&'a E);
 
-impl<E: Error> fmt::Display for PrettyError<'_, E> {
+impl<E> fmt::Display for PrettyError<'_, E>
+where
+    E: Error,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)?;
 
@@ -33,6 +36,9 @@ impl<E: Error> fmt::Display for PrettyError<'_, E> {
 /// impl write the entire error chain.
 ///
 /// See the [module-level docs](self).
-pub fn as_pretty<E: Error>(err: &E) -> PrettyError<'_, E> {
+pub fn as_pretty<E>(err: &E) -> PrettyError<'_, E>
+where
+    E: Error,
+{
     PrettyError(err)
 }

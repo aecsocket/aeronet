@@ -105,7 +105,10 @@ pub struct LocalClientConnected;
 ///
 /// See [`ClientEvent::Recv`].
 #[derive(Debug, Clone, Event)]
-pub struct FromServer<P: Protocol> {
+pub struct FromServer<P>
+where
+    P: Protocol,
+{
     /// The message received.
     pub msg: P::S2C,
 }
@@ -118,7 +121,11 @@ pub struct FromServer<P: Protocol> {
 ///
 /// See [`ClientEvent::Disconnected`].
 #[derive(Debug, Clone, Event)]
-pub struct LocalClientDisconnected<P: Protocol, T: TransportClient<P>> {
+pub struct LocalClientDisconnected<P, T>
+where
+    P: Protocol,
+    T: TransportClient<P>,
+{
     /// The reason why the client lost connection.
     pub cause: T::Error,
 }
@@ -127,7 +134,10 @@ pub struct LocalClientDisconnected<P: Protocol, T: TransportClient<P>> {
 ///
 /// See [`TransportClient::send`].
 #[derive(Debug, Clone, Event)]
-pub struct ToServer<P: Protocol> {
+pub struct ToServer<P>
+where
+    P: Protocol,
+{
     /// The message to send.
     pub msg: P::C2S,
 }

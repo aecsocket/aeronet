@@ -9,7 +9,10 @@ use crate::Protocol;
 /// Allows connecting to a server, and transporting messages to/from the server.
 ///
 /// See the [crate-level docs](crate).
-pub trait TransportClient<P: Protocol> {
+pub trait TransportClient<P>
+where
+    P: Protocol,
+{
     /// Error returned from operations on this client.
     type Error: Send + Sync + 'static;
 
@@ -92,7 +95,11 @@ pub trait TransportClient<P: Protocol> {
 
 /// An event which is raised by a [`TransportClient`].
 #[derive(Debug, Clone)]
-pub enum ClientEvent<P: Protocol, T: TransportClient<P>> {
+pub enum ClientEvent<P, T>
+where
+    P: Protocol,
+    T: TransportClient<P>,
+{
     /// This client has fully connected to a server.
     ///
     /// Use this event to do setup logic, e.g. start loading the level.

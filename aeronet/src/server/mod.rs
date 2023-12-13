@@ -10,7 +10,10 @@ use crate::Protocol;
 /// the clients connected to this server.
 ///
 /// See the [crate-level docs](crate).
-pub trait TransportServer<P: Protocol> {
+pub trait TransportServer<P>
+where
+    P: Protocol,
+{
     /// Key type that this server uses to uniquely identify clients.
     type Client: Send + Sync + Clone + 'static;
 
@@ -112,7 +115,11 @@ pub trait TransportServer<P: Protocol> {
 
 /// An event which is raised by a [`TransportServer`].
 #[derive(Debug, Clone)]
-pub enum ServerEvent<P: Protocol, T: TransportServer<P>> {
+pub enum ServerEvent<P, T>
+where
+    P: Protocol,
+    T: TransportServer<P>,
+{
     /// A client has fully connected to this server.
     ///
     /// Use this event to do client setup logic, e.g. start loading player data.

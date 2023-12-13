@@ -20,8 +20,13 @@ where
 }
 
 enum ChannelState<P: Protocol> {
-    Datagram { channel: P::Channel },
-    Stream { channel: P::Channel, send_stream: SendStream },
+    Datagram {
+        channel: P::Channel,
+    },
+    Stream {
+        channel: P::Channel,
+        send_stream: SendStream,
+    },
 }
 
 pub(super) async fn establish_channels<P, S, R, const OPENS: bool>(

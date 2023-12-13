@@ -4,7 +4,7 @@ use aeronet::{ChannelKey, Message, OnChannel, TransportServer, TryFromBytes, Try
 use tokio::sync::{mpsc, oneshot};
 use wtransport::ServerConfig;
 
-use crate::{ClientKey, EndpointInfo, ServerEvent, WebTransportServer, Protocol};
+use crate::{ClientKey, EndpointInfo, Protocol, ServerEvent, WebTransportServer};
 
 use super::{
     backend, ClientState, OpenServer, OpenServerResult, OpeningServer, State, WebTransportError,

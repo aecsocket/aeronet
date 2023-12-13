@@ -15,7 +15,10 @@ type ServerEvent<P> = aeronet::ServerEvent<P, ChannelServer<P>>;
 #[derive(Derivative, Default)]
 #[derivative(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct ChannelServer<P: Protocol> {
+pub struct ChannelServer<P>
+where
+    P: Protocol,
+{
     #[derivative(Debug = "ignore")]
     pub(super) clients: SlotMap<ClientKey, ClientState<P>>,
     #[derivative(Debug = "ignore")]
@@ -23,12 +26,18 @@ pub struct ChannelServer<P: Protocol> {
 }
 
 #[derive(Debug)]
-pub(super) struct ClientState<P: Protocol> {
+pub(super) struct ClientState<P>
+where
+    P: Protocol,
+{
     pub(super) send_s2c: Sender<P::S2C>,
     pub(super) recv_c2s: Receiver<P::C2S>,
 }
 
-impl<P: Protocol> ChannelServer<P> {
+impl<P> ChannelServer<P>
+where
+    P: Protocol,
+{
     /// Creates a new server with no clients connected.
     ///
     /// See [`ChannelClient`] on how to create and connect a client to this
@@ -44,7 +53,10 @@ impl<P: Protocol> ChannelServer<P> {
     }
 }
 
-impl<P: Protocol> TransportServer<P> for ChannelServer<P> {
+impl<P> TransportServer<P> for ChannelServer<P>
+where
+    P: Protocol,
+{
     type Client = ClientKey;
 
     type Error = ChannelError;

@@ -88,7 +88,11 @@ pub enum TransportServerSet {
 ///
 /// See [`ServerEvent::Connected`].
 #[derive(Debug, Clone, Event)]
-pub struct RemoteClientConnected<P: Protocol, T: TransportServer<P>> {
+pub struct RemoteClientConnected<P, T>
+where
+    P: Protocol,
+    T: TransportServer<P>,
+{
     /// The key of the connected client.
     pub client: T::Client,
 }
@@ -97,7 +101,11 @@ pub struct RemoteClientConnected<P: Protocol, T: TransportServer<P>> {
 ///
 /// See [`ServerEvent::Recv`].
 #[derive(Debug, Clone, Event)]
-pub struct FromClient<P: Protocol, T: TransportServer<P>> {
+pub struct FromClient<P, T>
+where
+    P: Protocol,
+    T: TransportServer<P>,
+{
     /// The key of the client which sent the message.
     pub client: T::Client,
     /// The message received.
@@ -112,7 +120,11 @@ pub struct FromClient<P: Protocol, T: TransportServer<P>> {
 ///
 /// See [`ServerEvent::Disconnected`].
 #[derive(Debug, Clone, Event)]
-pub struct RemoteClientDisconnected<P: Protocol, T: TransportServer<P>> {
+pub struct RemoteClientDisconnected<P, T>
+where
+    P: Protocol,
+    T: TransportServer<P>,
+{
     /// The key of the client.
     pub client: T::Client,
     /// The reason why the client lost connection.
@@ -123,7 +135,11 @@ pub struct RemoteClientDisconnected<P: Protocol, T: TransportServer<P>> {
 ///
 /// See [`TransportServer::send`].
 #[derive(Debug, Clone, Event)]
-pub struct ToClient<P: Protocol, T: TransportServer<P>> {
+pub struct ToClient<P, T>
+where
+    P: Protocol,
+    T: TransportServer<P>,
+{
     /// The key of the client to send to.
     pub client: T::Client,
     /// The message to send.
@@ -134,7 +150,11 @@ pub struct ToClient<P: Protocol, T: TransportServer<P>> {
 ///
 /// See [`TransportServer::disconnect`].
 #[derive(Debug, Clone, Event)]
-pub struct DisconnectRemoteClient<P: Protocol, T: TransportServer<P>> {
+pub struct DisconnectRemoteClient<P, T>
+where
+    P: Protocol,
+    T: TransportServer<P>,
+{
     /// The key of the client to disconnect.
     pub client: T::Client,
 }

@@ -1,7 +1,7 @@
 mod backend;
 mod frontend;
 
-use aeronet::{TryFromBytes, TryIntoBytes, OnChannel};
+use aeronet::{OnChannel, TryFromBytes, TryIntoBytes};
 pub use frontend::*;
 
 use std::{fmt::Debug, io, net::SocketAddr};
@@ -80,8 +80,7 @@ where
     },
 }
 
-impl<P> From<ServerEvent<P>>
-    for Option<aeronet::ServerEvent<P, WebTransportServer<P>>>
+impl<P> From<ServerEvent<P>> for Option<aeronet::ServerEvent<P, WebTransportServer<P>>>
 where
     P: Protocol,
     P::C2S: TryFromBytes,
