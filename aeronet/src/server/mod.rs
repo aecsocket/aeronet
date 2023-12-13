@@ -4,17 +4,13 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use crate::Message;
+use crate::Protocol;
 
 /// Allows listening for client connections, and transporting messages to/from
 /// the clients connected to this server.
 ///
 /// See the [crate-level docs](crate).
-pub trait TransportServer<C2S, S2C>
-where
-    C2S: Message,
-    S2C: Message,
-{
+pub trait TransportServer<P: Protocol> {
     /// Key type that this server uses to uniquely identify clients.
     type Client: Send + Sync + Clone + 'static;
 
@@ -30,7 +26,7 @@ where
     /// This event type must be able to be potentially converted into a
     /// [`ServerEvent`]. If an event value cannot cleanly map to a single
     /// generic [`ServerEvent`], its [`Into`] impl must return [`None`].
-    type Event: Into<Option<ServerEvent<C2S, Self::Client, Self::Error>>>;
+    type Event: Into<Option<ServerEvent<P, Self>>> where Self: Sized;
 
     /// Gets the current connection information and statistics on a connected
     /// client.
@@ -69,7 +65,7 @@ where
     /// If an error occurs later during the transport process, the server will
     /// forcefully disconnect the client and emit a
     /// [`ServerEvent::Disconnected`].
-    fn send(&mut self, client: Self::Client, msg: impl Into<S2C>) -> Result<(), Self::Error>;
+    fn send(&mut self, client: Self::Client, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
 
     /// Polls events and receives messages from this transport.
     ///
@@ -88,7 +84,7 @@ where
     ///     implementations
     ///   * a single event returned from this is not guaranteed to map to a
     ///     specific [`ServerEvent`]
-    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a;
+    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a where Self: Sized;
 
     /// Forces a client to disconnect from this server.
     ///
@@ -109,7 +105,7 @@ where
 
 /// An event which is raised by a [`TransportServer`].
 #[derive(Debug, Clone)]
-pub enum ServerEvent<C2S, C, E> {
+pub enum ServerEvent<P: Protocol, T: TransportServer<P>> {
     /// A client has fully connected to this server.
     ///
     /// See [`TransportServer`] for the definition of "connected".
@@ -117,14 +113,14 @@ pub enum ServerEvent<C2S, C, E> {
     /// Use this event to do client setup logic, e.g. start loading player data.
     Connected {
         /// The key of the connected client.
-        client: C,
+        client: T::Client,
     },
     /// A client sent a message to this server.
     Recv {
         /// The key of the client which sent the message.
-        client: C,
+        client: T::Client,
         /// The message.
-        msg: C2S,
+        msg: P::C2S,
     },
     /// A client has lost connection from this server, which cannot be recovered
     /// from.
@@ -133,8 +129,8 @@ pub enum ServerEvent<C2S, C, E> {
     /// from the world.
     Disconnected {
         /// The key of the client.
-        client: C,
+        client: T::Client,
         /// The reason why the client lost connection.
-        cause: E,
+        cause: T::Error,
     },
 }

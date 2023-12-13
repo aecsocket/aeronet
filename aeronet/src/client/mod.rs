@@ -4,16 +4,12 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use crate::Message;
+use crate::Protocol;
 
 /// Allows connecting to a server, and transporting messages to/from the server.
 ///
 /// See the [crate-level docs](crate).
-pub trait TransportClient<C2S, S2C>
-where
-    C2S: Message,
-    S2C: Message,
-{
+pub trait TransportClient<P: Protocol> {
     /// Error returned from operations on this client.
     type Error: Send + Sync + 'static;
 
@@ -26,7 +22,7 @@ where
     /// This event type must be able to be potentially converted into a
     /// [`ClientEvent`]. If an event value cannot cleanly map to a single
     /// generic [`ClientEvent`], its [`Into`] impl must return [`None`].
-    type Event: Into<Option<ClientEvent<S2C, Self::Error>>>;
+    type Event: Into<Option<ClientEvent<P, Self>>> where Self: Sized;
 
     /// Gets the current connection information and statistics if this client
     /// is connected.
@@ -53,7 +49,7 @@ where
     /// If an error occurs later during the transport process, the server will
     /// forcefully disconnect the client and emit a
     /// [`ClientEvent::Disconnected`].
-    fn send(&mut self, msg: impl Into<C2S>) -> Result<(), Self::Error>;
+    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error>;
 
     /// Polls events and receives messages from this transport.
     ///
@@ -72,7 +68,7 @@ where
     ///     implementations
     ///   * a single event returned from this is not guaranteed to map to a
     ///     specific [`ClientEvent`]
-    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a;
+    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a where Self: Sized;
 
     /// Forces this client to disconnect from its currently connected server.
     ///
@@ -92,7 +88,7 @@ where
 
 /// An event which is raised by a [`TransportClient`].
 #[derive(Debug, Clone)]
-pub enum ClientEvent<S2C, E> {
+pub enum ClientEvent<P: Protocol, T: TransportClient<P>> {
     /// This client has fully connected to a server.
     ///
     /// Use this event to do setup logic, e.g. start loading the level.
@@ -100,7 +96,7 @@ pub enum ClientEvent<S2C, E> {
     /// The server sent a message to this client.
     Recv {
         /// The message received.
-        msg: S2C,
+        msg: P::S2C,
     },
     /// This client has lost connection from its previously connected server,
     /// which cannot be recovered from.
@@ -109,6 +105,6 @@ pub enum ClientEvent<S2C, E> {
     /// menu.
     Disconnected {
         /// The reason why the client lost connection.
-        cause: E,
+        cause: T::Error,
     },
 }

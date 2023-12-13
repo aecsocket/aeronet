@@ -1,5 +1,13 @@
 use std::{net::SocketAddr, time::Duration};
 
+use crate::Message;
+
+pub trait Protocol: Send + Sync + 'static {
+    type C2S: Message;
+
+    type S2C: Message;
+}
+
 /// Allows access to the round-trip time of a connection.
 pub trait Rtt {
     /// Gets the round-trip time to the connected endpoint.

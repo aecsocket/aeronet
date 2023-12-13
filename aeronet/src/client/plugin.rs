@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use derivative::Derivative;
 
-use crate::{TransportClient, Message, ClientEvent};
+use crate::{TransportClient, ClientEvent, Protocol};
 
 /// Provides systems to send commands to, and receive events from, a
 /// [`TransportClient`].
@@ -28,28 +28,28 @@ use crate::{TransportClient, Message, ClientEvent};
 /// 
 /// Note that errors during operation will be silently ignored, e.g. if you
 /// attempt to send a message while the client is not connected.
-pub fn transport_client_plugin<C2S, S2C, T>(app: &mut App)
+pub fn transport_client_plugin<P, T>(app: &mut App)
 where
-    C2S: Message + Clone,
-    S2C: Message,
-    T: TransportClient<C2S, S2C> + Resource,
+    P: Protocol,
+    P::C2S: Clone,
+    T: TransportClient<P> + Resource,
 {
     app.configure_sets(PreUpdate, TransportClientSet::Recv)
         .configure_sets(PostUpdate, TransportClientSet::Send)
         .add_event::<LocalClientConnected>()
-        .add_event::<FromServer<S2C>>()
-        .add_event::<LocalClientDisconnected<T::Error>>()
-        .add_event::<ToServer<C2S>>()
+        .add_event::<FromServer<P>>()
+        .add_event::<LocalClientDisconnected<P, T>>()
+        .add_event::<ToServer<P>>()
         .add_event::<DisconnectLocalClient>()
         .add_systems(
             PreUpdate,
-            recv::<C2S, S2C, T>.in_set(TransportClientSet::Recv),
+            recv::<P, T>.in_set(TransportClientSet::Recv),
         )
         .add_systems(
             PostUpdate,
             (
-                send::<C2S, S2C, T>,
-                disconnect::<C2S, S2C, T>.run_if(on_event::<DisconnectLocalClient>()),
+                send::<P, T>,
+                disconnect::<P, T>.run_if(on_event::<DisconnectLocalClient>()),
             )
             .chain()
             .in_set(TransportClientSet::Send),
@@ -62,28 +62,26 @@ where
 /// See [`transport_client_plugin`].
 #[derive(Derivative)]
 #[derivative(Debug, Default)]
-pub struct TransportClientPlugin<C2S, S2C, T>
+pub struct TransportClientPlugin<P, T>
 where
-    C2S: Message + Clone,
-    S2C: Message,
-    T: TransportClient<C2S, S2C> + Resource,
+    P: Protocol,
+    P::C2S: Clone,
+    T: TransportClient<P> + Resource,
 {
     #[derivative(Debug = "ignore")]
-    _phantom_c2s: PhantomData<C2S>,
-    #[derivative(Debug = "ignore")]
-    _phantom_s2c: PhantomData<S2C>,
+    _phantom_p: PhantomData<P>,
     #[derivative(Debug = "ignore")]
     _phantom_t: PhantomData<T>,
 }
 
-impl<C2S, S2C, T> Plugin for TransportClientPlugin<C2S, S2C, T>
+impl<P, T> Plugin for TransportClientPlugin<P, T>
 where
-    C2S: Message + Clone,
-    S2C: Message,
-    T: TransportClient<C2S, S2C> + Resource,
+    P: Protocol,
+    P::C2S: Clone,
+    T: TransportClient<P> + Resource,
 {
     fn build(&self, app: &mut App) {
-        transport_client_plugin::<C2S, S2C, T>(app);
+        transport_client_plugin::<P, T>(app);
     }
 }
 
@@ -110,9 +108,9 @@ pub struct LocalClientConnected;
 /// 
 /// See [`ClientEvent::Recv`].
 #[derive(Debug, Clone, Event)]
-pub struct FromServer<S2C> {
+pub struct FromServer<P: Protocol> {
     /// The message received.
-    pub msg: S2C,
+    pub msg: P::S2C,
 }
 
 /// This client has lost connection from its previously connected server,
@@ -123,18 +121,18 @@ pub struct FromServer<S2C> {
 /// 
 /// See [`ClientEvent::Disconnected`].
 #[derive(Debug, Clone, Event)]
-pub struct LocalClientDisconnected<E> {
+pub struct LocalClientDisconnected<P: Protocol, T: TransportClient<P>> {
     /// The reason why the client lost connection.
-    pub cause: E,
+    pub cause: T::Error,
 }
 
 /// Sends a message along the client to the server.
 /// 
 /// See [`TransportClient::send`].
 #[derive(Debug, Clone, Event)]
-pub struct ToServer<C2S> {
+pub struct ToServer<P: Protocol> {
     /// The message to send.
-    pub msg: C2S,
+    pub msg: P::C2S,
 }
 
 /// Forcefully disconnects the client from its currently connected server.
@@ -145,16 +143,16 @@ pub struct DisconnectLocalClient;
 
 // systems
 
-fn recv<C2S, S2C, T>(
+fn recv<P, T>(
     mut client: ResMut<T>,
     mut connected: EventWriter<LocalClientConnected>,
-    mut recv: EventWriter<FromServer<S2C>>,
-    mut disconnected: EventWriter<LocalClientDisconnected<T::Error>>,
+    mut recv: EventWriter<FromServer<P>>,
+    mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
 )
 where
-    C2S: Message + Clone,
-    S2C: Message,
-    T: TransportClient<C2S, S2C> + Resource,
+    P: Protocol,
+    P::C2S: Clone,
+    T: TransportClient<P> + Resource,
 {
     for event in client.recv() {
         match event.into() {
@@ -168,27 +166,27 @@ where
     }
 }
 
-fn send<C2S, S2C, T>(
+fn send<P, T>(
     mut client: ResMut<T>,
-    mut send: EventReader<ToServer<C2S>>,
+    mut send: EventReader<ToServer<P>>,
 )
 where
-    C2S: Message + Clone,
-    S2C: Message,
-    T: TransportClient<C2S, S2C> + Resource,
+    P: Protocol,
+    P::C2S: Clone,
+    T: TransportClient<P> + Resource,
 {
     for ToServer { msg } in send.read() {
         let _ = client.send(msg.clone());
     }
 }
 
-fn disconnect<C2S, S2C, T>(
+fn disconnect<P, T>(
     mut client: ResMut<T>,
 )
 where
-    C2S: Message + Clone,
-    S2C: Message,
-    T: TransportClient<C2S, S2C> + Resource,
+    P: Protocol,
+    P::C2S: Clone,
+    T: TransportClient<P> + Resource,
 {
     let _ = client.disconnect();
 }

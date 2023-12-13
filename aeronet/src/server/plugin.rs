@@ -3,30 +3,30 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use derivative::Derivative;
 
-use crate::{Message, TransportServer, ServerEvent};
+use crate::{TransportServer, ServerEvent, Protocol};
 
 /// Provides systems to send commands to, and receive events from, a
 /// [`TransportServer`].
-pub fn transport_server_plugin<C2S, S2C, T>(app: &mut App)
+pub fn transport_server_plugin<P, T>(app: &mut App)
 where
-    C2S: Message,
-    S2C: Message + Clone,
-    T: TransportServer<C2S, S2C> + Resource,
+    P: Protocol,
+    P::S2C: Clone,
+    T: TransportServer<P> + Resource,
 {
     app.configure_sets(PreUpdate, TransportServerSet::Recv)
         .configure_sets(PostUpdate, TransportServerSet::Send)
-        .add_event::<RemoteClientConnected<T::Client>>()
-        .add_event::<FromClient<T::Client, C2S>>()
-        .add_event::<RemoteClientDisconnected<T::Client, T::Error>>()
-        .add_event::<ToClient<T::Client, S2C>>()
-        .add_event::<DisconnectRemoteClient<T::Client>>()
+        .add_event::<RemoteClientConnected<P, T>>()
+        .add_event::<FromClient<P, T>>()
+        .add_event::<RemoteClientDisconnected<P, T>>()
+        .add_event::<ToClient<P, T>>()
+        .add_event::<DisconnectRemoteClient<P, T>>()
         .add_systems(
             PreUpdate,
-            recv::<C2S, S2C, T>.in_set(TransportServerSet::Recv),
+            recv::<P, T>.in_set(TransportServerSet::Recv),
         )
         .add_systems(
             PostUpdate,
-            send::<C2S, S2C, T>.in_set(TransportServerSet::Send),
+            send::<P, T>.in_set(TransportServerSet::Send),
         );
 }
 
@@ -36,18 +36,27 @@ where
 /// See [`transport_server_plugin`].
 #[derive(Derivative)]
 #[derivative(Debug, Default)]
-pub struct TransportServerPlugin<C2S, S2C, T>
+pub struct TransportServerPlugin<P, T>
 where
-    C2S: Message,
-    S2C: Message + Clone,
-    T: TransportServer<C2S, S2C> + Resource,
+    P: Protocol,
+    P::S2C: Clone,
+    T: TransportServer<P> + Resource,
 {
     #[derivative(Debug = "ignore")]
-    _phantom_c2s: PhantomData<C2S>,
-    #[derivative(Debug = "ignore")]
-    _phantom_s2c: PhantomData<S2C>,
+    _phantom_p: PhantomData<P>,
     #[derivative(Debug = "ignore")]
     _phantom_t: PhantomData<T>,
+}
+
+impl<P, T> Plugin for TransportServerPlugin<P, T>
+where
+    P: Protocol,
+    P::S2C: Clone,
+    T: TransportServer<P> + Resource,
+{
+    fn build(&self, app: &mut App) {
+        transport_server_plugin::<P, T>(app);
+    }
 }
 
 /// Group of systems for sending and receiving data to/from a
@@ -62,45 +71,45 @@ pub enum TransportServerSet {
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct RemoteClientConnected<C> {
-    pub client: C,
+pub struct RemoteClientConnected<P: Protocol, T: TransportServer<P>> {
+    pub client: T::Client,
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct FromClient<C, C2S> {
-    pub client: C,
-    pub msg: C2S,
+pub struct FromClient<P: Protocol, T: TransportServer<P>> {
+    pub client: T::Client,
+    pub msg: P::C2S,
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct RemoteClientDisconnected<C, E> {
-    pub client: C,
-    pub cause: E,
+pub struct RemoteClientDisconnected<P: Protocol, T: TransportServer<P>> {
+    pub client: T::Client,
+    pub cause: T::Error,
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct ToClient<C, S2C> {
-    pub client: C,
-    pub msg: S2C,
+pub struct ToClient<P: Protocol, T: TransportServer<P>> {
+    pub client: T::Client,
+    pub msg: P::S2C,
 }
 
 #[derive(Debug, Clone, Event)]
-pub struct DisconnectRemoteClient<C> {
-    pub client: C,
+pub struct DisconnectRemoteClient<P: Protocol, T: TransportServer<P>> {
+    pub client: T::Client,
 }
 
 // systems
 
-fn recv<C2S, S2C, T>(
+fn recv<P, T>(
     mut server: ResMut<T>,
-    mut connected: EventWriter<RemoteClientConnected<T::Client>>,
-    mut recv: EventWriter<FromClient<T::Client, C2S>>,
-    mut disconnected: EventWriter<RemoteClientDisconnected<T::Client, T::Error>>,
+    mut connected: EventWriter<RemoteClientConnected<P, T>>,
+    mut recv: EventWriter<FromClient<P, T>>,
+    mut disconnected: EventWriter<RemoteClientDisconnected<P, T>>,
 )
 where
-    C2S: Message,
-    S2C: Message + Clone,
-    T: TransportServer<C2S, S2C> + Resource,
+    P: Protocol,
+    P::S2C: Clone,
+    T: TransportServer<P> + Resource,
 {
     for event in server.recv() {
         match event.into() {
@@ -112,15 +121,15 @@ where
     }
 }
 
-fn send<C2S, S2C, T>(
+fn send<P, T>(
     mut server: ResMut<T>,
-    mut send: EventReader<ToClient<T::Client, S2C>>,
-    mut disconnect: EventReader<DisconnectRemoteClient<T::Client>>,
+    mut send: EventReader<ToClient<P, T>>,
+    mut disconnect: EventReader<DisconnectRemoteClient<P, T>>,
 )
 where
-    C2S: Message,
-    S2C: Message + Clone,
-    T: TransportServer<C2S, S2C> + Resource,
+    P: Protocol,
+    P::S2C: Clone,
+    T: TransportServer<P> + Resource,
 {
     for ToClient { client, msg } in send.read() {
         let _ = server.send(client.clone(), msg.clone());

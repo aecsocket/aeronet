@@ -3,13 +3,13 @@
 use std::{convert::Infallible, mem, string::FromUtf8Error};
 
 use aeronet::{
-    ClientEvent, ServerEvent, TransportClient, TransportServer, TryFromBytes, TryIntoBytes,
+    ClientEvent, ServerEvent, TransportClient, TransportServer, TryFromBytes, TryIntoBytes, Protocol,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
-// config
+// protocol
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AppMessage(String);
@@ -38,10 +38,17 @@ impl TryFromBytes for AppMessage {
     }
 }
 
+struct AppProtocol;
+
+impl Protocol for AppProtocol {
+    type C2S = AppMessage;
+    type S2C = AppMessage;
+}
+
 // resources
 
-type Client = ChannelClient<AppMessage, AppMessage>;
-type Server = ChannelServer<AppMessage, AppMessage>;
+type Client = ChannelClient<AppProtocol>;
+type Server = ChannelServer<AppProtocol>;
 
 #[derive(Debug, Resource)]
 struct ClientState<const N: usize> {

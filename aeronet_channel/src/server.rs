@@ -1,28 +1,34 @@
 use std::mem;
 
-use aeronet::{Message, ServerEvent, TransportServer};
+use aeronet::{TransportServer, Protocol};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
+use derivative::Derivative;
 use slotmap::SlotMap;
 
 use crate::{ChannelError, ClientKey};
 
+type ServerEvent<P> = aeronet::ServerEvent<P, ChannelServer<P>>;
+
 /// Implementation of [`TransportServer`] using in-memory MPSC channels.
 ///
 /// See the [crate-level docs](crate).
-#[derive(Debug, Default)]
+#[derive(Derivative, Default)]
+#[derivative(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct ChannelServer<C2S, S2C> {
-    pub(super) clients: SlotMap<ClientKey, ClientState<C2S, S2C>>,
-    pub(super) event_buf: Vec<ServerEvent<C2S, ClientKey, ChannelError>>,
+pub struct ChannelServer<P: Protocol> {
+    #[derivative(Debug = "ignore")]
+    pub(super) clients: SlotMap<ClientKey, ClientState<P>>,
+    #[derivative(Debug = "ignore")]
+    pub(super) event_buf: Vec<ServerEvent<P>>,
 }
 
 #[derive(Debug)]
-pub(super) struct ClientState<C2S, S2C> {
-    pub(super) send_s2c: Sender<S2C>,
-    pub(super) recv_c2s: Receiver<C2S>,
+pub(super) struct ClientState<P: Protocol> {
+    pub(super) send_s2c: Sender<P::S2C>,
+    pub(super) recv_c2s: Receiver<P::C2S>,
 }
 
-impl<C2S, S2C> ChannelServer<C2S, S2C> {
+impl<P: Protocol> ChannelServer<P> {
     /// Creates a new server with no clients connected.
     ///
     /// See [`ChannelClient`] on how to create and connect a client to this
@@ -38,18 +44,14 @@ impl<C2S, S2C> ChannelServer<C2S, S2C> {
     }
 }
 
-impl<C2S, S2C> TransportServer<C2S, S2C> for ChannelServer<C2S, S2C>
-where
-    C2S: Message,
-    S2C: Message,
-{
+impl<P: Protocol> TransportServer<P> for ChannelServer<P> {
     type Client = ClientKey;
 
     type Error = ChannelError;
 
     type ConnectionInfo = ();
 
-    type Event = ServerEvent<C2S, Self::Client, Self::Error>;
+    type Event = ServerEvent<P>;
 
     fn connection_info(&self, client: Self::Client) -> Option<Self::ConnectionInfo> {
         self.clients.get(client).map(|_| ())
@@ -59,7 +61,7 @@ where
         self.clients.keys()
     }
 
-    fn send(&mut self, client: Self::Client, msg: impl Into<S2C>) -> Result<(), Self::Error> {
+    fn send(&mut self, client: Self::Client, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
         let msg = msg.into();
         let Some(client) = self.clients.get(client) else {
             return Err(ChannelError::NoClient(client));
