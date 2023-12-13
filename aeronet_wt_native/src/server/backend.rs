@@ -1,23 +1,22 @@
-use aeronet::{ChannelKey, Message, OnChannel, TryFromBytes, TryIntoBytes};
+use aeronet::{OnChannel, TryFromBytes, TryIntoBytes};
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
-use crate::{shared, EndpointInfo};
+use crate::{shared, EndpointInfo, Protocol};
 
 use super::{
     AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, OpenServer,
     OpenServerResult, WebTransportError,
 };
 
-pub(super) async fn start<C2S, S2C, C>(
+pub(super) async fn start<P: Protocol>(
     config: ServerConfig,
-    send_open: oneshot::Sender<OpenServerResult<C2S, S2C, C>>,
+    send_open: oneshot::Sender<OpenServerResult<P>>,
 ) where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
 {
     let endpoint = match Endpoint::server(config).map_err(WebTransportError::Endpoint) {
         Ok(endpoint) => endpoint,
@@ -56,17 +55,16 @@ pub(super) async fn start<C2S, S2C, C>(
             return;
         };
 
-        tokio::spawn(handle_session::<C2S, S2C, C>(session, send_accepted));
+        tokio::spawn(handle_session::<P>(session, send_accepted));
     }
 }
 
-async fn handle_session<C2S, S2C, C>(
+async fn handle_session<P: Protocol>(
     session: IncomingSession,
-    send_accepted: oneshot::Sender<AcceptedClientResult<C2S, S2C, C>>,
+    send_accepted: oneshot::Sender<AcceptedClientResult<P>>,
 ) where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
 {
     let session = match session.await.map_err(WebTransportError::IncomingSession) {
         Ok(session) => session,
@@ -106,7 +104,7 @@ async fn handle_session<C2S, S2C, C>(
     };
 
     debug!("Establishing channels");
-    let channels_state = match shared::establish_channels::<S2C, C2S, C, true>(&conn).await {
+    let channels_state = match shared::establish_channels::<P, P::S2C, P::C2S, true>(&conn).await {
         Ok(state) => state,
         Err(err) => {
             let _ = send_connected.send(Err(err));
@@ -131,7 +129,7 @@ async fn handle_session<C2S, S2C, C>(
     }
 
     debug!("Starting connection loop");
-    if let Err(err) = shared::handle_connection::<S2C, C2S, C>(
+    if let Err(err) = shared::handle_connection::<P, P::S2C, P::C2S>(
         conn,
         channels_state,
         send_info,

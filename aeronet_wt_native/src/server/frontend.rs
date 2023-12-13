@@ -4,41 +4,17 @@ use aeronet::{ChannelKey, Message, OnChannel, TransportServer, TryFromBytes, Try
 use tokio::sync::{mpsc, oneshot};
 use wtransport::ServerConfig;
 
-use crate::{ClientKey, EndpointInfo, ServerEvent};
+use crate::{ClientKey, EndpointInfo, ServerEvent, WebTransportServer, Protocol};
 
-use super::{backend, ClientState, OpenServer, OpenServerResult, OpeningServer, WebTransportError};
+use super::{
+    backend, ClientState, OpenServer, OpenServerResult, OpeningServer, State, WebTransportError,
+};
 
-/// Implementation of [`TransportServer`] using the WebTransport protocol.
-///
-/// See the [crate-level docs](crate).
-#[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct WebTransportServer<C2S, S2C, C>
+impl<P> WebTransportServer<P>
 where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    state: State<C2S, S2C, C>,
-}
-
-#[derive(Debug)]
-enum State<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    Closed,
-    Opening(OpeningServer<C2S, S2C, C>),
-    Open(OpenServer<C2S, S2C, C>),
-}
-
-impl<C2S, S2C, C> WebTransportServer<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
+    P: Protocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
 {
     /// Creates a new server which is not open for connections, and is not
     /// starting to open.
@@ -81,7 +57,7 @@ where
     pub fn open(
         &mut self,
         config: ServerConfig,
-    ) -> Result<impl Future<Output = ()> + Send, WebTransportError<C2S, S2C, C>> {
+    ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
         match self.state {
             State::Closed => {
                 let (server, backend) = OpeningServer::new(config);
@@ -97,9 +73,7 @@ where
     /// # Errors
     ///
     /// Errors if this server is not open.
-    pub fn local_addr(
-        &self,
-    ) -> Result<Result<SocketAddr, &io::Error>, WebTransportError<C2S, S2C, C>> {
+    pub fn local_addr(&self) -> Result<Result<SocketAddr, &io::Error>, WebTransportError<P>> {
         match &self.state {
             State::Closed | State::Opening(_) => Err(WebTransportError::BackendClosed),
             State::Open(server) => Ok(server.local_addr()),
@@ -107,19 +81,14 @@ where
     }
 }
 
-impl<C2S, S2C, C> TransportServer<C2S, S2C> for WebTransportServer<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
+impl<P: Protocol> TransportServer<P> for WebTransportServer<P> {
     type Client = ClientKey;
 
-    type Error = WebTransportError<C2S, S2C, C>;
+    type Error = WebTransportError<P>;
 
     type ConnectionInfo = EndpointInfo;
 
-    type Event = ServerEvent<C2S, S2C, C>;
+    type Event = ServerEvent<P>;
 
     fn connection_info(&self, client: Self::Client) -> Option<Self::ConnectionInfo> {
         match &self.state {
@@ -139,8 +108,8 @@ where
     fn send(
         &mut self,
         client: Self::Client,
-        msg: impl Into<S2C>,
-    ) -> Result<(), WebTransportError<C2S, S2C, C>> {
+        msg: impl Into<P::S2C>,
+    ) -> Result<(), WebTransportError<P>> {
         match &mut self.state {
             State::Closed | State::Opening(_) => Err(WebTransportError::BackendClosed),
             State::Open(server) => server.send(client, msg),
@@ -180,21 +149,13 @@ where
     }
 }
 
-impl<C2S, S2C, C> OpeningServer<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
+impl<P: Protocol> OpeningServer<P> {
     fn new(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel();
-        (
-            Self { recv_open },
-            backend::start::<C2S, S2C, C>(config, send_open),
-        )
+        (Self { recv_open }, backend::start::<P>(config, send_open))
     }
 
-    fn poll(&mut self) -> Poll<OpenServerResult<C2S, S2C, C>> {
+    fn poll(&mut self) -> Poll<OpenServerResult<P>> {
         match self.recv_open.try_recv() {
             Ok(result) => Poll::Ready(result),
             Err(oneshot::error::TryRecvError::Empty) => Poll::Pending,
@@ -205,12 +166,7 @@ where
     }
 }
 
-impl<C2S, S2C, C> OpenServer<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
+impl<P: Protocol> OpenServer<P> {
     fn local_addr(&self) -> Result<SocketAddr, &io::Error> {
         self.local_addr.as_ref().map(|addr| *addr)
     }
@@ -226,11 +182,7 @@ where
         })
     }
 
-    fn send(
-        &self,
-        client: ClientKey,
-        msg: impl Into<S2C>,
-    ) -> Result<(), WebTransportError<C2S, S2C, C>> {
+    fn send(&self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), WebTransportError<P>> {
         let Some(state) = self.clients.get(client) else {
             return Err(WebTransportError::NoClient(client));
         };
@@ -245,12 +197,7 @@ where
             .map_err(|_| WebTransportError::NotConnected(client))
     }
 
-    fn recv(
-        &mut self,
-    ) -> (
-        Vec<ServerEvent<C2S, S2C, C>>,
-        Result<(), WebTransportError<C2S, S2C, C>>,
-    ) {
+    fn recv(&mut self) -> (Vec<ServerEvent<P>>, Result<(), WebTransportError<P>>) {
         let mut events = Vec::new();
         loop {
             match self.recv_client.try_recv() {
@@ -276,10 +223,7 @@ where
         (events, Ok(()))
     }
 
-    fn disconnect(
-        &mut self,
-        client: impl Into<ClientKey>,
-    ) -> Result<(), WebTransportError<C2S, S2C, C>> {
+    fn disconnect(&mut self, client: impl Into<ClientKey>) -> Result<(), WebTransportError<P>> {
         let client = client.into();
         match self.clients.get_mut(client) {
             Some(client) => {
@@ -291,16 +235,12 @@ where
     }
 }
 
-fn recv_client<C2S, S2C, C>(
+fn recv_client<P: Protocol>(
     client: ClientKey,
-    state: &mut ClientState<C2S, S2C, C>,
-    events: &mut Vec<ServerEvent<C2S, S2C, C>>,
+    state: &mut ClientState<P>,
+    events: &mut Vec<ServerEvent<P>>,
     to_remove: &mut Vec<ClientKey>,
-) where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
+) {
     match state {
         ClientState::Incoming(incoming) => match incoming.recv_accepted.try_recv() {
             Ok(Ok(accepted)) => {

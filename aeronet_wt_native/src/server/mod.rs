@@ -1,24 +1,27 @@
 mod backend;
 mod frontend;
 
+use aeronet::{TryFromBytes, TryIntoBytes, OnChannel};
 pub use frontend::*;
 
-use std::{io, net::SocketAddr};
+use std::{fmt::Debug, io, net::SocketAddr};
 
-use aeronet::{ChannelKey, Message, OnChannel, TryFromBytes, TryIntoBytes};
 use derivative::Derivative;
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{ClientKey, EndpointInfo};
+use crate::{ClientKey, EndpointInfo, Protocol};
+
+type WebTransportError<P> =
+    crate::WebTransportError<P, <P as aeronet::Protocol>::S2C, <P as aeronet::Protocol>::C2S>;
 
 /// Event raised by a [`WebTransportServer`].
 #[derive(Debug)]
-pub enum ServerEvent<C2S, S2C, C>
+pub enum ServerEvent<P>
 where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
+    P: Protocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
 {
     /// The server backend has been set up and is ready to accept connections.
     Opened,
@@ -57,7 +60,7 @@ where
         /// The key of the client which sent the message.
         client: ClientKey,
         /// The message.
-        msg: C2S,
+        msg: P::C2S,
     },
     /// A client has lost connection from this server, which could not be
     /// recovered from.
@@ -67,24 +70,24 @@ where
         /// The key of the client.
         client: ClientKey,
         /// The reason why the client lost connection.
-        cause: WebTransportError<C2S, S2C, C>,
+        cause: WebTransportError<P>,
     },
     /// The server backend has been shut down, all client connections have been
     /// dropped, and the backend must be re-opened.
     Closed {
         /// The reason why the backend was closed.
-        cause: WebTransportError<C2S, S2C, C>,
+        cause: WebTransportError<P>,
     },
 }
 
-impl<C2S, S2C, C> From<ServerEvent<C2S, S2C, C>>
-    for Option<aeronet::ServerEvent<C2S, ClientKey, WebTransportError<C2S, S2C, C>>>
+impl<P> From<ServerEvent<P>>
+    for Option<aeronet::ServerEvent<P, WebTransportServer<P>>>
 where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
+    P: Protocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
 {
-    fn from(value: ServerEvent<C2S, S2C, C>) -> Self {
+    fn from(value: ServerEvent<P>) -> Self {
         match value {
             ServerEvent::Opened => None,
             ServerEvent::Incoming { .. } => None,
@@ -101,104 +104,85 @@ where
 
 // server states
 
-type WebTransportError<C2S, S2C, C> = crate::WebTransportError<S2C, C2S, C>;
+/// Implementation of [`TransportServer`] using the WebTransport protocol.
+///
+/// See the [crate-level docs](crate).
+#[derive(Debug)]
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
+pub struct WebTransportServer<P: Protocol> {
+    state: State<P>,
+}
 
-#[derive(Derivative)]
-#[derivative(Debug)]
-struct OpeningServer<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    #[derivative(Debug = "ignore")]
-    recv_open: oneshot::Receiver<OpenServerResult<C2S, S2C, C>>,
+#[derive(Debug)]
+enum State<P: Protocol> {
+    Closed,
+    Opening(OpeningServer<P>),
+    Open(OpenServer<P>),
 }
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct OpenServer<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    local_addr: Result<SocketAddr, io::Error>,
-    clients: SlotMap<ClientKey, ClientState<C2S, S2C, C>>,
+struct OpeningServer<P: Protocol> {
     #[derivative(Debug = "ignore")]
-    recv_client: mpsc::UnboundedReceiver<IncomingClient<C2S, S2C, C>>,
+    recv_open: oneshot::Receiver<OpenServerResult<P>>,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug)]
+struct OpenServer<P: Protocol> {
+    local_addr: Result<SocketAddr, io::Error>,
+    clients: SlotMap<ClientKey, ClientState<P>>,
+    #[derivative(Debug = "ignore")]
+    recv_client: mpsc::UnboundedReceiver<IncomingClient<P>>,
     #[derivative(Debug = "ignore")]
     #[allow(dead_code)]
     send_closed: mpsc::Sender<()>,
 }
 
-type OpenServerResult<C2S, S2C, C> =
-    Result<OpenServer<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>;
+type OpenServerResult<P> = Result<OpenServer<P>, WebTransportError<P>>;
 
 // client states
 
 #[derive(Debug)]
-enum ClientState<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
-    Incoming(IncomingClient<C2S, S2C, C>),
-    Accepted(AcceptedClient<C2S, S2C, C>),
-    Connected(ConnectedClient<C2S, S2C, C>),
+enum ClientState<P: Protocol> {
+    Incoming(IncomingClient<P>),
+    Accepted(AcceptedClient<P>),
+    Connected(ConnectedClient<P>),
     Disconnected,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct IncomingClient<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
+struct IncomingClient<P: Protocol> {
     #[derivative(Debug = "ignore")]
-    recv_accepted: oneshot::Receiver<AcceptedClientResult<C2S, S2C, C>>,
+    recv_accepted: oneshot::Receiver<AcceptedClientResult<P>>,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct AcceptedClient<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
+struct AcceptedClient<P: Protocol> {
     authority: String,
     path: String,
     origin: Option<String>,
     user_agent: Option<String>,
     #[derivative(Debug = "ignore")]
-    recv_connected: oneshot::Receiver<ConnectedClientResult<C2S, S2C, C>>,
+    recv_connected: oneshot::Receiver<ConnectedClientResult<P>>,
 }
 
-type AcceptedClientResult<C2S, S2C, C> =
-    Result<AcceptedClient<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>;
+type AcceptedClientResult<P> = Result<AcceptedClient<P>, WebTransportError<P>>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct ConnectedClient<C2S, S2C, C>
-where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
-    C: ChannelKey,
-{
+struct ConnectedClient<P: Protocol> {
     info: EndpointInfo,
     #[derivative(Debug = "ignore")]
     recv_info: mpsc::UnboundedReceiver<EndpointInfo>,
     #[derivative(Debug = "ignore")]
-    recv_c2s: mpsc::UnboundedReceiver<C2S>,
+    recv_c2s: mpsc::UnboundedReceiver<P::C2S>,
     #[derivative(Debug = "ignore")]
-    send_s2c: mpsc::UnboundedSender<S2C>,
+    send_s2c: mpsc::UnboundedSender<P::S2C>,
     #[derivative(Debug = "ignore")]
-    recv_err: oneshot::Receiver<WebTransportError<C2S, S2C, C>>,
+    recv_err: oneshot::Receiver<WebTransportError<P>>,
 }
 
-type ConnectedClientResult<C2S, S2C, C> =
-    Result<ConnectedClient<C2S, S2C, C>, WebTransportError<C2S, S2C, C>>;
+type ConnectedClientResult<P> = Result<ConnectedClient<P>, WebTransportError<P>>;

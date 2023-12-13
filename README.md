@@ -74,8 +74,6 @@ if let Some(conn_info) = client.connection_info() {
 
 # Architecture
 
-## Transport
-
 The traits defined in this crate lay out a **client/server** architecture - one central server which
 multiple clients can connect to. The most popular alternative is **peer-to-peer**, but explaining
 the differences, advantages, and disadvantages of these architectures are outside the scope of this.
@@ -109,7 +107,7 @@ This crate abstracts over the complexities of connection by defining two states:
 
 Although the networking implementation is likely to be much more complex, including encryption,
 handshakes, etc., these two states can be used as a basic contract for networking code. However,
-the implementation may also choose to expose some of these details itself.
+the implementation may also choose to expose some more of these details.
 
 # With Bevy
 

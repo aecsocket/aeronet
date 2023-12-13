@@ -4,46 +4,43 @@ use tokio::sync::mpsc;
 use tracing::debug;
 use wtransport::{datagram::Datagram, error::ConnectionError, Connection, RecvStream, SendStream};
 
-use crate::{ChannelError, EndpointInfo, WebTransportError};
+use crate::{ChannelError, EndpointInfo, Protocol, WebTransportError};
 
 // establishing channels
 
-pub(super) struct ChannelsState<S, R, C>
+pub(super) struct ChannelsState<P, S, R>
 where
+    P: Protocol,
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
-    C: ChannelKey,
 {
-    channels: Vec<ChannelState<C>>,
+    channels: Vec<ChannelState<P>>,
     recv_streams: mpsc::UnboundedReceiver<R>,
-    recv_err: mpsc::UnboundedReceiver<WebTransportError<S, R, C>>,
+    recv_err: mpsc::UnboundedReceiver<WebTransportError<P, S, R>>,
 }
 
-enum ChannelState<C>
-where
-    C: ChannelKey,
-{
-    Datagram { channel: C },
-    Stream { channel: C, send_stream: SendStream },
+enum ChannelState<P: Protocol> {
+    Datagram { channel: P::Channel },
+    Stream { channel: P::Channel, send_stream: SendStream },
 }
 
-pub(super) async fn establish_channels<S, R, C, const OPENS: bool>(
+pub(super) async fn establish_channels<P, S, R, const OPENS: bool>(
     conn: &Connection,
-) -> Result<ChannelsState<S, R, C>, WebTransportError<S, R, C>>
+) -> Result<ChannelsState<P, S, R>, WebTransportError<P, S, R>>
 where
+    P: Protocol,
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
-    C: ChannelKey,
 {
     let (send_streams, recv_streams) = mpsc::unbounded_channel();
     let (send_err, recv_err) = mpsc::unbounded_channel();
-    let channels = C::ALL.iter().map(|channel| {
+    let channels = P::Channel::ALL.iter().map(|channel| {
         let send_r = send_streams.clone();
         let send_err = send_err.clone();
         async move {
-            establish_channel::<S, R, C, OPENS>(conn, channel.clone(), send_r, send_err)
+            establish_channel::<P, S, R, OPENS>(conn, channel.clone(), send_r, send_err)
                 .await
-                .map_err(|err| WebTransportError::OnChannel(channel.clone(), err))
+                .map_err(|err| WebTransportError::<P, S, R>::OnChannel(channel.clone(), err))
         }
     });
     let channels = try_join_all(channels).await?;
@@ -54,35 +51,35 @@ where
     })
 }
 
-async fn establish_channel<S, R, C, const OPENS: bool>(
+async fn establish_channel<P, S, R, const OPENS: bool>(
     conn: &Connection,
-    channel: C,
+    channel: P::Channel,
     send_r: mpsc::UnboundedSender<R>,
-    send_err: mpsc::UnboundedSender<WebTransportError<S, R, C>>,
-) -> Result<ChannelState<C>, ChannelError<S, R>>
+    send_err: mpsc::UnboundedSender<WebTransportError<P, S, R>>,
+) -> Result<ChannelState<P>, ChannelError<S, R>>
 where
+    P: Protocol,
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
-    C: ChannelKey,
 {
     match channel.kind() {
         ChannelKind::Unreliable => Ok(ChannelState::Datagram { channel }),
         ChannelKind::ReliableUnordered | ChannelKind::ReliableOrdered => {
-            establish_stream::<S, R, C, OPENS>(conn, channel, send_r, send_err).await
+            establish_stream::<P, S, R, OPENS>(conn, channel, send_r, send_err).await
         }
     }
 }
 
-async fn establish_stream<S, R, C, const OPENS: bool>(
+async fn establish_stream<P, S, R, const OPENS: bool>(
     conn: &Connection,
-    channel: C,
+    channel: P::Channel,
     send_r: mpsc::UnboundedSender<R>,
-    send_err: mpsc::UnboundedSender<WebTransportError<S, R, C>>,
-) -> Result<ChannelState<C>, ChannelError<S, R>>
+    send_err: mpsc::UnboundedSender<WebTransportError<P, S, R>>,
+) -> Result<ChannelState<P>, ChannelError<S, R>>
 where
+    P: Protocol,
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
-    C: ChannelKey,
 {
     let (send_stream, recv_stream) = if OPENS {
         conn.open_bi()
@@ -99,7 +96,7 @@ where
         tokio::spawn(async move {
             #[allow(clippy::large_futures)] // this future is going on the heap anyway
             if let Err(err) = handle_stream::<S, R>(recv_stream, send_r).await {
-                let _ = send_err.send(WebTransportError::OnChannel(channel, err));
+                let _ = send_err.send(WebTransportError::<P, S, R>::OnChannel(channel, err));
             }
         });
     }
@@ -140,17 +137,17 @@ where
 
 // connection handling
 
-pub(super) async fn handle_connection<S, R, C>(
+pub(super) async fn handle_connection<P, S, R>(
     conn: Connection,
-    channels_state: ChannelsState<S, R, C>,
+    channels_state: ChannelsState<P, S, R>,
     send_info: mpsc::UnboundedSender<EndpointInfo>,
     send_r: mpsc::UnboundedSender<R>,
     mut recv_s: mpsc::UnboundedReceiver<S>,
-) -> Result<(), WebTransportError<S, R, C>>
+) -> Result<(), WebTransportError<P, S, R>>
 where
-    S: Message + TryIntoBytes + OnChannel<Channel = C>,
+    P: Protocol,
+    S: Message + TryIntoBytes + OnChannel<Channel = P::Channel>,
     R: Message + TryFromBytes,
-    C: ChannelKey,
 {
     let ChannelsState {
         mut channels,
@@ -173,11 +170,11 @@ where
                     debug!("Frontend closed");
                     return Ok(());
                 };
-                send::<S, R, C>(&conn, &mut channels, msg).await?;
+                send::<P, S, R>(&conn, &mut channels, msg).await?;
             }
             result = conn.receive_datagram() => {
                 recv_datagram(result, &send_r)
-                    .map_err(|err| WebTransportError::OnDatagram(err))?;
+                    .map_err(|err| WebTransportError::<P, S, R>::OnDatagram(err))?;
             }
             Some(msg) = recv_streams.recv() => {
                 let _ = send_r.send(msg);
@@ -189,15 +186,15 @@ where
     }
 }
 
-async fn send<S, R, C>(
+async fn send<P, S, R>(
     conn: &Connection,
-    channels: &mut [ChannelState<C>],
+    channels: &mut [ChannelState<P>],
     msg: S,
-) -> Result<(), WebTransportError<S, R, C>>
+) -> Result<(), WebTransportError<P, S, R>>
 where
-    S: Message + TryIntoBytes + OnChannel<Channel = C>,
+    P: Protocol,
+    S: Message + TryIntoBytes + OnChannel<Channel = P::Channel>,
     R: Message + TryFromBytes,
-    C: ChannelKey,
 {
     let (channel, result) = match &mut channels[msg.channel().index()] {
         ChannelState::Datagram { channel } => (channel.clone(), send_datagram::<S, R>(conn, &msg)),
@@ -207,7 +204,7 @@ where
         } => (channel.clone(), send_stream::<S, R>(send, msg).await),
     };
 
-    result.map_err(|err| WebTransportError::OnChannel(channel, err))
+    result.map_err(|err| WebTransportError::<P, S, R>::OnChannel(channel, err))
 }
 
 fn send_datagram<S, R>(conn: &Connection, msg: &S) -> Result<(), ChannelError<S, R>>

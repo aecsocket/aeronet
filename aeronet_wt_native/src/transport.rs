@@ -1,4 +1,4 @@
-use std::{io, net::SocketAddr, time::Duration};
+use std::{fmt::Debug, io, net::SocketAddr, time::Duration};
 
 use aeronet::{ChannelKey, Message, RemoteAddr, Rtt, TryFromBytes, TryIntoBytes};
 use wtransport::{
@@ -13,6 +13,13 @@ slotmap::new_key_type! {
     /// Key type used to uniquely identify a client connected to a
     /// [`WebTransportServer`].
     pub struct ClientKey;
+}
+
+/// Extension of [`aeronet::Protocol`] for WebTransport implementations.
+pub trait Protocol: aeronet::Protocol {
+    /// The type of [`ChannelKey`] used to specify along what channel a message
+    /// is sent.
+    type Channel: ChannelKey;
 }
 
 /// Statistics on the network state of a [`Connection`] managed by an endpoint.
@@ -57,11 +64,11 @@ impl RemoteAddr for EndpointInfo {
 
 /// Error that occurs when processing a WebTransport transport implementation.
 #[derive(Debug, thiserror::Error)]
-pub enum WebTransportError<S, R, C>
+pub enum WebTransportError<P, S, R>
 where
+    P: Protocol,
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
-    C: ChannelKey,
 {
     /// The backend that handles connections asynchronously is shut down or not
     /// ready for this operation.
@@ -88,7 +95,7 @@ where
     OnDatagram(#[source] ChannelError<S, R>),
     /// An error occurred while processing a channel.
     #[error("on {0:?}")]
-    OnChannel(C, #[source] ChannelError<S, R>),
+    OnChannel(P::Channel, #[source] ChannelError<S, R>),
     /// Attempted to perform an operation on a client which does not exist.
     #[error("no client with key {0:?}")]
     NoClient(ClientKey),

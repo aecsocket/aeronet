@@ -35,8 +35,11 @@ pub trait TransportServer<P: Protocol> {
     ///
     /// The data that this function returns is left up to the implementation,
     /// but in general this allows accessing:
-    /// * the round-trip time, or ping ([`crate::Rtt`])
-    /// * the remote socket address ([`crate:RemoteAddr`])
+    /// * the round-trip time, or ping ([`Rtt`])
+    /// * the remote socket address ([`RemoteAddr`])
+    ///
+    /// [`Rtt`]: crate::Rtt
+    /// [`RemoteAddr`]: crate::RemoteAddr
     fn connection_info(&self, client: Self::Client) -> Option<Self::ConnectionInfo>;
 
     /// Gets if the given client is currently connected.

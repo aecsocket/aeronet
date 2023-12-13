@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 /// Represents what kind of method is used to transport data along a connection.
 ///
 /// A connection may support different methods for transporting messages, where
@@ -91,7 +93,7 @@ pub enum ChannelKind {
 /// This should be derived rather than implemented manually - see
 /// [`aeronet_derive::ChannelKey`]. Otherwise, transport implementations may
 /// panic.
-pub unsafe trait ChannelKey: Send + Sync + Sized + Clone + 'static {
+pub unsafe trait ChannelKey: Send + Sync + Sized + Debug + Clone + 'static {
     /// The set of all valid variants of [`ChannelKey`].
     ///
     /// # Safety
@@ -119,7 +121,7 @@ pub unsafe trait ChannelKey: Send + Sync + Sized + Clone + 'static {
 /// message is sent; *incoming* messages are simply received without any
 /// info on what channel it was received on.
 pub trait OnChannel {
-    /// The type of channel key that [`OnChannel::channel_key`] returns.
+    /// The type of channel key that [`OnChannel::channel`] returns.
     type Channel: ChannelKey;
 
     /// The channel key along which this message is sent.

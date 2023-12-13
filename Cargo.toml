@@ -4,7 +4,7 @@ members = [
     "aeronet",
     "aeronet_derive",
     "aeronet_channel",
-    #"aeronet_wt_native",
+    "aeronet_wt_native",
     #"aeronet_wt_wasm",
 ]
 
