@@ -108,8 +108,6 @@ pub trait TransportServer<P: Protocol> {
 pub enum ServerEvent<P: Protocol, T: TransportServer<P>> {
     /// A client has fully connected to this server.
     ///
-    /// See [`TransportServer`] for the definition of "connected".
-    ///
     /// Use this event to do client setup logic, e.g. start loading player data.
     Connected {
         /// The key of the connected client.
@@ -119,7 +117,7 @@ pub enum ServerEvent<P: Protocol, T: TransportServer<P>> {
     Recv {
         /// The key of the client which sent the message.
         client: T::Client,
-        /// The message.
+        /// The message received.
         msg: P::C2S,
     },
     /// A client has lost connection from this server, which cannot be recovered

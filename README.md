@@ -52,12 +52,12 @@ the transport, to do functions such as sending and receiving data.
 use std::time::Duration;
 use aeronet::{TransportClient, Rtt};
 
-#[derive(Debug, Clone)]
-pub enum C2S {
-    Move(f32),
-    Shoot,
-}
-
+# #[derive(Debug, Clone)]
+# pub enum C2S {
+#     Move(f32),
+#     Shoot,
+# }
+#
 # fn run<Client, ConnInfo>(mut client: Client)
 # where
 #     Client: TransportClient<C2S, (), ConnectionInfo = ConnInfo>,
@@ -84,13 +84,20 @@ A transport is not necessarily **networked** - that is, one that communicates to
 probably using the internet. Instead, transport can also work using something as simple as in-memory
 channels or some other non-networked method.
 
-Transport traits also provide no guarantees about in what form the messages are transported. The
+The method used to transport the data itself (i.e. unreliable, reliable ordered, etc.) is also
+exposed by this crate - see [`ChannelKind`] for more info.
+
+## Protocol
+
+The type of data that is sent between endpoints is a type implementing [`Message`], but the exact
+type is left up to the user of the transport. The user must define their own type implementing
+[`Protocol`], which specifies what type of message is sent client-to-server and server-to-client,
+then use this protocol type throughout their transports.
+
+Transport traits provide no guarantees about in what form the messages are transported. The
 memory (and therefore ownership) of the value may be sent directly, in the case of an in-memory
 MPSC channel, or may have to be serialized to/from a byte form before being transported. In this
 case, [`TryFromBytes`] and [`TryIntoBytes`] are useful to look at.
-
-The method used to transport the data itself (i.e. unreliable, reliable ordered, etc.) is also
-exposed by this crate - see [`ChannelKind`] for more info.
 
 ## Connection
 

@@ -137,7 +137,7 @@ pub struct ToServer<P: Protocol> {
 
 /// Forcefully disconnects the client from its currently connected server.
 /// 
-/// See [`TransportClient::disconnect`].s
+/// See [`TransportClient::disconnect`].
 #[derive(Debug, Clone, Event)]
 pub struct DisconnectLocalClient;
 

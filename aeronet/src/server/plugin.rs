@@ -7,6 +7,24 @@ use crate::{TransportServer, ServerEvent, Protocol};
 
 /// Provides systems to send commands to, and receive events from, a
 /// [`TransportServer`].
+/// 
+/// To use a struct version of this plugin, see [`TransportServerPlugin`].
+/// 
+/// With this plugin added, the transport `T` will receive data and update its
+/// state on [`PreUpdate`], and send out messages triggered by the app on
+/// [`PostUpdate`]. This is controlled by the [`TransportServerSet`].
+/// 
+/// This plugin emits the events:
+/// * [`RemoteClientConnected`]
+/// * [`FromClient`]
+/// * [`RemoteClientDisconnected`]
+/// 
+/// ...and consumes the events:
+/// * [`ToClient`]
+/// * [`DisconnectRemoteClient`]
+/// 
+/// Note that errors during operation will be silently ignored, e.g. if you
+/// attempt to send a message to an unconnected client.
 pub fn transport_server_plugin<P, T>(app: &mut App)
 where
     P: Protocol,
@@ -70,31 +88,60 @@ pub enum TransportServerSet {
     Send,
 }
 
+/// A client has fully connected to this server.
+///
+/// Use this event to do client setup logic, e.g. start loading player data.
+/// 
+/// See [`ServerEvent::Connected`].
 #[derive(Debug, Clone, Event)]
 pub struct RemoteClientConnected<P: Protocol, T: TransportServer<P>> {
+    /// The key of the connected client.
     pub client: T::Client,
 }
 
+/// A client sent a message to this server.
+/// 
+/// See [`ServerEvent::Recv`].
 #[derive(Debug, Clone, Event)]
 pub struct FromClient<P: Protocol, T: TransportServer<P>> {
+    /// The key of the client which sent the message.
     pub client: T::Client,
+    /// The message received.
     pub msg: P::C2S,
 }
 
+/// A client has lost connection from this server, which cannot be recovered
+/// from.
+///
+/// Use this event to do client teardown logic, e.g. removing the player
+/// from the world.
+/// 
+/// See [`ServerEvent::Disconnected`].
 #[derive(Debug, Clone, Event)]
 pub struct RemoteClientDisconnected<P: Protocol, T: TransportServer<P>> {
+    /// The key of the client.
     pub client: T::Client,
+    /// The reason why the client lost connection.
     pub cause: T::Error,
 }
 
+/// Sends a message along the server to a client.
+/// 
+/// See [`TransportServer::send`].
 #[derive(Debug, Clone, Event)]
 pub struct ToClient<P: Protocol, T: TransportServer<P>> {
+    /// The key of the client to send to.
     pub client: T::Client,
+    /// The message to send.
     pub msg: P::S2C,
 }
 
+/// Forcefully disconnects a client from this server.
+/// 
+/// See [`TransportServer::disconnect`].
 #[derive(Debug, Clone, Event)]
 pub struct DisconnectRemoteClient<P: Protocol, T: TransportServer<P>> {
+    /// The key of the client to disconnect.
     pub client: T::Client,
 }
 

@@ -2,9 +2,29 @@ use std::{net::SocketAddr, time::Duration};
 
 use crate::Message;
 
+/// Defines the types of messages sent across a transport channel.
+/// 
+/// You should define one type that implements this trait in a single central
+/// place in your app, and use it as the protocol type parameter on transport
+/// implementations.
+/// 
+/// ```
+/// use aeronet::Protocol;
+/// 
+/// struct AppProtocol;
+/// 
+/// struct AppMessage { /* ... */ }
+/// 
+/// impl Protocol for AppProtocol {
+///     type C2S = AppMessage;
+///     type S2C = AppMessage;
+/// }
+/// ```
 pub trait Protocol: Send + Sync + 'static {
+    /// The type of message sent from the client to the server.
     type C2S: Message;
 
+    /// The type of message sent from the server to the client.
     type S2C: Message;
 }
 
