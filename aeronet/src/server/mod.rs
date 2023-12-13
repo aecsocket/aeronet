@@ -16,7 +16,7 @@ where
     S2C: Message,
 {
     /// Key type that this server uses to uniquely identify clients.
-    type Client: Send + Sync + 'static;
+    type Client: Send + Sync + Clone + 'static;
 
     /// Error returned from operations on this server.
     type Error: Send + Sync + 'static;

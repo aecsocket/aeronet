@@ -5,7 +5,8 @@ use derivative::Derivative;
 
 use crate::{TransportClient, Message, ClientEvent};
 
-/// Provides systems to send and receive data to/from a [`TransportClient`].
+/// Provides systems to send commands to, and receive events from, a
+/// [`TransportClient`].
 /// 
 /// To use a struct version of this plugin, see [`TransportClientPlugin`].
 /// 
@@ -48,14 +49,15 @@ where
             PostUpdate,
             (
                 send::<C2S, S2C, T>,
-                disconnect::<C2S, S2C, T>,
+                disconnect::<C2S, S2C, T>.run_if(on_event::<DisconnectLocalClient>()),
             )
             .chain()
             .in_set(TransportClientSet::Send),
         );
 }
 
-/// Provides systems to send and receive data to/from a [`TransportClient`].
+/// Provides systems to send commands to, and receive events from, a
+/// [`TransportClient`].
 /// 
 /// See [`transport_client_plugin`].
 #[derive(Derivative)]
@@ -96,33 +98,48 @@ pub enum TransportClientSet {
     Send,
 }
 
-/// The client finished connecting to a server.
+/// This client has fully connected to a server.
+///
+/// Use this event to do setup logic, e.g. start loading the level.
 /// 
 /// See [`ClientEvent::Connected`].
 #[derive(Debug, Clone, Event)]
 pub struct LocalClientConnected;
 
-/// The client received a message from the server.
+/// The server sent a message to this client.
 /// 
 /// See [`ClientEvent::Recv`].
 #[derive(Debug, Clone, Event)]
-pub struct FromServer<S2C>(pub S2C);
+pub struct FromServer<S2C> {
+    /// The message received.
+    pub msg: S2C,
+}
 
-/// The client lost connection from the server.
+/// This client has lost connection from its previously connected server,
+/// which cannot be recovered from.
+///
+/// Use this event to do teardown logic, e.g. changing state to the main
+/// menu.
 /// 
 /// See [`ClientEvent::Disconnected`].
 #[derive(Debug, Clone, Event)]
-pub struct LocalClientDisconnected<E>(pub E);
+pub struct LocalClientDisconnected<E> {
+    /// The reason why the client lost connection.
+    pub cause: E,
+}
 
 /// Sends a message along the client to the server.
 /// 
 /// See [`TransportClient::send`].
 #[derive(Debug, Clone, Event)]
-pub struct ToServer<C2S>(pub C2S);
+pub struct ToServer<C2S> {
+    /// The message to send.
+    pub msg: C2S,
+}
 
 /// Forcefully disconnects the client from its currently connected server.
 /// 
-/// See [`TransportClient::disconnect`].
+/// See [`TransportClient::disconnect`].s
 #[derive(Debug, Clone, Event)]
 pub struct DisconnectLocalClient;
 
@@ -143,9 +160,9 @@ where
         match event.into() {
             None => {},
             Some(ClientEvent::Connected) => connected.send(LocalClientConnected),
-            Some(ClientEvent::Recv { msg }) => recv.send(FromServer(msg)),
+            Some(ClientEvent::Recv { msg }) => recv.send(FromServer { msg }),
             Some(ClientEvent::Disconnected { cause }) => {
-                disconnected.send(LocalClientDisconnected(cause));
+                disconnected.send(LocalClientDisconnected { cause });
             }
         }
     }
@@ -160,7 +177,7 @@ where
     S2C: Message,
     T: TransportClient<C2S, S2C> + Resource,
 {
-    for ToServer(msg) in send.read() {
+    for ToServer { msg } in send.read() {
         let _ = client.send(msg.clone());
     }
 }

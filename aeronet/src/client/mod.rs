@@ -99,7 +99,7 @@ pub enum ClientEvent<S2C, E> {
     Connected,
     /// The server sent a message to this client.
     Recv {
-        /// The message.
+        /// The message received.
         msg: S2C,
     },
     /// This client has lost connection from its previously connected server,
