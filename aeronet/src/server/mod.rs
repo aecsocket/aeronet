@@ -26,7 +26,9 @@ pub trait TransportServer<P: Protocol> {
     /// This event type must be able to be potentially converted into a
     /// [`ServerEvent`]. If an event value cannot cleanly map to a single
     /// generic [`ServerEvent`], its [`Into`] impl must return [`None`].
-    type Event: Into<Option<ServerEvent<P, Self>>> where Self: Sized;
+    type Event: Into<Option<ServerEvent<P, Self>>>
+    where
+        Self: Sized;
 
     /// Gets the current connection information and statistics on a connected
     /// client.
@@ -84,7 +86,9 @@ pub trait TransportServer<P: Protocol> {
     ///     implementations
     ///   * a single event returned from this is not guaranteed to map to a
     ///     specific [`ServerEvent`]
-    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a where Self: Sized;
+    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a
+    where
+        Self: Sized;
 
     /// Forces a client to disconnect from this server.
     ///

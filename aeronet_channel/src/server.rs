@@ -1,6 +1,6 @@
 use std::mem;
 
-use aeronet::{TransportServer, Protocol};
+use aeronet::{Protocol, TransportServer};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;

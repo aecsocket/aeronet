@@ -1,4 +1,4 @@
-use aeronet::{ServerEvent, TransportClient, Protocol};
+use aeronet::{Protocol, ServerEvent, TransportClient};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 
@@ -58,10 +58,7 @@ impl<P: Protocol> ChannelClient<P> {
     /// # Errors
     ///
     /// Errors if this client is already connected to a server.
-    pub fn connect(
-        &mut self,
-        server: &mut ChannelServer<P>,
-    ) -> Result<ClientKey, ChannelError> {
+    pub fn connect(&mut self, server: &mut ChannelServer<P>) -> Result<ClientKey, ChannelError> {
         match self.state {
             State::Disconnected => {
                 let (server, key) = ConnectedClient::new(server);

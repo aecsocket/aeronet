@@ -3,7 +3,8 @@
 use std::{convert::Infallible, mem, string::FromUtf8Error};
 
 use aeronet::{
-    ClientEvent, ServerEvent, TransportClient, TransportServer, TryFromBytes, TryIntoBytes, Protocol,
+    ClientEvent, Protocol, ServerEvent, TransportClient, TransportServer, TryFromBytes,
+    TryIntoBytes,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::{log::LogPlugin, prelude::*};
@@ -47,47 +48,18 @@ impl Protocol for AppProtocol {
 
 // resources
 
-type Client = ChannelClient<AppProtocol>;
-type Server = ChannelServer<AppProtocol>;
-
-#[derive(Debug, Resource)]
+#[derive(Debug, Default, Resource)]
 struct ClientState<const N: usize> {
-    client: Client,
     scrollback: Vec<String>,
     buf: String,
 }
 
-impl<const N: usize> ClientState<N> {
-    fn new(client: Client) -> Self {
-        Self {
-            client,
-            scrollback: Vec::new(),
-            buf: String::new(),
-        }
-    }
-
-    fn push(&mut self, text: impl Into<String>) {
-        self.scrollback.push(text.into());
-    }
-}
-
 #[derive(Debug, Resource)]
+struct Client<const N: usize>(ChannelClient<AppProtocol>);
+
+#[derive(Debug, Default, Resource)]
 struct ServerState {
-    server: Server,
     scrollback: Vec<String>,
-}
-
-impl ServerState {
-    fn new(server: Server) -> Self {
-        Self {
-            server,
-            scrollback: Vec::new(),
-        }
-    }
-
-    fn push(&mut self, text: impl Into<String>) {
-        self.scrollback.push(text.into());
-    }
 }
 
 // logic
@@ -101,6 +73,10 @@ fn main() {
             }),
             EguiPlugin,
         ))
+        .init_resource::<ServerState>()
+        .init_resource::<ClientState<1>>()
+        .init_resource::<ClientState<2>>()
+        .init_resource::<ClientState<3>>()
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -125,18 +101,18 @@ fn setup(mut commands: Commands) {
     let (client2, _) = ChannelClient::connected(&mut server);
     let (client3, _) = ChannelClient::connected(&mut server);
 
-    commands.insert_resource(ServerState::new(server));
-    commands.insert_resource(ClientState::<1>::new(client1));
-    commands.insert_resource(ClientState::<2>::new(client2));
-    commands.insert_resource(ClientState::<3>::new(client3));
+    commands.insert_resource(server);
+    commands.insert_resource(Client::<1>(client1));
+    commands.insert_resource(Client::<2>(client2));
+    commands.insert_resource(Client::<3>(client3));
 }
 
-fn update_client<const N: usize>(mut state: ResMut<ClientState<N>>) {
-    for event in state.client.recv() {
+fn update_client<const N: usize>(mut client: ResMut<Client<N>>, mut state: ResMut<ClientState<N>>) {
+    for event in client.0.recv() {
         match event {
-            ClientEvent::Connected => state.push(format!("Connected")),
-            ClientEvent::Recv { msg } => state.push(format!("< {}", msg.0)),
-            ClientEvent::Disconnected { cause } => state.push(format!(
+            ClientEvent::Connected => state.scrollback.push(format!("Connected")),
+            ClientEvent::Recv { msg } => state.scrollback.push(format!("> {}", msg.0)),
+            ClientEvent::Disconnected { cause } => state.scrollback.push(format!(
                 "Disconnected: {:#}",
                 aeronet::error::as_pretty(&cause)
             )),
@@ -144,7 +120,11 @@ fn update_client<const N: usize>(mut state: ResMut<ClientState<N>>) {
     }
 }
 
-fn client_ui<const N: usize>(mut egui: EguiContexts, mut state: ResMut<ClientState<N>>) {
+fn client_ui<const N: usize>(
+    mut egui: EguiContexts,
+    mut client: ResMut<Client<N>>,
+    mut state: ResMut<ClientState<N>>,
+) {
     egui::Window::new(format!("Client {}", N)).show(egui.ctx_mut(), |ui| {
         show_scrollback(ui, &state.scrollback);
 
@@ -155,8 +135,8 @@ fn client_ui<const N: usize>(mut egui: EguiContexts, mut state: ResMut<ClientSta
                 return;
             }
 
-            match state.client.send(buf.clone()) {
-                Ok(_) => state.scrollback.push(format!("> {}", buf)),
+            match client.0.send(buf.clone()) {
+                Ok(_) => state.scrollback.push(format!("< {}", buf)),
                 Err(err) => state
                     .scrollback
                     .push(format!("Error: {:#}", aeronet::error::as_pretty(&err))),
@@ -167,22 +147,25 @@ fn client_ui<const N: usize>(mut egui: EguiContexts, mut state: ResMut<ClientSta
     });
 }
 
-fn update_server(mut state: ResMut<ServerState>) {
-    for event in state.server.recv() {
+fn update_server(mut server: ResMut<ChannelServer<AppProtocol>>, mut state: ResMut<ServerState>) {
+    for event in server.recv() {
         match event {
-            ServerEvent::Connected { client } => state.push(format!("{client:?} connected")),
+            ServerEvent::Connected { client } => {
+                state.scrollback.push(format!("{client:?} connected"))
+            }
             ServerEvent::Recv { client, msg } => {
-                state.push(format!("{client:?} < {}", msg.0));
+                state.scrollback.push(format!("{client:?} > {}", msg.0));
+
                 let msg = format!("You sent: {}", msg.0);
-                match state.server.send(client, msg.clone()) {
-                    Ok(_) => state.push(format!("{client:?} > {msg}")),
-                    Err(err) => state.push(format!(
+                match server.send(client, msg.clone()) {
+                    Ok(_) => state.scrollback.push(format!("{client:?} < {msg}")),
+                    Err(err) => state.scrollback.push(format!(
                         "Failed to send message to {client:?}: {:#}",
                         aeronet::error::as_pretty(&err)
                     )),
                 }
             }
-            ServerEvent::Disconnected { client, cause } => state.push(format!(
+            ServerEvent::Disconnected { client, cause } => state.scrollback.push(format!(
                 "{client:?} disconnected: {:#}",
                 aeronet::error::as_pretty(&cause)
             )),

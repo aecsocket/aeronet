@@ -3,7 +3,9 @@
 use std::{convert::Infallible, mem, string::FromUtf8Error};
 
 use aeronet::{
-    TryFromBytes, TryIntoBytes, TransportClientPlugin, Protocol, LocalClientConnected, FromServer, LocalClientDisconnected, ToServer, RemoteClientConnected, FromClient, RemoteClientDisconnected, ToClient, TransportServerPlugin,
+    FromClient, FromServer, LocalClientConnected, LocalClientDisconnected, Protocol,
+    RemoteClientConnected, RemoteClientDisconnected, ToClient, ToServer, TransportClientPlugin,
+    TransportServerPlugin, TryFromBytes, TryIntoBytes,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::{log::LogPlugin, prelude::*};
@@ -76,8 +78,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            (update_client, client_ui, update_server, server_ui)
-                .chain(),
+            (update_client, client_ui, update_server, server_ui).chain(),
         )
         .run();
 }
@@ -125,7 +126,11 @@ fn update_client(
     }
 }
 
-fn client_ui(mut egui: EguiContexts, mut state: ResMut<ClientState>, mut send: EventWriter<ToServer<AppProtocol>>) {
+fn client_ui(
+    mut egui: EguiContexts,
+    mut state: ResMut<ClientState>,
+    mut send: EventWriter<ToServer<AppProtocol>>,
+) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         show_scrollback(ui, state.scrollback.as_slice());
 
@@ -136,8 +141,10 @@ fn client_ui(mut egui: EguiContexts, mut state: ResMut<ClientState>, mut send: E
                 return;
             }
 
-            send.send(ToServer { msg: AppMessage(buf) });
-            
+            send.send(ToServer {
+                msg: AppMessage(buf),
+            });
+
             ui.memory_mut(|m| m.request_focus(buf_resp.id));
         }
     });
@@ -147,7 +154,9 @@ fn update_server(
     mut state: ResMut<ServerState>,
     mut connected: EventReader<RemoteClientConnected<AppProtocol, ChannelServer<AppProtocol>>>,
     mut recv: EventReader<FromClient<AppProtocol, ChannelServer<AppProtocol>>>,
-    mut disconnected: EventReader<RemoteClientDisconnected<AppProtocol, ChannelServer<AppProtocol>>>,
+    mut disconnected: EventReader<
+        RemoteClientDisconnected<AppProtocol, ChannelServer<AppProtocol>>,
+    >,
     mut send: EventWriter<ToClient<AppProtocol, ChannelServer<AppProtocol>>>,
 ) {
     for RemoteClientConnected { client } in connected.read() {
@@ -159,7 +168,10 @@ fn update_server(
 
         let msg = format!("You sent: {}", msg.0);
         state.scrollback.push(format!("{client:?} < {}", msg));
-        send.send(ToClient { client: client.clone(), msg: AppMessage(msg) });
+        send.send(ToClient {
+            client: client.clone(),
+            msg: AppMessage(msg),
+        });
     }
 
     for RemoteClientDisconnected { client, cause } in disconnected.read() {
