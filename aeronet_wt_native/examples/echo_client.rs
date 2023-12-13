@@ -1,11 +1,11 @@
 //!
 
-use std::{convert::Infallible, string::FromUtf8Error, time::Duration, mem};
+use std::{convert::Infallible, mem, string::FromUtf8Error, time::Duration};
 
 use aeronet::{AsyncRuntime, ChannelKey, OnChannel, TryFromBytes, TryIntoBytes};
 use anyhow::Result;
 use bevy::{log::LogPlugin, prelude::*};
-use bevy_egui::{egui, EguiPlugin, EguiContexts};
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use wtransport::ClientConfig;
 
 // config
@@ -67,10 +67,7 @@ fn main() {
         .init_resource::<AsyncRuntime>()
         .init_resource::<ClientState>()
         .insert_resource(WebTransportClient::disconnected())
-        .add_systems(
-            Update,
-            (update, ui).chain(),
-        )
+        .add_systems(Update, (update, ui).chain())
         .run();
 }
 
@@ -80,12 +77,9 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportClient> {
         .with_no_cert_validation()
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
-
 }
 
-fn update(mut client: ResMut<WebTransportClient>) {
-    
-}
+fn update(mut client: ResMut<WebTransportClient>) {}
 
 fn ui(mut egui: EguiContexts, mut state: ResMut<ClientState>) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {

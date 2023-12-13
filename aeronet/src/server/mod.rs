@@ -1,3 +1,9 @@
+#[cfg(feature = "bevy")]
+mod plugin;
+
+#[cfg(feature = "bevy")]
+pub use plugin::*;
+
 use crate::Message;
 
 /// Allows listening for client connections, and transporting messages to/from

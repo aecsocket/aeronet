@@ -1,3 +1,9 @@
+#[cfg(feature = "bevy")]
+mod plugin;
+
+#[cfg(feature = "bevy")]
+pub use plugin::*;
+
 use crate::Message;
 
 /// Allows connecting to a server, and transporting messages to/from the server.

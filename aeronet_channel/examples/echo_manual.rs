@@ -1,6 +1,6 @@
 //!
 
-use std::{convert::Infallible, string::FromUtf8Error, mem};
+use std::{convert::Infallible, mem, string::FromUtf8Error};
 
 use aeronet::{
     ClientEvent, ServerEvent, TransportClient, TransportServer, TryFromBytes, TryIntoBytes,
@@ -107,7 +107,7 @@ fn main() {
                 update_server,
                 server_ui,
             )
-            .chain(),
+                .chain(),
         )
         .run();
 }

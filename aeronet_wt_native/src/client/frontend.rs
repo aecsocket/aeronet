@@ -9,7 +9,7 @@ use crate::{ClientEvent, EndpointInfo};
 use super::{backend, ConnectedClient, ConnectedClientResult, ConnectingClient, WebTransportError};
 
 /// Implementation of [`TransportClient`] using the WebTransport protocol.
-/// 
+///
 /// See the [crate-level docs](crate).
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
@@ -41,20 +41,22 @@ where
     C: ChannelKey,
 {
     /// Creates a new client which is not connecting to any server.
-    /// 
+    ///
     /// This is useful if you want to prepare a client for connecting, but you
     /// do not have a target server to connect to yet.
-    /// 
+    ///
     /// If you want to create a client and connect to a server immediately after
     /// creation, use [`WebTransportClient::connecting`] instead.
     pub fn disconnected() -> Self {
-        Self { state: State::Disconnected }
+        Self {
+            state: State::Disconnected,
+        }
     }
 
     /// Creates and starts connecting a client to a server.
-    /// 
+    ///
     /// The URL must have protocol `https://`.
-    /// 
+    ///
     /// This returns:
     /// * the client frontend
     ///   * use this throughout your app to interface with the client
@@ -74,13 +76,17 @@ where
     }
 
     /// Attempts to start connecting this client to a server.
-    /// 
+    ///
     /// See [`WebTransportClient::connecting`].
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Errors if this client is already connecting or is connected to a server.
-    pub fn connect(&mut self, config: ClientConfig, url: impl Into<String>) -> Result<impl Future<Output = ()> + Send, WebTransportError<C2S, S2C, C>> {
+    pub fn connect(
+        &mut self,
+        config: ClientConfig,
+        url: impl Into<String>,
+    ) -> Result<impl Future<Output = ()> + Send, WebTransportError<C2S, S2C, C>> {
         match self.state {
             State::Disconnected => {
                 let (client, backend) = ConnectingClient::new(config, url);
@@ -131,8 +137,15 @@ where
                     self.state = State::Disconnected;
                     vec![ClientEvent::Disconnected { cause }].into_iter()
                 }
-            }
-            State::Connected(_) => todo!(),
+            },
+            State::Connected(server) => match server.recv() {
+                (events, Ok(())) => events.into_iter(),
+                (mut events, Err(cause)) => {
+                    self.state = State::Disconnected;
+                    events.push(ClientEvent::Disconnected { cause });
+                    events.into_iter()
+                }
+            },
         }
     }
 
@@ -188,10 +201,17 @@ where
 
     fn send(&mut self, msg: impl Into<C2S>) -> Result<(), WebTransportError<C2S, S2C, C>> {
         let msg = msg.into();
-        self.send_c2s.send(msg).map_err(|_| WebTransportError::BackendClosed)
+        self.send_c2s
+            .send(msg)
+            .map_err(|_| WebTransportError::BackendClosed)
     }
 
-    fn recv(&mut self) {
+    fn recv(
+        &mut self,
+    ) -> (
+        Vec<ClientEvent<C2S, S2C, C>>,
+        Result<(), WebTransportError<C2S, S2C, C>>,
+    ) {
         let mut events = Vec::new();
 
         while let Ok(info) = self.recv_info.try_recv() {
@@ -203,10 +223,9 @@ where
         }
 
         match self.recv_err.try_recv() {
-            Ok(cause) => {
-                events.push(ClientEvent::Disconnected { cause });
-            },
-            Err(_) => todo!(),
+            Ok(cause) => (events, Err(cause)),
+            Err(oneshot::error::TryRecvError::Empty) => (events, Ok(())),
+            Err(oneshot::error::TryRecvError::Closed) => (events, Err(WebTransportError::BackendClosed)),
         }
     }
 }

@@ -42,10 +42,10 @@ where
 {
     /// Creates a new server which is not open for connections, and is not
     /// starting to open.
-    /// 
+    ///
     /// This is useful if you want to prepare a server, but do not want to open
     /// it up to accepting connections yet.
-    /// 
+    ///
     /// If you want to create a server and start listening for connections
     /// immediately after creation, use [`WebTransportServer::opening`] instead.
     pub fn closed() -> Self {
@@ -296,8 +296,7 @@ fn recv_client<C2S, S2C, C>(
     state: &mut ClientState<C2S, S2C, C>,
     events: &mut Vec<ServerEvent<C2S, S2C, C>>,
     to_remove: &mut Vec<ClientKey>,
-)
-where
+) where
     C2S: Message + TryFromBytes,
     S2C: Message + TryIntoBytes + OnChannel<Channel = C>,
     C: ChannelKey,
