@@ -1,22 +1,20 @@
-use std::time::Duration;
+//!
+
+use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
-    AsyncRuntime, DisconnectClient, FromClient, RemoteClientConnected, RemoteClientDisconnected,
-    ServerTransport, ServerTransportPlugin, ToClient, TryFromBytes, TryIntoBytes,
+    AsyncRuntime, ChannelKey, OnChannel, TransportProtocol, TransportServer, TryFromBytes,
+    TryIntoBytes,
 };
-use aeronet_wt_native::{Channels, OnChannel, WebTransportServer};
+use aeronet_wt_native::{ServerEvent, WebTransportProtocol, WebTransportServer};
 use anyhow::Result;
-use bevy::{
-    app::{AppExit, ScheduleRunnerPlugin},
-    log::LogPlugin,
-    prelude::*,
-};
+use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
 
-// config
+// protocol
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Channels)]
-#[channel_kind(Datagram)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ChannelKey)]
+#[channel_kind(Unreliable)]
 struct AppChannel;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, OnChannel)]
@@ -24,26 +22,51 @@ struct AppChannel;
 #[on_channel(AppChannel)]
 struct AppMessage(String);
 
-impl TryFromBytes for AppMessage {
-    fn try_from_bytes(buf: &[u8]) -> Result<Self> {
-        String::from_utf8(buf.to_owned().into_iter().collect())
-            .map(AppMessage)
-            .map_err(Into::into)
+impl<T> From<T> for AppMessage
+where
+    T: Into<String>,
+{
+    fn from(value: T) -> Self {
+        Self(value.into())
     }
 }
 
 impl TryIntoBytes for AppMessage {
-    fn try_into_bytes(self) -> Result<Vec<u8>> {
-        Ok(self.0.into_bytes())
+    type Output<'a> = &'a [u8];
+
+    type Error = Infallible;
+
+    fn try_into_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
+        Ok(self.0.as_bytes())
     }
 }
 
-type Server = WebTransportServer<AppMessage, AppMessage, AppChannel>;
+impl TryFromBytes for AppMessage {
+    type Error = FromUtf8Error;
+
+    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
+        String::from_utf8(buf.to_owned().into_iter().collect()).map(AppMessage)
+    }
+}
+
+struct AppProtocol;
+
+impl TransportProtocol for AppProtocol {
+    type C2S = AppMessage;
+    type S2C = AppMessage;
+}
+
+impl WebTransportProtocol for AppProtocol {
+    type Channel = AppChannel;
+}
+
+type Server = WebTransportServer<AppProtocol>;
 
 // logic
 
 /*
 chromium \
+brave \
 --webtransport-developer-mode \
 --ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
 */
@@ -56,11 +79,10 @@ fn main() {
                 ..default()
             },
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
-            ServerTransportPlugin::<_, _, Server>::default(),
         ))
         .init_resource::<AsyncRuntime>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (reply, log))
+        .add_systems(Update, update_server)
         .run();
 }
 
@@ -75,10 +97,12 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
 }
 
 fn create(rt: &AsyncRuntime) -> Result<Server> {
-    let cert = Certificate::load(
-        "./aeronet_wt_native/examples/cert.pem",
-        "./aeronet_wt_native/examples/key.pem",
-    )?;
+    let cert = tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(Certificate::load(
+            "./aeronet_wt_native/examples/cert.pem",
+            "./aeronet_wt_native/examples/key.pem",
+        ))?;
 
     let config = ServerConfig::builder()
         .with_bind_default(25565)
@@ -86,46 +110,44 @@ fn create(rt: &AsyncRuntime) -> Result<Server> {
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    let (front, back) = aeronet_wt_native::create_server(config);
-    rt.0.spawn(async move {
-        back.start().await.unwrap();
-    });
-    Ok(front)
+    let (server, backend) = WebTransportServer::opening(config);
+    rt.0.spawn(backend);
+
+    Ok(WebTransportServer::from(server))
 }
 
-fn log(
-    server: Res<Server>,
-    mut connected: EventReader<RemoteClientConnected>,
-    mut disconnected: EventReader<RemoteClientDisconnected>,
-) {
-    for RemoteClientConnected(client) in connected.read() {
-        info!("Client {client} connected");
-        info!("  Info: {:?}", server.client_info(*client));
-    }
-
-    for RemoteClientDisconnected(client, reason) in disconnected.read() {
-        info!(
-            "Client {client} disconnected: {:#}",
-            aeronet::error::as_pretty(reason),
-        );
-        info!("  Info: {:?}", server.client_info(*client));
-    }
-}
-
-fn reply(
-    mut recv: EventReader<FromClient<AppMessage>>,
-    mut send: EventWriter<ToClient<AppMessage>>,
-    mut disconnect: EventWriter<DisconnectClient>,
-    mut exit: EventWriter<AppExit>,
-) {
-    for FromClient(client, msg) in recv.read() {
-        info!("From {client}: {:?}", msg.0);
-        match msg.0.as_str() {
-            "dc" => disconnect.send(DisconnectClient(*client)),
-            "stop" => exit.send(AppExit),
-            msg => {
-                let msg = format!("You sent: {}", msg);
-                send.send(ToClient(*client, AppMessage(msg)));
+fn update_server(mut server: ResMut<Server>) {
+    for event in server.recv() {
+        match event {
+            ServerEvent::Opened => info!("Opened server for connections"),
+            ServerEvent::Incoming { client } => info!("{client:?} incoming"),
+            ServerEvent::Accepted {
+                client,
+                authority,
+                path,
+                ..
+            } => info!("{client:?} accepted from {authority}{path}"),
+            ServerEvent::Connected { client } => {
+                let remote_addr = server.connection_info(client).unwrap().remote_addr;
+                info!("{client:?} connected from {remote_addr}");
+            }
+            ServerEvent::Recv { client, msg } => {
+                info!("{client:?} > {}", msg.0);
+                let msg = format!("You sent: {}", msg.0);
+                match server.send(client, msg.clone()) {
+                    Ok(()) => info!("{client:?} < {}", msg),
+                    Err(err) => warn!(
+                        "Failed to send message to {client:?}: {:#}",
+                        aeronet::error::as_pretty(&err)
+                    ),
+                }
+            }
+            ServerEvent::Disconnected { client, cause } => info!(
+                "{client:?} disconnected: {:#}",
+                aeronet::error::as_pretty(&cause)
+            ),
+            ServerEvent::Closed { cause } => {
+                info!("Server closed: {:#}", aeronet::error::as_pretty(&cause))
             }
         }
     }

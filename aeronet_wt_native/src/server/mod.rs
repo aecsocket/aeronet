@@ -1,63 +1,230 @@
-pub mod back;
-pub mod front;
+mod backend;
+mod frontend;
 
-use aeronet::{ClientId, Message, SessionError, TryFromBytes, TryIntoBytes};
-use aeronet_wt_core::{Channels, OnChannel};
-use rustc_hash::FxHashMap;
-use tokio::sync::{broadcast, mpsc};
-use wtransport::ServerConfig;
+use aeronet::{OnChannel, TransportProtocol, TransportServer, TryFromBytes, TryIntoBytes};
 
-use crate::{shared::CHANNEL_BUF, EndpointInfo, WebTransportServer, WebTransportServerBackend};
+use std::{fmt::Debug, io, net::SocketAddr};
 
-/// Creates a server-side transport using the WebTransport protocol.
+use derivative::Derivative;
+use slotmap::SlotMap;
+use tokio::sync::{mpsc, oneshot};
+
+use crate::{ClientKey, EndpointInfo, WebTransportProtocol};
+
+type WebTransportError<P> =
+    crate::WebTransportError<P, <P as TransportProtocol>::S2C, <P as TransportProtocol>::C2S>;
+
+/// Implementation of [`TransportServer`] using the WebTransport protocol.
 ///
-/// This returns a [`WebTransportServer`], which provides the API of the server
-/// and is the type you should store, pass around, etc; and also a
-/// [`WebTransportServerBackend`], which should be started once using
-/// [`WebTransportServerBackend::start`] in an async Tokio runtime when it is
-/// first available (this function does not automatically start the backend,
-/// because we have no guarantees about the current Tokio runtime at this
-/// point).
-pub fn create_server<C2S, S2C, C>(
-    config: ServerConfig,
-) -> (
-    WebTransportServer<C2S, S2C, C>,
-    WebTransportServerBackend<C2S, S2C, C>,
-)
+/// See the [crate-level docs](crate).
+#[derive(Debug, Derivative)]
+#[derivative(Default)]
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
+pub struct WebTransportServer<P>
 where
-    C2S: Message + TryFromBytes,
-    S2C: Message + TryIntoBytes + OnChannel<Channel = C> + Clone,
-    C: Channels,
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
 {
-    let (send_b2f, recv_b2f) = mpsc::channel::<Event<C2S>>(CHANNEL_BUF);
-    let (send_f2b, _) = broadcast::channel::<Request<S2C>>(CHANNEL_BUF);
-
-    let frontend = WebTransportServer::<C2S, S2C, C> {
-        send: send_f2b.clone(),
-        recv: recv_b2f,
-        clients: FxHashMap::default(),
-        events: Vec::new(),
-    };
-
-    let backend = WebTransportServerBackend::<C2S, S2C, C> {
-        config,
-        send_b2f,
-        send_f2b,
-    };
-
-    (frontend, backend)
+    state: State<P>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) enum Request<S2C> {
-    Send { client: ClientId, msg: S2C },
-    Disconnect { client: ClientId },
+/// Event raised by a [`WebTransportServer`].
+#[derive(Derivative)]
+#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"))]
+pub enum ServerEvent<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
+    /// The server backend has been set up and is ready to accept connections.
+    Opened,
+    /// A client has requested to connect.
+    ///
+    /// No further data is known about the client yet.
+    Incoming {
+        /// The key of the client.
+        client: ClientKey,
+    },
+    /// The server has accepted a client's request to connect.
+    Accepted {
+        /// The key of the client.
+        client: ClientKey,
+        /// See [`wtransport::endpoint::SessionRequest::authority`].
+        authority: String,
+        /// See [`wtransport::endpoint::SessionRequest::path`].
+        path: String,
+        /// See [`wtransport::endpoint::SessionRequest::origin`].
+        origin: Option<String>,
+        /// See [`wtransport::endpoint::SessionRequest::user_agent`].
+        user_agent: Option<String>,
+    },
+    /// A client has fully established a connection to the server (including
+    /// opening streams) and the connection is ready for messages.
+    ///
+    /// This is equivalent to [`aeronet::ServerEvent::Connected`].
+    Connected {
+        /// The key of the client.
+        client: ClientKey,
+    },
+    /// A client sent a message to the server.
+    ///
+    /// This is equivalent to [`aeronet::ServerEvent::Recv`].
+    Recv {
+        /// The key of the client which sent the message.
+        client: ClientKey,
+        /// The message.
+        msg: P::C2S,
+    },
+    /// A client has lost connection from this server, which could not be
+    /// recovered from.
+    ///
+    /// This is equivalent to [`aeronet::ServerEvent::Disconnected`].
+    Disconnected {
+        /// The key of the client.
+        client: ClientKey,
+        /// The reason why the client lost connection.
+        cause: WebTransportError<P>,
+    },
+    /// The server backend has been shut down, all client connections have been
+    /// dropped, and the backend must be re-opened.
+    Closed {
+        /// The reason why the backend was closed.
+        cause: WebTransportError<P>,
+    },
 }
+
+impl<P, T> From<ServerEvent<P>> for Option<aeronet::ServerEvent<P, T>>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    T: TransportServer<P, Client = ClientKey, Error = WebTransportError<P>>,
+{
+    fn from(value: ServerEvent<P>) -> Self {
+        match value {
+            ServerEvent::Connected { client } => Some(aeronet::ServerEvent::Connected { client }),
+            ServerEvent::Recv { client, msg } => Some(aeronet::ServerEvent::Recv { client, msg }),
+            ServerEvent::Disconnected { client, cause } => {
+                Some(aeronet::ServerEvent::Disconnected { client, cause })
+            }
+            ServerEvent::Opened
+            | ServerEvent::Incoming { .. }
+            | ServerEvent::Accepted { .. }
+            | ServerEvent::Closed { .. } => None,
+        }
+    }
+}
+
+// server states
+
+#[derive(Debug, Default)]
+enum State<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
+    #[default]
+    Closed,
+    Opening(OpeningServer<P>),
+    Open(OpenServer<P>),
+}
+
+#[derive(Derivative)]
+#[derivative(Debug)]
+struct OpeningServer<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
+    #[derivative(Debug = "ignore")]
+    recv_open: oneshot::Receiver<OpenServerResult<P>>,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug)]
+struct OpenServer<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
+    local_addr: Result<SocketAddr, io::Error>,
+    clients: SlotMap<ClientKey, ClientState<P>>,
+    #[derivative(Debug = "ignore")]
+    recv_client: mpsc::UnboundedReceiver<IncomingClient<P>>,
+    #[derivative(Debug = "ignore")]
+    #[allow(dead_code)]
+    send_closed: mpsc::Sender<()>,
+}
+
+type OpenServerResult<P> = Result<OpenServer<P>, WebTransportError<P>>;
+
+// client states
 
 #[derive(Debug)]
-pub(crate) enum Event<C2S> {
-    Connected(ClientId, EndpointInfo),
-    UpdateInfo(ClientId, EndpointInfo),
-    Recv(ClientId, C2S),
-    Disconnected(ClientId, SessionError),
+enum ClientState<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
+    Incoming(IncomingClient<P>),
+    Accepted(AcceptedClient<P>),
+    Connected(ConnectedClient<P>),
+    Disconnected,
 }
+
+#[derive(Derivative)]
+#[derivative(Debug)]
+struct IncomingClient<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
+    #[derivative(Debug = "ignore")]
+    recv_accepted: oneshot::Receiver<AcceptedClientResult<P>>,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug)]
+struct AcceptedClient<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
+    authority: String,
+    path: String,
+    origin: Option<String>,
+    user_agent: Option<String>,
+    #[derivative(Debug = "ignore")]
+    recv_connected: oneshot::Receiver<ConnectedClientResult<P>>,
+}
+
+type AcceptedClientResult<P> = Result<AcceptedClient<P>, WebTransportError<P>>;
+
+#[derive(Derivative)]
+#[derivative(Debug)]
+struct ConnectedClient<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
+    info: EndpointInfo,
+    #[derivative(Debug = "ignore")]
+    recv_info: mpsc::UnboundedReceiver<EndpointInfo>,
+    #[derivative(Debug = "ignore")]
+    recv_c2s: mpsc::UnboundedReceiver<P::C2S>,
+    #[derivative(Debug = "ignore")]
+    send_s2c: mpsc::UnboundedSender<P::S2C>,
+    #[derivative(Debug = "ignore")]
+    recv_err: oneshot::Receiver<WebTransportError<P>>,
+}
+
+type ConnectedClientResult<P> = Result<ConnectedClient<P>, WebTransportError<P>>;

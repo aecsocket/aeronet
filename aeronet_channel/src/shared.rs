@@ -1,7 +1,31 @@
-pub(crate) const CHANNEL_BUF: usize = 128;
+slotmap::new_key_type! {
+    /// Key type used to uniquely identify a client connected to a
+    /// [`ChannelServer`].
+    ///
+    /// [`ChannelServer`]: crate::ChannelServer
+    pub struct ClientKey;
+}
 
-/// Occurs when the other side forcefully disconnects this side from itself by
-/// dropping the other half of the channel.
-#[derive(Debug, Clone, thiserror::Error)]
-#[error("channel disconnected")]
-pub struct DisconnectedError;
+/// Error that occurs when processing a [`ChannelClient`] or [`ChannelServer`].
+///
+/// [`ChannelClient`]: crate::ChannelClient
+/// [`ChannelServer`]: crate::ChannelServer
+#[derive(Debug, thiserror::Error)]
+pub enum ChannelError {
+    /// A client with the given key does not exist.
+    #[error("no client with key {0:?}")]
+    NoClient(ClientKey),
+    /// The other side disconnected from this side, due to the other side being
+    /// dropped and closing the MPSC channels.
+    #[error("disconnected")]
+    Disconnected,
+    /// The client was forcefully disconnected by the server.
+    #[error("force disconnect")]
+    ForceDisconnect,
+    /// This client is already connected to a server.
+    #[error("already connected")]
+    AlreadyConnected,
+    /// This client is already disconnected.
+    #[error("already disconnected")]
+    AlreadyDisconnected,
+}

@@ -1,43 +1,55 @@
 [package]
 name = "aeronet_wt_native"
-version = "0.3.0"
-edition = "2021"
 description = "Native WebTransport transport implementation for aeronet"
-authors = [ "aecsocket <aecsocket@tutanota.com>" ]
-repository = "https://github.com/aecsocket/aeronet"
-keywords = [ "gamedev", "network", "bevy" ]
-categories = [ "game-development", "network-programming" ]
-license = "MIT OR Apache-2.0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
 
-[features]
-bevy = [ "dep:bevy", "aeronet/bevy" ]
-
-[dependencies]
-aeronet = { path = "../aeronet", version = "0.3.0", features = [ "bevy-tokio-rt" ] }
-aeronet_wt_core = { path = "../aeronet_wt_core", version = "0.3.0" }
-tracing = "0.1.37"
-thiserror = "1.0.40"
-anyhow = "1.0.75"
-rustc-hash = "1.1"
-bevy = { version = "0.12.0", default-features = false, optional = true }
-wtransport = { version = "0.1.6", features = [ "dangerous-configuration" ] }
-tokio = { version = "1.32", default-features = false, features = [ "rt" ] }
-
-[dev-dependencies]
-base64 = "0.21.5"
-rcgen = "0.11.3"
-ring = "0.17.5"
-time = "0.3.30"
-bevy = "0.12.0"
-bevy_egui = "0.22.0"
+[lints]
+workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
 
+[features]
+## Enables [`bevy`](https://docs.rs/bevy) support.
+bevy = [ "dep:bevy", "aeronet/bevy", "aeronet/bevy-tokio-rt" ]
+
+## Enables [`rustls/dangerous-configuration`](https://docs.rs/rustls/latest/rustls/#crate-features).
+dangerous-configuration = [ "wtransport/dangerous-configuration" ]
+
+[dependencies]
+aeronet.workspace = true
+
+derivative.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+slotmap.workspace = true
+futures.workspace = true
+tokio = { workspace = true, default-features = false, features = [ "rt" ] }
+wtransport.workspace = true
+
+bevy = { workspace = true, optional = true }
+
+[dev-dependencies]
+bevy = { workspace = true, default-features = true }
+bevy_egui.workspace = true
+anyhow.workspace = true
+
+base64.workspace = true
+rcgen.workspace = true
+ring.workspace = true
+time.workspace = true
+
 [[example]]
 name = "echo_client"
 path = "examples/echo_client.rs"
-required-features = [ "bevy" ]
+required-features = [ "bevy", "dangerous-configuration" ]
 
 [[example]]
 name = "echo_server"

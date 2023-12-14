@@ -1,14 +1,15 @@
-#![warn(clippy::all)]
-#![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
 
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput};
 
-mod channels;
+mod channel_key;
 mod on_channel;
 
-/// Defines the different app-specific channels used by messages in this app.
+/// Defines a type of key used to represent the different app-specific channels
+/// that can be used to send messages.
+///
+/// # Attributes
 ///
 /// * `#[channel_kind(kind)]` determines which kind of channel this variant
 ///   represents, where `kind` is a variant of `ChannelKind`.
@@ -17,11 +18,11 @@ mod on_channel;
 ///
 /// ## Struct
 ///
-/// The struct requires the attribute `#[channel_kind(..)]`.
+/// The type requires the attribute `#[channel_kind(..)]`.
 ///
 /// ```ignore
-/// #[derive(Channels)]
-/// #[channel_kind(Datagram)]
+/// #[derive(ChannelKey)]
+/// #[channel_kind(Unreliable)]
 /// struct AppChannel;
 /// ```
 ///
@@ -30,28 +31,28 @@ mod on_channel;
 /// All variants require the attribute `#[channel_kind(..)]`.
 ///
 /// ```ignore
-/// #[derive(Channels)]
+/// #[derive(ChannelKey)]
 /// enum AppChannel {
-///     #[channel_kind(Datagram)]
+///     #[channel_kind(Unreliable)]
 ///     LowPriority,
-///     #[channel_kind(Stream)]
+///     #[channel_kind(ReliableOrdered)]
 ///     HighPriority,
 /// }
 /// ```
-#[proc_macro_derive(Channels, attributes(channel_kind))]
-pub fn derive_channels(input: TokenStream) -> TokenStream {
-    let node = parse_macro_input!(input as DeriveInput);
-    channels::derive(&node)
+#[proc_macro_derive(ChannelKey, attributes(channel_kind))]
+pub fn channel_key(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    channel_key::derive(&input)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }
 
-/// Defines along what variant of a [`Channels`] a message is sent.
+/// Defines along what variant of a [`ChannelKey`] a message is sent.
 ///
-/// * `#[channel_type(type)]` determines what `type` implementing [`Channels`]
-///   variants of this type can be sent along.
-/// * `#[on_channel(value)]` determines what value of type `type` this variant
-///   is sent along.
+/// # Attributes
+///
+/// * `#[channel_type(type)]` determines what `type` implementing [`ChannelKey`]
+///   this message is sent along.
 ///
 /// # Usage
 ///
@@ -61,8 +62,8 @@ pub fn derive_channels(input: TokenStream) -> TokenStream {
 /// `#[on_channel(..)]`.
 ///
 /// ```ignore
-/// #[derive(Channels)]
-/// #[channel_kind(Datagram)]
+/// #[derive(ChannelKey)]
+/// #[channel_kind(Unreliable)]
 /// struct AppChannel;
 ///
 /// #[derive(OnChannel)]
@@ -78,11 +79,11 @@ pub fn derive_channels(input: TokenStream) -> TokenStream {
 /// All variants require the attribute `#[on_channel(..)]`.
 ///
 /// ```ignore
-/// #[derive(Channels)]
+/// #[derive(ChannelKey)]
 /// enum AppChannel {
-///     #[channel_kind(Datagram)]
+///     #[channel_kind(Unreliable)]
 ///     LowPriority,
-///     #[channel_kind(Stream)]
+///     #[channel_kind(ReliableOrdered)]
 ///     HighPriority,
 /// }
 ///
@@ -98,9 +99,13 @@ pub fn derive_channels(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_derive(OnChannel, attributes(channel_type, on_channel))]
-pub fn derive_on_channel(input: TokenStream) -> TokenStream {
-    let node = parse_macro_input!(input as DeriveInput);
-    on_channel::derive(&node)
+pub fn on_channel(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    on_channel::derive(&input)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }
+
+const CHANNEL_KIND: &str = "channel_kind";
+const CHANNEL_TYPE: &str = "channel_type";
+const ON_CHANNEL: &str = "on_channel";

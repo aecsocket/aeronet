@@ -1,123 +1,148 @@
 #[cfg(feature = "bevy")]
-pub mod plugin;
+mod plugin;
 
-use std::fmt::Display;
+#[cfg(feature = "bevy")]
+pub use plugin::*;
 
-use crate::{Message, SessionError};
+use crate::TransportProtocol;
 
-/// A server-to-client layer responsible for sending user messages to the other
-/// side.
+/// Allows listening for client connections, and transporting messages to/from
+/// the clients connected to this server.
 ///
-/// The server transport accepts incoming connections, sending and receiving
-/// messages, and handling disconnections and errors.
-///
-/// Different transport implementations will use different methods to
-/// transport the data across, such as through memory or over a network. This
-/// means that a transport does not necessarily work over the internet! If you
-/// want to get details such as RTT or remote address, see [`Rtt`] and
-/// [`RemoteAddr`].
-///
-/// The type parameters allows configuring which types of messages are sent and
-/// received by this transport (see [`Message`]).
-///
-/// [`Rtt`]: crate::Rtt
-/// [`RemoteAddr`]: crate::RemoteAddr
-pub trait ServerTransport<C2S, S2C>
+/// See the [crate-level docs](crate).
+pub trait TransportServer<P>
 where
-    C2S: Message,
-    S2C: Message,
+    P: TransportProtocol,
 {
-    /// Iterator type over this transport's events.
-    type EventIter<'a>: Iterator<Item = ServerEvent<C2S>> + 'a
+    /// Key type that this server uses to uniquely identify clients.
+    type Client: Send + Sync + Clone + 'static;
+
+    /// Error returned from operations on this server.
+    type Error: Send + Sync + 'static;
+
+    /// Info on a given client's connection status, returned by
+    /// [`TransportServer::connection_info`].
+    type ConnectionInfo;
+
+    /// Type of event raised by this server.
+    ///
+    /// This event type must be able to be potentially converted into a
+    /// [`ServerEvent`]. If an event value cannot cleanly map to a single
+    /// generic [`ServerEvent`], its [`Into`] impl must return [`None`].
+    type Event: Into<Option<ServerEvent<P, Self>>>
     where
-        Self: 'a;
+        Self: Sized;
 
-    /// The info that [`ServerTransport::client_info`] provides.
-    type ClientInfo;
-
-    /// Instructs the transport to receive incoming events and update its
-    /// internal state.
+    /// Gets the current connection information and statistics on a connected
+    /// client.
     ///
-    /// This should be called before [`ServerTransport::take_events`].
-    fn recv(&mut self);
-
-    /// Takes ownership of all queued events in this transport.
-    fn take_events(&mut self) -> Self::EventIter<'_>;
-
-    /// Sends a message to a connected client.
-    fn send(&mut self, client: ClientId, msg: impl Into<S2C>);
-
-    /// Forces a client to disconnect from the server.
+    /// The data that this function returns is left up to the implementation,
+    /// but in general this allows accessing:
+    /// * the round-trip time, or ping ([`Rtt`])
+    /// * the remote socket address ([`RemoteAddr`])
     ///
-    /// This will issue a [`ServerEvent::Disconnected`] with reason
-    /// [`SessionError::ForceDisconnect`].
-    fn disconnect(&mut self, client: ClientId);
+    /// [`Rtt`]: crate::Rtt
+    /// [`RemoteAddr`]: crate::RemoteAddr
+    fn connection_info(&self, client: Self::Client) -> Option<Self::ConnectionInfo>;
 
-    /// Gets transport info on a connected client.
-    ///
-    /// If the specified client is not connected, [`None`] is returned.
-    fn client_info(&self, client: ClientId) -> Option<Self::ClientInfo>;
-
-    /// Gets if the specified client is connected to this server.
-    fn connected(&self, client: ClientId) -> bool;
-}
-
-/// An event received from a [`ServerTransport`].
-///
-/// Under Bevy this also implements `Event`, however this type cannot be used in
-/// an event reader or writer using the inbuilt plugins. `Event` is implemented
-/// to allow user code to use this type as an event if they wish to manually
-/// implement transport handling.
-#[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Event))]
-pub enum ServerEvent<C2S> {
-    /// A client has established a connection to the server and can now
-    /// send/receive data.
-    ///
-    /// This should be used as a signal to start client setup, such as loading
-    /// the client's data from a database.
-    Connected(ClientId),
-    /// A connected client sent data to the server.
-    Recv(ClientId, C2S),
-    /// A client was lost and the connection was closed for any reason.
-    ///
-    /// This is called for both transport errors (such as losing connection) and
-    /// for the transport forcefully disconnecting the client via
-    /// [`ServerTransport::disconnect`].
-    ///
-    /// This should be used as a signal to start client teardown and removing
-    /// them from the app.
-    Disconnected(ClientId, SessionError),
-}
-
-/// A unique identifier for a client connected to a server.
-///
-/// This uses a [`usize`] under the hood, however it is up to the implementation
-/// on how to use this exactly. One possible approach is to use an
-/// auto-incrementing integer and store that in a hash map.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ClientId(usize);
-
-impl ClientId {
-    /// Creates an ID from the raw value provided.
-    ///
-    /// Passing an arbitrary value which was not previously made from
-    /// [`Self::into_raw`] may result in a client ID which does not point to
-    /// a valid client.
-    #[must_use]
-    pub fn from_raw(raw: usize) -> Self {
-        Self(raw)
+    /// Gets if the given client is currently connected.
+    fn connected(&self, client: Self::Client) -> bool {
+        self.connection_info(client).is_some()
     }
 
-    /// Converts an ID into its raw value.
-    #[must_use]
-    pub fn into_raw(self) -> usize {
-        self.0
-    }
+    /// Gets all clients connected to this server.
+    ///
+    /// Each client key returned by this iterator is guaranteed to be connected,
+    /// however the implementation may have some clients which *could* be
+    /// connected, but not recognised as connected yet.
+    fn connected_clients(&self) -> impl Iterator<Item = Self::Client>;
+
+    /// Attempts to send a message to the given client.
+    ///
+    /// # Errors
+    ///
+    /// If the server cannot even attempt to send a message to the client (e.g.
+    /// if the server knows that this client is already disconnected), this
+    /// returns an error.
+    ///
+    /// However, since errors may occur later in the transport process after
+    /// this function has already returned (e.g. in an async task), this will
+    /// return [`Ok`] if the server has successfully *tried* to send a message,
+    /// not if the server actually *has* sent the message.
+    ///
+    /// If an error occurs later during the transport process, the server will
+    /// forcefully disconnect the client and emit a
+    /// [`ServerEvent::Disconnected`].
+    fn send(&mut self, client: Self::Client, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
+
+    /// Polls events and receives messages from this transport.
+    ///
+    /// This will consume messages and events from connected clients. Events
+    /// must be continuously received to allow this transport to do its internal
+    /// work, so this should be run in the main loop of your program.
+    ///
+    /// This returns an iterator over the events received, which may be used in
+    /// two ways:
+    /// * used as-is, if you know the concrete type of the transport
+    ///   * transports may expose their own event type, which allows you to
+    ///     listen to specialized events
+    /// * converted into a generic [`ServerEvent`] via its
+    ///   `Into<Option<ServerEvent>>` implementation
+    ///   * useful for generic code which must abstract over different transport
+    ///     implementations
+    ///   * a single event returned from this is not guaranteed to map to a
+    ///     specific [`ServerEvent`]
+    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a
+    where
+        Self: Sized;
+
+    /// Forces a client to disconnect from this server.
+    ///
+    /// This function does not guarantee that the client is gracefully
+    /// disconnected in any way, so you must use your own mechanism for graceful
+    /// disconnection if you need this feature.
+    ///
+    /// Disconnecting a client using this function will also raise a
+    /// [`ServerEvent::Disconnected`].
+    ///
+    /// # Errors
+    ///
+    /// If the server cannot even attempt to disconnect this client (e.g. if the
+    /// server knows that this client is already disconnected), this returns an
+    /// error.
+    fn disconnect(&mut self, client: impl Into<Self::Client>) -> Result<(), Self::Error>;
 }
 
-impl Display for ClientId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
+/// An event which is raised by a [`TransportServer`].
+#[derive(Debug, Clone)]
+pub enum ServerEvent<P, T>
+where
+    P: TransportProtocol,
+    T: TransportServer<P>,
+{
+    /// A client has fully connected to this server.
+    ///
+    /// Use this event to do client setup logic, e.g. start loading player data.
+    Connected {
+        /// The key of the connected client.
+        client: T::Client,
+    },
+    /// A client sent a message to this server.
+    Recv {
+        /// The key of the client which sent the message.
+        client: T::Client,
+        /// The message received.
+        msg: P::C2S,
+    },
+    /// A client has lost connection from this server, which cannot be recovered
+    /// from.
+    ///
+    /// Use this event to do client teardown logic, e.g. removing the player
+    /// from the world.
+    Disconnected {
+        /// The key of the client.
+        client: T::Client,
+        /// The reason why the client lost connection.
+        cause: T::Error,
+    },
 }

@@ -1,3 +1,7 @@
+# 0.4.0
+
+Overhaul of basically the entire crate. Treat this as a completely new crate.
+
 # 0.3.0
 
 No major features in this version, since I'm still working on a large rework of API for 0.4.0.

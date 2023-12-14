@@ -1,20 +1,31 @@
 use std::{net::SocketAddr, time::Duration};
 
-/// The reason why this side disconnected from the other side.
-#[derive(Debug, thiserror::Error)]
-pub enum SessionError {
-    /// This side was closed and all open connections have been dropped.
-    #[error("transport closed")]
-    Closed,
-    /// This side forced a disconnect from the other side.
-    #[error("forced disconnect")]
-    ForceDisconnect,
-    /// This side failed to establish a connection to the other side.
-    #[error("failed to connect")]
-    Connecting(#[source] anyhow::Error),
-    /// There was an error in transport (receiving or sending data).
-    #[error("transport error")]
-    Transport(#[source] anyhow::Error),
+use crate::Message;
+
+/// Defines the types of messages sent across a transport channel.
+///
+/// You should define one type that implements this trait in a single central
+/// place in your app, and use it as the protocol type parameter on transport
+/// implementations.
+///
+/// ```
+/// use aeronet::TransportProtocol;
+///
+/// struct AppProtocol;
+///
+/// struct AppMessage {/* ... */}
+///
+/// impl TransportProtocol for AppProtocol {
+///     type C2S = AppMessage;
+///     type S2C = AppMessage;
+/// }
+/// ```
+pub trait TransportProtocol: Send + Sync + 'static {
+    /// The type of message sent from the client to the server.
+    type C2S: Message;
+
+    /// The type of message sent from the server to the client.
+    type S2C: Message;
 }
 
 /// Allows access to the round-trip time of a connection.
