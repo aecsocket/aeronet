@@ -175,11 +175,11 @@ fn recv<P, T>(
         match event.into() {
             None => {}
             Some(ServerEvent::Connected { client }) => {
-                connected.send(RemoteClientConnected { client })
+                connected.send(RemoteClientConnected { client });
             }
             Some(ServerEvent::Recv { client, msg }) => recv.send(FromClient { client, msg }),
             Some(ServerEvent::Disconnected { client, cause }) => {
-                disconnected.send(RemoteClientDisconnected { client, cause })
+                disconnected.send(RemoteClientDisconnected { client, cause });
             }
         }
     }

@@ -180,14 +180,15 @@ fn ui(
         scrollback(ui, &ui_state.log);
 
         if client.state() == ClientState::Disconnected {
-            let url_resp = ui.horizontal(|ui| {
-                ui.label("URL");
-                ui.add(
-                    egui::TextEdit::singleline(&mut ui_state.url)
-                        .hint_text("https://[::1]:25565 | [enter] to connect"),
-                )
-            })
-            .inner;
+            let url_resp = ui
+                .horizontal(|ui| {
+                    ui.label("URL");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut ui_state.url)
+                            .hint_text("https://[::1]:25565 | [enter] to connect"),
+                    )
+                })
+                .inner;
 
             if url_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 let url = mem::take(&mut ui_state.url).trim().to_string();
@@ -199,14 +200,15 @@ fn ui(
                 rt.0.spawn(backend);
             }
         } else {
-            let buf_resp = ui.horizontal(|ui| {
-                ui.label("Message");
-                ui.add(
-                    egui::TextEdit::singleline(&mut ui_state.buf).hint_text("[enter] to send")
-                )
-            })
-            .inner;
-        
+            let buf_resp = ui
+                .horizontal(|ui| {
+                    ui.label("Message");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut ui_state.buf).hint_text("[enter] to send"),
+                    )
+                })
+                .inner;
+
             if buf_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 let buf = mem::take(&mut ui_state.buf);
                 if !buf.is_empty() {

@@ -3,6 +3,10 @@
 [![crates.io](https://img.shields.io/crates/v/aeronet.svg)](https://crates.io/crates/aeronet)
 [![docs.rs](https://img.shields.io/docsrs/aeronet)](https://docs.rs/aeronet)
 
+**Note: This currently uses Rust nightly. When
+[#91611](https://github.com/rust-lang/rust/issues/91611) is stabilized, this will be switched to
+stable.**
+
 A *light-as-air* client/server networking library with first-class support for Bevy, providing a
 consistent API which can be implemented by different transport mechanisms.
 

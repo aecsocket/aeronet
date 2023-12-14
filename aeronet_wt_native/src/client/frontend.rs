@@ -75,6 +75,7 @@ where
     }
 
     /// Gets the current state of the client.
+    #[must_use]
     pub fn state(&self) -> ClientState {
         match self.state {
             State::Disconnected => ClientState::Disconnected,
