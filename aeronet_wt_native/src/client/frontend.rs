@@ -1,44 +1,18 @@
 use std::{future::Future, task::Poll};
 
-use aeronet::{ChannelKey, Message, OnChannel, TransportClient, TryFromBytes, TryIntoBytes};
+use aeronet::{OnChannel, TransportClient, TryFromBytes, TryIntoBytes};
 use tokio::sync::oneshot;
 use wtransport::ClientConfig;
 
-use crate::{ClientEvent, EndpointInfo};
+use crate::{ClientEvent, EndpointInfo, WebTransportProtocol, WebTransportClient};
 
-use super::{backend, ConnectedClient, ConnectedClientResult, ConnectingClient, WebTransportError};
+use super::{backend, ConnectedClient, ConnectedClientResult, ConnectingClient, WebTransportError, State};
 
-/// Implementation of [`TransportClient`] using the WebTransport protocol.
-///
-/// See the [crate-level docs](crate).
-#[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct WebTransportClient<C2S, S2C, C>
+impl<P> WebTransportClient<P>
 where
-    C2S: Message + TryIntoBytes + OnChannel<Channel = C>,
-    S2C: Message + TryFromBytes,
-    C: ChannelKey,
-{
-    state: State<C2S, S2C, C>,
-}
-
-#[derive(Debug)]
-enum State<C2S, S2C, C>
-where
-    C2S: Message + TryIntoBytes + OnChannel<Channel = C>,
-    S2C: Message + TryFromBytes,
-    C: ChannelKey,
-{
-    Disconnected,
-    Connecting(ConnectingClient<C2S, S2C, C>),
-    Connected(ConnectedClient<C2S, S2C, C>),
-}
-
-impl<C2S, S2C, C> WebTransportClient<C2S, S2C, C>
-where
-    C2S: Message + TryIntoBytes + OnChannel<Channel = C>,
-    S2C: Message + TryFromBytes,
-    C: ChannelKey,
+    P: WebTransportProtocol,
+    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryFromBytes,
 {
     /// Creates a new client which is not connecting to any server.
     ///
@@ -47,6 +21,7 @@ where
     ///
     /// If you want to create a client and connect to a server immediately after
     /// creation, use [`WebTransportClient::connecting`] instead.
+    #[must_use]
     pub fn disconnected() -> Self {
         Self {
             state: State::Disconnected,
@@ -86,7 +61,7 @@ where
         &mut self,
         config: ClientConfig,
         url: impl Into<String>,
-    ) -> Result<impl Future<Output = ()> + Send, WebTransportError<C2S, S2C, C>> {
+    ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
         match self.state {
             State::Disconnected => {
                 let (client, backend) = ConnectingClient::new(config, url);
@@ -98,26 +73,26 @@ where
     }
 }
 
-impl<C2S, S2C, C> TransportClient<C2S, S2C> for WebTransportClient<C2S, S2C, C>
+impl<P> TransportClient<P> for WebTransportClient<P>
 where
-    C2S: Message + TryIntoBytes + OnChannel<Channel = C>,
-    S2C: Message + TryFromBytes,
-    C: ChannelKey,
+    P: WebTransportProtocol,
+    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryFromBytes,
 {
-    type Error = WebTransportError<C2S, S2C, C>;
+    type Error = WebTransportError<P>;
 
     type ConnectionInfo = EndpointInfo;
 
-    type Event = ClientEvent<C2S, S2C, C>;
+    type Event = ClientEvent<P>;
 
     fn connection_info(&self) -> Option<Self::ConnectionInfo> {
         match &self.state {
             State::Disconnected | State::Connecting(_) => None,
-            State::Connected(client) => client.connection_info(),
+            State::Connected(client) => Some(client.connection_info()),
         }
     }
 
-    fn send(&mut self, msg: impl Into<C2S>) -> Result<(), Self::Error> {
+    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
         match &mut self.state {
             State::Disconnected | State::Connecting(_) => Err(WebTransportError::BackendClosed),
             State::Connected(client) => client.send(msg),
@@ -160,11 +135,11 @@ where
     }
 }
 
-impl<C2S, S2C, C> ConnectingClient<C2S, S2C, C>
+impl<P> ConnectingClient<P>
 where
-    C2S: Message + TryIntoBytes + OnChannel<Channel = C>,
-    S2C: Message + TryFromBytes,
-    C: ChannelKey,
+    P: WebTransportProtocol,
+    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryFromBytes,
 {
     fn new(
         config: ClientConfig,
@@ -174,11 +149,11 @@ where
         let url = url.into();
         (
             Self { recv_connected },
-            backend::start::<C2S, S2C, C>(config, url, send_connected),
+            backend::start::<P>(config, url, send_connected),
         )
     }
 
-    fn poll(&mut self) -> Poll<ConnectedClientResult<C2S, S2C, C>> {
+    fn poll(&mut self) -> Poll<ConnectedClientResult<P>> {
         match self.recv_connected.try_recv() {
             Ok(result) => Poll::Ready(result),
             Err(oneshot::error::TryRecvError::Empty) => Poll::Pending,
@@ -189,17 +164,17 @@ where
     }
 }
 
-impl<C2S, S2C, C> ConnectedClient<C2S, S2C, C>
+impl<P> ConnectedClient<P>
 where
-    C2S: Message + TryIntoBytes + OnChannel<Channel = C>,
-    S2C: Message + TryFromBytes,
-    C: ChannelKey,
+    P: WebTransportProtocol,
+    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryFromBytes,
 {
-    fn connection_info(&self) -> Option<EndpointInfo> {
-        Some(self.info.clone())
+    fn connection_info(&self) -> EndpointInfo {
+        self.info.clone()
     }
 
-    fn send(&mut self, msg: impl Into<C2S>) -> Result<(), WebTransportError<C2S, S2C, C>> {
+    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), WebTransportError<P>> {
         let msg = msg.into();
         self.send_c2s
             .send(msg)
@@ -209,8 +184,8 @@ where
     fn recv(
         &mut self,
     ) -> (
-        Vec<ClientEvent<C2S, S2C, C>>,
-        Result<(), WebTransportError<C2S, S2C, C>>,
+        Vec<ClientEvent<P>>,
+        Result<(), WebTransportError<P>>,
     ) {
         let mut events = Vec::new();
 

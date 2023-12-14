@@ -2,13 +2,14 @@
 
 use std::{convert::Infallible, mem, string::FromUtf8Error, time::Duration};
 
-use aeronet::{AsyncRuntime, ChannelKey, OnChannel, TryFromBytes, TryIntoBytes};
+use aeronet::{AsyncRuntime, ChannelKey, OnChannel, TryFromBytes, TryIntoBytes, TransportProtocol, TransportClientPlugin, LocalClientConnected, FromServer, LocalClientDisconnected};
+use aeronet_wt_native::{WebTransportProtocol, WebTransportClient};
 use anyhow::Result;
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use wtransport::ClientConfig;
 
-// config
+// protocol
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ChannelKey)]
 #[channel_kind(Unreliable)]
@@ -19,7 +20,10 @@ struct AppChannel;
 #[on_channel(AppChannel)]
 struct AppMessage(String);
 
-impl<T: Into<String>> From<T> for AppMessage {
+impl<T> From<T> for AppMessage
+where
+    T: Into<String>,
+{
     fn from(value: T) -> Self {
         Self(value.into())
     }
@@ -43,9 +47,20 @@ impl TryFromBytes for AppMessage {
     }
 }
 
-// resources
+struct AppProtocol;
 
-type WebTransportClient = aeronet_wt_native::WebTransportClient<AppMessage, AppMessage, AppChannel>;
+impl TransportProtocol for AppProtocol {
+    type C2S = AppMessage;
+    type S2C = AppMessage;
+}
+
+impl WebTransportProtocol for AppProtocol {
+    type Channel = AppChannel;
+}
+
+type Client = WebTransportClient<AppProtocol>;
+
+// resources
 
 #[derive(Debug, Default, Resource)]
 struct ClientState {
@@ -63,15 +78,17 @@ fn main() {
                 ..default()
             }),
             EguiPlugin,
+            TransportClientPlugin::<_, Client>::default(),
         ))
         .init_resource::<AsyncRuntime>()
+        .init_resource::<Client>()
         .init_resource::<ClientState>()
         .insert_resource(WebTransportClient::disconnected())
         .add_systems(Update, (update, ui).chain())
         .run();
 }
 
-fn create(rt: &AsyncRuntime) -> Result<WebTransportClient> {
+fn create(rt: &AsyncRuntime) -> Result<Client> {
     let config = ClientConfig::builder()
         .with_bind_default()
         .with_no_cert_validation()
@@ -79,7 +96,27 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportClient> {
         .build();
 }
 
-fn update(mut client: ResMut<WebTransportClient>) {}
+fn update(
+    mut state: ResMut<ClientState>,
+    mut connected: EventReader<LocalClientConnected>,
+    mut recv: EventReader<FromServer<AppProtocol>>,
+    mut disconnected: EventReader<LocalClientDisconnected<AppProtocol, Client>>,
+) {
+    for LocalClientConnected in connected.read() {
+        state.scrollback.push(format!("Connected"));
+    }
+
+    for FromServer { msg } in recv.read() {
+        state.scrollback.push(format!("> {}", msg.0));
+    }
+
+    for LocalClientDisconnected { cause } in disconnected.read() {
+        state.scrollback.push(format!(
+            "Disconnected: {:#}",
+            aeronet::error::as_pretty(cause),
+        ));
+    }
+}
 
 fn ui(mut egui: EguiContexts, mut state: ResMut<ClientState>) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {

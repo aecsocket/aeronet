@@ -1,7 +1,7 @@
 mod backend;
 mod frontend;
 
-use aeronet::{OnChannel, TryFromBytes, TryIntoBytes};
+use aeronet::{OnChannel, TransportProtocol, TransportServer, TryFromBytes, TryIntoBytes};
 
 use std::{fmt::Debug, io, net::SocketAddr};
 
@@ -11,11 +11,23 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{ClientKey, EndpointInfo, WebTransportProtocol};
 
-type WebTransportError<P> = crate::WebTransportError<
-    P,
-    <P as aeronet::TransportProtocol>::S2C,
-    <P as aeronet::TransportProtocol>::C2S,
->;
+type WebTransportError<P> =
+    crate::WebTransportError<P, <P as TransportProtocol>::S2C, <P as TransportProtocol>::C2S>;
+
+/// Implementation of [`TransportServer`] using the WebTransport protocol.
+///
+/// See the [crate-level docs](crate).
+#[derive(Debug, Derivative)]
+#[derivative(Default)]
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
+pub struct WebTransportServer<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
+    state: State<P>,
+}
 
 /// Event raised by a [`WebTransportServer`].
 #[derive(Derivative)]
@@ -83,11 +95,16 @@ where
     },
 }
 
-impl<P> From<ServerEvent<P>> for Option<aeronet::ServerEvent<P, WebTransportServer<P>>>
+impl<P, T> From<ServerEvent<P>> for Option<aeronet::ServerEvent<P, T>>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    T: TransportServer<
+        P,
+        Client = ClientKey,
+        Error = WebTransportError<P>,
+    >,
 {
     fn from(value: ServerEvent<P>) -> Self {
         match value {
@@ -105,20 +122,6 @@ where
 }
 
 // server states
-
-/// Implementation of [`TransportServer`] using the WebTransport protocol.
-///
-/// See the [crate-level docs](crate).
-#[derive(Debug, Default)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct WebTransportServer<P>
-where
-    P: WebTransportProtocol,
-    P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
-{
-    state: State<P>,
-}
 
 #[derive(Debug, Default)]
 enum State<P>

@@ -11,7 +11,7 @@ use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
 
-// config
+// protocol
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ChannelKey)]
 #[channel_kind(Unreliable)]
