@@ -1,6 +1,6 @@
 # 0.4.0
 
-Overhaul of basically the entire crate. Treat this as a completely crate.
+Overhaul of basically the entire crate. Treat this as a completely new crate.
 
 # 0.3.0
 
