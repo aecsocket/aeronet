@@ -1,9 +1,12 @@
 use aeronet::{OnChannel, TryFromBytes, TryIntoBytes};
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
-use wtransport::{ClientConfig, Endpoint, Connection, endpoint::endpoint_side};
+use wtransport::{endpoint::endpoint_side, ClientConfig, Connection, Endpoint};
 
-use crate::{shared::{self, ChannelsState}, EndpointInfo, WebTransportProtocol};
+use crate::{
+    shared::{self, ChannelsState},
+    EndpointInfo, WebTransportProtocol,
+};
 
 use super::{ConnectedClient, ConnectedClientResult, WebTransportError};
 
@@ -44,11 +47,7 @@ pub(super) async fn start<P>(
 
     debug!("Starting connection loop");
     if let Err(err) = shared::handle_connection::<P, P::C2S, P::S2C>(
-        conn,
-        channels,
-        send_info,
-        send_s2c,
-        recv_c2s,
+        conn, channels, send_info, send_s2c, recv_c2s,
     )
     .await
     {
@@ -62,7 +61,14 @@ pub(super) async fn start<P>(
 async fn connect<P>(
     config: ClientConfig,
     url: String,
-) -> Result<(Endpoint<endpoint_side::Client>, Connection, ChannelsState<P, P::C2S, P::S2C>), WebTransportError<P>>
+) -> Result<
+    (
+        Endpoint<endpoint_side::Client>,
+        Connection,
+        ChannelsState<P, P::C2S, P::S2C>,
+    ),
+    WebTransportError<P>,
+>
 where
     P: WebTransportProtocol,
     P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
@@ -70,7 +76,7 @@ where
 {
     debug!("Creating endpoint for {url}");
     let endpoint = Endpoint::client(config).map_err(WebTransportError::Endpoint)?;
-    
+
     debug!("Connecting");
     let conn = endpoint
         .connect(url.clone())
@@ -78,8 +84,7 @@ where
         .map_err(WebTransportError::Connect)?;
 
     debug!("Establishing channels");
-    let channels = shared::establish_channels::<P, P::C2S, P::S2C, false>(&conn)
-        .await?;
+    let channels = shared::establish_channels::<P, P::C2S, P::S2C, false>(&conn).await?;
 
     Ok((endpoint, conn, channels))
 }

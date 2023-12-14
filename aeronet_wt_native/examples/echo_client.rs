@@ -4,12 +4,15 @@ use std::{convert::Infallible, mem, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
     AsyncRuntime, ChannelKey, FromServer, LocalClientConnected, LocalClientDisconnected, OnChannel,
-    TransportClientPlugin, TransportProtocol, TryFromBytes, TryIntoBytes, ToServer,
+    TransportClient, TransportClientPlugin, TransportProtocol, TryFromBytes, TryIntoBytes,
 };
 use aeronet_wt_native::{ClientState, WebTransportClient, WebTransportProtocol};
 use anyhow::Result;
 use bevy::{log::LogPlugin, prelude::*};
-use bevy_egui::{egui::{self, Color32}, EguiContexts, EguiPlugin};
+use bevy_egui::{
+    egui::{self, Color32},
+    EguiContexts, EguiPlugin,
+};
 use wtransport::ClientConfig;
 
 // protocol
@@ -65,27 +68,53 @@ type Client = WebTransportClient<AppProtocol>;
 
 // resources
 
-#[derive(Debug, Clone, Copy)]
-enum LineKind {
-    Info,
-    Connect,
-    Error,
-}
-
-impl LineKind {
-    fn color(&self) -> Color32 {
-        match self {
-            Self::Info => Color32::WHITE,
-            Self::Connect => Color32::GREEN,
-            Self::Error => Color32::RED,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 struct LogLine {
-    kind: LineKind,
+    color: Color32,
     msg: String,
+}
+
+impl LogLine {
+    fn connect_request(url: impl AsRef<str>) -> Self {
+        let url = url.as_ref();
+        Self {
+            color: Color32::GREEN,
+            msg: format!("Connecting to {url}"),
+        }
+    }
+
+    fn connected() -> Self {
+        Self {
+            color: Color32::WHITE,
+            msg: format!("Connected"),
+        }
+    }
+
+    fn recv(msg: impl AsRef<str>) -> Self {
+        let msg = msg.as_ref();
+        Self {
+            color: Color32::GRAY,
+            msg: format!("> {msg}"),
+        }
+    }
+
+    fn send(msg: impl AsRef<str>) -> Self {
+        let msg = msg.as_ref();
+        Self {
+            color: Color32::GRAY,
+            msg: format!("< {msg}"),
+        }
+    }
+
+    fn disconnected<E>(err: &E) -> Self
+    where
+        E: std::error::Error,
+    {
+        Self {
+            color: Color32::RED,
+            msg: format!("Disconnected: {:#}", aeronet::error::as_pretty(err)),
+        }
+    }
 }
 
 #[derive(Debug, Default, Resource)]
@@ -93,13 +122,6 @@ struct ClientUiState {
     log: Vec<LogLine>,
     url: String,
     buf: String,
-}
-
-impl ClientUiState {
-    fn push(&mut self, kind: LineKind, msg: impl Into<String>) {
-        let msg = msg.into();
-        self.log.push(LogLine { kind, msg });
-    }
 }
 
 // logic
@@ -136,52 +158,68 @@ fn update(
     mut disconnected: EventReader<LocalClientDisconnected<AppProtocol, Client>>,
 ) {
     for LocalClientConnected in connected.read() {
-        ui_state.push(LineKind::Info, "Connected");
+        ui_state.log.push(LogLine::connected());
     }
 
     for FromServer { msg } in recv.read() {
-        ui_state.push(LineKind::Info, format!("> {}", msg.0));
+        ui_state.log.push(LogLine::recv(&msg.0));
     }
 
     for LocalClientDisconnected { cause } in disconnected.read() {
-        ui_state.push(LineKind::Error, format!(
-            "Disconnected: {:#}",
-            aeronet::error::as_pretty(cause),
-        ));
+        ui_state.log.push(LogLine::disconnected(cause));
     }
 }
 
-fn ui(rt: Res<AsyncRuntime>, mut egui: EguiContexts, mut client: ResMut<Client>, mut ui_state: ResMut<ClientUiState>, mut send: EventWriter<ToServer<AppProtocol>>) {
-    egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
-        ui.add_enabled_ui(client.state() == ClientState::Disconnected, |ui| {
-            ui.horizontal(|ui| {
-                let url_resp = ui.add(
-                    egui::TextEdit::singleline(&mut ui_state.url)
-                        .hint_text("https://echo.webtransport.day | [enter] to connect"),
-                );
-                if url_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    let url = mem::take(&mut ui_state.url).trim().to_string();
-                    ui_state.push(LineKind::Connect, format!("Connecting to {}", url));
-
-                    let backend = client.connect(client_config(), url)
-                        .expect("backend should be disconnected");
-                    rt.0.spawn(backend);
-                }
-            })
-        });
-
+fn ui(
+    rt: Res<AsyncRuntime>,
+    mut egui: EguiContexts,
+    mut client: ResMut<Client>,
+    mut ui_state: ResMut<ClientUiState>,
+) {
+    egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
         scrollback(ui, &ui_state.log);
 
-        let buf_resp =
-            ui.add(egui::TextEdit::singleline(&mut ui_state.buf).hint_text("[enter] to send"));
-        if buf_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-            let buf = mem::take(&mut ui_state.buf);
-            if buf.is_empty() {
-                return;
+        if client.state() == ClientState::Disconnected {
+            let url_resp = ui.horizontal(|ui| {
+                ui.label("URL");
+                ui.add(
+                    egui::TextEdit::singleline(&mut ui_state.url)
+                        .hint_text("https://[::1]:25565 | [enter] to connect"),
+                )
+            })
+            .inner;
+
+            if url_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let url = mem::take(&mut ui_state.url).trim().to_string();
+                ui_state.log.push(LogLine::connect_request(&url));
+
+                let backend = client
+                    .connect(client_config(), url)
+                    .expect("backend should be disconnected");
+                rt.0.spawn(backend);
+            }
+        } else {
+            let buf_resp = ui.horizontal(|ui| {
+                ui.label("Message");
+                ui.add(
+                    egui::TextEdit::singleline(&mut ui_state.buf).hint_text("[enter] to send")
+                )
+            })
+            .inner;
+        
+            if buf_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let buf = mem::take(&mut ui_state.buf);
+                if !buf.is_empty() {
+                    ui_state.log.push(LogLine::send(&buf));
+                    let _ = client.send(buf);
+
+                    ui.memory_mut(|m| m.request_focus(buf_resp.id));
+                }
             }
 
-            ui_state.push(LineKind::Info, format!("< {}", buf));
-            send.send(ToServer { msg: AppMessage(buf) });
+            if ui.button("Disconnect").clicked() {
+                let _ = client.disconnect();
+            }
         }
     });
 }
@@ -189,9 +227,11 @@ fn ui(rt: Res<AsyncRuntime>, mut egui: EguiContexts, mut client: ResMut<Client>,
 fn scrollback(ui: &mut egui::Ui, scrollback: &[LogLine]) {
     egui::ScrollArea::vertical().show(ui, |ui| {
         for line in scrollback {
-            ui.label(egui::RichText::new(&line.msg)
-                .font(egui::FontId::monospace(14.0))
-                .color(line.kind.color()));
+            ui.label(
+                egui::RichText::new(&line.msg)
+                    .font(egui::FontId::monospace(14.0))
+                    .color(line.color),
+            );
         }
     });
 }
