@@ -2,8 +2,11 @@
 
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
-use aeronet::{AsyncRuntime, ChannelKey, OnChannel, TransportServer, TryFromBytes, TryIntoBytes};
-use aeronet_wt_native::ServerEvent;
+use aeronet::{
+    AsyncRuntime, ChannelKey, OnChannel, TransportProtocol, TransportServer, TryFromBytes,
+    TryIntoBytes,
+};
+use aeronet_wt_native::{ServerEvent, WebTransportProtocol, WebTransportServer};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
@@ -19,7 +22,10 @@ struct AppChannel;
 #[on_channel(AppChannel)]
 struct AppMessage(String);
 
-impl<T: Into<String>> From<T> for AppMessage {
+impl<T> From<T> for AppMessage
+where
+    T: Into<String>,
+{
     fn from(value: T) -> Self {
         Self(value.into())
     }
@@ -43,9 +49,18 @@ impl TryFromBytes for AppMessage {
     }
 }
 
-// resources
+struct AppProtocol;
 
-type WebTransportServer = aeronet_wt_native::WebTransportServer<AppMessage, AppMessage, AppChannel>;
+impl TransportProtocol for AppProtocol {
+    type C2S = AppMessage;
+    type S2C = AppMessage;
+}
+
+impl WebTransportProtocol for AppProtocol {
+    type Channel = AppChannel;
+}
+
+type Server = WebTransportServer<AppProtocol>;
 
 // logic
 
@@ -81,7 +96,7 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
     }
 }
 
-fn create(rt: &AsyncRuntime) -> Result<WebTransportServer> {
+fn create(rt: &AsyncRuntime) -> Result<Server> {
     let cert = tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(Certificate::load(
@@ -101,7 +116,7 @@ fn create(rt: &AsyncRuntime) -> Result<WebTransportServer> {
     Ok(WebTransportServer::from(server))
 }
 
-fn update_server(mut server: ResMut<WebTransportServer>) {
+fn update_server(mut server: ResMut<Server>) {
     for event in server.recv() {
         match event {
             ServerEvent::Opened => info!("Opened server for connections"),

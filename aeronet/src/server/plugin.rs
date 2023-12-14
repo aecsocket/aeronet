@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use derivative::Derivative;
 
-use crate::{Protocol, ServerEvent, TransportServer};
+use crate::{ServerEvent, TransportProtocol, TransportServer};
 
 /// Provides systems to send commands to, and receive events from, a
 /// [`TransportServer`].
@@ -27,7 +27,7 @@ use crate::{Protocol, ServerEvent, TransportServer};
 /// attempt to send a message to an unconnected client.
 pub fn transport_server_plugin<P, T>(app: &mut App)
 where
-    P: Protocol,
+    P: TransportProtocol,
     P::S2C: Clone,
     T: TransportServer<P> + Resource,
 {
@@ -50,7 +50,7 @@ where
 #[derivative(Debug, Default)]
 pub struct TransportServerPlugin<P, T>
 where
-    P: Protocol,
+    P: TransportProtocol,
     P::S2C: Clone,
     T: TransportServer<P> + Resource,
 {
@@ -62,7 +62,7 @@ where
 
 impl<P, T> Plugin for TransportServerPlugin<P, T>
 where
-    P: Protocol,
+    P: TransportProtocol,
     P::S2C: Clone,
     T: TransportServer<P> + Resource,
 {
@@ -90,7 +90,7 @@ pub enum TransportServerSet {
 #[derive(Debug, Clone, Event)]
 pub struct RemoteClientConnected<P, T>
 where
-    P: Protocol,
+    P: TransportProtocol,
     T: TransportServer<P>,
 {
     /// The key of the connected client.
@@ -103,7 +103,7 @@ where
 #[derive(Debug, Clone, Event)]
 pub struct FromClient<P, T>
 where
-    P: Protocol,
+    P: TransportProtocol,
     T: TransportServer<P>,
 {
     /// The key of the client which sent the message.
@@ -122,7 +122,7 @@ where
 #[derive(Debug, Clone, Event)]
 pub struct RemoteClientDisconnected<P, T>
 where
-    P: Protocol,
+    P: TransportProtocol,
     T: TransportServer<P>,
 {
     /// The key of the client.
@@ -137,7 +137,7 @@ where
 #[derive(Debug, Clone, Event)]
 pub struct ToClient<P, T>
 where
-    P: Protocol,
+    P: TransportProtocol,
     T: TransportServer<P>,
 {
     /// The key of the client to send to.
@@ -152,7 +152,7 @@ where
 #[derive(Debug, Clone, Event)]
 pub struct DisconnectRemoteClient<P, T>
 where
-    P: Protocol,
+    P: TransportProtocol,
     T: TransportServer<P>,
 {
     /// The key of the client to disconnect.
@@ -167,7 +167,7 @@ fn recv<P, T>(
     mut recv: EventWriter<FromClient<P, T>>,
     mut disconnected: EventWriter<RemoteClientDisconnected<P, T>>,
 ) where
-    P: Protocol,
+    P: TransportProtocol,
     P::S2C: Clone,
     T: TransportServer<P> + Resource,
 {
@@ -190,7 +190,7 @@ fn send<P, T>(
     mut send: EventReader<ToClient<P, T>>,
     mut disconnect: EventReader<DisconnectRemoteClient<P, T>>,
 ) where
-    P: Protocol,
+    P: TransportProtocol,
     P::S2C: Clone,
     T: TransportServer<P> + Resource,
 {

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use derivative::Derivative;
 
-use crate::{ClientEvent, Protocol, TransportClient};
+use crate::{ClientEvent, TransportClient, TransportProtocol};
 
 /// Provides systems to send commands to, and receive events from, a
 /// [`TransportClient`].
@@ -30,7 +30,7 @@ use crate::{ClientEvent, Protocol, TransportClient};
 /// attempt to send a message while the client is not connected.
 pub fn transport_client_plugin<P, T>(app: &mut App)
 where
-    P: Protocol,
+    P: TransportProtocol,
     P::C2S: Clone,
     T: TransportClient<P> + Resource,
 {
@@ -61,7 +61,7 @@ where
 #[derivative(Debug, Default)]
 pub struct TransportClientPlugin<P, T>
 where
-    P: Protocol,
+    P: TransportProtocol,
     P::C2S: Clone,
     T: TransportClient<P> + Resource,
 {
@@ -73,7 +73,7 @@ where
 
 impl<P, T> Plugin for TransportClientPlugin<P, T>
 where
-    P: Protocol,
+    P: TransportProtocol,
     P::C2S: Clone,
     T: TransportClient<P> + Resource,
 {
@@ -107,7 +107,7 @@ pub struct LocalClientConnected;
 #[derive(Debug, Clone, Event)]
 pub struct FromServer<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     /// The message received.
     pub msg: P::S2C,
@@ -123,7 +123,7 @@ where
 #[derive(Debug, Clone, Event)]
 pub struct LocalClientDisconnected<P, T>
 where
-    P: Protocol,
+    P: TransportProtocol,
     T: TransportClient<P>,
 {
     /// The reason why the client lost connection.
@@ -136,7 +136,7 @@ where
 #[derive(Debug, Clone, Event)]
 pub struct ToServer<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     /// The message to send.
     pub msg: P::C2S,
@@ -156,7 +156,7 @@ fn recv<P, T>(
     mut recv: EventWriter<FromServer<P>>,
     mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
 ) where
-    P: Protocol,
+    P: TransportProtocol,
     P::C2S: Clone,
     T: TransportClient<P> + Resource,
 {
@@ -174,7 +174,7 @@ fn recv<P, T>(
 
 fn send<P, T>(mut client: ResMut<T>, mut send: EventReader<ToServer<P>>)
 where
-    P: Protocol,
+    P: TransportProtocol,
     P::C2S: Clone,
     T: TransportClient<P> + Resource,
 {
@@ -185,7 +185,7 @@ where
 
 fn disconnect<P, T>(mut client: ResMut<T>)
 where
-    P: Protocol,
+    P: TransportProtocol,
     P::C2S: Clone,
     T: TransportClient<P> + Resource,
 {

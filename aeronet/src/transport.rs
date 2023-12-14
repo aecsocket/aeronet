@@ -9,18 +9,18 @@ use crate::Message;
 /// implementations.
 ///
 /// ```
-/// use aeronet::Protocol;
+/// use aeronet::TransportProtocol;
 ///
 /// struct AppProtocol;
 ///
 /// struct AppMessage {/* ... */}
 ///
-/// impl Protocol for AppProtocol {
+/// impl TransportProtocol for AppProtocol {
 ///     type C2S = AppMessage;
 ///     type S2C = AppMessage;
 /// }
 /// ```
-pub trait Protocol: Send + Sync + 'static {
+pub trait TransportProtocol: Send + Sync + 'static {
     /// The type of message sent from the client to the server.
     type C2S: Message;
 

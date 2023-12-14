@@ -3,11 +3,10 @@
 use std::{convert::Infallible, mem, string::FromUtf8Error};
 
 use aeronet::{
-    FromClient, FromServer, LocalClientConnected, LocalClientDisconnected, Protocol,
-    RemoteClientConnected, RemoteClientDisconnected, ToClient, ToServer, TransportClientPlugin,
+    FromClient, FromServer, LocalClientConnected, LocalClientDisconnected, RemoteClientConnected,
+    RemoteClientDisconnected, ToClient, ToServer, TransportClientPlugin, TransportProtocol,
     TransportServerPlugin, TryFromBytes, TryIntoBytes,
 };
-use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
@@ -16,7 +15,10 @@ use bevy_egui::{egui, EguiContexts, EguiPlugin};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AppMessage(String);
 
-impl<T: Into<String>> From<T> for AppMessage {
+impl<T> From<T> for AppMessage
+where
+    T: Into<String>,
+{
     fn from(value: T) -> Self {
         Self(value.into())
     }
@@ -42,10 +44,13 @@ impl TryFromBytes for AppMessage {
 
 struct AppProtocol;
 
-impl Protocol for AppProtocol {
+impl TransportProtocol for AppProtocol {
     type C2S = AppMessage;
     type S2C = AppMessage;
 }
+
+type Client = aeronet_channel::ChannelClient<AppProtocol>;
+type Server = aeronet_channel::ChannelServer<AppProtocol>;
 
 // resources
 
@@ -70,8 +75,8 @@ fn main() {
                 ..default()
             }),
             EguiPlugin,
-            TransportServerPlugin::<AppProtocol, ChannelServer<_>>::default(),
-            TransportClientPlugin::<AppProtocol, ChannelClient<_>>::default(),
+            TransportServerPlugin::<_, Server>::default(),
+            TransportClientPlugin::<_, Client>::default(),
         ))
         .init_resource::<ServerState>()
         .init_resource::<ClientState>()
@@ -84,8 +89,8 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    let mut server = ChannelServer::<AppProtocol>::new();
-    let (client, _) = ChannelClient::connected(&mut server);
+    let mut server = Server::new();
+    let (client, _) = Client::connected(&mut server);
 
     commands.insert_resource(server);
     commands.insert_resource(client);
@@ -103,7 +108,7 @@ fn update_client(
     mut state: ResMut<ClientState>,
     mut connected: EventReader<LocalClientConnected>,
     mut recv: EventReader<FromServer<AppProtocol>>,
-    mut disconnected: EventReader<LocalClientDisconnected<AppProtocol, ChannelClient<AppProtocol>>>,
+    mut disconnected: EventReader<LocalClientDisconnected<AppProtocol, Client>>,
     mut send: EventReader<ToServer<AppProtocol>>,
 ) {
     for LocalClientConnected in connected.read() {
@@ -152,12 +157,10 @@ fn client_ui(
 
 fn update_server(
     mut state: ResMut<ServerState>,
-    mut connected: EventReader<RemoteClientConnected<AppProtocol, ChannelServer<AppProtocol>>>,
-    mut recv: EventReader<FromClient<AppProtocol, ChannelServer<AppProtocol>>>,
-    mut disconnected: EventReader<
-        RemoteClientDisconnected<AppProtocol, ChannelServer<AppProtocol>>,
-    >,
-    mut send: EventWriter<ToClient<AppProtocol, ChannelServer<AppProtocol>>>,
+    mut connected: EventReader<RemoteClientConnected<AppProtocol, Server>>,
+    mut recv: EventReader<FromClient<AppProtocol, Server>>,
+    mut disconnected: EventReader<RemoteClientDisconnected<AppProtocol, Server>>,
+    mut send: EventWriter<ToClient<AppProtocol, Server>>,
 ) {
     for RemoteClientConnected { client } in connected.read() {
         state.scrollback.push(format!("{client:?} connected"));

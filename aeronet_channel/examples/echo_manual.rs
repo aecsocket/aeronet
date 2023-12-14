@@ -3,7 +3,7 @@
 use std::{convert::Infallible, mem, string::FromUtf8Error};
 
 use aeronet::{
-    ClientEvent, Protocol, ServerEvent, TransportClient, TransportServer, TryFromBytes,
+    ClientEvent, ServerEvent, TransportClient, TransportProtocol, TransportServer, TryFromBytes,
     TryIntoBytes,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
@@ -15,7 +15,10 @@ use bevy_egui::{egui, EguiContexts, EguiPlugin};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AppMessage(String);
 
-impl<T: Into<String>> From<T> for AppMessage {
+impl<T> From<T> for AppMessage
+where
+    T: Into<String>,
+{
     fn from(value: T) -> Self {
         Self(value.into())
     }
@@ -41,10 +44,15 @@ impl TryFromBytes for AppMessage {
 
 struct AppProtocol;
 
-impl Protocol for AppProtocol {
+impl TransportProtocol for AppProtocol {
     type C2S = AppMessage;
     type S2C = AppMessage;
 }
+
+#[derive(Debug, Resource)]
+struct Client<const N: usize>(ChannelClient<AppProtocol>);
+
+type Server = ChannelServer<AppProtocol>;
 
 // resources
 
@@ -53,9 +61,6 @@ struct ClientState<const N: usize> {
     scrollback: Vec<String>,
     buf: String,
 }
-
-#[derive(Debug, Resource)]
-struct Client<const N: usize>(ChannelClient<AppProtocol>);
 
 #[derive(Debug, Default, Resource)]
 struct ServerState {
@@ -96,7 +101,7 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    let mut server = ChannelServer::new();
+    let mut server = Server::new();
     let (client1, _) = ChannelClient::connected(&mut server);
     let (client2, _) = ChannelClient::connected(&mut server);
     let (client3, _) = ChannelClient::connected(&mut server);

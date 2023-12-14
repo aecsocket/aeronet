@@ -1,6 +1,6 @@
 use std::mem;
 
-use aeronet::{Protocol, TransportServer};
+use aeronet::{TransportProtocol, TransportServer};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;
@@ -17,7 +17,7 @@ type ServerEvent<P> = aeronet::ServerEvent<P, ChannelServer<P>>;
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelServer<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     #[derivative(Debug = "ignore")]
     pub(super) clients: SlotMap<ClientKey, ClientState<P>>,
@@ -28,7 +28,7 @@ where
 #[derive(Debug)]
 pub(super) struct ClientState<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     pub(super) send_s2c: Sender<P::S2C>,
     pub(super) recv_c2s: Receiver<P::C2S>,
@@ -36,7 +36,7 @@ where
 
 impl<P> ChannelServer<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     /// Creates a new server with no clients connected.
     ///
@@ -55,7 +55,7 @@ where
 
 impl<P> TransportServer<P> for ChannelServer<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     type Client = ClientKey;
 

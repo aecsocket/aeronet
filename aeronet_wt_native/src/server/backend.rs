@@ -4,14 +4,14 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
-use crate::{shared, EndpointInfo, Protocol};
+use crate::{shared, EndpointInfo, WebTransportProtocol};
 
 use super::{
     AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, OpenServer,
     OpenServerResult, WebTransportError,
 };
 
-pub(super) async fn start<P: Protocol>(
+pub(super) async fn start<P: WebTransportProtocol>(
     config: ServerConfig,
     send_open: oneshot::Sender<OpenServerResult<P>>,
 ) where
@@ -59,7 +59,7 @@ pub(super) async fn start<P: Protocol>(
     }
 }
 
-async fn handle_session<P: Protocol>(
+async fn handle_session<P: WebTransportProtocol>(
     session: IncomingSession,
     send_accepted: oneshot::Sender<AcceptedClientResult<P>>,
 ) where

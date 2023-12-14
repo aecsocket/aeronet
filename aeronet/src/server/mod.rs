@@ -4,7 +4,7 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use crate::Protocol;
+use crate::TransportProtocol;
 
 /// Allows listening for client connections, and transporting messages to/from
 /// the clients connected to this server.
@@ -12,7 +12,7 @@ use crate::Protocol;
 /// See the [crate-level docs](crate).
 pub trait TransportServer<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     /// Key type that this server uses to uniquely identify clients.
     type Client: Send + Sync + Clone + 'static;
@@ -117,7 +117,7 @@ where
 #[derive(Debug, Clone)]
 pub enum ServerEvent<P, T>
 where
-    P: Protocol,
+    P: TransportProtocol,
     T: TransportServer<P>,
 {
     /// A client has fully connected to this server.

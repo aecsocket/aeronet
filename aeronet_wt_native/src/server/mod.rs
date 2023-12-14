@@ -2,7 +2,6 @@ mod backend;
 mod frontend;
 
 use aeronet::{OnChannel, TryFromBytes, TryIntoBytes};
-pub use frontend::*;
 
 use std::{fmt::Debug, io, net::SocketAddr};
 
@@ -10,16 +9,20 @@ use derivative::Derivative;
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{ClientKey, EndpointInfo, Protocol};
+use crate::{ClientKey, EndpointInfo, WebTransportProtocol};
 
-type WebTransportError<P> =
-    crate::WebTransportError<P, <P as aeronet::Protocol>::S2C, <P as aeronet::Protocol>::C2S>;
+type WebTransportError<P> = crate::WebTransportError<
+    P,
+    <P as aeronet::TransportProtocol>::S2C,
+    <P as aeronet::TransportProtocol>::C2S,
+>;
 
 /// Event raised by a [`WebTransportServer`].
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"))]
 pub enum ServerEvent<P>
 where
-    P: Protocol,
+    P: WebTransportProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
 {
@@ -82,21 +85,21 @@ where
 
 impl<P> From<ServerEvent<P>> for Option<aeronet::ServerEvent<P, WebTransportServer<P>>>
 where
-    P: Protocol,
+    P: WebTransportProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
 {
     fn from(value: ServerEvent<P>) -> Self {
         match value {
-            ServerEvent::Opened => None,
-            ServerEvent::Incoming { .. } => None,
-            ServerEvent::Accepted { .. } => None,
             ServerEvent::Connected { client } => Some(aeronet::ServerEvent::Connected { client }),
             ServerEvent::Recv { client, msg } => Some(aeronet::ServerEvent::Recv { client, msg }),
             ServerEvent::Disconnected { client, cause } => {
                 Some(aeronet::ServerEvent::Disconnected { client, cause })
             }
-            ServerEvent::Closed { .. } => None,
+            ServerEvent::Opened
+            | ServerEvent::Incoming { .. }
+            | ServerEvent::Accepted { .. }
+            | ServerEvent::Closed { .. } => None,
         }
     }
 }
@@ -106,14 +109,25 @@ where
 /// Implementation of [`TransportServer`] using the WebTransport protocol.
 ///
 /// See the [crate-level docs](crate).
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct WebTransportServer<P: Protocol> {
+pub struct WebTransportServer<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
     state: State<P>,
 }
 
-#[derive(Debug)]
-enum State<P: Protocol> {
+#[derive(Debug, Default)]
+enum State<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
+    #[default]
     Closed,
     Opening(OpeningServer<P>),
     Open(OpenServer<P>),
@@ -121,14 +135,24 @@ enum State<P: Protocol> {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct OpeningServer<P: Protocol> {
+struct OpeningServer<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
     #[derivative(Debug = "ignore")]
     recv_open: oneshot::Receiver<OpenServerResult<P>>,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct OpenServer<P: Protocol> {
+struct OpenServer<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
     local_addr: Result<SocketAddr, io::Error>,
     clients: SlotMap<ClientKey, ClientState<P>>,
     #[derivative(Debug = "ignore")]
@@ -143,7 +167,12 @@ type OpenServerResult<P> = Result<OpenServer<P>, WebTransportError<P>>;
 // client states
 
 #[derive(Debug)]
-enum ClientState<P: Protocol> {
+enum ClientState<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
     Incoming(IncomingClient<P>),
     Accepted(AcceptedClient<P>),
     Connected(ConnectedClient<P>),
@@ -152,14 +181,24 @@ enum ClientState<P: Protocol> {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct IncomingClient<P: Protocol> {
+struct IncomingClient<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
     #[derivative(Debug = "ignore")]
     recv_accepted: oneshot::Receiver<AcceptedClientResult<P>>,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct AcceptedClient<P: Protocol> {
+struct AcceptedClient<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
     authority: String,
     path: String,
     origin: Option<String>,
@@ -172,7 +211,12 @@ type AcceptedClientResult<P> = Result<AcceptedClient<P>, WebTransportError<P>>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct ConnectedClient<P: Protocol> {
+struct ConnectedClient<P>
+where
+    P: WebTransportProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+{
     info: EndpointInfo,
     #[derivative(Debug = "ignore")]
     recv_info: mpsc::UnboundedReceiver<EndpointInfo>,

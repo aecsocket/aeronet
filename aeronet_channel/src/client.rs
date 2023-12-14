@@ -1,4 +1,4 @@
-use aeronet::{Protocol, ServerEvent, TransportClient};
+use aeronet::{ServerEvent, TransportClient, TransportProtocol};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 
@@ -12,7 +12,7 @@ use crate::{server, ChannelError, ChannelServer, ClientKey};
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelClient<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     state: State<P>,
 }
@@ -21,7 +21,7 @@ where
 #[derivative(Debug(bound = "P::C2S: ::std::fmt::Debug, P::S2C: ::std::fmt::Debug"))]
 enum State<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     Disconnected,
     Connected(ConnectedClient<P>),
@@ -29,13 +29,14 @@ where
 
 impl<P> ChannelClient<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     /// Creates a new client which is not connected to a server.
     ///
     /// If you already have a server at the time of creation of this client, use
     /// [`ChannelClient::connected`] instead. Otherwise, you can connect this
     /// client later manually using [`ChannelClient::connect`].
+    #[must_use]
     pub fn disconnected() -> Self {
         Self {
             state: State::Disconnected,
@@ -81,9 +82,9 @@ where
 
 type ClientEvent<P> = aeronet::ClientEvent<P, ChannelClient<P>>;
 
-impl<P> TransportClient<P> for ChannelClient<P> 
+impl<P> TransportClient<P> for ChannelClient<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     type Error = ChannelError;
 
@@ -136,7 +137,7 @@ where
 #[derivative(Debug)]
 struct ConnectedClient<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     #[derivative(Debug = "ignore")]
     send_c2s: Sender<P::C2S>,
@@ -148,7 +149,7 @@ where
 
 impl<P> ConnectedClient<P>
 where
-    P: Protocol,
+    P: TransportProtocol,
 {
     fn new(server: &mut ChannelServer<P>) -> (Self, ClientKey) {
         let (send_c2s, recv_c2s) = crossbeam_channel::unbounded::<P::C2S>();

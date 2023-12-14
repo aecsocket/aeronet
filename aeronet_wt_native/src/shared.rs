@@ -4,13 +4,13 @@ use tokio::sync::mpsc;
 use tracing::debug;
 use wtransport::{datagram::Datagram, error::ConnectionError, Connection, RecvStream, SendStream};
 
-use crate::{ChannelError, EndpointInfo, Protocol, WebTransportError};
+use crate::{ChannelError, EndpointInfo, WebTransportError, WebTransportProtocol};
 
 // establishing channels
 
 pub(super) struct ChannelsState<P, S, R>
 where
-    P: Protocol,
+    P: WebTransportProtocol,
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
 {
@@ -19,7 +19,10 @@ where
     recv_err: mpsc::UnboundedReceiver<WebTransportError<P, S, R>>,
 }
 
-enum ChannelState<P: Protocol> {
+enum ChannelState<P>
+where
+    P: WebTransportProtocol,
+{
     Datagram {
         channel: P::Channel,
     },
@@ -33,7 +36,7 @@ pub(super) async fn establish_channels<P, S, R, const OPENS: bool>(
     conn: &Connection,
 ) -> Result<ChannelsState<P, S, R>, WebTransportError<P, S, R>>
 where
-    P: Protocol,
+    P: WebTransportProtocol,
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
 {
@@ -63,7 +66,7 @@ async fn establish_channel<P, S, R, const OPENS: bool>(
     send_err: mpsc::UnboundedSender<WebTransportError<P, S, R>>,
 ) -> Result<ChannelState<P>, ChannelError<S, R>>
 where
-    P: Protocol,
+    P: WebTransportProtocol,
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
 {
@@ -82,7 +85,7 @@ async fn establish_stream<P, S, R, const OPENS: bool>(
     send_err: mpsc::UnboundedSender<WebTransportError<P, S, R>>,
 ) -> Result<ChannelState<P>, ChannelError<S, R>>
 where
-    P: Protocol,
+    P: WebTransportProtocol,
     S: Message + TryIntoBytes,
     R: Message + TryFromBytes,
 {
@@ -150,7 +153,7 @@ pub(super) async fn handle_connection<P, S, R>(
     mut recv_s: mpsc::UnboundedReceiver<S>,
 ) -> Result<(), WebTransportError<P, S, R>>
 where
-    P: Protocol,
+    P: WebTransportProtocol,
     S: Message + TryIntoBytes + OnChannel<Channel = P::Channel>,
     R: Message + TryFromBytes,
 {
@@ -197,7 +200,7 @@ async fn send<P, S, R>(
     msg: S,
 ) -> Result<(), WebTransportError<P, S, R>>
 where
-    P: Protocol,
+    P: WebTransportProtocol,
     S: Message + TryIntoBytes + OnChannel<Channel = P::Channel>,
     R: Message + TryFromBytes,
 {
