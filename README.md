@@ -44,6 +44,26 @@ assert_is_message::<C2S>();
 assert_is_message::<S2C>();
 ```
 
+Create a type implementing [`TransportProtocol`] which uses these message types.
+
+```rust
+use aeronet::TransportProtocol;
+
+pub enum C2S { /* ... */ }
+pub enum S2C { /* ... */ }
+
+#[derive(Debug)]
+pub struct AppProtocol;
+
+impl TransportProtocol for AppProtocol {
+    type C2S = C2S;
+    type S2C = S2C;
+}
+```
+
+Note that certain transport implementations may need you to implement extra traits on your protocol
+type.
+
 Then, you will need a transport implementation to use. Select one from the list above that suits
 your needs. Afterwards, use the [`TransportClient`] and [`TransportServer`] traits to interact with
 the transport, to do functions such as sending and receiving data.
@@ -52,15 +72,13 @@ the transport, to do functions such as sending and receiving data.
 use std::time::Duration;
 use aeronet::{TransportClient, Rtt};
 
-# #[derive(Debug, Clone)]
-# pub enum C2S {
-#     Move(f32),
-#     Shoot,
-# }
+# #[derive(Debug)]
+# pub enum C2S { Shoot }
 #
-# fn run<Client, ConnInfo>(mut client: Client)
+# fn run<P, Client, ConnInfo>(mut client: Client)
 # where
-#     Client: TransportClient<C2S, (), ConnectionInfo = ConnInfo>,
+#     P: aeronet::TransportProtocol<C2S = C2S>,
+#     Client: TransportClient<P, ConnectionInfo = ConnInfo>,
 #     ConnInfo: Rtt,
 # {
 client.send(C2S::Shoot);
@@ -108,33 +126,3 @@ This crate abstracts over the complexities of connection by defining two states:
 Although the networking implementation is likely to be much more complex, including encryption,
 handshakes, etc., these two states can be used as a basic contract for networking code. However,
 the implementation may also choose to expose some more of these details.
-
-# With Bevy
-
-**!!! OUTDATED !!!**
-
-Aeronet provides *transport-agnostic* plugins for the client and server transports, letting you
-write the same code for all networking without worrying about the underlying transport that's used
-to deliver your messages.
-
-```rust,ignore
-use bevy::prelude::*;
-use aeronet::ClientTransportPlugin;
-
-fn main() {
-    App::new()
-        .add_plugins((
-            ClientTransportPlugin::<C2S, S2C, MyClientTransport<_, _>>::default(),
-        ))
-        .add_systems(Update, on_recv)
-        .run();
-}
-
-fn on_recv(
-    mut recv: EventReader<FromServer<S2C>>,
-) {
-    for FromServer(msg) in recv.iter() {
-        println!("Got a message from the server: {msg:?}");
-    }
-}
-```
