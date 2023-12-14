@@ -100,11 +100,7 @@ where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
-    T: TransportServer<
-        P,
-        Client = ClientKey,
-        Error = WebTransportError<P>,
-    >,
+    T: TransportServer<P, Client = ClientKey, Error = WebTransportError<P>>,
 {
     fn from(value: ServerEvent<P>) -> Self {
         match value {

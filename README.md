@@ -111,6 +111,8 @@ the implementation may also choose to expose some more of these details.
 
 # With Bevy
 
+**!!! OUTDATED !!!**
+
 Aeronet provides *transport-agnostic* plugins for the client and server transports, letting you
 write the same code for all networking without worrying about the underlying transport that's used
 to deliver your messages.

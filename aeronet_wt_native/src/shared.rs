@@ -147,7 +147,7 @@ where
 
 pub(super) async fn handle_connection<P, S, R>(
     conn: Connection,
-    channels_state: ChannelsState<P, S, R>,
+    channels: ChannelsState<P, S, R>,
     send_info: mpsc::UnboundedSender<EndpointInfo>,
     send_r: mpsc::UnboundedSender<R>,
     mut recv_s: mpsc::UnboundedReceiver<S>,
@@ -161,7 +161,7 @@ where
         mut channels,
         mut recv_streams,
         mut recv_err,
-    } = channels_state;
+    } = channels;
 
     loop {
         if send_info

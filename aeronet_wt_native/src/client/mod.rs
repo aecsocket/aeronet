@@ -3,23 +3,20 @@ mod frontend;
 
 use std::{fmt::Debug, io, net::SocketAddr};
 
-use aeronet::{OnChannel, TryFromBytes, TryIntoBytes, TransportProtocol, TransportClient};
+use aeronet::{OnChannel, TransportClient, TransportProtocol, TryFromBytes, TryIntoBytes};
 use derivative::Derivative;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{EndpointInfo, WebTransportProtocol};
 
-type WebTransportError<P> = crate::WebTransportError<
-    P,
-    <P as TransportProtocol>::C2S,
-    <P as TransportProtocol>::S2C,
->;
+type WebTransportError<P> =
+    crate::WebTransportError<P, <P as TransportProtocol>::C2S, <P as TransportProtocol>::S2C>;
 
 /// Implementation of [`TransportClient`] using the WebTransport protocol.
 ///
 /// See the [crate-level docs](crate).
 #[derive(Debug, Derivative)]
-#[derivative(Default)]
+#[derivative(Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct WebTransportClient<P>
 where
@@ -60,16 +57,12 @@ where
     },
 }
 
-impl<P, T> From<ClientEvent<P>>
-    for Option<aeronet::ClientEvent<P, T>>
+impl<P, T> From<ClientEvent<P>> for Option<aeronet::ClientEvent<P, T>>
 where
     P: WebTransportProtocol,
     P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
-    T: TransportClient<
-        P,
-        Error = WebTransportError<P>,
-    >,
+    T: TransportClient<P, Error = WebTransportError<P>>,
 {
     fn from(value: ClientEvent<P>) -> Self {
         match value {
@@ -93,6 +86,17 @@ where
     Disconnected,
     Connecting(ConnectingClient<P>),
     Connected(ConnectedClient<P>),
+}
+
+/// The current state of a [`WebTransportClient`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ClientState {
+    /// Not connected and is not attempting to connect to a server.
+    Disconnected,
+    /// Currently attempting to connect to a server.
+    Connecting,
+    /// Fully connected to a server and ready to transmit messages.
+    Connected,
 }
 
 // client states

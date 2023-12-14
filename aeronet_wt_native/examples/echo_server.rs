@@ -141,7 +141,6 @@ fn update_server(mut server: ResMut<Server>) {
                         aeronet::error::as_pretty(&err)
                     ),
                 }
-                let _ = server.disconnect(client);
             }
             ServerEvent::Disconnected { client, cause } => info!(
                 "{client:?} disconnected: {:#}",

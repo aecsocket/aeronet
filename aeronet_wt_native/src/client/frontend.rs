@@ -4,9 +4,11 @@ use aeronet::{OnChannel, TransportClient, TryFromBytes, TryIntoBytes};
 use tokio::sync::oneshot;
 use wtransport::ClientConfig;
 
-use crate::{ClientEvent, EndpointInfo, WebTransportProtocol, WebTransportClient};
+use crate::{ClientEvent, ClientState, EndpointInfo, WebTransportClient, WebTransportProtocol};
 
-use super::{backend, ConnectedClient, ConnectedClientResult, ConnectingClient, WebTransportError, State};
+use super::{
+    backend, ConnectedClient, ConnectedClientResult, ConnectingClient, State, WebTransportError,
+};
 
 impl<P> WebTransportClient<P>
 where
@@ -69,6 +71,15 @@ where
                 Ok(backend)
             }
             State::Connecting(_) | State::Connected(_) => Err(WebTransportError::BackendOpen),
+        }
+    }
+
+    /// Gets the current state of the client.
+    pub fn state(&self) -> ClientState {
+        match self.state {
+            State::Disconnected => ClientState::Disconnected,
+            State::Connecting(_) => ClientState::Connecting,
+            State::Connected(_) => ClientState::Connected,
         }
     }
 }
@@ -181,12 +192,7 @@ where
             .map_err(|_| WebTransportError::BackendClosed)
     }
 
-    fn recv(
-        &mut self,
-    ) -> (
-        Vec<ClientEvent<P>>,
-        Result<(), WebTransportError<P>>,
-    ) {
+    fn recv(&mut self) -> (Vec<ClientEvent<P>>, Result<(), WebTransportError<P>>) {
         let mut events = Vec::new();
 
         while let Ok(info) = self.recv_info.try_recv() {
@@ -200,7 +206,9 @@ where
         match self.recv_err.try_recv() {
             Ok(cause) => (events, Err(cause)),
             Err(oneshot::error::TryRecvError::Empty) => (events, Ok(())),
-            Err(oneshot::error::TryRecvError::Closed) => (events, Err(WebTransportError::BackendClosed)),
+            Err(oneshot::error::TryRecvError::Closed) => {
+                (events, Err(WebTransportError::BackendClosed))
+            }
         }
     }
 }
