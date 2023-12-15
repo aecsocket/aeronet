@@ -5,7 +5,7 @@ use std::{convert::Infallible, mem, string::FromUtf8Error};
 use aeronet::{
     FromClient, FromServer, LocalClientConnected, LocalClientDisconnected, RemoteClientConnected,
     RemoteClientDisconnected, ToClient, ToServer, TransportClientPlugin, TransportProtocol,
-    TransportServerPlugin, TryFromBytes, TryIntoBytes,
+    TransportServerPlugin, TryAsBytes, TryFromBytes,
 };
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
@@ -24,12 +24,12 @@ where
     }
 }
 
-impl TryIntoBytes for AppMessage {
+impl TryAsBytes for AppMessage {
     type Output<'a> = &'a [u8];
 
     type Error = Infallible;
 
-    fn try_into_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
+    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
         Ok(self.0.as_bytes())
     }
 }

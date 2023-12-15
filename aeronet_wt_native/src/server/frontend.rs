@@ -1,6 +1,6 @@
 use std::{future::Future, io, net::SocketAddr, task::Poll};
 
-use aeronet::{OnChannel, TransportServer, TryFromBytes, TryIntoBytes};
+use aeronet::{OnChannel, TransportServer, TryAsBytes, TryFromBytes};
 use tokio::sync::{mpsc, oneshot};
 use wtransport::ServerConfig;
 
@@ -14,7 +14,7 @@ impl<P> WebTransportServer<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     /// Creates a new server which is not open for connections, and is not
     /// starting to open.
@@ -86,7 +86,7 @@ impl<P> TransportServer<P> for WebTransportServer<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     type Client = ClientKey;
 
@@ -159,7 +159,7 @@ impl<P> OpeningServer<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     fn new(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel();
@@ -181,7 +181,7 @@ impl<P> OpenServer<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     fn local_addr(&self) -> Result<SocketAddr, &io::Error> {
         self.local_addr.as_ref().map(|addr| *addr)
@@ -259,7 +259,7 @@ fn recv_client<P>(
 ) where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     match state {
         ClientState::Incoming(incoming) => match incoming.recv_accepted.try_recv() {

@@ -35,10 +35,10 @@ bevy = { workspace = true, default-features = true }
 bevy_egui.workspace = true
 anyhow.workspace = true
 
-# [[example]]
-# name = "echo_plugin"
-# path = "examples/echo_plugin.rs"
-# required-features = [ "bevy" ]
+[[example]]
+name = "echo_plugin"
+path = "examples/echo_plugin.rs"
+required-features = [ "bevy" ]
 
 [[example]]
 name = "echo_manual"

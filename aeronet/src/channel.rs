@@ -1,10 +1,10 @@
 use std::fmt::Debug;
 
-/// Represents what kind of method is used to transport data along a connection.
+/// What kind of method is used to transport data along a connection.
 ///
 /// A connection may support different methods for transporting messages, where
 /// each different method is called a channel. A channel provides guarantees on:
-/// * **reliablity** - ensuring that the message reaches the other side without
+/// * **reliability** - ensuring that the message reaches the other side without
 ///   being lost
 /// * **ordering** - ensuring that messages are received in the same order that
 ///   they are sent
@@ -56,7 +56,7 @@ pub enum ChannelKind {
     /// parts of the level are received in, but it is important that they are
     /// all received.
     ReliableUnordered,
-    /// Messages are sent **reliablity** and **ordered**.
+    /// Messages are sent **reliably** and **ordered**.
     ///
     /// This is useful for important one-off events where you need a guarantee
     /// that the message will be delivered, and the order in which it's
@@ -80,7 +80,7 @@ pub enum ChannelKind {
     ReliableOrdered,
 }
 
-/// Represents a finite set of channels that may be opened by an app.
+/// Finite set of channels that may be opened by an app.
 ///
 /// When you want to send a message from your app, you may need to specify along
 /// what channel it is sent. A type that implements this trait effectively acts
@@ -113,7 +113,7 @@ pub unsafe trait ChannelKey: Send + Sync + Sized + Debug + Clone + 'static {
     fn kind(&self) -> ChannelKind;
 }
 
-/// A type which can be sent along a specific variant of a [`ChannelKey`].
+/// Type which can be sent along a specific variant of a [`ChannelKey`].
 ///
 /// This should be dereived - see [`aeronet_derive::OnChannel`].
 ///

@@ -15,7 +15,7 @@ use std::error::Error;
 /// transport implementations, there may be additional bounds placed on message
 /// types, such as for transports using a network, in which data is sent as a
 /// byte sequence:
-/// * [`TryIntoBytes`] if the message should be able to be converted into a byte
+/// * [`TryAsBytes`] if the message should be able to be converted into a byte
 ///   sequence
 /// * [`TryFromBytes`] if the message should be able to be constructed from a
 ///   byte sequence
@@ -23,7 +23,7 @@ pub trait Message: Send + Sync + 'static {}
 
 impl<T> Message for T where T: Send + Sync + 'static {}
 
-/// Data that can potentially be converted to a sequence of bytes.
+/// Type that can potentially be read as a sequence of bytes.
 ///
 /// The transport implementation may wish to handle messages as a byte sequence,
 /// for example if it communicates over a network. This trait can be used as a
@@ -40,14 +40,14 @@ With the `bincode` feature enabled, this trait will automatically be implemented
 implement [`serde::Serialize`].
 "##
 )]
-pub trait TryIntoBytes {
-    /// Output type of [`TryIntoBytes::try_into_bytes`], which can be
+pub trait TryAsBytes {
+    /// Output type of [`TryAsBytes::try_as_bytes`], which can be
     /// converted into a slice of bytes.
     type Output<'a>: AsRef<[u8]> + Send
     where
         Self: 'a;
 
-    /// Error type for [`TryIntoBytes::try_into_bytes`].
+    /// Error type for [`TryAsBytes::try_as_bytes`].
     type Error: Error + Send + Sync + 'static;
 
     /// Performs the conversion.
@@ -55,7 +55,7 @@ pub trait TryIntoBytes {
     /// # Errors
     ///
     /// Errors if the conversion could not be performed.
-    fn try_into_bytes(&self) -> Result<Self::Output<'_>, Self::Error>;
+    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error>;
 }
 
 /// Data that can potentially be converted from a sequence of bytes into this
@@ -69,7 +69,7 @@ pub trait TryIntoBytes {
 /// ownership of them. This should be fine in most use-cases, but is still
 /// something to be aware of.
 ///
-/// See [`TryIntoBytes`] for the sending counterpart.
+/// See [`TryAsBytes`] for the sending counterpart.
 #[cfg_attr(
     feature = "bincode",
     doc = r##"
@@ -93,7 +93,7 @@ pub trait TryFromBytes: Sized {
 }
 
 #[cfg(feature = "bincode")]
-impl<T> TryIntoBytes for T
+impl<T> TryAsBytes for T
 where
     T: serde::Serialize,
 {
@@ -101,7 +101,7 @@ where
 
     type Error = bincode::Error;
 
-    fn try_into_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
+    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
         bincode::serialize(self)
     }
 }
@@ -140,7 +140,7 @@ mod tests {
     #[cfg(feature = "bincode")]
     fn bincode_serde() {
         let value = Value { x: 4, y: -2 };
-        let bytes = value.try_into_bytes().unwrap();
+        let bytes = value.try_as_bytes().unwrap();
         let value = Value::try_from_bytes(&bytes).unwrap();
         assert_eq!(Value { x: 4, y: -2 }, value);
     }

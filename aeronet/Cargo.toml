@@ -20,7 +20,7 @@ all-features = true
 ## Enables [`bevy`](https://docs.rs/bevy) support.
 bevy = [ "dep:bevy" ]
 
-## Enables using an async [`tokio`](https://docs.rs/tokio) runtime in a
+## Allows storing an async [`tokio`](https://docs.rs/tokio) runtime in a
 ## [`bevy`](https://docs.rs/bevy) resource.
 bevy-tokio-rt = [ "bevy", "dep:tokio" ]
 

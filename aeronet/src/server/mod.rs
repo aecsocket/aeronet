@@ -113,7 +113,7 @@ where
     fn disconnect(&mut self, client: impl Into<Self::Client>) -> Result<(), Self::Error>;
 }
 
-/// An event which is raised by a [`TransportServer`].
+/// Event raised by a [`TransportServer`].
 #[derive(Debug, Clone)]
 pub enum ServerEvent<P, T>
 where

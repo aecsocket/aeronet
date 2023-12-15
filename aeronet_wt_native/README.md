@@ -15,6 +15,6 @@ Using this requires the [`tokio`](https://crates.io/crates/tokio) async runtime.
 
 Before a message (of a user-specified type) can be transported along a WebTransport connection, it
 must first be converted to/from its serialized byte form. This is achieved using
-[`aeronet::TryIntoBytes`] and [`aeronet::TryFromBytes`]. The transport will not process the bytes
+[`aeronet::TryAsBytes`] and [`aeronet::TryFromBytes`]. The transport will not process the bytes
 any further than converting the bytes using these functions - the implementation will not do any
 higher-level functions such as message batching.

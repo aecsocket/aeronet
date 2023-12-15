@@ -1,4 +1,4 @@
-use aeronet::{OnChannel, TryFromBytes, TryIntoBytes};
+use aeronet::{OnChannel, TryAsBytes, TryFromBytes};
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 use wtransport::{endpoint::endpoint_side, ClientConfig, Connection, Endpoint};
@@ -16,7 +16,7 @@ pub(super) async fn start<P>(
     send_connected: oneshot::Sender<ConnectedClientResult<P>>,
 ) where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     let (endpoint, conn, channels) = match connect::<P>(config, url).await {
@@ -71,7 +71,7 @@ async fn connect<P>(
 >
 where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     debug!("Creating endpoint for {url}");

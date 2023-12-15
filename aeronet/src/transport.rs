@@ -29,6 +29,10 @@ pub trait TransportProtocol: Send + Sync + 'static {
 }
 
 /// Allows access to the round-trip time of a connection.
+///
+/// This is also known as latency, or "ping".
+#[doc(alias = "ping")]
+#[doc(alias = "latency")]
 pub trait Rtt {
     /// Gets the round-trip time to the connected endpoint.
     ///

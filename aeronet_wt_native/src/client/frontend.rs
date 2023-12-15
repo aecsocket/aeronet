@@ -1,6 +1,6 @@
 use std::{future::Future, task::Poll};
 
-use aeronet::{OnChannel, TransportClient, TryFromBytes, TryIntoBytes};
+use aeronet::{OnChannel, TransportClient, TryAsBytes, TryFromBytes};
 use tokio::sync::oneshot;
 use wtransport::ClientConfig;
 
@@ -13,7 +13,7 @@ use super::{
 impl<P> WebTransportClient<P>
 where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     /// Creates a new client which is not connecting to any server.
@@ -88,7 +88,7 @@ where
 impl<P> TransportClient<P> for WebTransportClient<P>
 where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     type Error = WebTransportError<P>;
@@ -150,7 +150,7 @@ where
 impl<P> ConnectingClient<P>
 where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     fn new(
@@ -179,7 +179,7 @@ where
 impl<P> ConnectedClient<P>
 where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     fn connection_info(&self) -> EndpointInfo {

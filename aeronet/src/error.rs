@@ -2,9 +2,11 @@
 //!
 //! In some situations, such as when reading an error from a Bevy event reader,
 //! you may only have access to an error behind a shared reference. Use
-//! [`as_pretty`] to wrap that reference a [`PrettyError`], making the
+//! [`as_pretty`] to wrap that reference in a [`PrettyError`], making the
 //! alternative [`fmt::Display`] impl format the entire error chain, in the
 //! same style as [`anyhow`](https://docs.rs/anyhow).
+//!
+//! Use `{:#}` to print the error in the "pretty" style.
 
 use std::{error::Error, fmt};
 

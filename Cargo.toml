@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 rust-version = "1.74.0"
 authors = [ "aecsocket <aecsocket@tutanota.com>" ]
@@ -27,8 +27,8 @@ pedantic = "warn"
 module_name_repetitions = "allow"
 
 [workspace.dependencies]
-aeronet = { version = "0.4.0", path = "aeronet" }
-aeronet_derive = { version = "0.4.0", path = "aeronet_derive" }
+aeronet = { version = "0.4.1", path = "aeronet" }
+aeronet_derive = { version = "0.4.1", path = "aeronet_derive" }
 
 derivative = "2.2.0"
 tracing = "0.1.40"

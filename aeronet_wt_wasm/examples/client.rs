@@ -23,7 +23,7 @@ impl TryFromBytes for AppMessage {
     }
 }
 
-impl TryIntoBytes for AppMessage {
+impl TryAsBytes for AppMessage {
     fn try_into_bytes(self) -> Result<Vec<u8>> {
         Ok(self.0.into_bytes())
     }

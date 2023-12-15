@@ -1,8 +1,6 @@
 use std::{fmt::Debug, io, net::SocketAddr, time::Duration};
 
-use aeronet::{
-    ChannelKey, Message, RemoteAddr, Rtt, TransportProtocol, TryFromBytes, TryIntoBytes,
-};
+use aeronet::{ChannelKey, Message, RemoteAddr, Rtt, TransportProtocol, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use wtransport::{
     error::{
@@ -71,7 +69,7 @@ impl RemoteAddr for EndpointInfo {
 pub enum WebTransportError<P, S, R>
 where
     P: WebTransportProtocol,
-    S: Message + TryIntoBytes,
+    S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
     /// The backend that handles connections asynchronously is shut down or not
@@ -117,7 +115,7 @@ where
 #[derive(Debug, thiserror::Error)]
 pub enum ChannelError<S, R>
 where
-    S: Message + TryIntoBytes,
+    S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
     // establish
@@ -138,7 +136,7 @@ where
     /// Failed to write into a bidirectional stream.
     #[error("failed to write stream")]
     WriteStream(#[source] StreamWriteError),
-    /// Failed to serialize data using [`TryIntoBytes::try_into_bytes`].
+    /// Failed to serialize data using [`TryAsBytes::try_as_bytes`].
     #[error("failed to serialize data")]
     Serialize(#[source] S::Error),
 

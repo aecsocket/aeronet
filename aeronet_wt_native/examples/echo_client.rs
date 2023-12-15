@@ -4,7 +4,7 @@ use std::{convert::Infallible, mem, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
     AsyncRuntime, ChannelKey, FromServer, LocalClientConnected, LocalClientDisconnected, OnChannel,
-    TransportClient, TransportClientPlugin, TransportProtocol, TryFromBytes, TryIntoBytes,
+    TransportClient, TransportClientPlugin, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use aeronet_wt_native::{ClientState, WebTransportClient, WebTransportProtocol};
 use anyhow::Result;
@@ -35,12 +35,12 @@ where
     }
 }
 
-impl TryIntoBytes for AppMessage {
+impl TryAsBytes for AppMessage {
     type Output<'a> = &'a [u8];
 
     type Error = Infallible;
 
-    fn try_into_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
+    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
         Ok(self.0.as_bytes())
     }
 }

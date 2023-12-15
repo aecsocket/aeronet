@@ -6,7 +6,7 @@ pub use plugin::*;
 
 use crate::TransportProtocol;
 
-/// Allows connecting to a server, and transporting messages to/from the server.
+/// Allows connecting to, and transporting messages to/from, a server.
 ///
 /// See the [crate-level docs](crate).
 pub trait TransportClient<P>
@@ -93,7 +93,7 @@ where
     fn disconnect(&mut self) -> Result<(), Self::Error>;
 }
 
-/// An event which is raised by a [`TransportClient`].
+/// Event raised by a [`TransportClient`].
 #[derive(Debug, Clone)]
 pub enum ClientEvent<P, T>
 where

@@ -3,8 +3,8 @@
 use std::{convert::Infallible, mem, string::FromUtf8Error};
 
 use aeronet::{
-    ClientEvent, ServerEvent, TransportClient, TransportProtocol, TransportServer, TryFromBytes,
-    TryIntoBytes,
+    ClientEvent, ServerEvent, TransportClient, TransportProtocol, TransportServer, TryAsBytes,
+    TryFromBytes,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::{log::LogPlugin, prelude::*};
@@ -24,12 +24,12 @@ where
     }
 }
 
-impl TryIntoBytes for AppMessage {
+impl TryAsBytes for AppMessage {
     type Output<'a> = &'a [u8];
 
     type Error = Infallible;
 
-    fn try_into_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
+    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
         Ok(self.0.as_bytes())
     }
 }

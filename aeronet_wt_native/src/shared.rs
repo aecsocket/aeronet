@@ -1,4 +1,4 @@
-use aeronet::{ChannelKey, ChannelKind, Message, OnChannel, TryFromBytes, TryIntoBytes};
+use aeronet::{ChannelKey, ChannelKind, Message, OnChannel, TryAsBytes, TryFromBytes};
 use futures::future::try_join_all;
 use tokio::sync::mpsc;
 use tracing::debug;
@@ -11,7 +11,7 @@ use crate::{ChannelError, EndpointInfo, WebTransportError, WebTransportProtocol}
 pub(super) struct ChannelsState<P, S, R>
 where
     P: WebTransportProtocol,
-    S: Message + TryIntoBytes,
+    S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
     channels: Vec<ChannelState<P>>,
@@ -37,7 +37,7 @@ pub(super) async fn establish_channels<P, S, R, const OPENS: bool>(
 ) -> Result<ChannelsState<P, S, R>, WebTransportError<P, S, R>>
 where
     P: WebTransportProtocol,
-    S: Message + TryIntoBytes,
+    S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
     let (send_streams, recv_streams) = mpsc::unbounded_channel();
@@ -67,7 +67,7 @@ async fn establish_channel<P, S, R, const OPENS: bool>(
 ) -> Result<ChannelState<P>, ChannelError<S, R>>
 where
     P: WebTransportProtocol,
-    S: Message + TryIntoBytes,
+    S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
     match channel.kind() {
@@ -86,7 +86,7 @@ async fn establish_stream<P, S, R, const OPENS: bool>(
 ) -> Result<ChannelState<P>, ChannelError<S, R>>
 where
     P: WebTransportProtocol,
-    S: Message + TryIntoBytes,
+    S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
     let (send_stream, recv_stream) = if OPENS {
@@ -120,7 +120,7 @@ async fn handle_stream<S, R>(
     send_r: mpsc::UnboundedSender<R>,
 ) -> Result<(), ChannelError<S, R>>
 where
-    S: Message + TryIntoBytes,
+    S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
     // TOOD: what is a good value for this?
@@ -154,7 +154,7 @@ pub(super) async fn handle_connection<P, S, R>(
 ) -> Result<(), WebTransportError<P, S, R>>
 where
     P: WebTransportProtocol,
-    S: Message + TryIntoBytes + OnChannel<Channel = P::Channel>,
+    S: Message + TryAsBytes + OnChannel<Channel = P::Channel>,
     R: Message + TryFromBytes,
 {
     let ChannelsState {
@@ -201,7 +201,7 @@ async fn send<P, S, R>(
 ) -> Result<(), WebTransportError<P, S, R>>
 where
     P: WebTransportProtocol,
-    S: Message + TryIntoBytes + OnChannel<Channel = P::Channel>,
+    S: Message + TryAsBytes + OnChannel<Channel = P::Channel>,
     R: Message + TryFromBytes,
 {
     let (channel, result) = match &mut channels[msg.channel().index()] {
@@ -217,10 +217,10 @@ where
 
 fn send_datagram<S, R>(conn: &Connection, msg: &S) -> Result<(), ChannelError<S, R>>
 where
-    S: Message + TryIntoBytes,
+    S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
-    let serialized = msg.try_into_bytes().map_err(ChannelError::Serialize)?;
+    let serialized = msg.try_as_bytes().map_err(ChannelError::Serialize)?;
     let bytes = serialized.as_ref();
     conn.send_datagram(bytes)
         .map_err(ChannelError::SendDatagram)
@@ -228,10 +228,10 @@ where
 
 async fn send_stream<S, R>(send: &mut SendStream, msg: S) -> Result<(), ChannelError<S, R>>
 where
-    S: Message + TryIntoBytes,
+    S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
-    let serialized = msg.try_into_bytes().map_err(ChannelError::Serialize)?;
+    let serialized = msg.try_as_bytes().map_err(ChannelError::Serialize)?;
     let bytes = serialized.as_ref();
     send.write_all(bytes)
         .await
@@ -243,7 +243,7 @@ fn recv_datagram<S, R>(
     send_r: &mpsc::UnboundedSender<R>,
 ) -> Result<(), ChannelError<S, R>>
 where
-    S: Message + TryIntoBytes,
+    S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
     let datagram = result.map_err(ChannelError::RecvDatagram)?;

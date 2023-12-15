@@ -1,7 +1,7 @@
 mod backend;
 mod frontend;
 
-use aeronet::{OnChannel, TransportProtocol, TransportServer, TryFromBytes, TryIntoBytes};
+use aeronet::{OnChannel, TransportProtocol, TransportServer, TryAsBytes, TryFromBytes};
 
 use std::{fmt::Debug, io, net::SocketAddr};
 
@@ -24,7 +24,7 @@ pub struct WebTransportServer<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     state: State<P>,
 }
@@ -36,7 +36,7 @@ pub enum ServerEvent<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     /// The server backend has been set up and is ready to accept connections.
     Opened,
@@ -99,7 +99,7 @@ impl<P, T> From<ServerEvent<P>> for Option<aeronet::ServerEvent<P, T>>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
     T: TransportServer<P, Client = ClientKey, Error = WebTransportError<P>>,
 {
     fn from(value: ServerEvent<P>) -> Self {
@@ -124,7 +124,7 @@ enum State<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     #[default]
     Closed,
@@ -138,7 +138,7 @@ struct OpeningServer<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     #[derivative(Debug = "ignore")]
     recv_open: oneshot::Receiver<OpenServerResult<P>>,
@@ -150,7 +150,7 @@ struct OpenServer<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     local_addr: Result<SocketAddr, io::Error>,
     clients: SlotMap<ClientKey, ClientState<P>>,
@@ -170,7 +170,7 @@ enum ClientState<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     Incoming(IncomingClient<P>),
     Accepted(AcceptedClient<P>),
@@ -184,7 +184,7 @@ struct IncomingClient<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     #[derivative(Debug = "ignore")]
     recv_accepted: oneshot::Receiver<AcceptedClientResult<P>>,
@@ -196,7 +196,7 @@ struct AcceptedClient<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     authority: String,
     path: String,
@@ -214,7 +214,7 @@ struct ConnectedClient<P>
 where
     P: WebTransportProtocol,
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     info: EndpointInfo,
     #[derivative(Debug = "ignore")]

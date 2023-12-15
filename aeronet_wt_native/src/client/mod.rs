@@ -3,7 +3,7 @@ mod frontend;
 
 use std::{fmt::Debug, io, net::SocketAddr};
 
-use aeronet::{OnChannel, TransportClient, TransportProtocol, TryFromBytes, TryIntoBytes};
+use aeronet::{OnChannel, TransportClient, TransportProtocol, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use tokio::sync::{mpsc, oneshot};
 
@@ -21,7 +21,7 @@ type WebTransportError<P> =
 pub struct WebTransportClient<P>
 where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     state: State<P>,
@@ -33,7 +33,7 @@ where
 pub enum ClientEvent<P>
 where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     /// This client has fully connected to a server.
@@ -60,7 +60,7 @@ where
 impl<P, T> From<ClientEvent<P>> for Option<aeronet::ClientEvent<P, T>>
 where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
     T: TransportClient<P, Error = WebTransportError<P>>,
 {
@@ -79,7 +79,7 @@ where
 enum State<P>
 where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     #[default]
@@ -106,7 +106,7 @@ pub enum ClientState {
 struct ConnectingClient<P>
 where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     #[derivative(Debug = "ignore")]
@@ -118,7 +118,7 @@ where
 struct ConnectedClient<P>
 where
     P: WebTransportProtocol,
-    P::C2S: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     local_addr: Result<SocketAddr, io::Error>,

@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use aeronet::{
-    ClientEvent, ClientTransport, Message, SessionError, TryFromBytes, TryIntoBytes,
+    ClientEvent, ClientTransport, Message, SessionError, TryFromBytes, TryAsBytes,
 };
 use crossbeam_channel::{Receiver, Sender};
 use js_sys::{Reflect, Uint8Array};
@@ -134,7 +134,7 @@ where
 
 impl<C2S, S2C> ClientTransport<C2S, S2C> for WebTransportClient<C2S, S2C>
 where
-    C2S: Message + TryIntoBytes,
+    C2S: Message + TryAsBytes,
     S2C: Message,
 {
     type EventIter<'a> = std::vec::Drain<'a, ClientEvent<S2C>> where Self: 'a;

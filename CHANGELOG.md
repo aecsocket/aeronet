@@ -1,6 +1,29 @@
+# 0.4.1
+
+* `TryIntoBytes` renamed to `TryAsBytes` since it doesn't consume `self`
+* Doc updates
+
 # 0.4.0
 
 Overhaul of basically the entire crate. Treat this as a completely new crate.
+
+What worked:
+* Using a finite state machine internally for the transport impls
+  * Makes it much easier to isolate logic and determine what happens when
+* Using a single `TransportProtocol` type parameter instead of `<C2S, S2C>`
+  * I originally had this in 0.1.0, but I wasn't experienced enough with the type system to
+    implement it properly
+  * Switching back to a single protocol type makes the API simpler for consumers
+* `ChannelKind` moved into `aeronet` core, as opposed to being WT-specific
+  * Reliability is a general-purpose feature which should be transport-agnostic, and channels are
+    perfect for this
+
+What didn't work:
+* Representing WT native clients as `Closed <-> (Open <-> Connected)` FSM
+  * Overly complicated state machine, made the logic confusing
+  * Not much benefit to the consumer
+* Exposing the internal FSM types to the user
+  * Complicated the API a lot, and how many users are going to be using the FSM directly?
 
 # 0.3.0
 

@@ -15,6 +15,18 @@ an endpoint, either the client or the server. You write your code against this i
 Bevy plugin which provides events used by the transport), and you don't have to worry about the
 underlying mechanism used to transport your data.
 
+# Examples
+
+WebTransport client
+```bash
+cargo run --package aeronet_wt_native --example echo_client --features "bevy dangerous-configuration"
+```
+
+WebTransport server
+```bash
+cargo run --package aeronet_wt_native --example echo_server --features "bevy"
+```
+
 # Transports
 
 * [`aeronet_channel`](https://crates.io/crates/aeronet_channel) via in-memory MPSC channels, useful
@@ -111,13 +123,13 @@ exposed by this crate - see [`ChannelKind`] for more info.
 
 The type of data that is sent between endpoints is a type implementing [`Message`], but the exact
 type is left up to the user of the transport. The user must define their own type implementing
-[`Protocol`], which specifies what type of message is sent client-to-server and server-to-client,
-then use this protocol type throughout their transports.
+[`TransportProtocol`], which specifies what type of message is sent client-to-server and
+server-to-client, then use this protocol type throughout their transports.
 
 Transport traits provide no guarantees about in what form the messages are transported. The
 memory (and therefore ownership) of the value may be sent directly, in the case of an in-memory
 MPSC channel, or may have to be serialized to/from a byte form before being transported. In this
-case, [`TryFromBytes`] and [`TryIntoBytes`] are useful to look at.
+case, [`TryFromBytes`] and [`TryAsBytes`] are useful to look at.
 
 ## Connection
 

@@ -1,4 +1,4 @@
-use aeronet::{OnChannel, TryFromBytes, TryIntoBytes};
+use aeronet::{OnChannel, TryAsBytes, TryFromBytes};
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
@@ -16,7 +16,7 @@ pub(super) async fn start<P: WebTransportProtocol>(
     send_open: oneshot::Sender<OpenServerResult<P>>,
 ) where
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     let endpoint = match Endpoint::server(config).map_err(WebTransportError::Endpoint) {
         Ok(endpoint) => endpoint,
@@ -64,7 +64,7 @@ async fn handle_session<P: WebTransportProtocol>(
     send_accepted: oneshot::Sender<AcceptedClientResult<P>>,
 ) where
     P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     let session = match session.await.map_err(WebTransportError::IncomingSession) {
         Ok(session) => session,
