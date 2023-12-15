@@ -42,13 +42,15 @@ First, you will need two [`Message`] types to use for sending client-to-server (
 server-to-client messages (S2C). They may be the same type.
 
 ```rust
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum C2S {
     Move(f32),
     Shoot,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum S2C {
     AddPlayer(String),
     UpdateHealth(f32),
@@ -91,11 +93,11 @@ use aeronet::{TransportClient, Rtt};
 # #[derive(Debug)]
 # pub enum C2S { Shoot }
 #
-# fn run<P, Client, ConnInfo>(mut client: Client)
+# fn run<P, T, I>(mut client: T)
 # where
 #     P: aeronet::TransportProtocol<C2S = C2S>,
-#     Client: TransportClient<P, ConnectionInfo = ConnInfo>,
-#     ConnInfo: Rtt,
+#     T: TransportClient<P, ConnectionInfo = I>,
+#     I: Rtt,
 # {
 client.send(C2S::Shoot);
 
