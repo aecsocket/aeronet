@@ -154,6 +154,7 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "crossbeam-channel",
+ "derivative",
  "js-sys",
  "thiserror",
  "tracing",

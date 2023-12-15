@@ -26,6 +26,7 @@ bevy = [ "dep:bevy", "aeronet/bevy" ]
 [dependencies]
 aeronet.workspace = true
 
+derivative.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
 crossbeam-channel.workspace = true

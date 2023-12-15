@@ -1,16 +1,18 @@
-use aeronet::{ChannelKey, ChannelKind, Message, OnChannel, TryAsBytes, TryFromBytes};
+use aeronet::{
+    ChannelKey, ChannelKind, ChannelProtocol, Message, OnChannel, TryAsBytes, TryFromBytes,
+};
 use futures::future::try_join_all;
 use tokio::sync::mpsc;
 use tracing::debug;
 use wtransport::{datagram::Datagram, error::ConnectionError, Connection, RecvStream, SendStream};
 
-use crate::{ChannelError, EndpointInfo, WebTransportError, WebTransportProtocol};
+use crate::{ChannelError, EndpointInfo, WebTransportError};
 
 // establishing channels
 
 pub(super) struct ChannelsState<P, S, R>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
@@ -21,7 +23,7 @@ where
 
 enum ChannelState<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
 {
     Datagram {
         channel: P::Channel,
@@ -36,7 +38,7 @@ pub(super) async fn establish_channels<P, S, R, const OPENS: bool>(
     conn: &Connection,
 ) -> Result<ChannelsState<P, S, R>, WebTransportError<P, S, R>>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
@@ -66,7 +68,7 @@ async fn establish_channel<P, S, R, const OPENS: bool>(
     send_err: mpsc::UnboundedSender<WebTransportError<P, S, R>>,
 ) -> Result<ChannelState<P>, ChannelError<S, R>>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
@@ -85,7 +87,7 @@ async fn establish_stream<P, S, R, const OPENS: bool>(
     send_err: mpsc::UnboundedSender<WebTransportError<P, S, R>>,
 ) -> Result<ChannelState<P>, ChannelError<S, R>>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {
@@ -153,7 +155,7 @@ pub(super) async fn handle_connection<P, S, R>(
     mut recv_s: mpsc::UnboundedReceiver<S>,
 ) -> Result<(), WebTransportError<P, S, R>>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     S: Message + TryAsBytes + OnChannel<Channel = P::Channel>,
     R: Message + TryFromBytes,
 {
@@ -200,7 +202,7 @@ async fn send<P, S, R>(
     msg: S,
 ) -> Result<(), WebTransportError<P, S, R>>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     S: Message + TryAsBytes + OnChannel<Channel = P::Channel>,
     R: Message + TryFromBytes,
 {

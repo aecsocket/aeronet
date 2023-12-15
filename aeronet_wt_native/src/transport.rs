@@ -1,6 +1,6 @@
 use std::{fmt::Debug, io, net::SocketAddr, time::Duration};
 
-use aeronet::{ChannelKey, Message, RemoteAddr, Rtt, TransportProtocol, TryAsBytes, TryFromBytes};
+use aeronet::{ChannelProtocol, Message, RemoteAddr, Rtt, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use wtransport::{
     error::{
@@ -16,17 +16,10 @@ slotmap::new_key_type! {
     pub struct ClientKey;
 }
 
-/// Extension of [`TransportProtocol`] for WebTransport implementations.
-pub trait WebTransportProtocol: TransportProtocol {
-    /// The type of [`ChannelKey`] used to specify along what channel a message
-    /// is sent.
-    type Channel: ChannelKey;
-}
-
 /// Statistics on the network state of a [`Connection`] managed by an endpoint.
 ///
 /// This serves as a snapshot of network stats, not a live updating value.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct EndpointInfo {
     /// The round-trip time of the connection as defined by [`Rtt`].
     ///
@@ -68,7 +61,7 @@ impl RemoteAddr for EndpointInfo {
 #[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug, S: Debug, R: Debug"))]
 pub enum WebTransportError<P, S, R>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     S: Message + TryAsBytes,
     R: Message + TryFromBytes,
 {

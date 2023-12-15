@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod bindings;
-//mod client;
+mod client;
+mod transport;
 
-//pub use client::*;
+pub use {client::*, transport::*};

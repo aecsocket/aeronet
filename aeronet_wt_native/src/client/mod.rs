@@ -3,11 +3,13 @@ mod frontend;
 
 use std::{fmt::Debug, io, net::SocketAddr};
 
-use aeronet::{OnChannel, TransportClient, TransportProtocol, TryAsBytes, TryFromBytes};
+use aeronet::{
+    ChannelProtocol, OnChannel, TransportClient, TransportProtocol, TryAsBytes, TryFromBytes,
+};
 use derivative::Derivative;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{EndpointInfo, WebTransportProtocol};
+use crate::EndpointInfo;
 
 type WebTransportError<P> =
     crate::WebTransportError<P, <P as TransportProtocol>::C2S, <P as TransportProtocol>::S2C>;
@@ -20,7 +22,7 @@ type WebTransportError<P> =
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct WebTransportClient<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
@@ -32,7 +34,7 @@ where
 #[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"))]
 pub enum ClientEvent<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
@@ -59,7 +61,7 @@ where
 
 impl<P, T> From<ClientEvent<P>> for Option<aeronet::ClientEvent<P, T>>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
     T: TransportClient<P, Error = WebTransportError<P>>,
@@ -78,7 +80,7 @@ where
 #[derive(Debug, Default)]
 enum State<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
@@ -105,7 +107,7 @@ pub enum ClientState {
 #[derivative(Debug)]
 struct ConnectingClient<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
@@ -117,7 +119,7 @@ where
 #[derivative(Debug)]
 struct ConnectedClient<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {

@@ -1,7 +1,9 @@
 mod backend;
 mod frontend;
 
-use aeronet::{OnChannel, TransportProtocol, TransportServer, TryAsBytes, TryFromBytes};
+use aeronet::{
+    ChannelProtocol, OnChannel, TransportProtocol, TransportServer, TryAsBytes, TryFromBytes,
+};
 
 use std::{fmt::Debug, io, net::SocketAddr};
 
@@ -9,7 +11,7 @@ use derivative::Derivative;
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{ClientKey, EndpointInfo, WebTransportProtocol};
+use crate::{ClientKey, EndpointInfo};
 
 type WebTransportError<P> =
     crate::WebTransportError<P, <P as TransportProtocol>::S2C, <P as TransportProtocol>::C2S>;
@@ -22,7 +24,7 @@ type WebTransportError<P> =
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct WebTransportServer<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -34,7 +36,7 @@ where
 #[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"))]
 pub enum ServerEvent<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -97,7 +99,7 @@ where
 
 impl<P, T> From<ServerEvent<P>> for Option<aeronet::ServerEvent<P, T>>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
     T: TransportServer<P, Client = ClientKey, Error = WebTransportError<P>>,
@@ -122,7 +124,7 @@ where
 #[derive(Debug, Default)]
 enum State<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -136,7 +138,7 @@ where
 #[derivative(Debug)]
 struct OpeningServer<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -148,7 +150,7 @@ where
 #[derivative(Debug)]
 struct OpenServer<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -168,7 +170,7 @@ type OpenServerResult<P> = Result<OpenServer<P>, WebTransportError<P>>;
 #[derive(Debug)]
 enum ClientState<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -182,7 +184,7 @@ where
 #[derivative(Debug)]
 struct IncomingClient<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -194,7 +196,7 @@ where
 #[derivative(Debug)]
 struct AcceptedClient<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -212,7 +214,7 @@ type AcceptedClientResult<P> = Result<AcceptedClient<P>, WebTransportError<P>>;
 #[derivative(Debug)]
 struct ConnectedClient<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {

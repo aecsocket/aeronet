@@ -1,20 +1,19 @@
-use aeronet::{OnChannel, TryAsBytes, TryFromBytes};
+use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
-use crate::{shared, EndpointInfo, WebTransportProtocol};
+use crate::{shared, EndpointInfo};
 
 use super::{
     AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, OpenServer,
     OpenServerResult, WebTransportError,
 };
 
-pub(super) async fn start<P: WebTransportProtocol>(
-    config: ServerConfig,
-    send_open: oneshot::Sender<OpenServerResult<P>>,
-) where
+pub(super) async fn start<P>(config: ServerConfig, send_open: oneshot::Sender<OpenServerResult<P>>)
+where
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -59,10 +58,11 @@ pub(super) async fn start<P: WebTransportProtocol>(
     }
 }
 
-async fn handle_session<P: WebTransportProtocol>(
+async fn handle_session<P>(
     session: IncomingSession,
     send_accepted: oneshot::Sender<AcceptedClientResult<P>>,
 ) where
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {

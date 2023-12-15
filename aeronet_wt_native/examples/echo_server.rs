@@ -3,10 +3,10 @@
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
-    AsyncRuntime, ChannelKey, OnChannel, TransportProtocol, TransportServer, TryAsBytes,
-    TryFromBytes,
+    AsyncRuntime, ChannelKey, ChannelProtocol, OnChannel, TransportProtocol, TransportServer,
+    TryAsBytes, TryFromBytes,
 };
-use aeronet_wt_native::{ServerEvent, WebTransportProtocol, WebTransportServer};
+use aeronet_wt_native::{ServerEvent, WebTransportServer};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
@@ -56,7 +56,7 @@ impl TransportProtocol for AppProtocol {
     type S2C = AppMessage;
 }
 
-impl WebTransportProtocol for AppProtocol {
+impl ChannelProtocol for AppProtocol {
     type Channel = AppChannel;
 }
 

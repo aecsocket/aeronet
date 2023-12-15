@@ -1,10 +1,10 @@
 use std::{future::Future, task::Poll};
 
-use aeronet::{OnChannel, TransportClient, TryAsBytes, TryFromBytes};
+use aeronet::{ChannelProtocol, OnChannel, TransportClient, TryAsBytes, TryFromBytes};
 use tokio::sync::oneshot;
 use wtransport::ClientConfig;
 
-use crate::{ClientEvent, ClientState, EndpointInfo, WebTransportClient, WebTransportProtocol};
+use crate::{ClientEvent, ClientState, EndpointInfo, WebTransportClient};
 
 use super::{
     backend, ConnectedClient, ConnectedClientResult, ConnectingClient, State, WebTransportError,
@@ -12,7 +12,7 @@ use super::{
 
 impl<P> WebTransportClient<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
@@ -87,7 +87,7 @@ where
 
 impl<P> TransportClient<P> for WebTransportClient<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
@@ -149,7 +149,7 @@ where
 
 impl<P> ConnectingClient<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
@@ -178,7 +178,7 @@ where
 
 impl<P> ConnectedClient<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {

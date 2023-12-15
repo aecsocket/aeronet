@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, time::Duration};
 
-use crate::Message;
+use crate::{ChannelKey, Message};
 
 /// Defines the types of messages sent across a transport channel.
 ///
@@ -26,6 +26,14 @@ pub trait TransportProtocol: Send + Sync + 'static {
 
     /// The type of message sent from the server to the client.
     type S2C: Message;
+}
+
+/// Extension of [`TransportProtocol`] which specifies along which
+/// [`ChannelKey`] messages are sent.
+pub trait ChannelProtocol: TransportProtocol {
+    /// The type of [`ChannelKey`] used to specify along what channel a message
+    /// is sent.
+    type Channel: ChannelKey;
 }
 
 /// Allows access to the round-trip time of a connection.

@@ -1,10 +1,10 @@
 use std::{future::Future, io, net::SocketAddr, task::Poll};
 
-use aeronet::{OnChannel, TransportServer, TryAsBytes, TryFromBytes};
+use aeronet::{ChannelProtocol, OnChannel, TransportServer, TryAsBytes, TryFromBytes};
 use tokio::sync::{mpsc, oneshot};
 use wtransport::ServerConfig;
 
-use crate::{ClientKey, EndpointInfo, ServerEvent, WebTransportProtocol, WebTransportServer};
+use crate::{ClientKey, EndpointInfo, ServerEvent, WebTransportServer};
 
 use super::{
     backend, ClientState, OpenServer, OpenServerResult, OpeningServer, State, WebTransportError,
@@ -12,7 +12,7 @@ use super::{
 
 impl<P> WebTransportServer<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -84,7 +84,7 @@ where
 
 impl<P> TransportServer<P> for WebTransportServer<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -157,7 +157,7 @@ where
 
 impl<P> OpeningServer<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -179,7 +179,7 @@ where
 
 impl<P> OpenServer<P>
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
@@ -257,7 +257,7 @@ fn recv_client<P>(
     events: &mut Vec<ServerEvent<P>>,
     to_remove: &mut Vec<ClientKey>,
 ) where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {

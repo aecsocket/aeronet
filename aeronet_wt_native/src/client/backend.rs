@@ -1,11 +1,11 @@
-use aeronet::{OnChannel, TryAsBytes, TryFromBytes};
+use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 use wtransport::{endpoint::endpoint_side, ClientConfig, Connection, Endpoint};
 
 use crate::{
     shared::{self, ChannelsState},
-    EndpointInfo, WebTransportProtocol,
+    EndpointInfo,
 };
 
 use super::{ConnectedClient, ConnectedClientResult, WebTransportError};
@@ -15,7 +15,7 @@ pub(super) async fn start<P>(
     url: String,
     send_connected: oneshot::Sender<ConnectedClientResult<P>>,
 ) where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
@@ -70,7 +70,7 @@ async fn connect<P>(
     WebTransportError<P>,
 >
 where
-    P: WebTransportProtocol,
+    P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {

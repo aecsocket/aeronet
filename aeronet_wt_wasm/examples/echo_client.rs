@@ -1,7 +1,7 @@
 //!
 
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiPlugin, EguiContexts};
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 fn main() {
     App::new()
