@@ -5,7 +5,7 @@ members = [
     "aeronet_derive",
     "aeronet_channel",
     "aeronet_wt_native",
-    #"aeronet_wt_wasm",
+    "aeronet_wt_wasm",
 ]
 
 [workspace.package]
@@ -51,8 +51,12 @@ slotmap = "1.0.6"
 bevy = { version = "0.12.0", default-features = false }
 bevy_egui = "0.24.0"
 
-rustc-hash = "1.1.0"
 wtransport = "0.1.8"
+
+wasm-bindgen = "0.2.89"
+wasm-bindgen-futures = "0.4.39"
+js-sys = "0.3.65"
+web-sys = "0.3.66"
 
 base64 = "0.21.5"
 rcgen = "0.11.3"
