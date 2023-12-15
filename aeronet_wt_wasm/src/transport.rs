@@ -14,8 +14,8 @@ where
     #[error("backend closed")]
     BackendClosed,
     /// Failed to create the JS WebTransport object.
-    #[error("failed to create client")]
-    CreateClient,
+    #[error("failed to create client: {0}")]
+    CreateClient(String),
     #[error("todo")]
     _X(Vec<P::C2S>),
 }
