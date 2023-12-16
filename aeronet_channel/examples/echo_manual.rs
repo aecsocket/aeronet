@@ -8,7 +8,6 @@ use aeronet::{
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::{log::LogPlugin, prelude::*};
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 // protocol
 

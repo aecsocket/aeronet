@@ -1,9 +1,11 @@
 //!
 
-use std::{mem, convert::Infallible, string::FromUtf8Error};
+use std::{convert::Infallible, mem, string::FromUtf8Error};
 
-use aeronet::{ChannelKey, OnChannel, TryAsBytes, TryFromBytes, TransportProtocol, ChannelProtocol};
-use aeronet_wt_wasm::WebTransportClient;
+use aeronet::{
+    ChannelKey, ChannelProtocol, OnChannel, TransportProtocol, TryAsBytes, TryFromBytes,
+};
+use aeronet_wt_wasm::{WebTransportClient, WebTransportConfig};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
@@ -95,7 +97,7 @@ fn ui(mut egui: EguiContexts, mut ui_state: ResMut<ClientUiState>) {
             let url = url.trim().to_string();
             let url = url[..url.len() - 1].to_string();
             if !url.is_empty() {
-                match Client::connecting(url) {
+                match Client::connecting(WebTransportConfig::default(), url) {
                     Ok(_) => info!("ok"),
                     Err(err) => warn!("err: {:#}", aeronet::error::as_pretty(&err)),
                 }

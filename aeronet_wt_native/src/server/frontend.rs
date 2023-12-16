@@ -124,27 +124,28 @@ where
 
     fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a {
         match &mut self.state {
-            State::Closed => vec![].into_iter(),
+            State::Closed => vec![],
             State::Opening(server) => match server.poll() {
-                Poll::Pending => vec![].into_iter(),
+                Poll::Pending => vec![],
                 Poll::Ready(Ok(server)) => {
                     self.state = State::Open(server);
-                    vec![ServerEvent::Opened].into_iter()
+                    vec![ServerEvent::Opened]
                 }
                 Poll::Ready(Err(cause)) => {
                     self.state = State::Closed;
-                    vec![ServerEvent::Closed { cause }].into_iter()
+                    vec![ServerEvent::Closed { cause }]
                 }
             },
             State::Open(server) => match server.recv() {
-                (events, Ok(())) => events.into_iter(),
+                (events, Ok(())) => events,
                 (mut events, Err(cause)) => {
                     self.state = State::Closed;
                     events.push(ServerEvent::Closed { cause });
-                    events.into_iter()
+                    events
                 }
             },
         }
+        .into_iter()
     }
 
     fn disconnect(&mut self, client: impl Into<Self::Client>) -> Result<(), Self::Error> {

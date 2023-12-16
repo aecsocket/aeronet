@@ -39,17 +39,11 @@ bevy = { workspace = true, optional = true }
 [dependencies.web-sys]
 workspace = true
 features = [
-    # bindings.rs
     "DomException",
     "ReadableStream",
     "WritableStream",
-    # client.rs
-    "Blob",
-    "Url",
-    "Worker",
     "ReadableStreamDefaultReader",
     "WritableStreamDefaultWriter",
-    "MessageEvent",
 ]
 
 [dev-dependencies]

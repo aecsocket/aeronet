@@ -135,7 +135,7 @@ where
 
     // receive
     /// Failed to receive a datagram from the other side.
-    #[error("failed to recv datagram")]
+    #[error("failed to receive datagram")]
     RecvDatagram(#[source] ConnectionError),
     /// Failed to read from a bidirectional stream.
     #[error("failed to read stream")]

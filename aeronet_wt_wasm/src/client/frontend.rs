@@ -1,14 +1,13 @@
 use std::{future::Future, task::Poll};
 
 use aeronet::{ChannelProtocol, OnChannel, TransportClient, TryAsBytes, TryFromBytes};
-use tokio::sync::oneshot;
-use wtransport::ClientConfig;
+use futures::channel::oneshot;
 
-use crate::{ClientEvent, ClientState, EndpointInfo, WebTransportClient};
-
-use super::{
-    backend, ConnectedClient, ConnectedClientResult, ConnectingClient, State, WebTransportError,
+use crate::{
+    util::WebTransport, EndpointInfo, WebTransportClient, WebTransportConfig, WebTransportError,
 };
+
+use super::{backend, ConnectedClient, ConnectedClientResult, ConnectingClient, State};
 
 impl<P> WebTransportClient<P>
 where
@@ -16,74 +15,28 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    /// Creates a new client which is not connecting to any server.
-    ///
-    /// This is useful if you want to prepare a client for connecting, but you
-    /// do not have a target server to connect to yet.
-    ///
-    /// If you want to create a client and connect to a server immediately after
-    /// creation, use [`WebTransportClient::connecting`] instead.
     #[must_use]
-    pub fn disconnected() -> Self {
+    pub fn closed() -> Self {
         Self {
             state: State::Disconnected,
         }
     }
 
-    /// Creates and starts connecting a client to a server.
-    ///
-    /// The URL must have protocol `https://`.
-    ///
-    /// This returns:
-    /// * the client frontend
-    ///   * use this throughout your app to interface with the client
-    /// * a [`Future`] for the client's backend task
-    ///   * run this on an async runtime as soon as possible
     pub fn connecting(
-        config: ClientConfig,
-        url: impl Into<String>,
-    ) -> (Self, impl Future<Output = ()> + Send) {
-        let (client, backend) = ConnectingClient::new(config, url);
-        (
+        config: WebTransportConfig,
+        url: impl AsRef<str>,
+    ) -> Result<(Self, impl Future<Output = ()>), WebTransportError<P>> {
+        let (client, backend) = ConnectingClient::new(config, url)?;
+        Ok((
             Self {
                 state: State::Connecting(client),
             },
             backend,
-        )
-    }
-
-    /// Attempts to start connecting this client to a server.
-    ///
-    /// See [`WebTransportClient::connecting`].
-    ///
-    /// # Errors
-    ///
-    /// Errors if this client is already connecting or is connected to a server.
-    pub fn connect(
-        &mut self,
-        config: ClientConfig,
-        url: impl Into<String>,
-    ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
-        match self.state {
-            State::Disconnected => {
-                let (client, backend) = ConnectingClient::new(config, url);
-                self.state = State::Connecting(client);
-                Ok(backend)
-            }
-            State::Connecting(_) | State::Connected(_) => Err(WebTransportError::BackendOpen),
-        }
-    }
-
-    /// Gets the current state of the client.
-    #[must_use]
-    pub fn state(&self) -> ClientState {
-        match self.state {
-            State::Disconnected => ClientState::Disconnected,
-            State::Connecting(_) => ClientState::Connecting,
-            State::Connected(_) => ClientState::Connected,
-        }
+        ))
     }
 }
+
+type ClientEvent<P> = aeronet::ClientEvent<P, WebTransportClient<P>>;
 
 impl<P> TransportClient<P> for WebTransportClient<P>
 where
@@ -99,12 +52,16 @@ where
 
     fn connection_info(&self) -> Option<Self::ConnectionInfo> {
         match &self.state {
-            State::Disconnected | State::Connecting(_) => None,
+            State::Disconnected => None,
+            State::Connecting(_) => None,
             State::Connected(client) => Some(client.connection_info()),
         }
     }
 
-    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
+    fn send(
+        &mut self,
+        msg: impl Into<<P as aeronet::TransportProtocol>::C2S>,
+    ) -> Result<(), Self::Error> {
         match &mut self.state {
             State::Disconnected | State::Connecting(_) => Err(WebTransportError::BackendClosed),
             State::Connected(client) => client.send(msg),
@@ -125,7 +82,7 @@ where
                     vec![ClientEvent::Disconnected { cause }]
                 }
             },
-            State::Connected(server) => match server.recv() {
+            State::Connected(client) => match client.recv() {
                 (events, Ok(())) => events,
                 (mut events, Err(cause)) => {
                     self.state = State::Disconnected;
@@ -155,24 +112,24 @@ where
     P::S2C: TryFromBytes,
 {
     fn new(
-        config: ClientConfig,
-        url: impl Into<String>,
-    ) -> (Self, impl Future<Output = ()> + Send) {
+        config: WebTransportConfig,
+        url: impl AsRef<str>,
+    ) -> Result<(Self, impl Future<Output = ()>), WebTransportError<P>> {
+        let url = url.as_ref();
+        let transport = WebTransport::new(config, url)?;
+
         let (send_connected, recv_connected) = oneshot::channel();
-        let url = url.into();
-        (
+        Ok((
             Self { recv_connected },
-            backend::start::<P>(config, url, send_connected),
-        )
+            backend::start::<P>(transport, send_connected),
+        ))
     }
 
     fn poll(&mut self) -> Poll<ConnectedClientResult<P>> {
         match self.recv_connected.try_recv() {
-            Ok(result) => Poll::Ready(result),
-            Err(oneshot::error::TryRecvError::Empty) => Poll::Pending,
-            Err(oneshot::error::TryRecvError::Closed) => {
-                Poll::Ready(Err(WebTransportError::BackendClosed))
-            }
+            Ok(Some(result)) => Poll::Ready(result),
+            Ok(None) => Poll::Pending,
+            Err(_) => Poll::Ready(Err(WebTransportError::BackendClosed)),
         }
     }
 }
@@ -184,33 +141,31 @@ where
     P::S2C: TryFromBytes,
 {
     fn connection_info(&self) -> EndpointInfo {
-        self.info.clone()
+        EndpointInfo
     }
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), WebTransportError<P>> {
         let msg = msg.into();
         self.send_c2s
-            .send(msg)
+            .unbounded_send(msg)
             .map_err(|_| WebTransportError::BackendClosed)
     }
 
     fn recv(&mut self) -> (Vec<ClientEvent<P>>, Result<(), WebTransportError<P>>) {
         let mut events = Vec::new();
 
-        while let Ok(info) = self.recv_info.try_recv() {
-            self.info = info;
-        }
+        // while let Ok(info) = self.recv_info.try_recv() {
+        //     self.info = info;
+        // }
 
-        while let Ok(msg) = self.recv_s2c.try_recv() {
+        while let Ok(Some(msg)) = self.recv_s2c.try_next() {
             events.push(ClientEvent::Recv { msg });
         }
 
         match self.recv_err.try_recv() {
-            Ok(cause) => (events, Err(cause)),
-            Err(oneshot::error::TryRecvError::Empty) => (events, Ok(())),
-            Err(oneshot::error::TryRecvError::Closed) => {
-                (events, Err(WebTransportError::BackendClosed))
-            }
+            Ok(Some(cause)) => (events, Err(cause)),
+            Ok(None) => (events, Ok(())),
+            Err(_) => (events, Err(WebTransportError::BackendClosed)),
         }
     }
 }

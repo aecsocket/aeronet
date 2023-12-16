@@ -9,56 +9,7 @@ use aeronet::{
 };
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-
-// protocol
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct AppMessage(String);
-
-impl<T> From<T> for AppMessage
-where
-    T: Into<String>,
-{
-    fn from(value: T) -> Self {
-        Self(value.into())
-    }
-}
-
-impl TryAsBytes for AppMessage {
-    type Output<'a> = &'a [u8];
-
-    type Error = Infallible;
-
-    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
-        Ok(self.0.as_bytes())
-    }
-}
-
-impl TryFromBytes for AppMessage {
-    type Error = FromUtf8Error;
-
-    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
-        String::from_utf8(buf.to_owned().into_iter().collect()).map(AppMessage)
-    }
-}
-
-struct AppProtocol;
-
-impl TransportProtocol for AppProtocol {
-    type C2S = AppMessage;
-    type S2C = AppMessage;
-}
-
-type Client = aeronet_channel::ChannelClient<AppProtocol>;
-type Server = aeronet_channel::ChannelServer<AppProtocol>;
-
 // resources
-
-#[derive(Debug, Default, Resource)]
-struct ClientState {
-    scrollback: Vec<String>,
-    buf: String,
-}
 
 #[derive(Debug, Default, Resource)]
 struct ServerState {

@@ -17,6 +17,8 @@ underlying mechanism used to transport your data.
 
 # Examples
 
+Note that the examples use code from `aeronet_example`.
+
 WebTransport client
 ```bash
 cargo run --package aeronet_wt_native --example echo_client --features "bevy dangerous-configuration"

@@ -105,9 +105,9 @@ name = "aeronet_channel"
 version = "0.4.1"
 dependencies = [
  "aeronet",
+ "aeronet_example",
  "anyhow",
  "bevy",
- "bevy_egui",
  "crossbeam-channel",
  "derivative",
  "slotmap",
@@ -126,10 +126,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "aeronet_example"
+version = "0.4.1"
+dependencies = [
+ "aeronet",
+ "anyhow",
+ "bevy",
+ "bevy_egui",
+]
+
+[[package]]
 name = "aeronet_wt_native"
 version = "0.4.1"
 dependencies = [
  "aeronet",
+ "aeronet_example",
  "anyhow",
  "base64 0.21.5",
  "bevy",

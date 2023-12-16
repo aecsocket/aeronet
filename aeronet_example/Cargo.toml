@@ -1,0 +1,19 @@
+[package]
+name = "aeronet_example"
+description = "Support code for aeronet implementation examples"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aeronet.workspace = true
+bevy = { workspace = true, default-features = false }
+bevy_egui.workspace = true
+anyhow.workspace = true
