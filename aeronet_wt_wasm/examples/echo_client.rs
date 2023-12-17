@@ -22,7 +22,6 @@ fn main() {
                 .set(WindowPlugin {
                     primary_window: Some(Window {
                         fit_canvas_to_parent: true,
-                        prevent_default_event_handling: false,
                         ..default()
                     }),
                     ..default()
@@ -67,10 +66,9 @@ fn ui(
         ui.horizontal(|ui| {
             ui.add_enabled_ui(!can_disconnect, |ui| {
                 if let Some(url) = url_buf(ui, &mut ui_state.url) {
-                    let backend = client
+                    client
                         .connect(client_config(), url)
                         .expect("backend should be disconnected");
-                    spawn_local(backend);
                 }
             });
 

@@ -1,7 +1,8 @@
-use std::{future::Future, task::Poll};
+use std::task::Poll;
 
 use aeronet::{ChannelProtocol, OnChannel, TransportClient, TryAsBytes, TryFromBytes};
 use futures::channel::oneshot;
+use wasm_bindgen_futures::spawn_local;
 
 use crate::{EndpointInfo, WebTransportClient, WebTransportConfig, WebTransportError};
 
@@ -23,26 +24,23 @@ where
     pub fn connecting(
         config: WebTransportConfig,
         url: impl Into<String>,
-    ) -> Result<(Self, impl Future<Output = ()>), WebTransportError<P>> {
-        let (client, backend) = ConnectingClient::new(config, url)?;
-        Ok((
-            Self {
-                state: State::Connecting(client),
-            },
-            backend,
-        ))
+    ) -> Result<Self, WebTransportError<P>> {
+        let client = ConnectingClient::new(config, url)?;
+        Ok(Self {
+            state: State::Connecting(client),
+        })
     }
 
     pub fn connect(
         &mut self,
         config: WebTransportConfig,
         url: impl Into<String>,
-    ) -> Result<impl Future<Output = ()>, WebTransportError<P>> {
+    ) -> Result<(), WebTransportError<P>> {
         match self.state {
             State::Disconnected { .. } => {
-                let (client, backend) = ConnectingClient::new(config, url)?;
+                let client = ConnectingClient::new(config, url)?;
                 self.state = State::Connecting(client);
-                Ok(backend)
+                Ok(())
             }
             State::Connecting(_) | State::Connected(_) => Err(WebTransportError::BackendOpen),
         }
@@ -151,16 +149,14 @@ where
     fn new(
         config: WebTransportConfig,
         url: impl Into<String>,
-    ) -> Result<(Self, impl Future<Output = ()>), WebTransportError<P>> {
+    ) -> Result<Self, WebTransportError<P>> {
         let url = url.into();
         let (send_connected, recv_connected) = oneshot::channel();
-        Ok((
-            Self {
-                recv_connected,
-                send_event: true,
-            },
-            backend::start::<P>(config, url, send_connected),
-        ))
+        spawn_local(backend::start::<P>(config, url, send_connected));
+        Ok(Self {
+            recv_connected,
+            send_event: true,
+        })
     }
 
     fn poll(&mut self) -> Poll<ConnectedClientResult<P>> {

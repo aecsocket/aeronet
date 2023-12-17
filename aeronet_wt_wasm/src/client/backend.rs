@@ -1,12 +1,12 @@
 use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
 use futures::{
     channel::{mpsc, oneshot},
-    FutureExt, StreamExt,
+    StreamExt,
 };
 use js_sys::{Reflect, Uint8Array};
 use tracing::debug;
 use wasm_bindgen::JsValue;
-use wasm_bindgen_futures::JsFuture;
+use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{ReadableStreamDefaultReader, WritableStreamDefaultWriter};
 
 use crate::{
@@ -88,20 +88,47 @@ where
         transport.datagrams().writable().get_writer().unwrap(),
     ));
 
+    // the current task handles frontend commands,
+    // the `spawn_local`'ed tasks handles receiving from the client 
+
+    let (mut send_err, mut recv_err) = mpsc::channel(0);
+    spawn_local(async move {
+        if let Err(err) = recv_stream::<P>(reader, send_s2c.clone()).await {
+            let _ = send_err.try_send(WebTransportError::OnDatagram(err));
+        }
+    });
+
     loop {
         futures::select! {
-            result = read::<P>(&reader).fuse() => {
-                let msg = result.map_err(WebTransportError::OnDatagram)?;
-                let _ = send_s2c.unbounded_send(msg);
-            }
             result = recv_c2s.next() => {
                 let msg = match result {
                     Some(msg) => msg,
-                    None => continue,
+                    None => return Ok(()),
                 };
                 send::<P>(&writer, msg).await.map_err(WebTransportError::OnDatagram)?;
             }
-        };
+            result = recv_err.next() => {
+                match result {
+                    Some(err) => return Err(err),
+                    None => return Ok(()),
+                }
+            }
+        }
+    }
+}
+
+async fn recv_stream<P>(
+    reader: ReadableStreamDefaultReader,
+    send_s2c: mpsc::UnboundedSender<P::S2C>,
+) -> Result<(), ChannelError<P>>
+where
+    P: ChannelProtocol,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryFromBytes,
+{
+    loop {
+        let msg = read::<P>(&reader).await?;
+        let _ = send_s2c.unbounded_send(msg);
     }
 }
 
@@ -111,7 +138,6 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    debug!("Waiting for reader");
     let (bytes, done) = JsFuture::from(reader.read())
         .await
         .map(|js| {
@@ -120,7 +146,6 @@ where
                 .unwrap()
                 .as_bool()
                 .unwrap();
-            debug!("Got val: {done}");
             (bytes, done)
         })
         .map_err(|js| ChannelError::RecvDatagram(err_msg(js)))?;
@@ -130,7 +155,6 @@ where
     }
 
     let bytes = bytes.to_vec();
-    debug!("Got a bunch of bytes: {bytes:?}");
     P::S2C::try_from_bytes(&bytes).map_err(ChannelError::Deserialize)
 }
 
