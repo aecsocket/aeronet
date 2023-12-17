@@ -144,12 +144,14 @@ case, [`TryFromBytes`] and [`TryAsBytes`] are useful to look at.
 
 ## Connection
 
-This crate abstracts over the complexities of connection by defining two states:
+This crate abstracts over the complexities of connection by defining three [`ClientState`]s:
+* **not connected** - a client does not have a connection to a server, and is not attempting to
+  establish a connection. This is the initial state of a client.
+* **connecting** - a client has attempted to establish a connection, but has not finished yet.
 * **connected** - a client has fully established a connection to a server, including opening the
   correct streams and channels and all other setup, and messages can now be exchanged between the
-  two
-* **not connected** - any state which isn't connected
+  two.
 
 Although the networking implementation is likely to be much more complex, including encryption,
-handshakes, etc., these two states can be used as a basic contract for networking code. However,
-the implementation may also choose to expose some more of these details.
+handshakes, etc., these states can be used as a basic contract for networking code. However, the
+implementation may also choose to expose some more of these details.

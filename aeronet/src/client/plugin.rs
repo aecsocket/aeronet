@@ -15,6 +15,7 @@ use crate::{ClientEvent, TransportClient, TransportProtocol};
 /// [`PostUpdate`]. This is controlled by the [`TransportClientSet`].
 ///
 /// This plugin emits the events:
+/// * [`LocalClientConnecting`]
 /// * [`LocalClientConnected`]
 /// * [`FromServer`]
 /// * [`LocalClientDisconnected`]
@@ -36,6 +37,7 @@ where
 {
     app.configure_sets(PreUpdate, TransportClientSet::Recv)
         .configure_sets(PostUpdate, TransportClientSet::Send)
+        .add_event::<LocalClientConnecting>()
         .add_event::<LocalClientConnected>()
         .add_event::<FromServer<P>>()
         .add_event::<LocalClientDisconnected<P, T>>()
@@ -92,6 +94,15 @@ pub enum TransportClientSet {
     /// Sending out messages created by the app.
     Send,
 }
+
+/// This client has started connecting to a server.
+/// 
+/// This may be followed by a [`ClientEvent::Connected`] or a
+/// [`ClientEvent::Disconnected`].
+///
+/// See [`ClientEvent::Connecting`].
+#[derive(Debug, Clone, Event)]
+pub struct LocalClientConnecting;
 
 /// This client has fully connected to a server.
 ///
@@ -152,6 +163,7 @@ pub struct DisconnectLocalClient;
 
 fn recv<P, T>(
     mut client: ResMut<T>,
+    mut connecting: EventWriter<LocalClientConnecting>,
     mut connected: EventWriter<LocalClientConnected>,
     mut recv: EventWriter<FromServer<P>>,
     mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
@@ -163,6 +175,7 @@ fn recv<P, T>(
     for event in client.recv() {
         match event.into() {
             None => {}
+            Some(ClientEvent::Connecting) => connecting.send(LocalClientConnecting),
             Some(ClientEvent::Connected) => connected.send(LocalClientConnected),
             Some(ClientEvent::Recv { msg }) => recv.send(FromServer { msg }),
             Some(ClientEvent::Disconnected { cause }) => {

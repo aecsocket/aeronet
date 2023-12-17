@@ -20,13 +20,13 @@ where
     P: TransportProtocol,
 {
     #[derivative(Debug = "ignore")]
-    pub(super) clients: SlotMap<ClientKey, ClientState<P>>,
+    pub(super) clients: SlotMap<ClientKey, RemoteClient<P>>,
     #[derivative(Debug = "ignore")]
     pub(super) event_buf: Vec<ServerEvent<P>>,
 }
 
 #[derive(Debug)]
-pub(super) struct ClientState<P>
+pub(super) struct RemoteClient<P>
 where
     P: TransportProtocol,
 {

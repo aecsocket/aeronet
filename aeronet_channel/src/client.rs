@@ -1,4 +1,4 @@
-use aeronet::{ServerEvent, TransportClient, TransportProtocol};
+use aeronet::{ServerEvent, TransportClient, TransportProtocol, ClientState};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 
@@ -25,6 +25,7 @@ where
 {
     Disconnected,
     Connected(ConnectedClient<P>),
+    JustDisconnected,
 }
 
 impl<P> ChannelClient<P>
@@ -70,7 +71,7 @@ where
     /// Errors if this client is already connected to a server.
     pub fn connect(&mut self, server: &mut ChannelServer<P>) -> Result<ClientKey, ChannelError> {
         match self.state {
-            State::Disconnected => {
+            State::Disconnected | State::JustDisconnected => {
                 let (server, key) = ConnectedClient::new(server);
                 self.state = State::Connected(server);
                 Ok(key)
@@ -92,39 +93,44 @@ where
 
     type Event = ClientEvent<P>;
 
-    fn connection_info(&self) -> Option<Self::ConnectionInfo> {
+    fn state(&self) -> ClientState<Self::ConnectionInfo> {
         match self.state {
-            State::Disconnected => None,
-            State::Connected(_) => Some(()),
+            State::Disconnected | State::JustDisconnected => ClientState::Disconnected,
+            State::Connected(_) => ClientState::Connected(()),
         }
     }
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
         match &mut self.state {
-            State::Disconnected => Err(ChannelError::Disconnected),
+            State::Disconnected | State::JustDisconnected => Err(ChannelError::Disconnected),
             State::Connected(client) => client.send(msg),
         }
     }
 
     fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a {
         match &mut self.state {
-            State::Disconnected => vec![].into_iter(),
+            State::Disconnected => vec![],
             State::Connected(client) => match client.recv() {
-                (events, Ok(())) => events.into_iter(),
+                (events, Ok(())) => events,
                 (mut events, Err(cause)) => {
                     self.state = State::Disconnected;
                     events.push(ClientEvent::Disconnected { cause });
-                    events.into_iter()
+                    events
                 }
             },
+            State::JustDisconnected => {
+                self.state = State::Disconnected;
+                vec![ClientEvent::Disconnected { cause: ChannelError::ForceDisconnect }]
+            }
         }
+        .into_iter()
     }
 
     fn disconnect(&mut self) -> Result<(), Self::Error> {
         match &mut self.state {
-            State::Disconnected => Err(ChannelError::AlreadyDisconnected),
+            State::Disconnected | State::JustDisconnected => Err(ChannelError::AlreadyDisconnected),
             State::Connected(_) => {
-                self.state = State::Disconnected;
+                self.state = State::JustDisconnected;
                 Ok(())
             }
         }
@@ -155,7 +161,7 @@ where
         let (send_c2s, recv_c2s) = crossbeam_channel::unbounded::<P::C2S>();
         let (send_s2c, recv_s2c) = crossbeam_channel::unbounded::<P::S2C>();
 
-        let remote_state = server::ClientState { send_s2c, recv_c2s };
+        let remote_state = server::RemoteClient { send_s2c, recv_c2s };
         let key = server.clients.insert(remote_state);
         server
             .event_buf

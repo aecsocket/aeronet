@@ -17,7 +17,7 @@ where
     type Error: Send + Sync + 'static;
 
     /// Info on this client's connection status, returned by
-    /// [`TransportClient::connection_info`].
+    /// [`TransportClient::state`].
     type ConnectionInfo;
 
     /// Type of event raised by this client.
@@ -29,14 +29,11 @@ where
     where
         Self: Sized;
 
-    /// Gets the current connection information and statistics if this client
-    /// is connected.
-    fn connection_info(&self) -> Option<Self::ConnectionInfo>;
-
-    /// Gets if this client is currently connected.
-    fn connected(&self) -> bool {
-        self.connection_info().is_some()
-    }
+    /// Gets the current state that this client is in.
+    /// 
+    /// This can be used to get information about the connection if it is
+    /// connected, or to check if the client is connected at all.
+    fn state(&self) -> ClientState<Self::ConnectionInfo>;
 
     /// Attempts to send a message to the connected server.
     ///
@@ -93,6 +90,21 @@ where
     fn disconnect(&mut self) -> Result<(), Self::Error>;
 }
 
+/// Current state of a [`TransportClient`].
+#[derive(Debug, Clone, Default)]
+pub enum ClientState<I> {
+    /// The client is not connected to a server, and is making no attempts to
+    /// connect.
+    #[default]
+    Disconnected,
+    /// The client is attempting to connect to a server, but the connection has
+    /// not been established yet.
+    Connecting,
+    /// The client has fully connected to a server, and information about the
+    /// connection is now available.
+    Connected(I),
+}
+
 /// Event raised by a [`TransportClient`].
 #[derive(Debug, Clone)]
 pub enum ClientEvent<P, T>
@@ -100,6 +112,11 @@ where
     P: TransportProtocol,
     T: TransportClient<P>,
 {
+    /// This client has started connecting to a server.
+    /// 
+    /// This may be followed by a [`ClientEvent::Connected`] or a
+    /// [`ClientEvent::Disconnected`].
+    Connecting,
     /// This client has fully connected to a server.
     ///
     /// Use this event to do setup logic, e.g. start loading the level.

@@ -36,11 +36,6 @@ bevy = { workspace = true, default-features = true }
 anyhow.workspace = true
 
 [[example]]
-name = "echo_plugin"
-path = "examples/echo_plugin.rs"
-required-features = [ "bevy" ]
-
-[[example]]
-name = "echo_manual"
-path = "examples/echo_manual.rs"
+name = "echo"
+path = "examples/echo.rs"
 required-features = [ "bevy" ]
