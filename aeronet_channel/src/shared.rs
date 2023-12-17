@@ -1,10 +1,4 @@
-slotmap::new_key_type! {
-    /// Key type used to uniquely identify a client connected to a
-    /// [`ChannelServer`].
-    ///
-    /// [`ChannelServer`]: crate::ChannelServer
-    pub struct ClientKey;
-}
+use crate::ClientKey;
 
 /// Error that occurs when processing a [`ChannelClient`] or [`ChannelServer`].
 ///
@@ -19,13 +13,13 @@ pub enum ChannelError {
     /// dropped and closing the MPSC channels.
     #[error("disconnected")]
     Disconnected,
-    /// The client was forcefully disconnected by the server.
+    /// The client was forcefully disconnected by the app.
     #[error("force disconnect")]
     ForceDisconnect,
-    /// This client is already connected to a server.
+    /// The client is already connected to a server.
     #[error("already connected")]
     AlreadyConnected,
-    /// This client is already disconnected.
+    /// The client is already disconnected.
     #[error("already disconnected")]
     AlreadyDisconnected,
 }

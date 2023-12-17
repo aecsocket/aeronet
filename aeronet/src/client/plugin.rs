@@ -96,7 +96,7 @@ pub enum TransportClientSet {
 }
 
 /// This client has started connecting to a server.
-/// 
+///
 /// This may be followed by a [`ClientEvent::Connected`] or a
 /// [`ClientEvent::Disconnected`].
 ///

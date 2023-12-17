@@ -15,6 +15,7 @@ use crate::{ServerEvent, TransportProtocol, TransportServer};
 /// [`PostUpdate`]. This is controlled by the [`TransportServerSet`].
 ///
 /// This plugin emits the events:
+/// * [`RemoteClientConnecting`]
 /// * [`RemoteClientConnected`]
 /// * [`FromClient`]
 /// * [`RemoteClientDisconnected`]
@@ -33,6 +34,7 @@ where
 {
     app.configure_sets(PreUpdate, TransportServerSet::Recv)
         .configure_sets(PostUpdate, TransportServerSet::Send)
+        .add_event::<RemoteClientConnecting<P, T>>()
         .add_event::<RemoteClientConnected<P, T>>()
         .add_event::<FromClient<P, T>>()
         .add_event::<RemoteClientDisconnected<P, T>>()
@@ -80,6 +82,22 @@ pub enum TransportServerSet {
     Recv,
     /// Sending out messages and commands requested by the app.
     Send,
+}
+
+/// A client has requested to connect to this server.
+///
+/// This may be followed by a [`ServerEvent::Connected`] or a
+/// [`ServerEvent::Disconnected`].
+///
+/// See [`ServerEvent::Connecting`].
+#[derive(Debug, Clone, Event)]
+pub struct RemoteClientConnecting<P, T>
+where
+    P: TransportProtocol,
+    T: TransportServer<P>,
+{
+    /// The key of the connecting client.
+    pub client: T::Client,
 }
 
 /// A client has fully connected to this server.
@@ -163,6 +181,7 @@ where
 
 fn recv<P, T>(
     mut server: ResMut<T>,
+    mut connecting: EventWriter<RemoteClientConnecting<P, T>>,
     mut connected: EventWriter<RemoteClientConnected<P, T>>,
     mut recv: EventWriter<FromClient<P, T>>,
     mut disconnected: EventWriter<RemoteClientDisconnected<P, T>>,
@@ -174,6 +193,9 @@ fn recv<P, T>(
     for event in server.recv() {
         match event.into() {
             None => {}
+            Some(ServerEvent::Connecting { client }) => {
+                connecting.send(RemoteClientConnecting { client });
+            }
             Some(ServerEvent::Connected { client }) => {
                 connected.send(RemoteClientConnected { client });
             }

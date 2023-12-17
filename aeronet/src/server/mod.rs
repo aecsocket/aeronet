@@ -4,7 +4,7 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use crate::TransportProtocol;
+use crate::{ClientState, TransportProtocol};
 
 /// Allows listening for client connections, and transporting messages to/from
 /// the clients connected to this server.
@@ -21,7 +21,7 @@ where
     type Error: Send + Sync + 'static;
 
     /// Info on a given client's connection status, returned by
-    /// [`TransportServer::connection_info`].
+    /// [`TransportServer::client_state`].
     type ConnectionInfo;
 
     /// Type of event raised by this server.
@@ -29,12 +29,12 @@ where
     /// This event type must be able to be potentially converted into a
     /// [`ServerEvent`]. If an event value cannot cleanly map to a single
     /// generic [`ServerEvent`], its [`Into`] impl must return [`None`].
-    type Event: Into<Option<ServerEvent<P, Self>>>
-    where
-        Self: Sized;
+    type Event: Into<Option<ServerEvent<P, Self>>>;
 
-    /// Gets the current connection information and statistics on a connected
-    /// client.
+    /// Gets the current state that a specific client is in.
+    ///
+    /// This can be used to get information about the connection if it is
+    /// connected, or to check if the client is connected at all.
     ///
     /// The data that this function returns is left up to the implementation,
     /// but in general this allows accessing:
@@ -43,19 +43,10 @@ where
     ///
     /// [`Rtt`]: crate::Rtt
     /// [`RemoteAddr`]: crate::RemoteAddr
-    fn connection_info(&self, client: Self::Client) -> Option<Self::ConnectionInfo>;
+    fn client_state(&self, client: Self::Client) -> ClientState<Self::ConnectionInfo>;
 
-    /// Gets if the given client is currently connected.
-    fn connected(&self, client: Self::Client) -> bool {
-        self.connection_info(client).is_some()
-    }
-
-    /// Gets all clients connected to this server.
-    ///
-    /// Each client key returned by this iterator is guaranteed to be connected,
-    /// however the implementation may have some clients which *could* be
-    /// connected, but not recognised as connected yet.
-    fn connected_clients(&self) -> impl Iterator<Item = Self::Client>;
+    /// Gets all clients recognized by this server.
+    fn clients(&self) -> impl Iterator<Item = (Self::Client, ClientState<Self::ConnectionInfo>)>;
 
     /// Attempts to send a message to the given client.
     ///
@@ -92,9 +83,7 @@ where
     ///     implementations
     ///   * a single event returned from this is not guaranteed to map to a
     ///     specific [`ServerEvent`]
-    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a
-    where
-        Self: Sized;
+    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a;
 
     /// Forces a client to disconnect from this server.
     ///
@@ -115,11 +104,19 @@ where
 
 /// Event raised by a [`TransportServer`].
 #[derive(Debug, Clone)]
-pub enum ServerEvent<P, T>
+pub enum ServerEvent<P, T: ?Sized>
 where
     P: TransportProtocol,
     T: TransportServer<P>,
 {
+    /// A client has requested to connect to this server.
+    ///
+    /// This may be followed by a [`ServerEvent::Connected`] or a
+    /// [`ServerEvent::Disconnected`].
+    Connecting {
+        /// The key of the connecting client.
+        client: T::Client,
+    },
     /// A client has fully connected to this server.
     ///
     /// Use this event to do client setup logic, e.g. start loading player data.

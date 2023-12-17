@@ -97,7 +97,7 @@ the transport, to do functions such as sending and receiving data.
 
 ```rust
 use std::time::Duration;
-use aeronet::{TransportClient, Rtt};
+use aeronet::{ClientState, TransportClient, Rtt};
 
 # #[derive(Debug)]
 # pub enum C2S { Shoot }
@@ -110,7 +110,7 @@ use aeronet::{TransportClient, Rtt};
 # {
 client.send(C2S::Shoot);
 
-if let Some(conn_info) = client.connection_info() {
+if let ClientState::Connected(conn_info) = client.connection_info() {
     let rtt: Duration = conn_info.rtt();
     println!("Latency to server: {rtt:?}");
 }

@@ -108,6 +108,7 @@ dependencies = [
  "aeronet_example",
  "anyhow",
  "bevy",
+ "bevy_egui",
  "crossbeam-channel",
  "derivative",
  "slotmap",

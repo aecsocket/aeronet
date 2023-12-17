@@ -2,5 +2,6 @@
 
 mod client;
 mod protocol;
+mod ui;
 
-pub use {client::*, protocol::*};
+pub use {client::*, protocol::*, ui::*};

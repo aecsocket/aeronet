@@ -78,7 +78,7 @@ fn ui(
         ui.horizontal(|ui| {
             ui.add_enabled_ui(!connected, |ui| {
                 if let Some(url) = url_buf(ui, &mut ui_state.url) {
-                    ui_state.log.push(LogLine::connecting(&url));
+                    ui_state.log.push(LogLine::connecting_to(&url));
                     let backend = client
                         .connect(client_config(), url)
                         .expect("backend should be disconnected");

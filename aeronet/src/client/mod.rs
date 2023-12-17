@@ -25,14 +25,20 @@ where
     /// This event type must be able to be potentially converted into a
     /// [`ClientEvent`]. If an event value cannot cleanly map to a single
     /// generic [`ClientEvent`], its [`Into`] impl must return [`None`].
-    type Event: Into<Option<ClientEvent<P, Self>>>
-    where
-        Self: Sized;
+    type Event: Into<Option<ClientEvent<P, Self>>>;
 
     /// Gets the current state that this client is in.
-    /// 
+    ///
     /// This can be used to get information about the connection if it is
     /// connected, or to check if the client is connected at all.
+    ///
+    /// The data that this function returns is left up to the implementation,
+    /// but in general this allows accessing:
+    /// * the round-trip time, or ping ([`Rtt`])
+    /// * the remote socket address ([`RemoteAddr`])
+    ///
+    /// [`Rtt`]: crate::Rtt
+    /// [`RemoteAddr`]: crate::RemoteAddr
     fn state(&self) -> ClientState<Self::ConnectionInfo>;
 
     /// Attempts to send a message to the connected server.
@@ -70,9 +76,7 @@ where
     ///     implementations
     ///   * a single event returned from this is not guaranteed to map to a
     ///     specific [`ClientEvent`]
-    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a
-    where
-        Self: Sized;
+    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a;
 
     /// Forces this client to disconnect from its currently connected server.
     ///
@@ -90,7 +94,10 @@ where
     fn disconnect(&mut self) -> Result<(), Self::Error>;
 }
 
-/// Current state of a [`TransportClient`].
+/// Current state of a client, either a [`TransportClient`] or a remote client
+/// connecting to a [`TransportServer`].
+///
+/// [`TransportServer`]: crate::TransportServer
 #[derive(Debug, Clone, Default)]
 pub enum ClientState<I> {
     /// The client is not connected to a server, and is making no attempts to
@@ -107,13 +114,13 @@ pub enum ClientState<I> {
 
 /// Event raised by a [`TransportClient`].
 #[derive(Debug, Clone)]
-pub enum ClientEvent<P, T>
+pub enum ClientEvent<P, T: ?Sized>
 where
     P: TransportProtocol,
     T: TransportClient<P>,
 {
     /// This client has started connecting to a server.
-    /// 
+    ///
     /// This may be followed by a [`ClientEvent::Connected`] or a
     /// [`ClientEvent::Disconnected`].
     Connecting,

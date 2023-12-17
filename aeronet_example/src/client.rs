@@ -1,5 +1,7 @@
-use std::{error::Error, mem};
+use std::{error::Error, fmt::Debug};
 
+use aeronet::{LocalClientConnecting, LocalClientConnected, FromServer, ToServer, LocalClientDisconnected, TransportProtocol, TransportClient, RemoteClientConnecting, RemoteClientConnected, FromClient, ToClient, RemoteClientDisconnected, TransportServer};
+use bevy::prelude::*;
 use bevy_egui::egui;
 
 use crate::AppMessage;
@@ -45,37 +47,6 @@ impl LogLine {
         Self { kind, msg }
     }
 
-    /// The user requested to connect to a target.
-    pub fn connecting(target: impl AsRef<str>) -> Self {
-        let target = target.as_ref();
-        Self::new(LogKind::Connect, format!("Connecting to {target}"))
-    }
-
-    /// The client connected to a server.
-    pub fn connected() -> Self {
-        Self::new(LogKind::Info, "Connected")
-    }
-
-    /// The client sent a message to the server.
-    pub fn send(msg: impl AsRef<str>) -> Self {
-        let msg = msg.as_ref();
-        Self::new(LogKind::Message, format!("< {msg}"))
-    }
-
-    /// The server sent a message to this client.
-    pub fn recv(msg: impl AsRef<str>) -> Self {
-        let msg = msg.as_ref();
-        Self::new(LogKind::Message, format!("> {msg}"))
-    }
-
-    /// The client lost connection from its server.
-    pub fn disconnected(err: &impl Error) -> Self {
-        Self::new(
-            LogKind::Disconnect,
-            format!("Disconnected: {:#}", aeronet::error::as_pretty(err)),
-        )
-    }
-
     /// Creates a rich text value for this log line, which can be added to an
     /// [`egui::Ui`].
     pub fn text(&self) -> egui::RichText {
@@ -85,59 +56,87 @@ impl LogLine {
     }
 }
 
-/// Shows a series of [`LogLine`]s in a vertical [`egui::ScrollArea`].
-pub fn log_lines(ui: &mut egui::Ui, log: &[LogLine]) {
-    egui::ScrollArea::vertical().show(ui, |ui| {
-        for line in log {
-            ui.label(line.text());
-        }
-    });
+pub trait Log {
+    fn lines(&mut self) -> &mut Vec<LogLine>;
 }
 
-/// Shows a message input buffer using [`egui::TextEdit`].
-pub fn msg_buf(ui: &mut egui::Ui, buf: &mut String) -> Option<AppMessage> {
-    let resp = ui
-        .horizontal(|ui| {
-            ui.label("Send");
-            ui.add(egui::TextEdit::singleline(buf).hint_text("[enter] to send"))
-        })
-        .inner;
+pub fn client_log<P, T, L>(
+    mut log: ResMut<L>,
+    mut connecting: EventReader<LocalClientConnecting>,
+    mut connected: EventReader<LocalClientConnected>,
+    mut recv: EventReader<FromServer<P>>,
+    mut send: EventReader<ToServer<P>>,
+    mut disconnected: EventReader<LocalClientDisconnected<P, T>>,
+)
+where
+    P: TransportProtocol<C2S = AppMessage, S2C = AppMessage>,
+    T: TransportClient<P> + Resource,
+    T::Error: Error,
+    L: Log + Resource,
+{
+    let log = log.lines();
 
-    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-        ui.memory_mut(|m| m.request_focus(resp.id));
-
-        let buf = mem::take(buf).trim().to_string();
-        if buf.is_empty() {
-            return None;
-        } else {
-            return Some(AppMessage(buf));
-        }
+    for LocalClientConnecting in connecting.read() {
+        log.push(LogLine::new(LogKind::Connect, "Connecting"));
     }
 
-    None
+    for LocalClientConnected in connected.read() {
+        log.push(LogLine::new(LogKind::Info, "Connected"));
+    }
+
+    for FromServer { msg } in recv.read() {
+        log.push(LogLine::new(LogKind::Message, format!("> {}", &msg.0)));
+    }
+
+    for ToServer { msg } in send.read() {
+        log.push(LogLine::new(LogKind::Message, format!("< {}", &msg.0)));
+    }
+
+    for LocalClientDisconnected { cause } in disconnected.read() {
+        log.push(LogLine::new(LogKind::Disconnect, format!(
+            "Disconnected: {:#}",
+            aeronet::error::as_pretty(cause),
+        )));
+    }
 }
 
-pub fn url_buf(ui: &mut egui::Ui, url: &mut String) -> Option<String> {
-    let resp = ui
-        .horizontal(|ui| {
-            ui.label("URL");
-            ui.add(
-                egui::TextEdit::singleline(url)
-                    .hint_text("https://[::1]:25565 | [enter] to connect"),
-            )
-        })
-        .inner;
+pub fn server_log<P, T, L>(
+    mut log: ResMut<L>,
+    mut connecting: EventReader<RemoteClientConnecting<P, T>>,
+    mut connected: EventReader<RemoteClientConnected<P, T>>,
+    mut recv: EventReader<FromClient<P, T>>,
+    mut send: EventReader<ToClient<P, T>>,
+    mut disconnected: EventReader<RemoteClientDisconnected<P, T>>,
+)
+where
+    P: TransportProtocol<C2S = AppMessage, S2C = AppMessage>,
+    T: TransportServer<P> + Resource,
+    T::Client: Debug,
+    T::Error: Error,
+    L: Log + Resource,
+{
+    let log = log.lines();
 
-    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-        ui.memory_mut(|m| m.request_focus(resp.id));
-
-        let url = url.trim().to_string();
-        if url.is_empty() {
-            return None;
-        } else {
-            return Some(url);
-        }
+    for RemoteClientConnecting { client } in connecting.read() {
+        log.push(LogLine::new(LogKind::Connect, format!("{client:?} connecting")));
     }
 
-    None
+    for RemoteClientConnected { client } in connected.read() {
+        log.push(LogLine::new(LogKind::Info, format!("{client:?} connected")));
+    }
+
+    for FromClient { client, msg } in recv.read() {
+        log.push(LogLine::new(LogKind::Message, format!("{client:?} > {}", &msg.0)));
+    }
+
+    for ToClient { client, msg } in send.read() {
+        log.push(LogLine::new(LogKind::Message, format!("{client:?} < {}", &msg.0)));
+    }
+
+    for RemoteClientDisconnected { client, cause } in disconnected.read() {
+        log.push(LogLine::new(LogKind::Disconnect, format!(
+            "{client:?} disconnected: {:#}",
+            aeronet::error::as_pretty(cause),
+        )));
+    }
 }
