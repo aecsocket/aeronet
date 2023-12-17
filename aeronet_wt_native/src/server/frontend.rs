@@ -4,10 +4,10 @@ use aeronet::{ChannelProtocol, OnChannel, TransportServer, TryAsBytes, TryFromBy
 use tokio::sync::{mpsc, oneshot};
 use wtransport::ServerConfig;
 
-use crate::{ClientKey, EndpointInfo, ServerEvent, WebTransportServer};
+use crate::{shared::ClientState, ClientKey, EndpointInfo, ServerEvent, WebTransportServer};
 
 use super::{
-    backend, ClientState, OpenServer, OpenServerResult, OpeningServer, State, WebTransportError,
+    backend, OpenServer, OpenServerResult, OpeningServer, RemoteClient, State, WebTransportError,
 };
 
 impl<P> WebTransportServer<P>
@@ -96,14 +96,14 @@ where
 
     type Event = ServerEvent<P>;
 
-    fn connection_info(&self, client: Self::Client) -> Option<Self::ConnectionInfo> {
+    fn client_state(&self, client: Self::Client) -> ClientState {
         match &self.state {
-            State::Closed | State::Opening(_) => None,
-            State::Open(server) => server.connection_info(client),
+            State::Closed | State::Opening(_) => ClientState::Disconnected,
+            State::Open(server) => server.client_state(client),
         }
     }
 
-    fn connected_clients(&self) -> impl Iterator<Item = Self::Client> {
+    fn clients(&self) -> impl Iterator<Item = (Self::Client, ClientState)> {
         let clients = match &self.state {
             State::Closed | State::Opening(_) => None,
             State::Open(server) => Some(server.clients()),
@@ -188,22 +188,25 @@ where
         self.local_addr.as_ref().map(|addr| *addr)
     }
 
-    fn clients(&self) -> impl Iterator<Item = ClientKey> + '_ {
-        self.clients.keys()
+    fn client_state(&self, client: ClientKey) -> ClientState {
+        match self.clients.get(client) {
+            None | Some(RemoteClient::Disconnected) => ClientState::Disconnected,
+            Some(RemoteClient::Incoming(_) | RemoteClient::Accepted(_)) => ClientState::Connecting,
+            Some(RemoteClient::Connected(client)) => ClientState::Connected(client.info.clone()),
+        }
     }
 
-    fn connection_info(&self, client: ClientKey) -> Option<EndpointInfo> {
-        self.clients.get(client).and_then(|client| match client {
-            ClientState::Connected(client) => Some(client.info.clone()),
-            _ => None,
-        })
+    fn clients(&self) -> impl Iterator<Item = (ClientKey, ClientState)> + '_ {
+        self.clients
+            .keys()
+            .map(|client| (client, self.client_state(client)))
     }
 
     fn send(&self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), WebTransportError<P>> {
         let Some(state) = self.clients.get(client) else {
             return Err(WebTransportError::NoClient(client));
         };
-        let ClientState::Connected(state) = state else {
+        let RemoteClient::Connected(state) = state else {
             return Err(WebTransportError::NotConnected(client));
         };
 
@@ -219,7 +222,7 @@ where
         loop {
             match self.recv_client.try_recv() {
                 Ok(client) => {
-                    let client = self.clients.insert(ClientState::Incoming(client));
+                    let client = self.clients.insert(RemoteClient::Incoming(client));
                     events.push(ServerEvent::Incoming { client });
                 }
                 Err(mpsc::error::TryRecvError::Empty) => break,
@@ -244,7 +247,7 @@ where
         let client = client.into();
         match self.clients.get_mut(client) {
             Some(client) => {
-                *client = ClientState::Disconnected;
+                *client = RemoteClient::Disconnected;
                 Ok(())
             }
             None => Err(WebTransportError::NoClient(client)),
@@ -254,7 +257,7 @@ where
 
 fn recv_client<P>(
     client: ClientKey,
-    state: &mut ClientState<P>,
+    state: &mut RemoteClient<P>,
     events: &mut Vec<ServerEvent<P>>,
     to_remove: &mut Vec<ClientKey>,
 ) where
@@ -263,7 +266,7 @@ fn recv_client<P>(
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     match state {
-        ClientState::Incoming(incoming) => match incoming.recv_accepted.try_recv() {
+        RemoteClient::Incoming(incoming) => match incoming.recv_accepted.try_recv() {
             Ok(Ok(accepted)) => {
                 events.push(ServerEvent::Accepted {
                     client,
@@ -272,7 +275,7 @@ fn recv_client<P>(
                     origin: accepted.origin.clone(),
                     user_agent: accepted.user_agent.clone(),
                 });
-                *state = ClientState::Accepted(accepted);
+                *state = RemoteClient::Accepted(accepted);
             }
             Ok(Err(cause)) => {
                 events.push(ServerEvent::Disconnected { client, cause });
@@ -287,10 +290,10 @@ fn recv_client<P>(
                 to_remove.push(client);
             }
         },
-        ClientState::Accepted(accepted) => match accepted.recv_connected.try_recv() {
+        RemoteClient::Accepted(accepted) => match accepted.recv_connected.try_recv() {
             Ok(Ok(connected)) => {
                 events.push(ServerEvent::Connected { client });
-                *state = ClientState::Connected(connected);
+                *state = RemoteClient::Connected(connected);
             }
             Ok(Err(cause)) => {
                 events.push(ServerEvent::Disconnected { client, cause });
@@ -305,7 +308,7 @@ fn recv_client<P>(
                 to_remove.push(client);
             }
         },
-        ClientState::Connected(connected) => {
+        RemoteClient::Connected(connected) => {
             while let Ok(info) = connected.recv_info.try_recv() {
                 connected.info = info;
             }
@@ -329,7 +332,7 @@ fn recv_client<P>(
                 }
             }
         }
-        ClientState::Disconnected => {
+        RemoteClient::Disconnected => {
             events.push(ServerEvent::Disconnected {
                 client,
                 cause: WebTransportError::ForceDisconnect,

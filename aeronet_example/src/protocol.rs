@@ -64,6 +64,6 @@ impl TryFromBytes for AppMessage {
     type Error = FromUtf8Error;
 
     fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
-        String::from_utf8(buf.to_owned().into_iter().collect()).map(AppMessage)
+        String::from_utf8(buf.to_vec()).map(AppMessage)
     }
 }

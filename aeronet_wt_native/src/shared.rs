@@ -8,6 +8,8 @@ use wtransport::{datagram::Datagram, error::ConnectionError, Connection, RecvStr
 
 use crate::{ChannelError, EndpointInfo, WebTransportError};
 
+pub(super) type ClientState = aeronet::ClientState<EndpointInfo>;
+
 // establishing channels
 
 pub(super) struct ChannelsState<P, S, R>

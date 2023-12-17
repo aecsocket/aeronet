@@ -6,7 +6,7 @@ members = [
     "aeronet_derive",
     "aeronet_channel",
     "aeronet_wt_native",
-    "aeronet_wt_wasm",
+    #"aeronet_wt_wasm",
 ]
 
 [workspace.package]

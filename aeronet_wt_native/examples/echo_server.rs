@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use aeronet::{AsyncRuntime, TransportServer};
+use aeronet::{AsyncRuntime, TransportServer, ClientState};
 use aeronet_example::AppProtocol;
 use aeronet_wt_native::{ServerEvent, WebTransportServer};
 use anyhow::Result;
@@ -77,8 +77,10 @@ fn update_server(mut server: ResMut<Server>) {
                 ..
             } => info!("{client:?} accepted from {authority}{path}"),
             ServerEvent::Connected { client } => {
-                let remote_addr = server.connection_info(client).unwrap().remote_addr;
-                info!("{client:?} connected from {remote_addr}");
+                let ClientState::Connected(info) = server.client_state(client) else {
+                    unreachable!();
+                };
+                info!("{client:?} connected from {}", info.remote_addr);
             }
             ServerEvent::Recv { client, msg } => {
                 info!("{client:?} > {}", msg.0);

@@ -1,12 +1,10 @@
 //!
 
-use aeronet::{
-    FromClient,
-    ToClient, ToServer, TransportClientPlugin,
-    TransportServerPlugin,
-};
+use aeronet::{FromClient, ToClient, ToServer, TransportClientPlugin, TransportServerPlugin};
 use aeronet_channel::{ChannelClient, ChannelServer};
-use aeronet_example::{AppProtocol, LogLine, AppMessage, Log, client_log, log_lines, msg_buf, server_log};
+use aeronet_example::{
+    client_log, log_lines, msg_buf, server_log, AppMessage, AppProtocol, Log, LogLine,
+};
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
@@ -56,7 +54,12 @@ fn main() {
             Update,
             (
                 (client_log::<_, Client, ClientUiState>, client_ui).chain(),
-                (server_reply, server_log::<_, Server, ServerUiState>, server_ui).chain(),
+                (
+                    server_reply,
+                    server_log::<_, Server, ServerUiState>,
+                    server_ui,
+                )
+                    .chain(),
             ),
         )
         .run();

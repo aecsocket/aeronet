@@ -2,12 +2,9 @@
 
 use std::time::Duration;
 
-use aeronet::{
-    AsyncRuntime, FromServer, LocalClientConnected, LocalClientDisconnected, TransportClient,
-    TransportClientPlugin,
-};
-use aeronet_example::{log_lines, msg_buf, url_buf, AppProtocol, LogLine};
-use aeronet_wt_native::{ClientState, WebTransportClient};
+use aeronet::{AsyncRuntime, TransportClient, TransportClientPlugin, ClientState, ToServer};
+use aeronet_example::{log_lines, msg_buf, url_buf, AppProtocol, LogLine, client_log, Log};
+use aeronet_wt_native::WebTransportClient;
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use wtransport::ClientConfig;
@@ -19,6 +16,12 @@ struct ClientUiState {
     log: Vec<LogLine>,
     url: String,
     buf: String,
+}
+
+impl Log for ClientUiState {
+    fn lines(&mut self) -> &mut Vec<LogLine> {
+        &mut self.log
+    }
 }
 
 // logic
@@ -36,7 +39,7 @@ fn main() {
         .init_resource::<AsyncRuntime>()
         .init_resource::<Client>()
         .init_resource::<ClientUiState>()
-        .add_systems(Update, (update, ui).chain())
+        .add_systems(Update, (client_log::<_, Client, ClientUiState>, ui).chain())
         .run();
 }
 
@@ -48,37 +51,18 @@ fn client_config() -> ClientConfig {
         .build()
 }
 
-fn update(
-    mut ui_state: ResMut<ClientUiState>,
-    mut connected: EventReader<LocalClientConnected>,
-    mut recv: EventReader<FromServer<AppProtocol>>,
-    mut disconnected: EventReader<LocalClientDisconnected<AppProtocol, Client>>,
-) {
-    for LocalClientConnected in connected.read() {
-        ui_state.log.push(LogLine::connected());
-    }
-
-    for FromServer { msg } in recv.read() {
-        ui_state.log.push(LogLine::recv(&msg.0));
-    }
-
-    for LocalClientDisconnected { cause } in disconnected.read() {
-        ui_state.log.push(LogLine::disconnected(cause));
-    }
-}
-
 fn ui(
     rt: Res<AsyncRuntime>,
     mut egui: EguiContexts,
     mut client: ResMut<Client>,
     mut ui_state: ResMut<ClientUiState>,
+    mut send: EventWriter<ToServer<AppProtocol>>,
 ) {
     egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
-        let connected = client.state() != ClientState::Disconnected;
+        let can_disconnect = matches!(client.state(), ClientState::Connecting | ClientState::Connected(_));
         ui.horizontal(|ui| {
-            ui.add_enabled_ui(!connected, |ui| {
+            ui.add_enabled_ui(!can_disconnect, |ui| {
                 if let Some(url) = url_buf(ui, &mut ui_state.url) {
-                    ui_state.log.push(LogLine::connecting_to(&url));
                     let backend = client
                         .connect(client_config(), url)
                         .expect("backend should be disconnected");
@@ -86,7 +70,7 @@ fn ui(
                 }
             });
 
-            ui.add_enabled_ui(connected, |ui| {
+            ui.add_enabled_ui(can_disconnect, |ui| {
                 if ui.button("Disconnect").clicked() {
                     let _ = client.disconnect();
                 }
@@ -95,10 +79,9 @@ fn ui(
 
         log_lines(ui, &ui_state.log);
 
-        if client.state() == ClientState::Connected {
+        if let ClientState::Connected(_) = client.state() {
             if let Some(msg) = msg_buf(ui, &mut ui_state.buf) {
-                ui_state.log.push(LogLine::send(&msg.0));
-                let _ = client.send(msg);
+                send.send(ToServer { msg });
             }
         }
     });

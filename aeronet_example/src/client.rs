@@ -1,6 +1,10 @@
 use std::{error::Error, fmt::Debug};
 
-use aeronet::{LocalClientConnecting, LocalClientConnected, FromServer, ToServer, LocalClientDisconnected, TransportProtocol, TransportClient, RemoteClientConnecting, RemoteClientConnected, FromClient, ToClient, RemoteClientDisconnected, TransportServer};
+use aeronet::{
+    FromClient, FromServer, LocalClientConnected, LocalClientConnecting, LocalClientDisconnected,
+    RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected, ToClient, ToServer,
+    TransportClient, TransportProtocol, TransportServer,
+};
 use bevy::prelude::*;
 use bevy_egui::egui;
 
@@ -21,6 +25,7 @@ pub enum LogKind {
 
 impl LogKind {
     /// Gets the color of this log message.
+    #[must_use]
     pub fn color(&self) -> egui::Color32 {
         match self {
             Self::Message => egui::Color32::GRAY,
@@ -49,6 +54,7 @@ impl LogLine {
 
     /// Creates a rich text value for this log line, which can be added to an
     /// [`egui::Ui`].
+    #[must_use]
     pub fn text(&self) -> egui::RichText {
         egui::RichText::new(&self.msg)
             .color(self.kind.color())
@@ -56,10 +62,14 @@ impl LogLine {
     }
 }
 
+/// Access to a [`Vec`] of [`LogLine`]s.
 pub trait Log {
+    /// Provides access to the [`LogLine`]s.
     fn lines(&mut self) -> &mut Vec<LogLine>;
 }
 
+/// Collects events from [`aeronet::TransportClientPlugin`] and pushes them to
+/// a [`Log`].
 pub fn client_log<P, T, L>(
     mut log: ResMut<L>,
     mut connecting: EventReader<LocalClientConnecting>,
@@ -67,8 +77,7 @@ pub fn client_log<P, T, L>(
     mut recv: EventReader<FromServer<P>>,
     mut send: EventReader<ToServer<P>>,
     mut disconnected: EventReader<LocalClientDisconnected<P, T>>,
-)
-where
+) where
     P: TransportProtocol<C2S = AppMessage, S2C = AppMessage>,
     T: TransportClient<P> + Resource,
     T::Error: Error,
@@ -93,13 +102,15 @@ where
     }
 
     for LocalClientDisconnected { cause } in disconnected.read() {
-        log.push(LogLine::new(LogKind::Disconnect, format!(
-            "Disconnected: {:#}",
-            aeronet::error::as_pretty(cause),
-        )));
+        log.push(LogLine::new(
+            LogKind::Disconnect,
+            format!("Disconnected: {:#}", aeronet::error::as_pretty(cause),),
+        ));
     }
 }
 
+/// Collects events from [`aeronet::TransportServerPlugin`] and pushes them to
+/// a [`Log`].
 pub fn server_log<P, T, L>(
     mut log: ResMut<L>,
     mut connecting: EventReader<RemoteClientConnecting<P, T>>,
@@ -107,8 +118,7 @@ pub fn server_log<P, T, L>(
     mut recv: EventReader<FromClient<P, T>>,
     mut send: EventReader<ToClient<P, T>>,
     mut disconnected: EventReader<RemoteClientDisconnected<P, T>>,
-)
-where
+) where
     P: TransportProtocol<C2S = AppMessage, S2C = AppMessage>,
     T: TransportServer<P> + Resource,
     T::Client: Debug,
@@ -118,7 +128,10 @@ where
     let log = log.lines();
 
     for RemoteClientConnecting { client } in connecting.read() {
-        log.push(LogLine::new(LogKind::Connect, format!("{client:?} connecting")));
+        log.push(LogLine::new(
+            LogKind::Connect,
+            format!("{client:?} connecting"),
+        ));
     }
 
     for RemoteClientConnected { client } in connected.read() {
@@ -126,17 +139,26 @@ where
     }
 
     for FromClient { client, msg } in recv.read() {
-        log.push(LogLine::new(LogKind::Message, format!("{client:?} > {}", &msg.0)));
+        log.push(LogLine::new(
+            LogKind::Message,
+            format!("{client:?} > {}", &msg.0),
+        ));
     }
 
     for ToClient { client, msg } in send.read() {
-        log.push(LogLine::new(LogKind::Message, format!("{client:?} < {}", &msg.0)));
+        log.push(LogLine::new(
+            LogKind::Message,
+            format!("{client:?} < {}", &msg.0),
+        ));
     }
 
     for RemoteClientDisconnected { client, cause } in disconnected.read() {
-        log.push(LogLine::new(LogKind::Disconnect, format!(
-            "{client:?} disconnected: {:#}",
-            aeronet::error::as_pretty(cause),
-        )));
+        log.push(LogLine::new(
+            LogKind::Disconnect,
+            format!(
+                "{client:?} disconnected: {:#}",
+                aeronet::error::as_pretty(cause),
+            ),
+        ));
     }
 }

@@ -16,8 +16,8 @@ type ServerEvent<P> = aeronet::ServerEvent<P, ChannelServer<P>>;
 /// Implementation of [`TransportServer`] using in-memory MPSC channels.
 ///
 /// See the [crate-level docs](crate).
-#[derive(Derivative, Default)]
-#[derivative(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelServer<P>
 where

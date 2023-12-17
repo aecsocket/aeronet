@@ -4,10 +4,10 @@ use aeronet::{ChannelProtocol, OnChannel, TransportClient, TryAsBytes, TryFromBy
 use tokio::sync::oneshot;
 use wtransport::ClientConfig;
 
-use crate::{ClientEvent, ClientState, EndpointInfo, WebTransportClient};
+use crate::{shared::ClientState, EndpointInfo, WebTransportClient};
 
 use super::{
-    backend, ConnectedClient, ConnectedClientResult, ConnectingClient, State, WebTransportError,
+    backend, ConnectedClient, ConnectedClientResult, ConnectingClient, State, WebTransportError, ClientEvent,
 };
 
 impl<P> WebTransportClient<P>
@@ -26,7 +26,7 @@ where
     #[must_use]
     pub fn disconnected() -> Self {
         Self {
-            state: State::Disconnected,
+            state: State::Disconnected { forced: false },
         }
     }
 
@@ -65,22 +65,12 @@ where
         url: impl Into<String>,
     ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
         match self.state {
-            State::Disconnected | State::JustDisconnected => {
+            State::Disconnected { .. } => {
                 let (client, backend) = ConnectingClient::new(config, url);
                 self.state = State::Connecting(client);
                 Ok(backend)
             }
             State::Connecting(_) | State::Connected(_) => Err(WebTransportError::BackendOpen),
-        }
-    }
-
-    /// Gets the current state of the client.
-    #[must_use]
-    pub fn state(&self) -> ClientState {
-        match self.state {
-            State::Disconnected | State::JustDisconnected => ClientState::Disconnected,
-            State::Connecting(_) => ClientState::Connecting,
-            State::Connected(_) => ClientState::Connected,
         }
     }
 }
@@ -97,16 +87,17 @@ where
 
     type Event = ClientEvent<P>;
 
-    fn connection_info(&self) -> Option<Self::ConnectionInfo> {
+    fn state(&self) -> ClientState {
         match &self.state {
-            State::Disconnected | State::Connecting(_) | State::JustDisconnected => None,
-            State::Connected(client) => Some(client.connection_info()),
+            State::Disconnected { .. } => ClientState::Disconnected,
+            State::Connecting(_) => ClientState::Connecting,
+            State::Connected(client) => ClientState::Connected(client.connection_info()),
         }
     }
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
         match &mut self.state {
-            State::Disconnected | State::Connecting(_) | State::JustDisconnected => {
+            State::Disconnected { .. } | State::Connecting(_) => {
                 Err(WebTransportError::BackendClosed)
             }
             State::Connected(client) => client.send(msg),
@@ -115,41 +106,55 @@ where
 
     fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a {
         match &mut self.state {
-            State::Disconnected => vec![],
-            State::Connecting(client) => match client.poll() {
-                Poll::Pending => vec![],
-                Poll::Ready(Ok(client)) => {
-                    self.state = State::Connected(client);
-                    vec![ClientEvent::Connected]
+            State::Disconnected { forced } => {
+                if *forced {
+                    *forced = false;
+                    vec![ClientEvent::Disconnected {
+                        cause: WebTransportError::ForceDisconnect,
+                    }]
+                } else {
+                    vec![]
                 }
-                Poll::Ready(Err(cause)) => {
-                    self.state = State::Disconnected;
-                    vec![ClientEvent::Disconnected { cause }]
+            }
+            State::Connecting(client) => {
+                let mut events = Vec::new();
+
+                if client.send_event {
+                    client.send_event = false;
+                    events.push(ClientEvent::Connecting);
                 }
-            },
+
+                match client.poll() {
+                    Poll::Pending => {}
+                    Poll::Ready(Ok(client)) => {
+                        self.state = State::Connected(client);
+                        events.push(ClientEvent::Connected);
+                    }
+                    Poll::Ready(Err(cause)) => {
+                        self.state = State::Disconnected { forced: false };
+                        events.push(ClientEvent::Disconnected { cause });
+                    }
+                }
+
+                events
+            }
             State::Connected(server) => match server.recv() {
                 (events, Ok(())) => events,
                 (mut events, Err(cause)) => {
-                    self.state = State::Disconnected;
+                    self.state = State::Disconnected { forced: false };
                     events.push(ClientEvent::Disconnected { cause });
                     events
                 }
             },
-            State::JustDisconnected => {
-                self.state = State::Disconnected;
-                vec![ClientEvent::Disconnected {
-                    cause: WebTransportError::ForceDisconnect,
-                }]
-            }
         }
         .into_iter()
     }
 
     fn disconnect(&mut self) -> Result<(), Self::Error> {
         match self.state {
-            State::Disconnected | State::JustDisconnected => Err(WebTransportError::BackendClosed),
+            State::Disconnected { .. } => Err(WebTransportError::BackendClosed),
             State::Connecting(_) | State::Connected(_) => {
-                self.state = State::JustDisconnected;
+                self.state = State::Disconnected { forced: true };
                 Ok(())
             }
         }
@@ -169,7 +174,10 @@ where
         let (send_connected, recv_connected) = oneshot::channel();
         let url = url.into();
         (
-            Self { recv_connected },
+            Self {
+                recv_connected,
+                send_event: true,
+            },
             backend::start::<P>(config, url, send_connected),
         )
     }

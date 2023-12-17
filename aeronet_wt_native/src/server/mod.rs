@@ -19,8 +19,8 @@ type WebTransportError<P> =
 /// Implementation of [`TransportServer`] using the WebTransport protocol.
 ///
 /// See the [crate-level docs](crate).
-#[derive(Debug, Derivative)]
-#[derivative(Default)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct WebTransportServer<P>
 where
@@ -29,6 +29,30 @@ where
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     state: State<P>,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"))]
+enum State<P>
+where
+    P: ChannelProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
+{
+    Closed,
+    Opening(OpeningServer<P>),
+    Open(OpenServer<P>),
+}
+
+impl<P> Default for State<P>
+where
+    P: ChannelProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
+{
+    fn default() -> Self {
+        Self::Closed
+    }
 }
 
 /// Event raised by a [`WebTransportServer`].
@@ -119,23 +143,8 @@ where
     }
 }
 
-// server states
-
-#[derive(Debug, Default)]
-enum State<P>
-where
-    P: ChannelProtocol,
-    P::C2S: TryFromBytes,
-    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
-{
-    #[default]
-    Closed,
-    Opening(OpeningServer<P>),
-    Open(OpenServer<P>),
-}
-
 #[derive(Derivative)]
-#[derivative(Debug)]
+#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"))]
 struct OpeningServer<P>
 where
     P: ChannelProtocol,
@@ -147,7 +156,7 @@ where
 }
 
 #[derive(Derivative)]
-#[derivative(Debug)]
+#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"))]
 struct OpenServer<P>
 where
     P: ChannelProtocol,
@@ -155,7 +164,7 @@ where
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     local_addr: Result<SocketAddr, io::Error>,
-    clients: SlotMap<ClientKey, ClientState<P>>,
+    clients: SlotMap<ClientKey, RemoteClient<P>>,
     #[derivative(Debug = "ignore")]
     recv_client: mpsc::UnboundedReceiver<IncomingClient<P>>,
     #[derivative(Debug = "ignore")]
@@ -167,8 +176,9 @@ type OpenServerResult<P> = Result<OpenServer<P>, WebTransportError<P>>;
 
 // client states
 
-#[derive(Debug)]
-enum ClientState<P>
+#[derive(Derivative)]
+#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"))]
+enum RemoteClient<P>
 where
     P: ChannelProtocol,
     P::C2S: TryFromBytes,

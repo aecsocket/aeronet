@@ -8,7 +8,7 @@ use crate::{ChannelError, ChannelServer, ClientKey};
 ///
 /// See the [crate-level docs](crate).
 #[derive(Derivative)]
-#[derivative(Debug(bound = "P::C2S: ::std::fmt::Debug, P::S2C: ::std::fmt::Debug"))]
+#[derivative(Debug(bound = "P::C2S: ::std::fmt::Debug, P::S2C: ::std::fmt::Debug"), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelClient<P>
 where
@@ -25,6 +25,15 @@ where
 {
     Disconnected { forced: bool },
     Connected(ConnectedClient<P>),
+}
+
+impl<P> Default for State<P>
+where
+    P: TransportProtocol,
+{
+    fn default() -> Self {
+        Self::Disconnected { forced: false }
+    }
 }
 
 impl<P> ChannelClient<P>

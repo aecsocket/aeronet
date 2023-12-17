@@ -2,7 +2,7 @@ use std::mem;
 
 use bevy_egui::egui;
 
-use crate::{LogLine, AppMessage};
+use crate::{AppMessage, LogLine};
 
 /// Shows a series of [`LogLine`]s in a vertical [`egui::ScrollArea`].
 pub fn log_lines(ui: &mut egui::Ui, log: &[LogLine]) {
@@ -26,11 +26,11 @@ pub fn msg_buf(ui: &mut egui::Ui, buf: &mut String) -> Option<AppMessage> {
         ui.memory_mut(|m| m.request_focus(resp.id));
 
         let buf = mem::take(buf).trim().to_string();
-        if buf.is_empty() {
-            return None;
+        return if buf.is_empty() {
+            None
         } else {
-            return Some(AppMessage(buf));
-        }
+            Some(AppMessage(buf))
+        };
     }
 
     None
@@ -52,11 +52,7 @@ pub fn url_buf(ui: &mut egui::Ui, url: &mut String) -> Option<String> {
         ui.memory_mut(|m| m.request_focus(resp.id));
 
         let url = url.trim().to_string();
-        if url.is_empty() {
-            return None;
-        } else {
-            return Some(url);
-        }
+        return if url.is_empty() { None } else { Some(url) };
     }
 
     None
