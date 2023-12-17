@@ -5,7 +5,6 @@ use aeronet_example::{client_log, log_lines, msg_buf, url_buf, AppProtocol, Log,
 use aeronet_wt_wasm::{WebTransportClient, WebTransportConfig};
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-use wasm_bindgen_futures::spawn_local;
 
 type Client = WebTransportClient<AppProtocol>;
 
@@ -81,12 +80,10 @@ fn ui(
 
         log_lines(ui, &ui_state.log);
 
-        if let ClientState::Connected(info) = client.state() {
+        if let ClientState::Connected(_) = client.state() {
             if let Some(msg) = msg_buf(ui, &mut ui_state.buf) {
                 send.send(ToServer { msg });
             }
-
-            //ui.label(format!("RTT: {:?}", info.rtt));
         }
     });
 }

@@ -14,6 +14,13 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
+    /// Creates a new client which is not connecting to any server.
+    ///
+    /// This is useful if you want to prepare a client for connecting, but you
+    /// do not have a target server to connect to yet.
+    ///
+    /// If you want to create a client and connect to a server immediately after
+    /// creation, use [`WebTransportClient::connecting`] instead.
     #[must_use]
     pub fn closed() -> Self {
         Self {
@@ -21,16 +28,28 @@ where
         }
     }
 
-    pub fn connecting(
-        config: WebTransportConfig,
-        url: impl Into<String>,
-    ) -> Result<Self, WebTransportError<P>> {
-        let client = ConnectingClient::new(config, url)?;
-        Ok(Self {
+    /// Creates and starts connecting a client to a server.
+    ///
+    /// The URL must have protocol `https://`.
+    ///
+    /// This will spawn the client backend on the JavaScript microtask queue
+    /// (holding the actual WebTransport client), and return the client
+    /// frontend. You should use this frontend throughout your app to interface
+    /// with the client.
+    pub fn connecting(config: WebTransportConfig, url: impl Into<String>) -> Self {
+        let client = ConnectingClient::new(config, url);
+        Self {
             state: State::Connecting(client),
-        })
+        }
     }
 
+    /// Attempts to start connecting this client to a server.
+    ///
+    /// See [`WebTransportClient::connecting`].
+    ///
+    /// # Errors
+    ///
+    /// Errors if this client is already connecting or is connected to a server.
     pub fn connect(
         &mut self,
         config: WebTransportConfig,
@@ -38,7 +57,7 @@ where
     ) -> Result<(), WebTransportError<P>> {
         match self.state {
             State::Disconnected { .. } => {
-                let client = ConnectingClient::new(config, url)?;
+                let client = ConnectingClient::new(config, url);
                 self.state = State::Connecting(client);
                 Ok(())
             }
@@ -146,17 +165,14 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    fn new(
-        config: WebTransportConfig,
-        url: impl Into<String>,
-    ) -> Result<Self, WebTransportError<P>> {
+    fn new(config: WebTransportConfig, url: impl Into<String>) -> Self {
         let url = url.into();
         let (send_connected, recv_connected) = oneshot::channel();
         spawn_local(backend::start::<P>(config, url, send_connected));
-        Ok(Self {
+        Self {
             recv_connected,
             send_event: true,
-        })
+        }
     }
 
     fn poll(&mut self) -> Poll<ConnectedClientResult<P>> {
@@ -174,6 +190,7 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
+    #[allow(clippy::unused_self)] // we're gonna use it in the future; TODO stats API
     fn connection_info(&self) -> EndpointInfo {
         EndpointInfo
     }

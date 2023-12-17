@@ -1,3 +1,4 @@
+#![allow(clippy::pedantic)]
 // Source: https://raw.githubusercontent.com/lucaspoffo/renet/f2ff0c841014a6b31e05e0983e5f96c9a2b0faa7/renet_webtransport/src/bindings.rs
 
 //! This module contains the bindings to the WebTransport API.

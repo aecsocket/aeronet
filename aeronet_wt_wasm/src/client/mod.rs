@@ -10,6 +10,8 @@ use crate::WebTransportError;
 /// Implementation of [`TransportClient`] using the WebTransport protocol.
 ///
 /// See the [crate-level docs](crate).
+///
+/// [`TransportClient`]: aeronet::TransportClient
 #[derive(Debug, Derivative)]
 #[derivative(Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]

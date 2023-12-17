@@ -6,7 +6,7 @@ use futures::{
 use js_sys::{Reflect, Uint8Array};
 use tracing::debug;
 use wasm_bindgen::JsValue;
-use wasm_bindgen_futures::{JsFuture, spawn_local};
+use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{ReadableStreamDefaultReader, WritableStreamDefaultWriter};
 
 use crate::{
@@ -68,7 +68,7 @@ where
     JsFuture::from(transport.ready())
         .await
         .map(|_| transport)
-        .map_err(|js| WebTransportError::ClientReady(err_msg(js)))
+        .map_err(|js| WebTransportError::ClientReady(err_msg(&js)))
 }
 
 async fn handle_connection<P>(
@@ -89,7 +89,7 @@ where
     ));
 
     // the current task handles frontend commands,
-    // the `spawn_local`'ed tasks handles receiving from the client 
+    // the `spawn_local`'ed tasks handles receiving from the client
 
     let (mut send_err, mut recv_err) = mpsc::channel(0);
     spawn_local(async move {
@@ -101,10 +101,7 @@ where
     loop {
         futures::select! {
             result = recv_c2s.next() => {
-                let msg = match result {
-                    Some(msg) => msg,
-                    None => return Ok(()),
-                };
+                let Some(msg) = result else { return Ok(()) };
                 send::<P>(&writer, msg).await.map_err(WebTransportError::OnDatagram)?;
             }
             result = recv_err.next() => {
@@ -148,7 +145,7 @@ where
                 .unwrap();
             (bytes, done)
         })
-        .map_err(|js| ChannelError::RecvDatagram(err_msg(js)))?;
+        .map_err(|js| ChannelError::RecvDatagram(err_msg(&js)))?;
 
     if done {
         return Err(ChannelError::StreamClosed);
@@ -166,11 +163,11 @@ where
 {
     let serialized = msg.try_as_bytes().map_err(ChannelError::Serialize)?;
     let bytes = serialized.as_ref();
-    let chunk = Uint8Array::new_with_length(bytes.len() as u32);
-    chunk.copy_from(&bytes);
+    let chunk = Uint8Array::new_with_length(u32::try_from(bytes.len()).unwrap());
+    chunk.copy_from(bytes);
 
     JsFuture::from(writer.write_with_chunk(&chunk.into()))
         .await
         .map(|_| ())
-        .map_err(|js| ChannelError::SendDatagram(err_msg(js)))
+        .map_err(|js| ChannelError::SendDatagram(err_msg(&js)))
 }

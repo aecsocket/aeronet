@@ -6,7 +6,7 @@ use web_sys::DomException;
 
 use crate::{bindings, WebTransportConfig, WebTransportError};
 
-pub fn err_msg(js: JsValue) -> String {
+pub fn err_msg(js: &JsValue) -> String {
     match js.dyn_ref::<DomException>() {
         Some(err) => err.message(),
         None => "<unknown>".to_owned(),
@@ -29,7 +29,7 @@ impl WebTransport {
         let options = bindings::WebTransportOptions::from(config);
         match bindings::WebTransport::new_with_options(url, &options) {
             Ok(wt) => Ok(Self(wt)),
-            Err(js) => Err(WebTransportError::CreateClient(err_msg(js))),
+            Err(js) => Err(WebTransportError::CreateClient(err_msg(&js))),
         }
     }
 }

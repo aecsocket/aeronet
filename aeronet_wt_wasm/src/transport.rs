@@ -10,7 +10,7 @@ use crate::bindings::WebTransportOptions;
 /// Options for the WebTransport WASM client.
 ///
 /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport#options)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WebTransportConfig {
     /// If true, the network connection for this WebTransport can be shared with
     /// a pool of other HTTP/3 sessions. By default the value is false, and the
@@ -49,17 +49,6 @@ pub struct WebTransportConfig {
     ///
     /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport#servercertificatehashes)
     pub server_certificate_hashes: Vec<ServerCertificateHash>,
-}
-
-impl Default for WebTransportConfig {
-    fn default() -> Self {
-        Self {
-            allow_pooling: false,
-            congestion_control: CongestionControl::default(),
-            require_unreliable: false,
-            server_certificate_hashes: Vec::default(),
-        }
-    }
 }
 
 /// Congestion control algorithm preference.
@@ -110,9 +99,10 @@ impl From<&WebTransportConfig> for WebTransportOptions {
     fn from(value: &WebTransportConfig) -> Self {
         let mut opts = WebTransportOptions::new();
 
-        let cert_hashes = Array::new_with_length(value.server_certificate_hashes.len() as u32);
+        let cert_hashes =
+            Array::new_with_length(u32::try_from(value.server_certificate_hashes.len()).unwrap());
         for (i, cert) in value.server_certificate_hashes.iter().enumerate() {
-            cert_hashes.set(i as u32, Object::from(cert).into());
+            cert_hashes.set(u32::try_from(i).unwrap(), Object::from(cert).into());
         }
 
         opts.allow_pooling(value.allow_pooling)
@@ -123,7 +113,8 @@ impl From<&WebTransportConfig> for WebTransportOptions {
             })
             .require_unreliable(value.require_unreliable)
             .server_certificate_hashes(&cert_hashes);
-        return opts;
+
+        opts
     }
 }
 
