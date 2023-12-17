@@ -116,7 +116,7 @@ where
         url: impl AsRef<str>,
     ) -> Result<(Self, impl Future<Output = ()>), WebTransportError<P>> {
         let url = url.as_ref();
-        let transport = WebTransport::new(config, url)?;
+        let transport = WebTransport::new(&config, url)?;
 
         let (send_connected, recv_connected) = oneshot::channel();
         Ok((

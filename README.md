@@ -17,14 +17,21 @@ underlying mechanism used to transport your data.
 
 # Examples
 
-Note that the examples use code from `aeronet_example`.
+See [`aeronet_example`](https://github.com/aecsocket/aeronet/tree/main/aeronet_example) for example
+transport-generic code. This crate is used internally to provide shared types for the examples in
+crates.
 
-WebTransport client
+WebTransport native client
 ```bash
 cargo run --package aeronet_wt_native --example echo_client --features "bevy dangerous-configuration"
 ```
 
-WebTransport server
+WebTransport WASM client - requires `cargo install wasm_server_runner`
+```bash
+cargo run --package aeronet_wt_wasm --target wasm32-unknown-unknown --example echo_client --features "bevy"
+```
+
+WebTransport server - runs on port `25565`
 ```bash
 cargo run --package aeronet_wt_native --example echo_server --features "bevy"
 ```

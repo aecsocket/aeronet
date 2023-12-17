@@ -1,64 +1,13 @@
 //!
 
-use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
+use std::time::Duration;
 
-use aeronet::{
-    AsyncRuntime, ChannelKey, ChannelProtocol, OnChannel, TransportProtocol, TransportServer,
-    TryAsBytes, TryFromBytes,
-};
+use aeronet::{AsyncRuntime, TransportServer};
+use aeronet_example::AppProtocol;
 use aeronet_wt_native::{ServerEvent, WebTransportServer};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
-
-// protocol
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ChannelKey)]
-#[channel_kind(Unreliable)]
-struct AppChannel;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, OnChannel)]
-#[channel_type(AppChannel)]
-#[on_channel(AppChannel)]
-struct AppMessage(String);
-
-impl<T> From<T> for AppMessage
-where
-    T: Into<String>,
-{
-    fn from(value: T) -> Self {
-        Self(value.into())
-    }
-}
-
-impl TryAsBytes for AppMessage {
-    type Output<'a> = &'a [u8];
-
-    type Error = Infallible;
-
-    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
-        Ok(self.0.as_bytes())
-    }
-}
-
-impl TryFromBytes for AppMessage {
-    type Error = FromUtf8Error;
-
-    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
-        String::from_utf8(buf.to_owned().into_iter().collect()).map(AppMessage)
-    }
-}
-
-struct AppProtocol;
-
-impl TransportProtocol for AppProtocol {
-    type C2S = AppMessage;
-    type S2C = AppMessage;
-}
-
-impl ChannelProtocol for AppProtocol {
-    type Channel = AppChannel;
-}
 
 type Server = WebTransportServer<AppProtocol>;
 

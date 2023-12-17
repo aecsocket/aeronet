@@ -5,6 +5,7 @@ use std::{convert::Infallible, mem, string::FromUtf8Error};
 use aeronet::{
     ChannelKey, ChannelProtocol, OnChannel, TransportProtocol, TryAsBytes, TryFromBytes,
 };
+use aeronet_example::{log_lines, LogLine};
 use aeronet_wt_wasm::{WebTransportClient, WebTransportConfig};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
@@ -82,11 +83,17 @@ fn main() {
 
 #[derive(Debug, Default, Resource)]
 struct ClientUiState {
+    log: Vec<LogLine>,
     url: String,
+    buf: String,
 }
 
 fn ui(mut egui: EguiContexts, mut ui_state: ResMut<ClientUiState>) {
     egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
+        let connected = client.state() != ClientState::Disconnected;
+
+        log_lines(ui, &ui_state.log);
+
         ui.label("Hello world");
 
         let url_resp = ui.add(egui::TextEdit::singleline(&mut ui_state.url));

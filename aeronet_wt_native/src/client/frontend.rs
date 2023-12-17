@@ -65,7 +65,7 @@ where
         url: impl Into<String>,
     ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
         match self.state {
-            State::Disconnected => {
+            State::Disconnected | State::JustDisconnected => {
                 let (client, backend) = ConnectingClient::new(config, url);
                 self.state = State::Connecting(client);
                 Ok(backend)
@@ -78,7 +78,7 @@ where
     #[must_use]
     pub fn state(&self) -> ClientState {
         match self.state {
-            State::Disconnected => ClientState::Disconnected,
+            State::Disconnected | State::JustDisconnected => ClientState::Disconnected,
             State::Connecting(_) => ClientState::Connecting,
             State::Connected(_) => ClientState::Connected,
         }
@@ -99,14 +99,16 @@ where
 
     fn connection_info(&self) -> Option<Self::ConnectionInfo> {
         match &self.state {
-            State::Disconnected | State::Connecting(_) => None,
+            State::Disconnected | State::Connecting(_) | State::JustDisconnected => None,
             State::Connected(client) => Some(client.connection_info()),
         }
     }
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
         match &mut self.state {
-            State::Disconnected | State::Connecting(_) => Err(WebTransportError::BackendClosed),
+            State::Disconnected | State::Connecting(_) | State::JustDisconnected => {
+                Err(WebTransportError::BackendClosed)
+            }
             State::Connected(client) => client.send(msg),
         }
     }
@@ -133,15 +135,21 @@ where
                     events
                 }
             },
+            State::JustDisconnected => {
+                self.state = State::Disconnected;
+                vec![ClientEvent::Disconnected {
+                    cause: WebTransportError::ForceDisconnect,
+                }]
+            }
         }
         .into_iter()
     }
 
     fn disconnect(&mut self) -> Result<(), Self::Error> {
         match self.state {
-            State::Disconnected => Err(WebTransportError::BackendClosed),
+            State::Disconnected | State::JustDisconnected => Err(WebTransportError::BackendClosed),
             State::Connecting(_) | State::Connected(_) => {
-                self.state = State::Disconnected;
+                self.state = State::JustDisconnected;
                 Ok(())
             }
         }

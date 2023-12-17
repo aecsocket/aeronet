@@ -162,6 +162,7 @@ name = "aeronet_wt_wasm"
 version = "0.4.1"
 dependencies = [
  "aeronet",
+ "aeronet_example",
  "bevy",
  "bevy_egui",
  "derivative",

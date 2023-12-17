@@ -2,6 +2,8 @@ use std::fmt::Debug;
 
 use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
+use js_sys::{Array, Object, Reflect, Uint8Array};
+use wasm_bindgen::JsValue;
 
 use crate::bindings::WebTransportOptions;
 
@@ -26,6 +28,26 @@ pub struct WebTransportConfig {
     ///
     /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport#requireunreliable)
     pub require_unreliable: bool,
+    /// A [`Vec`] of certificate hashes, each defining the hash value of a
+    /// server certificate along with the name of the algorithm that was
+    /// used to generate it. This option is only supported for transports
+    /// using dedicated connections ([`WebTransportConfig::allow_pooling`]
+    /// is false).
+    ///
+    /// If specified, the browser will attempt to authenticate the certificate
+    /// provided by the server against the provided certificate hash(es) in
+    /// order to connect, instead of using the Web public key infrastructure
+    /// (PKI). If any hashes match, the browser knows that the server has
+    /// possession of a trusted certificate and will connect as normal. If empty
+    /// the user agent uses the same PKI certificate verification procedures it
+    /// would use for a normal fetch operation.
+    ///
+    /// This feature allows developers to connect to WebTransport servers that
+    /// would normally find obtaining a publicly trusted certificate
+    /// challenging, such as hosts that are not publicly routable, or ephemeral
+    /// hosts like virtual machines.
+    ///
+    /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport#servercertificatehashes)
     pub server_certificate_hashes: Vec<ServerCertificateHash>,
 }
 
@@ -54,26 +76,58 @@ pub enum CongestionControl {
     LowLatency,
 }
 
+/// Server certificate used in [`WebTransportConfig`].
+///
+/// The certificate must be an X.509v3 certificate that has a validity period of
+/// less that 2 weeks, and the current time must be within that validity period.
+/// The format of the public key in the certificate depends on the
+/// implementation, but must minimally include ECDSA with the secp256r1 (NIST
+/// P-256) named group, and must not include RSA keys. An ECSDA key is therefore
+/// an interoperable default public key format.
+///
+/// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport#servercertificatehashes)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ServerCertificateHash {
+    /// The hash value.
+    ///
+    /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport#value)
     pub value: Vec<u8>,
 }
 
-impl From<WebTransportConfig> for WebTransportOptions {
-    fn from(value: WebTransportConfig) -> Self {
+impl From<&ServerCertificateHash> for Object {
+    fn from(value: &ServerCertificateHash) -> Self {
+        let obj = Self::new();
+
+        Reflect::set(&obj, &JsValue::from("algorithm"), &JsValue::from("sha-256")).unwrap();
+        let value = Uint8Array::from(value.value.as_slice());
+        Reflect::set(&obj, &JsValue::from("value"), &value).unwrap();
+
+        obj
+    }
+}
+
+impl From<&WebTransportConfig> for WebTransportOptions {
+    fn from(value: &WebTransportConfig) -> Self {
         let mut opts = WebTransportOptions::new();
+
+        let cert_hashes = Array::new_with_length(value.server_certificate_hashes.len() as u32);
+        for (i, cert) in value.server_certificate_hashes.iter().enumerate() {
+            cert_hashes.set(i as u32, Object::from(cert).into());
+        }
+
         opts.allow_pooling(value.allow_pooling)
             .congestion_control(match value.congestion_control {
                 CongestionControl::Default => "default",
                 CongestionControl::Throughput => "throughput",
                 CongestionControl::LowLatency => "low-latency",
             })
-            .require_unreliable(value.require_unreliable);
-        // TODO .server_certificate_hashes(val);
+            .require_unreliable(value.require_unreliable)
+            .server_certificate_hashes(&cert_hashes);
         return opts;
     }
 }
 
+/// Info and statistics for a WebTransport connection.
 #[derive(Debug, Clone)]
 pub struct EndpointInfo;
 

@@ -17,7 +17,7 @@ pub struct WebTransport(bindings::WebTransport);
 
 impl WebTransport {
     pub fn new<P>(
-        config: WebTransportConfig,
+        config: &WebTransportConfig,
         url: impl AsRef<str>,
     ) -> Result<Self, WebTransportError<P>>
     where

@@ -88,6 +88,7 @@ where
     Disconnected,
     Connecting(ConnectingClient<P>),
     Connected(ConnectedClient<P>),
+    JustDisconnected,
 }
 
 /// The current state of a [`WebTransportClient`].

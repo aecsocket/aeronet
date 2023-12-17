@@ -1,12 +1,12 @@
 //!
 
-use std::{mem, time::Duration};
+use std::time::Duration;
 
 use aeronet::{
     AsyncRuntime, FromServer, LocalClientConnected, LocalClientDisconnected, TransportClient,
     TransportClientPlugin,
 };
-use aeronet_example::{log_lines, msg_buf, AppProtocol, LogLine};
+use aeronet_example::{log_lines, msg_buf, url_buf, AppProtocol, LogLine};
 use aeronet_wt_native::{ClientState, WebTransportClient};
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
@@ -76,18 +76,9 @@ fn ui(
     egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
         let connected = client.state() != ClientState::Disconnected;
         ui.horizontal(|ui| {
-            ui.label("URL");
-
             ui.add_enabled_ui(!connected, |ui| {
-                let url_resp = ui.add(
-                    egui::TextEdit::singleline(&mut ui_state.url)
-                        .hint_text("https://[::1]:25565 | [enter] to connect"),
-                );
-
-                if url_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    let url = mem::take(&mut ui_state.url).trim().to_string();
+                if let Some(url) = url_buf(ui, &mut ui_state.url) {
                     ui_state.log.push(LogLine::connecting(&url));
-
                     let backend = client
                         .connect(client_config(), url)
                         .expect("backend should be disconnected");
@@ -95,16 +86,16 @@ fn ui(
                 }
             });
 
-            if connected {
+            ui.add_enabled_ui(connected, |ui| {
                 if ui.button("Disconnect").clicked() {
                     let _ = client.disconnect();
                 }
-            }
+            });
         });
 
         log_lines(ui, &ui_state.log);
 
-        if connected {
+        if client.state() == ClientState::Connected {
             if let Some(msg) = msg_buf(ui, &mut ui_state.buf) {
                 ui_state.log.push(LogLine::send(&msg.0));
                 let _ = client.send(msg);
