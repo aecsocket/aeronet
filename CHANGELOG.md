@@ -1,3 +1,10 @@
+# 0.5.0
+
+* `Message` is now a derive macro, not an automatically impl'd trait
+* WebTransport WASM client first draft
+* Clients now have three states: disconnected, connecting, connected
+  * As opposed to disconnected, connected
+
 # 0.4.1
 
 * `TryIntoBytes` renamed to `TryAsBytes` since it doesn't consume `self`
