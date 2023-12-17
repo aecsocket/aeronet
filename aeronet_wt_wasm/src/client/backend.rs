@@ -9,25 +9,29 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{ReadableStreamDefaultReader, WritableStreamDefaultWriter};
 
-use crate::{util::err_msg, util::WebTransport, ChannelError, WebTransportError};
+use crate::{
+    util::err_msg, util::WebTransport, ChannelError, WebTransportConfig, WebTransportError,
+};
 
 use super::{ConnectedClient, ConnectedClientResult};
 
 pub(super) async fn start<P>(
-    transport: WebTransport,
+    config: WebTransportConfig,
+    url: String,
     send_connected: oneshot::Sender<ConnectedClientResult<P>>,
 ) where
     P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    match JsFuture::from(transport.ready()).await {
-        Ok(_) => {}
-        Err(js) => {
-            let _ = send_connected.send(Err(WebTransportError::ClientReady(err_msg(js))));
+    debug!("Connecting to {url}");
+    let transport = match create_transport::<P>(config, url).await {
+        Ok(t) => t,
+        Err(err) => {
+            let _ = send_connected.send(Err(err));
             return;
         }
-    }
+    };
 
     let (send_c2s, recv_c2s) = mpsc::unbounded();
     let (send_s2c, recv_s2c) = mpsc::unbounded();
@@ -49,6 +53,22 @@ pub(super) async fn start<P>(
     } else {
         debug!("Disconnected without error");
     }
+}
+
+async fn create_transport<P>(
+    config: WebTransportConfig,
+    url: String,
+) -> Result<WebTransport, WebTransportError<P>>
+where
+    P: ChannelProtocol,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryFromBytes,
+{
+    let transport = WebTransport::new(&config, url)?;
+    JsFuture::from(transport.ready())
+        .await
+        .map(|_| transport)
+        .map_err(|js| WebTransportError::ClientReady(err_msg(js)))
 }
 
 async fn handle_connection<P>(
@@ -91,6 +111,7 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
+    debug!("Waiting for reader");
     let (bytes, done) = JsFuture::from(reader.read())
         .await
         .map(|js| {
@@ -99,6 +120,7 @@ where
                 .unwrap()
                 .as_bool()
                 .unwrap();
+            debug!("Got val: {done}");
             (bytes, done)
         })
         .map_err(|js| ChannelError::RecvDatagram(err_msg(js)))?;
@@ -108,6 +130,7 @@ where
     }
 
     let bytes = bytes.to_vec();
+    debug!("Got a bunch of bytes: {bytes:?}");
     P::S2C::try_from_bytes(&bytes).map_err(ChannelError::Deserialize)
 }
 

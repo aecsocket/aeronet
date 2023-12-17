@@ -3,9 +3,7 @@ mod frontend;
 
 use std::{fmt::Debug, io, net::SocketAddr};
 
-use aeronet::{
-    ChannelProtocol, OnChannel, TransportProtocol, TryAsBytes, TryFromBytes,
-};
+use aeronet::{ChannelProtocol, OnChannel, TransportProtocol, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use tokio::sync::{mpsc, oneshot};
 
@@ -19,10 +17,13 @@ type ClientEvent<P> = aeronet::ClientEvent<P, WebTransportClient<P>>;
 /// Implementation of [`TransportClient`] using the WebTransport protocol.
 ///
 /// See the [crate-level docs](crate).
-/// 
+///
 /// [`TransportClient`]: aeronet::TransportClient
 #[derive(Derivative)]
-#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"), Default(bound = ""))]
+#[derivative(
+    Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"),
+    Default(bound = "")
+)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct WebTransportClient<P>
 where

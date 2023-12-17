@@ -20,7 +20,10 @@ type WebTransportError<P> =
 ///
 /// See the [crate-level docs](crate).
 #[derive(Derivative)]
-#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"), Default(bound = ""))]
+#[derivative(
+    Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"),
+    Default(bound = "")
+)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct WebTransportServer<P>
 where

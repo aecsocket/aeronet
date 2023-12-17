@@ -11,7 +11,7 @@ use crate::WebTransportError;
 ///
 /// See the [crate-level docs](crate).
 #[derive(Debug, Derivative)]
-#[derivative(Default)]
+#[derivative(Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct WebTransportClient<P>
 where
@@ -22,17 +22,27 @@ where
     state: State<P>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 enum State<P>
 where
     P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    #[default]
-    Disconnected,
+    Disconnected { forced: bool },
     Connecting(ConnectingClient<P>),
     Connected(ConnectedClient<P>),
+}
+
+impl<P> Default for State<P>
+where
+    P: ChannelProtocol,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryFromBytes,
+{
+    fn default() -> Self {
+        Self::Disconnected { forced: false }
+    }
 }
 
 #[derive(Derivative)]
@@ -45,6 +55,8 @@ where
 {
     #[derivative(Debug = "ignore")]
     recv_connected: oneshot::Receiver<ConnectedClientResult<P>>,
+    #[derivative(Debug = "ignore")]
+    send_event: bool,
 }
 
 #[derive(Derivative)]

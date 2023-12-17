@@ -1,63 +1,11 @@
 //!
 
-use std::{convert::Infallible, mem, string::FromUtf8Error};
-
-use aeronet::{
-    ChannelKey, ChannelProtocol, OnChannel, TransportProtocol, TryAsBytes, TryFromBytes,
-};
-use aeronet_example::{log_lines, LogLine};
+use aeronet::{ClientState, ToServer, TransportClient, TransportClientPlugin};
+use aeronet_example::{client_log, log_lines, msg_buf, url_buf, AppProtocol, Log, LogLine};
 use aeronet_wt_wasm::{WebTransportClient, WebTransportConfig};
-use bevy::prelude::*;
+use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-
-// protocol
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ChannelKey)]
-#[channel_kind(Unreliable)]
-struct AppChannel;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, OnChannel)]
-#[channel_type(AppChannel)]
-#[on_channel(AppChannel)]
-struct AppMessage(String);
-
-impl<T> From<T> for AppMessage
-where
-    T: Into<String>,
-{
-    fn from(value: T) -> Self {
-        Self(value.into())
-    }
-}
-
-impl TryAsBytes for AppMessage {
-    type Output<'a> = &'a [u8];
-
-    type Error = Infallible;
-
-    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
-        Ok(self.0.as_bytes())
-    }
-}
-
-impl TryFromBytes for AppMessage {
-    type Error = FromUtf8Error;
-
-    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
-        String::from_utf8(buf.to_owned().into_iter().collect()).map(AppMessage)
-    }
-}
-
-struct AppProtocol;
-
-impl TransportProtocol for AppProtocol {
-    type C2S = AppMessage;
-    type S2C = AppMessage;
-}
-
-impl ChannelProtocol for AppProtocol {
-    type Channel = AppChannel;
-}
+use wasm_bindgen_futures::spawn_local;
 
 type Client = WebTransportClient<AppProtocol>;
 
@@ -66,18 +14,25 @@ type Client = WebTransportClient<AppProtocol>;
 fn main() {
     App::new()
         .add_plugins((
-            DefaultPlugins.set(WindowPlugin {
-                primary_window: Some(Window {
-                    fit_canvas_to_parent: true,
-                    prevent_default_event_handling: false,
+            DefaultPlugins
+                .set(LogPlugin {
+                    level: tracing::Level::DEBUG,
+                    ..default()
+                })
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        fit_canvas_to_parent: true,
+                        prevent_default_event_handling: false,
+                        ..default()
+                    }),
                     ..default()
                 }),
-                ..default()
-            }),
             EguiPlugin,
+            TransportClientPlugin::<_, Client>::default(),
         ))
+        .init_resource::<Client>()
         .init_resource::<ClientUiState>()
-        .add_systems(Update, ui)
+        .add_systems(Update, (client_log::<_, Client, ClientUiState>, ui).chain())
         .run();
 }
 
@@ -88,29 +43,52 @@ struct ClientUiState {
     buf: String,
 }
 
-fn ui(mut egui: EguiContexts, mut ui_state: ResMut<ClientUiState>) {
+impl Log for ClientUiState {
+    fn lines(&mut self) -> &mut Vec<LogLine> {
+        &mut self.log
+    }
+}
+
+fn client_config() -> WebTransportConfig {
+    WebTransportConfig::default()
+}
+
+fn ui(
+    mut egui: EguiContexts,
+    mut client: ResMut<Client>,
+    mut ui_state: ResMut<ClientUiState>,
+    mut send: EventWriter<ToServer<AppProtocol>>,
+) {
     egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
-        let connected = client.state() != ClientState::Disconnected;
+        let can_disconnect = matches!(
+            client.state(),
+            ClientState::Connecting | ClientState::Connected(_)
+        );
+        ui.horizontal(|ui| {
+            ui.add_enabled_ui(!can_disconnect, |ui| {
+                if let Some(url) = url_buf(ui, &mut ui_state.url) {
+                    let backend = client
+                        .connect(client_config(), url)
+                        .expect("backend should be disconnected");
+                    spawn_local(backend);
+                }
+            });
+
+            ui.add_enabled_ui(can_disconnect, |ui| {
+                if ui.button("Disconnect").clicked() {
+                    let _ = client.disconnect();
+                }
+            });
+        });
 
         log_lines(ui, &ui_state.log);
 
-        ui.label("Hello world");
-
-        let url_resp = ui.add(egui::TextEdit::singleline(&mut ui_state.url));
-        if url_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-            // TODO: trim to [..-1] because egui on WASM adds an "E" to the end
-            // TODO: also this code SUCKS
-            let url = mem::take(&mut ui_state.url);
-            let url = url.trim().to_string();
-            let url = url[..url.len() - 1].to_string();
-            if !url.is_empty() {
-                match Client::connecting(WebTransportConfig::default(), url) {
-                    Ok(_) => info!("ok"),
-                    Err(err) => warn!("err: {:#}", aeronet::error::as_pretty(&err)),
-                }
+        if let ClientState::Connected(info) = client.state() {
+            if let Some(msg) = msg_buf(ui, &mut ui_state.buf) {
+                send.send(ToServer { msg });
             }
 
-            ui.memory_mut(|m| m.request_focus(url_resp.id));
+            //ui.label(format!("RTT: {:?}", info.rtt));
         }
     });
 }

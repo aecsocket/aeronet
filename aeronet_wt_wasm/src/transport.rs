@@ -88,7 +88,7 @@ pub enum CongestionControl {
 /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport#servercertificatehashes)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ServerCertificateHash {
-    /// The hash value.
+    /// The hash value of the certificate.
     ///
     /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport#value)
     pub value: Vec<u8>,
@@ -144,6 +144,9 @@ where
     /// ready for this operation.
     #[error("backend closed")]
     BackendClosed,
+    /// Attempted to open the backend while it was already open.
+    #[error("backend already open")]
+    BackendOpen,
     /// Failed to create the JS WebTransport object.
     #[error("failed to create client: {0}")]
     CreateClient(String),
@@ -154,6 +157,9 @@ where
     /// channel.
     #[error("on datagram channel")]
     OnDatagram(#[source] ChannelError<P>),
+    /// The client was forcefully disconnected by the app.
+    #[error("force disconnect")]
+    ForceDisconnect,
 }
 
 /// Error that occurs while processing a channel, either datagrams or QUIC

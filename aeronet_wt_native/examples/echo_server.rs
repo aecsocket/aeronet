@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use aeronet::{AsyncRuntime, TransportServer, ClientState};
+use aeronet::{AsyncRuntime, ClientState, TransportServer};
 use aeronet_example::AppProtocol;
 use aeronet_wt_native::{ServerEvent, WebTransportServer};
 use anyhow::Result;
@@ -81,17 +81,13 @@ fn update_server(mut server: ResMut<Server>) {
                     unreachable!();
                 };
                 info!("{client:?} connected from {}", info.remote_addr);
+                let _ = server.send(client, "Welcome!");
+                let _ = server.send(client, "Send me some text, and I will send it back!");
             }
             ServerEvent::Recv { client, msg } => {
                 info!("{client:?} > {}", msg.0);
                 let msg = format!("You sent: {}", msg.0);
-                match server.send(client, msg.clone()) {
-                    Ok(()) => info!("{client:?} < {}", msg),
-                    Err(err) => warn!(
-                        "Failed to send message to {client:?}: {:#}",
-                        aeronet::error::as_pretty(&err)
-                    ),
-                }
+                let _ = server.send(client, msg);
             }
             ServerEvent::Disconnected { client, cause } => info!(
                 "{client:?} disconnected: {:#}",

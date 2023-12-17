@@ -98,7 +98,7 @@ where
     /// yet.
     #[error("client {0:?} has not connected yet")]
     NotConnected(ClientKey),
-    /// The client was forcefully disconnected by the server.
+    /// The client was forcefully disconnected by the app.
     #[error("force disconnect")]
     ForceDisconnect,
 }

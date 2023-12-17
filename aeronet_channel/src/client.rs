@@ -8,7 +8,10 @@ use crate::{ChannelError, ChannelServer, ClientKey};
 ///
 /// See the [crate-level docs](crate).
 #[derive(Derivative)]
-#[derivative(Debug(bound = "P::C2S: ::std::fmt::Debug, P::S2C: ::std::fmt::Debug"), Default(bound = ""))]
+#[derivative(
+    Debug(bound = "P::C2S: ::std::fmt::Debug, P::S2C: ::std::fmt::Debug"),
+    Default(bound = "")
+)]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ChannelClient<P>
 where

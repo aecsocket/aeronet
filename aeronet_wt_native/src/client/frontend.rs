@@ -7,7 +7,8 @@ use wtransport::ClientConfig;
 use crate::{shared::ClientState, EndpointInfo, WebTransportClient};
 
 use super::{
-    backend, ConnectedClient, ConnectedClientResult, ConnectingClient, State, WebTransportError, ClientEvent,
+    backend, ClientEvent, ConnectedClient, ConnectedClientResult, ConnectingClient, State,
+    WebTransportError,
 };
 
 impl<P> WebTransportClient<P>
