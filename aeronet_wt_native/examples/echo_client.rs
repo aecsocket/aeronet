@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use aeronet::{AsyncRuntime, ClientState, ToServer, TransportClient, TransportClientPlugin};
+use aeronet::{AsyncRuntime, ClientState, Rtt, ToServer, TransportClient, TransportClientPlugin};
 use aeronet_example::{client_log, log_lines, msg_buf, url_buf, AppProtocol, Log, LogLine};
 use aeronet_wt_native::WebTransportClient;
 use bevy::{log::LogPlugin, prelude::*};
@@ -87,7 +87,7 @@ fn ui(
                 send.send(ToServer { msg });
             }
 
-            ui.label(format!("RTT: {:?}", info.rtt));
+            ui.label(format!("RTT: {:?}", info.rtt()));
         }
     });
 }

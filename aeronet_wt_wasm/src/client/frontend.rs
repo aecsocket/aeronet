@@ -68,7 +68,7 @@ where
 
 type ClientEvent<P> = aeronet::ClientEvent<P, WebTransportClient<P>>;
 
-type ClientState = aeronet::ClientState<EndpointInfo>;
+type ClientState = aeronet::ClientState<Option<EndpointInfo>>;
 
 impl<P> TransportClient<P> for WebTransportClient<P>
 where
@@ -78,7 +78,7 @@ where
 {
     type Error = WebTransportError<P>;
 
-    type ConnectionInfo = EndpointInfo;
+    type ConnectionInfo = Option<EndpointInfo>;
 
     type Event = ClientEvent<P>;
 
@@ -190,9 +190,8 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    #[allow(clippy::unused_self)] // we're gonna use it in the future; TODO stats API
-    fn connection_info(&self) -> EndpointInfo {
-        EndpointInfo
+    fn connection_info(&self) -> Option<EndpointInfo> {
+        self.info.clone()
     }
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), WebTransportError<P>> {
@@ -205,9 +204,9 @@ where
     fn recv(&mut self) -> (Vec<ClientEvent<P>>, Result<(), WebTransportError<P>>) {
         let mut events = Vec::new();
 
-        // while let Ok(info) = self.recv_info.try_recv() {
-        //     self.info = info;
-        // }
+        while let Ok(Some(info)) = self.recv_info.try_next() {
+            self.info = Some(info);
+        }
 
         while let Ok(Some(msg)) = self.recv_s2c.try_next() {
             events.push(ClientEvent::Recv { msg });

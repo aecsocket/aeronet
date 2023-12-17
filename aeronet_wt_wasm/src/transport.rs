@@ -1,11 +1,16 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, time::Duration};
 
-use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
+use aeronet::{ChannelProtocol, OnChannel, Rtt, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
-use js_sys::{Array, Object, Reflect, Uint8Array};
+use js_sys::{Array, Reflect, Uint8Array};
 use wasm_bindgen::JsValue;
 
-use crate::bindings::WebTransportOptions;
+use crate::{
+    bind::{
+        WebTransportCongestionControl, WebTransportHash, WebTransportOptions, WebTransportStats,
+    },
+    util::err_msg,
+};
 
 /// Options for the WebTransport WASM client.
 ///
@@ -83,15 +88,14 @@ pub struct ServerCertificateHash {
     pub value: Vec<u8>,
 }
 
-impl From<&ServerCertificateHash> for Object {
+impl From<&ServerCertificateHash> for WebTransportHash {
     fn from(value: &ServerCertificateHash) -> Self {
-        let obj = Self::new();
+        let mut hash = WebTransportHash::new();
 
-        Reflect::set(&obj, &JsValue::from("algorithm"), &JsValue::from("sha-256")).unwrap();
-        let value = Uint8Array::from(value.value.as_slice());
-        Reflect::set(&obj, &JsValue::from("value"), &value).unwrap();
+        hash.algorithm("sha-256");
+        hash.value(&Uint8Array::from(value.value.as_slice()));
 
-        obj
+        hash
     }
 }
 
@@ -102,25 +106,62 @@ impl From<&WebTransportConfig> for WebTransportOptions {
         let cert_hashes =
             Array::new_with_length(u32::try_from(value.server_certificate_hashes.len()).unwrap());
         for (i, cert) in value.server_certificate_hashes.iter().enumerate() {
-            cert_hashes.set(u32::try_from(i).unwrap(), Object::from(cert).into());
+            cert_hashes.set(
+                u32::try_from(i).unwrap(),
+                JsValue::from(WebTransportHash::from(cert)),
+            );
         }
 
         opts.allow_pooling(value.allow_pooling)
             .congestion_control(match value.congestion_control {
-                CongestionControl::Default => "default",
-                CongestionControl::Throughput => "throughput",
-                CongestionControl::LowLatency => "low-latency",
+                CongestionControl::Default => WebTransportCongestionControl::Default,
+                CongestionControl::Throughput => WebTransportCongestionControl::Throughput,
+                CongestionControl::LowLatency => WebTransportCongestionControl::LowLatency,
             })
-            .require_unreliable(value.require_unreliable)
-            .server_certificate_hashes(&cert_hashes);
+            .require_unreliable(value.require_unreliable);
+            // TODO: This isn't available on Firefox yet
+            // .server_certificate_hashes(&cert_hashes);
 
         opts
     }
 }
 
 /// Info and statistics for a WebTransport connection.
-#[derive(Debug, Clone)]
-pub struct EndpointInfo;
+/// 
+/// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/getStats#return_value)
+#[derive(Debug, Clone, Default)]
+pub struct EndpointInfo {
+    // pub bytes_sent: u64,
+    // pub packets_sent: u64,
+    // pub packets_lost: u64,
+    // pub bytes_received: u64,
+    // pub packets_received: u64,
+    /// TODO
+    pub smoothed_rtt: Duration,
+    // pub rtt_variation: Duration,
+    // pub min_rtt: Duration,
+}
+
+impl Rtt for EndpointInfo {
+    fn rtt(&self) -> Duration {
+        self.smoothed_rtt
+    }
+}
+
+impl TryFrom<&WebTransportStats> for EndpointInfo {
+    type Error = String;
+
+    fn try_from(value: &WebTransportStats) -> Result<Self, Self::Error> {
+        let rtt = Reflect::get(value, &"smoothedRtt".into())
+            .map_err(|js| err_msg(&js))?
+            .as_f64()
+            .ok_or("not a number".to_string())?;
+        Ok(Self {
+            smoothed_rtt: Duration::from_millis(rtt as u64),
+            ..EndpointInfo::default()
+        })
+    }
+}
 
 /// Error that occurs when processing a WebTransport client.
 #[derive(Derivative, thiserror::Error)]
@@ -144,6 +185,9 @@ where
     /// Failed to await the WebTransport being ready.
     #[error("failed to await client ready: {0}")]
     ClientReady(String),
+    /// Failed to get the WebTransport stats.
+    #[error("failed to get stats: {0}")]
+    GetStats(String),
     /// An error occurred while processing datagrams not bound to a specific
     /// channel.
     #[error("on datagram channel")]

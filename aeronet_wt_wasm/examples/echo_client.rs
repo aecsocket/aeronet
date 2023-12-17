@@ -1,6 +1,6 @@
 //!
 
-use aeronet::{ClientState, ToServer, TransportClient, TransportClientPlugin};
+use aeronet::{ClientState, Rtt, ToServer, TransportClient, TransportClientPlugin};
 use aeronet_example::{client_log, log_lines, msg_buf, url_buf, AppProtocol, Log, LogLine};
 use aeronet_wt_wasm::{WebTransportClient, WebTransportConfig};
 use bevy::{log::LogPlugin, prelude::*};
@@ -80,10 +80,16 @@ fn ui(
 
         log_lines(ui, &ui_state.log);
 
-        if let ClientState::Connected(_) = client.state() {
+        if let ClientState::Connected(info) = client.state() {
             if let Some(msg) = msg_buf(ui, &mut ui_state.buf) {
                 send.send(ToServer { msg });
             }
+
+            let rtt = match info {
+                Some(info) => format!("RTT: {:?}", info.rtt()),
+                None => format!("Unknown RTT"),
+            };
+            ui.label(rtt);
         }
     });
 }

@@ -4,7 +4,7 @@ use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::DomException;
 
-use crate::{bindings, WebTransportConfig, WebTransportError};
+use crate::{bind, WebTransportConfig, WebTransportError};
 
 pub fn err_msg(js: &JsValue) -> String {
     match js.dyn_ref::<DomException>() {
@@ -13,7 +13,7 @@ pub fn err_msg(js: &JsValue) -> String {
     }
 }
 
-pub struct WebTransport(bindings::WebTransport);
+pub struct WebTransport(bind::WebTransport);
 
 impl WebTransport {
     pub fn new<P>(
@@ -26,8 +26,8 @@ impl WebTransport {
         P::S2C: TryFromBytes,
     {
         let url = url.as_ref();
-        let options = bindings::WebTransportOptions::from(config);
-        match bindings::WebTransport::new_with_options(url, &options) {
+        let options = bind::WebTransportOptions::from(config);
+        match bind::WebTransport::new_with_options(url, &options) {
             Ok(wt) => Ok(Self(wt)),
             Err(js) => Err(WebTransportError::CreateClient(err_msg(&js))),
         }
@@ -41,7 +41,7 @@ impl Drop for WebTransport {
 }
 
 impl Deref for WebTransport {
-    type Target = bindings::WebTransport;
+    type Target = bind::WebTransport;
 
     fn deref(&self) -> &Self::Target {
         &self.0

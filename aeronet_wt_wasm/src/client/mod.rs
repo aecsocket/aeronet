@@ -5,7 +5,7 @@ use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 
-use crate::WebTransportError;
+use crate::{EndpointInfo, WebTransportError};
 
 /// Implementation of [`TransportClient`] using the WebTransport protocol.
 ///
@@ -69,6 +69,9 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
+    info: Option<EndpointInfo>,
+    #[derivative(Debug = "ignore")]
+    recv_info: mpsc::UnboundedReceiver<EndpointInfo>,
     #[derivative(Debug = "ignore")]
     send_c2s: mpsc::UnboundedSender<P::C2S>,
     #[derivative(Debug = "ignore")]
