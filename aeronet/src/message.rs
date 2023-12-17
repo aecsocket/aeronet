@@ -7,8 +7,8 @@ use std::error::Error;
 /// * [`Sync`]
 /// * `'static`
 ///
-/// This trait is automatically implemented for all types matching these
-/// criteria.
+/// This trait can be derived for any type meeting this criteria - see
+/// [`aeronet_derive::Message`].
 ///
 /// The user defines which types of messages their transport uses, and this
 /// trait acts as a minimum bound for all message types. However, for different
@@ -20,8 +20,6 @@ use std::error::Error;
 /// * [`TryFromBytes`] if the message should be able to be constructed from a
 ///   byte sequence
 pub trait Message: Send + Sync + 'static {}
-
-impl<T> Message for T where T: Send + Sync + 'static {}
 
 /// Type that can potentially be read as a sequence of bytes.
 ///
@@ -128,13 +126,6 @@ mod tests {
         x: u32,
         y: i32,
     }
-
-    #[test]
-    fn type_is_message() {
-        assert_message::<Value>();
-    }
-
-    fn assert_message<T: Message>() {}
 
     #[test]
     #[cfg(feature = "bincode")]

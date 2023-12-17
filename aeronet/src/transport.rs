@@ -9,10 +9,11 @@ use crate::{ChannelKey, Message};
 /// implementations.
 ///
 /// ```
-/// use aeronet::TransportProtocol;
+/// use aeronet::{Message, TransportProtocol};
 ///
 /// struct AppProtocol;
 ///
+/// #[derive(Message)]
 /// struct AppMessage {/* ... */}
 ///
 /// impl TransportProtocol for AppProtocol {

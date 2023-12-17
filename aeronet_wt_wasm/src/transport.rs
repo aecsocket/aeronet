@@ -157,8 +157,10 @@ impl TryFrom<&WebTransportStats> for EndpointInfo {
             .as_f64()
             .ok_or("not a number".to_string())?;
         Ok(Self {
+            // TODO
+            #[allow(clippy::cast_possible_truncation)]
+            #[allow(clippy::cast_sign_loss)]
             smoothed_rtt: Duration::from_millis(rtt as u64),
-            ..EndpointInfo::default()
         })
     }
 }

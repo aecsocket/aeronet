@@ -59,7 +59,8 @@ pub(super) async fn start<P>(
     }
 }
 
-#[allow(unused_variables)] // TODO
+#[allow(unused_variables)] // see comment
+#[allow(clippy::unused_async)] // see comment
 async fn endpoint_info<P>(transport: &WebTransport) -> Result<EndpointInfo, WebTransportError<P>>
 where
     P: ChannelProtocol,

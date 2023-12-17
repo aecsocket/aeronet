@@ -21,6 +21,7 @@ returned [`ClientKey`] to disconnect this client later.
 use aeronet::{TransportClient, TransportServer};
 use aeronet_channel::{ChannelClient, ChannelServer, ClientKey};
 
+# #[derive(aeronet::Message)]
 # struct AppMessage(&'static str);
 # 
 # struct AppProtocol;

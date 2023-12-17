@@ -51,21 +51,23 @@ First, you will need two [`Message`] types to use for sending client-to-server (
 server-to-client messages (S2C). They may be the same type.
 
 ```rust
-#[derive(Debug, Clone)]
+use aeronet::Message;
+
+#[derive(Debug, Clone, Message)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum C2S {
     Move(f32),
     Shoot,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Message)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum S2C {
     AddPlayer(String),
     UpdateHealth(f32),
 }
 
-fn assert_is_message<T: aeronet::Message>() {}
+fn assert_is_message<T>() where T: Message {}
 
 assert_is_message::<C2S>();
 assert_is_message::<S2C>();
@@ -74,9 +76,12 @@ assert_is_message::<S2C>();
 Create a type implementing [`TransportProtocol`] which uses these message types.
 
 ```rust
-use aeronet::TransportProtocol;
+use aeronet::{Message, TransportProtocol};
 
+#[derive(Message)]
 pub enum C2S { /* ... */ }
+
+#[derive(Message)]
 pub enum S2C { /* ... */ }
 
 #[derive(Debug)]
@@ -99,7 +104,7 @@ the transport, to do functions such as sending and receiving data.
 use std::time::Duration;
 use aeronet::{ClientState, TransportClient, Rtt};
 
-# #[derive(Debug)]
+# #[derive(Debug, aeronet::Message)]
 # pub enum C2S { Shoot }
 #
 # fn run<P, T, I>(mut client: T)
@@ -110,7 +115,7 @@ use aeronet::{ClientState, TransportClient, Rtt};
 # {
 client.send(C2S::Shoot);
 
-if let ClientState::Connected(conn_info) = client.connection_info() {
+if let ClientState::Connected(conn_info) = client.state() {
     let rtt: Duration = conn_info.rtt();
     println!("Latency to server: {rtt:?}");
 }

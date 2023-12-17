@@ -88,7 +88,7 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 
 [[package]]
 name = "aeronet"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "aeronet_derive",
  "anyhow",
@@ -102,7 +102,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_channel"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "aeronet",
  "aeronet_example",
@@ -118,7 +118,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_derive"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "const_format",
  "proc-macro2",
@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_example"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "aeronet",
  "anyhow",
@@ -138,7 +138,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_wt_native"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "aeronet",
  "aeronet_example",
@@ -160,7 +160,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_wt_wasm"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "aeronet",
  "aeronet_example",
@@ -2174,9 +2174,9 @@ dependencies = [
 
 [[package]]
 name = "gilrs-core"
-version = "0.5.9"
+version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "178769da179a47b187837d1ab2b5b9b684a21180166a77a4ca37e7e58ee3833d"
+checksum = "0af1827b7dd2f36d740ae804c1b3ea0d64c12533fb61ff91883005143a0e8c5a"
 dependencies = [
  "core-foundation",
  "inotify",
@@ -2190,7 +2190,7 @@ dependencies = [
  "vec_map",
  "wasm-bindgen",
  "web-sys",
- "windows 0.51.1",
+ "windows 0.52.0",
 ]
 
 [[package]]
@@ -4649,21 +4649,21 @@ dependencies = [
 
 [[package]]
 name = "windows"
-version = "0.51.1"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca229916c5ee38c2f2bc1e9d8f04df975b4bd93f9955dc69fabb5d91270045c9"
+checksum = "e48a53791691ab099e5e2ad123536d0fff50652600abaf43bbf952894110d0be"
 dependencies = [
  "windows-core",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.0",
 ]
 
 [[package]]
 name = "windows-core"
-version = "0.51.1"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1f8cf84f35d2db49a46868f947758c7a1138116f7fac3bc844f43ade1292e64"
+checksum = "33ab640c8d7e35bf8ba19b884ba838ceb4fba93a4e8c65a9059d08afcfc683d9"
 dependencies = [
- "windows-targets 0.48.5",
+ "windows-targets 0.52.0",
 ]
 
 [[package]]

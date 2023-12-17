@@ -5,6 +5,21 @@ use syn::{parse_macro_input, DeriveInput};
 
 mod channel_key;
 mod on_channel;
+mod message;
+
+/// Implements `aeronet::Message` for the given type.
+/// 
+/// # Usage
+/// 
+/// ```ignore
+/// #[derive(Message)]
+/// struct MyMessage(String);
+/// ```
+#[proc_macro_derive(Message)]
+pub fn message(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    message::derive(&input).into()
+}
 
 /// Defines a type of key used to represent the different app-specific channels
 /// that can be used to send messages.
