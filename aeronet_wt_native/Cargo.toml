@@ -56,3 +56,13 @@ required-features = [ "bevy", "dangerous-configuration" ]
 name = "native_echo_server"
 path = "examples/native_echo_server.rs"
 required-features = [ "bevy" ]
+
+[[example]]
+name = "native_complex_client"
+path = "examples/native_complex_client.rs"
+required-features = [ "bevy", "dangerous-configuration" ]
+
+[[example]]
+name = "native_complex_server"
+path = "examples/native_complex_server.rs"
+required-features = [ "bevy" ]

@@ -13,7 +13,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-aeronet = { workspace = true, features = [ "bevy" ] }
+serde.workspace = true
+aeronet = { workspace = true, features = [ "bevy", "bincode" ] }
 bevy = { workspace = true, default-features = false }
 bevy_egui.workspace = true
-anyhow.workspace = true

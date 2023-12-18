@@ -1,4 +1,5 @@
 use aeronet::{ChannelKey, OnChannel, Message, TransportProtocol, ChannelProtocol};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ChannelKey)]
 pub enum ComplexChannel {
@@ -12,7 +13,7 @@ pub enum ComplexChannel {
     PriorityOrdered,
 }
 
-#[derive(Debug, Clone, PartialEq, Message, OnChannel)]
+#[derive(Debug, Clone, PartialEq, Message, OnChannel, Serialize, Deserialize)]
 #[channel_type(ComplexChannel)]
 pub enum C2S {
     #[on_channel(ComplexChannel::LowPriority1)]
@@ -25,7 +26,7 @@ pub enum C2S {
     PriorityOrdered(Vec<String>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Message, OnChannel)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Message, OnChannel, Serialize, Deserialize)]
 #[channel_type(ComplexChannel)]
 pub enum S2C {
     #[on_channel(ComplexChannel::LowPriority2)]

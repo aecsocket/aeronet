@@ -131,9 +131,9 @@ name = "aeronet_example"
 version = "0.5.0"
 dependencies = [
  "aeronet",
- "anyhow",
  "bevy",
  "bevy_egui",
+ "serde",
 ]
 
 [[package]]

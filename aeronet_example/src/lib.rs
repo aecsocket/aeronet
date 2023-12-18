@@ -5,4 +5,4 @@ mod client;
 mod echo;
 mod ui;
 
-pub use {client::*, echo::*, ui::*};
+pub use {client::*, echo::*, complex::*, ui::*};
