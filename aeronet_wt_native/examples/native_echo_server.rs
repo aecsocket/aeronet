@@ -3,13 +3,13 @@
 use std::time::Duration;
 
 use aeronet::{AsyncRuntime, ClientState, TransportServer};
-use aeronet_example::AppProtocol;
+use aeronet_example::EchoProtocol;
 use aeronet_wt_native::{ServerEvent, WebTransportServer};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
 
-type Server = WebTransportServer<AppProtocol>;
+type Server = WebTransportServer<EchoProtocol>;
 
 // logic
 

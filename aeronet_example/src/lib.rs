@@ -1,7 +1,8 @@
 //! Support code for [`aeronet`] implementation examples.
 
+mod complex;
 mod client;
-mod protocol;
+mod echo;
 mod ui;
 
-pub use {client::*, protocol::*, ui::*};
+pub use {client::*, echo::*, ui::*};

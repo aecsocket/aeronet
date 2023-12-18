@@ -2,7 +2,7 @@ use std::mem;
 
 use bevy_egui::egui;
 
-use crate::{AppMessage, LogLine};
+use crate::{EchoMessage, LogLine};
 
 /// Shows a series of [`LogLine`]s in a vertical [`egui::ScrollArea`].
 pub fn log_lines(ui: &mut egui::Ui, log: &[LogLine]) {
@@ -31,7 +31,7 @@ fn fix_input(s: &str) -> &str {
 }
 
 /// Shows a message input buffer using [`egui::TextEdit`].
-pub fn msg_buf(ui: &mut egui::Ui, buf: &mut String) -> Option<AppMessage> {
+pub fn msg_buf(ui: &mut egui::Ui, buf: &mut String) -> Option<EchoMessage> {
     let resp = ui
         .horizontal(|ui| {
             ui.label("Send");
@@ -46,7 +46,7 @@ pub fn msg_buf(ui: &mut egui::Ui, buf: &mut String) -> Option<AppMessage> {
         return if buf.is_empty() {
             None
         } else {
-            Some(AppMessage(buf))
+            Some(EchoMessage(buf))
         };
     }
 

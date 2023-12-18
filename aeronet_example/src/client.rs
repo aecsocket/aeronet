@@ -8,7 +8,7 @@ use aeronet::{
 use bevy::prelude::*;
 use bevy_egui::egui;
 
-use crate::AppMessage;
+use crate::EchoMessage;
 
 /// Kind of log message in a [`LogLine`].
 #[derive(Debug, Clone, Copy)]
@@ -78,7 +78,7 @@ pub fn client_log<P, T, L>(
     mut send: EventReader<ToServer<P>>,
     mut disconnected: EventReader<LocalClientDisconnected<P, T>>,
 ) where
-    P: TransportProtocol<C2S = AppMessage, S2C = AppMessage>,
+    P: TransportProtocol<C2S = EchoMessage, S2C = EchoMessage>,
     T: TransportClient<P> + Resource,
     T::Error: Error,
     L: Log + Resource,
@@ -119,7 +119,7 @@ pub fn server_log<P, T, L>(
     mut send: EventReader<ToClient<P, T>>,
     mut disconnected: EventReader<RemoteClientDisconnected<P, T>>,
 ) where
-    P: TransportProtocol<C2S = AppMessage, S2C = AppMessage>,
+    P: TransportProtocol<C2S = EchoMessage, S2C = EchoMessage>,
     T: TransportServer<P> + Resource,
     T::Client: Debug,
     T::Error: Error,

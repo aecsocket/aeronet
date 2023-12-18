@@ -1,12 +1,12 @@
 //!
 
 use aeronet::{ClientState, Rtt, ToServer, TransportClient, TransportClientPlugin};
-use aeronet_example::{client_log, log_lines, msg_buf, url_buf, AppProtocol, Log, LogLine};
+use aeronet_example::{client_log, log_lines, msg_buf, url_buf, EchoProtocol, Log, LogLine};
 use aeronet_wt_wasm::{WebTransportClient, WebTransportConfig};
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
-type Client = WebTransportClient<AppProtocol>;
+type Client = WebTransportClient<EchoProtocol>;
 
 // logic
 
@@ -55,7 +55,7 @@ fn ui(
     mut egui: EguiContexts,
     mut client: ResMut<Client>,
     mut ui_state: ResMut<ClientUiState>,
-    mut send: EventWriter<ToServer<AppProtocol>>,
+    mut send: EventWriter<ToServer<EchoProtocol>>,
 ) {
     egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
         let can_disconnect = matches!(

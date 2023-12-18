@@ -3,13 +3,13 @@
 use aeronet::{FromClient, ToClient, ToServer, TransportClientPlugin, TransportServerPlugin};
 use aeronet_channel::{ChannelClient, ChannelServer};
 use aeronet_example::{
-    client_log, log_lines, msg_buf, server_log, AppMessage, AppProtocol, Log, LogLine,
+    client_log, log_lines, msg_buf, server_log, EchoMessage, EchoProtocol, Log, LogLine,
 };
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
-type Client = ChannelClient<AppProtocol>;
-type Server = ChannelServer<AppProtocol>;
+type Client = ChannelClient<EchoProtocol>;
+type Server = ChannelServer<EchoProtocol>;
 
 #[derive(Debug, Default, Resource)]
 struct ClientUiState {
@@ -76,7 +76,7 @@ fn setup(mut commands: Commands) {
 fn client_ui(
     mut egui: EguiContexts,
     mut ui_state: ResMut<ClientUiState>,
-    mut send: EventWriter<ToServer<AppProtocol>>,
+    mut send: EventWriter<ToServer<EchoProtocol>>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         log_lines(ui, &ui_state.log);
@@ -88,14 +88,14 @@ fn client_ui(
 }
 
 fn server_reply(
-    mut recv: EventReader<FromClient<AppProtocol, Server>>,
-    mut send: EventWriter<ToClient<AppProtocol, Server>>,
+    mut recv: EventReader<FromClient<EchoProtocol, Server>>,
+    mut send: EventWriter<ToClient<EchoProtocol, Server>>,
 ) {
     for FromClient { client, msg } in recv.read() {
         let msg = format!("You sent: {}", msg.0);
         send.send(ToClient {
             client: *client,
-            msg: AppMessage(msg),
+            msg: EchoMessage(msg),
         });
     }
 }

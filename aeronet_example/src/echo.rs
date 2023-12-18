@@ -4,7 +4,7 @@ use aeronet::{
     ChannelKey, ChannelProtocol, OnChannel, TransportProtocol, TryAsBytes, TryFromBytes, Message,
 };
 
-/// The channel type used for messages sent by our app.
+/// The channel type used for echo messages sent by our app.
 ///
 /// In this case, there's only a single `Unreliable` channel, but this can be
 /// an enum with multiple fieldless variants.
@@ -13,37 +13,37 @@ use aeronet::{
 /// to be defined (see [`ChannelProtocol`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ChannelKey)]
 #[channel_kind(Unreliable)]
-pub struct AppChannel;
+pub struct EchoChannel;
 
-/// The message type sent between clients and servers.
+/// The echo message type sent between clients and servers.
 ///
 /// Our app only has a single message type for client-to-server (C2S) and
 /// server-to-client (S2C) communication, but you can (and probably should) have
 /// two separate types.
 /// 
 /// This type derives [`Message`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash, OnChannel, Message)]
-#[channel_type(AppChannel)]
-#[on_channel(AppChannel)]
-pub struct AppMessage(pub String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Message, OnChannel)]
+#[channel_type(EchoChannel)]
+#[on_channel(EchoChannel)]
+pub struct EchoMessage(pub String);
 
-/// Defines the configuration for transports that we use in our app.
+/// Defines the configuration for transports that we use in our echo app.
 ///
-/// This uses the [`AppMessage`] and [`AppChannel`] structs we made earlier.
-pub struct AppProtocol;
+/// This uses the [`EchoMessage`] and [`EchoChannel`] structs we made earlier.
+pub struct EchoProtocol;
 
-impl TransportProtocol for AppProtocol {
-    type C2S = AppMessage;
-    type S2C = AppMessage;
+impl TransportProtocol for EchoProtocol {
+    type C2S = EchoMessage;
+    type S2C = EchoMessage;
 }
 
-impl ChannelProtocol for AppProtocol {
-    type Channel = AppChannel;
+impl ChannelProtocol for EchoProtocol {
+    type Channel = EchoChannel;
 }
 
 // Helper stuff
 
-impl<T> From<T> for AppMessage
+impl<T> From<T> for EchoMessage
 where
     T: Into<String>,
 {
@@ -52,7 +52,7 @@ where
     }
 }
 
-impl TryAsBytes for AppMessage {
+impl TryAsBytes for EchoMessage {
     type Output<'a> = &'a [u8];
 
     type Error = Infallible;
@@ -62,10 +62,10 @@ impl TryAsBytes for AppMessage {
     }
 }
 
-impl TryFromBytes for AppMessage {
+impl TryFromBytes for EchoMessage {
     type Error = FromUtf8Error;
 
     fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
-        String::from_utf8(buf.to_vec()).map(AppMessage)
+        String::from_utf8(buf.to_vec()).map(EchoMessage)
     }
 }
