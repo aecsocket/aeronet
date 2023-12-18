@@ -21,19 +21,24 @@ See [`aeronet_example`](https://github.com/aecsocket/aeronet/tree/main/aeronet_e
 transport-generic code. This crate is used internally to provide shared types for the examples in
 crates.
 
+Local MPSC client/srever
+```bash
+cargo run --package aeronet_channel --example channel_echo --features "bevy"
+```
+
 WebTransport native client
 ```bash
-cargo run --package aeronet_wt_native --example echo_client --features "bevy dangerous-configuration"
+cargo run --package aeronet_wt_native --example native_echo_client --features "bevy dangerous-configuration"
 ```
 
 WebTransport WASM client - requires `cargo install wasm_server_runner`
 ```bash
-cargo run --package aeronet_wt_wasm --target wasm32-unknown-unknown --example echo_client --features "bevy"
+cargo run --package aeronet_wt_wasm --target wasm32-unknown-unknown --example wasm_echo_client --features "bevy"
 ```
 
 WebTransport server - runs on port `25565`
 ```bash
-cargo run --package aeronet_wt_native --example echo_server --features "bevy"
+cargo run --package aeronet_wt_native --example native_echo_server --features "bevy"
 ```
 
 # Transports
@@ -126,11 +131,11 @@ if let ClientState::Connected(conn_info) = client.state() {
 
 The traits defined in this crate lay out a **client/server** architecture - one central server which
 multiple clients can connect to. The most popular alternative is **peer-to-peer**, but explaining
-the differences, advantages, and disadvantages of these architectures are outside the scope of this.
+the differences between the two is outside the scope of this readme.
 
-A transport is not necessarily **networked** - that is, one that communicates to other computers,
-probably using the internet. Instead, transport can also work using something as simple as in-memory
-channels or some other non-networked method.
+A transport is not necessarily **networked** - that is, it may not communicate to other computers.
+Instead, transports can also work using other methods such as in-memory channels. Therefore, the
+crate does not expose socket addresses or anything similar.
 
 The method used to transport the data itself (i.e. unreliable, reliable ordered, etc.) is also
 exposed by this crate - see [`ChannelKind`] for more info.
