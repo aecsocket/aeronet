@@ -64,7 +64,7 @@ impl RemoteAddr for EndpointInfo {
 
 /// Error that occurs when processing a WebTransport transport implementation.
 #[derive(Derivative, thiserror::Error)]
-#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug, S: Debug, R: Debug"))]
+#[derivative(Debug(bound = ""))]
 pub enum WebTransportError<P, S, R>
 where
     P: ChannelProtocol,
@@ -111,7 +111,8 @@ where
 
 /// Error that occurs while processing a channel, either datagrams or QUIC
 /// streams.
-#[derive(Debug, thiserror::Error)]
+#[derive(Derivative, thiserror::Error)]
+#[derivative(Debug(bound = ""))]
 pub enum ChannelError<S, R>
 where
     S: Message + TryAsBytes,

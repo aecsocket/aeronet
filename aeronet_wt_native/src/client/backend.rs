@@ -4,7 +4,7 @@ use tracing::debug;
 use wtransport::{endpoint::endpoint_side, ClientConfig, Connection, Endpoint};
 
 use crate::{
-    shared::{self, ChannelsState},
+    shared::{self, ConnectionSetup},
     EndpointInfo,
 };
 
@@ -49,17 +49,10 @@ pub(super) async fn start<P>(
         return;
     }
 
-    debug!("Starting connection loop");
-    if let Err(err) = shared::handle_connection::<P, P::C2S, P::S2C>(
-        conn, channels, send_info, send_s2c, recv_c2s,
+    shared::handle_connection::<P, P::C2S, P::S2C>(
+        conn, channels, send_info, send_s2c, send_err, recv_c2s,
     )
     .await
-    {
-        debug!("Disconnected with error");
-        let _ = send_err.send(err);
-    } else {
-        debug!("Disconnected without error");
-    }
 }
 
 async fn connect<P>(
@@ -69,7 +62,7 @@ async fn connect<P>(
     (
         Endpoint<endpoint_side::Client>,
         Connection,
-        ChannelsState<P, P::C2S, P::S2C>,
+        ConnectionSetup<P, P::C2S, P::S2C>,
     ),
     WebTransportError<P>,
 >
@@ -88,7 +81,7 @@ where
         .map_err(WebTransportError::Connect)?;
 
     debug!("Establishing channels");
-    let channels = shared::establish_channels::<P, P::C2S, P::S2C, false>(&conn).await?;
+    let channels = shared::setup_connection::<P, P::C2S, P::S2C, false>(&conn).await?;
 
     Ok((endpoint, conn, channels))
 }

@@ -104,7 +104,7 @@ async fn handle_session<P>(
     };
 
     debug!("Establishing channels");
-    let channels_state = match shared::establish_channels::<P, P::S2C, P::C2S, true>(&conn).await {
+    let channels_state = match shared::setup_connection::<P, P::S2C, P::C2S, true>(&conn).await {
         Ok(state) => state,
         Err(err) => {
             let _ = send_connected.send(Err(err));
@@ -128,19 +128,13 @@ async fn handle_session<P>(
         return;
     }
 
-    debug!("Starting connection loop");
-    if let Err(err) = shared::handle_connection::<P, P::S2C, P::C2S>(
+    shared::handle_connection::<P, P::S2C, P::C2S>(
         conn,
         channels_state,
         send_info,
         send_c2s,
+        send_err,
         recv_s2c,
     )
     .await
-    {
-        debug!("Disconnected with error");
-        let _ = send_err.send(err);
-    } else {
-        debug!("Disconnected without error");
-    }
 }
