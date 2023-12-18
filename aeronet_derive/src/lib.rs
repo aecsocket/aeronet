@@ -4,13 +4,13 @@ use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput};
 
 mod channel_key;
-mod on_channel;
 mod message;
+mod on_channel;
 
 /// Implements `aeronet::Message` for the given type.
-/// 
+///
 /// # Usage
-/// 
+///
 /// ```ignore
 /// #[derive(Message)]
 /// struct MyMessage(String);

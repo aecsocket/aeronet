@@ -1,7 +1,7 @@
 use std::{convert::Infallible, string::FromUtf8Error};
 
 use aeronet::{
-    ChannelKey, ChannelProtocol, OnChannel, TransportProtocol, TryAsBytes, TryFromBytes, Message,
+    ChannelKey, ChannelProtocol, Message, OnChannel, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 
 /// The channel type used for echo messages sent by our app.
@@ -20,7 +20,7 @@ pub struct EchoChannel;
 /// Our app only has a single message type for client-to-server (C2S) and
 /// server-to-client (S2C) communication, but you can (and probably should) have
 /// two separate types.
-/// 
+///
 /// This type derives [`Message`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Message, OnChannel)]
 #[channel_type(EchoChannel)]

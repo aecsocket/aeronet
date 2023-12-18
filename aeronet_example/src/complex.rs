@@ -1,4 +1,4 @@
-use aeronet::{ChannelKey, OnChannel, Message, TransportProtocol, ChannelProtocol};
+use aeronet::{ChannelKey, ChannelProtocol, Message, OnChannel, TransportProtocol};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ChannelKey)]

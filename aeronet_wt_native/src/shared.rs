@@ -1,4 +1,7 @@
-use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 
 use aeronet::{
     ChannelKey, ChannelKind, ChannelProtocol, Message, OnChannel, TryAsBytes, TryFromBytes,
@@ -50,18 +53,25 @@ where
     let (send_streams, recv_streams) = mpsc::unbounded_channel();
     let (send_err, recv_err) = mpsc::unbounded_channel();
     let bytes_recv = Arc::new(AtomicUsize::new(0));
-    
+
     let channels = P::Channel::ALL.iter().map(|channel| {
+        let channel = channel.clone();
         let send_r = send_streams.clone();
         let send_err = send_err.clone();
         let bytes_recv = bytes_recv.clone();
+
         async move {
-            establish_channel::<P, S, R, OPENS>(conn, channel.clone(), send_r, send_err, bytes_recv)
-                .await
-                .map_err(|err| WebTransportError::<P, S, R>::OnChannel(channel.clone(), err))
+            match channel.kind() {
+                ChannelKind::Unreliable => Ok(ChannelState::Datagram { channel }),
+                ChannelKind::ReliableUnordered | ChannelKind::ReliableOrdered => {
+                    establish_stream::<P, S, R, OPENS>(conn, channel.clone(), send_r, send_err, bytes_recv)
+                        .await
+                        .map_err(|err| WebTransportError::<P, S, R>::OnChannel(channel, err))
+                }
+            }
         }
     });
-    
+
     let channels = try_join_all(channels).await?;
     Ok(ChannelsState {
         channels,
@@ -69,26 +79,6 @@ where
         recv_err,
         bytes_recv,
     })
-}
-
-async fn establish_channel<P, S, R, const OPENS: bool>(
-    conn: &Connection,
-    channel: P::Channel,
-    send_r: mpsc::UnboundedSender<R>,
-    send_err: mpsc::UnboundedSender<WebTransportError<P, S, R>>,
-    bytes_recv: Arc<AtomicUsize>,
-) -> Result<ChannelState<P>, ChannelError<S, R>>
-where
-    P: ChannelProtocol,
-    S: Message + TryAsBytes,
-    R: Message + TryFromBytes,
-{
-    match channel.kind() {
-        ChannelKind::Unreliable => Ok(ChannelState::Datagram { channel }),
-        ChannelKind::ReliableUnordered | ChannelKind::ReliableOrdered => {
-            establish_stream::<P, S, R, OPENS>(conn, channel, send_r, send_err, bytes_recv).await
-        }
-    }
 }
 
 async fn establish_stream<P, S, R, const OPENS: bool>(
@@ -139,6 +129,7 @@ where
     R: Message + TryFromBytes,
 {
     // TOOD: what is a good value for this?
+    // TODO: this doesn't end the task if the main task gets killed
     const RECV_CAP: usize = 0x1000;
 
     let mut buf = [0u8; RECV_CAP];

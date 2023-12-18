@@ -1,8 +1,10 @@
 use std::ops::{Deref, DerefMut};
 
 use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
+use js_sys::Reflect;
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::DomException;
+use wasm_bindgen_futures::JsFuture;
+use web_sys::{DomException, ReadableStreamDefaultReader, WritableStreamDefaultWriter};
 
 use crate::{bind, WebTransportConfig, WebTransportError};
 
@@ -51,5 +53,58 @@ impl Deref for WebTransport {
 impl DerefMut for WebTransport {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+pub struct StreamReader(ReadableStreamDefaultReader);
+
+impl<T> From<T> for StreamReader
+where
+    T: Into<JsValue>,
+{
+    fn from(value: T) -> Self {
+        Self(ReadableStreamDefaultReader::from(value.into()))
+    }
+}
+
+impl StreamReader {
+    pub async fn read<T>(&self) -> Result<(T, bool), String>
+    where
+        T: From<JsValue>,
+    {
+        JsFuture::from(self.0.read())
+            .await
+            .map(|js| {
+                let bytes = T::from(Reflect::get(&js, &JsValue::from("value")).unwrap());
+                let done = Reflect::get(&js, &JsValue::from("done"))
+                    .unwrap()
+                    .as_bool()
+                    .unwrap();
+                (bytes, done)
+            })
+            .map_err(|js| err_msg(&js))
+    }
+}
+
+pub struct StreamWriter(WritableStreamDefaultWriter);
+
+impl<T> From<T> for StreamWriter
+where
+    T: Into<JsValue>,
+{
+    fn from(value: T) -> Self {
+        Self(WritableStreamDefaultWriter::from(value.into()))
+    }
+}
+
+impl StreamWriter {
+    pub async fn write<T>(&self, chunk: T) -> Result<(), String>
+    where
+        T: Into<JsValue>,
+    {
+        JsFuture::from(self.0.write_with_chunk(&chunk.into()))
+            .await
+            .map(|_| ())
+            .map_err(|js| err_msg(&js))
     }
 }

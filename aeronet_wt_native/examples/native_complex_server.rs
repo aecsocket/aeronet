@@ -83,9 +83,7 @@ fn update_server(mut server: ResMut<Server>) {
                 info!("{client:?} connected from {}", info.remote_addr);
             }
             ServerEvent::Recv { client, msg } => {
-                info!("{client:?} > {}", msg.0);
-                let msg = format!("You sent: {}", msg.0);
-                let _ = server.send(client, msg);
+                info!("{client:?} > {:?}", msg);
             }
             ServerEvent::Disconnected { client, cause } => info!(
                 "{client:?} disconnected: {:#}",

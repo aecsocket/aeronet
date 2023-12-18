@@ -1,5 +1,56 @@
 use wasm_bindgen::prelude::*;
+
 use web_sys::{ReadableStream, WritableStream};
+
+#[wasm_bindgen]
+extern "C" {
+    # [wasm_bindgen (extends = WritableStream , extends = :: js_sys :: Object , js_name = WebTransportSendStream , typescript_type = "WebTransportSendStream")]
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[doc = "The `WebTransportSendStream` class."]
+    #[doc = ""]
+    #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransportSendStream)"]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportSendStream`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub type WebTransportSendStream;
+    # [wasm_bindgen (method , structural , js_class = "WebTransportSendStream" , js_name = getStats)]
+    #[doc = "The `getStats()` method."]
+    #[doc = ""]
+    #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransportSendStream/getStats)"]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportSendStream`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn get_stats(this: &WebTransportSendStream) -> ::js_sys::Promise;
+}
+
+#[wasm_bindgen]
+extern "C" {
+    # [wasm_bindgen (extends = ReadableStream , extends = :: js_sys :: Object , js_name = WebTransportReceiveStream , typescript_type = "WebTransportReceiveStream")]
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[doc = "The `WebTransportReceiveStream` class."]
+    #[doc = ""]
+    #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransportReceiveStream)"]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportReceiveStream`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub type WebTransportReceiveStream;
+    # [wasm_bindgen (method , structural , js_class = "WebTransportReceiveStream" , js_name = getStats)]
+    #[doc = "The `getStats()` method."]
+    #[doc = ""]
+    #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransportReceiveStream/getStats)"]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportReceiveStream`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn get_stats(this: &WebTransportReceiveStream) -> ::js_sys::Promise;
+}
 
 #[wasm_bindgen]
 extern "C" {
@@ -124,4 +175,41 @@ extern "C" {
     #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
     #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub fn set_outgoing_high_water_mark(this: &WebTransportDatagramDuplexStream, value: f64);
+}
+
+#[wasm_bindgen]
+extern "C" {
+    # [wasm_bindgen (extends = :: js_sys :: Object , js_name = WebTransportBidirectionalStream , typescript_type = "WebTransportBidirectionalStream")]
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[doc = "The `WebTransportBidirectionalStream` class."]
+    #[doc = ""]
+    #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransportBidirectionalStream)"]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportBidirectionalStream`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub type WebTransportBidirectionalStream;
+    #[cfg(feature = "WebTransportReceiveStream")]
+    # [wasm_bindgen (structural , method , getter , js_class = "WebTransportBidirectionalStream" , js_name = readable)]
+    #[doc = "Getter for the `readable` field of this object."]
+    #[doc = ""]
+    #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransportBidirectionalStream/readable)"]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportBidirectionalStream`, `WebTransportReceiveStream`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn readable(this: &WebTransportBidirectionalStream) -> WebTransportReceiveStream;
+    #[cfg(feature = "WebTransportSendStream")]
+    # [wasm_bindgen (structural , method , getter , js_class = "WebTransportBidirectionalStream" , js_name = writable)]
+    #[doc = "Getter for the `writable` field of this object."]
+    #[doc = ""]
+    #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransportBidirectionalStream/writable)"]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportBidirectionalStream`, `WebTransportSendStream`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn writable(this: &WebTransportBidirectionalStream) -> WebTransportSendStream;
 }

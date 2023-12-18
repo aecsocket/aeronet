@@ -1,7 +1,5 @@
 use wasm_bindgen::prelude::*;
 
-use super::*;
-
 #[wasm_bindgen]
 extern "C" {
     # [wasm_bindgen (extends = :: js_sys :: Object , js_name = WebTransportStats)]
@@ -14,6 +12,7 @@ extern "C" {
     #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
     pub type WebTransportStats;
 }
+
 impl WebTransportStats {
     #[doc = "Construct a new `WebTransportStats`."]
     #[doc = ""]
@@ -254,6 +253,115 @@ impl WebTransportStats {
 }
 
 impl Default for WebTransportStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[wasm_bindgen]
+extern "C" {
+    # [wasm_bindgen (extends = :: js_sys :: Object , js_name = WebTransportDatagramStats)]
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[doc = "The `WebTransportDatagramStats` dictionary."]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportDatagramStats`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub type WebTransportDatagramStats;
+}
+
+impl WebTransportDatagramStats {
+    #[doc = "Construct a new `WebTransportDatagramStats`."]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportDatagramStats`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn new() -> Self {
+        #[allow(unused_mut)]
+        let mut ret: Self = ::wasm_bindgen::JsCast::unchecked_into(::js_sys::Object::new());
+        ret
+    }
+    #[doc = "Change the `droppedIncoming` field of this object."]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportDatagramStats`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn dropped_incoming(&mut self, val: f64) -> &mut Self {
+        let r = ::js_sys::Reflect::set(
+            self.as_ref(),
+            &JsValue::from("droppedIncoming"),
+            &JsValue::from(val),
+        );
+        debug_assert!(
+            r.is_ok(),
+            "setting properties should never fail on our dictionary objects"
+        );
+        let _ = r;
+        self
+    }
+    #[doc = "Change the `expiredOutgoing` field of this object."]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportDatagramStats`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn expired_outgoing(&mut self, val: f64) -> &mut Self {
+        let r = ::js_sys::Reflect::set(
+            self.as_ref(),
+            &JsValue::from("expiredOutgoing"),
+            &JsValue::from(val),
+        );
+        debug_assert!(
+            r.is_ok(),
+            "setting properties should never fail on our dictionary objects"
+        );
+        let _ = r;
+        self
+    }
+    #[doc = "Change the `lostOutgoing` field of this object."]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportDatagramStats`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn lost_outgoing(&mut self, val: f64) -> &mut Self {
+        let r = ::js_sys::Reflect::set(
+            self.as_ref(),
+            &JsValue::from("lostOutgoing"),
+            &JsValue::from(val),
+        );
+        debug_assert!(
+            r.is_ok(),
+            "setting properties should never fail on our dictionary objects"
+        );
+        let _ = r;
+        self
+    }
+    #[doc = "Change the `timestamp` field of this object."]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `WebTransportDatagramStats`*"]
+    #[doc = ""]
+    #[doc = "*This API is unstable and requires `--cfg=web_sys_unstable_apis` to be activated, as"]
+    #[doc = "[described in the `wasm-bindgen` guide](https://rustwasm.github.io/docs/wasm-bindgen/web-sys/unstable-apis.html)*"]
+    pub fn timestamp(&mut self, val: f64) -> &mut Self {
+        let r = ::js_sys::Reflect::set(
+            self.as_ref(),
+            &JsValue::from("timestamp"),
+            &JsValue::from(val),
+        );
+        debug_assert!(
+            r.is_ok(),
+            "setting properties should never fail on our dictionary objects"
+        );
+        let _ = r;
+        self
+    }
+}
+
+impl Default for WebTransportDatagramStats {
     fn default() -> Self {
         Self::new()
     }

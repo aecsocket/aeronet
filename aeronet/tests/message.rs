@@ -8,4 +8,8 @@ fn type_is_message() {
     assert_message::<Value>();
 }
 
-fn assert_message<T>() where T: Message {}
+fn assert_message<T>()
+where
+    T: Message,
+{
+}

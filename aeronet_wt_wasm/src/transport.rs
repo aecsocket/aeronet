@@ -119,15 +119,15 @@ impl From<&WebTransportConfig> for WebTransportOptions {
                 CongestionControl::LowLatency => WebTransportCongestionControl::LowLatency,
             })
             .require_unreliable(value.require_unreliable);
-            // TODO: This isn't available on Firefox yet
-            // .server_certificate_hashes(&cert_hashes);
+        // TODO: This isn't available on Firefox yet
+        // .server_certificate_hashes(&cert_hashes);
 
         opts
     }
 }
 
 /// Info and statistics for a WebTransport connection.
-/// 
+///
 /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/getStats#return_value)
 #[derive(Debug, Clone, Default)]
 pub struct EndpointInfo {
@@ -157,7 +157,7 @@ impl TryFrom<&WebTransportStats> for EndpointInfo {
             .as_f64()
             .ok_or("not a number".to_string())?;
         Ok(Self {
-            // TODO
+            // truncating behaviour is what we want
             #[allow(clippy::cast_possible_truncation)]
             #[allow(clippy::cast_sign_loss)]
             smoothed_rtt: Duration::from_millis(rtt as u64),
@@ -199,6 +199,8 @@ where
     ForceDisconnect,
 }
 
+const MAX_MSG_SIZE: u32 = u32::MAX;
+
 /// Error that occurs while processing a channel, either datagrams or QUIC
 /// streams.
 #[derive(Derivative, thiserror::Error)]
@@ -210,9 +212,17 @@ where
     P::S2C: TryFromBytes,
 {
     // send
+    /// The writable stream for this channel was locked when it should not have
+    /// been.
+    #[error("writer locked")]
+    WriterLocked,
     /// Failed to send a datagram to the other side.
     #[error("failed to send datagram: {0}")]
     SendDatagram(String),
+    /// Cannot create a JS `Uint8Buffer` for this message because it exceeds the
+    /// maximum size supported by it.
+    #[error("message too large: {0} / {MAX_MSG_SIZE} bytes")]
+    TooLarge(usize),
     /// Failed to serialize data using [`TryAsBytes::try_as_bytes`].
     #[error("failed to serialize data")]
     Serialize(#[source] <P::C2S as TryAsBytes>::Error),
