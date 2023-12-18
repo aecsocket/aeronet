@@ -34,7 +34,11 @@ pub(super) async fn start<P>(
     let (send_err, recv_err) = oneshot::channel();
     let connected = ConnectedClient::<P> {
         local_addr: endpoint.local_addr(),
-        info: EndpointInfo::from_connection(&conn),
+        info: EndpointInfo {
+            bytes_sent: 0,
+            bytes_recv: 0,
+            ..EndpointInfo::from_connection(&conn)
+        },
         recv_info,
         recv_s2c,
         send_c2s,

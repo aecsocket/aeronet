@@ -50,3 +50,8 @@ features = [
 aeronet_example.workspace = true
 bevy = { workspace = true, default-features = true }
 bevy_egui.workspace = true
+
+[[example]]
+name = "wasm_echo_client"
+path = "examples/wasm_echo_client.rs"
+required-features = [ "bevy" ]

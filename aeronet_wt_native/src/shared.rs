@@ -1,3 +1,5 @@
+use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+
 use aeronet::{
     ChannelKey, ChannelKind, ChannelProtocol, Message, OnChannel, TryAsBytes, TryFromBytes,
 };
@@ -21,6 +23,7 @@ where
     channels: Vec<ChannelState<P>>,
     recv_streams: mpsc::UnboundedReceiver<R>,
     recv_err: mpsc::UnboundedReceiver<WebTransportError<P, S, R>>,
+    bytes_recv: Arc<AtomicUsize>,
 }
 
 enum ChannelState<P>
@@ -46,20 +49,25 @@ where
 {
     let (send_streams, recv_streams) = mpsc::unbounded_channel();
     let (send_err, recv_err) = mpsc::unbounded_channel();
+    let bytes_recv = Arc::new(AtomicUsize::new(0));
+    
     let channels = P::Channel::ALL.iter().map(|channel| {
         let send_r = send_streams.clone();
         let send_err = send_err.clone();
+        let bytes_recv = bytes_recv.clone();
         async move {
-            establish_channel::<P, S, R, OPENS>(conn, channel.clone(), send_r, send_err)
+            establish_channel::<P, S, R, OPENS>(conn, channel.clone(), send_r, send_err, bytes_recv)
                 .await
                 .map_err(|err| WebTransportError::<P, S, R>::OnChannel(channel.clone(), err))
         }
     });
+    
     let channels = try_join_all(channels).await?;
     Ok(ChannelsState {
         channels,
         recv_streams,
         recv_err,
+        bytes_recv,
     })
 }
 
@@ -68,6 +76,7 @@ async fn establish_channel<P, S, R, const OPENS: bool>(
     channel: P::Channel,
     send_r: mpsc::UnboundedSender<R>,
     send_err: mpsc::UnboundedSender<WebTransportError<P, S, R>>,
+    bytes_recv: Arc<AtomicUsize>,
 ) -> Result<ChannelState<P>, ChannelError<S, R>>
 where
     P: ChannelProtocol,
@@ -77,7 +86,7 @@ where
     match channel.kind() {
         ChannelKind::Unreliable => Ok(ChannelState::Datagram { channel }),
         ChannelKind::ReliableUnordered | ChannelKind::ReliableOrdered => {
-            establish_stream::<P, S, R, OPENS>(conn, channel, send_r, send_err).await
+            establish_stream::<P, S, R, OPENS>(conn, channel, send_r, send_err, bytes_recv).await
         }
     }
 }
@@ -87,6 +96,7 @@ async fn establish_stream<P, S, R, const OPENS: bool>(
     channel: P::Channel,
     send_r: mpsc::UnboundedSender<R>,
     send_err: mpsc::UnboundedSender<WebTransportError<P, S, R>>,
+    bytes_recv: Arc<AtomicUsize>,
 ) -> Result<ChannelState<P>, ChannelError<S, R>>
 where
     P: ChannelProtocol,
@@ -107,7 +117,7 @@ where
         let channel = channel.clone();
         tokio::spawn(async move {
             #[allow(clippy::large_futures)] // this future is going on the heap anyway
-            if let Err(err) = handle_stream::<S, R>(recv_stream, send_r).await {
+            if let Err(err) = handle_stream::<S, R>(recv_stream, send_r, bytes_recv).await {
                 let _ = send_err.send(WebTransportError::<P, S, R>::OnChannel(channel, err));
             }
         });
@@ -122,6 +132,7 @@ where
 async fn handle_stream<S, R>(
     mut recv_stream: RecvStream,
     send_r: mpsc::UnboundedSender<R>,
+    bytes_recv: Arc<AtomicUsize>,
 ) -> Result<(), ChannelError<S, R>>
 where
     S: Message + TryAsBytes,
@@ -141,6 +152,7 @@ where
 
                 let bytes = &buf[..bytes_read];
                 let msg = R::try_from_bytes(bytes).map_err(ChannelError::Deserialize)?;
+                bytes_recv.fetch_add(bytes_read, Ordering::SeqCst);
                 let _ = send_r.send(msg);
             }
         }
@@ -165,11 +177,19 @@ where
         mut channels,
         mut recv_streams,
         mut recv_err,
+        bytes_recv,
     } = channels;
+
+    let mut dgram_bytes_recv = 0;
+    let mut bytes_sent = 0;
 
     loop {
         if send_info
-            .send(EndpointInfo::from_connection(&conn))
+            .send(EndpointInfo {
+                bytes_sent,
+                bytes_recv: dgram_bytes_recv + bytes_recv.load(Ordering::SeqCst),
+                ..EndpointInfo::from_connection(&conn)
+            })
             .is_err()
         {
             debug!("Frontend closed");
@@ -182,10 +202,10 @@ where
                     debug!("Frontend closed");
                     return Ok(());
                 };
-                send::<P, S, R>(&conn, &mut channels, msg).await?;
+                bytes_sent += send::<P, S, R>(&conn, &mut channels, msg).await?;
             }
             result = conn.receive_datagram() => {
-                recv_datagram(result, &send_r)
+                dgram_bytes_recv += recv_datagram(result, &send_r)
                     .map_err(|err| WebTransportError::<P, S, R>::OnDatagram(err))?;
             }
             Some(msg) = recv_streams.recv() => {
@@ -202,7 +222,7 @@ async fn send<P, S, R>(
     conn: &Connection,
     channels: &mut [ChannelState<P>],
     msg: S,
-) -> Result<(), WebTransportError<P, S, R>>
+) -> Result<usize, WebTransportError<P, S, R>>
 where
     P: ChannelProtocol,
     S: Message + TryAsBytes + OnChannel<Channel = P::Channel>,
@@ -219,7 +239,7 @@ where
     result.map_err(|err| WebTransportError::<P, S, R>::OnChannel(channel, err))
 }
 
-fn send_datagram<S, R>(conn: &Connection, msg: &S) -> Result<(), ChannelError<S, R>>
+fn send_datagram<S, R>(conn: &Connection, msg: &S) -> Result<usize, ChannelError<S, R>>
 where
     S: Message + TryAsBytes,
     R: Message + TryFromBytes,
@@ -227,10 +247,11 @@ where
     let serialized = msg.try_as_bytes().map_err(ChannelError::Serialize)?;
     let bytes = serialized.as_ref();
     conn.send_datagram(bytes)
+        .map(|_| bytes.len())
         .map_err(ChannelError::SendDatagram)
 }
 
-async fn send_stream<S, R>(send: &mut SendStream, msg: S) -> Result<(), ChannelError<S, R>>
+async fn send_stream<S, R>(send: &mut SendStream, msg: S) -> Result<usize, ChannelError<S, R>>
 where
     S: Message + TryAsBytes,
     R: Message + TryFromBytes,
@@ -239,13 +260,14 @@ where
     let bytes = serialized.as_ref();
     send.write_all(bytes)
         .await
+        .map(|_| bytes.len())
         .map_err(ChannelError::WriteStream)
 }
 
 fn recv_datagram<S, R>(
     result: Result<Datagram, ConnectionError>,
     send_r: &mpsc::UnboundedSender<R>,
-) -> Result<(), ChannelError<S, R>>
+) -> Result<usize, ChannelError<S, R>>
 where
     S: Message + TryAsBytes,
     R: Message + TryFromBytes,
@@ -253,5 +275,5 @@ where
     let datagram = result.map_err(ChannelError::RecvDatagram)?;
     let msg = R::try_from_bytes(&datagram).map_err(ChannelError::Deserialize)?;
     let _ = send_r.send(msg);
-    Ok(())
+    Ok(datagram.len())
 }

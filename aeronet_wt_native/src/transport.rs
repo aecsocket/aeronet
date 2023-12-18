@@ -31,6 +31,10 @@ pub struct EndpointInfo {
     pub remote_addr: SocketAddr,
     /// See [`Connection::max_datagram_size`].
     pub max_datagram_size: Option<usize>,
+    /// The number of bytes sent in total over this endpoint.
+    pub bytes_sent: usize,
+    /// The number of bytes received in total over this endpoint.
+    pub bytes_recv: usize,
 }
 
 impl EndpointInfo {
@@ -40,6 +44,8 @@ impl EndpointInfo {
             rtt: conn.rtt(),
             remote_addr: conn.remote_address(),
             max_datagram_size: conn.max_datagram_size(),
+            bytes_sent: 0,
+            bytes_recv: 0,
         }
     }
 }
