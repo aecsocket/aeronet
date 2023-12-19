@@ -191,7 +191,9 @@ where
     fn client_state(&self, client: ClientKey) -> ClientState {
         match self.clients.get(client) {
             None | Some(RemoteClient::Disconnected) => ClientState::Disconnected,
-            Some(RemoteClient::Incoming(_) | RemoteClient::Accepted(_)) => ClientState::Connecting,
+            Some(
+                RemoteClient::Untracked(_) | RemoteClient::Incoming(_) | RemoteClient::Accepted(_),
+            ) => ClientState::Connecting,
             Some(RemoteClient::Connected(client)) => ClientState::Connected(client.info.clone()),
         }
     }
@@ -222,7 +224,7 @@ where
         loop {
             match self.recv_client.try_recv() {
                 Ok(client) => {
-                    let client = self.clients.insert(RemoteClient::Incoming(client));
+                    let client = self.clients.insert(RemoteClient::Untracked(client));
                     events.push(ServerEvent::Incoming { client });
                 }
                 Err(mpsc::error::TryRecvError::Empty) => break,
@@ -266,6 +268,25 @@ fn recv_client<P>(
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     match state {
+        RemoteClient::Untracked(untracked) => {
+            if let Some(send_key) = untracked.send_key.take() {
+                let _ = send_key.send(client);
+            }
+
+            match untracked.recv_incoming.try_recv() {
+                Ok(incoming) => {
+                    *state = RemoteClient::Incoming(incoming);
+                }
+                Err(oneshot::error::TryRecvError::Empty) => {}
+                Err(oneshot::error::TryRecvError::Closed) => {
+                    events.push(ServerEvent::Disconnected {
+                        client,
+                        cause: WebTransportError::BackendClosed,
+                    });
+                    to_remove.push(client);
+                }
+            }
+        }
         RemoteClient::Incoming(incoming) => match incoming.recv_accepted.try_recv() {
             Ok(Ok(accepted)) => {
                 events.push(ServerEvent::Accepted {

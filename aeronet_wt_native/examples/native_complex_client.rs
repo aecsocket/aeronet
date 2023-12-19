@@ -30,7 +30,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins.set(LogPlugin {
-                level: tracing::Level::DEBUG,
+                filter: "aeronet_wt_native=debug".to_string(),
                 ..default()
             }),
             EguiPlugin,

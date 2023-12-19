@@ -24,7 +24,7 @@ fn main() {
     App::new()
         .add_plugins((
             LogPlugin {
-                level: tracing::Level::DEBUG,
+                filter: "aeronet_wt_native=debug".to_string(),
                 ..default()
             },
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),

@@ -169,7 +169,7 @@ where
     local_addr: Result<SocketAddr, io::Error>,
     clients: SlotMap<ClientKey, RemoteClient<P>>,
     #[derivative(Debug = "ignore")]
-    recv_client: mpsc::UnboundedReceiver<IncomingClient<P>>,
+    recv_client: mpsc::UnboundedReceiver<UntrackedClient<P>>,
     #[derivative(Debug = "ignore")]
     #[allow(dead_code)]
     send_closed: mpsc::Sender<()>,
@@ -187,10 +187,25 @@ where
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
+    Untracked(UntrackedClient<P>),
     Incoming(IncomingClient<P>),
     Accepted(AcceptedClient<P>),
     Connected(ConnectedClient<P>),
     Disconnected,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug)]
+struct UntrackedClient<P>
+where
+    P: ChannelProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
+{
+    #[derivative(Debug = "ignore")]
+    send_key: Option<oneshot::Sender<ClientKey>>,
+    #[derivative(Debug = "ignore")]
+    recv_incoming: oneshot::Receiver<IncomingClient<P>>,
 }
 
 #[derive(Derivative)]

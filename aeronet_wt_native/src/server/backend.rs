@@ -1,10 +1,10 @@
 use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot};
-use tracing::debug;
+use tracing::{debug, debug_span, Instrument};
 use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
-use crate::{shared, EndpointInfo};
+use crate::{server::UntrackedClient, shared, ClientKey, EndpointInfo};
 
 use super::{
     AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, OpenServer,
@@ -12,6 +12,20 @@ use super::{
 };
 
 pub(super) async fn start<P>(config: ServerConfig, send_open: oneshot::Sender<OpenServerResult<P>>)
+where
+    P: ChannelProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
+{
+    debug!("Started backend");
+    start_inner::<P>(config, send_open).await;
+    debug!("Closed backend");
+}
+
+async fn start_inner<P>(
+    config: ServerConfig,
+    send_open: oneshot::Sender<OpenServerResult<P>>,
+)
 where
     P: ChannelProtocol,
     P::C2S: TryFromBytes,
@@ -35,27 +49,51 @@ where
         send_closed,
     };
     if send_open.send(Ok(open)).is_err() {
-        debug!("Frontend closed");
         return;
     }
 
+    debug!("Listening for incoming sessions");
     loop {
-        debug!("Listening for incoming sessions");
         let session = tokio::select! {
-            session = endpoint.accept() => session,
             _ = recv_closed.recv() => return,
+            session = endpoint.accept() => session,
         };
         debug!("Incoming session");
 
-        let (send_accepted, recv_accepted) = oneshot::channel();
-        let client_state = IncomingClient { recv_accepted };
-        if send_client.send(client_state).is_err() {
-            debug!("Frontend closed");
-            return;
-        };
+        // the backend doesn't know the ClientKey,
+        // so the frontend has to send it over
+        let (send_key, recv_key) = oneshot::channel();
+        let (send_incoming, recv_incoming) = oneshot::channel();
+        let _ = send_client.send(UntrackedClient {
+            send_key: Some(send_key),
+            recv_incoming,
+        });
 
-        tokio::spawn(handle_session::<P>(session, send_accepted));
+        tokio::spawn(start_session::<P>(session, recv_key, send_incoming));
     }
+}
+
+async fn start_session<P>(
+    session: IncomingSession,
+    recv_key: oneshot::Receiver<ClientKey>,
+    send_incoming: oneshot::Sender<IncomingClient<P>>,
+) where
+    P: ChannelProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
+{
+    let key = match recv_key.await {
+        Ok(key) => key,
+        Err(_) => return,
+    };
+
+    let (send_accepted, recv_accepted) = oneshot::channel();
+    let _ = send_incoming.send(IncomingClient { recv_accepted });
+
+    tokio::spawn(
+        handle_session::<P>(session, send_accepted)
+            .instrument(debug_span!("Client", key = tracing::field::display(key))),
+    );
 }
 
 async fn handle_session<P>(

@@ -23,6 +23,22 @@ use crate::{ChannelError, EndpointInfo, WebTransportError};
 
 pub(super) type ClientState = aeronet::ClientState<EndpointInfo>;
 
+struct NotifyDrop {
+    notify: Arc<Notify>,
+}
+
+impl NotifyDrop {
+    fn new(notify: Arc<Notify>) -> Self {
+        Self { notify }
+    }
+}
+
+impl Drop for NotifyDrop {
+    fn drop(&mut self) {
+        self.notify.notify_waiters()
+    }
+}
+
 // setup connection
 
 pub(super) struct ConnectionSetup<P, S, R>
@@ -34,7 +50,7 @@ where
     channels: Vec<ChannelState<P>>,
     recv_streams: mpsc::UnboundedReceiver<R>,
     recv_err: mpsc::UnboundedReceiver<WebTransportError<P, S, R>>,
-    closed: Arc<Notify>,
+    closed: NotifyDrop,
     bytes_recv: Arc<AtomicUsize>,
 }
 
@@ -104,6 +120,8 @@ where
 
     debug!("Set up connection");
     let channels = try_join_all(channels).await?;
+    let closed = NotifyDrop::new(closed);
+
     Ok(ConnectionSetup {
         channels,
         recv_streams,
@@ -141,13 +159,13 @@ where
     {
         let channel = channel.clone();
         tokio::spawn(async move {
-            debug!("Starting event loop");
+            debug!("Channel worker started");
             #[allow(clippy::large_futures)] // this future is going on the heap anyway
             if let Err(err) = handle_stream::<S, R>(recv_stream, send_r, closed, bytes_recv).await {
-                debug!("Finished event loop: {err:#}");
+                debug!("Channel worker finished: {err:#}");
                 let _ = send_err.send(WebTransportError::<P, S, R>::OnChannel(channel, err));
             } else {
-                debug!("Finished event loop successfully");
+                debug!("Channel worker finished successfully");
             }
         });
     }
@@ -224,15 +242,15 @@ pub(super) async fn handle_connection<P, S, R>(
     .await
     {
         Ok(()) => {
-            closed.notify_waiters();
             debug!("Disconnected successfully");
         }
         Err(err) => {
-            closed.notify_waiters();
             debug!("Disconnected: {:#}", aeronet::error::as_pretty(&err));
             let _ = send_err.send(err);
         }
     }
+
+    drop(closed)
 }
 
 async fn connection_loop<P, S, R>(
@@ -262,7 +280,6 @@ where
             })
             .is_err()
         {
-            debug!("Frontend closed");
             return Ok(());
         }
 

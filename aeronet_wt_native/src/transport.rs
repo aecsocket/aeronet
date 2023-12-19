@@ -1,4 +1,9 @@
-use std::{fmt::Debug, io, net::SocketAddr, time::Duration};
+use std::{
+    fmt::{self, Debug},
+    io,
+    net::SocketAddr,
+    time::Duration,
+};
 
 use aeronet::{ChannelProtocol, Message, RemoteAddr, Rtt, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
@@ -14,6 +19,12 @@ slotmap::new_key_type! {
     /// Key type used to uniquely identify a client connected to a
     /// [`WebTransportServer`].
     pub struct ClientKey;
+}
+
+impl fmt::Display for ClientKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
 }
 
 /// Statistics on the network state of a [`Connection`] managed by an endpoint.
