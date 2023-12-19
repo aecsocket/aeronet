@@ -5,11 +5,11 @@ use aeronet::{
     ChannelProtocol, OnChannel, TransportProtocol, TransportServer, TryAsBytes, TryFromBytes,
 };
 
-use std::{fmt::Debug, io, net::SocketAddr};
+use std::{fmt::Debug, io, net::SocketAddr, sync::Arc};
 
 use derivative::Derivative;
 use slotmap::SlotMap;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, Notify};
 
 use crate::{ClientKey, EndpointInfo};
 
@@ -171,8 +171,18 @@ where
     #[derivative(Debug = "ignore")]
     recv_client: mpsc::UnboundedReceiver<UntrackedClient<P>>,
     #[derivative(Debug = "ignore")]
-    #[allow(dead_code)]
-    send_closed: mpsc::Sender<()>,
+    closed: Arc<Notify>,
+}
+
+impl<P> Drop for OpenServer<P>
+where
+    P: ChannelProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
+{
+    fn drop(&mut self) {
+        self.closed.notify_waiters();
+    }
 }
 
 type OpenServerResult<P> = Result<OpenServer<P>, WebTransportError<P>>;

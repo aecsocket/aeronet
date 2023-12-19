@@ -1,6 +1,8 @@
+use std::sync::Arc;
+
 use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
 use slotmap::SlotMap;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, Notify};
 use tracing::{debug, debug_span, Instrument};
 use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
@@ -17,15 +19,12 @@ where
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
-    debug!("Started backend");
+    debug!("Opened backend");
     start_inner::<P>(config, send_open).await;
     debug!("Closed backend");
 }
 
-async fn start_inner<P>(
-    config: ServerConfig,
-    send_open: oneshot::Sender<OpenServerResult<P>>,
-)
+async fn start_inner<P>(config: ServerConfig, send_open: oneshot::Sender<OpenServerResult<P>>)
 where
     P: ChannelProtocol,
     P::C2S: TryFromBytes,
@@ -41,12 +40,12 @@ where
     debug!("Created endpoint");
 
     let (send_client, recv_client) = mpsc::unbounded_channel();
-    let (send_closed, mut recv_closed) = mpsc::channel(1);
+    let closed = Arc::new(Notify::new());
     let open = OpenServer {
         local_addr: endpoint.local_addr(),
         clients: SlotMap::default(),
         recv_client,
-        send_closed,
+        closed: closed.clone(),
     };
     if send_open.send(Ok(open)).is_err() {
         return;
@@ -55,13 +54,14 @@ where
     debug!("Listening for incoming sessions");
     loop {
         let session = tokio::select! {
-            _ = recv_closed.recv() => return,
+            () = closed.notified() => return,
             session = endpoint.accept() => session,
         };
         debug!("Incoming session");
 
         // the backend doesn't know the ClientKey,
         // so the frontend has to send it over
+        // so that we can instrument this session
         let (send_key, recv_key) = oneshot::channel();
         let (send_incoming, recv_incoming) = oneshot::channel();
         let _ = send_client.send(UntrackedClient {
@@ -69,6 +69,8 @@ where
             recv_incoming,
         });
 
+        // make sure to start a new task ASAP
+        // so that we can keep accepting sessions
         tokio::spawn(start_session::<P>(session, recv_key, send_incoming));
     }
 }
@@ -90,10 +92,12 @@ async fn start_session<P>(
     let (send_accepted, recv_accepted) = oneshot::channel();
     let _ = send_incoming.send(IncomingClient { recv_accepted });
 
-    tokio::spawn(
-        handle_session::<P>(session, send_accepted)
-            .instrument(debug_span!("Client", key = tracing::field::display(key))),
-    );
+    async move {
+        handle_session::<P>(session, send_accepted).await;
+        debug!("Finished session");
+    }
+    .instrument(debug_span!("Client", key = tracing::field::display(key)))
+    .await;
 }
 
 async fn handle_session<P>(
@@ -125,7 +129,6 @@ async fn handle_session<P>(
         recv_connected,
     };
     if send_accepted.send(Ok(accepted)).is_err() {
-        debug!("Frontend closed");
         return;
     }
 
@@ -141,7 +144,6 @@ async fn handle_session<P>(
         }
     };
 
-    debug!("Establishing channels");
     let channels_state = match shared::setup_connection::<P, P::S2C, P::C2S, true>(&conn).await {
         Ok(state) => state,
         Err(err) => {
@@ -162,7 +164,6 @@ async fn handle_session<P>(
         recv_err,
     };
     if send_connected.send(Ok(connected)).is_err() {
-        debug!("Frontend closed");
         return;
     }
 

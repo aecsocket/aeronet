@@ -23,22 +23,6 @@ use crate::{ChannelError, EndpointInfo, WebTransportError};
 
 pub(super) type ClientState = aeronet::ClientState<EndpointInfo>;
 
-struct NotifyDrop {
-    notify: Arc<Notify>,
-}
-
-impl NotifyDrop {
-    fn new(notify: Arc<Notify>) -> Self {
-        Self { notify }
-    }
-}
-
-impl Drop for NotifyDrop {
-    fn drop(&mut self) {
-        self.notify.notify_waiters()
-    }
-}
-
 // setup connection
 
 pub(super) struct ConnectionSetup<P, S, R>
@@ -50,7 +34,7 @@ where
     channels: Vec<ChannelState<P>>,
     recv_streams: mpsc::UnboundedReceiver<R>,
     recv_err: mpsc::UnboundedReceiver<WebTransportError<P, S, R>>,
-    closed: NotifyDrop,
+    closed: Arc<Notify>,
     bytes_recv: Arc<AtomicUsize>,
 }
 
@@ -92,7 +76,7 @@ where
             let channel = channel.clone();
             async move {
                 let kind = channel.kind();
-                debug!("Establishing channel of kind {kind:?}");
+                debug!("Establishing {kind:?} channel");
                 let state = match kind {
                     ChannelKind::Unreliable => ChannelState::Datagram { channel },
                     ChannelKind::ReliableUnordered | ChannelKind::ReliableOrdered => {
@@ -118,10 +102,9 @@ where
         ))
     });
 
-    debug!("Set up connection");
     let channels = try_join_all(channels).await?;
-    let closed = NotifyDrop::new(closed);
 
+    debug!("Set up connection");
     Ok(ConnectionSetup {
         channels,
         recv_streams,
@@ -228,7 +211,7 @@ pub(super) async fn handle_connection<P, S, R>(
         bytes_recv,
     } = channels;
 
-    debug!("Starting connection loop");
+    debug!("Connected");
     match connection_loop(
         conn,
         send_info,
@@ -249,8 +232,7 @@ pub(super) async fn handle_connection<P, S, R>(
             let _ = send_err.send(err);
         }
     }
-
-    drop(closed)
+    closed.notify_waiters();
 }
 
 async fn connection_loop<P, S, R>(

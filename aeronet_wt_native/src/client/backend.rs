@@ -19,10 +19,23 @@ pub(super) async fn start<P>(
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
+    debug!("Opened backend");
+    start_inner::<P>(config, url, send_connected).await;
+    debug!("Closed backend");
+}
+
+async fn start_inner<P>(
+    config: ClientConfig,
+    url: String,
+    send_connected: oneshot::Sender<ConnectedClientResult<P>>,
+) where
+    P: ChannelProtocol,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryFromBytes,
+{
     let (endpoint, conn, channels) = match connect::<P>(config, url).await {
         Ok(t) => t,
         Err(err) => {
-            debug!("Failed to connect");
             let _ = send_connected.send(Err(err));
             return;
         }
@@ -45,7 +58,6 @@ pub(super) async fn start<P>(
         recv_err,
     };
     if send_connected.send(Ok(connected)).is_err() {
-        debug!("Frontend closed");
         return;
     }
 
@@ -71,17 +83,17 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    debug!("Creating endpoint for {url}");
+    debug!("Creating endpoint");
     let endpoint = Endpoint::client(config).map_err(WebTransportError::Endpoint)?;
 
-    debug!("Connecting");
+    debug!("Connecting to {url:?}");
     let conn = endpoint
         .connect(url.clone())
         .await
         .map_err(WebTransportError::Connect)?;
 
-    debug!("Establishing channels");
     let channels = shared::setup_connection::<P, P::C2S, P::S2C, false>(&conn).await?;
 
+    debug!("Created endpoint");
     Ok((endpoint, conn, channels))
 }
