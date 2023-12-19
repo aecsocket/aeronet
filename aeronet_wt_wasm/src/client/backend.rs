@@ -15,7 +15,7 @@ use crate::{
 
 use super::{ConnectedClient, ConnectedClientResult};
 
-pub(super) async fn start<P>(
+pub(super) async fn open<P>(
     config: WebTransportConfig,
     url: String,
     send_connected: oneshot::Sender<ConnectedClientResult<P>>,
@@ -24,7 +24,20 @@ pub(super) async fn start<P>(
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    debug!("Connecting to {url}");
+    debug!("Opened backend");
+    start::<P>(config, url, send_connected).await;
+    debug!("Closed backend");
+}
+
+async fn start<P>(
+    config: WebTransportConfig,
+    url: String,
+    send_connected: oneshot::Sender<ConnectedClientResult<P>>,
+) where
+    P: ChannelProtocol,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryFromBytes,
+{
     let transport = match connect::<P>(config, url).await {
         Ok(t) => t,
         Err(err) => {
@@ -44,17 +57,14 @@ pub(super) async fn start<P>(
         recv_s2c,
         recv_err,
     };
-    if send_connected.send(Ok(connected)).is_err() {
-        debug!("Frontend closed");
-        return;
-    }
+    let _ = send_connected.send(Ok(connected));
 
-    debug!("Starting connection loop");
+    debug!("Connected");
     if let Err(err) = handle_connection::<P>(transport, send_info, send_s2c, recv_c2s).await {
-        debug!("Disconnected with error");
+        debug!("Disconnected: {err:#}");
         let _ = send_err.send(err);
     } else {
-        debug!("Disconnected without error");
+        debug!("Disconnected successfully");
     }
 }
 
@@ -111,6 +121,7 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
+    debug!("Connecting to {url}");
     let transport = WebTransport::new(&config, url)?;
     JsFuture::from(transport.ready())
         .await
@@ -147,22 +158,22 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    let reader = transport.datagrams().readable().get_reader();
-    let reader = StreamReader::from(reader);
-
-    let writer = transport
+    let send_dgram = transport
         .datagrams()
         .writable()
         .get_writer()
         .map_err(|_| WebTransportError::OnDatagram(ChannelError::WriterLocked))?;
-    let writer = StreamWriter::from(writer);
+    let send_dgram = StreamWriter::from(send_dgram);
+
+    let recv_dgram = transport.datagrams().readable().get_reader();
+    let recv_dgram = StreamReader::from(recv_dgram);
 
     // the current task handles frontend commands,
     // the `spawn_local`'ed tasks handles receiving from the client
 
     let (mut send_err, mut recv_err) = mpsc::channel(0);
     spawn_local(async move {
-        if let Err(err) = recv_stream::<P>(reader, send_s2c.clone()).await {
+        if let Err(err) = recv_stream::<P>(recv_dgram, send_s2c.clone()).await {
             let _ = send_err.try_send(WebTransportError::OnDatagram(err));
         }
     });
@@ -172,18 +183,17 @@ where
             let _ = send_info.unbounded_send(info);
         }
 
+        // reading the datagram stream isn't cancel-safe
+        // so we can't directly do that here
+        // instead, that's delegated to the task spawned above
         futures::select! {
             result = recv_c2s.next() => {
-                let Some(msg) = result else {
-                    debug!("Frontend closed");
-                    return Ok(());
-                };
-                send::<P>(&writer, msg).await.map_err(WebTransportError::OnDatagram)?;
+                let Some(msg) = result else { return Ok(()) };
+                send::<P>(&send_dgram, msg).await.map_err(WebTransportError::OnDatagram)?;
             }
-            result = recv_err.next() => {
-                match result {
-                    Some(err) => return Err(err),
-                    None => return Ok(()),
+            err = recv_err.next() => {
+                if let Some(err) = err {
+                    return Err(err);
                 }
             }
         }

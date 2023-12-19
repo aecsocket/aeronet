@@ -10,7 +10,7 @@ use crate::{
 
 use super::{ConnectedClient, ConnectedClientResult, WebTransportError};
 
-pub(super) async fn start<P>(
+pub(super) async fn open<P>(
     config: ClientConfig,
     url: String,
     send_connected: oneshot::Sender<ConnectedClientResult<P>>,
@@ -20,11 +20,11 @@ pub(super) async fn start<P>(
     P::S2C: TryFromBytes,
 {
     debug!("Opened backend");
-    start_inner::<P>(config, url, send_connected).await;
+    start::<P>(config, url, send_connected).await;
     debug!("Closed backend");
 }
 
-async fn start_inner<P>(
+async fn start<P>(
     config: ClientConfig,
     url: String,
     send_connected: oneshot::Sender<ConnectedClientResult<P>>,

@@ -2,7 +2,6 @@ use std::{future::Future, io, net::SocketAddr, task::Poll};
 
 use aeronet::{ChannelProtocol, OnChannel, TransportServer, TryAsBytes, TryFromBytes};
 use tokio::sync::{mpsc, oneshot};
-use tracing::debug;
 use wtransport::ServerConfig;
 
 use crate::{shared::ClientState, ClientKey, EndpointInfo, ServerEvent, WebTransportServer};
@@ -165,7 +164,7 @@ where
 {
     fn new(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel();
-        (Self { recv_open }, backend::start::<P>(config, send_open))
+        (Self { recv_open }, backend::open::<P>(config, send_open))
     }
 
     fn poll(&mut self) -> Poll<OpenServerResult<P>> {
@@ -226,7 +225,6 @@ where
             match self.recv_client.try_recv() {
                 Ok(client) => {
                     let client = self.clients.insert(RemoteClient::Untracked(client));
-                    debug!("Inserted client {client:?}");
                     events.push(ServerEvent::Incoming { client });
                 }
                 Err(mpsc::error::TryRecvError::Empty) => break,
@@ -242,7 +240,6 @@ where
         }
         for client in to_remove {
             self.clients.remove(client);
-            debug!("Removed {client:?}");
         }
 
         (events, Ok(()))

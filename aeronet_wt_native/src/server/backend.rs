@@ -13,18 +13,18 @@ use super::{
     OpenServerResult, WebTransportError,
 };
 
-pub(super) async fn start<P>(config: ServerConfig, send_open: oneshot::Sender<OpenServerResult<P>>)
+pub(super) async fn open<P>(config: ServerConfig, send_open: oneshot::Sender<OpenServerResult<P>>)
 where
     P: ChannelProtocol,
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     debug!("Opened backend");
-    start_inner::<P>(config, send_open).await;
+    start::<P>(config, send_open).await;
     debug!("Closed backend");
 }
 
-async fn start_inner<P>(config: ServerConfig, send_open: oneshot::Sender<OpenServerResult<P>>)
+async fn start<P>(config: ServerConfig, send_open: oneshot::Sender<OpenServerResult<P>>)
 where
     P: ChannelProtocol,
     P::C2S: TryFromBytes,
@@ -47,9 +47,7 @@ where
         recv_client,
         closed: closed.clone(),
     };
-    if send_open.send(Ok(open)).is_err() {
-        return;
-    }
+    let _ = send_open.send(Ok(open));
 
     debug!("Listening for incoming sessions");
     loop {

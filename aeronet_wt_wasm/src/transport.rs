@@ -167,7 +167,7 @@ impl TryFrom<&WebTransportStats> for EndpointInfo {
 
 /// Error that occurs when processing a WebTransport client.
 #[derive(Derivative, thiserror::Error)]
-#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"))]
+#[derivative(Debug(bound = ""))]
 pub enum WebTransportError<P>
 where
     P: ChannelProtocol,
@@ -204,7 +204,7 @@ const MAX_MSG_SIZE: u32 = u32::MAX;
 /// Error that occurs while processing a channel, either datagrams or QUIC
 /// streams.
 #[derive(Derivative, thiserror::Error)]
-#[derivative(Debug(bound = "P::C2S: Debug, P::S2C: Debug, P::Channel: Debug"))]
+#[derivative(Debug(bound = ""))]
 pub enum ChannelError<P>
 where
     P: ChannelProtocol,

@@ -168,7 +168,7 @@ where
     fn new(config: WebTransportConfig, url: impl Into<String>) -> Self {
         let url = url.into();
         let (send_connected, recv_connected) = oneshot::channel();
-        spawn_local(backend::start::<P>(config, url, send_connected));
+        spawn_local(backend::open::<P>(config, url, send_connected));
         Self {
             recv_connected,
             send_event: true,

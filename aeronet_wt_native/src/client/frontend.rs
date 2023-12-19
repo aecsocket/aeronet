@@ -179,7 +179,7 @@ where
                 recv_connected,
                 send_event: true,
             },
-            backend::start::<P>(config, url, send_connected),
+            backend::open::<P>(config, url, send_connected),
         )
     }
 

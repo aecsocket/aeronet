@@ -181,7 +181,7 @@ where
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     fn drop(&mut self) {
-        self.closed.notify_waiters();
+        self.closed.notify_one();
     }
 }
 
