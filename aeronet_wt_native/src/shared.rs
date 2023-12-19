@@ -235,6 +235,7 @@ pub(super) async fn handle_connection<P, S, R>(
     closed.notify_waiters();
 }
 
+#[allow(clippy::too_many_arguments)] // this is the cleanest way to do this
 async fn connection_loop<P, S, R>(
     conn: Connection,
     send_info: mpsc::UnboundedSender<EndpointInfo>,
@@ -313,7 +314,7 @@ where
     let serialized = msg.try_as_bytes().map_err(ChannelError::Serialize)?;
     let bytes = serialized.as_ref();
     conn.send_datagram(bytes)
-        .map(|_| bytes.len())
+        .map(|()| bytes.len())
         .map_err(ChannelError::SendDatagram)
 }
 
@@ -326,7 +327,7 @@ where
     let bytes = serialized.as_ref();
     send.write_all(bytes)
         .await
-        .map(|_| bytes.len())
+        .map(|()| bytes.len())
         .map_err(ChannelError::WriteStream)
 }
 

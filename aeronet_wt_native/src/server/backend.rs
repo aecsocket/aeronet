@@ -175,5 +175,5 @@ async fn handle_session<P>(
         send_err,
         recv_s2c,
     )
-    .await
+    .await;
 }

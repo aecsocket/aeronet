@@ -13,23 +13,6 @@ pub fn log_lines(ui: &mut egui::Ui, log: &[LogLine]) {
     });
 }
 
-// TODO: stupid ass hack because egui WASM adds an "E" after you press enter in
-// a TextEdit, so we get rid of it
-
-#[cfg(target_arch = "wasm32")]
-fn fix_input(s: &str) -> &str {
-    if s.ends_with("E") {
-        &s[0..s.len() - 1]
-    } else {
-        s
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn fix_input(s: &str) -> &str {
-    s
-}
-
 /// Shows a message input buffer using [`egui::TextEdit`].
 pub fn msg_buf(ui: &mut egui::Ui, buf: &mut String) -> Option<EchoMessage> {
     let resp = ui
@@ -42,7 +25,7 @@ pub fn msg_buf(ui: &mut egui::Ui, buf: &mut String) -> Option<EchoMessage> {
     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
         ui.memory_mut(|m| m.request_focus(resp.id));
 
-        let buf = fix_input(mem::take(buf).trim()).to_string();
+        let buf = mem::take(buf).trim().to_string();
         return if buf.is_empty() {
             None
         } else {
@@ -68,7 +51,7 @@ pub fn url_buf(ui: &mut egui::Ui, url: &mut String) -> Option<String> {
     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
         ui.memory_mut(|m| m.request_focus(resp.id));
 
-        let url = fix_input(url.trim()).to_string();
+        let url = url.trim().to_string();
         return if url.is_empty() { None } else { Some(url) };
     }
 

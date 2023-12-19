@@ -64,7 +64,7 @@ async fn start_inner<P>(
     shared::handle_connection::<P, P::C2S, P::S2C>(
         conn, channels, send_info, send_s2c, send_err, recv_c2s,
     )
-    .await
+    .await;
 }
 
 async fn connect<P>(
