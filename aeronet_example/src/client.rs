@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Debug};
+use std::{error::Error, fmt::{Debug, Display}};
 
 use aeronet::{
     FromClient, FromServer, LocalClientConnected, LocalClientConnecting, LocalClientDisconnected,
@@ -78,7 +78,9 @@ pub fn client_log<P, T, L>(
     mut send: EventReader<ToServer<P>>,
     mut disconnected: EventReader<LocalClientDisconnected<P, T>>,
 ) where
-    P: TransportProtocol<C2S = EchoMessage, S2C = EchoMessage>,
+    P: TransportProtocol,
+    P::C2S: Display,
+    P::S2C: Display,
     T: TransportClient<P> + Resource,
     T::Error: Error,
     L: Log + Resource,
@@ -94,11 +96,11 @@ pub fn client_log<P, T, L>(
     }
 
     for FromServer { msg } in recv.read() {
-        log.push(LogLine::new(LogKind::Message, format!("> {}", &msg.0)));
+        log.push(LogLine::new(LogKind::Message, format!("> {}", msg)));
     }
 
     for ToServer { msg } in send.read() {
-        log.push(LogLine::new(LogKind::Message, format!("< {}", &msg.0)));
+        log.push(LogLine::new(LogKind::Message, format!("< {}", msg)));
     }
 
     for LocalClientDisconnected { cause } in disconnected.read() {

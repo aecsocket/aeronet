@@ -181,7 +181,7 @@ where
 }
 
 async fn handle_stream<P>(
-
+    stream: WebTransportBidirectionalStream,
 ) -> Result<(), ChannelError<P>>
 where
     P: ChannelProtocol,

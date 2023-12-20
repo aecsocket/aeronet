@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use aeronet::{AsyncRuntime, ClientState, TransportServer};
-use aeronet_example::EchoProtocol;
+use aeronet_example::{EchoProtocol, LOG_FILTER};
 use aeronet_wt_native::{ServerEvent, WebTransportServer};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
@@ -24,7 +24,7 @@ fn main() {
     App::new()
         .add_plugins((
             LogPlugin {
-                filter: "aeronet_wt_native=debug".to_string(),
+                filter: LOG_FILTER.to_string(),
                 ..default()
             },
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),

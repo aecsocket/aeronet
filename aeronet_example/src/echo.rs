@@ -1,4 +1,4 @@
-use std::{convert::Infallible, string::FromUtf8Error};
+use std::{convert::Infallible, string::FromUtf8Error, fmt::Display};
 
 use aeronet::{
     ChannelKey, ChannelProtocol, Message, OnChannel, TransportProtocol, TryAsBytes, TryFromBytes,
@@ -42,6 +42,12 @@ impl ChannelProtocol for EchoProtocol {
 }
 
 // Helper stuff
+
+impl Display for EchoMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl<T> From<T> for EchoMessage
 where

@@ -3,13 +3,13 @@
 use std::time::Duration;
 
 use aeronet::{AsyncRuntime, ClientState, ToServer, TransportClient, TransportClientPlugin};
-use aeronet_example::{client_log, log_lines, msg_buf, url_buf, EchoProtocol, Log, LogLine};
+use aeronet_example::{client_log, log_lines, msg_buf, url_buf, Log, LogLine, ComplexProtocol, C2S, LOG_FILTER};
 use aeronet_wt_native::WebTransportClient;
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use wtransport::ClientConfig;
 
-type Client = WebTransportClient<EchoProtocol>;
+type Client = WebTransportClient<ComplexProtocol>;
 
 #[derive(Debug, Default, Resource)]
 struct ClientUiState {
@@ -30,7 +30,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins.set(LogPlugin {
-                filter: "aeronet_wt_native=debug".to_string(),
+                filter: LOG_FILTER.to_string(),
                 ..default()
             }),
             EguiPlugin,
@@ -56,7 +56,7 @@ fn ui(
     mut egui: EguiContexts,
     mut client: ResMut<Client>,
     mut ui_state: ResMut<ClientUiState>,
-    mut send: EventWriter<ToServer<EchoProtocol>>,
+    mut send: EventWriter<ToServer<ComplexProtocol>>,
 ) {
     egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
         let can_disconnect = matches!(
@@ -84,7 +84,9 @@ fn ui(
 
         if let ClientState::Connected(info) = client.state() {
             if let Some(msg) = msg_buf(ui, &mut ui_state.buf) {
-                send.send(ToServer { msg });
+                send.send(ToServer {
+                    msg: C2S::Msg(msg),
+                });
             }
 
             egui::Grid::new("stats").show(ui, |ui| {

@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use aeronet::{AsyncRuntime, ClientState, TransportServer};
-use aeronet_example::ComplexProtocol;
+use aeronet_example::{ComplexProtocol, S2C, LOG_FILTER};
 use aeronet_wt_native::{ServerEvent, WebTransportServer};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
@@ -24,7 +24,7 @@ fn main() {
     App::new()
         .add_plugins((
             LogPlugin {
-                level: tracing::Level::DEBUG,
+                filter: LOG_FILTER.to_string(),
                 ..default()
             },
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
@@ -84,6 +84,8 @@ fn update_server(mut server: ResMut<Server>) {
             }
             ServerEvent::Recv { client, msg } => {
                 info!("{client:?} > {:?}", msg);
+                let msg = format!("You sent: {}", msg);
+                let _ = server.send(client, S2C::Msg(msg));
             }
             ServerEvent::Disconnected { client, cause } => info!(
                 "{client:?} disconnected: {:#}",

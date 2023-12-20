@@ -15,7 +15,7 @@ use aeronet::{
     ChannelKey, ChannelKind, ChannelProtocol, Message, OnChannel, TryAsBytes, TryFromBytes,
 };
 use futures::future::try_join_all;
-use tokio::sync::{mpsc, oneshot, Notify};
+use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, debug_span, Instrument};
 use wtransport::{datagram::Datagram, error::ConnectionError, Connection, RecvStream, SendStream};
 
@@ -34,7 +34,7 @@ where
     channels: Vec<ChannelState<P>>,
     recv_streams: mpsc::UnboundedReceiver<R>,
     recv_err: mpsc::UnboundedReceiver<WebTransportError<P, S, R>>,
-    closed: Arc<Notify>,
+    send_closed: watch::Sender<()>,
     bytes_recv: Arc<AtomicUsize>,
 }
 
@@ -63,43 +63,40 @@ where
 
     let (send_streams, recv_streams) = mpsc::unbounded_channel();
     let (send_err, recv_err) = mpsc::unbounded_channel();
-    let closed = Arc::new(Notify::new());
+    let (send_closed, recv_closed) = watch::channel(());
     let bytes_recv = Arc::new(AtomicUsize::new(0));
 
     let channels = P::Channel::ALL.iter().map(|channel| {
         let send_r = send_streams.clone();
         let send_err = send_err.clone();
-        let closed = closed.clone();
+        let recv_closed = recv_closed.clone();
         let bytes_recv = bytes_recv.clone();
 
+        let field = tracing::field::debug(channel);
+        
         {
             let channel = channel.clone();
             async move {
                 let kind = channel.kind();
                 debug!("Establishing {kind:?} channel");
-                let state = match kind {
-                    ChannelKind::Unreliable => ChannelState::Datagram { channel },
+                match kind {
+                    ChannelKind::Unreliable => Ok(ChannelState::Datagram { channel }),
                     ChannelKind::ReliableUnordered | ChannelKind::ReliableOrdered => {
                         establish_stream::<P, S, R, OPENS>(
                             conn,
                             channel.clone(),
                             send_r,
                             send_err,
-                            closed,
+                            recv_closed,
                             bytes_recv,
                         )
                         .await
-                        .map_err(|err| WebTransportError::<P, S, R>::OnChannel(channel, err))?
+                        .map_err(|err| WebTransportError::<P, S, R>::OnChannel(channel, err))
                     }
-                };
-
-                Ok(state)
+                }
             }
         }
-        .instrument(debug_span!(
-            "Channel",
-            channel = tracing::field::debug(channel)
-        ))
+        .instrument(debug_span!("Channel", key = tracing::field::debug(channel)))
     });
 
     let channels = try_join_all(channels).await?;
@@ -109,7 +106,7 @@ where
         channels,
         recv_streams,
         recv_err,
-        closed,
+        send_closed,
         bytes_recv,
     })
 }
@@ -119,7 +116,7 @@ async fn establish_stream<P, S, R, const OPENS: bool>(
     channel: P::Channel,
     send_r: mpsc::UnboundedSender<R>,
     send_err: mpsc::UnboundedSender<WebTransportError<P, S, R>>,
-    closed: Arc<Notify>,
+    recv_closed: watch::Receiver<()>,
     bytes_recv: Arc<AtomicUsize>,
 ) -> Result<ChannelState<P>, ChannelError<S, R>>
 where
@@ -138,20 +135,22 @@ where
         debug!("Accepting bidi stream");
         conn.accept_bi().await.map_err(ChannelError::AcceptStream)?
     };
+    debug!("Stream established");
 
     {
         let channel = channel.clone();
         tokio::spawn(async move {
             debug!("Channel worker started");
             #[allow(clippy::large_futures)] // this future is going on the heap anyway
-            match handle_stream::<S, R>(recv_stream, send_r, closed, bytes_recv).await {
+            match handle_stream::<S, R>(recv_stream, send_r, recv_closed, bytes_recv).await {
                 Ok(()) => debug!("Channel worker finished successfully"),
                 Err(err) => {
                     debug!("Channel worker finished: {err:#}");
                     let _ = send_err.send(WebTransportError::<P, S, R>::OnChannel(channel, err));
                 }
             }
-        });
+        }
+        .in_current_span());
     }
 
     Ok(ChannelState::Stream {
@@ -163,7 +162,7 @@ where
 async fn handle_stream<S, R>(
     mut recv_stream: RecvStream,
     send_r: mpsc::UnboundedSender<R>,
-    closed: Arc<Notify>,
+    mut recv_closed: watch::Receiver<()>,
     bytes_recv: Arc<AtomicUsize>,
 ) -> Result<(), ChannelError<S, R>>
 where
@@ -175,7 +174,7 @@ where
     let mut buf = [0u8; RECV_CAP];
     loop {
         tokio::select! {
-            () = closed.notified() => return Ok(()),
+            Err(_) = recv_closed.changed() => return Ok(()),
             result = recv_stream.read(&mut buf) => {
                 let Some(bytes_read) = result.map_err(ChannelError::ReadStream)? else {
                     continue;
@@ -208,7 +207,7 @@ pub(super) async fn handle_connection<P, S, R>(
         channels,
         recv_streams,
         recv_err,
-        closed,
+        send_closed,
         bytes_recv,
     } = channels;
 
@@ -233,7 +232,7 @@ pub(super) async fn handle_connection<P, S, R>(
             let _ = send_err.send(err);
         }
     }
-    closed.notify_waiters();
+    drop(send_closed)
 }
 
 #[allow(clippy::too_many_arguments)] // this is the cleanest way to do this
