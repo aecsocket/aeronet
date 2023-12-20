@@ -72,8 +72,6 @@ where
         let recv_closed = recv_closed.clone();
         let bytes_recv = bytes_recv.clone();
 
-        let field = tracing::field::debug(channel);
-        
         {
             let channel = channel.clone();
             async move {

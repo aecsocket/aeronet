@@ -38,7 +38,7 @@ async fn start<P>(
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    let transport = match connect::<P>(config, url).await {
+    let (transport = match connect::<P>(config, url).await {
         Ok(t) => t,
         Err(err) => {
             let _ = send_connected.send(Err(err));
@@ -105,9 +105,16 @@ where
         .await
         .map_err(|js| WebTransportError::ClientReady(err_msg(&js)))?;
 
-    establish_channels::<P>(&transport).await?;
+    setup_connection::<P>(&transport).await?;
 
     Ok(transport)
+}
+
+struct ConnectionSetup<P>
+where
+    P: ChannelProtocol,
+{
+
 }
 
 enum ChannelState<P>
@@ -118,12 +125,14 @@ where
     Stream { channel: P::Channel },
 }
 
-async fn establish_channels<P>(transport: &WebTransport) -> Result<(), WebTransportError<P>>
+async fn setup_connection<P>(transport: &WebTransport) -> Result<ConnectionSetup<P>, WebTransportError<P>>
 where
     P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
+    let (send_err, recv_err) = mpsc::channel(1);
+
     let streams = StreamReader::from(transport.incoming_bidirectional_streams().get_reader());
     let channels = P::Channel::ALL.iter().map(|channel| {
         {
@@ -143,7 +152,7 @@ where
         }
         .instrument(debug_span!(
             "Channel",
-            channel = tracing::field::debug(channel)
+            key = tracing::field::debug(channel)
         ))
     });
 
