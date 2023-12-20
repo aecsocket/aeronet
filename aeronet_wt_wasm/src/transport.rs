@@ -194,6 +194,9 @@ where
     /// channel.
     #[error("on datagram channel")]
     OnDatagram(#[source] ChannelError<P>),
+    /// An error occurred while processing a channel.
+    #[error("on {0:?}")]
+    OnChannel(P::Channel, #[source] ChannelError<P>),
     /// The client was forcefully disconnected by the app.
     #[error("force disconnect")]
     ForceDisconnect,
@@ -211,6 +214,11 @@ where
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
+    // establish
+    /// Failed to accept an incoming bidirectional stream request.
+    #[error("failed to open stream: {0}")]
+    AcceptStream(String),
+
     // send
     /// The writable stream for this channel was locked when it should not have
     /// been.

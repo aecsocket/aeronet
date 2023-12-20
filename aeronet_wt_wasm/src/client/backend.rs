@@ -1,16 +1,16 @@
 use aeronet::{ChannelKey, ChannelKind, ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
 use futures::{
     channel::{mpsc, oneshot},
-    StreamExt,
+    StreamExt, TryFutureExt,
 };
 use js_sys::Uint8Array;
-use tracing::debug;
+use tracing::{debug, Instrument, debug_span};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 
 use crate::{
     util::{err_msg, StreamWriter},
     util::{StreamReader, WebTransport},
-    ChannelError, EndpointInfo, WebTransportConfig, WebTransportError,
+    ChannelError, EndpointInfo, WebTransportConfig, WebTransportError, bind::WebTransportBidirectionalStream,
 };
 
 use super::{ConnectedClient, ConnectedClientResult};
@@ -70,28 +70,6 @@ async fn start<P>(
 
 // channels
 
-enum ChannelState<P>
-where
-    P: ChannelProtocol,
-{
-    Datagram { channel: P::Channel },
-    Stream { channel: P::Channel },
-}
-
-async fn establish_channels<P>(transport: &WebTransport) -> Result<(), WebTransportError<P>>
-where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
-    P::S2C: TryFromBytes,
-{
-    todo!()
-    // let streams =
-    // StreamReader::from(transport.incoming_bidirectional_streams().
-    // get_reader()); let channels = P::Channel::ALL.iter().map(|channel| {
-
-    // });
-}
-
 #[allow(unused_variables)] // see comment
 #[allow(clippy::unused_async)] // see comment
 async fn endpoint_info<P>(transport: &WebTransport) -> Result<EndpointInfo, WebTransportError<P>>
@@ -132,19 +110,85 @@ where
     Ok(transport)
 }
 
-async fn establish_channel<P>(
+enum ChannelState<P>
+where
+    P: ChannelProtocol,
+{
+    Datagram { channel: P::Channel },
+    Stream { channel: P::Channel },
+}
+
+async fn establish_channels<P>(transport: &WebTransport) -> Result<(), WebTransportError<P>>
+where
+    P: ChannelProtocol,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryFromBytes,
+{
+    let streams = StreamReader::from(transport.incoming_bidirectional_streams().get_reader());
+    let channels = P::Channel::ALL.iter().map(|channel| {
+        {
+            let channel = channel.clone();
+            async move {
+                let channel = match channel.kind() {
+                    ChannelKind::Unreliable => Ok(ChannelState::Datagram {
+                        channel: channel.clone(),
+                    }),
+                    ChannelKind::ReliableUnordered | ChannelKind::ReliableOrdered => {
+                        establish_stream(transport, channel.clone()).await
+                    }
+                }
+                .map_err(|err| WebTransportError::OnChannel(channel.clone(), err))?;
+                Ok::<_, WebTransportError<P>>(channel)
+            }
+        }
+        .instrument(debug_span!(
+            "Channel",
+            channel = tracing::field::debug(channel)
+        ))
+    });
+
+    todo!()
+    // let streams =
+    // StreamReader::from(transport.incoming_bidirectional_streams().
+    // get_reader()); let channels = P::Channel::ALL.iter().map(|channel| {
+
+    // });
+}
+
+async fn establish_stream<P>(
     transport: &WebTransport,
     channel: P::Channel,
+    send_err: mpsc::UnboundedSender<WebTransportError<P>>,
 ) -> Result<ChannelState<P>, ChannelError<P>>
 where
     P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    match channel.kind() {
-        ChannelKind::Unreliable => Ok(ChannelState::Datagram { channel }),
-        ChannelKind::ReliableUnordered | ChannelKind::ReliableOrdered => todo!(),
-    }
+    let streams = StreamReader::from(transport.incoming_bidirectional_streams().get_reader());
+    let (stream, _) = streams.read::<WebTransportBidirectionalStream>().await.map_err(|err| ChannelError::AcceptStream(err))?;
+    
+    spawn_local(async move {
+        debug!("Channel worker started");
+        match handle_stream::<P>().await {
+            Ok(()) => debug!("Channel worker finished successfully"),
+            Err(err) => {
+                debug!("Channel worker finished: {err:#}");
+                let _ = send_err.send(WebTransportError::<P, S, R>::OnChannel(channel, err));
+            }
+        }
+    });
+}
+
+async fn handle_stream<P>(
+
+) -> Result<(), ChannelError<P>>
+where
+    P: ChannelProtocol,
+    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P::S2C: TryFromBytes,
+{
+
 }
 
 async fn handle_connection<P>(
