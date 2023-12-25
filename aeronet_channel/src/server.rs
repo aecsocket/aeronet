@@ -1,4 +1,4 @@
-use aeronet::{ClientState, TransportProtocol, TransportServer};
+use aeronet::{ClientState, ServerState, TransportProtocol, TransportServer};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;
@@ -78,18 +78,24 @@ where
 
     type Error = ChannelError;
 
-    type ConnectionInfo = ();
+    type ServerInfo = ();
+
+    type ClientInfo = ();
 
     type Event = ServerEvent<P>;
 
-    fn client_state(&self, client: Self::Client) -> ClientState<Self::ConnectionInfo> {
+    fn server_state(&self) -> ServerState<Self::ServerInfo> {
+        ServerState::Open { info: () }
+    }
+
+    fn client_state(&self, client: Self::Client) -> ClientState<Self::ClientInfo> {
         match self.clients.get(client) {
-            Some(_) => ClientState::Connected(()),
+            Some(_) => ClientState::Connected { info: () },
             None => ClientState::Disconnected,
         }
     }
 
-    fn clients(&self) -> impl Iterator<Item = (Self::Client, ClientState<Self::ConnectionInfo>)> {
+    fn clients(&self) -> impl Iterator<Item = (Self::Client, ClientState<Self::ClientInfo>)> {
         self.clients
             .keys()
             .map(|client| (client, self.client_state(client)))

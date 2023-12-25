@@ -137,18 +137,21 @@ where
 
     {
         let channel = channel.clone();
-        tokio::spawn(async move {
-            debug!("Channel worker started");
-            #[allow(clippy::large_futures)] // this future is going on the heap anyway
-            match handle_stream::<S, R>(recv_stream, send_r, recv_closed, bytes_recv).await {
-                Ok(()) => debug!("Channel worker finished successfully"),
-                Err(err) => {
-                    debug!("Channel worker finished: {err:#}");
-                    let _ = send_err.send(WebTransportError::<P, S, R>::OnChannel(channel, err));
+        tokio::spawn(
+            async move {
+                debug!("Channel worker started");
+                #[allow(clippy::large_futures)] // this future is going on the heap anyway
+                match handle_stream::<S, R>(recv_stream, send_r, recv_closed, bytes_recv).await {
+                    Ok(()) => debug!("Channel worker finished successfully"),
+                    Err(err) => {
+                        debug!("Channel worker finished: {err:#}");
+                        let _ =
+                            send_err.send(WebTransportError::<P, S, R>::OnChannel(channel, err));
+                    }
                 }
             }
-        }
-        .in_current_span());
+            .in_current_span(),
+        );
     }
 
     Ok(ChannelState::Stream {

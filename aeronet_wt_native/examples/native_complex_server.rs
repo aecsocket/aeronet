@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use aeronet::{AsyncRuntime, ClientState, TransportServer};
-use aeronet_example::{ComplexProtocol, S2C, LOG_FILTER};
+use aeronet_example::{ComplexProtocol, LOG_FILTER, S2C};
 use aeronet_wt_native::{ServerEvent, WebTransportServer};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};

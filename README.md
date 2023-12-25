@@ -154,15 +154,9 @@ case, [`TryFromBytes`] and [`TryAsBytes`] are useful to look at.
 
 ## Connection
 
-This crate abstracts over the complexities of a client connection by defining the [`ClientState`]
-type. A [`TransportClient`], and a client connected to a [`TransportServer`], can be in only one of
-these states at once:
-* **not connected** - a client does not have a connection to a server, and is not attempting to
-  establish a connection. This is the initial state of a client.
-* **connecting** - a client has attempted to establish a connection, but has not finished yet.
-* **connected** - a client has fully established a connection to a server, including opening the
-  correct streams and channels and all other setup, and messages can now be exchanged between the
-  two.
+This crate abstracts over the complexities of a client connection by defining a set of states that
+a client can be in at any time. See [`ClientState`] for details. The same applies for a server, with
+[`ServerState`].
 
 Although the networking implementation is likely to be much more complex, including encryption,
 handshakes, etc., these states can be used as a basic contract for networking code. However, the

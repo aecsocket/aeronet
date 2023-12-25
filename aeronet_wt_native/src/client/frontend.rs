@@ -84,15 +84,17 @@ where
 {
     type Error = WebTransportError<P>;
 
-    type ConnectionInfo = EndpointInfo;
+    type ClientInfo = EndpointInfo;
 
     type Event = ClientEvent<P>;
 
-    fn state(&self) -> ClientState {
+    fn client_state(&self) -> ClientState {
         match &self.state {
             State::Disconnected { .. } => ClientState::Disconnected,
             State::Connecting(_) => ClientState::Connecting,
-            State::Connected(client) => ClientState::Connected(client.connection_info()),
+            State::Connected(client) => ClientState::Connected {
+                info: client.connection_info(),
+            },
         }
     }
 

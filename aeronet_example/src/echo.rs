@@ -1,4 +1,4 @@
-use std::{convert::Infallible, string::FromUtf8Error, fmt::Display};
+use std::{convert::Infallible, fmt::Display, string::FromUtf8Error};
 
 use aeronet::{
     ChannelKey, ChannelProtocol, Message, OnChannel, TransportProtocol, TryAsBytes, TryFromBytes,

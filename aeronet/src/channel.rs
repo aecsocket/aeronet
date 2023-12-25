@@ -88,22 +88,22 @@ pub enum ChannelKind {
 /// will transport over in a single place, and let your code use this throughout
 /// the app.
 ///
-/// # Safety
+/// # Panics
 ///
 /// This should be derived rather than implemented manually - see
 /// [`aeronet_derive::ChannelKey`]. Otherwise, transport implementations may
 /// panic.
-pub unsafe trait ChannelKey: Send + Sync + Sized + Debug + Clone + 'static {
+pub trait ChannelKey: Send + Sync + Sized + Debug + Clone + 'static {
     /// The set of all valid variants of [`ChannelKey`].
     ///
-    /// # Safety
+    /// # Panics
     ///
     /// This must include *every representable value* of this type.
     const ALL: &'static [Self];
 
     /// The index of this value in [`ChannelKey::ALL`].
     ///
-    /// # Safety
+    /// # Panics
     ///
     /// This index must point to a valid index in [`ChannelKey::ALL`], and the
     /// value pointed to must be equivalent to this value.

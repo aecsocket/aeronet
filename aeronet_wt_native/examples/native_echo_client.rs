@@ -3,7 +3,9 @@
 use std::time::Duration;
 
 use aeronet::{AsyncRuntime, ClientState, ToServer, TransportClient, TransportClientPlugin};
-use aeronet_example::{client_log, log_lines, msg_buf, url_buf, EchoProtocol, Log, LogLine, EchoMessage, LOG_FILTER};
+use aeronet_example::{
+    client_log, log_lines, msg_buf, url_buf, EchoMessage, EchoProtocol, Log, LogLine, LOG_FILTER,
+};
 use aeronet_wt_native::WebTransportClient;
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
@@ -60,7 +62,7 @@ fn ui(
 ) {
     egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
         let can_disconnect = matches!(
-            client.state(),
+            client.client_state(),
             ClientState::Connecting | ClientState::Connected(_)
         );
         ui.horizontal(|ui| {
@@ -82,7 +84,7 @@ fn ui(
 
         log_lines(ui, &ui_state.log);
 
-        if let ClientState::Connected(info) = client.state() {
+        if let ClientState::Connected(info) = client.client_state() {
             if let Some(msg) = msg_buf(ui, &mut ui_state.buf) {
                 send.send(ToServer {
                     msg: EchoMessage(msg),

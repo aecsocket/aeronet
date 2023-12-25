@@ -26,11 +26,7 @@ pub fn msg_buf(ui: &mut egui::Ui, buf: &mut String) -> Option<String> {
         ui.memory_mut(|m| m.request_focus(resp.id));
 
         let buf = mem::take(buf).trim().to_string();
-        return if buf.is_empty() {
-            None
-        } else {
-            Some(buf)
-        };
+        return if buf.is_empty() { None } else { Some(buf) };
     }
 
     None

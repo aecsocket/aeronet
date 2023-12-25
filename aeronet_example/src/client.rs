@@ -1,4 +1,7 @@
-use std::{error::Error, fmt::{Debug, Display}};
+use std::{
+    error::Error,
+    fmt::{Debug, Display},
+};
 
 use aeronet::{
     FromClient, FromServer, LocalClientConnected, LocalClientConnecting, LocalClientDisconnected,

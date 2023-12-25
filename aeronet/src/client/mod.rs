@@ -16,9 +16,9 @@ where
     /// Error returned from operations on this client.
     type Error: Send + Sync + 'static;
 
-    /// Info on this client's connection status, returned by
-    /// [`TransportClient::state`].
-    type ConnectionInfo;
+    /// Info on this client's connection state, returned by
+    /// [`TransportClient::client_state`].
+    type ClientInfo;
 
     /// Type of event raised by this client.
     ///
@@ -39,7 +39,7 @@ where
     ///
     /// [`Rtt`]: crate::Rtt
     /// [`RemoteAddr`]: crate::RemoteAddr
-    fn state(&self) -> ClientState<Self::ConnectionInfo>;
+    fn client_state(&self) -> ClientState<Self::ClientInfo>;
 
     /// Attempts to send a message to the connected server.
     ///
@@ -94,8 +94,8 @@ where
     fn disconnect(&mut self) -> Result<(), Self::Error>;
 }
 
-/// Current state of a client, either a [`TransportClient`] or a remote client
-/// connecting to a [`TransportServer`].
+/// Current state of a client; either a [`TransportClient`] managed by this app,
+/// or a remote client connecting to a [`TransportServer`] managed by this app.
 ///
 /// [`TransportServer`]: crate::TransportServer
 #[derive(Debug, Clone, Default)]
@@ -109,7 +109,10 @@ pub enum ClientState<I> {
     Connecting,
     /// The client has fully connected to a server, and information about the
     /// connection is now available.
-    Connected(I),
+    Connected {
+        /// Info on the established connection.
+        info: I,
+    },
 }
 
 /// Event raised by a [`TransportClient`].

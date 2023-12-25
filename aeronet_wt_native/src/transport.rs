@@ -92,6 +92,9 @@ where
     /// Failed to create the [`wtransport::Endpoint`].
     #[error("failed to create endpoint")]
     Endpoint(#[source] io::Error),
+    /// Failed to get the local address of the server [`wtransport::Endpoint`].
+    #[error("failed to get local address of server endpoint")]
+    GetLocalAddr(#[source] io::Error),
     /// Failed to connect the endpoint to the given URL.
     #[error("failed to connect to URL")]
     Connect(#[source] ConnectingError),

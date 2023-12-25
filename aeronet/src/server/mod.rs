@@ -20,9 +20,13 @@ where
     /// Error returned from operations on this server.
     type Error: Send + Sync + 'static;
 
-    /// Info on a given client's connection status, returned by
+    /// Info on the server's current status while open, returned by
+    /// [`TransportServer::server_state`]
+    type ServerInfo;
+
+    /// Info on a given client's connection state, returned by
     /// [`TransportServer::client_state`].
-    type ConnectionInfo;
+    type ClientInfo;
 
     /// Type of event raised by this server.
     ///
@@ -30,6 +34,12 @@ where
     /// [`ServerEvent`]. If an event value cannot cleanly map to a single
     /// generic [`ServerEvent`], its [`Into`] impl must return [`None`].
     type Event: Into<Option<ServerEvent<P, Self>>>;
+
+    /// Gets the current state that this server is in.
+    ///
+    /// This can be used to get information about the endpoint, such as the
+    /// socket address, or to check if the server is opened at all.
+    fn server_state(&self) -> ServerState<Self::ServerInfo>;
 
     /// Gets the current state that a specific client is in.
     ///
@@ -43,10 +53,10 @@ where
     ///
     /// [`Rtt`]: crate::Rtt
     /// [`RemoteAddr`]: crate::RemoteAddr
-    fn client_state(&self, client: Self::Client) -> ClientState<Self::ConnectionInfo>;
+    fn client_state(&self, client: Self::Client) -> ClientState<Self::ClientInfo>;
 
     /// Gets all clients recognized by this server.
-    fn clients(&self) -> impl Iterator<Item = (Self::Client, ClientState<Self::ConnectionInfo>)>;
+    fn clients(&self) -> impl Iterator<Item = (Self::Client, ClientState<Self::ClientInfo>)>;
 
     /// Attempts to send a message to the given client.
     ///
@@ -100,6 +110,24 @@ where
     /// server knows that this client is already disconnected), this returns an
     /// error.
     fn disconnect(&mut self, client: impl Into<Self::Client>) -> Result<(), Self::Error>;
+}
+
+/// Current state of a server managed by this app.
+#[derive(Debug, Clone, Default)]
+pub enum ServerState<I> {
+    /// The server is not listening for connections, and is making no attempts
+    /// to start listening for connections.
+    #[default]
+    Closed,
+    /// The server is starting to listen for connections, but is not ready to
+    /// accept them yet.
+    Opening,
+    /// The server has been fully established, and is now ready to accept and
+    /// manage client connections.
+    Open {
+        /// Info on the current state of the server.
+        info: I,
+    },
 }
 
 /// Event raised by a [`TransportServer`].

@@ -2,10 +2,11 @@ mod backend;
 mod frontend;
 
 use aeronet::{
-    ChannelProtocol, OnChannel, TransportProtocol, TransportServer, TryAsBytes, TryFromBytes,
+    ChannelProtocol, LocalAddr, OnChannel, TransportProtocol, TransportServer, TryAsBytes,
+    TryFromBytes,
 };
 
-use std::{fmt::Debug, io, net::SocketAddr, sync::Arc};
+use std::{fmt::Debug, net::SocketAddr, sync::Arc};
 
 use derivative::Derivative;
 use slotmap::SlotMap;
@@ -32,6 +33,19 @@ where
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
     state: State<P>,
+}
+
+/// Info on the current state of a [`WebTransportServer`] when it is open.
+pub struct ServerInfo {
+    /// The local socket address of the endpoint as reported by the operating
+    /// system.
+    pub local_addr: SocketAddr,
+}
+
+impl LocalAddr for ServerInfo {
+    fn local_addr(&self) -> SocketAddr {
+        self.local_addr
+    }
 }
 
 #[derive(Derivative)]
@@ -166,7 +180,7 @@ where
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
-    local_addr: Result<SocketAddr, io::Error>,
+    local_addr: SocketAddr,
     clients: SlotMap<ClientKey, RemoteClient<P>>,
     #[derivative(Debug = "ignore")]
     recv_client: mpsc::UnboundedReceiver<UntrackedClient<P>>,

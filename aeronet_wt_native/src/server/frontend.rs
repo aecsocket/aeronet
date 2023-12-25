@@ -1,10 +1,12 @@
-use std::{future::Future, io, net::SocketAddr, task::Poll};
+use std::{future::Future, net::SocketAddr, task::Poll};
 
-use aeronet::{ChannelProtocol, OnChannel, TransportServer, TryAsBytes, TryFromBytes};
+use aeronet::{ChannelProtocol, OnChannel, ServerState, TransportServer, TryAsBytes, TryFromBytes};
 use tokio::sync::{mpsc, oneshot};
 use wtransport::ServerConfig;
 
-use crate::{shared::ClientState, ClientKey, EndpointInfo, ServerEvent, WebTransportServer};
+use crate::{
+    shared::ClientState, ClientKey, EndpointInfo, ServerEvent, ServerInfo, WebTransportServer,
+};
 
 use super::{
     backend, OpenServer, OpenServerResult, OpeningServer, RemoteClient, State, WebTransportError,
@@ -68,18 +70,6 @@ where
             State::Opening(_) | State::Open(_) => Err(WebTransportError::BackendOpen),
         }
     }
-
-    /// Gets the local socket address of this server if it is open.
-    ///
-    /// # Errors
-    ///
-    /// Errors if this server is not open.
-    pub fn local_addr(&self) -> Result<Result<SocketAddr, &io::Error>, WebTransportError<P>> {
-        match &self.state {
-            State::Closed | State::Opening(_) => Err(WebTransportError::BackendClosed),
-            State::Open(server) => Ok(server.local_addr()),
-        }
-    }
 }
 
 impl<P> TransportServer<P> for WebTransportServer<P>
@@ -92,9 +82,23 @@ where
 
     type Error = WebTransportError<P>;
 
-    type ConnectionInfo = EndpointInfo;
+    type ServerInfo = ServerInfo;
+
+    type ClientInfo = EndpointInfo;
 
     type Event = ServerEvent<P>;
+
+    fn server_state(&self) -> aeronet::ServerState<Self::ServerInfo> {
+        match &self.state {
+            State::Closed => ServerState::Closed,
+            State::Opening(_) => ServerState::Opening,
+            State::Open(server) => ServerState::Open {
+                info: ServerInfo {
+                    local_addr: server.local_addr(),
+                },
+            },
+        }
+    }
 
     fn client_state(&self, client: Self::Client) -> ClientState {
         match &self.state {
@@ -184,8 +188,8 @@ where
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
-    fn local_addr(&self) -> Result<SocketAddr, &io::Error> {
-        self.local_addr.as_ref().map(|addr| *addr)
+    fn local_addr(&self) -> SocketAddr {
+        self.local_addr
     }
 
     fn client_state(&self, client: ClientKey) -> ClientState {
@@ -194,7 +198,9 @@ where
             Some(
                 RemoteClient::Untracked(_) | RemoteClient::Incoming(_) | RemoteClient::Accepted(_),
             ) => ClientState::Connecting,
-            Some(RemoteClient::Connected(client)) => ClientState::Connected(client.info.clone()),
+            Some(RemoteClient::Connected(client)) => ClientState::Connected {
+                info: client.info.clone(),
+            },
         }
     }
 

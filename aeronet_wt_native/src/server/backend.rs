@@ -1,10 +1,13 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
 use slotmap::SlotMap;
 use tokio::sync::{mpsc, oneshot, Notify};
 use tracing::{debug, debug_span, Instrument};
-use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
+use wtransport::{
+    endpoint::{endpoint_side, IncomingSession},
+    Endpoint, ServerConfig,
+};
 
 use crate::{server::UntrackedClient, shared, ClientKey, EndpointInfo};
 
@@ -30,8 +33,8 @@ where
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
 {
-    let endpoint = match Endpoint::server(config).map_err(WebTransportError::Endpoint) {
-        Ok(endpoint) => endpoint,
+    let (endpoint, local_addr) = match create_endpoint::<P>(config) {
+        Ok(t) => t,
         Err(err) => {
             let _ = send_open.send(Err(err));
             return;
@@ -42,7 +45,7 @@ where
     let (send_client, recv_client) = mpsc::unbounded_channel();
     let closed = Arc::new(Notify::new());
     let open = OpenServer {
-        local_addr: endpoint.local_addr(),
+        local_addr,
         clients: SlotMap::default(),
         recv_client,
         closed: closed.clone(),
@@ -71,6 +74,21 @@ where
         // so that we can keep accepting sessions
         tokio::spawn(start_session::<P>(session, recv_key, send_incoming));
     }
+}
+
+fn create_endpoint<P>(
+    config: ServerConfig,
+) -> Result<(Endpoint<endpoint_side::Server>, SocketAddr), WebTransportError<P>>
+where
+    P: ChannelProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryAsBytes + OnChannel<Channel = P::Channel>,
+{
+    let endpoint = Endpoint::server(config).map_err(WebTransportError::Endpoint)?;
+    let local_addr = endpoint
+        .local_addr()
+        .map_err(WebTransportError::GetLocalAddr)?;
+    Ok((endpoint, local_addr))
 }
 
 async fn start_session<P>(

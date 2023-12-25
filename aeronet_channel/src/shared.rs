@@ -1,5 +1,7 @@
 use crate::ClientKey;
 
+pub(super) const CAP: usize = 64;
+
 /// Error that occurs when processing a [`ChannelClient`] or [`ChannelServer`].
 ///
 /// [`ChannelClient`]: crate::ChannelClient

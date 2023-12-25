@@ -24,7 +24,7 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
     let channel_kind = parse_channel_kind(input, &input.attrs)?;
 
     Ok(quote! {
-        unsafe impl #impl_generics ::aeronet::ChannelKey for #name #type_generics #where_clause {
+        impl #impl_generics ::aeronet::ChannelKey for #name #type_generics #where_clause {
             const ALL: &'static [Self] = &[
                 Self
             ];
@@ -93,7 +93,7 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         .collect::<Vec<_>>();
 
     Ok(quote! {
-        unsafe impl #impl_generics ::aeronet::ChannelKey for #name #type_generics #where_clause {
+        impl #impl_generics ::aeronet::ChannelKey for #name #type_generics #where_clause {
             const ALL: &'static [Self] = &[
                 #(#all_variants),*
             ];

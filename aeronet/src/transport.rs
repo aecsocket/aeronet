@@ -54,8 +54,20 @@ pub trait Rtt {
     fn rtt(&self) -> Duration;
 }
 
+/// Allows access to the local socket address of a connection.
+///
+/// If a connection uses an operating system socket for communication with the
+/// other side, this returns the address of that socket.
+pub trait LocalAddr {
+    /// Gets the local socket address of this endpoint.
+    fn local_addr(&self) -> SocketAddr;
+}
+
 /// Allows access to the remote socket address of the other side of a
 /// connection.
+///
+/// If a connection uses an operating system socket for communication with the
+/// other side, this returns the address of that socket.
 pub trait RemoteAddr {
     /// Gets the remote socket address of the endpoint that this side is
     /// connected to.

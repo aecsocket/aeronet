@@ -2,7 +2,7 @@ use aeronet::{ClientState, TransportClient, TransportProtocol};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 
-use crate::{ChannelError, ChannelServer, ClientKey};
+use crate::{ChannelError, ChannelServer, ClientKey, CAP};
 
 /// Implementation of [`TransportClient`] using in-memory MPSC channels.
 ///
@@ -100,14 +100,14 @@ where
 {
     type Error = ChannelError;
 
-    type ConnectionInfo = ();
+    type ClientInfo = ();
 
     type Event = ClientEvent<P>;
 
-    fn state(&self) -> ClientState<Self::ConnectionInfo> {
+    fn client_state(&self) -> ClientState<Self::ClientInfo> {
         match self.state {
             State::Disconnected { .. } => ClientState::Disconnected,
-            State::Connected(_) => ClientState::Connected(()),
+            State::Connected(_) => ClientState::Connected { info: () },
         }
     }
 
@@ -174,8 +174,8 @@ where
     P: TransportProtocol,
 {
     fn new(server: &mut ChannelServer<P>) -> (Self, ClientKey) {
-        let (send_c2s, recv_c2s) = crossbeam_channel::unbounded::<P::C2S>();
-        let (send_s2c, recv_s2c) = crossbeam_channel::unbounded::<P::S2C>();
+        let (send_c2s, recv_c2s) = crossbeam_channel::bounded::<P::C2S>(CAP);
+        let (send_s2c, recv_s2c) = crossbeam_channel::bounded::<P::S2C>(CAP);
 
         let key = server.add_client(send_s2c, recv_c2s);
 
