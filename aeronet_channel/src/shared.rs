@@ -1,6 +1,7 @@
 use crate::ClientKey;
 
-pub(super) const CAP: usize = 64;
+/// The capacity of the buffer used by the message channels.
+pub(super) const MSG_BUF_CAP: usize = 16;
 
 /// Error that occurs when processing a [`ChannelClient`] or [`ChannelServer`].
 ///

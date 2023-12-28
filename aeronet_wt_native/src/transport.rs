@@ -89,6 +89,10 @@ where
     /// Attempted to open the backend while it was already open.
     #[error("backend already open")]
     BackendOpen,
+    /// The backend that handles connections is busy processing other requests,
+    /// and its message buffer is full.
+    #[error("backend busy")]
+    BackendBusy,
     /// Failed to create the [`wtransport::Endpoint`].
     #[error("failed to create endpoint")]
     Endpoint(#[source] io::Error),

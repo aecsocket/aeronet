@@ -37,6 +37,6 @@ bevy_egui.workspace = true
 anyhow.workspace = true
 
 [[example]]
-name = "channel_echo"
-path = "examples/channel_echo.rs"
+name = "echo"
+path = "examples/echo.rs"
 required-features = [ "bevy" ]

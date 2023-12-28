@@ -272,11 +272,13 @@ where
 {
     info: EndpointInfo,
     #[derivative(Debug = "ignore")]
-    recv_info: mpsc::UnboundedReceiver<EndpointInfo>,
-    #[derivative(Debug = "ignore")]
-    recv_c2s: mpsc::UnboundedReceiver<P::C2S>,
+    recv_c2s: mpsc::Receiver<P::C2S>,
+    // this one specifically is unbounded, because the frontend will be sending
+    // along it, and we do NOT want to block the frontend
     #[derivative(Debug = "ignore")]
     send_s2c: mpsc::UnboundedSender<P::S2C>,
+    #[derivative(Debug = "ignore")]
+    recv_info: mpsc::Receiver<EndpointInfo>,
     #[derivative(Debug = "ignore")]
     recv_err: oneshot::Receiver<WebTransportError<P>>,
 }

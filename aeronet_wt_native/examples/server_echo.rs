@@ -77,7 +77,7 @@ fn update_server(mut server: ResMut<Server>) {
                 ..
             } => info!("{client:?} accepted from {authority}{path}"),
             ServerEvent::Connected { client } => {
-                let ClientState::Connected(info) = server.client_state(client) else {
+                let ClientState::Connected { info } = server.client_state(client) else {
                     unreachable!();
                 };
                 info!("{client:?} connected from {}", info.remote_addr);

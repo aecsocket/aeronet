@@ -23,6 +23,12 @@ use crate::{ChannelError, EndpointInfo, WebTransportError};
 
 pub(super) type ClientState = aeronet::ClientState<EndpointInfo>;
 
+/// The capacity of the buffer used by the message channels.
+pub(super) const MSG_BUF_CAP: usize = 16;
+
+/// The capacity of the buffer used by the endpoint info channels.
+pub(super) const INFO_BUF_CAP: usize = 1;
+
 // setup connection
 
 pub(super) struct ConnectionSetup<P, S, R>
@@ -194,9 +200,9 @@ where
 
 pub(super) async fn handle_connection<P, S, R>(
     conn: Connection,
-    channels: ConnectionSetup<P, S, R>,
-    send_info: mpsc::UnboundedSender<EndpointInfo>,
-    send_r: mpsc::UnboundedSender<R>,
+    setup: ConnectionSetup<P, S, R>,
+    send_info: mpsc::Sender<EndpointInfo>,
+    send_r: mpsc::Sender<R>,
     send_err: oneshot::Sender<WebTransportError<P, S, R>>,
     recv_s: mpsc::UnboundedReceiver<S>,
 ) where
@@ -210,7 +216,7 @@ pub(super) async fn handle_connection<P, S, R>(
         recv_err,
         send_closed,
         bytes_recv,
-    } = channels;
+    } = setup;
 
     debug!("Connected");
     match connection_loop(
@@ -239,8 +245,8 @@ pub(super) async fn handle_connection<P, S, R>(
 #[allow(clippy::too_many_arguments)] // this is the cleanest way to do this
 async fn connection_loop<P, S, R>(
     conn: Connection,
-    send_info: mpsc::UnboundedSender<EndpointInfo>,
-    send_r: mpsc::UnboundedSender<R>,
+    send_info: mpsc::Sender<EndpointInfo>,
+    send_r: mpsc::Sender<R>,
     mut recv_s: mpsc::UnboundedReceiver<S>,
     mut channels: Vec<ChannelState<P>>,
     mut recv_streams: mpsc::UnboundedReceiver<R>,
@@ -256,20 +262,23 @@ where
     let mut bytes_sent = 0;
 
     loop {
-        if send_info
-            .send(EndpointInfo {
-                bytes_sent,
-                bytes_recv: dgram_bytes_recv + bytes_recv.load(Ordering::SeqCst),
-                ..EndpointInfo::from_connection(&conn)
-            })
-            .is_err()
-        {
-            return Ok(());
+        // We don't care about if the buffer is full or not, since this info is
+        // constantly changing, and the frontend is gonna get an updated version
+        // soon enough anyway. But we *do* care about if the channel is
+        // disconnected, because then the frontend is disconnected.
+        match send_info.try_send(EndpointInfo {
+            bytes_sent,
+            bytes_recv: dgram_bytes_recv + bytes_recv.load(Ordering::SeqCst),
+            ..EndpointInfo::from_connection(&conn)
+        }) {
+            Ok(_) | Err(mpsc::error::TrySendError::Full(_)) => {}
+            Err(mpsc::error::TrySendError::Closed(_)) => return Ok(()),
         }
 
         tokio::select! {
             result = conn.receive_datagram() => {
                 dgram_bytes_recv += recv_datagram(result, &send_r)
+                    .await
                     .map_err(|err| WebTransportError::<P, S, R>::OnDatagram(err))?;
             }
             result = recv_s.recv() => {
@@ -332,9 +341,9 @@ where
         .map_err(ChannelError::WriteStream)
 }
 
-fn recv_datagram<S, R>(
+async fn recv_datagram<S, R>(
     result: Result<Datagram, ConnectionError>,
-    send_r: &mpsc::UnboundedSender<R>,
+    send_r: &mpsc::Sender<R>,
 ) -> Result<usize, ChannelError<S, R>>
 where
     S: Message + TryAsBytes,
@@ -342,6 +351,6 @@ where
 {
     let datagram = result.map_err(ChannelError::RecvDatagram)?;
     let msg = R::try_from_bytes(&datagram).map_err(ChannelError::Deserialize)?;
-    let _ = send_r.send(msg);
+    let _ = send_r.send(msg).await;
     Ok(datagram.len())
 }

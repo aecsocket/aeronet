@@ -73,3 +73,11 @@ pub trait RemoteAddr {
     /// connected to.
     fn remote_addr(&self) -> SocketAddr;
 }
+
+/// A reasonable guess for a default [MTU], in bytes, used by transports which
+/// send data over the internet.
+/// 
+/// https://blog.cloudflare.com/increasing-ipv6-mtu/
+/// 
+/// [MTU]: https://en.wikipedia.org/wiki/Maximum_transmission_unit
+pub const DEFAULT_MTU: usize = 1024;

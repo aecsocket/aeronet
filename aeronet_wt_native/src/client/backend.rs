@@ -4,7 +4,7 @@ use tracing::debug;
 use wtransport::{endpoint::endpoint_side, ClientConfig, Connection, Endpoint};
 
 use crate::{
-    shared::{self, ConnectionSetup},
+    shared::{self, ConnectionSetup, MSG_BUF_CAP, INFO_BUF_CAP},
     EndpointInfo,
 };
 
@@ -33,7 +33,7 @@ async fn start<P>(
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    let (endpoint, conn, channels) = match connect::<P>(config, url).await {
+    let (endpoint, conn, setup) = match connect::<P>(config, url).await {
         Ok(t) => t,
         Err(err) => {
             let _ = send_connected.send(Err(err));
@@ -42,8 +42,8 @@ async fn start<P>(
     };
 
     let (send_c2s, recv_c2s) = mpsc::unbounded_channel();
-    let (send_s2c, recv_s2c) = mpsc::unbounded_channel();
-    let (send_info, recv_info) = mpsc::unbounded_channel();
+    let (send_s2c, recv_s2c) = mpsc::channel(MSG_BUF_CAP);
+    let (send_info, recv_info) = mpsc::channel(INFO_BUF_CAP);
     let (send_err, recv_err) = oneshot::channel();
     let connected = ConnectedClient::<P> {
         local_addr: endpoint.local_addr(),
@@ -53,8 +53,8 @@ async fn start<P>(
             ..EndpointInfo::from_connection(&conn)
         },
         recv_info,
-        recv_s2c,
         send_c2s,
+        recv_s2c,
         recv_err,
     };
     if send_connected.send(Ok(connected)).is_err() {
@@ -62,7 +62,7 @@ async fn start<P>(
     }
 
     shared::handle_connection::<P, P::C2S, P::S2C>(
-        conn, channels, send_info, send_s2c, send_err, recv_c2s,
+        conn, setup, send_info, send_s2c, send_err, recv_c2s,
     )
     .await;
 }
@@ -92,8 +92,8 @@ where
         .await
         .map_err(WebTransportError::Connect)?;
 
-    let channels = shared::setup_connection::<P, P::C2S, P::S2C, false>(&conn).await?;
+    let setup = shared::setup_connection::<P, P::C2S, P::S2C, false>(&conn).await?;
 
     debug!("Created endpoint");
-    Ok((endpoint, conn, channels))
+    Ok((endpoint, conn, setup))
 }

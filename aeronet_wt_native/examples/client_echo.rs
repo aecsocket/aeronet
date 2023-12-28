@@ -63,7 +63,7 @@ fn ui(
     egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
         let can_disconnect = matches!(
             client.client_state(),
-            ClientState::Connecting | ClientState::Connected(_)
+            ClientState::Connecting | ClientState::Connected { .. }
         );
         ui.horizontal(|ui| {
             ui.add_enabled_ui(!can_disconnect, |ui| {
@@ -84,7 +84,7 @@ fn ui(
 
         log_lines(ui, &ui_state.log);
 
-        if let ClientState::Connected(info) = client.client_state() {
+        if let ClientState::Connected { info } = client.client_state() {
             if let Some(msg) = msg_buf(ui, &mut ui_state.buf) {
                 send.send(ToServer {
                     msg: EchoMessage(msg),

@@ -82,7 +82,9 @@ fn client_ui(
         log_lines(ui, &ui_state.log);
 
         if let Some(msg) = msg_buf(ui, &mut ui_state.buf) {
-            send.send(ToServer { msg });
+            send.send(ToServer {
+                msg: EchoMessage(msg),
+            });
         }
     });
 }

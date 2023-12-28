@@ -48,21 +48,21 @@ ring.workspace = true
 time.workspace = true
 
 [[example]]
-name = "native_echo_client"
-path = "examples/native_echo_client.rs"
+name = "client_echo"
+path = "examples/client_echo.rs"
 required-features = [ "bevy", "dangerous-configuration" ]
 
 [[example]]
-name = "native_echo_server"
-path = "examples/native_echo_server.rs"
+name = "server_echo"
+path = "examples/server_echo.rs"
 required-features = [ "bevy" ]
 
 [[example]]
-name = "native_complex_client"
-path = "examples/native_complex_client.rs"
+name = "client_complex"
+path = "examples/client_complex.rs"
 required-features = [ "bevy", "dangerous-configuration" ]
 
 [[example]]
-name = "native_complex_server"
-path = "examples/native_complex_server.rs"
+name = "server_complex"
+path = "examples/server_complex.rs"
 required-features = [ "bevy" ]

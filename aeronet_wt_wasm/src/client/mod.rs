@@ -71,11 +71,11 @@ where
 {
     info: Option<EndpointInfo>,
     #[derivative(Debug = "ignore")]
-    recv_info: mpsc::UnboundedReceiver<EndpointInfo>,
-    #[derivative(Debug = "ignore")]
     send_c2s: mpsc::UnboundedSender<P::C2S>,
     #[derivative(Debug = "ignore")]
-    recv_s2c: mpsc::UnboundedReceiver<P::S2C>,
+    recv_info: mpsc::Receiver<EndpointInfo>,
+    #[derivative(Debug = "ignore")]
+    recv_s2c: mpsc::Receiver<P::S2C>,
     #[derivative(Debug = "ignore")]
     recv_err: oneshot::Receiver<WebTransportError<P>>,
 }

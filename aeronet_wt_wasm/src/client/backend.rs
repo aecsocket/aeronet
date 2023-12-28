@@ -1,7 +1,7 @@
 use aeronet::{ChannelKey, ChannelKind, ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
 use futures::{
     channel::{mpsc, oneshot},
-    StreamExt, TryFutureExt,
+    StreamExt,
 };
 use js_sys::Uint8Array;
 use tracing::{debug, Instrument, debug_span};
@@ -14,6 +14,12 @@ use crate::{
 };
 
 use super::{ConnectedClient, ConnectedClientResult};
+
+/// The capacity of the buffer used by the message channels.
+const MSG_BUF_CAP: usize = 16;
+
+/// The capacity of the buffer used by the endpoint info channels.
+const INFO_BUF_CAP: usize = 1;
 
 pub(super) async fn open<P>(
     config: WebTransportConfig,
@@ -38,7 +44,7 @@ async fn start<P>(
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    let (transport = match connect::<P>(config, url).await {
+    let transport = match connect::<P>(config, url).await {
         Ok(t) => t,
         Err(err) => {
             let _ = send_connected.send(Err(err));
@@ -46,15 +52,15 @@ async fn start<P>(
         }
     };
 
-    let (send_info, recv_info) = mpsc::unbounded();
     let (send_c2s, recv_c2s) = mpsc::unbounded();
-    let (send_s2c, recv_s2c) = mpsc::unbounded();
+    let (send_s2c, recv_s2c) = mpsc::channel(MSG_BUF_CAP);
+    let (send_info, recv_info) = mpsc::channel(INFO_BUF_CAP);
     let (send_err, recv_err) = oneshot::channel();
     let connected = ConnectedClient {
         info: None,
-        recv_info,
         send_c2s,
         recv_s2c,
+        recv_info,
         recv_err,
     };
     let _ = send_connected.send(Ok(connected));
@@ -202,8 +208,8 @@ where
 
 async fn handle_connection<P>(
     transport: WebTransport,
-    send_info: mpsc::UnboundedSender<EndpointInfo>,
-    send_s2c: mpsc::UnboundedSender<P::S2C>,
+    send_info: mpsc::Sender<EndpointInfo>,
+    send_s2c: mpsc::Sender<P::S2C>,
     mut recv_c2s: mpsc::UnboundedReceiver<P::C2S>,
 ) -> Result<(), WebTransportError<P>>
 where

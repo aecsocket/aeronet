@@ -83,6 +83,8 @@ pub enum CongestionControl {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ServerCertificateHash {
     /// The hash value of the certificate.
+    /// 
+    /// This must be a SHA-256 hash.
     ///
     /// [MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport#value)
     pub value: Vec<u8>,

@@ -84,12 +84,14 @@ where
 {
     local_addr: Result<SocketAddr, io::Error>,
     info: EndpointInfo,
-    #[derivative(Debug = "ignore")]
-    recv_info: mpsc::UnboundedReceiver<EndpointInfo>,
-    #[derivative(Debug = "ignore")]
-    recv_s2c: mpsc::UnboundedReceiver<P::S2C>,
+    // this one specifically is unbounded, because the frontend will be sending
+    // along it, and we do NOT want to block the frontend
     #[derivative(Debug = "ignore")]
     send_c2s: mpsc::UnboundedSender<P::C2S>,
+    #[derivative(Debug = "ignore")]
+    recv_s2c: mpsc::Receiver<P::S2C>,
+    #[derivative(Debug = "ignore")]
+    recv_info: mpsc::Receiver<EndpointInfo>,
     #[derivative(Debug = "ignore")]
     recv_err: oneshot::Receiver<WebTransportError<P>>,
 }

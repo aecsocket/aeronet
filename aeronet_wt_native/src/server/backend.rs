@@ -9,7 +9,7 @@ use wtransport::{
     Endpoint, ServerConfig,
 };
 
-use crate::{server::UntrackedClient, shared, ClientKey, EndpointInfo};
+use crate::{server::UntrackedClient, shared::{self, MSG_BUF_CAP, INFO_BUF_CAP}, ClientKey, EndpointInfo};
 
 use super::{
     AcceptedClient, AcceptedClientResult, ConnectedClient, IncomingClient, OpenServer,
@@ -160,17 +160,17 @@ async fn handle_session<P>(
         }
     };
 
-    let channels_state = match shared::setup_connection::<P, P::S2C, P::C2S, true>(&conn).await {
-        Ok(state) => state,
+    let setup = match shared::setup_connection::<P, P::S2C, P::C2S, true>(&conn).await {
+        Ok(t) => t,
         Err(err) => {
             let _ = send_connected.send(Err(err));
             return;
         }
     };
 
-    let (send_c2s, recv_c2s) = mpsc::unbounded_channel();
+    let (send_c2s, recv_c2s) = mpsc::channel(MSG_BUF_CAP);
     let (send_s2c, recv_s2c) = mpsc::unbounded_channel();
-    let (send_info, recv_info) = mpsc::unbounded_channel();
+    let (send_info, recv_info) = mpsc::channel(INFO_BUF_CAP);
     let (send_err, recv_err) = oneshot::channel();
     let connected = ConnectedClient {
         info: EndpointInfo::from_connection(&conn),
@@ -185,7 +185,7 @@ async fn handle_session<P>(
 
     shared::handle_connection::<P, P::S2C, P::C2S>(
         conn,
-        channels_state,
+        setup,
         send_info,
         send_c2s,
         send_err,
