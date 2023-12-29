@@ -4,145 +4,70 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use crate::TransportProtocol;
+use std::{
+    fmt::{self, Debug},
+    time::Instant,
+};
 
-/// Allows connecting to, and transporting messages to/from, a server.
-///
-/// See the [crate-level docs](crate).
-pub trait TransportClient<P>
+use derivative::Derivative;
+
+use crate::{MessageState, MessageTicket, TransportProtocol};
+
+pub trait ClientTransport<P>
 where
     P: TransportProtocol,
 {
-    /// Error returned from operations on this client.
     type Error: Send + Sync + 'static;
 
-    /// Info on this client's connection state, returned by
-    /// [`TransportClient::client_state`].
     type ClientInfo;
 
-    /// Type of event raised by this client.
-    ///
-    /// This event type must be able to be potentially converted into a
-    /// [`ClientEvent`]. If an event value cannot cleanly map to a single
-    /// generic [`ClientEvent`], its [`Into`] impl must return [`None`].
-    type Event: Into<Option<ClientEvent<P, Self>>>;
-
-    /// Gets the current state that this client is in.
-    ///
-    /// This can be used to get information about the connection if it is
-    /// connected, or to check if the client is connected at all.
-    ///
-    /// The data that this function returns is left up to the implementation,
-    /// but in general this allows accessing:
-    /// * the round-trip time, or ping ([`Rtt`])
-    /// * the remote socket address ([`RemoteAddr`])
-    ///
-    /// [`Rtt`]: crate::Rtt
-    /// [`RemoteAddr`]: crate::RemoteAddr
     fn client_state(&self) -> ClientState<Self::ClientInfo>;
 
-    /// Attempts to send a message to the connected server.
-    ///
-    /// # Errors
-    ///
-    /// If the client cannot even attempt to send a message to the server (e.g.
-    /// if the client knows that it is already disconnected), this returns an
-    /// error
-    ///
-    /// However, since errors may occur later in the transport process after
-    /// this function has already returned (e.g. in an async task), this will
-    /// return [`Ok`] if the client has successfully *tried* to send a message,
-    /// not if the client actually *has* sent the message.
-    ///
-    /// If an error occurs later during the transport process, the server will
-    /// forcefully disconnect the client and emit a
-    /// [`ClientEvent::Disconnected`].
-    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error>;
+    fn message_state(&self, msg: MessageTicket) -> MessageState;
 
-    /// Polls events and receives messages from this transport.
-    ///
-    /// This will consume messages and events if the client is connected. Events
-    /// must be continuously received to allow this transport to do its internal
-    /// work, so this should be run in the main loop of your program.
-    ///
-    /// This returns an iterator over the events received, which may be used in
-    /// two ways:
-    /// * used as-is, if you know the concrete type of the transport
-    ///   * transports may expose their own event type, which allows you to
-    ///     listen to specialized events
-    /// * converted into a generic [`ClientEvent`] via its
-    ///   `Into<Option<ClientEvent>>` implementation
-    ///   * useful for generic code which must abstract over different transport
-    ///     implementations
-    ///   * a single event returned from this is not guaranteed to map to a
-    ///     specific [`ClientEvent`]
-    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a;
+    fn send(&self, msg: impl Into<P::C2S>) -> Result<MessageTicket, Self::Error>;
 
-    /// Forces this client to disconnect from its currently connected server.
-    ///
-    /// This function does not guarantee that the client is gracefully
-    /// disconnected in any way, so you must use your own mechanism for graceful
-    /// disconnection if you need this feature.
-    ///
-    /// Disconnecting using this function will also raise a
-    /// [`ClientEvent::Disconnected`].
-    ///
-    /// # Errors
-    ///
-    /// If the client cannot even attempt to disconnect (e.g. if the client
-    /// knows that it is already disconnected), this returns an error.
-    fn disconnect(&mut self) -> Result<(), Self::Error>;
+    /// If this emits an event which changes the transport's state, then after
+    /// this call, the transport will be in this new state.
+    fn recv(&mut self) -> impl Iterator<Item = ClientEvent<P, Self>>
+    where
+        Self: Sized;
 }
 
-/// Current state of a client; either a [`TransportClient`] managed by this app,
-/// or a remote client connecting to a [`TransportServer`] managed by this app.
-///
-/// [`TransportServer`]: crate::TransportServer
-#[derive(Debug, Clone, Default)]
-pub enum ClientState<I> {
-    /// The client is not connected to a server, and is making no attempts to
-    /// connect.
-    #[default]
-    Disconnected,
-    /// The client is attempting to connect to a server, but the connection has
-    /// not been established yet.
-    Connecting,
-    /// The client has fully connected to a server, and information about the
-    /// connection is now available.
-    Connected {
-        /// Info on the established connection.
-        info: I,
-    },
+slotmap::new_key_type! {
+    pub struct ClientKey;
 }
 
-/// Event raised by a [`TransportClient`].
+impl fmt::Display for ClientKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
 #[derive(Debug, Clone)]
-pub enum ClientEvent<P, T: ?Sized>
+pub enum ClientState<I> {
+    Disconnected,
+    Connecting,
+    Connected { info: I },
+}
+
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = "P::S2C: Debug, T::Error: Debug"),
+    Clone(bound = "P::S2C: Clone, T::Error: Clone")
+)]
+pub enum ClientEvent<P, T>
 where
     P: TransportProtocol,
-    T: TransportClient<P>,
+    T: ClientTransport<P>,
 {
-    /// This client has started connecting to a server.
-    ///
-    /// This may be followed by a [`ClientEvent::Connected`] or a
-    /// [`ClientEvent::Disconnected`].
+    // state
     Connecting,
-    /// This client has fully connected to a server.
-    ///
-    /// Use this event to do setup logic, e.g. start loading the level.
     Connected,
-    /// The server sent a message to this client.
-    Recv {
-        /// The message received.
-        msg: P::S2C,
-    },
-    /// This client has lost connection from its previously connected server,
-    /// which cannot be recovered from.
-    ///
-    /// Use this event to do teardown logic, e.g. changing state to the main
-    /// menu.
-    Disconnected {
-        /// The reason why the client lost connection.
-        cause: T::Error,
-    },
+    Disconnected { reason: T::Error },
+
+    // messages
+    Recv { msg: P::S2C, at: Instant },
+    Ack { msg: MessageTicket, at: Instant },
+    Nack { msg: MessageTicket, at: Instant },
 }

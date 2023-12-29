@@ -1,83 +1,47 @@
 use std::{net::SocketAddr, time::Duration};
 
-use crate::{ChannelKey, Message};
+use crate::{LaneKey, Message};
 
-/// Defines the types of messages sent across a transport channel.
-///
-/// You should define one type that implements this trait in a single central
-/// place in your app, and use it as the protocol type parameter on transport
-/// implementations.
-///
-/// ```
-/// use aeronet::{Message, TransportProtocol};
-///
-/// struct AppProtocol;
-///
-/// #[derive(Message)]
-/// struct AppMessage {/* ... */}
-///
-/// impl TransportProtocol for AppProtocol {
-///     type C2S = AppMessage;
-///     type S2C = AppMessage;
-/// }
-/// ```
 pub trait TransportProtocol: Send + Sync + 'static {
-    /// The type of message sent from the client to the server.
     type C2S: Message;
 
-    /// The type of message sent from the server to the client.
     type S2C: Message;
 }
 
-/// Extension of [`TransportProtocol`] which specifies along which
-/// [`ChannelKey`] messages are sent.
-pub trait ChannelProtocol: TransportProtocol {
-    /// The type of [`ChannelKey`] used to specify along what channel a message
-    /// is sent.
-    type Channel: ChannelKey;
+pub trait LaneProtocol: TransportProtocol {
+    type Lane: LaneKey;
 }
 
-/// Allows access to the round-trip time of a connection.
+/// Gets the round-trip time of a connection.
 ///
-/// This is also known as latency, or "ping".
-#[doc(alias = "ping")]
+/// The RTT is defined as the time taken for the following to happen:
+/// * a message is sent
+/// * the other endpoint receives it
+/// * the other endpoint processes the message
+/// * a reponse message is received
 #[doc(alias = "latency")]
+#[doc(alias = "ping")]
 pub trait Rtt {
-    /// Gets the round-trip time to the connected endpoint.
-    ///
-    /// The round-trip time is defined as the time taken for the following to
-    /// happen:
-    /// * client sends data
-    /// * server receives the data and sends a response
-    ///   * the processing time is assumed to be instant
-    /// * client receives data
+    /// Gets the round-trip time.
     fn rtt(&self) -> Duration;
 }
 
-/// Allows access to the local socket address of a connection.
-///
-/// If a connection uses an operating system socket for communication with the
-/// other side, this returns the address of that socket.
+#[derive(Debug, Clone)]
+pub struct MessageStats {
+    pub msgs_sent: usize,
+    pub msgs_recv: usize,
+    pub bytes_sent: usize,
+    pub bytes_recv: usize,
+}
+
+pub trait GetMessageStats {
+    fn message_stats(&self) -> MessageStats;
+}
+
 pub trait LocalAddr {
-    /// Gets the local socket address of this endpoint.
     fn local_addr(&self) -> SocketAddr;
 }
 
-/// Allows access to the remote socket address of the other side of a
-/// connection.
-///
-/// If a connection uses an operating system socket for communication with the
-/// other side, this returns the address of that socket.
 pub trait RemoteAddr {
-    /// Gets the remote socket address of the endpoint that this side is
-    /// connected to.
     fn remote_addr(&self) -> SocketAddr;
 }
-
-/// A reasonable guess for a default [MTU], in bytes, used by transports which
-/// send data over the internet.
-/// 
-/// https://blog.cloudflare.com/increasing-ipv6-mtu/
-/// 
-/// [MTU]: https://en.wikipedia.org/wiki/Maximum_transmission_unit
-pub const DEFAULT_MTU: usize = 1024;

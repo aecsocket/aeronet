@@ -1,6 +1,6 @@
 [package]
-name = "aeronet_wt_native"
-description = "Native WebTransport transport implementation for aeronet"
+name = "aeronet_steam"
+description = "Steam networking socket implementation for aeronet"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -18,10 +18,7 @@ all-features = true
 
 [features]
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = [ "dep:bevy", "aeronet/bevy", "aeronet/bevy-tokio-rt" ]
-
-## Enables [`rustls/dangerous-configuration`](https://docs.rs/rustls/latest/rustls/#crate-features).
-dangerous-configuration = [ "wtransport/dangerous-configuration" ]
+bevy = [ "aeronet/bevy", "dep:bevy" ]
 
 [dependencies]
 aeronet.workspace = true
@@ -31,38 +28,24 @@ tracing.workspace = true
 thiserror.workspace = true
 slotmap.workspace = true
 futures.workspace = true
+rand.workspace = true
 tokio = { workspace = true, default-features = false, features = [ "rt" ] }
 wtransport.workspace = true
+steamworks.workspace = true
 
 bevy = { workspace = true, optional = true }
 
 [dev-dependencies]
-#aeronet_example.workspace = true
 bevy = { workspace = true, default-features = true }
 bevy_egui.workspace = true
 anyhow.workspace = true
 
-base64.workspace = true
-rcgen.workspace = true
-ring.workspace = true
-time.workspace = true
-
 [[example]]
-name = "client_echo"
-path = "examples/client_echo.rs"
-required-features = [ "bevy", "dangerous-configuration" ]
-
-[[example]]
-name = "server_echo"
-path = "examples/server_echo.rs"
+name = "client"
+path = "examples/client.rs"
 required-features = [ "bevy" ]
 
 [[example]]
-name = "client_complex"
-path = "examples/client_complex.rs"
-required-features = [ "bevy", "dangerous-configuration" ]
-
-[[example]]
-name = "server_complex"
-path = "examples/server_complex.rs"
+name = "server"
+path = "examples/server.rs"
 required-features = [ "bevy" ]

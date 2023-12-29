@@ -22,21 +22,14 @@ bevy = [ "dep:bevy" ]
 
 ## Allows storing an async [`tokio`](https://docs.rs/tokio) runtime in a
 ## [`bevy`](https://docs.rs/bevy) resource.
-bevy-tokio-rt = [ "bevy", "dep:tokio" ]
-
-## Allows using [`bincode`](https://docs.rs/bincode) as a format for message serialization
-## using [`serde`](https://docs.rs/serde).
-bincode = [ "dep:serde", "dep:bincode" ]
+bevy-tokio-rt = [ "bevy", "bevy/multi-threaded", "dep:tokio" ]
 
 [dependencies]
 aeronet_derive.workspace = true
 
 derivative.workspace = true
 thiserror.workspace = true
-anyhow.workspace = true
-
-serde = { workspace = true, optional = true }
-bincode = { workspace = true, optional = true }
+slotmap.workspace = true
 
 bevy = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, default-features = false, features = [ "rt-multi-thread" ] }

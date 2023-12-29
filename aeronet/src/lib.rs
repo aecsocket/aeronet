@@ -2,18 +2,17 @@
 
 pub use aeronet_derive::*;
 
-pub mod error;
-
-mod channel;
 mod client;
+mod lane;
 mod message;
 mod server;
 mod transport;
+mod protocol;
+
+pub use {client::*, lane::*, message::*, server::*, transport::*, protocol::*};
 
 #[cfg(feature = "bevy-tokio-rt")]
-mod runtime;
-
-pub use {channel::*, client::*, message::*, server::*, transport::*};
+pub mod runtime;
 
 #[cfg(feature = "bevy-tokio-rt")]
 pub use runtime::*;

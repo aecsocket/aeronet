@@ -3,7 +3,7 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Fields, Meta, Result};
 
-use crate::{CHANNEL_TYPE, ON_CHANNEL};
+use crate::{LANE_TYPE, ON_LANE};
 
 pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
     match &input.data {
@@ -11,7 +11,7 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
         Data::Enum(data) => on_enum(input, data),
         Data::Union(_) => Err(Error::new_spanned(
             input,
-            "union as OnChannel is not supported",
+            "union as OnLane is not supported",
         )),
     }
 }
@@ -21,15 +21,15 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
     let generics = &input.generics;
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
-    let channel_type = parse_channel_type(input, &input.attrs)?;
-    let on_channel = parse_on_channel(input, &input.attrs)?;
+    let lane_type = parse_lane_type(input, &input.attrs)?;
+    let on_lane = parse_on_lane(input, &input.attrs)?;
 
     Ok(quote! {
-        impl #impl_generics ::aeronet::OnChannel for #name #type_generics #where_clause {
-            type Channel = #channel_type;
+        impl #impl_generics ::aeronet::OnLane for #name #type_generics #where_clause {
+            type Lane = #lane_type;
 
-            fn channel(&self) -> Self::Channel {
-                #on_channel
+            fn lane(&self) -> Self::Lane {
+                #on_lane
             }
         }
     })
@@ -39,22 +39,22 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
     struct Variant<'a> {
         ident: &'a Ident,
         fields: &'a Fields,
-        on_channel: &'a TokenStream,
+        on_lane: &'a TokenStream,
     }
 
     let name = &input.ident;
     let generics = &input.generics;
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
-    let channel_type = parse_channel_type(input, &input.attrs)?;
+    let lane_type = parse_lane_type(input, &input.attrs)?;
     let variants = data
         .variants
         .iter()
         .map(|variant| {
-            parse_on_channel(variant, &variant.attrs).map(|on_channel| Variant {
+            parse_on_lane(variant, &variant.attrs).map(|on_lane| Variant {
                 ident: &variant.ident,
                 fields: &variant.fields,
-                on_channel,
+                on_lane,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -68,16 +68,16 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
                 Fields::Named(_) => quote! { { .. } },
                 Fields::Unnamed(_) => quote! { (..) },
             };
-            let on_channel = variant.on_channel;
-            quote! { Self::#pattern #destruct => #on_channel }
+            let on_lane = variant.on_lane;
+            quote! { Self::#pattern #destruct => #on_lane }
         })
         .collect::<Vec<_>>();
 
     Ok(quote! {
-        impl #impl_generics ::aeronet::OnChannel for #name #type_generics #where_clause {
-            type Channel = #channel_type;
+        impl #impl_generics ::aeronet::OnLane for #name #type_generics #where_clause {
+            type Lane = #lane_type;
 
-            fn channel(&self) -> Self::Channel {
+            fn lane(&self) -> Self::Lane {
                 match *self {
                     #(#match_body),*
                 }
@@ -88,62 +88,62 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
 
 // attributes
 
-fn parse_channel_type(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<&TokenStream> {
-    let mut channel_type = None;
+fn parse_lane_type(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<&TokenStream> {
+    let mut lane_type = None;
     for attr in attrs {
-        if !attr.path().is_ident(CHANNEL_TYPE) {
+        if !attr.path().is_ident(LANE_TYPE) {
             continue;
         }
 
-        if channel_type.is_some() {
+        if lane_type.is_some() {
             return Err(Error::new_spanned(
                 attr,
-                formatcp!("duplicate #[{CHANNEL_TYPE}] attribute"),
+                formatcp!("duplicate #[{LANE_TYPE}] attribute"),
             ));
         }
 
         let Meta::List(list) = &attr.meta else {
             return Err(Error::new_spanned(
                 attr,
-                formatcp!("missing type in #[{CHANNEL_TYPE}(type)]"),
+                formatcp!("missing type in #[{LANE_TYPE}(type)]"),
             ));
         };
 
-        channel_type = Some(&list.tokens);
+        lane_type = Some(&list.tokens);
     }
 
-    channel_type.ok_or(Error::new_spanned(
+    lane_type.ok_or(Error::new_spanned(
         tokens,
-        formatcp!("missing #[{CHANNEL_TYPE}] attribute"),
+        formatcp!("missing #[{LANE_TYPE}] attribute"),
     ))
 }
 
-fn parse_on_channel(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<&TokenStream> {
-    let mut on_channel = None;
+fn parse_on_lane(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<&TokenStream> {
+    let mut on_lane = None;
     for attr in attrs {
-        if !attr.path().is_ident(ON_CHANNEL) {
+        if !attr.path().is_ident(ON_LANE) {
             continue;
         }
 
-        if on_channel.is_some() {
+        if on_lane.is_some() {
             return Err(Error::new_spanned(
                 attr,
-                formatcp!("duplicate #[{ON_CHANNEL}] attribute"),
+                formatcp!("duplicate #[{ON_LANE}] attribute"),
             ));
         }
 
         let Meta::List(list) = &attr.meta else {
             return Err(Error::new_spanned(
                 attr,
-                formatcp!("missing value in #[{ON_CHANNEL}(value)]"),
+                formatcp!("missing value in #[{ON_LANE}(value)]"),
             ));
         };
 
-        on_channel = Some(&list.tokens);
+        on_lane = Some(&list.tokens);
     }
 
-    on_channel.ok_or(Error::new_spanned(
+    on_lane.ok_or(Error::new_spanned(
         tokens,
-        formatcp!("missing #[{ON_CHANNEL}] attribute"),
+        formatcp!("missing #[{ON_LANE}] attribute"),
     ))
 }

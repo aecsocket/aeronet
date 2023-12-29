@@ -3,7 +3,7 @@ use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Fields, Meta, Result};
 
-use crate::CHANNEL_KIND;
+use crate::LANE_KIND;
 
 pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
     match &input.data {
@@ -11,7 +11,7 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
         Data::Enum(data) => on_enum(input, data),
         Data::Union(_) => Err(Error::new_spanned(
             input,
-            "union as ChannelKey is not supported",
+            "union as LaneKey is not supported",
         )),
     }
 }
@@ -21,20 +21,20 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
     let generics = &input.generics;
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
-    let channel_kind = parse_channel_kind(input, &input.attrs)?;
+    let lane_kind = parse_lane_kind(input, &input.attrs)?;
 
     Ok(quote! {
-        impl #impl_generics ::aeronet::ChannelKey for #name #type_generics #where_clause {
-            const ALL: &'static [Self] = &[
+        impl #impl_generics ::aeronet::LaneKey for #name #type_generics #where_clause {
+            const VARIANTS: &'static [Self] = &[
                 Self
             ];
 
-            fn index(&self) -> usize {
+            fn variant(&self) -> usize {
                 0
             }
 
-            fn kind(&self) -> ::aeronet::ChannelKind {
-                #channel_kind
+            fn kind(&self) -> ::aeronet::LaneKind {
+                #lane_kind
             }
         }
     })
@@ -61,7 +61,7 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
                 ));
             };
 
-            parse_channel_kind(variant, &variant.attrs).map(|kind| Variant {
+            parse_lane_kind(variant, &variant.attrs).map(|kind| Variant {
                 ident: &variant.ident,
                 kind,
             })
@@ -75,7 +75,7 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
             quote! { Self::#pattern }
         })
         .collect::<Vec<_>>();
-    let index_body = variants
+    let variant_body = variants
         .iter()
         .enumerate()
         .map(|(index, variant)| {
@@ -93,18 +93,18 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         .collect::<Vec<_>>();
 
     Ok(quote! {
-        impl #impl_generics ::aeronet::ChannelKey for #name #type_generics #where_clause {
-            const ALL: &'static [Self] = &[
+        impl #impl_generics ::aeronet::LaneKey for #name #type_generics #where_clause {
+            const VARIANTS: &'static [Self] = &[
                 #(#all_variants),*
             ];
 
-            fn index(&self) -> usize {
+            fn variant(&self) -> usize {
                 match *self {
-                    #(#index_body),*
+                    #(#variant_body),*
                 }
             }
 
-            fn kind(&self) -> ::aeronet::ChannelKind {
+            fn kind(&self) -> ::aeronet::LaneKind {
                 match *self {
                     #(#kind_body),*
                 }
@@ -115,49 +115,50 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
 
 // attributes
 
-fn parse_channel_kind(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<TokenStream> {
-    let mut channel_kind = None;
+fn parse_lane_kind(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<TokenStream> {
+    let mut lane_kind = None;
     for attr in attrs {
-        if !attr.path().is_ident(CHANNEL_KIND) {
+        if !attr.path().is_ident(LANE_KIND) {
             continue;
         }
 
-        if channel_kind.is_some() {
+        if lane_kind.is_some() {
             return Err(Error::new_spanned(
                 attr,
-                formatcp!("duplicate #[{CHANNEL_KIND}] attribute"),
+                formatcp!("duplicate #[{LANE_KIND}] attribute"),
             ));
         }
 
         let Meta::List(list) = &attr.meta else {
             return Err(Error::new_spanned(
                 attr,
-                formatcp!("missing kind in #[{CHANNEL_KIND}(kind)]"),
+                formatcp!("missing kind in #[{LANE_KIND}(kind)]"),
             ));
         };
 
         let Some(TokenTree::Ident(kind_ident)) = list.tokens.clone().into_iter().next() else {
             return Err(Error::new_spanned(
                 attr,
-                formatcp!("missing kind in #[{CHANNEL_KIND}(kind)]"),
+                formatcp!("missing kind in #[{LANE_KIND}(kind)]"),
             ));
         };
 
-        channel_kind = Some(match kind_ident.to_string().as_str() {
-            "Unreliable" => quote! { ::aeronet::ChannelKind::Unreliable },
-            "ReliableUnordered" => quote! { ::aeronet::ChannelKind::ReliableUnordered },
-            "ReliableOrdered" => quote! { ::aeronet::ChannelKind::ReliableOrdered },
+        lane_kind = Some(match kind_ident.to_string().as_str() {
+            "UnreliableUnordered" => quote! { ::aeronet::LaneKind::UnreliableUnordered },
+            "UnreliableOrdered" => quote! { ::aeronet::LaneKind::UnreliableOrdered },
+            "ReliableUnordered" => quote! { ::aeronet::LaneKind::ReliableUnordered },
+            "ReliableOrdered" => quote! { ::aeronet::LaneKind::ReliableOrdered },
             kind => {
                 return Err(Error::new_spanned(
                     kind_ident,
-                    format!("invalid channel kind `{kind}`"),
+                    format!("invalid lane kind `{kind}`"),
                 ))
             }
         });
     }
 
-    channel_kind.ok_or(Error::new_spanned(
+    lane_kind.ok_or(Error::new_spanned(
         tokens,
-        formatcp!("missing #[{CHANNEL_KIND}] attribute"),
+        formatcp!("missing #[{LANE_KIND}] attribute"),
     ))
 }

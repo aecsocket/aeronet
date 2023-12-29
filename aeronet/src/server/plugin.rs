@@ -1,226 +1,136 @@
-use std::marker::PhantomData;
+use std::{fmt::Debug, marker::PhantomData, time::Instant};
 
 use bevy::prelude::*;
 use derivative::Derivative;
 
-use crate::{ServerEvent, TransportProtocol, TransportServer};
+use crate::{ClientKey, MessageTicket, ServerEvent, ServerTransport, TransportProtocol};
 
-/// Provides systems to send commands to, and receive events from, a
-/// [`TransportServer`].
-///
-/// To use a struct version of this plugin, see [`TransportServerPlugin`].
-///
-/// With this plugin added, the transport `T` will receive data and update its
-/// state on [`PreUpdate`], and send out messages triggered by the app on
-/// [`PostUpdate`]. This is controlled by the [`TransportServerSet`].
-///
-/// This plugin emits the events:
-/// * [`RemoteClientConnecting`]
-/// * [`RemoteClientConnected`]
-/// * [`FromClient`]
-/// * [`RemoteClientDisconnected`]
-///
-/// ...and consumes the events:
-/// * [`ToClient`]
-/// * [`DisconnectRemoteClient`]
-///
-/// Note that errors during operation will be silently ignored, e.g. if you
-/// attempt to send a message to an unconnected client.
-pub fn transport_server_plugin<P, T>(app: &mut App)
+pub fn server_transport_plugin<P, T>(app: &mut App)
 where
     P: TransportProtocol,
-    P::S2C: Clone,
-    T: TransportServer<P> + Resource,
+    T: ServerTransport<P> + Resource,
 {
-    app.configure_sets(PreUpdate, TransportServerSet::Recv)
-        .configure_sets(PostUpdate, TransportServerSet::Send)
-        .add_event::<RemoteClientConnecting<P, T>>()
-        .add_event::<RemoteClientConnected<P, T>>()
-        .add_event::<FromClient<P, T>>()
-        .add_event::<RemoteClientDisconnected<P, T>>()
-        .add_event::<ToClient<P, T>>()
-        .add_event::<DisconnectRemoteClient<P, T>>()
-        .add_systems(PreUpdate, recv::<P, T>.in_set(TransportServerSet::Recv))
-        .add_systems(PostUpdate, send::<P, T>.in_set(TransportServerSet::Send));
+    app.add_event::<ServerOpening>()
+        .add_event::<ServerOpened>()
+        .add_event::<ServerClosed<P, T>>()
+        .add_event::<RemoteConnecting>()
+        .add_event::<RemoteConnected>()
+        .add_event::<RemoteDisconnected<P, T>>()
+        .add_event::<FromClient<P>>()
+        .add_event::<ServerAck>()
+        .add_event::<ServerNack>()
+        .add_systems(PreUpdate, recv::<P, T>);
 }
 
-/// Provides systems to send commands to, and receive events from, a
-/// [`TransportServer`].
-///
-/// See [`transport_server_plugin`].
 #[derive(Derivative)]
-#[derivative(Debug, Default)]
-pub struct TransportServerPlugin<P, T>
-where
-    P: TransportProtocol,
-    P::S2C: Clone,
-    T: TransportServer<P> + Resource,
-{
+#[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
+pub struct ServerTransportPlugin<P, T> {
     #[derivative(Debug = "ignore")]
     _phantom_p: PhantomData<P>,
     #[derivative(Debug = "ignore")]
     _phantom_t: PhantomData<T>,
 }
 
-impl<P, T> Plugin for TransportServerPlugin<P, T>
+impl<P, T> Plugin for ServerTransportPlugin<P, T>
 where
     P: TransportProtocol,
-    P::S2C: Clone,
-    T: TransportServer<P> + Resource,
+    T: ServerTransport<P> + Resource,
 {
     fn build(&self, app: &mut App) {
-        transport_server_plugin::<P, T>(app);
+        server_transport_plugin::<P, T>(app);
     }
 }
 
-/// Group of systems for sending and receiving data to/from a
-/// [`TransportServer`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum TransportServerSet {
-    /// Receiving data from client connections and updating the server's
-    /// internal state.
-    Recv,
-    /// Sending out messages and commands requested by the app.
-    Send,
-}
-
-/// A client has requested to connect to this server.
-///
-/// This may be followed by a [`ServerEvent::Connected`] or a
-/// [`ServerEvent::Disconnected`].
-///
-/// See [`ServerEvent::Connecting`].
 #[derive(Debug, Clone, Event)]
-pub struct RemoteClientConnecting<P, T>
+pub struct ServerOpening;
+
+#[derive(Debug, Clone, Event)]
+pub struct ServerOpened;
+
+#[derive(Debug, Clone, Event)]
+pub struct ServerClosed<P, T>
 where
     P: TransportProtocol,
-    T: TransportServer<P>,
+    T: ServerTransport<P>,
 {
-    /// The key of the connecting client.
-    pub client: T::Client,
+    pub reason: T::Error,
 }
 
-/// A client has fully connected to this server.
-///
-/// Use this event to do client setup logic, e.g. start loading player data.
-///
-/// See [`ServerEvent::Connected`].
 #[derive(Debug, Clone, Event)]
-pub struct RemoteClientConnected<P, T>
-where
-    P: TransportProtocol,
-    T: TransportServer<P>,
-{
-    /// The key of the connected client.
-    pub client: T::Client,
+pub struct RemoteConnecting {
+    pub client: ClientKey,
 }
 
-/// A client sent a message to this server.
-///
-/// See [`ServerEvent::Recv`].
 #[derive(Debug, Clone, Event)]
-pub struct FromClient<P, T>
+pub struct RemoteConnected {
+    pub client: ClientKey,
+}
+
+#[derive(Derivative, Event)]
+#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+pub struct RemoteDisconnected<P, T>
 where
     P: TransportProtocol,
-    T: TransportServer<P>,
+    T: ServerTransport<P>,
 {
-    /// The key of the client which sent the message.
-    pub client: T::Client,
-    /// The message received.
+    pub client: ClientKey,
+    pub reason: T::Error,
+}
+
+#[derive(Derivative, Event)]
+#[derivative(Debug(bound = "P::C2S: Debug"), Clone(bound = "P::C2S: Clone"))]
+pub struct FromClient<P>
+where
+    P: TransportProtocol,
+{
+    pub client: ClientKey,
     pub msg: P::C2S,
+    pub at: Instant,
 }
 
-/// A client has lost connection from this server, which cannot be recovered
-/// from.
-///
-/// Use this event to do client teardown logic, e.g. removing the player
-/// from the world.
-///
-/// See [`ServerEvent::Disconnected`].
 #[derive(Debug, Clone, Event)]
-pub struct RemoteClientDisconnected<P, T>
-where
-    P: TransportProtocol,
-    T: TransportServer<P>,
-{
-    /// The key of the client.
-    pub client: T::Client,
-    /// The reason why the client lost connection.
-    pub cause: T::Error,
+pub struct ServerAck {
+    pub client: ClientKey,
+    pub msg: MessageTicket,
+    pub at: Instant,
 }
 
-/// Sends a message along the server to a client.
-///
-/// See [`TransportServer::send`].
 #[derive(Debug, Clone, Event)]
-pub struct ToClient<P, T>
-where
-    P: TransportProtocol,
-    T: TransportServer<P>,
-{
-    /// The key of the client to send to.
-    pub client: T::Client,
-    /// The message to send.
-    pub msg: P::S2C,
+pub struct ServerNack {
+    pub client: ClientKey,
+    pub msg: MessageTicket,
+    pub at: Instant,
 }
 
-/// Forcefully disconnects a client from this server.
-///
-/// See [`TransportServer::disconnect`].
-#[derive(Debug, Clone, Event)]
-pub struct DisconnectRemoteClient<P, T>
-where
-    P: TransportProtocol,
-    T: TransportServer<P>,
-{
-    /// The key of the client to disconnect.
-    pub client: T::Client,
-}
-
-// systems
-
+#[allow(clippy::too_many_arguments)]
 fn recv<P, T>(
-    mut server: ResMut<T>,
-    mut connecting: EventWriter<RemoteClientConnecting<P, T>>,
-    mut connected: EventWriter<RemoteClientConnected<P, T>>,
-    mut recv: EventWriter<FromClient<P, T>>,
-    mut disconnected: EventWriter<RemoteClientDisconnected<P, T>>,
+    mut client: ResMut<T>,
+    mut opening: EventWriter<ServerOpening>,
+    mut opened: EventWriter<ServerOpened>,
+    mut closed: EventWriter<ServerClosed<P, T>>,
+    mut connecting: EventWriter<RemoteConnecting>,
+    mut connected: EventWriter<RemoteConnected>,
+    mut disconnected: EventWriter<RemoteDisconnected<P, T>>,
+    mut recv: EventWriter<FromClient<P>>,
+    mut ack: EventWriter<ServerAck>,
+    mut nack: EventWriter<ServerNack>,
 ) where
     P: TransportProtocol,
-    P::S2C: Clone,
-    T: TransportServer<P> + Resource,
+    T: ServerTransport<P> + Resource,
 {
-    for event in server.recv() {
-        match event.into() {
-            None => {}
-            Some(ServerEvent::Connecting { client }) => {
-                connecting.send(RemoteClientConnecting { client });
+    for event in client.recv() {
+        match event {
+            ServerEvent::Opening => opening.send(ServerOpening),
+            ServerEvent::Opened => opened.send(ServerOpened),
+            ServerEvent::Closed { reason } => closed.send(ServerClosed { reason }),
+            ServerEvent::Connecting { client } => connecting.send(RemoteConnecting { client }),
+            ServerEvent::Connected { client } => connected.send(RemoteConnected { client }),
+            ServerEvent::Disconnected { client, reason } => {
+                disconnected.send(RemoteDisconnected { client, reason })
             }
-            Some(ServerEvent::Connected { client }) => {
-                connected.send(RemoteClientConnected { client });
-            }
-            Some(ServerEvent::Recv { client, msg }) => recv.send(FromClient { client, msg }),
-            Some(ServerEvent::Disconnected { client, cause }) => {
-                disconnected.send(RemoteClientDisconnected { client, cause });
-            }
+            ServerEvent::Recv { client, msg, at } => recv.send(FromClient { client, msg, at }),
+            ServerEvent::Ack { client, msg, at } => ack.send(ServerAck { client, msg, at }),
+            ServerEvent::Nack { client, msg, at } => nack.send(ServerNack { client, msg, at }),
         }
-    }
-}
-
-fn send<P, T>(
-    mut server: ResMut<T>,
-    mut send: EventReader<ToClient<P, T>>,
-    mut disconnect: EventReader<DisconnectRemoteClient<P, T>>,
-) where
-    P: TransportProtocol,
-    P::S2C: Clone,
-    T: TransportServer<P> + Resource,
-{
-    for ToClient { client, msg } in send.read() {
-        let _ = server.send(client.clone(), msg.clone());
-    }
-
-    for DisconnectRemoteClient { client } in disconnect.read() {
-        let _ = server.disconnect(client.clone());
     }
 }

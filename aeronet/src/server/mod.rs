@@ -4,170 +4,90 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use crate::{ClientState, TransportProtocol};
+use std::{fmt::Debug, time::Instant};
 
-/// Allows listening for client connections, and transporting messages to/from
-/// the clients connected to this server.
-///
-/// See the [crate-level docs](crate).
-pub trait TransportServer<P>
+use derivative::Derivative;
+
+use crate::{ClientKey, ClientState, MessageState, MessageTicket, TransportProtocol};
+
+pub trait ServerTransport<P>
 where
     P: TransportProtocol,
 {
-    /// Key type that this server uses to uniquely identify clients.
-    type Client: Send + Sync + Clone + 'static;
-
-    /// Error returned from operations on this server.
     type Error: Send + Sync + 'static;
 
-    /// Info on the server's current status while open, returned by
-    /// [`TransportServer::server_state`]
     type ServerInfo;
 
-    /// Info on a given client's connection state, returned by
-    /// [`TransportServer::client_state`].
     type ClientInfo;
 
-    /// Type of event raised by this server.
-    ///
-    /// This event type must be able to be potentially converted into a
-    /// [`ServerEvent`]. If an event value cannot cleanly map to a single
-    /// generic [`ServerEvent`], its [`Into`] impl must return [`None`].
-    type Event: Into<Option<ServerEvent<P, Self>>>;
-
-    /// Gets the current state that this server is in.
-    ///
-    /// This can be used to get information about the endpoint, such as the
-    /// socket address, or to check if the server is opened at all.
     fn server_state(&self) -> ServerState<Self::ServerInfo>;
 
-    /// Gets the current state that a specific client is in.
-    ///
-    /// This can be used to get information about the connection if it is
-    /// connected, or to check if the client is connected at all.
-    ///
-    /// The data that this function returns is left up to the implementation,
-    /// but in general this allows accessing:
-    /// * the round-trip time, or ping ([`Rtt`])
-    /// * the remote socket address ([`RemoteAddr`])
-    ///
-    /// [`Rtt`]: crate::Rtt
-    /// [`RemoteAddr`]: crate::RemoteAddr
-    fn client_state(&self, client: Self::Client) -> ClientState<Self::ClientInfo>;
+    fn client_state(&self, client: ClientKey) -> ClientState<Self::ClientInfo>;
 
-    /// Gets all clients recognized by this server.
-    fn clients(&self) -> impl Iterator<Item = (Self::Client, ClientState<Self::ClientInfo>)>;
+    fn message_state(&self, client: ClientKey, msg: MessageTicket) -> MessageState;
 
-    /// Attempts to send a message to the given client.
-    ///
-    /// # Errors
-    ///
-    /// If the server cannot even attempt to send a message to the client (e.g.
-    /// if the server knows that this client is already disconnected), this
-    /// returns an error.
-    ///
-    /// However, since errors may occur later in the transport process after
-    /// this function has already returned (e.g. in an async task), this will
-    /// return [`Ok`] if the server has successfully *tried* to send a message,
-    /// not if the server actually *has* sent the message.
-    ///
-    /// If an error occurs later during the transport process, the server will
-    /// forcefully disconnect the client and emit a
-    /// [`ServerEvent::Disconnected`].
-    fn send(&mut self, client: Self::Client, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
+    fn send(&self, client: ClientKey, msg: impl Into<P::S2C>)
+        -> Result<MessageTicket, Self::Error>;
 
-    /// Polls events and receives messages from this transport.
-    ///
-    /// This will consume messages and events from connected clients. Events
-    /// must be continuously received to allow this transport to do its internal
-    /// work, so this should be run in the main loop of your program.
-    ///
-    /// This returns an iterator over the events received, which may be used in
-    /// two ways:
-    /// * used as-is, if you know the concrete type of the transport
-    ///   * transports may expose their own event type, which allows you to
-    ///     listen to specialized events
-    /// * converted into a generic [`ServerEvent`] via its
-    ///   `Into<Option<ServerEvent>>` implementation
-    ///   * useful for generic code which must abstract over different transport
-    ///     implementations
-    ///   * a single event returned from this is not guaranteed to map to a
-    ///     specific [`ServerEvent`]
-    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a;
+    fn recv(&mut self) -> impl Iterator<Item = ServerEvent<P, Self>>
+    where
+        Self: Sized;
 
-    /// Forces a client to disconnect from this server.
-    ///
-    /// This function does not guarantee that the client is gracefully
-    /// disconnected in any way, so you must use your own mechanism for graceful
-    /// disconnection if you need this feature.
-    ///
-    /// Disconnecting a client using this function will also raise a
-    /// [`ServerEvent::Disconnected`].
-    ///
-    /// # Errors
-    ///
-    /// If the server cannot even attempt to disconnect this client (e.g. if the
-    /// server knows that this client is already disconnected), this returns an
-    /// error.
-    fn disconnect(&mut self, client: impl Into<Self::Client>) -> Result<(), Self::Error>;
+    fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error>;
+
+    fn close(&mut self) -> Result<(), Self::Error>;
 }
 
-/// Current state of a server managed by this app.
-#[derive(Debug, Clone, Default)]
-pub enum ServerState<I> {
-    /// The server is not listening for connections, and is making no attempts
-    /// to start listening for connections.
-    #[default]
-    Closed,
-    /// The server is starting to listen for connections, but is not ready to
-    /// accept them yet.
-    Opening,
-    /// The server has been fully established, and is now ready to accept and
-    /// manage client connections.
-    Open {
-        /// Info on the current state of the server.
-        info: I,
-    },
-}
-
-/// Event raised by a [`TransportServer`].
 #[derive(Debug, Clone)]
-pub enum ServerEvent<P, T: ?Sized>
+pub enum ServerState<I> {
+    Closed,
+    Opening,
+    Open { info: I },
+}
+
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = "P::C2S: Debug, T::Error: Debug"),
+    Clone(bound = "P::C2S: Clone, T::Error: Clone")
+)]
+pub enum ServerEvent<P, T>
 where
     P: TransportProtocol,
-    T: TransportServer<P>,
+    T: ServerTransport<P>,
 {
-    /// A client has requested to connect to this server.
-    ///
-    /// This may be followed by a [`ServerEvent::Connected`] or a
-    /// [`ServerEvent::Disconnected`].
+    // server state
+    Opening,
+    Opened,
+    Closed {
+        reason: T::Error,
+    },
+
+    // client state
     Connecting {
-        /// The key of the connecting client.
-        client: T::Client,
+        client: ClientKey,
     },
-    /// A client has fully connected to this server.
-    ///
-    /// Use this event to do client setup logic, e.g. start loading player data.
     Connected {
-        /// The key of the connected client.
-        client: T::Client,
+        client: ClientKey,
     },
-    /// A client sent a message to this server.
-    Recv {
-        /// The key of the client which sent the message.
-        client: T::Client,
-        /// The message received.
-        msg: P::C2S,
-    },
-    /// A client has lost connection from this server, which cannot be recovered
-    /// from.
-    ///
-    /// Use this event to do client teardown logic, e.g. removing the player
-    /// from the world.
     Disconnected {
-        /// The key of the client.
-        client: T::Client,
-        /// The reason why the client lost connection.
-        cause: T::Error,
+        client: ClientKey,
+        reason: T::Error,
+    },
+
+    // messages
+    Recv {
+        client: ClientKey,
+        msg: P::C2S,
+        at: Instant,
+    },
+    Ack {
+        client: ClientKey,
+        msg: MessageTicket,
+        at: Instant,
+    },
+    Nack {
+        client: ClientKey,
+        msg: MessageTicket,
+        at: Instant,
     },
 }
