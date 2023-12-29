@@ -1,8 +1,8 @@
 use std::{marker::PhantomData, time::Instant};
 
 use aeronet::{
-    Timeout, TransportConfig,
-    LaneKey, LaneKind, LaneProtocol, MessageState, MessageTicket, OnLane, TryAsBytes, TryFromBytes,
+    LaneKey, LaneKind, LaneProtocol, MessageState, MessageTicket, OnLane, Timeout, TransportConfig,
+    TryAsBytes, TryFromBytes,
 };
 use steamworks::{
     networking_messages::NetworkingMessages,
@@ -165,8 +165,8 @@ where
                     // out for it yet, then we will send that event and do no further
                     // processing.
                     // This means that connection will never occur immediately after
-                    // calling `recv`, even if it's possible, but this is important to
-                    // maintain the `recv` contract - if it emits an event which changes
+                    // calling `update`, even if it's possible, but this is important to
+                    // maintain the `update` contract - if it emits an event which changes
                     // the transport state, then after the call, it will be in that state.
                     *send_connecting = false;
                     return Ok(vec![ClientEvent::Connecting]);
@@ -191,12 +191,12 @@ where
                 for (index, lane) in P::Lane::VARIANTS.iter().enumerate() {
                     // This is enforced during `new`
                     let channel = u32::try_from(index).unwrap();
-                    recv_channel(&self.net, channel, &mut events).map_err(|source| {
-                        SteamTransportError::<P>::OnLane {
+                    update_channel(&self.net, &mut self.timeout, channel, &mut events).map_err(
+                        |source| SteamTransportError::<P>::OnLane {
                             lane: lane.clone(),
                             source,
-                        }
-                    })?;
+                        },
+                    )?;
                 }
 
                 Ok(events)
@@ -235,8 +235,9 @@ where
         .map_err(LaneError::<P>::Send)
 }
 
-fn recv_channel<P>(
+fn update_channel<P>(
     net: &NetworkingMessages<ClientManager>,
+    timeout: &mut Timeout,
     channel: u32,
     events: &mut Vec<ClientEvent<P>>,
 ) -> Result<(), LaneError<P>>
@@ -246,6 +247,9 @@ where
     P::S2C: TryFromBytes,
 {
     let payloads = net.receive_messages_on_channel(channel, RECV_BATCH_SIZE);
+    if !payloads.is_empty() {
+        timeout.update();
+    }
 
     for payload in payloads {
         let msg = P::S2C::try_from_bytes(payload.data()).map_err(LaneError::<P>::Deserialize)?;

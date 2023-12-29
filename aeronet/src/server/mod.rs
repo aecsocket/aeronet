@@ -29,13 +29,11 @@ where
     fn send(&self, client: ClientKey, msg: impl Into<P::S2C>)
         -> Result<MessageTicket, Self::Error>;
 
-    fn recv(&mut self) -> impl Iterator<Item = ServerEvent<P, Self>>
+    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self>>
     where
         Self: Sized;
 
     fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error>;
-
-    fn close(&mut self) -> Result<(), Self::Error>;
 }
 
 #[derive(Debug, Clone)]

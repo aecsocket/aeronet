@@ -1,8 +1,9 @@
-use std::{convert::Infallible, string::FromUtf8Error, net::SocketAddr};
+use std::{convert::Infallible, string::FromUtf8Error};
 
 use aeronet::{
-    ClientTransportPlugin, LaneKey, LaneProtocol, LocalConnected, LocalConnecting, Message, OnLane,
-    TransportProtocol, TryAsBytes, TryFromBytes, FromServer, LocalDisconnected, TransportConfig,
+    ClientTransportPlugin, FromServer, LaneKey, LaneProtocol, LocalConnected, LocalConnecting,
+    LocalDisconnected, Message, OnLane, TransportConfig, TransportProtocol, TryAsBytes,
+    TryFromBytes,
 };
 use aeronet_steam::SteamClientTransport;
 use bevy::prelude::*;
@@ -60,13 +61,7 @@ fn main() {
         ))
         .init_resource::<UiState>()
         .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            (
-                update_steam,
-                (add_to_log, ui).chain(),
-            )
-        )
+        .add_systems(Update, (update_steam, (add_to_log, ui).chain()))
         .run();
 }
 
@@ -104,7 +99,9 @@ fn add_to_log(
     mut ui_state: ResMut<UiState>,
     mut connecting: EventReader<LocalConnecting>,
     mut connected: EventReader<LocalConnected>,
-    mut disconnected: EventReader<LocalDisconnected<AppProtocol, SteamClientTransport<AppProtocol>>>,
+    mut disconnected: EventReader<
+        LocalDisconnected<AppProtocol, SteamClientTransport<AppProtocol>>,
+    >,
     mut recv: EventReader<FromServer<AppProtocol>>,
 ) {
     for LocalConnecting in connecting.read() {
@@ -116,7 +113,9 @@ fn add_to_log(
     }
 
     for LocalDisconnected { reason } in disconnected.read() {
-        ui_state.log.push((LogKind::Error, format!("Disconnected: {:#}", reason)));
+        ui_state
+            .log
+            .push((LogKind::Error, format!("Disconnected: {:#}", reason)));
     }
 
     for FromServer { msg, .. } in recv.read() {
@@ -133,7 +132,8 @@ fn ui(
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         ui.horizontal(|ui| {
             ui.label("Target Steam ID");
-            let target_resp = ui.add(egui::TextEdit::singleline(&mut ui_state.target).hint_text("[enter]"));
+            let target_resp =
+                ui.add(egui::TextEdit::singleline(&mut ui_state.target).hint_text("[enter]"));
             let mut connect = false;
             if target_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 connect = true;
@@ -141,15 +141,8 @@ fn ui(
             connect |= ui.button("Connect").clicked();
 
             if connect {
-                match ui_state.target.parse::<u64>() {
-                    Ok(id) => {
-                        let id = SteamId::from_raw(id);
-                        let target = NetworkingIdentity::new_steam_id(id);
-                        if let Err(err) = client.connect(&steam.0, target, TransportConfig::default()) {
-                            ui_state.log.push((LogKind::Error, format!("Failed to connect: {:#}", err)));
-                        }
-                    }
-                    Err(err) => ui_state.log.push((LogKind::Error, format!("Failed to parse Steam ID: {:#}", err))),
+                if let Err(err) = try_connect(&ui_state.target, steam.as_ref(), client.as_mut()) {
+                    ui_state.log.push((LogKind::Error, err));
                 }
             }
         });
@@ -158,15 +151,32 @@ fn ui(
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             for (kind, line) in ui_state.log.iter() {
-                ui.label(egui::RichText::new(line)
-                    .font(egui::FontId::monospace(14.0))
-                    .color(match kind {
-                        LogKind::Info => egui::Color32::WHITE,
-                        LogKind::Msg => egui::Color32::GRAY,
-                        LogKind::Connect => egui::Color32::GREEN,
-                        LogKind::Error => egui::Color32::RED,
-                    }));
+                ui.label(
+                    egui::RichText::new(line)
+                        .font(egui::FontId::monospace(14.0))
+                        .color(match kind {
+                            LogKind::Info => egui::Color32::WHITE,
+                            LogKind::Msg => egui::Color32::GRAY,
+                            LogKind::Connect => egui::Color32::GREEN,
+                            LogKind::Error => egui::Color32::RED,
+                        }),
+                );
             }
         });
     });
+}
+
+fn try_connect(
+    target: &str,
+    steam: &SteamClient,
+    client: &mut SteamClientTransport<AppProtocol>,
+) -> Result<(), String> {
+    let id = target
+        .parse::<u64>()
+        .map_err(|err| format!("Failed to parse Steam ID: {err:#}"))?;
+    let id = SteamId::from_raw(id);
+    let target = NetworkingIdentity::new_steam_id(id);
+    client
+        .connect(&steam.0, target, TransportConfig::default())
+        .map_err(|err| format!("Failed to connect: {err:#}"))
 }

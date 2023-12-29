@@ -118,7 +118,7 @@ fn recv<P, T>(
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
 {
-    for event in client.recv() {
+    for event in client.update() {
         match event {
             ServerEvent::Opening => opening.send(ServerOpening),
             ServerEvent::Opened => opened.send(ServerOpened),

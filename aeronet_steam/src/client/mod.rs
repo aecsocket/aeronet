@@ -3,7 +3,7 @@ mod inner;
 pub use inner::*;
 
 use aeronet::{
-    TransportConfig, ClientTransport, LaneProtocol, MessageState, MessageTicket, OnLane,
+    ClientTransport, LaneProtocol, MessageState, MessageTicket, OnLane, TransportConfig,
     TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use steamworks::{networking_types::NetworkingIdentity, ClientManager};
@@ -108,7 +108,7 @@ where
         }
     }
 
-    fn recv(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
+    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
         match self {
             Self::Disconnected => vec![],
             Self::Working(client) => match client.recv() {

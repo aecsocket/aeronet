@@ -29,7 +29,7 @@ where
 
     /// If this emits an event which changes the transport's state, then after
     /// this call, the transport will be in this new state.
-    fn recv(&mut self) -> impl Iterator<Item = ClientEvent<P, Self>>
+    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self>>
     where
         Self: Sized;
 }
