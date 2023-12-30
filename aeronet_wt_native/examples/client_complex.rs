@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use aeronet::{AsyncRuntime, ClientState, ToServer, TransportClient, TransportClientPlugin};
+use aeronet::{ClientState, ToServer, TokioRuntime, TransportClient, TransportClientPlugin};
 use aeronet_example::{
     client_log, log_lines, msg_buf, url_buf, ComplexProtocol, Log, LogLine, C2S, LOG_FILTER,
 };
@@ -38,7 +38,7 @@ fn main() {
             EguiPlugin,
             TransportClientPlugin::<_, Client>::default(),
         ))
-        .init_resource::<AsyncRuntime>()
+        .init_resource::<TokioRuntime>()
         .init_resource::<Client>()
         .init_resource::<ClientUiState>()
         .add_systems(Update, (client_log::<_, Client, ClientUiState>, ui).chain())
@@ -54,7 +54,7 @@ fn client_config() -> ClientConfig {
 }
 
 fn ui(
-    rt: Res<AsyncRuntime>,
+    rt: Res<TokioRuntime>,
     mut egui: EguiContexts,
     mut client: ResMut<Client>,
     mut ui_state: ResMut<ClientUiState>,

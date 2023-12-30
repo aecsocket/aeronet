@@ -1,6 +1,6 @@
 use std::{
-    mem,
-    time::{Duration, Instant}, iter,
+    iter, mem,
+    time::{Duration, Instant},
 };
 
 use rand::Rng;
@@ -11,7 +11,7 @@ use rand_distr::{Distribution, Normal};
 ///
 /// **This is for testing purposes only. For production use, never use a
 /// conditioner! Use `()` instead, which implements this trait but does no
-/// conditioning.**
+/// actual conditioning.**
 ///
 /// A useful strategy for testing transport implementations, and networking code
 /// in general, is to induce artificial packet loss and delays and see how your
@@ -19,41 +19,42 @@ use rand_distr::{Distribution, Normal};
 /// effects, while being as transport-agnostic as possible.
 ///
 /// The standard implementation of this is [`SimpleConditioner`].
-/// 
+///
 /// # The type of `T`
-/// 
+///
 /// The type `T` here represents the type of data that gets conditioned, i.e.
 /// potentially dropped or delayed, however this does not necessarily have to
 /// be the same as the message type! If the underlying transport uses bytes
 /// for communication, and these bytes make up a single packet rather than a
-/// single message, then these bytes may be conditioned instead. This leads to
-/// more comprehensive testing, as the transport must now deal with entire
-/// packets potentially being dropped, rather than just messages.
-/// 
+/// single message, then these bytes should be conditioned instead. This leads
+/// to more comprehensive testing, as the transport must now deal with entire
+/// packets potentially being dropped, rather than just messages, which it
+/// should be able to handle.
+///
 /// # Sending and receiving
-/// 
+///
 /// This trait is agnostic about which side of the transport process it
 /// conditions - it can be applied to both outgoing and incoming data.
 pub trait Conditioner<T>: Send + Sync + 'static {
     /// Passes data through the conditioner to determine if it will carry on
     /// being processed as normal by the transport.
-    /// 
+    ///
     /// If the conditioner decides that this data will carry on being processed
     /// as normal, it will return `Some(T)` with the same data passed in.
     /// Otherwise, it can choose to delay or even drop the data entirely, in
     /// which case `None` is returned.
-    /// 
-    /// If the data is delayed, make sure to call [`Conditioner::buffered`] to
-    /// check if the delayed data is ready for sending yet.
+    ///
+    /// If the data is delayed, it will eventually appear in
+    /// [`Conditioner::buffered`].
     fn condition(&mut self, data: T) -> Option<T>;
 
     /// Gets any data that the conditioner has decided is ready for processing.
-    /// 
+    ///
     /// Since the conditioner may delay sending and receiving data, it may
     /// always have some data ready for the transport to process - you don't
     /// know until you call this function. This function will consume any data
     /// which was buffered and is now ready to be processed further.
-    /// 
+    ///
     /// A transport should call this right before/after dealing with the
     /// underlying transport layer, i.e. after receiving datagrams, and if there
     /// is any data returned by this function, append it.
@@ -76,7 +77,7 @@ impl<T> Conditioner<T> for () {
 #[derive(Debug, Clone)]
 pub struct SimpleConditionerConfig {
     /// Chance of data being dropped in transit.
-    /// 
+    ///
     /// Represented by a percentage value in the range `0.0..=1.0`. Smaller
     /// values mean a lower chance of data being dropped.
     pub loss_rate: f32,
@@ -97,7 +98,7 @@ impl Default for SimpleConditionerConfig {
 }
 
 /// Standard [`Conditioner`] which randomly drops data and delays it.
-/// 
+///
 /// If the delay distribution produces a negative delay for data, it will be
 /// processed immediately.
 #[derive(Debug)]
@@ -117,7 +118,7 @@ pub enum SimpleConditionerError {
     /// [`SimpleConditionerConfig::delay_std_dev`] produced an invalid normal
     /// distribution.
     #[error("invalid delay distribution")]
-    DelayDistr(#[source] rand_distr::NormalError)
+    DelayDistr(#[source] rand_distr::NormalError),
 }
 
 #[derive(Debug)]
@@ -127,6 +128,12 @@ struct Payload<T> {
 }
 
 impl<T> SimpleConditioner<T> {
+    /// Creates a new conditioner from the given config.
+    ///
+    /// # Errors
+    ///
+    /// If the configuration is invalid in any of the ways described by
+    /// [`SimpleConditionerError`].
     pub fn new(config: SimpleConditionerConfig) -> Result<Self, SimpleConditionerError> {
         if !(0.0..=1.0).contains(&config.loss_rate) {
             return Err(SimpleConditionerError::LossRateOutOfRange);
@@ -163,7 +170,10 @@ where
         let delay = Duration::from_secs_f32(delay_sec);
         let send_at = Instant::now() + delay;
 
-        self.buf.push(Payload { data, ready_at: send_at });
+        self.buf.push(Payload {
+            data,
+            ready_at: send_at,
+        });
 
         // The underlying transport won't process anything right now
         None
@@ -173,7 +183,7 @@ where
         let now = Instant::now();
         // TODO I'm sure there's a smart iterator way to do this, but I can't
         // think of one
-        // TODO https://github.com/rust-lang/rust/issues/43244
+        // https://github.com/rust-lang/rust/issues/43244
         let buf = mem::take(&mut self.buf);
         let mut ready_now = Vec::new();
 

@@ -1,15 +1,35 @@
 use std::net::SocketAddr;
 
-use aeronet::{LaneKey, LaneProtocol, OnLane, TryAsBytes, TryFromBytes};
-use tokio::sync::oneshot;
+use aeronet::{LaneProtocol, OnLane, TryAsBytes, TryFromBytes};
+use futures::channel::{mpsc, oneshot};
+use tracing::debug;
 use wtransport::{endpoint::ConnectOptions, ClientConfig, Connection, Endpoint};
 
-use crate::WebTransportError;
+use crate::{
+    shared::{self, MSG_CHAN_BUF},
+    ConnectedClient, ConnectionInfo, WebTransportError,
+};
 
-use super::ConnectedResult;
+use super::{ConnectedResult, TransportConfig};
 
 pub(super) async fn start<P>(
     wt_config: ClientConfig,
+    transport_config: TransportConfig<P>,
+    conn_opts: ConnectOptions,
+    send_connected: oneshot::Sender<ConnectedResult<P>>,
+) where
+    P: LaneProtocol,
+    P::Send: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::Recv: TryFromBytes,
+{
+    debug!("Opened backend");
+    _start(wt_config, transport_config, conn_opts, send_connected).await;
+    debug!("Closed backend");
+}
+
+async fn _start<P>(
+    wt_config: ClientConfig,
+    transport_config: TransportConfig<P>,
     conn_opts: ConnectOptions,
     send_connected: oneshot::Sender<ConnectedResult<P>>,
 ) where
@@ -24,6 +44,23 @@ pub(super) async fn start<P>(
             return;
         }
     };
+
+    shared::open_lanes::<P>(&conn).await;
+
+    let (send_s, recv_s) = mpsc::unbounded();
+    let (send_r, recv_r) = mpsc::channel(MSG_CHAN_BUF);
+    let (send_info, recv_info) = mpsc::channel(1);
+    let (send_err, recv_err) = oneshot::channel();
+    let _ = send_connected.send(Ok(ConnectedClient {
+        conn_info: ConnectionInfo::from_connection(&conn),
+        local_addr,
+        send_s,
+        recv_r,
+        recv_info,
+        recv_err,
+    }));
+
+    shared::handle_connection(conn, recv_s, send_r, send_info, send_err).await;
 }
 
 async fn connect<P>(

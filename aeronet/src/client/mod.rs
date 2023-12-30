@@ -11,9 +11,9 @@ use std::{
 
 use derivative::Derivative;
 
-use crate::{MessageState, MessageTicket, TransportProtocol};
+use crate::{MessageState, MessageTicket, Transport, TransportProtocol};
 
-pub trait ClientTransport<P>
+pub trait ClientTransport<P>: Transport
 where
     P: TransportProtocol,
 {

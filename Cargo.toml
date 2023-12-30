@@ -27,6 +27,7 @@ license = "MIT OR Apache-2.0"
 all = "warn"
 pedantic = "warn"
 module_name_repetitions = "allow"
+similar_names = "allow"
 
 [workspace.dependencies]
 aeronet = { version = "0.5.0", path = "aeronet" }
@@ -40,6 +41,7 @@ slotmap = "1.0.6"
 anyhow = "1.0.75"
 rand = "0.8.5"
 rand_distr = "0.4.3"
+bitcode = { version = "0.5.0", features = [ "derive" ] }
 
 proc-macro2 = "1.0.69"
 syn = "2.0.39"

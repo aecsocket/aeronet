@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use aeronet::{AsyncRuntime, ClientState, TransportServer};
+use aeronet::{ClientState, TokioRuntime, TransportServer};
 use aeronet_example::{ComplexProtocol, LOG_FILTER, S2C};
 use aeronet_wt_native::{ServerEvent, WebTransportServer};
 use anyhow::Result;
@@ -29,13 +29,13 @@ fn main() {
             },
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
         ))
-        .init_resource::<AsyncRuntime>()
+        .init_resource::<TokioRuntime>()
         .add_systems(Startup, setup)
         .add_systems(Update, update_server)
         .run();
 }
 
-fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
+fn setup(mut commands: Commands, rt: Res<TokioRuntime>) {
     match create(rt.as_ref()) {
         Ok(server) => {
             info!("Created server");
@@ -45,7 +45,7 @@ fn setup(mut commands: Commands, rt: Res<AsyncRuntime>) {
     }
 }
 
-fn create(rt: &AsyncRuntime) -> Result<Server> {
+fn create(rt: &TokioRuntime) -> Result<Server> {
     let cert = tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(Certificate::load(

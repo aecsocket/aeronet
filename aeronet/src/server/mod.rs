@@ -8,9 +8,9 @@ use std::{fmt::Debug, time::Instant};
 
 use derivative::Derivative;
 
-use crate::{ClientKey, ClientState, MessageState, MessageTicket, TransportProtocol};
+use crate::{ClientKey, ClientState, MessageState, MessageTicket, Transport, TransportProtocol};
 
-pub trait ServerTransport<P>
+pub trait ServerTransport<P>: Transport
 where
     P: TransportProtocol,
 {
