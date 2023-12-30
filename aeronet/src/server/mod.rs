@@ -26,8 +26,11 @@ where
 
     fn message_state(&self, client: ClientKey, msg: MessageTicket) -> MessageState;
 
-    fn send(&self, client: ClientKey, msg: impl Into<P::S2C>)
-        -> Result<MessageTicket, Self::Error>;
+    fn send(
+        &self,
+        client: ClientKey,
+        msg: impl Into<P::Send>,
+    ) -> Result<MessageTicket, Self::Error>;
 
     fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self>>
     where
@@ -45,8 +48,8 @@ pub enum ServerState<I> {
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::C2S: Debug, T::Error: Debug"),
-    Clone(bound = "P::C2S: Clone, T::Error: Clone")
+    Debug(bound = "P::Recv: Debug, T::Error: Debug"),
+    Clone(bound = "P::Recv: Clone, T::Error: Clone")
 )]
 pub enum ServerEvent<P, T>
 where
@@ -75,7 +78,7 @@ where
     // messages
     Recv {
         client: ClientKey,
-        msg: P::C2S,
+        msg: P::Recv,
         at: Instant,
     },
     Ack {

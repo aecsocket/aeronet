@@ -93,6 +93,8 @@ dependencies = [
  "aeronet_derive",
  "bevy",
  "derivative",
+ "rand",
+ "rand_distr",
  "slotmap",
  "thiserror",
  "tokio",
@@ -109,19 +111,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "aeronet_steam"
+name = "aeronet_wt_native"
 version = "0.5.0"
 dependencies = [
  "aeronet",
  "anyhow",
+ "base64 0.21.5",
  "bevy",
  "bevy_egui",
  "derivative",
  "futures",
- "rand",
+ "rcgen",
+ "ring 0.17.7",
  "slotmap",
- "steamworks",
  "thiserror",
+ "time",
  "tokio",
  "tracing",
  "wtransport",
@@ -2548,6 +2552,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libm"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
+
+[[package]]
 name = "libredox"
 version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2864,6 +2874,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39e3200413f237f41ab11ad6d161bc7239c84dcb631773ccd7de3dfe4b5c267c"
 dependencies = [
  "autocfg",
+ "libm",
 ]
 
 [[package]]
@@ -3324,6 +3335,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_distr"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
+dependencies = [
+ "num-traits",
+ "rand",
+]
+
+[[package]]
 name = "range-alloc"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3741,24 +3762,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "steamworks"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37769f3fb7cc26bf69609e455a606c073d7332ddd45742b2317d72abafc04d8e"
-dependencies = [
- "bitflags 1.3.2",
- "lazy_static",
- "steamworks-sys",
- "thiserror",
-]
-
-[[package]]
-name = "steamworks-sys"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dee9311cd52318d225220e3f52414958fbac21b75541a6543d33fbdda68797b6"
 
 [[package]]
 name = "str-buf"

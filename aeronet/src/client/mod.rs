@@ -25,7 +25,7 @@ where
 
     fn message_state(&self, msg: MessageTicket) -> MessageState;
 
-    fn send(&self, msg: impl Into<P::C2S>) -> Result<MessageTicket, Self::Error>;
+    fn send(&self, msg: impl Into<P::Send>) -> Result<MessageTicket, Self::Error>;
 
     /// If this emits an event which changes the transport's state, then after
     /// this call, the transport will be in this new state.
@@ -53,8 +53,8 @@ pub enum ClientState<I> {
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::S2C: Debug, T::Error: Debug"),
-    Clone(bound = "P::S2C: Clone, T::Error: Clone")
+    Debug(bound = "P::Recv: Debug, T::Error: Debug"),
+    Clone(bound = "P::Recv: Clone, T::Error: Clone")
 )]
 pub enum ClientEvent<P, T>
 where
@@ -67,7 +67,7 @@ where
     Disconnected { reason: T::Error },
 
     // messages
-    Recv { msg: P::S2C, at: Instant },
+    Recv { msg: P::Recv, at: Instant },
     Ack { msg: MessageTicket, at: Instant },
     Nack { msg: MessageTicket, at: Instant },
 }

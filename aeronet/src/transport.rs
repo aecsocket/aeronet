@@ -1,11 +1,15 @@
 use std::{net::SocketAddr, time::Duration};
 
-use crate::{LaneKey, Message};
+use crate::{condition::Conditioner, LaneKey, Message};
 
 pub trait TransportProtocol: Send + Sync + 'static {
-    type C2S: Message;
+    type Send: Message;
 
-    type S2C: Message;
+    type Recv: Message;
+
+    type SendConditioner<T>: Conditioner<T>;
+
+    type RecvConditioner<T>: Conditioner<T>;
 }
 
 pub trait LaneProtocol: TransportProtocol {
@@ -19,6 +23,10 @@ pub trait LaneProtocol: TransportProtocol {
 /// * the other endpoint receives it
 /// * the other endpoint processes the message
 /// * a reponse message is received
+///
+/// This will never give the exact RTT value, as it is constantly in flux as
+/// network conditions change. However, it aims to be a good-enough estimate for
+/// use in e.g. lag compensation estimates, or displaying to other clients.
 #[doc(alias = "latency")]
 #[doc(alias = "ping")]
 pub trait Rtt {

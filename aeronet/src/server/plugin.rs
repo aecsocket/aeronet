@@ -78,13 +78,13 @@ where
 }
 
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "P::C2S: Debug"), Clone(bound = "P::C2S: Clone"))]
+#[derivative(Debug(bound = "P::Recv: Debug"), Clone(bound = "P::Recv: Clone"))]
 pub struct FromClient<P>
 where
     P: TransportProtocol,
 {
     pub client: ClientKey,
-    pub msg: P::C2S,
+    pub msg: P::Recv,
     pub at: Instant,
 }
 

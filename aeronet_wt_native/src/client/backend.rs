@@ -1,99 +1,50 @@
-use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
-use tokio::sync::{mpsc, oneshot};
-use tracing::debug;
-use wtransport::{endpoint::endpoint_side, ClientConfig, Connection, Endpoint};
+use std::net::SocketAddr;
 
-use crate::{
-    shared::{self, ConnectionSetup, MSG_BUF_CAP, INFO_BUF_CAP},
-    EndpointInfo,
-};
+use aeronet::{LaneKey, LaneProtocol, OnLane, TryAsBytes, TryFromBytes};
+use tokio::sync::oneshot;
+use wtransport::{endpoint::ConnectOptions, ClientConfig, Connection, Endpoint};
 
-use super::{ConnectedClient, ConnectedClientResult, WebTransportError};
+use crate::WebTransportError;
 
-pub(super) async fn open<P>(
-    config: ClientConfig,
-    url: String,
-    send_connected: oneshot::Sender<ConnectedClientResult<P>>,
+use super::ConnectedResult;
+
+pub(super) async fn start<P>(
+    wt_config: ClientConfig,
+    conn_opts: ConnectOptions,
+    send_connected: oneshot::Sender<ConnectedResult<P>>,
 ) where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
-    P::S2C: TryFromBytes,
+    P: LaneProtocol,
+    P::Send: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::Recv: TryFromBytes,
 {
-    debug!("Opened backend");
-    start::<P>(config, url, send_connected).await;
-    debug!("Closed backend");
-}
-
-async fn start<P>(
-    config: ClientConfig,
-    url: String,
-    send_connected: oneshot::Sender<ConnectedClientResult<P>>,
-) where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
-    P::S2C: TryFromBytes,
-{
-    let (endpoint, conn, setup) = match connect::<P>(config, url).await {
+    let (conn, local_addr) = match connect::<P>(wt_config, conn_opts).await {
         Ok(t) => t,
         Err(err) => {
             let _ = send_connected.send(Err(err));
             return;
         }
     };
-
-    let (send_c2s, recv_c2s) = mpsc::unbounded_channel();
-    let (send_s2c, recv_s2c) = mpsc::channel(MSG_BUF_CAP);
-    let (send_info, recv_info) = mpsc::channel(INFO_BUF_CAP);
-    let (send_err, recv_err) = oneshot::channel();
-    let connected = ConnectedClient::<P> {
-        local_addr: endpoint.local_addr(),
-        info: EndpointInfo {
-            bytes_sent: 0,
-            bytes_recv: 0,
-            ..EndpointInfo::from_connection(&conn)
-        },
-        recv_info,
-        send_c2s,
-        recv_s2c,
-        recv_err,
-    };
-    if send_connected.send(Ok(connected)).is_err() {
-        return;
-    }
-
-    shared::handle_connection::<P, P::C2S, P::S2C>(
-        conn, setup, send_info, send_s2c, send_err, recv_c2s,
-    )
-    .await;
 }
 
 async fn connect<P>(
-    config: ClientConfig,
-    url: String,
-) -> Result<
-    (
-        Endpoint<endpoint_side::Client>,
-        Connection,
-        ConnectionSetup<P, P::C2S, P::S2C>,
-    ),
-    WebTransportError<P>,
->
+    wt_config: ClientConfig,
+    conn_opts: ConnectOptions,
+) -> Result<(Connection, SocketAddr), WebTransportError<P>>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
-    P::S2C: TryFromBytes,
+    P: LaneProtocol,
+    P::Send: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::Recv: TryFromBytes,
 {
-    debug!("Creating endpoint");
-    let endpoint = Endpoint::client(config).map_err(WebTransportError::Endpoint)?;
+    let endpoint = Endpoint::client(wt_config).map_err(WebTransportError::<P>::CreateEndpoint)?;
 
-    debug!("Connecting to {url:?}");
+    let local_addr = endpoint
+        .local_addr()
+        .map_err(WebTransportError::<P>::GetLocalAddr)?;
+
     let conn = endpoint
-        .connect(url.clone())
+        .connect(conn_opts)
         .await
-        .map_err(WebTransportError::Connect)?;
+        .map_err(WebTransportError::<P>::Connect)?;
 
-    let setup = shared::setup_connection::<P, P::C2S, P::S2C, false>(&conn).await?;
-
-    debug!("Created endpoint");
-    Ok((endpoint, conn, setup))
+    Ok((conn, local_addr))
 }

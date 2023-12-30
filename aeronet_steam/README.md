@@ -14,6 +14,8 @@ Transport is implemented using [`steamworks`](https://crates.io/crates/steamwork
 and [messages](https://partner.steamgames.com/doc/api/ISteamNetworkingMessages) as the transmission
 mechanism, rather than sockets, because it allows for datagram-like transport.
 
+## Protocol
+
 Each lane defined in your protocol corresponds to a single channel in Steam networking, with each
 lane key getting its own unique auto-incrementing channel number.
 
