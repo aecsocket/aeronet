@@ -5,7 +5,7 @@ use aeronet::{
     TryAsBytes, TryFromBytes,
 };
 use futures::channel::oneshot;
-use wtransport::{endpoint::IntoConnectOptions, ClientConfig};
+use wtransport::{endpoint::IntoConnectOptions, ClientConfig, datagram::Datagram};
 
 use crate::{ClientInfo, ClientWebTransport, ConnectedClient, ConnectingClient, WebTransportError};
 
@@ -74,7 +74,7 @@ where
     P::Send: TryAsBytes + OnLane<Lane = P::Lane>,
     P::Recv: TryFromBytes,
 {
-    type ConditionedData = Vec<u8>;
+    type ConditionedData = Datagram;
 }
 
 impl<P> ClientTransport<P> for ClientWebTransport<P>

@@ -60,7 +60,22 @@ async fn _start<P>(
         recv_err,
     }));
 
-    shared::handle_connection(conn, recv_s, send_r, send_info, send_err).await;
+    let TransportConfig {
+        timeout,
+        send_conditioner,
+        recv_conditioner,
+    } = transport_config;
+
+    shared::handle_connection(
+        conn,
+        send_conditioner,
+        recv_conditioner,
+        recv_s,
+        send_r,
+        send_info,
+        send_err,
+    )
+    .await;
 }
 
 async fn connect<P>(

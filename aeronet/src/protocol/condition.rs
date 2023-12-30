@@ -58,7 +58,7 @@ pub trait Conditioner<T>: Send + Sync + 'static {
     /// A transport should call this right before/after dealing with the
     /// underlying transport layer, i.e. after receiving datagrams, and if there
     /// is any data returned by this function, append it.
-    fn buffered(&mut self) -> impl Iterator<Item = T>;
+    fn buffered(&mut self) -> impl Iterator<Item = T> + Send;
 }
 
 impl<T> Conditioner<T> for () {

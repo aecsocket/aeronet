@@ -1,4 +1,4 @@
-use std::{cmp, mem, array};
+use std::{array, cmp, mem};
 
 use bitcode::{Decode, Encode};
 use derivative::Derivative;
@@ -10,7 +10,7 @@ use crate::util::SparseBuffer;
 /// This value uniquely identifies this message on both sides of the connection
 /// (as long as the sequence counter hasn't wrapped around yet, since this is
 /// just a `u16` after all).
-/// 
+///
 /// Note that this identifies the **message**, not the **chunk** - for a message
 /// which has been split into multiple chunks, all of its packets will have the
 /// same sequence number.
@@ -152,8 +152,7 @@ impl LaneState {
 
     pub fn chunk(&mut self, buf: &[u8]) -> Result<Vec<Vec<u8>>, PacketError> {
         let chunks = buf.chunks(MAX_PAYLOAD_SIZE);
-        let num_chunks = u8::try_from(chunks.len())
-            .map_err(|_| PacketError::TooManyChunks)?;
+        let num_chunks = u8::try_from(chunks.len()).map_err(|_| PacketError::TooManyChunks)?;
 
         let seq = self.next_seq();
         let chunks = chunks
@@ -186,13 +185,13 @@ impl LaneState {
             return Err(PacketError::TooSmall);
         }
 
-        let header: PacketHeader = bitcode::decode(&buf[..PACKET_HEADER_SIZE])
-            .map_err(PacketError::DecodeHeader)?;
+        let header: PacketHeader =
+            bitcode::decode(&buf[..PACKET_HEADER_SIZE]).map_err(PacketError::DecodeHeader)?;
         if header.chunk_idx >= header.num_chunks {
             return Err(PacketError::InvalidChunk);
         }
         let payload = &buf[PACKET_HEADER_SIZE..];
-        
+
         let seq = usize::from(header.seq.0);
         let msg_data = match self.msgs_recv.get_mut(seq) {
             Some(msg_data) => msg_data,
@@ -204,7 +203,7 @@ impl LaneState {
             msg_data.chunks_recv = 0;
             msg_data.chunks.fill_with(Vec::new);
         }
-        
+
         msg_data.chunks_recv += 1;
         msg_data.chunks[usize::from(header.chunk_idx)] = payload.to_vec();
 
@@ -233,18 +232,21 @@ mod tests {
         y: u32,
         z: String,
     }
-    
+
+    #[derive(Debug, Clone, Encode, Decode)]
+    struct Bar(Vec<Foo>);
+
     #[test]
     fn test() {
         let mut lane = LaneState::new();
 
-        let foo = Foo {
+        let msg = Foo {
             x: 12.3,
             y: 456,
             z: "hello".into(),
         };
 
-        let bytes = bitcode::encode(&foo).unwrap();
+        let bytes = bitcode::encode(&msg).unwrap();
         let packets = lane.chunk(&bytes).unwrap();
         for packet in packets {
             if let Some(msg) = lane.recv(&packet).unwrap() {
@@ -253,17 +255,34 @@ mod tests {
             }
         }
 
-        let foo = Foo {
+        let msg = Foo {
             x: 1.0,
             y: 2,
-            z: "ABC".repeat(1024),
+            z: "ABC".repeat(256),
         };
 
-        let bytes = bitcode::encode(&foo).unwrap();
+        let bytes = bitcode::encode(&msg).unwrap();
         let packets = lane.chunk(&bytes).unwrap();
         for packet in packets {
             if let Some(msg) = lane.recv(&packet).unwrap() {
                 let msg: Foo = bitcode::decode(&msg).unwrap();
+                println!("Received: {msg:?}");
+            }
+        }
+
+        let msg = Bar((0..128)
+            .map(|_| Foo {
+                x: 1.0,
+                y: 2,
+                z: "abcd".repeat(256),
+            })
+            .collect());
+
+        let bytes = bitcode::encode(&msg).unwrap();
+        let packets = lane.chunk(&bytes).unwrap();
+        for packet in packets {
+            if let Some(msg) = lane.recv(&packet).unwrap() {
+                let msg: Bar = bitcode::decode(&msg).unwrap();
                 println!("Received: {msg:?}");
             }
         }

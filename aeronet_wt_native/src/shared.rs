@@ -1,18 +1,20 @@
-use aeronet::{protocol::LaneState, LaneProtocol, OnLane, TryAsBytes, TryFromBytes, LaneKey};
+use aeronet::{
+    protocol::{Conditioner, LaneState},
+    LaneKey, LaneProtocol, OnLane, TryAsBytes, TryFromBytes,
+};
 use futures::{
     channel::{mpsc, oneshot},
-    StreamExt, FutureExt, SinkExt,
+    FutureExt, SinkExt, StreamExt,
 };
 use tracing::debug;
-use wtransport::{Connection, datagram::Datagram};
+use wtransport::{datagram::Datagram, Connection};
 
 use crate::{ConnectionInfo, LaneError, WebTransportError, MAX_NUM_LANES};
 
 pub(super) const MSG_CHAN_BUF: usize = 16;
 
-pub(super) async fn open_lanes<P>(
-    conn: &Connection,
-) where
+pub(super) async fn open_lanes<P>(conn: &Connection)
+where
     P: LaneProtocol,
     P::Send: TryAsBytes + OnLane<Lane = P::Lane>,
     P::Recv: TryFromBytes,
@@ -20,8 +22,11 @@ pub(super) async fn open_lanes<P>(
     assert!(P::Lane::VARIANTS.len() < usize::from(MAX_NUM_LANES));
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn handle_connection<P>(
     conn: Connection,
+    send_conditioner: P::SendConditioner<Datagram>,
+    recv_conditioner: P::RecvConditioner<Datagram>,
     recv_s: mpsc::UnboundedReceiver<P::Send>,
     send_r: mpsc::Sender<P::Recv>,
     send_info: mpsc::Sender<ConnectionInfo>,
@@ -32,7 +37,16 @@ pub(super) async fn handle_connection<P>(
     P::Recv: TryFromBytes,
 {
     debug!("Started connection loop");
-    match _handle_connection(conn, recv_s, send_r, send_info).await {
+    match _handle_connection(
+        conn,
+        send_conditioner,
+        recv_conditioner,
+        recv_s,
+        send_r,
+        send_info,
+    )
+    .await
+    {
         Ok(()) => {
             // Frontend closed
             debug!("Disconnected successfully");
@@ -44,8 +58,11 @@ pub(super) async fn handle_connection<P>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn _handle_connection<P>(
     conn: Connection,
+    send_conditioner: P::SendConditioner<Datagram>,
+    mut recv_conditioner: P::RecvConditioner<Datagram>,
     mut recv_s: mpsc::UnboundedReceiver<P::Send>,
     mut send_r: mpsc::Sender<P::Recv>,
     mut send_info: mpsc::Sender<ConnectionInfo>,
@@ -60,7 +77,7 @@ where
     let mut bytes_sent = 0;
     let mut bytes_recv = 0;
 
-    let mut dgram_lane = LaneState::new();
+    let mut lane_state = LaneState::new();
 
     loop {
         let info = ConnectionInfo {
@@ -76,6 +93,18 @@ where
         // closed frontend in the select block anyway
         let _ = send_info.try_send(info);
 
+        for dgram in recv_conditioner.buffered() {
+            recv::<P>(
+                &mut send_r,
+                &mut lane_state,
+                &mut msgs_recv,
+                &mut bytes_recv,
+                dgram,
+            )
+            .await
+            .map_err(WebTransportError::Recv)?;
+        }
+
         futures::select! {
             msg = recv_s.next() => {
                 let Some(msg) = msg else {
@@ -83,19 +112,15 @@ where
                 };
                 let lane = msg.lane();
 
-                send::<P>(&conn, &mut dgram_lane, msg, &mut bytes_sent)
+                send::<P>(&conn, &mut lane_state, &mut bytes_sent, msg)
                     .map_err(|source| WebTransportError::Send { lane, source })?;
                 msgs_sent += 1;
             }
             dgram = conn.receive_datagram().fuse() => {
                 let dgram = dgram.map_err(WebTransportError::Disconnected)?;
-                
-                let msg = recv(dgram, &mut dgram_lane, &mut bytes_recv)
+                recv(&mut send_r, &mut lane_state, &mut msgs_recv, &mut bytes_recv, dgram)
+                    .await
                     .map_err(WebTransportError::Recv)?;
-                if let Some(msg) = msg {
-                    let _ = send_r.send(msg).await;
-                    msgs_recv += 1;
-                }
             }
         }
     }
@@ -104,8 +129,8 @@ where
 fn send<P>(
     conn: &Connection,
     lane_state: &mut LaneState,
-    msg: P::Send,
     bytes_sent: &mut usize,
+    msg: P::Send,
 ) -> Result<(), LaneError<P>>
 where
     P: LaneProtocol,
@@ -124,11 +149,13 @@ where
     Ok(())
 }
 
-fn recv<P>(
-    dgram: Datagram,
+async fn recv<P>(
+    send_r: &mut mpsc::Sender<P::Recv>,
     lane_state: &mut LaneState,
+    msgs_recv: &mut usize,
     bytes_recv: &mut usize,
-) -> Result<Option<P::Recv>, LaneError<P>>
+    dgram: Datagram,
+) -> Result<(), LaneError<P>>
 where
     P: LaneProtocol,
     P::Send: TryAsBytes + OnLane<Lane = P::Lane>,
@@ -137,9 +164,12 @@ where
     *bytes_recv += dgram.len();
     let buf = lane_state.recv(&dgram).map_err(LaneError::RecvPacket)?;
     let Some(buf) = buf else {
-        return Ok(None);
+        return Ok(());
     };
 
     let msg = P::Recv::try_from_bytes(&buf).map_err(LaneError::Deserialize)?;
-    Ok(Some(msg))
+    let _ = send_r.send(msg).await;
+    *msgs_recv += 1;
+
+    Ok(())
 }
