@@ -248,7 +248,21 @@ mod tests {
         let packets = lane.chunk(&bytes).unwrap();
         for packet in packets {
             if let Some(msg) = lane.recv(&packet).unwrap() {
-                println!("{msg:?}");
+                let msg: Foo = bitcode::decode(&msg).unwrap();
+                println!("Received: {msg:?}");
+            }
+        }
+
+        let foo = Foo {
+            x: 1.0,
+            y: 2,
+            z: "ABC".repeat(1024),
+        };
+
+        let bytes = bitcode::encode(&foo).unwrap();
+        let packets = lane.chunk(&bytes).unwrap();
+        for packet in packets {
+            if let Some(msg) = lane.recv(&packet).unwrap() {
                 let msg: Foo = bitcode::decode(&msg).unwrap();
                 println!("Received: {msg:?}");
             }
