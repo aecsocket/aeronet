@@ -1,181 +1,168 @@
-use aeronet::{ClientState, ServerState, TransportProtocol, TransportServer};
+use std::time::Instant;
+
+use aeronet::{
+    ClientKey, ClientState, ServerEvent, ServerState, ServerTransport, TransportProtocol,
+};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;
 
-use crate::ChannelError;
+use crate::{ChannelError, MSG_BUF_CAP};
 
-slotmap::new_key_type! {
-    /// Key type used to uniquely identify a client connected to a
-    /// [`ChannelServer`].
-    pub struct ClientKey;
-}
-
-type ServerEvent<P> = aeronet::ServerEvent<P, ChannelServer<P>>;
-
-/// Implementation of [`TransportServer`] using in-memory MPSC channels.
-///
-/// See the [crate-level docs](crate).
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct ChannelServer<P>
+pub struct OpenServer<P>
 where
     P: TransportProtocol,
 {
-    #[derivative(Debug = "ignore")]
-    clients: SlotMap<ClientKey, RemoteClient<P>>,
+    clients: SlotMap<ClientKey, Client<P>>,
 }
 
-#[derive(Debug)]
-enum RemoteClient<P>
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+enum Client<P>
 where
     P: TransportProtocol,
 {
     Connected {
-        send_s2c: Sender<P::S2C>,
-        recv_c2s: Receiver<P::C2S>,
-        send_connect: bool,
+        recv_c2s: Receiver<P::Recv>,
+        send_s2c: Sender<P::Send>,
+        send_connected: bool,
     },
-    ForceDisconnected,
+    Disconnected,
 }
 
-impl<P> ChannelServer<P>
+impl<P> OpenServer<P>
 where
     P: TransportProtocol,
 {
-    /// Creates a new server with no clients connected.
-    ///
-    /// See [`ChannelClient`] on how to create and connect a client to this
-    /// server.
-    ///
-    /// [`ChannelClient`]: crate::ChannelClient
-    #[must_use]
-    pub fn new() -> Self {
+    pub fn open() -> Self {
         Self {
             clients: SlotMap::default(),
         }
     }
 
-    pub(super) fn add_client(
-        &mut self,
-        send_s2c: Sender<P::S2C>,
-        recv_c2s: Receiver<P::C2S>,
-    ) -> ClientKey {
-        self.clients.insert(RemoteClient::Connected {
-            send_s2c,
+    pub(super) fn insert(&mut self) {
+        let (send_c2s, recv_c2s) = crossbeam_channel::bounded(MSG_BUF_CAP);
+        let (send_s2c, recv_s2c) = crossbeam_channel::bounded(MSG_BUF_CAP);
+        self.clients.insert(Client::Connected {
             recv_c2s,
-            send_connect: true,
-        })
+            send_s2c,
+            send_connected: true,
+        });
     }
 }
 
-impl<P> TransportServer<P> for ChannelServer<P>
+impl<P> ServerTransport<P> for OpenServer<P>
 where
     P: TransportProtocol,
 {
-    type Client = ClientKey;
-
     type Error = ChannelError;
 
     type ServerInfo = ();
 
     type ClientInfo = ();
 
-    type Event = ServerEvent<P>;
-
     fn server_state(&self) -> ServerState<Self::ServerInfo> {
         ServerState::Open { info: () }
     }
 
-    fn client_state(&self, client: Self::Client) -> ClientState<Self::ClientInfo> {
+    fn client_state(&self, client: ClientKey) -> ClientState<Self::ClientInfo> {
         match self.clients.get(client) {
             Some(_) => ClientState::Connected { info: () },
             None => ClientState::Disconnected,
         }
     }
 
-    fn clients(&self) -> impl Iterator<Item = (Self::Client, ClientState<Self::ClientInfo>)> {
-        self.clients
-            .keys()
-            .map(|client| (client, self.client_state(client)))
-    }
-
-    fn send(&mut self, client: Self::Client, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
-        let msg = msg.into();
-        let Some(RemoteClient::Connected { send_s2c, .. }) = self.clients.get(client) else {
-            return Err(ChannelError::NoClient(client));
+    fn send(&self, client: ClientKey, msg: impl Into<P::Send>) -> Result<(), Self::Error> {
+        let Some(Client::Connected { send_s2c, .. }) = self.clients.get(client) else {
+            return Err(ChannelError::Disconnected);
         };
+        let msg = msg.into();
         send_s2c.send(msg).map_err(|_| ChannelError::Disconnected)
     }
 
-    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a {
+    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>> {
         let mut events = Vec::new();
-
         let mut to_remove = Vec::new();
-        for (client, state) in &mut self.clients {
-            recv_client::<P>(client, state, &mut events, &mut to_remove);
+
+        for (client, data) in self.clients.iter_mut() {
+            update_client(client, data, &mut events, &mut to_remove);
         }
 
         for client in to_remove {
             self.clients.remove(client);
         }
-
         events.into_iter()
     }
 
-    fn disconnect(&mut self, client: impl Into<Self::Client>) -> Result<(), Self::Error> {
-        let client = client.into();
-        match self.clients.get_mut(client) {
-            Some(client @ RemoteClient::Connected { .. }) => {
-                *client = RemoteClient::ForceDisconnected;
-                Ok(())
-            }
-            Some(RemoteClient::ForceDisconnected) | None => Err(ChannelError::NoClient(client)),
-        }
+    fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error> {
+        self.clients
+            .remove(client)
+            .ok_or(ChannelError::Disconnected)
+            .map(drop)
     }
 }
 
-fn recv_client<P>(
+fn update_client<P>(
     client: ClientKey,
-    state: &mut RemoteClient<P>,
-    events: &mut Vec<ServerEvent<P>>,
+    data: &mut Client<P>,
+    events: &mut Vec<ServerEvent<P, ChannelError>>,
     to_remove: &mut Vec<ClientKey>,
 ) where
     P: TransportProtocol,
 {
-    match state {
-        RemoteClient::Connected {
+    match data {
+        Client::Connected {
             recv_c2s,
-            send_connect,
+            send_connected,
             ..
         } => {
-            if *send_connect {
-                *send_connect = false;
+            if *send_connected {
                 events.push(ServerEvent::Connecting { client });
                 events.push(ServerEvent::Connected { client });
+                *send_connected = false;
             }
 
-            loop {
-                match recv_c2s.try_recv() {
-                    Ok(msg) => events.push(ServerEvent::Recv { client, msg }),
-                    Err(TryRecvError::Empty) => break,
-                    Err(TryRecvError::Disconnected) => {
-                        events.push(ServerEvent::Disconnected {
-                            client,
-                            cause: ChannelError::Disconnected,
-                        });
-                        to_remove.push(client);
-                    }
+            match recv_c2s.try_recv() {
+                Ok(msg) => {
+                    events.push(ServerEvent::Recv {
+                        client,
+                        msg,
+                        at: Instant::now(),
+                    });
+                }
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => {
+                    *data = Client::Disconnected;
                 }
             }
         }
-        RemoteClient::ForceDisconnected => {
+        Client::Disconnected => {
             events.push(ServerEvent::Disconnected {
                 client,
-                cause: ChannelError::ForceDisconnect,
+                reason: ChannelError::Disconnected,
             });
             to_remove.push(client);
         }
+    }
+}
+
+#[derive(Debug, Default)]
+pub enum ChannelServer<P>
+where
+    P: TransportProtocol,
+{
+    #[default]
+    Closed,
+    Open(OpenServer<P>),
+}
+
+impl<P> ChannelServer<P>
+where
+    P: TransportProtocol,
+{
+    pub fn open() -> Self {
+        Self::Open(OpenServer::open())
     }
 }

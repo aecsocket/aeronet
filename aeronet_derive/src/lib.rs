@@ -28,6 +28,8 @@ pub fn message(input: TokenStream) -> TokenStream {
 ///
 /// * `#[lane_kind(kind)]` determines which kind of lane this variant
 ///   represents, where `kind` is a variant of `LaneKind`.
+/// * `#[lane_priority(value)]` determines the priority of this lane, relative
+///   to other lanes, where `value` is an `i32`.
 ///
 /// # Usage
 ///
@@ -48,13 +50,13 @@ pub fn message(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(LaneKey)]
 /// enum AppLane {
-///     #[lane_kind(UnreliableUnordered)]
+///     #[lane_kind(UnreliableUnsequenced)]
 ///     LowPriority,
 ///     #[lane_kind(ReliableOrdered)]
 ///     HighPriority,
 /// }
 /// ```
-#[proc_macro_derive(LaneKey, attributes(lane_kind))]
+#[proc_macro_derive(LaneKey, attributes(lane_kind, lane_priority))]
 pub fn lane_key(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     lane_key::derive(&input)
@@ -78,7 +80,7 @@ pub fn lane_key(input: TokenStream) -> TokenStream {
 ///
 /// ```ignore
 /// #[derive(LaneKey)]
-/// #[lane_kind(Unreliable)]
+/// #[lane_kind(UnreliableUnsequenced)]
 /// struct AppLane;
 ///
 /// #[derive(OnLane)]
@@ -96,7 +98,7 @@ pub fn lane_key(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(LaneKey)]
 /// enum AppLane {
-///     #[lane_kind(Unreliable)]
+///     #[lane_kind(UnreliableUnsequenced)]
 ///     LowPriority,
 ///     #[lane_kind(ReliableOrdered)]
 ///     HighPriority,
@@ -122,5 +124,6 @@ pub fn on_lane(input: TokenStream) -> TokenStream {
 }
 
 const LANE_KIND: &str = "lane_kind";
+const LANE_PRIORITY: &str = "lane_priority";
 const LANE_TYPE: &str = "lane_type";
 const ON_LANE: &str = "on_lane";

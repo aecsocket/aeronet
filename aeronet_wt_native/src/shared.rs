@@ -25,7 +25,7 @@ where
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn handle_connection<P>(
     conn: Connection,
-    send_conditioner: P::SendConditioner<Datagram>,
+    send_conditioner: P::SendConditioner<P::Send>,
     recv_conditioner: P::RecvConditioner<Datagram>,
     recv_s: mpsc::UnboundedReceiver<P::Send>,
     send_r: mpsc::Sender<P::Recv>,
@@ -61,7 +61,7 @@ pub(super) async fn handle_connection<P>(
 #[allow(clippy::too_many_arguments)]
 async fn _handle_connection<P>(
     conn: Connection,
-    send_conditioner: P::SendConditioner<Datagram>,
+    mut send_conditioner: P::SendConditioner<P::Send>,
     mut recv_conditioner: P::RecvConditioner<Datagram>,
     mut recv_s: mpsc::UnboundedReceiver<P::Send>,
     mut send_r: mpsc::Sender<P::Recv>,
@@ -93,6 +93,10 @@ where
         // closed frontend in the select block anyway
         let _ = send_info.try_send(info);
 
+        for msg in send_conditioner.buffered() {
+            send::<P>(&conn, &mut lane_state, &mut msgs_sent, &mut bytes_sent, msg)?;
+        }
+
         for dgram in recv_conditioner.buffered() {
             recv::<P>(
                 &mut send_r,
@@ -101,8 +105,7 @@ where
                 &mut bytes_recv,
                 dgram,
             )
-            .await
-            .map_err(WebTransportError::Recv)?;
+            .await?;
         }
 
         futures::select! {
@@ -110,17 +113,17 @@ where
                 let Some(msg) = msg else {
                     return Ok(());
                 };
-                let lane = msg.lane();
-
-                send::<P>(&conn, &mut lane_state, &mut bytes_sent, msg)
-                    .map_err(|source| WebTransportError::Send { lane, source })?;
-                msgs_sent += 1;
+                let Some(msg) = send_conditioner.condition(msg) else {
+                    continue;
+                };
+                send::<P>(&conn, &mut lane_state, &mut msgs_sent, &mut bytes_sent, msg)?;
             }
             dgram = conn.receive_datagram().fuse() => {
                 let dgram = dgram.map_err(WebTransportError::Disconnected)?;
-                recv(&mut send_r, &mut lane_state, &mut msgs_recv, &mut bytes_recv, dgram)
-                    .await
-                    .map_err(WebTransportError::Recv)?;
+                let Some(dgram) = recv_conditioner.condition(dgram) else {
+                    continue;
+                };
+                recv(&mut send_r, &mut lane_state, &mut msgs_recv, &mut bytes_recv, dgram).await?;
             }
         }
     }
@@ -129,24 +132,31 @@ where
 fn send<P>(
     conn: &Connection,
     lane_state: &mut LaneState,
+    msgs_sent: &mut usize,
     bytes_sent: &mut usize,
     msg: P::Send,
-) -> Result<(), LaneError<P>>
+) -> Result<(), WebTransportError<P>>
 where
     P: LaneProtocol,
     P::Send: TryAsBytes + OnLane<Lane = P::Lane>,
     P::Recv: TryFromBytes,
 {
-    let buf = msg.try_as_bytes().map_err(LaneError::Serialize)?;
-    let buf = buf.as_ref();
+    let lane = msg.lane();
+    (|| {
+        let buf = msg.try_as_bytes().map_err(LaneError::Serialize)?;
+        let buf = buf.as_ref();
 
-    let chunks = lane_state.chunk(buf).map_err(LaneError::CreatePacket)?;
-    for chunk in chunks {
-        conn.send_datagram(&chunk)
-            .map_err(LaneError::SendDatagram)?;
-        *bytes_sent += chunk.len();
-    }
-    Ok(())
+        let chunks = lane_state.chunk(buf).map_err(LaneError::CreatePacket)?;
+        for chunk in chunks {
+            conn.send_datagram(&chunk)
+                .map_err(LaneError::SendDatagram)?;
+            *bytes_sent += chunk.len();
+        }
+
+        *msgs_sent += 1;
+        Ok(())
+    })()
+    .map_err(|source| WebTransportError::Send { lane, source })
 }
 
 async fn recv<P>(
@@ -155,21 +165,25 @@ async fn recv<P>(
     msgs_recv: &mut usize,
     bytes_recv: &mut usize,
     dgram: Datagram,
-) -> Result<(), LaneError<P>>
+) -> Result<(), WebTransportError<P>>
 where
     P: LaneProtocol,
     P::Send: TryAsBytes + OnLane<Lane = P::Lane>,
     P::Recv: TryFromBytes,
 {
-    *bytes_recv += dgram.len();
-    let buf = lane_state.recv(&dgram).map_err(LaneError::RecvPacket)?;
-    let Some(buf) = buf else {
-        return Ok(());
-    };
+    (|| async move {
+        *bytes_recv += dgram.len();
+        let buf = lane_state.recv(&dgram).map_err(LaneError::RecvPacket)?;
+        let Some(buf) = buf else {
+            return Ok(());
+        };
 
-    let msg = P::Recv::try_from_bytes(&buf).map_err(LaneError::Deserialize)?;
-    let _ = send_r.send(msg).await;
-    *msgs_recv += 1;
+        let msg = P::Recv::try_from_bytes(&buf).map_err(LaneError::Deserialize)?;
+        let _ = send_r.send(msg).await;
 
-    Ok(())
+        *msgs_recv += 1;
+        Ok(())
+    })()
+    .await
+    .map_err(WebTransportError::Recv)
 }

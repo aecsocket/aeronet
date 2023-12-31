@@ -1,7 +1,5 @@
 use std::error::Error;
 
-use crate::protocol::Seq;
-
 pub trait Message: Send + Sync + 'static {}
 
 pub trait TryAsBytes {
@@ -20,25 +18,4 @@ pub trait TryFromBytes {
     fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>
     where
         Self: Sized;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MessageTicket(Seq);
-
-impl MessageTicket {
-    pub fn from_raw(raw: Seq) -> Self {
-        Self(raw)
-    }
-
-    pub fn into_raw(self) -> Seq {
-        self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MessageState {
-    Unsent,
-    Sent,
-    Ack,
-    Nack,
 }

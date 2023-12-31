@@ -5,36 +5,40 @@ mod plugin;
 pub use plugin::*;
 
 use std::{
+    error::Error,
     fmt::{self, Debug},
     time::Instant,
 };
 
 use derivative::Derivative;
 
-use crate::{MessageState, MessageTicket, Transport, TransportProtocol};
+use crate::TransportProtocol;
 
-pub trait ClientTransport<P>: Transport
+pub trait ClientTransport<P>
 where
     P: TransportProtocol,
 {
-    type Error: Send + Sync + 'static;
+    type Error: Error + Send + Sync + 'static;
 
     type ClientInfo;
 
     fn client_state(&self) -> ClientState<Self::ClientInfo>;
 
-    fn message_state(&self, msg: MessageTicket) -> MessageState;
-
-    fn send(&self, msg: impl Into<P::Send>) -> Result<MessageTicket, Self::Error>;
+    fn send(&self, msg: impl Into<P::Send>) -> Result<(), Self::Error>;
 
     /// If this emits an event which changes the transport's state, then after
     /// this call, the transport will be in this new state.
-    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self>>
-    where
-        Self: Sized;
+    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error>>;
 }
 
 slotmap::new_key_type! {
+    /// Unique key identifying a client connected to a server.
+    ///
+    /// This key is unique for each individual session that a server accepts,
+    /// even if a new client takes the slot/allocation of a previous client. To
+    /// enforce this behavior, the key is implemented as a
+    /// [`slotmap::new_key_type`] and intended to be used in a
+    /// [`slotmap::SlotMap`].
     pub struct ClientKey;
 }
 
@@ -53,21 +57,19 @@ pub enum ClientState<I> {
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::Recv: Debug, T::Error: Debug"),
-    Clone(bound = "P::Recv: Clone, T::Error: Clone")
+    Debug(bound = "P::Recv: Debug, E: Debug"),
+    Clone(bound = "P::Recv: Clone, E: Clone")
 )]
-pub enum ClientEvent<P, T>
+pub enum ClientEvent<P, E>
 where
     P: TransportProtocol,
-    T: ClientTransport<P>,
+    E: Error,
 {
     // state
     Connecting,
     Connected,
-    Disconnected { reason: T::Error },
+    Disconnected { reason: E },
 
     // messages
     Recv { msg: P::Recv, at: Instant },
-    Ack { msg: MessageTicket, at: Instant },
-    Nack { msg: MessageTicket, at: Instant },
 }

@@ -6,6 +6,23 @@
 A *light-as-air* client/server networking library with first-class support for Bevy, providing a
 consistent API which can be implemented by different transport mechanisms.
 
+# Goals
+
+This crate aims to be:
+* Generic over as many transports as possible
+  * You should be able to plug nearly anything in as the underlying transport layer, and have things
+    work
+* A near-zero-cost abstraction
+  * You should only pay for what you use, so if the underlying protocol already implements a feature
+    such as fragmentation, this crate won't re-implement it on top
+* Integrated with Bevy
+  * Built with apps and games in mind, the abstractions chosen closely suit Bevy's app model, and
+    likely other frameworks
+
+This crate does not aim to be:
+* A high-level app networking library, featuring replication, rollback, etc.
+  * This crate only concerns the transport of data payloads, not what the payloads actualy contain
+
 # Architecture
 
 ## Lanes

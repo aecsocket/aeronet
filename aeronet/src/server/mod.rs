@@ -4,17 +4,17 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use std::{fmt::Debug, time::Instant};
+use std::{error::Error, fmt::Debug, time::Instant};
 
 use derivative::Derivative;
 
-use crate::{ClientKey, ClientState, MessageState, MessageTicket, Transport, TransportProtocol};
+use crate::{ClientKey, ClientState, TransportProtocol};
 
-pub trait ServerTransport<P>: Transport
+pub trait ServerTransport<P>
 where
     P: TransportProtocol,
 {
-    type Error: Send + Sync + 'static;
+    type Error: Error + Send + Sync + 'static;
 
     type ServerInfo;
 
@@ -24,17 +24,9 @@ where
 
     fn client_state(&self, client: ClientKey) -> ClientState<Self::ClientInfo>;
 
-    fn message_state(&self, client: ClientKey, msg: MessageTicket) -> MessageState;
+    fn send(&self, client: ClientKey, msg: impl Into<P::Send>) -> Result<(), Self::Error>;
 
-    fn send(
-        &self,
-        client: ClientKey,
-        msg: impl Into<P::Send>,
-    ) -> Result<MessageTicket, Self::Error>;
-
-    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self>>
-    where
-        Self: Sized;
+    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>>;
 
     fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error>;
 }
@@ -48,19 +40,19 @@ pub enum ServerState<I> {
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::Recv: Debug, T::Error: Debug"),
-    Clone(bound = "P::Recv: Clone, T::Error: Clone")
+    Debug(bound = "P::Recv: Debug, E: Debug"),
+    Clone(bound = "P::Recv: Clone, E: Clone")
 )]
-pub enum ServerEvent<P, T>
+pub enum ServerEvent<P, E>
 where
     P: TransportProtocol,
-    T: ServerTransport<P>,
+    E: Error,
 {
     // server state
     Opening,
     Opened,
     Closed {
-        reason: T::Error,
+        reason: E,
     },
 
     // client state
@@ -72,23 +64,13 @@ where
     },
     Disconnected {
         client: ClientKey,
-        reason: T::Error,
+        reason: E,
     },
 
     // messages
     Recv {
         client: ClientKey,
         msg: P::Recv,
-        at: Instant,
-    },
-    Ack {
-        client: ClientKey,
-        msg: MessageTicket,
-        at: Instant,
-    },
-    Nack {
-        client: ClientKey,
-        msg: MessageTicket,
         at: Instant,
     },
 }

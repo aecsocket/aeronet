@@ -3,7 +3,7 @@ use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Fields, Meta, Result};
 
-use crate::LANE_KIND;
+use crate::{LANE_KIND, LANE_PRIORITY};
 
 pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
     match &input.data {
@@ -21,7 +21,8 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
     let generics = &input.generics;
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
-    let lane_kind = parse_lane_kind(input, &input.attrs)?;
+    let kind = get_lane_kind(&input.attrs, input)?;
+    let priority = get_lane_priority(&input.attrs)?;
 
     Ok(quote! {
         impl #impl_generics ::aeronet::LaneKey for #name #type_generics #where_clause {
@@ -34,7 +35,11 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
             }
 
             fn kind(&self) -> ::aeronet::LaneKind {
-                #lane_kind
+                #kind
+            }
+
+            fn priority(&self) -> i32 {
+                #priority
             }
         }
     })
@@ -44,6 +49,7 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
     struct Variant<'a> {
         ident: &'a Ident,
         kind: TokenStream,
+        priority: TokenStream,
     }
 
     let name = &input.ident;
@@ -61,9 +67,12 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
                 ));
             };
 
-            parse_lane_kind(variant, &variant.attrs).map(|kind| Variant {
+            let kind = get_lane_kind(&variant.attrs, variant)?;
+            let priority = get_lane_priority(&variant.attrs)?;
+            Ok(Variant {
                 ident: &variant.ident,
                 kind,
+                priority,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -91,6 +100,14 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
             quote! { Self::#pattern => #kind }
         })
         .collect::<Vec<_>>();
+    let priority_body = variants
+        .iter()
+        .map(|variant| {
+            let pattern = variant.ident;
+            let priority = &variant.priority;
+            quote! { Self::#pattern => #priority }
+        })
+        .collect::<Vec<_>>();
 
     Ok(quote! {
         impl #impl_generics ::aeronet::LaneKey for #name #type_generics #where_clause {
@@ -109,13 +126,19 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
                     #(#kind_body),*
                 }
             }
+
+            fn priority(&self) -> i32 {
+                match *self {
+                    #(#priority_body),*
+                }
+            }
         }
     })
 }
 
 // attributes
 
-fn parse_lane_kind(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<TokenStream> {
+fn parse_lane_kind(attrs: &[Attribute]) -> Result<Option<TokenStream>> {
     let mut lane_kind = None;
     for attr in attrs {
         if !attr.path().is_ident(LANE_KIND) {
@@ -144,8 +167,8 @@ fn parse_lane_kind(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<TokenSt
         };
 
         lane_kind = Some(match kind_ident.to_string().as_str() {
-            "UnreliableUnordered" => quote! { ::aeronet::LaneKind::UnreliableUnordered },
-            "UnreliableOrdered" => quote! { ::aeronet::LaneKind::UnreliableOrdered },
+            "UnreliableUnsequenced" => quote! { ::aeronet::LaneKind::UnreliableUnsequenced },
+            "UnreliableSequenced" => quote! { ::aeronet::LaneKind::UnreliableSequenced },
             "ReliableUnordered" => quote! { ::aeronet::LaneKind::ReliableUnordered },
             "ReliableOrdered" => quote! { ::aeronet::LaneKind::ReliableOrdered },
             kind => {
@@ -157,8 +180,43 @@ fn parse_lane_kind(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<TokenSt
         });
     }
 
-    lane_kind.ok_or(Error::new_spanned(
+    Ok(lane_kind)
+}
+
+fn get_lane_kind(attrs: &[Attribute], tokens: impl ToTokens) -> Result<TokenStream> {
+    parse_lane_kind(attrs)?.ok_or(Error::new_spanned(
         tokens,
         formatcp!("missing #[{LANE_KIND}] attribute"),
     ))
+}
+
+fn parse_lane_priority(attrs: &[Attribute]) -> Result<Option<TokenStream>> {
+    let mut lane_priority = None;
+    for attr in attrs {
+        if !attr.path().is_ident(LANE_PRIORITY) {
+            continue;
+        }
+
+        if lane_priority.is_some() {
+            return Err(Error::new_spanned(
+                attr,
+                formatcp!("duplicate #[{LANE_PRIORITY}] attribute"),
+            ));
+        }
+
+        let Meta::List(list) = &attr.meta else {
+            return Err(Error::new_spanned(
+                attr,
+                formatcp!("missing value in #[{LANE_PRIORITY}(value)]"),
+            ));
+        };
+
+        lane_priority = Some(list.tokens.clone());
+    }
+
+    Ok(lane_priority)
+}
+
+fn get_lane_priority(attrs: &[Attribute]) -> Result<TokenStream> {
+    Ok(parse_lane_priority(attrs)?.unwrap_or(quote! { 0 }))
 }

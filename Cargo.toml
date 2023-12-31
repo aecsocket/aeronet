@@ -5,8 +5,8 @@ members = [
     "aeronet_derive",
     #"aeronet_steam",
     #"aeronet_example",
-    #"aeronet_channel",
-    "aeronet_wt_native",
+    "aeronet_channel",
+    #"aeronet_wt_native",
     #"aeronet_wt_wasm",
 ]
 

@@ -15,15 +15,26 @@ use crate::util::SparseBuffer;
 /// which has been split into multiple chunks, all of its packets will have the
 /// same sequence number.
 ///
-/// See https://gafferongames.com/post/packet_fragmentation_and_reassembly/, *Fragment Packet Structure*.
+/// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Ord, Hash, Encode, Decode)]
 pub struct Seq(pub u16);
+
+impl Seq {
+    /// Fetches then increments this counter.
+    ///
+    /// The incrementing operation will wrap around.
+    pub fn next(&mut self) -> Seq {
+        let cur = self.0;
+        self.0 = self.0.wrapping_add(1);
+        Seq(cur)
+    }
+}
 
 impl PartialOrd for Seq {
     /// Gets if the sequence number `self` is logically greater than the
     /// sequence number `other`.
     ///
-    /// See https://gafferongames.com/post/reliability_ordering_and_congestion_avoidance_over_udp/,
+    /// See <https://gafferongames.com/post/reliability_ordering_and_congestion_avoidance_over_udp/>,
     /// *Handling Sequence Number Wrap-Around*.
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         const HALF: u16 = u16::MAX / 2;
@@ -71,7 +82,7 @@ pub struct PacketHeader {
 /// crate's protocol implementation will limit the maximum packet size to this
 /// value. It is best to stay as close to this limit as possible.
 ///
-/// See https://gafferongames.com/post/packet_fragmentation_and_reassembly/, *MTU in the real world*.
+/// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *MTU in the real world*.
 #[doc(alias = "mtu")]
 #[doc(alias = "default_mtu")]
 pub const MAX_PACKET_SIZE: usize = 1024;
@@ -111,8 +122,8 @@ pub enum PacketError {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct LaneState {
-    next_seq: Seq,
-    msgs_recv: Box<SparseBuffer<MessageData, 256>>,
+    seq: Seq,
+    msgs_recv: SparseBuffer<MessageData, 256>,
 }
 
 #[derive(Debug, Clone)]
@@ -139,22 +150,16 @@ impl LaneState {
             bitcode::encode(&PacketHeader::default()).unwrap().len()
         );
         Self {
-            next_seq: Seq::default(),
-            msgs_recv: Box::new(SparseBuffer::default()),
+            seq: Seq::default(),
+            msgs_recv: SparseBuffer::default(),
         }
-    }
-
-    fn next_seq(&mut self) -> Seq {
-        let seq = self.next_seq;
-        self.next_seq.0 = seq.0.wrapping_add(1);
-        seq
     }
 
     pub fn chunk(&mut self, buf: &[u8]) -> Result<Vec<Vec<u8>>, PacketError> {
         let chunks = buf.chunks(MAX_PAYLOAD_SIZE);
         let num_chunks = u8::try_from(chunks.len()).map_err(|_| PacketError::TooManyChunks)?;
 
-        let seq = self.next_seq();
+        let seq = self.seq.next();
         let chunks = chunks
             .enumerate()
             .map(|(chunk_idx, chunk)| {

@@ -2,7 +2,7 @@ use aeronet::{LaneKey, OnLane};
 
 #[derive(Debug, Clone, LaneKey)]
 enum MyLane {
-    #[lane_kind(UnreliableUnordered)]
+    #[lane_kind(UnreliableUnsequenced)]
     A,
     #[lane_kind(ReliableOrdered)]
     B,
@@ -18,9 +18,9 @@ enum MyMsg {
     Variant2,
 }
 
-fn assert_on_lane<T: OnLane>() {}
-
 #[test]
 fn test() {
+    fn assert_on_lane<T: OnLane>() {}
+
     assert_on_lane::<MyMsg>();
 }

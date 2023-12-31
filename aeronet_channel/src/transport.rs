@@ -1,5 +1,3 @@
-use crate::ClientKey;
-
 /// The capacity of the buffer used by the message channels.
 pub(super) const MSG_BUF_CAP: usize = 16;
 
@@ -9,11 +7,7 @@ pub(super) const MSG_BUF_CAP: usize = 16;
 /// [`ChannelServer`]: crate::ChannelServer
 #[derive(Debug, thiserror::Error)]
 pub enum ChannelError {
-    /// A client with the given key does not exist.
-    #[error("no client with key {0:?}")]
-    NoClient(ClientKey),
-    /// The other side disconnected from this side, due to the other side being
-    /// dropped and closing the MPSC channels.
+    /// The other side is not connected.
     #[error("disconnected")]
     Disconnected,
     /// The client was forcefully disconnected by the app.

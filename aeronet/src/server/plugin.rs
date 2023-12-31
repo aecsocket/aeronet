@@ -3,7 +3,7 @@ use std::{fmt::Debug, marker::PhantomData, time::Instant};
 use bevy::prelude::*;
 use derivative::Derivative;
 
-use crate::{ClientKey, MessageTicket, ServerEvent, ServerTransport, TransportProtocol};
+use crate::{ClientKey, ServerEvent, ServerTransport, TransportProtocol};
 
 pub fn server_transport_plugin<P, T>(app: &mut App)
 where
@@ -17,8 +17,6 @@ where
         .add_event::<RemoteConnected>()
         .add_event::<RemoteDisconnected<P, T>>()
         .add_event::<FromClient<P>>()
-        .add_event::<ServerAck>()
-        .add_event::<ServerNack>()
         .add_systems(PreUpdate, recv::<P, T>);
 }
 
@@ -88,20 +86,6 @@ where
     pub at: Instant,
 }
 
-#[derive(Debug, Clone, Event)]
-pub struct ServerAck {
-    pub client: ClientKey,
-    pub msg: MessageTicket,
-    pub at: Instant,
-}
-
-#[derive(Debug, Clone, Event)]
-pub struct ServerNack {
-    pub client: ClientKey,
-    pub msg: MessageTicket,
-    pub at: Instant,
-}
-
 #[allow(clippy::too_many_arguments)]
 fn recv<P, T>(
     mut client: ResMut<T>,
@@ -112,8 +96,6 @@ fn recv<P, T>(
     mut connected: EventWriter<RemoteConnected>,
     mut disconnected: EventWriter<RemoteDisconnected<P, T>>,
     mut recv: EventWriter<FromClient<P>>,
-    mut ack: EventWriter<ServerAck>,
-    mut nack: EventWriter<ServerNack>,
 ) where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
@@ -129,8 +111,6 @@ fn recv<P, T>(
                 disconnected.send(RemoteDisconnected { client, reason })
             }
             ServerEvent::Recv { client, msg, at } => recv.send(FromClient { client, msg, at }),
-            ServerEvent::Ack { client, msg, at } => ack.send(ServerAck { client, msg, at }),
-            ServerEvent::Nack { client, msg, at } => nack.send(ServerNack { client, msg, at }),
         }
     }
 }

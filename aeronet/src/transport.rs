@@ -1,50 +1,21 @@
 use std::{fmt::Debug, net::SocketAddr, time::Duration};
 
-use derivative::Derivative;
-
-use crate::{
-    protocol::{Conditioner, TimeoutConfig},
-    LaneKey, Message,
-};
-
-pub trait Transport {
-    type ConditionedData;
-}
+use crate::{protocol::TimeoutConfig, LaneKey, Message};
 
 pub trait TransportProtocol: Send + Sync + 'static {
     type Send: Message;
 
     type Recv: Message;
-
-    type SendConditioner<T>: Conditioner<T>;
-
-    type RecvConditioner<T>: Conditioner<T>;
 }
 
 pub trait LaneProtocol: TransportProtocol {
     type Lane: LaneKey;
 }
 
-#[derive(Derivative)]
-#[derivative(
-    Debug(
-        bound = "P::SendConditioner<T::ConditionedData>: Debug, P::RecvConditioner<T::ConditionedData>: Debug"
-    ),
-    Clone(
-        bound = "P::SendConditioner<T::ConditionedData>: Clone, P::RecvConditioner<T::ConditionedData>: Clone"
-    ),
-    Default(
-        bound = "P::SendConditioner<T::ConditionedData>: Default, P::RecvConditioner<T::ConditionedData>: Default"
-    )
-)]
-pub struct TransportConfig<P, T>
-where
-    P: TransportProtocol,
-    T: Transport,
-{
+#[derive(Debug, Clone, Default)]
+pub struct TransportConfig {
     pub timeout: TimeoutConfig,
-    pub send_conditioner: P::SendConditioner<T::ConditionedData>,
-    pub recv_conditioner: P::RecvConditioner<T::ConditionedData>,
+    pub max_clients: Option<usize>,
 }
 
 /// Gets the round-trip time of a connection.

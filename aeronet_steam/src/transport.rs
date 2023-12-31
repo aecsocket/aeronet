@@ -1,25 +1,21 @@
 use std::fmt::Debug;
 
-use aeronet::{LaneKey, TryAsBytes, TryFromBytes};
+use aeronet::{LaneProtocol, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
-use steamworks::SteamError;
-
-pub(super) const HANDSHAKE_CHANNEL: u32 = u32::MAX;
-pub(super) const RECV_BATCH_SIZE: usize = 16;
-pub(super) const CHALLENGE_SIZE: usize = 32;
-pub(super) const DISCONNECT_TOKEN: &[u8] = "disconnect".as_bytes();
+use steamworks::{networking_sockets::InvalidHandle, SteamError};
 
 /// Error that occurs while processing a Steam networking transport.
 #[derive(Derivative, thiserror::Error)]
 #[derivative(
-    Debug(bound = "S::Error: Debug, R::Error: Debug"),
-    Clone(bound = "S::Error: Clone, R::Error: Clone")
+    Debug(bound = "<P::Send as TryAsBytes>::Error: Debug, <P::Recv as TryFromBytes>::Error: Debug"),
+    // TODO: `steamworks::InvalidHandle` should derive Clone
+    // Clone(bound = "<P::Send as TryAsBytes>::Error: Clone, <P::Recv as TryFromBytes>::Error: Clone")
 )]
-pub enum SteamTransportError<S, R, L>
+pub enum SteamTransportError<P>
 where
-    S: TryAsBytes,
-    R: TryFromBytes,
-    L: LaneKey,
+    P: LaneProtocol,
+    P::Send: TryAsBytes,
+    P::Recv: TryFromBytes,
 {
     // internal
     /// Attempted to establish a new connection while the client was already
@@ -34,42 +30,21 @@ where
     #[error("not connected")]
     NotConnected,
 
-    // handshaking
-    /// Failed to send the initial connection request message to the other side.
-    #[error("failed to send connect request")]
-    SendConnectRequest(#[source] SteamError),
-    /// The other side sent some data to our side to respond to our connection
-    /// request, but
-    #[error("received invalid handshake token")]
-    InvalidHandshakeToken,
-    #[error("disconnected by other side")]
-    DisconnectedByOtherSide,
+    // connect
+    /// Failed to connect to the endpoint.
+    #[error("failed to connect")]
+    Connect(#[source] InvalidHandle),
+    /// Failed to configure the lanes of the connection.
+    #[error("failed to configure lanes")]
+    ConfigureLanes(#[source] SteamError),
 
     // transport
     #[error("timed out")]
     TimedOut,
-    #[error("on {lane:?}")]
-    OnLane {
-        lane: L,
-        #[source]
-        source: LaneError<S, R>,
-    },
-}
-
-#[derive(Derivative, thiserror::Error)]
-#[derivative(
-    Debug(bound = "S::Error: Debug, R::Error: Debug"),
-    Clone(bound = "S::Error: Clone, R::Error: Clone")
-)]
-pub enum LaneError<S, R>
-where
-    S: TryAsBytes,
-    R: TryFromBytes,
-{
     #[error("failed to serialize message")]
-    Serialize(#[source] S::Error),
+    Serialize(#[source] <P::Send as TryAsBytes>::Error),
     #[error("failed to send message")]
     Send(#[source] SteamError),
     #[error("failed to deserialize message")]
-    Deserialize(#[source] R::Error),
+    Deserialize(#[source] <P::Recv as TryFromBytes>::Error),
 }
