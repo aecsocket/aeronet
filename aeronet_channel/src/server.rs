@@ -7,11 +7,12 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;
 
-use crate::{ChannelError, MSG_BUF_CAP};
+use crate::{ChannelError, ConnectionInfo};
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
-pub struct OpenServer<P>
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
+pub struct ChannelServer<P>
 where
     P: TransportProtocol,
 {
@@ -25,14 +26,15 @@ where
     P: TransportProtocol,
 {
     Connected {
-        recv_c2s: Receiver<P::Recv>,
-        send_s2c: Sender<P::Send>,
+        recv_c2s: Receiver<P::C2S>,
+        send_s2c: Sender<P::S2C>,
+        info: ConnectionInfo,
         send_connected: bool,
     },
     Disconnected,
 }
 
-impl<P> OpenServer<P>
+impl<P> ChannelServer<P>
 where
     P: TransportProtocol,
 {
@@ -42,18 +44,21 @@ where
         }
     }
 
-    pub(super) fn insert(&mut self) {
-        let (send_c2s, recv_c2s) = crossbeam_channel::bounded(MSG_BUF_CAP);
-        let (send_s2c, recv_s2c) = crossbeam_channel::bounded(MSG_BUF_CAP);
+    pub(super) fn insert_client(
+        &mut self,
+        recv_c2s: Receiver<P::C2S>,
+        send_s2c: Sender<P::S2C>,
+    ) -> ClientKey {
         self.clients.insert(Client::Connected {
             recv_c2s,
             send_s2c,
+            info: ConnectionInfo::default(),
             send_connected: true,
-        });
+        })
     }
 }
 
-impl<P> ServerTransport<P> for OpenServer<P>
+impl<P> ServerTransport<P> for ChannelServer<P>
 where
     P: TransportProtocol,
 {
@@ -61,7 +66,7 @@ where
 
     type ServerInfo = ();
 
-    type ClientInfo = ();
+    type ClientInfo = ConnectionInfo;
 
     fn server_state(&self) -> ServerState<Self::ServerInfo> {
         ServerState::Open { info: () }
@@ -69,17 +74,21 @@ where
 
     fn client_state(&self, client: ClientKey) -> ClientState<Self::ClientInfo> {
         match self.clients.get(client) {
-            Some(_) => ClientState::Connected { info: () },
-            None => ClientState::Disconnected,
+            Some(Client::Connected { info, .. }) => ClientState::Connected {
+                info: info.clone(),
+            },
+            Some(Client::Disconnected) | None => ClientState::Disconnected,
         }
     }
 
-    fn send(&self, client: ClientKey, msg: impl Into<P::Send>) -> Result<(), Self::Error> {
-        let Some(Client::Connected { send_s2c, .. }) = self.clients.get(client) else {
+    fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
+        let Some(Client::Connected { send_s2c, info, .. }) = self.clients.get_mut(client) else {
             return Err(ChannelError::Disconnected);
         };
         let msg = msg.into();
-        send_s2c.send(msg).map_err(|_| ChannelError::Disconnected)
+        send_s2c.send(msg).map_err(|_| ChannelError::Disconnected)?;
+        info.msgs_sent += 1;
+        Ok(())
     }
 
     fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>> {
@@ -115,6 +124,7 @@ fn update_client<P>(
     match data {
         Client::Connected {
             recv_c2s,
+            info,
             send_connected,
             ..
         } => {
@@ -131,6 +141,7 @@ fn update_client<P>(
                         msg,
                         at: Instant::now(),
                     });
+                    info.msgs_recv += 1;
                 }
                 Err(TryRecvError::Empty) => {}
                 Err(TryRecvError::Disconnected) => {
@@ -145,24 +156,5 @@ fn update_client<P>(
             });
             to_remove.push(client);
         }
-    }
-}
-
-#[derive(Debug, Default)]
-pub enum ChannelServer<P>
-where
-    P: TransportProtocol,
-{
-    #[default]
-    Closed,
-    Open(OpenServer<P>),
-}
-
-impl<P> ChannelServer<P>
-where
-    P: TransportProtocol,
-{
-    pub fn open() -> Self {
-        Self::Open(OpenServer::open())
     }
 }

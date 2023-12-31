@@ -1,5 +1,4 @@
 use std::{
-    marker::PhantomData,
     mem, ops,
     time::{Duration, Instant},
 };
@@ -40,29 +39,28 @@ pub enum ConditionerError {
 }
 
 #[derive(Debug)]
-struct Conditioner<T, R>
+struct Conditioner<R>
 where
-    R: Recv<T>,
+    R: Recv,
 {
     loss_rate: f32,
     delay_distr: Normal<f32>,
     recv_buf: Vec<R>,
-    _phantom_t: PhantomData<T>,
 }
 
-trait Recv<T> {
+trait Recv {
     fn at(&self) -> Instant;
 
     fn with_at(self, at: Instant) -> Self;
 }
 
 #[derive(Debug)]
-struct ClientRecv<T> {
-    msg: T,
+struct ClientRecv<M> {
+    msg: M,
     at: Instant,
 }
 
-impl<T> Recv<T> for ClientRecv<T> {
+impl<M> Recv for ClientRecv<M> {
     fn at(&self) -> Instant {
         self.at
     }
@@ -73,13 +71,13 @@ impl<T> Recv<T> for ClientRecv<T> {
 }
 
 #[derive(Debug)]
-struct ServerRecv<T> {
+struct ServerRecv<M> {
     client: ClientKey,
-    msg: T,
+    msg: M,
     at: Instant,
 }
 
-impl<T> Recv<T> for ServerRecv<T> {
+impl<M> Recv for ServerRecv<M> {
     fn at(&self) -> Instant {
         self.at
     }
@@ -93,9 +91,9 @@ impl<T> Recv<T> for ServerRecv<T> {
     }
 }
 
-impl<T, R> Conditioner<T, R>
+impl<R> Conditioner<R>
 where
-    R: Recv<T>,
+    R: Recv,
 {
     fn new(config: ConditionerConfig) -> Result<Self, ConditionerError> {
         if !(0.0..=1.0).contains(&config.loss_rate) {
@@ -109,7 +107,6 @@ where
             loss_rate: config.loss_rate,
             delay_distr,
             recv_buf: Vec::new(),
-            _phantom_t: PhantomData::default(),
         })
     }
 
@@ -162,7 +159,7 @@ where
     T: ClientTransport<P>,
 {
     inner: T,
-    conditioner: Conditioner<P::Recv, ClientRecv<P::Recv>>,
+    conditioner: Conditioner<ClientRecv<P::S2C>>,
 }
 
 impl<P, T> ConditionedClient<P, T>
@@ -215,7 +212,7 @@ where
         self.inner.client_state()
     }
 
-    fn send(&self, msg: impl Into<P::Send>) -> Result<(), Self::Error> {
+    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
         self.inner.send(msg)
     }
 
@@ -250,7 +247,7 @@ where
     T: ServerTransport<P>,
 {
     inner: T,
-    conditioner: Conditioner<P::Recv, ServerRecv<P::Recv>>,
+    conditioner: Conditioner<ServerRecv<P::C2S>>,
 }
 
 impl<P, T> ConditionedServer<P, T>
@@ -309,7 +306,7 @@ where
         self.inner.client_state(client)
     }
 
-    fn send(&self, client: ClientKey, msg: impl Into<P::Send>) -> Result<(), Self::Error> {
+    fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
         self.inner.send(client, msg)
     }
 

@@ -24,7 +24,7 @@ where
 
     fn client_state(&self, client: ClientKey) -> ClientState<Self::ClientInfo>;
 
-    fn send(&self, client: ClientKey, msg: impl Into<P::Send>) -> Result<(), Self::Error>;
+    fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
 
     fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>>;
 
@@ -40,21 +40,14 @@ pub enum ServerState<I> {
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::Recv: Debug, E: Debug"),
-    Clone(bound = "P::Recv: Clone, E: Clone")
+    Debug(bound = "P::C2S: Debug, E: Debug"),
+    Clone(bound = "P::C2S: Clone, E: Clone")
 )]
 pub enum ServerEvent<P, E>
 where
     P: TransportProtocol,
     E: Error,
 {
-    // server state
-    Opening,
-    Opened,
-    Closed {
-        reason: E,
-    },
-
     // client state
     Connecting {
         client: ClientKey,
@@ -70,7 +63,7 @@ where
     // messages
     Recv {
         client: ClientKey,
-        msg: P::Recv,
+        msg: P::C2S,
         at: Instant,
     },
 }

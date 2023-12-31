@@ -1,51 +1,42 @@
-//!
+use std::mem;
 
-use aeronet::{FromClient, ToClient, ToServer, TransportClientPlugin, TransportServerPlugin};
+use aeronet::{ClientTransportPlugin, TransportProtocol, Message, ServerTransportPlugin, ClientTransport, LocalConnecting, LocalConnected, FromServer, RemoteConnecting, RemoteConnected, FromClient, RemoteDisconnected, ServerTransport};
 use aeronet_channel::{ChannelClient, ChannelServer};
-use aeronet_example::{
-    client_log, log_lines, msg_buf, server_log, EchoMessage, EchoProtocol, Log, LogLine,
-};
-use bevy::{log::LogPlugin, prelude::*};
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use bevy::prelude::*;
+use bevy_egui::{egui, EguiPlugin, EguiContexts};
 
-type Client = ChannelClient<EchoProtocol>;
-type Server = ChannelServer<EchoProtocol>;
+// Protocol
+
+#[derive(Debug, Clone, Message)]
+struct AppMessage(String);
+
+struct AppProtocol;
+
+impl TransportProtocol for AppProtocol {
+    type C2S = AppMessage;
+    type S2C = AppMessage;
+}
+
+// Logic
 
 #[derive(Debug, Default, Resource)]
 struct ClientUiState {
-    log: Vec<LogLine>,
-    buf: String,
-}
-
-impl Log for ClientUiState {
-    fn lines(&mut self) -> &mut Vec<LogLine> {
-        &mut self.log
-    }
+    log: Vec<String>,
+    msg: String,
 }
 
 #[derive(Debug, Default, Resource)]
 struct ServerUiState {
-    log: Vec<LogLine>,
+    log: Vec<String>,
 }
-
-impl Log for ServerUiState {
-    fn lines(&mut self) -> &mut Vec<LogLine> {
-        &mut self.log
-    }
-}
-
-// logic
 
 fn main() {
     App::new()
         .add_plugins((
-            DefaultPlugins.set(LogPlugin {
-                level: tracing::Level::DEBUG,
-                ..default()
-            }),
+            DefaultPlugins,
             EguiPlugin,
-            TransportClientPlugin::<_, Client>::default(),
-            TransportServerPlugin::<_, Server>::default(),
+            ClientTransportPlugin::<AppProtocol, ChannelClient<_>>::default(),
+            ServerTransportPlugin::<AppProtocol, ChannelServer<_>>::default(),
         ))
         .init_resource::<ClientUiState>()
         .init_resource::<ServerUiState>()
@@ -53,57 +44,114 @@ fn main() {
         .add_systems(
             Update,
             (
-                (client_log::<_, Client, ClientUiState>, client_ui).chain(),
-                (
-                    server_reply,
-                    server_log::<_, Server, ServerUiState>,
-                    server_ui,
-                )
-                    .chain(),
-            ),
+                (client_update_log, client_ui).chain(),
+                (server_update_log, server_ui).chain(),
+            )
         )
         .run();
 }
 
 fn setup(mut commands: Commands) {
-    let mut server = Server::new();
-    let (client, _) = Client::connected(&mut server);
-
+    let mut server = ChannelServer::<AppProtocol>::open();
+    let client = ChannelClient::connecting(&mut server);
     commands.insert_resource(server);
     commands.insert_resource(client);
+}
+
+fn client_update_log(
+    mut ui_state: ResMut<ClientUiState>,
+    mut connecting: EventReader<LocalConnecting>,
+    mut connected: EventReader<LocalConnected>,
+    mut recv: EventReader<FromServer<AppProtocol>>,
+) {
+    for LocalConnecting in connecting.read() {
+        ui_state.log.push(format!("Connecting"));
+    }
+
+    for LocalConnected in connected.read() {
+        ui_state.log.push(format!("Connected"));
+    }
+
+    for FromServer { msg, .. } in recv.read() {
+        ui_state.log.push(format!("> {}", msg.0));
+    }
 }
 
 fn client_ui(
     mut egui: EguiContexts,
     mut ui_state: ResMut<ClientUiState>,
-    mut send: EventWriter<ToServer<EchoProtocol>>,
+    mut client: ResMut<ChannelClient<AppProtocol>>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
-        log_lines(ui, &ui_state.log);
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for line in ui_state.log.iter() {
+                ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
+            }
+        });
+        
+        let (send, msg_resp) = ui.horizontal(|ui| {
+            let mut send = false;
+            let msg_resp = ui.text_edit_singleline(&mut ui_state.msg);
+            send |= msg_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            send |= ui.button("Send").clicked();
+            (send, msg_resp)
+        })
+        .inner;
 
-        if let Some(msg) = msg_buf(ui, &mut ui_state.buf) {
-            send.send(ToServer {
-                msg: EchoMessage(msg),
-            });
+        if send {
+            (|| {
+                ui.memory_mut(|m| m.request_focus(msg_resp.id));
+
+                let msg = mem::take(&mut ui_state.msg);
+                if msg.is_empty() {
+                    return;
+                }
+
+                ui_state.log.push(format!("< {msg}"));
+                let _ = client.send(AppMessage(msg));
+            })();
         }
     });
 }
 
-fn server_reply(
-    mut recv: EventReader<FromClient<EchoProtocol, Server>>,
-    mut send: EventWriter<ToClient<EchoProtocol, Server>>,
+fn server_update_log(
+    mut ui_state: ResMut<ServerUiState>,
+    mut server: ResMut<ChannelServer<AppProtocol>>,
+    mut connecting: EventReader<RemoteConnecting>,
+    mut connected: EventReader<RemoteConnected>,
+    mut disconnected: EventReader<RemoteDisconnected<AppProtocol, ChannelServer<AppProtocol>>>,
+    mut recv: EventReader<FromClient<AppProtocol>>,
 ) {
-    for FromClient { client, msg } in recv.read() {
-        let msg = format!("You sent: {}", msg.0);
-        send.send(ToClient {
-            client: *client,
-            msg: EchoMessage(msg),
-        });
+    for RemoteConnecting { client } in connecting.read() {
+        ui_state.log.push(format!("Client {client} connecting"));
+    }
+
+    for RemoteConnected { client } in connected.read() {
+        ui_state.log.push(format!("Client {client} connected"));
+    }
+
+    for RemoteDisconnected { client, reason } in disconnected.read() {
+        ui_state.log.push(format!("Client {client} disconnected: {reason:#}"));
+    }
+
+    for FromClient { client, msg, .. } in recv.read() {
+        ui_state.log.push(format!("{client} > {}", msg.0));
+
+        let resp = format!("You sent: {}", msg.0);
+        ui_state.log.push(format!("{client} < {resp}"));
+        let _ = server.send(*client, AppMessage(resp));
     }
 }
 
-fn server_ui(mut egui: EguiContexts, ui_state: Res<ServerUiState>) {
+fn server_ui(
+    mut egui: EguiContexts,
+    ui_state: Res<ServerUiState>,
+) {
     egui::Window::new("Server").show(egui.ctx_mut(), |ui| {
-        log_lines(ui, &ui_state.log);
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for line in ui_state.log.iter() {
+                ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
+            }
+        });
     });
 }

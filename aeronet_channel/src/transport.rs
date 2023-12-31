@@ -1,5 +1,20 @@
-/// The capacity of the buffer used by the message channels.
-pub(super) const MSG_BUF_CAP: usize = 16;
+use aeronet::MessageStats;
+
+#[derive(Debug, Clone, Default)]
+pub struct ConnectionInfo {
+    pub msgs_sent: usize,
+    pub msgs_recv: usize,
+}
+
+impl MessageStats for ConnectionInfo {
+    fn msgs_sent(&self) -> usize {
+        self.msgs_sent
+    }
+
+    fn msgs_recv(&self) -> usize {
+        self.msgs_recv
+    }
+}
 
 /// Error that occurs when processing a [`ChannelClient`] or [`ChannelServer`].
 ///

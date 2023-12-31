@@ -3,9 +3,9 @@ use std::{fmt::Debug, net::SocketAddr, time::Duration};
 use crate::{protocol::TimeoutConfig, LaneKey, Message};
 
 pub trait TransportProtocol: Send + Sync + 'static {
-    type Send: Message;
+    type C2S: Message;
 
-    type Recv: Message;
+    type S2C: Message;
 }
 
 pub trait LaneProtocol: TransportProtocol {
@@ -15,7 +15,6 @@ pub trait LaneProtocol: TransportProtocol {
 #[derive(Debug, Clone, Default)]
 pub struct TransportConfig {
     pub timeout: TimeoutConfig,
-    pub max_clients: Option<usize>,
 }
 
 /// Gets the round-trip time of a connection.
