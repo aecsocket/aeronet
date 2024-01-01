@@ -12,8 +12,8 @@ type ClientEvent<P> = aeronet::ClientEvent<P, SteamTransportError<P>>;
 pub struct WorkingClient<P>
 where
     P: LaneProtocol,
-    P::Send: TryAsBytes + OnLane<Lane = P::Lane>,
-    P::Recv: TryFromBytes,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryFromBytes,
 {
     net: NetConnection<ClientManager>,
     _phantom_p: PhantomData<P>,
@@ -24,8 +24,8 @@ where
 pub enum SteamClientTransport<P>
 where
     P: LaneProtocol,
-    P::Send: TryAsBytes + OnLane<Lane = P::Lane>,
-    P::Recv: TryFromBytes,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryFromBytes,
 {
     #[default]
     Disconnected,
