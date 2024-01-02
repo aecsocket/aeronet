@@ -20,9 +20,9 @@ where
 {
     type Error: Error + Send + Sync + 'static;
 
-    type ClientInfo;
+    type Info;
 
-    fn client_state(&self) -> ClientState<Self::ClientInfo>;
+    fn state(&self) -> ClientState<Self::Info>;
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error>;
 
@@ -48,13 +48,22 @@ impl fmt::Display for ClientKey {
     }
 }
 
+/// State of a [`ClientTransport`].
 #[derive(Debug, Clone)]
 pub enum ClientState<I> {
+    /// Not connected to a server, and making no attempts to connect to one.
     Disconnected,
+    /// Attempting to establish a connection to a server, but is not ready for
+    /// transporting data yet.
     Connecting,
-    Connected { info: I },
+    /// Ready to transport data to/from a server.
+    Connected {
+        /// Info of the connection.
+        info: I,
+    },
 }
 
+/// Event emitted by a [`ClientTransport`].
 #[derive(Derivative)]
 #[derivative(
     Debug(bound = "P::S2C: Debug, E: Debug"),
@@ -66,10 +75,39 @@ where
     E: Error,
 {
     // state
+    /// The client has started to connect to a server.
+    /// 
+    /// This will be followed by either [`ClientEvent::Connected`] or
+    /// [`ClientEvent::Disconnected`].
     Connecting,
+    /// The client has fully established a connection to the server.
+    /// 
+    /// After this event, you can run your game initialization logic such as
+    /// receiving the initial world state and e.g. showing a spawn screen.
     Connected,
-    Disconnected { reason: E },
+    /// The client has unrecoverably lost connection from its previously
+    /// connected server.
+    /// 
+    /// This can either be forced by the app or caused by a transport error.
+    Disconnected {
+        /// Why the client lost connection.
+        reason: E,
+    },
 
     // messages
-    Recv { msg: P::S2C, at: Instant },
+    /// The client received a message from the server.
+    Recv {
+        /// The message received.
+        msg: P::S2C,
+        /// When the message was first received.
+        /// 
+        /// Since the transport may use e.g. an async task to receive data, the
+        /// time at which the message was polled using
+        /// [`ClientTransport::update`] is not necessarily when the app first
+        /// became aware of this message.
+        /// 
+        /// This value can be used for calculating an estimate of the round-trip
+        /// time.
+        at: Instant,
+    },
 }

@@ -18,7 +18,7 @@ all-features = true
 
 [features]
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = [ "dep:bevy", "aeronet/bevy" ]
+bevy = [ "dep:bevy", "aeronet/bevy", "aeronet/bevy-tokio-rt" ]
 
 [dependencies]
 aeronet.workspace = true
@@ -26,7 +26,9 @@ aeronet.workspace = true
 derivative.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
+either.workspace = true
 slotmap.workspace = true
+ahash.workspace = true
 futures.workspace = true
 rand.workspace = true
 tokio = { workspace = true, default-features = false, features = [ "rt" ] }

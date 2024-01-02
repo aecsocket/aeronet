@@ -1,10 +1,10 @@
 use std::time::Instant;
 
-use aeronet::{TransportProtocol, ClientKey, ClientTransport, ClientState, ClientEvent};
-use crossbeam_channel::{Sender, Receiver, TryRecvError};
+use aeronet::{ClientEvent, ClientKey, ClientState, ClientTransport, TransportProtocol};
+use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 
-use crate::{ChannelServer, ChannelError, ConnectionInfo};
+use crate::{ChannelError, ChannelServer, ConnectionInfo};
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
@@ -41,12 +41,15 @@ where
     }
 
     pub fn client_state(&self) -> ClientState<ConnectionInfo> {
-        ClientState::Connected { info: self.info.clone() }
+        ClientState::Connected {
+            info: self.info.clone(),
+        }
     }
 
     pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), ChannelError> {
         let msg = msg.into();
-        self.send_c2s.send(msg)
+        self.send_c2s
+            .send(msg)
             .map_err(|_| ChannelError::Disconnected)?;
         self.info.msgs_sent += 1;
         Ok(())
@@ -63,7 +66,10 @@ where
 
         match self.recv_s2c.try_recv() {
             Ok(msg) => {
-                events.push(ClientEvent::Recv { msg, at: Instant::now() });
+                events.push(ClientEvent::Recv {
+                    msg,
+                    at: Instant::now(),
+                });
                 self.info.msgs_recv += 1;
             }
             Err(TryRecvError::Empty) => {}
@@ -123,9 +129,9 @@ where
 {
     type Error = ChannelError;
 
-    type ClientInfo = ConnectionInfo;
+    type Info = ConnectionInfo;
 
-    fn client_state(&self) -> ClientState<Self::ClientInfo> {
+    fn state(&self) -> ClientState<Self::Info> {
         match self {
             Self::Disconnected => ClientState::Disconnected,
             Self::Connected(client) => client.client_state(),
@@ -148,7 +154,7 @@ where
                     events.push(ClientEvent::Disconnected { reason });
                     events
                 }
-            }
+            },
         }
         .into_iter()
     }

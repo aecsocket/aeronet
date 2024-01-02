@@ -16,19 +16,21 @@ where
 {
     type Error: Error + Send + Sync + 'static;
 
-    type ServerInfo;
+    type Info;
 
     type ClientInfo;
 
-    fn server_state(&self) -> ServerState<Self::ServerInfo>;
+    fn state(&self) -> ServerState<Self::Info>;
 
     fn client_state(&self, client: ClientKey) -> ClientState<Self::ClientInfo>;
 
+    fn clients(&self) -> impl Iterator<Item = ClientKey> + '_;
+
     fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
 
-    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>>;
-
     fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error>;
+
+    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>>;
 }
 
 #[derive(Debug, Clone)]

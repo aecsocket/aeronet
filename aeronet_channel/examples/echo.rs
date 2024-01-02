@@ -1,9 +1,13 @@
 use std::mem;
 
-use aeronet::{ClientTransportPlugin, TransportProtocol, Message, ServerTransportPlugin, ClientTransport, LocalConnecting, LocalConnected, FromServer, RemoteConnecting, RemoteConnected, FromClient, RemoteDisconnected, ServerTransport};
+use aeronet::{
+    ClientTransport, ClientTransportPlugin, FromClient, FromServer, LocalConnected,
+    LocalConnecting, Message, RemoteConnected, RemoteConnecting, RemoteDisconnected,
+    ServerTransport, ServerTransportPlugin, TransportProtocol,
+};
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiPlugin, EguiContexts};
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 // Protocol
 
@@ -46,7 +50,7 @@ fn main() {
             (
                 (client_update_log, client_ui).chain(),
                 (server_update_log, server_ui).chain(),
-            )
+            ),
         )
         .run();
 }
@@ -88,15 +92,16 @@ fn client_ui(
                 ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
             }
         });
-        
-        let (send, msg_resp) = ui.horizontal(|ui| {
-            let mut send = false;
-            let msg_resp = ui.text_edit_singleline(&mut ui_state.msg);
-            send |= msg_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            send |= ui.button("Send").clicked();
-            (send, msg_resp)
-        })
-        .inner;
+
+        let (send, msg_resp) = ui
+            .horizontal(|ui| {
+                let mut send = false;
+                let msg_resp = ui.text_edit_singleline(&mut ui_state.msg);
+                send |= msg_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                send |= ui.button("Send").clicked();
+                (send, msg_resp)
+            })
+            .inner;
 
         if send {
             (|| {
@@ -131,7 +136,9 @@ fn server_update_log(
     }
 
     for RemoteDisconnected { client, reason } in disconnected.read() {
-        ui_state.log.push(format!("Client {client} disconnected: {reason:#}"));
+        ui_state
+            .log
+            .push(format!("Client {client} disconnected: {reason:#}"));
     }
 
     for FromClient { client, msg, .. } in recv.read() {
@@ -143,10 +150,7 @@ fn server_update_log(
     }
 }
 
-fn server_ui(
-    mut egui: EguiContexts,
-    ui_state: Res<ServerUiState>,
-) {
+fn server_ui(mut egui: EguiContexts, ui_state: Res<ServerUiState>) {
     egui::Window::new("Server").show(egui.ctx_mut(), |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
             for line in ui_state.log.iter() {

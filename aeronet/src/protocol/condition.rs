@@ -206,10 +206,10 @@ where
 {
     type Error = T::Error;
 
-    type ClientInfo = T::ClientInfo;
+    type Info = T::Info;
 
-    fn client_state(&self) -> ClientState<Self::ClientInfo> {
-        self.inner.client_state()
+    fn state(&self) -> ClientState<Self::Info> {
+        self.inner.state()
     }
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
@@ -294,16 +294,20 @@ where
 {
     type Error = T::Error;
 
-    type ServerInfo = T::ServerInfo;
+    type Info = T::Info;
 
     type ClientInfo = T::ClientInfo;
 
-    fn server_state(&self) -> ServerState<Self::ServerInfo> {
-        self.inner.server_state()
+    fn state(&self) -> ServerState<Self::Info> {
+        self.inner.state()
     }
 
     fn client_state(&self, client: ClientKey) -> ClientState<Self::ClientInfo> {
         self.inner.client_state(client)
+    }
+
+    fn clients(&self) -> impl Iterator<Item = ClientKey> + '_ {
+        self.inner.clients()
     }
 
     fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {

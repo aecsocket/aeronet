@@ -3,6 +3,8 @@
 pub use steamworks;
 
 mod client;
+mod server;
 mod transport;
+mod shared;
 
-pub use {client::*, transport::*};
+pub use {client::*, server::*, transport::*};

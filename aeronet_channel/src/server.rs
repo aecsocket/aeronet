@@ -64,21 +64,23 @@ where
 {
     type Error = ChannelError;
 
-    type ServerInfo = ();
+    type Info = ();
 
     type ClientInfo = ConnectionInfo;
 
-    fn server_state(&self) -> ServerState<Self::ServerInfo> {
+    fn state(&self) -> ServerState<Self::Info> {
         ServerState::Open { info: () }
     }
 
     fn client_state(&self, client: ClientKey) -> ClientState<Self::ClientInfo> {
         match self.clients.get(client) {
-            Some(Client::Connected { info, .. }) => ClientState::Connected {
-                info: info.clone(),
-            },
+            Some(Client::Connected { info, .. }) => ClientState::Connected { info: info.clone() },
             Some(Client::Disconnected) | None => ClientState::Disconnected,
         }
+    }
+
+    fn clients(&self) -> impl Iterator<Item = ClientKey> {
+        self.clients.keys()
     }
 
     fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {

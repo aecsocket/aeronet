@@ -1,14 +1,13 @@
 use std::{convert::Infallible, string::FromUtf8Error};
 
 use aeronet::{
-    ClientTransportPlugin, FromServer, LaneKey, LaneProtocol, LocalConnected, LocalConnecting,
-    LocalDisconnected, Message, OnLane, TransportConfig, TransportProtocol, TryAsBytes,
-    TryFromBytes,
+    ClientTransportPlugin, FromServer, LocalConnected, LocalConnecting,
+    LocalDisconnected, LaneKey, Message, OnLane, TryAsBytes, TryFromBytes, TransportProtocol, LaneProtocol,
 };
 use aeronet_steam::SteamClientTransport;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-use steamworks::{networking_types::NetworkingIdentity, SteamId};
+use steamworks::SteamId;
 
 // Protocol
 
@@ -70,6 +69,7 @@ struct SteamClient(steamworks::Client);
 
 fn setup(world: &mut World) {
     let (steam, steam_single) = steamworks::Client::init_app(480).unwrap();
+    steam.networking_utils().init_relay_network_access();
     world.insert_resource(SteamClient(steam));
     world.insert_non_send_resource(steam_single);
 
@@ -167,16 +167,15 @@ fn ui(
 }
 
 fn try_connect(
-    target: &str,
+    remote: &str,
     steam: &SteamClient,
     client: &mut SteamClientTransport<AppProtocol>,
 ) -> Result<(), String> {
-    let id = target
+    let remote = remote
         .parse::<u64>()
         .map_err(|err| format!("Failed to parse Steam ID: {err:#}"))?;
-    let id = SteamId::from_raw(id);
-    let target = NetworkingIdentity::new_steam_id(id);
+    let remote = SteamId::from_raw(remote);
     client
-        .connect(&steam.0, target, TransportConfig::default())
+        .connect_p2p(&steam.0, remote, 0)
         .map_err(|err| format!("Failed to connect: {err:#}"))
 }
