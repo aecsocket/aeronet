@@ -1,8 +1,12 @@
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
-use aeronet::{LaneKey, Message, OnLane, TryAsBytes, TryFromBytes, TransportProtocol, LaneProtocol, ServerTransportPlugin, RemoteConnecting, RemoteConnected, FromClient, RemoteDisconnected, ServerTransport};
+use aeronet::{
+    FromClient, LaneKey, LaneProtocol, Message, OnLane, RemoteConnected, RemoteConnecting,
+    RemoteDisconnected, ServerTransport, ServerTransportPlugin, TransportProtocol, TryAsBytes,
+    TryFromBytes,
+};
 use aeronet_steam::SteamServerTransport;
-use bevy::{prelude::*, app::ScheduleRunnerPlugin};
+use bevy::{app::ScheduleRunnerPlugin, prelude::*};
 
 // Protocol
 
@@ -60,7 +64,7 @@ fn main() {
 fn setup(world: &mut World) {
     let (steam, steam_single) = steamworks::Client::init_app(480).unwrap();
     world.insert_non_send_resource(steam_single);
-    
+
     let server = SteamServerTransport::<AppProtocol>::open_new_p2p(&steam, 0).unwrap();
     world.insert_resource(server);
     info!("Started server");
@@ -74,7 +78,9 @@ fn update_server(
     mut server: ResMut<SteamServerTransport<AppProtocol>>,
     mut connecting: EventReader<RemoteConnecting>,
     mut connected: EventReader<RemoteConnected>,
-    mut disconnected: EventReader<RemoteDisconnected<AppProtocol, SteamServerTransport<AppProtocol>>>,
+    mut disconnected: EventReader<
+        RemoteDisconnected<AppProtocol, SteamServerTransport<AppProtocol>>,
+    >,
     mut recv: EventReader<FromClient<AppProtocol>>,
 ) {
     for RemoteConnecting { client } in connecting.read() {

@@ -10,8 +10,7 @@ where
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
 {
-    app.add_event::<LocalConnecting>()
-        .add_event::<LocalConnected>()
+    app.add_event::<LocalConnected<P, T>>()
         .add_event::<LocalDisconnected<P, T>>()
         .add_event::<FromServer<P>>()
         .add_systems(PreUpdate, recv::<P, T>);
@@ -36,11 +35,18 @@ where
     }
 }
 
-#[derive(Debug, Clone, Event)]
-pub struct LocalConnecting;
-
-#[derive(Debug, Clone, Event)]
-pub struct LocalConnected;
+#[derive(Derivative, Event)]
+#[derivative(
+    Debug(bound = "T::ConnectedInfo: Debug"),
+    Clone(bound = "T::ConnectedInfo: Clone")
+)]
+pub struct LocalConnected<P, T>
+where
+    P: TransportProtocol,
+    T: ClientTransport<P>,
+{
+    pub info: T::ConnectedInfo,
+}
 
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
@@ -54,10 +60,7 @@ where
 
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "P::S2C: Debug"), Clone(bound = "P::S2C: Clone"))]
-pub struct FromServer<P>
-where
-    P: TransportProtocol,
-{
+pub struct FromServer<P: TransportProtocol> {
     pub msg: P::S2C,
     pub at: Instant,
 }
@@ -65,8 +68,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn recv<P, T>(
     mut client: ResMut<T>,
-    mut connecting: EventWriter<LocalConnecting>,
-    mut connected: EventWriter<LocalConnected>,
+    mut connected: EventWriter<LocalConnected<P, T>>,
     mut disconnected: EventWriter<LocalDisconnected<P, T>>,
     mut recv: EventWriter<FromServer<P>>,
 ) where
@@ -75,8 +77,7 @@ fn recv<P, T>(
 {
     for event in client.update() {
         match event {
-            ClientEvent::Connecting => connecting.send(LocalConnecting),
-            ClientEvent::Connected => connected.send(LocalConnected),
+            ClientEvent::Connected { info } => connected.send(LocalConnected { info }),
             ClientEvent::Disconnected { reason } => disconnected.send(LocalDisconnected { reason }),
             ClientEvent::Recv { msg, at } => recv.send(FromServer { msg, at }),
         }

@@ -1,10 +1,15 @@
-use std::time::Instant;
+use std::{time::Instant, iter};
 
-use aeronet::{ClientEvent, ClientKey, ClientState, ClientTransport, TransportProtocol};
+use aeronet::{ClientKey, ClientTransport, TransportProtocol};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
+use either::Either;
 
 use crate::{ChannelError, ChannelServer, ConnectionInfo};
+
+type ClientState = aeronet::ClientState<(), ConnectionInfo>;
+
+type ClientEvent<P> = aeronet::ClientEvent<P, ConnectionInfo, ChannelError>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
@@ -40,10 +45,8 @@ where
         self.key
     }
 
-    pub fn client_state(&self) -> ClientState<ConnectionInfo> {
-        ClientState::Connected {
-            info: self.info.clone(),
-        }
+    pub fn state(&self) -> ClientState {
+        ClientState::Connected(self.info.clone())
     }
 
     pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), ChannelError> {
@@ -55,12 +58,11 @@ where
         Ok(())
     }
 
-    pub fn update(&mut self) -> (Vec<ClientEvent<P, ChannelError>>, Result<(), ChannelError>) {
+    pub fn update(&mut self) -> (Vec<ClientEvent<P>>, Result<(), ChannelError>) {
         let mut events = Vec::new();
 
         if self.send_connected {
-            events.push(ClientEvent::Connecting);
-            events.push(ClientEvent::Connected);
+            events.push(ClientEvent::Connected { info: self.info.clone() });
             self.send_connected = false;
         }
 
@@ -98,14 +100,14 @@ impl<P> ChannelClient<P>
 where
     P: TransportProtocol,
 {
-    pub fn connecting(server: &mut ChannelServer<P>) -> Self {
+    pub fn connect_new(server: &mut ChannelServer<P>) -> Self {
         Self::Connected(ConnectedClient::connect(server))
     }
 
     pub fn connect(&mut self, server: &mut ChannelServer<P>) -> Result<(), ChannelError> {
         match self {
             Self::Disconnected => {
-                *self = Self::connecting(server);
+                *self = Self::connect_new(server);
                 Ok(())
             }
             Self::Connected(_) => Err(ChannelError::AlreadyConnected),
@@ -129,12 +131,14 @@ where
 {
     type Error = ChannelError;
 
-    type Info = ConnectionInfo;
+    type ConnectingInfo = ();
 
-    fn state(&self) -> ClientState<Self::Info> {
+    type ConnectedInfo = ConnectionInfo;
+
+    fn state(&self) -> ClientState {
         match self {
             Self::Disconnected => ClientState::Disconnected,
-            Self::Connected(client) => client.client_state(),
+            Self::Connected(client) => client.state(),
         }
     }
 
@@ -145,17 +149,16 @@ where
         }
     }
 
-    fn update(&mut self) -> impl Iterator<Item = aeronet::ClientEvent<P, Self::Error>> {
+    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
         match self {
-            Self::Disconnected => vec![],
-            Self::Connected(client) => match client.update() {
+            Self::Disconnected => Either::Left(iter::empty()),
+            Self::Connected(client) => Either::Right(match client.update() {
                 (events, Ok(())) => events,
                 (mut events, Err(reason)) => {
                     events.push(ClientEvent::Disconnected { reason });
                     events
                 }
-            },
+            }.into_iter()),
         }
-        .into_iter()
     }
 }

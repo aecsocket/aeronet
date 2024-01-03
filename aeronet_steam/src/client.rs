@@ -1,13 +1,13 @@
-use std::{iter, marker::PhantomData, net::SocketAddr};
+use std::{iter, marker::PhantomData, net::SocketAddr, time::Instant};
 
 use aeronet::{
-    ClientState, ClientTransport, LaneKey, LaneKind, LaneProtocol, OnLane, TransportProtocol,
-    TryAsBytes, TryFromBytes, ClientEvent, MessageStats, ByteStats,
+    ByteStats, ClientState, ClientTransport, LaneKey, LaneKind, LaneProtocol, MessageStats, OnLane,
+    TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 use either::Either;
 use steamworks::{
-    networking_sockets::NetConnection,
+    networking_sockets::{InvalidHandle, NetConnection, NetworkingSockets},
     networking_types::{NetworkingIdentity, SendFlags},
     ClientManager, SteamId,
 };
@@ -17,12 +17,14 @@ use crate::shared;
 type SteamTransportError<P> =
     crate::SteamTransportError<<P as TransportProtocol>::C2S, <P as TransportProtocol>::S2C>;
 
+type ClientEvent<P> = aeronet::ClientEvent<P, SteamTransportError<P>>;
+
 #[derive(Debug, Clone, Default)]
 pub struct ClientInfo {
-    msgs_sent: usize,
-    msgs_recv: usize,
-    bytes_sent: usize,
-    bytes_recv: usize,
+    pub msgs_sent: usize,
+    pub msgs_recv: usize,
+    pub bytes_sent: usize,
+    pub bytes_recv: usize,
 }
 
 impl MessageStats for ClientInfo {
@@ -77,20 +79,9 @@ where
         remote: SteamId,
         port: i32,
     ) -> Result<Self, SteamTransportError<P>> {
-        shared::assert_valid_protocol::<P>();
-
         let socks = steam.networking_sockets();
-        let conn = socks
-            .connect_p2p(NetworkingIdentity::new_steam_id(remote), port, [])
-            .map_err(SteamTransportError::<P>::Connect)?;
-
-        shared::configure_lanes::<P, P::C2S, P::S2C, M>(&socks, &conn)?;
-
-        Ok(Self {
-            conn,
-            info: ClientInfo::default(),
-            _phantom_p: PhantomData::default(),
-        })
+        let remote = NetworkingIdentity::new_steam_id(remote);
+        Self::connect(&socks, socks.connect_p2p(remote, port, []))
     }
 
     pub fn connect_ip(
@@ -98,10 +89,16 @@ where
         remote: SocketAddr,
     ) -> Result<Self, SteamTransportError<P>> {
         let socks = steam.networking_sockets();
-        let conn = socks
-            .connect_by_ip_address(remote, [])
-            .map_err(SteamTransportError::<P>::Connect)?;
+        Self::connect(&socks, socks.connect_by_ip_address(remote, []))
+    }
 
+    fn connect(
+        socks: &NetworkingSockets<M>,
+        conn: Result<NetConnection<M>, InvalidHandle>,
+    ) -> Result<Self, SteamTransportError<P>> {
+        shared::assert_valid_protocol::<P>();
+
+        let conn = conn.map_err(SteamTransportError::<P>::Connect)?;
         shared::configure_lanes::<P, P::C2S, P::S2C, M>(&socks, &conn)?;
 
         Ok(Self {
@@ -112,17 +109,19 @@ where
     }
 
     pub fn state(&self) -> ClientState<ClientInfo> {
-        ClientState::Connected { info: self.info.clone() }
+        ClientState::Connected {
+            info: self.info.clone(),
+        }
     }
 
     pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), SteamTransportError<P>> {
         let msg = msg.into();
         let lane = msg.lane();
 
-        let buf = msg
+        let bytes = msg
             .try_as_bytes()
             .map_err(SteamTransportError::<P>::Serialize)?;
-        let buf = buf.as_ref();
+        let bytes = bytes.as_ref();
 
         let send_flags = match lane.kind() {
             LaneKind::UnreliableUnsequenced | LaneKind::UnreliableSequenced => {
@@ -132,16 +131,40 @@ where
         };
 
         self.conn
-            .send_message(buf, send_flags)
+            .send_message(bytes, send_flags)
             .map_err(SteamTransportError::<P>::Send)?;
 
         self.info.msgs_sent += 1;
-        self.info.bytes_sent += buf.len();
+        self.info.bytes_sent += bytes.len();
         Ok(())
     }
 
-    pub fn update(&mut self) -> (Vec<ClientEvent<P, SteamTransportError<P>>>, Result<(), SteamTransportError<P>>) {
-        todo!()
+    pub fn update(&mut self) -> Result<Vec<ClientEvent<P>>, SteamTransportError<P>> {
+        let mut events = Vec::new();
+        loop {
+            let msgs = self
+                .conn
+                .receive_messages(64)
+                .map_err(|_| SteamTransportError::<P>::LostConnection)?;
+            if msgs.is_empty() {
+                break;
+            }
+
+            for msg in msgs {
+                let bytes = msg.data();
+                let msg =
+                    P::S2C::try_from_bytes(bytes).map_err(SteamTransportError::<P>::Deserialize)?;
+
+                self.info.msgs_recv += 1;
+                self.info.bytes_recv += bytes.len();
+                events.push(ClientEvent::Recv {
+                    msg,
+                    at: Instant::now(),
+                });
+            }
+        }
+
+        Ok(events)
     }
 }
 
@@ -256,20 +279,13 @@ where
         }
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error>> {
+    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
         match self {
             Self::Disconnected => Either::Left(iter::empty()),
-            Self::Connected(client) => Either::Right(
-                match client.update() {
-                    (events, Ok(())) => events,
-                    (mut events, Err(reason)) => {
-                        *self = Self::Disconnected;
-                        events.push(ClientEvent::Disconnected { reason });
-                        events
-                    }
-                }
-                .into_iter(),
-            ),
+            Self::Connected(client) => Either::Right(match client.update() {
+                Ok(events) => Either::Left(events.into_iter()),
+                Err(reason) => Either::Right(iter::once(ClientEvent::Disconnected { reason })),
+            }),
         }
     }
 }

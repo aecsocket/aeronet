@@ -10,8 +10,8 @@ where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
 {
-    app.add_event::<RemoteConnecting>()
-        .add_event::<RemoteConnected>()
+    app.add_event::<RemoteConnecting<P, T>>()
+        .add_event::<RemoteConnected<P, T>>()
         .add_event::<RemoteDisconnected<P, T>>()
         .add_event::<FromClient<P>>()
         .add_systems(PreUpdate, recv::<P, T>);
@@ -36,14 +36,26 @@ where
     }
 }
 
-#[derive(Debug, Clone, Event)]
-pub struct RemoteConnecting {
+#[derive(Derivative, Event)]
+#[derivative(Debug(bound = "T::ConnectingInfo: Debug"), Clone(bound = "T::ConnectingInfo: Clone"))]
+pub struct RemoteConnecting<P, T>
+where
+    P: TransportProtocol,
+    T: ServerTransport<P>,
+{
     pub client: ClientKey,
+    pub info: T::ConnectingInfo,
 }
 
-#[derive(Debug, Clone, Event)]
-pub struct RemoteConnected {
+#[derive(Derivative, Event)]
+#[derivative(Debug(bound = "T::ConnectedInfo: Debug"), Clone(bound = "T::ConnectedInfo: Clone"))]
+pub struct RemoteConnected<P, T>
+where
+    P: TransportProtocol,
+    T: ServerTransport<P>,
+{
     pub client: ClientKey,
+    pub info: T::ConnectedInfo,
 }
 
 #[derive(Derivative, Event)]
@@ -71,8 +83,8 @@ where
 #[allow(clippy::too_many_arguments)]
 fn recv<P, T>(
     mut server: ResMut<T>,
-    mut connecting: EventWriter<RemoteConnecting>,
-    mut connected: EventWriter<RemoteConnected>,
+    mut connecting: EventWriter<RemoteConnecting<P, T>>,
+    mut connected: EventWriter<RemoteConnected<P, T>>,
     mut disconnected: EventWriter<RemoteDisconnected<P, T>>,
     mut recv: EventWriter<FromClient<P>>,
 ) where
@@ -81,8 +93,8 @@ fn recv<P, T>(
 {
     for event in server.update() {
         match event {
-            ServerEvent::Connecting { client } => connecting.send(RemoteConnecting { client }),
-            ServerEvent::Connected { client } => connected.send(RemoteConnected { client }),
+            ServerEvent::Connecting { client, info } => connecting.send(RemoteConnecting { client, info }),
+            ServerEvent::Connected { client, info } => connected.send(RemoteConnected { client, info }),
             ServerEvent::Disconnected { client, reason } => {
                 disconnected.send(RemoteDisconnected { client, reason })
             }

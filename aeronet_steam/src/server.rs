@@ -1,23 +1,25 @@
 use std::{iter, marker::PhantomData, net::SocketAddr};
 
 use aeronet::{
-    ClientKey, ClientState, LaneKey, LaneKind, LaneProtocol, OnLane, ServerState, ServerTransport,
-    TransportProtocol, TryAsBytes, TryFromBytes, ServerEvent,
+    ClientKey, ClientState, LaneKey, LaneKind, LaneProtocol, OnLane, ServerState,
+    ServerTransport, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use ahash::AHashMap;
 use derivative::Derivative;
 use either::Either;
 use slotmap::SlotMap;
 use steamworks::{
-    networking_sockets::{ListenSocket, NetConnection, NetworkingSockets},
+    networking_sockets::{ListenSocket, NetConnection, NetworkingSockets, InvalidHandle},
     networking_types::{ListenSocketEvent, NetConnectionEnd, SendFlags},
-    SteamId, ServerManager,
+    ServerManager, SteamId,
 };
 
-use crate::{ConnectionInfo, shared};
+use crate::{shared, ConnectionInfo};
 
 type SteamTransportError<P> =
     crate::SteamTransportError<<P as TransportProtocol>::S2C, <P as TransportProtocol>::C2S>;
+
+type ServerEvent<P> = aeronet::ServerEvent<P, SteamTransportError<P>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
@@ -49,15 +51,6 @@ enum Client<M> {
     },
 }
 
-impl<M> Client<M> {
-    fn steam_id(&self) -> SteamId {
-        match self {
-            Self::Connecting { steam_id } => *steam_id,
-            Self::Connected { steam_id, .. } => *steam_id,
-        }
-    }
-}
-
 impl<P, M> OpenServer<P, M>
 where
     P: LaneProtocol,
@@ -69,26 +62,24 @@ where
         steam: &steamworks::Client<M>,
         addr: SocketAddr,
     ) -> Result<Self, SteamTransportError<P>> {
-        let net_sockets = steam.networking_sockets();
-        let sock = net_sockets
-            .create_listen_socket_ip(addr, [])
-            .map_err(SteamTransportError::<P>::CreateListenSocket)?;
-        Ok(Self {
-            socks: net_sockets,
-            sock,
-            clients: SlotMap::default(),
-            steam_id_to_client: AHashMap::default(),
-            _phantom_p: PhantomData::default(),
-        })
+        let socks = steam.networking_sockets();
+        Self::open(socks, socks.create_listen_socket_ip(addr, []))
     }
 
-    pub fn open_p2p(steam: &steamworks::Client, port: i32) -> Result<Self, SteamTransportError<P>> {
-        let net_sockets = steam.networking_sockets();
-        let sock = net_sockets
-            .create_listen_socket_p2p(port, [])
-            .map_err(SteamTransportError::<P>::CreateListenSocket)?;
+    pub fn open_p2p(
+        steam: &steamworks::Client<M>,
+        port: i32,
+    ) -> Result<Self, SteamTransportError<P>> {
+        let socks = steam.networking_sockets();
+        Self::open(socks, socks.create_listen_socket_p2p(port, []))
+    }
+
+    fn open(
+        socks: NetworkingSockets<M>,
+        sock: Result<ListenSocket<M>, InvalidHandle>,
+    ) -> Result<Self, SteamTransportError<P>> {
         Ok(Self {
-            socks: net_sockets,
+            socks,
             sock,
             clients: SlotMap::default(),
             steam_id_to_client: AHashMap::default(),
@@ -101,6 +92,10 @@ where
     }
 
     pub fn client_state(&self, client: ClientKey) -> ClientState<ConnectionInfo> {
+        match self.clients.get(client) {
+            Some(Client::Connecting { .. }) => ClientState::Connecting,
+            Some(Client::Connected { steam_id, conn })
+        }
         todo!()
     }
 
@@ -166,12 +161,14 @@ where
                         continue;
                     };
                     let conn = event.take_connection();
-                    if let Err(reason) = shared::configure_lanes::<P, P::S2C, P::C2S>(&self.socks, &conn) {
+                    if let Err(reason) =
+                        shared::configure_lanes::<P, P::S2C, P::C2S>(&self.socks, &conn)
+                    {
                         conn.close(NetConnectionEnd::AppGeneric, None, false);
-                        events.push(ServerEvent::Disconnected { client, reason: () })
+                        events.push(ServerEvent::Disconnected { client, reason: () });
                         continue;
                     }
-                    
+
                     let client = self.clients.insert(Client::Connected {
                         steam_id,
                         conn: event.take_connection(),
@@ -262,7 +259,11 @@ where
         }
     }
 
-    pub fn open_p2p(&mut self, steam: &steamworks::Client, port: i32) -> Result<(), SteamTransportError<P>> {
+    pub fn open_p2p(
+        &mut self,
+        steam: &steamworks::Client,
+        port: i32,
+    ) -> Result<(), SteamTransportError<P>> {
         match self {
             Self::Closed => {
                 *self = Self::open_new_p2p(steam, port)?;
@@ -291,11 +292,11 @@ where
 {
     type Error = SteamTransportError<P>;
 
-    type Info = ();
+    type OpeningInfo = ();
 
     type ClientInfo = ConnectionInfo;
 
-    fn state(&self) -> ServerState<Self::Info> {
+    fn state(&self) -> ServerState<Self::OpeningInfo> {
         match self {
             Self::Closed => ServerState::Closed,
             Self::Open(server) => ServerState::Open {

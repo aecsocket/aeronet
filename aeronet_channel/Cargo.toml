@@ -25,6 +25,7 @@ aeronet.workspace = true
 derivative.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
+either.workspace = true
 slotmap.workspace = true
 crossbeam-channel.workspace = true
 

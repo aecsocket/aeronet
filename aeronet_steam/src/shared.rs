@@ -1,15 +1,22 @@
-use aeronet::{LaneProtocol, TryAsBytes, TryFromBytes, LaneKey};
-use steamworks::networking_sockets::{NetworkingSockets, NetConnection};
+use aeronet::{LaneKey, LaneProtocol, TryAsBytes, TryFromBytes};
+use steamworks::networking_sockets::{NetConnection, NetworkingSockets};
 
 use crate::SteamTransportError;
 
 // https://partner.steamgames.com/doc/api/ISteamNetworkingSockets
-// "The max number of lanes on Steam is 255, which is a very large number and not recommended!"
-fn num_lanes<P: LaneProtocol>() -> u8 {
+// "The max number of lanes on Steam is 255, which is a very large number and
+// not recommended!"
+fn num_lanes<P>() -> u8
+where
+    P: LaneProtocol,
+{
     u8::try_from(P::Lane::VARIANTS.len()).expect("there should be less than 256 lanes")
 }
 
-pub(super) fn assert_valid_protocol<P: LaneProtocol>() {
+pub(super) fn assert_valid_protocol<P>()
+where
+    P: LaneProtocol,
+{
     let _ = num_lanes::<P>();
 }
 

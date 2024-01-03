@@ -1,13 +1,18 @@
 use std::time::Instant;
 
-use aeronet::{
-    ClientKey, ClientState, ServerEvent, ServerState, ServerTransport, TransportProtocol,
-};
+use aeronet::{ClientKey, ServerTransport, TransportProtocol};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;
 
 use crate::{ChannelError, ConnectionInfo};
+
+type ServerState = aeronet::ServerState<(), ()>;
+
+type ClientState = aeronet::ClientState<(), ConnectionInfo>;
+
+type ServerEvent<P> = aeronet::ServerEvent<P, (), ConnectionInfo, ChannelError>;
+
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
@@ -64,17 +69,21 @@ where
 {
     type Error = ChannelError;
 
-    type Info = ();
+    type OpeningInfo = ();
 
-    type ClientInfo = ConnectionInfo;
+    type OpenInfo = ();
 
-    fn state(&self) -> ServerState<Self::Info> {
-        ServerState::Open { info: () }
+    type ConnectingInfo = ();
+
+    type ConnectedInfo = ConnectionInfo;
+
+    fn state(&self) -> ServerState {
+        ServerState::Open(())
     }
 
-    fn client_state(&self, client: ClientKey) -> ClientState<Self::ClientInfo> {
+    fn client_state(&self, client: ClientKey) -> ClientState {
         match self.clients.get(client) {
-            Some(Client::Connected { info, .. }) => ClientState::Connected { info: info.clone() },
+            Some(Client::Connected { info, .. }) => ClientState::Connected(info.clone()),
             Some(Client::Disconnected) | None => ClientState::Disconnected,
         }
     }
@@ -93,7 +102,7 @@ where
         Ok(())
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>> {
+    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P>> {
         let mut events = Vec::new();
         let mut to_remove = Vec::new();
 
@@ -118,7 +127,7 @@ where
 fn update_client<P>(
     client: ClientKey,
     data: &mut Client<P>,
-    events: &mut Vec<ServerEvent<P, ChannelError>>,
+    events: &mut Vec<ServerEvent<P>>,
     to_remove: &mut Vec<ClientKey>,
 ) where
     P: TransportProtocol,
@@ -131,8 +140,8 @@ fn update_client<P>(
             ..
         } => {
             if *send_connected {
-                events.push(ServerEvent::Connecting { client });
-                events.push(ServerEvent::Connected { client });
+                events.push(ServerEvent::Connecting { client, info: () });
+                events.push(ServerEvent::Connected { client, info: info.clone() });
                 *send_connected = false;
             }
 

@@ -2,7 +2,7 @@ use std::mem;
 
 use aeronet::{
     ClientTransport, ClientTransportPlugin, FromClient, FromServer, LocalConnected,
-    LocalConnecting, Message, RemoteConnected, RemoteConnecting, RemoteDisconnected,
+    Message, RemoteConnected, RemoteConnecting, RemoteDisconnected,
     ServerTransport, ServerTransportPlugin, TransportProtocol,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
@@ -57,22 +57,17 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     let mut server = ChannelServer::<AppProtocol>::open();
-    let client = ChannelClient::connecting(&mut server);
+    let client = ChannelClient::connect_new(&mut server);
     commands.insert_resource(server);
     commands.insert_resource(client);
 }
 
 fn client_update_log(
     mut ui_state: ResMut<ClientUiState>,
-    mut connecting: EventReader<LocalConnecting>,
-    mut connected: EventReader<LocalConnected>,
+    mut connected: EventReader<LocalConnected<AppProtocol, ChannelClient<AppProtocol>>>,
     mut recv: EventReader<FromServer<AppProtocol>>,
 ) {
-    for LocalConnecting in connecting.read() {
-        ui_state.log.push(format!("Connecting"));
-    }
-
-    for LocalConnected in connected.read() {
+    for LocalConnected { .. } in connected.read() {
         ui_state.log.push(format!("Connected"));
     }
 
@@ -116,22 +111,29 @@ fn client_ui(
                 let _ = client.send(AppMessage(msg));
             })();
         }
+
+        ui.add_enabled_ui(client.state().is_connected(), |ui| {
+            if ui.button("Disconnect").clicked() {
+                ui_state.log.push(format!("Disconnected by user"));
+                let _ = client.disconnect();
+            }
+        });
     });
 }
 
 fn server_update_log(
     mut ui_state: ResMut<ServerUiState>,
     mut server: ResMut<ChannelServer<AppProtocol>>,
-    mut connecting: EventReader<RemoteConnecting>,
-    mut connected: EventReader<RemoteConnected>,
+    mut connecting: EventReader<RemoteConnecting<AppProtocol, ChannelServer<AppProtocol>>>,
+    mut connected: EventReader<RemoteConnected<AppProtocol, ChannelServer<AppProtocol>>>,
     mut disconnected: EventReader<RemoteDisconnected<AppProtocol, ChannelServer<AppProtocol>>>,
     mut recv: EventReader<FromClient<AppProtocol>>,
 ) {
-    for RemoteConnecting { client } in connecting.read() {
+    for RemoteConnecting { client, .. } in connecting.read() {
         ui_state.log.push(format!("Client {client} connecting"));
     }
 
-    for RemoteConnected { client } in connected.read() {
+    for RemoteConnected { client, .. } in connected.read() {
         ui_state.log.push(format!("Client {client} connected"));
     }
 

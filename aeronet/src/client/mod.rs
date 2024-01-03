@@ -20,15 +20,17 @@ where
 {
     type Error: Error + Send + Sync + 'static;
 
-    type Info;
+    type ConnectingInfo: Send + Sync + 'static;
 
-    fn state(&self) -> ClientState<Self::Info>;
+    type ConnectedInfo: Send + Sync + 'static;
+
+    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error>;
 
     /// If this emits an event which changes the transport's state, then after
     /// this call, the transport will be in this new state.
-    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error>>;
+    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>> + '_;
 }
 
 slotmap::new_key_type! {
@@ -50,45 +52,68 @@ impl fmt::Display for ClientKey {
 
 /// State of a [`ClientTransport`].
 #[derive(Debug, Clone)]
-pub enum ClientState<I> {
+pub enum ClientState<A, B> {
     /// Not connected to a server, and making no attempts to connect to one.
     Disconnected,
     /// Attempting to establish a connection to a server, but is not ready for
     /// transporting data yet.
-    Connecting,
+    Connecting(A),
     /// Ready to transport data to/from a server.
-    Connected {
-        /// Info of the connection.
-        info: I,
-    },
+    Connected(B),
+}
+
+impl<A, B> ClientState<A, B> {
+    pub fn is_disconnected(&self) -> bool {
+        match self {
+            Self::Disconnected => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_connecting(&self) -> bool {
+        match self {
+            Self::Connecting(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_connected(&self) -> bool {
+        match self {
+            Self::Connected(_) => true,
+            _ => false,
+        }
+    }
 }
 
 /// Event emitted by a [`ClientTransport`].
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::S2C: Debug, E: Debug"),
-    Clone(bound = "P::S2C: Clone, E: Clone")
+    Debug(bound = "P::S2C: Debug, B: Debug, E: Debug"),
+    Clone(bound = "P::S2C: Clone, B: Clone, E: Clone")
 )]
-pub enum ClientEvent<P, E>
+pub enum ClientEvent<P, B, E>
 where
     P: TransportProtocol,
     E: Error,
 {
     // state
-    /// The client has started to connect to a server.
-    /// 
-    /// This will be followed by either [`ClientEvent::Connected`] or
-    /// [`ClientEvent::Disconnected`].
-    Connecting,
     /// The client has fully established a connection to the server.
     /// 
+    /// This event can be followed by [`ClientEvent::Recv`] or
+    /// [`ClientEvent::Disconnected`].
+    ///
     /// After this event, you can run your game initialization logic such as
     /// receiving the initial world state and e.g. showing a spawn screen.
-    Connected,
+    Connected {
+        /// Info on the connection.
+        ///
+        /// This is the same data as held by [`ClientState::Connecting`].
+        info: B,
+    },
     /// The client has unrecoverably lost connection from its previously
     /// connected server.
     /// 
-    /// This can either be forced by the app or caused by a transport error.
+    /// This event is not raised when the user invokes a disconnect.
     Disconnected {
         /// Why the client lost connection.
         reason: E,
@@ -100,12 +125,12 @@ where
         /// The message received.
         msg: P::S2C,
         /// When the message was first received.
-        /// 
+        ///
         /// Since the transport may use e.g. an async task to receive data, the
         /// time at which the message was polled using
         /// [`ClientTransport::update`] is not necessarily when the app first
         /// became aware of this message.
-        /// 
+        ///
         /// This value can be used for calculating an estimate of the round-trip
         /// time.
         at: Instant,

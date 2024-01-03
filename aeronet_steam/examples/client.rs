@@ -1,8 +1,8 @@
 use std::{convert::Infallible, string::FromUtf8Error};
 
 use aeronet::{
-    ClientTransportPlugin, FromServer, LocalConnected, LocalConnecting,
-    LocalDisconnected, LaneKey, Message, OnLane, TryAsBytes, TryFromBytes, TransportProtocol, LaneProtocol,
+    ClientTransportPlugin, FromServer, LaneKey, LaneProtocol, LocalConnected, LocalConnecting,
+    LocalDisconnected, Message, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use aeronet_steam::SteamClientTransport;
 use bevy::prelude::*;

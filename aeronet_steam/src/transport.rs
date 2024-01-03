@@ -2,9 +2,7 @@ use std::fmt::Debug;
 
 use aeronet::{TryAsBytes, TryFromBytes};
 use derivative::Derivative;
-use steamworks::{
-    networking_sockets::InvalidHandle, networking_types::NetConnectionEnd, SteamError,
-};
+use steamworks::{networking_types::NetConnectionEnd, SteamError};
 
 #[derive(Debug, Clone)]
 pub struct ConnectionInfo {}
@@ -35,7 +33,7 @@ where
     NotConnected,
     /// Failed to connect the client to the given remote.
     #[error("client failed to connect")]
-    Connect(#[source] InvalidHandle),
+    Connect,
 
     // server
     /// Attempted to close the server while it was already closed.
@@ -50,7 +48,7 @@ where
     NotOpen,
     /// Failed to create a listen socket to receive incoming connections on.
     #[error("failed to create listen socket")]
-    CreateListenSocket(#[source] InvalidHandle),
+    CreateListenSocket,
     /// Attempted to perform an action on a client which not connected.
     #[error("no client with the given key")]
     NoClient,
@@ -61,6 +59,8 @@ where
     ConfigureLanes(#[source] SteamError),
     #[error("disconnected: {0:?}")]
     Disconnected(NetConnectionEnd),
+    #[error("lost connection")]
+    LostConnection,
 
     // transport
     #[error("timed out")]
