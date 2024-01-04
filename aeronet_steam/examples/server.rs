@@ -5,8 +5,8 @@ use aeronet::{
     RemoteDisconnected, ServerTransport, ServerTransportPlugin, TransportProtocol, TryAsBytes,
     TryFromBytes,
 };
-use aeronet_steam::SteamServerTransport;
-use bevy::{app::ScheduleRunnerPlugin, prelude::*};
+use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
+use steamworks::ClientManager;
 
 // Protocol
 
@@ -48,13 +48,18 @@ impl LaneProtocol for AppProtocol {
     type Lane = AppLane;
 }
 
+// Use a `ClientManager` here since we use `steamworks::Client`, not
+// `steamworks::Server`
+type SteamServerTransport = aeronet_steam::SteamServerTransport<AppProtocol, ClientManager>;
+
 // App
 
 fn main() {
     App::new()
         .add_plugins((
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
-            ServerTransportPlugin::<AppProtocol, SteamServerTransport<_>>::default(),
+            LogPlugin::default(),
+            ServerTransportPlugin::<AppProtocol, SteamServerTransport>::default(),
         ))
         .add_systems(Startup, setup)
         .add_systems(Update, (update_steam, update_server))
@@ -65,9 +70,10 @@ fn setup(world: &mut World) {
     let (steam, steam_single) = steamworks::Client::init_app(480).unwrap();
     world.insert_non_send_resource(steam_single);
 
-    let server = SteamServerTransport::<AppProtocol>::open_new_p2p(&steam, 0).unwrap();
+    let addr = "0.0.0.0:27015".parse().unwrap();
+    let server = SteamServerTransport::open_new_ip(&steam, addr).unwrap();
     world.insert_resource(server);
-    info!("Started server");
+    info!("Started server on {addr}");
 }
 
 fn update_steam(steam: NonSend<steamworks::SingleClient>) {
@@ -75,24 +81,26 @@ fn update_steam(steam: NonSend<steamworks::SingleClient>) {
 }
 
 fn update_server(
-    mut server: ResMut<SteamServerTransport<AppProtocol>>,
-    mut connecting: EventReader<RemoteConnecting>,
-    mut connected: EventReader<RemoteConnected>,
-    mut disconnected: EventReader<
-        RemoteDisconnected<AppProtocol, SteamServerTransport<AppProtocol>>,
-    >,
+    mut server: ResMut<SteamServerTransport>,
+    mut connecting: EventReader<RemoteConnecting<AppProtocol, SteamServerTransport>>,
+    mut connected: EventReader<RemoteConnected<AppProtocol, SteamServerTransport>>,
+    mut disconnected: EventReader<RemoteDisconnected<AppProtocol, SteamServerTransport>>,
     mut recv: EventReader<FromClient<AppProtocol>>,
 ) {
-    for RemoteConnecting { client } in connecting.read() {
-        info!("Client {client} connecting");
+    for RemoteConnecting { client, info } in connecting.read() {
+        info!("Client {client} connecting ({:?})", info.steam_id);
+        let _ = server.accept_client(*client);
     }
 
-    for RemoteConnected { client } in connected.read() {
+    for RemoteConnected { client, .. } in connected.read() {
         info!("Client {client} connected");
     }
 
     for RemoteDisconnected { client, reason } in disconnected.read() {
-        info!("Client {client} disconnected: {reason:#}");
+        info!(
+            "Client {client} disconnected: {:#}",
+            aeronet::util::as_pretty(&reason)
+        );
     }
 
     for FromClient { client, msg, .. } in recv.read() {

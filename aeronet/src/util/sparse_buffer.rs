@@ -1,5 +1,3 @@
-//! Generic utilities.
-
 use std::{array, mem};
 
 /// Fixed-size sparse-set-like data structure for storage of a rolling buffer

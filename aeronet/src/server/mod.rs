@@ -37,7 +37,9 @@ where
 
     fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error>;
 
-    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::ConnectingInfo, Self::ConnectedInfo, Self::Error>> + '_;
+    fn update(
+        &mut self,
+    ) -> impl Iterator<Item = ServerEvent<P, Self::ConnectingInfo, Self::ConnectedInfo, Self::Error>> + '_;
 }
 
 #[derive(Debug, Clone)]
@@ -58,7 +60,7 @@ impl<A, B> ServerState<A, B> {
     pub fn is_opening(&self) -> bool {
         match self {
             Self::Opening(_) => true,
-            _ => false
+            _ => false,
         }
     }
 

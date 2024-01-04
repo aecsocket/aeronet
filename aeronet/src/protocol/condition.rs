@@ -218,7 +218,9 @@ where
         self.inner.send(msg)
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>> + '_ {
+    fn update(
+        &mut self,
+    ) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>> + '_ {
         let mut events = Vec::new();
 
         events.extend(self.conditioner.buffered().map(|recv| ClientEvent::Recv {
@@ -308,7 +310,10 @@ where
         self.inner.state()
     }
 
-    fn client_state(&self, client: ClientKey) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
+    fn client_state(
+        &self,
+        client: ClientKey,
+    ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         self.inner.client_state(client)
     }
 
@@ -320,7 +325,10 @@ where
         self.inner.send(client, msg)
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::ConnectingInfo, Self::ConnectedInfo, Self::Error>> {
+    fn update(
+        &mut self,
+    ) -> impl Iterator<Item = ServerEvent<P, Self::ConnectingInfo, Self::ConnectedInfo, Self::Error>>
+    {
         let mut events = Vec::new();
 
         events.extend(self.conditioner.buffered().map(|recv| ServerEvent::Recv {

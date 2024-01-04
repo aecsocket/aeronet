@@ -30,7 +30,9 @@ where
 
     /// If this emits an event which changes the transport's state, then after
     /// this call, the transport will be in this new state.
-    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>> + '_;
+    fn update(
+        &mut self,
+    ) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>> + '_;
 }
 
 slotmap::new_key_type! {
@@ -73,7 +75,7 @@ impl<A, B> ClientState<A, B> {
     pub fn is_connecting(&self) -> bool {
         match self {
             Self::Connecting(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -98,7 +100,7 @@ where
 {
     // state
     /// The client has fully established a connection to the server.
-    /// 
+    ///
     /// This event can be followed by [`ClientEvent::Recv`] or
     /// [`ClientEvent::Disconnected`].
     ///
@@ -112,7 +114,7 @@ where
     },
     /// The client has unrecoverably lost connection from its previously
     /// connected server.
-    /// 
+    ///
     /// This event is not raised when the user invokes a disconnect.
     Disconnected {
         /// Why the client lost connection.

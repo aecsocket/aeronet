@@ -13,7 +13,6 @@ type ClientState = aeronet::ClientState<(), ConnectionInfo>;
 
 type ServerEvent<P> = aeronet::ServerEvent<P, (), ConnectionInfo, ChannelError>;
 
-
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
@@ -141,7 +140,10 @@ fn update_client<P>(
         } => {
             if *send_connected {
                 events.push(ServerEvent::Connecting { client, info: () });
-                events.push(ServerEvent::Connected { client, info: info.clone() });
+                events.push(ServerEvent::Connected {
+                    client,
+                    info: info.clone(),
+                });
                 *send_connected = false;
             }
 

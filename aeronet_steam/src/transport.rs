@@ -1,11 +1,36 @@
 use std::fmt::Debug;
 
-use aeronet::{TryAsBytes, TryFromBytes};
+use aeronet::{ByteStats, MessageStats, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use steamworks::{networking_types::NetConnectionEnd, SteamError};
 
-#[derive(Debug, Clone)]
-pub struct ConnectionInfo {}
+#[derive(Debug, Clone, Default)]
+pub struct ConnectionInfo {
+    pub msgs_sent: usize,
+    pub msgs_recv: usize,
+    pub bytes_sent: usize,
+    pub bytes_recv: usize,
+}
+
+impl MessageStats for ConnectionInfo {
+    fn msgs_sent(&self) -> usize {
+        self.msgs_sent
+    }
+
+    fn msgs_recv(&self) -> usize {
+        self.msgs_recv
+    }
+}
+
+impl ByteStats for ConnectionInfo {
+    fn bytes_sent(&self) -> usize {
+        self.bytes_sent
+    }
+
+    fn bytes_recv(&self) -> usize {
+        self.bytes_recv
+    }
+}
 
 /// Error that occurs while processing a Steam networking transport.
 #[derive(Derivative, thiserror::Error)]
@@ -19,6 +44,9 @@ where
     S: TryAsBytes,
     R: TryFromBytes,
 {
+    #[error("internal error")]
+    InternalError,
+
     // client
     /// Attempted to disconnect the client while it was already disconnected.
     #[error("client already disconnected")]
@@ -31,9 +59,11 @@ where
     /// connection is established.
     #[error("client not connected")]
     NotConnected,
-    /// Failed to connect the client to the given remote.
-    #[error("client failed to connect")]
-    Connect,
+    /// Failed to start connecting the client to the given remote.
+    #[error("client failed to start connecting")]
+    StartConnecting,
+    #[error("client connection rejected by server")]
+    ConnectionRejected,
 
     // server
     /// Attempted to close the server while it was already closed.
@@ -49,9 +79,17 @@ where
     /// Failed to create a listen socket to receive incoming connections on.
     #[error("failed to create listen socket")]
     CreateListenSocket,
+
+    // server-side clients
     /// Attempted to perform an action on a client which not connected.
     #[error("no client with the given key")]
     NoClient,
+    #[error("client not connecting")]
+    NotConnecting,
+    #[error("client session already accepted/rejected")]
+    SessionAlreadyDecided,
+    #[error("failed to accept/reject client")]
+    DecideSession(#[source] SteamError),
 
     // connect
     /// Failed to configure the lanes of the connection.
@@ -60,11 +98,9 @@ where
     #[error("disconnected: {0:?}")]
     Disconnected(NetConnectionEnd),
     #[error("lost connection")]
-    LostConnection,
+    ConnectionLost,
 
     // transport
-    #[error("timed out")]
-    TimedOut,
     #[error("failed to serialize message")]
     Serialize(#[source] S::Error),
     #[error("failed to send message")]

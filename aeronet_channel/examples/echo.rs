@@ -1,9 +1,9 @@
 use std::mem;
 
 use aeronet::{
-    ClientTransport, ClientTransportPlugin, FromClient, FromServer, LocalConnected,
-    Message, RemoteConnected, RemoteConnecting, RemoteDisconnected,
-    ServerTransport, ServerTransportPlugin, TransportProtocol,
+    ClientTransport, ClientTransportPlugin, FromClient, FromServer, LocalConnected, Message,
+    RemoteConnected, RemoteConnecting, RemoteDisconnected, ServerTransport, ServerTransportPlugin,
+    TransportProtocol,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::prelude::*;
@@ -88,31 +88,31 @@ fn client_ui(
             }
         });
 
-        let (send, msg_resp) = ui
-            .horizontal(|ui| {
-                let mut send = false;
-                let msg_resp = ui.text_edit_singleline(&mut ui_state.msg);
-                send |= msg_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                send |= ui.button("Send").clicked();
-                (send, msg_resp)
-            })
-            .inner;
-
-        if send {
-            (|| {
-                ui.memory_mut(|m| m.request_focus(msg_resp.id));
-
-                let msg = mem::take(&mut ui_state.msg);
-                if msg.is_empty() {
-                    return;
-                }
-
-                ui_state.log.push(format!("< {msg}"));
-                let _ = client.send(AppMessage(msg));
-            })();
-        }
-
         ui.add_enabled_ui(client.state().is_connected(), |ui| {
+            let (send, msg_resp) = ui
+                .horizontal(|ui| {
+                    let mut send = false;
+                    let msg_resp = ui.text_edit_singleline(&mut ui_state.msg);
+                    send |= msg_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    send |= ui.button("Send").clicked();
+                    (send, msg_resp)
+                })
+                .inner;
+
+            if send {
+                (|| {
+                    ui.memory_mut(|m| m.request_focus(msg_resp.id));
+
+                    let msg = mem::take(&mut ui_state.msg);
+                    if msg.is_empty() {
+                        return;
+                    }
+
+                    ui_state.log.push(format!("< {msg}"));
+                    let _ = client.send(AppMessage(msg));
+                })();
+            }
+
             if ui.button("Disconnect").clicked() {
                 ui_state.log.push(format!("Disconnected by user"));
                 let _ = client.disconnect();

@@ -1,49 +1,140 @@
-use std::{iter, marker::PhantomData, net::SocketAddr, time::Instant};
+use std::{marker::PhantomData, net::SocketAddr, task::Poll, time::Instant};
 
 use aeronet::{
-    ByteStats, ClientState, ClientTransport, LaneKey, LaneKind, LaneProtocol, MessageStats, OnLane,
-    TransportProtocol, TryAsBytes, TryFromBytes,
+    ClientTransport, LaneKey, LaneKind, LaneProtocol, OnLane, TransportProtocol, TryAsBytes,
+    TryFromBytes,
 };
 use derivative::Derivative;
-use either::Either;
+use futures::channel::oneshot;
 use steamworks::{
-    networking_sockets::{InvalidHandle, NetConnection, NetworkingSockets},
-    networking_types::{NetworkingIdentity, SendFlags},
-    ClientManager, SteamId,
+    networking_sockets::{InvalidHandle, NetConnection},
+    networking_types::{
+        NetConnectionStatusChanged, NetworkingConnectionState, NetworkingIdentity, SendFlags,
+    },
+    CallbackHandle, ClientManager, Manager, SteamId,
 };
 
-use crate::shared;
+use crate::{shared, ConnectionInfo};
 
 type SteamTransportError<P> =
     crate::SteamTransportError<<P as TransportProtocol>::C2S, <P as TransportProtocol>::S2C>;
 
-type ClientEvent<P> = aeronet::ClientEvent<P, SteamTransportError<P>>;
+type ClientState = aeronet::ClientState<(), ConnectionInfo>;
 
-#[derive(Debug, Clone, Default)]
-pub struct ClientInfo {
-    pub msgs_sent: usize,
-    pub msgs_recv: usize,
-    pub bytes_sent: usize,
-    pub bytes_recv: usize,
+type ClientEvent<P> = aeronet::ClientEvent<P, ConnectionInfo, SteamTransportError<P>>;
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+pub struct ConnectingClient<P, M = ClientManager>
+where
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryFromBytes,
+    M: Manager + Send + Sync + 'static,
+{
+    #[derivative(Debug = "ignore")]
+    steam: steamworks::Client<M>,
+    #[derivative(Debug = "ignore")]
+    conn: Option<NetConnection<M>>,
+    #[derivative(Debug = "ignore")]
+    recv_connected: oneshot::Receiver<Result<(), SteamTransportError<P>>>,
+    #[derivative(Debug = "ignore")]
+    _status_changed_cb: CallbackHandle<M>,
+    #[derivative(Debug = "ignore")]
+    _phantom_p: PhantomData<P>,
 }
 
-impl MessageStats for ClientInfo {
-    fn msgs_sent(&self) -> usize {
-        self.msgs_sent
+impl<P, M> ConnectingClient<P, M>
+where
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryFromBytes,
+    M: Manager + Send + Sync + 'static,
+{
+    pub fn connect_p2p(
+        steam: steamworks::Client<M>,
+        remote: SteamId,
+        port: i32,
+    ) -> Result<Self, SteamTransportError<P>> {
+        let conn = steam.networking_sockets().connect_p2p(
+            NetworkingIdentity::new_steam_id(remote),
+            port,
+            [],
+        );
+        Self::connect(steam, conn)
     }
 
-    fn msgs_recv(&self) -> usize {
-        self.msgs_recv
-    }
-}
-
-impl ByteStats for ClientInfo {
-    fn bytes_sent(&self) -> usize {
-        self.bytes_sent
+    pub fn connect_ip(
+        steam: steamworks::Client<M>,
+        remote: SocketAddr,
+    ) -> Result<Self, SteamTransportError<P>> {
+        let conn = steam.networking_sockets().connect_by_ip_address(remote, []);
+        Self::connect(steam, conn)
     }
 
-    fn bytes_recv(&self) -> usize {
-        self.bytes_recv
+    fn connect(
+        steam: steamworks::Client<M>,
+        conn: Result<NetConnection<M>, InvalidHandle>,
+    ) -> Result<Self, SteamTransportError<P>> {
+        shared::assert_valid_protocol::<P>();
+
+        let (send_connected, recv_connected) = oneshot::channel();
+        let mut send_connected = Some(send_connected);
+        let status_changed_cb = steam.register_callback(move |event| {
+            Self::on_connection_status_changed(&mut send_connected, event)
+        });
+
+        let conn = conn.map_err(|_| SteamTransportError::<P>::StartConnecting)?;
+        shared::configure_lanes::<P, P::C2S, P::S2C, M>(&steam.networking_sockets(), &conn)?;
+
+        Ok(Self {
+            steam,
+            conn: Some(conn),
+            recv_connected,
+            _status_changed_cb: status_changed_cb,
+            _phantom_p: PhantomData::default(),
+        })
+    }
+
+    fn on_connection_status_changed(
+        send_connected: &mut Option<oneshot::Sender<Result<(), SteamTransportError<P>>>>,
+        event: NetConnectionStatusChanged,
+    ) {
+        let state = event
+            .connection_info
+            .state()
+            .unwrap_or(NetworkingConnectionState::None);
+        let res = match state {
+            NetworkingConnectionState::Connecting | NetworkingConnectionState::FindingRoute => None,
+            NetworkingConnectionState::Connected => Some(Ok(())),
+            NetworkingConnectionState::ClosedByPeer => {
+                Some(Err(SteamTransportError::<P>::ConnectionRejected))
+            }
+            NetworkingConnectionState::None | NetworkingConnectionState::ProblemDetectedLocally => {
+                Some(Err(SteamTransportError::<P>::ConnectionLost))
+            }
+        };
+
+        if let Some(res) = res {
+            if let Some(send_connected) = send_connected.take() {
+                let _ = send_connected.send(res);
+            }
+        }
+    }
+
+    pub fn poll(&mut self) -> Poll<ConnectedResult<P, M>> {
+        match self.recv_connected.try_recv() {
+            Ok(Some(Ok(()))) => {
+                let conn = self
+                    .conn
+                    .take()
+                    .expect("should not poll again after receiving connected client");
+                Poll::Ready(Ok(ConnectedClient::new(&self.steam, conn)))
+            }
+            Ok(Some(Err(err))) => Poll::Ready(Err(err)),
+            Ok(None) => Poll::Pending,
+            Err(_) => Poll::Ready(Err(SteamTransportError::<P>::InternalError)),
+        }
     }
 }
 
@@ -54,13 +145,20 @@ where
     P: LaneProtocol,
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
+    M: Manager + Send + Sync + 'static,
 {
     #[derivative(Debug = "ignore")]
     conn: NetConnection<M>,
-    info: ClientInfo,
+    info: ConnectionInfo,
+    #[derivative(Debug = "ignore")]
+    recv_err: oneshot::Receiver<SteamTransportError<P>>,
+    #[derivative(Debug = "ignore")]
+    _status_changed_cb: CallbackHandle<M>,
     #[derivative(Debug = "ignore")]
     _phantom_p: PhantomData<P>,
 }
+
+type ConnectedResult<P, M> = Result<ConnectedClient<P, M>, SteamTransportError<P>>;
 
 // TODO Note on drop impl:
 // There already exists a Drop impl for `NetConnection`, sending the message
@@ -72,46 +170,51 @@ where
     P: LaneProtocol,
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
-    M: 'static,
+    M: Manager + Send + Sync + 'static,
 {
-    pub fn connect_p2p(
-        steam: &steamworks::Client<M>,
-        remote: SteamId,
-        port: i32,
-    ) -> Result<Self, SteamTransportError<P>> {
-        let socks = steam.networking_sockets();
-        let remote = NetworkingIdentity::new_steam_id(remote);
-        Self::connect(&socks, socks.connect_p2p(remote, port, []))
-    }
+    fn new(steam: &steamworks::Client<M>, conn: NetConnection<M>) -> Self {
+        let (send_err, recv_err) = oneshot::channel();
+        let mut send_err = Some(send_err);
+        let status_changed_cb = steam.register_callback(move |event: NetConnectionStatusChanged| {
+            Self::on_connection_status_changed(&mut send_err, event)
+        });
 
-    pub fn connect_ip(
-        steam: &steamworks::Client<M>,
-        remote: SocketAddr,
-    ) -> Result<Self, SteamTransportError<P>> {
-        let socks = steam.networking_sockets();
-        Self::connect(&socks, socks.connect_by_ip_address(remote, []))
-    }
-
-    fn connect(
-        socks: &NetworkingSockets<M>,
-        conn: Result<NetConnection<M>, InvalidHandle>,
-    ) -> Result<Self, SteamTransportError<P>> {
-        shared::assert_valid_protocol::<P>();
-
-        let conn = conn.map_err(SteamTransportError::<P>::Connect)?;
-        shared::configure_lanes::<P, P::C2S, P::S2C, M>(&socks, &conn)?;
-
-        Ok(Self {
+        Self {
             conn,
-            info: ClientInfo::default(),
+            info: ConnectionInfo::default(),
+            recv_err,
+            _status_changed_cb: status_changed_cb,
             _phantom_p: PhantomData::default(),
-        })
+        }
     }
 
-    pub fn state(&self) -> ClientState<ClientInfo> {
-        ClientState::Connected {
-            info: self.info.clone(),
+    fn on_connection_status_changed(
+        send_err: &mut Option<oneshot::Sender<SteamTransportError<P>>>,
+        event: NetConnectionStatusChanged,
+    ) {
+        let state = event
+            .connection_info
+            .state()
+            .unwrap_or(NetworkingConnectionState::None);
+        let err = match state {
+            NetworkingConnectionState::FindingRoute | NetworkingConnectionState::Connecting | NetworkingConnectionState::Connected => None,
+            NetworkingConnectionState::ClosedByPeer => {
+                Some(SteamTransportError::<P>::ConnectionRejected)
+            }
+            NetworkingConnectionState::None | NetworkingConnectionState::ProblemDetectedLocally => {
+                Some(SteamTransportError::<P>::ConnectionLost)
+            }
+        };
+
+        if let Some(err) = err {
+            if let Some(send_err) = send_err.take() {
+                let _ = send_err.send(err);
+            }
         }
+    }
+
+    pub fn info(&self) -> ConnectionInfo {
+        self.info.clone()
     }
 
     pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), SteamTransportError<P>> {
@@ -139,32 +242,23 @@ where
         Ok(())
     }
 
-    pub fn update(&mut self) -> Result<Vec<ClientEvent<P>>, SteamTransportError<P>> {
-        let mut events = Vec::new();
-        loop {
-            let msgs = self
-                .conn
-                .receive_messages(64)
-                .map_err(|_| SteamTransportError::<P>::LostConnection)?;
-            if msgs.is_empty() {
-                break;
-            }
-
-            for msg in msgs {
-                let bytes = msg.data();
-                let msg =
-                    P::S2C::try_from_bytes(bytes).map_err(SteamTransportError::<P>::Deserialize)?;
-
-                self.info.msgs_recv += 1;
-                self.info.bytes_recv += bytes.len();
-                events.push(ClientEvent::Recv {
-                    msg,
-                    at: Instant::now(),
-                });
-            }
+    pub fn update(&mut self) -> (Vec<ClientEvent<P>>, Result<(), SteamTransportError<P>>) {
+        let (msgs, res) = shared::recv_all::<P, P::C2S, P::S2C, M>(&self.conn, &mut self.info);
+        let now = Instant::now();
+        let mut events = msgs
+            .into_iter()
+            .map(|msg| ClientEvent::Recv { msg, at: now })
+            .collect();
+        
+        if let Err(err) = res {
+            return (events, Err(err));
         }
 
-        Ok(events)
+        match self.recv_err.try_recv() {
+            Ok(Some(err)) => (events, Err(err)),
+            Ok(None) => (events, Ok(())),
+            Err(_) => (events, Err(SteamTransportError::<P>::InternalError)),
+        }
     }
 }
 
@@ -176,21 +270,12 @@ where
     P: LaneProtocol,
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
+    M: Manager + Send + Sync + 'static,
 {
     #[derivative(Default)]
     Disconnected,
+    Connecting(ConnectingClient<P, M>),
     Connected(ConnectedClient<P, M>),
-}
-
-impl<P, M> From<ConnectedClient<P, M>> for SteamClientTransport<P, M>
-where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryFromBytes,
-{
-    fn from(value: ConnectedClient<P, M>) -> Self {
-        Self::Connected(value)
-    }
 }
 
 impl<P, M> SteamClientTransport<P, M>
@@ -198,26 +283,26 @@ where
     P: LaneProtocol,
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
-    M: 'static,
+    M: Manager + Send + Sync + 'static,
 {
     pub fn connect_new_ip(
-        steam: &steamworks::Client<M>,
+        steam: steamworks::Client<M>,
         remote: SocketAddr,
     ) -> Result<Self, SteamTransportError<P>> {
-        ConnectedClient::connect_ip(steam, remote).map(Self::Connected)
+        ConnectingClient::connect_ip(steam, remote).map(Self::Connecting)
     }
 
     pub fn connect_new_p2p(
-        steam: &steamworks::Client<M>,
+        steam: steamworks::Client<M>,
         remote: SteamId,
         port: i32,
     ) -> Result<Self, SteamTransportError<P>> {
-        ConnectedClient::connect_p2p(steam, remote, port).map(Self::Connected)
+        ConnectingClient::connect_p2p(steam, remote, port).map(Self::Connecting)
     }
 
     pub fn connect_ip(
         &mut self,
-        steam: &steamworks::Client<M>,
+        steam: steamworks::Client<M>,
         remote: SocketAddr,
     ) -> Result<(), SteamTransportError<P>> {
         match self {
@@ -225,13 +310,13 @@ where
                 *self = Self::connect_new_ip(steam, remote)?;
                 Ok(())
             }
-            Self::Connected(_) => Err(SteamTransportError::<P>::AlreadyConnected),
+            _ => Err(SteamTransportError::<P>::AlreadyConnected),
         }
     }
 
     pub fn connect_p2p(
         &mut self,
-        steam: &steamworks::Client<M>,
+        steam: steamworks::Client<M>,
         remote: SteamId,
         port: i32,
     ) -> Result<(), SteamTransportError<P>> {
@@ -240,14 +325,14 @@ where
                 *self = Self::connect_new_p2p(steam, remote, port)?;
                 Ok(())
             }
-            Self::Connected(_) => Err(SteamTransportError::<P>::AlreadyConnected),
+            _ => Err(SteamTransportError::<P>::AlreadyConnected),
         }
     }
 
     pub fn disconnect(&mut self) -> Result<(), SteamTransportError<P>> {
         match self {
             Self::Disconnected => Err(SteamTransportError::<P>::AlreadyDisconnected),
-            Self::Connected(_) => {
+            _ => {
                 *self = Self::Disconnected;
                 Ok(())
             }
@@ -263,29 +348,52 @@ where
 {
     type Error = SteamTransportError<P>;
 
-    type Info = ClientInfo;
+    type ConnectingInfo = ();
 
-    fn state(&self) -> ClientState<Self::Info> {
+    type ConnectedInfo = ConnectionInfo;
+
+    fn state(&self) -> ClientState {
         match self {
             Self::Disconnected => ClientState::Disconnected,
-            Self::Connected(client) => client.state(),
+            Self::Connecting(_) => ClientState::Connecting(()),
+            Self::Connected(client) => ClientState::Connected(client.info()),
         }
     }
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
         match self {
             Self::Disconnected => Err(SteamTransportError::<P>::NotConnected),
+            Self::Connecting(_) => Err(SteamTransportError::<P>::NotConnected),
             Self::Connected(client) => client.send(msg),
         }
     }
 
     fn update(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
         match self {
-            Self::Disconnected => Either::Left(iter::empty()),
-            Self::Connected(client) => Either::Right(match client.update() {
-                Ok(events) => Either::Left(events.into_iter()),
-                Err(reason) => Either::Right(iter::once(ClientEvent::Disconnected { reason })),
-            }),
+            Self::Disconnected => vec![],
+            Self::Connecting(client) => match client.poll() {
+                Poll::Pending => vec![],
+                Poll::Ready(Ok(client)) => {
+                    let event = ClientEvent::Connected {
+                        info: client.info(),
+                    };
+                    *self = Self::Connected(client);
+                    vec![event]
+                }
+                Poll::Ready(Err(reason)) => {
+                    *self = Self::Disconnected;
+                    vec![ClientEvent::Disconnected { reason }]
+                }
+            },
+            Self::Connected(client) => match client.update() {
+                (events, Ok(())) => events,
+                (mut events, Err(reason)) => {
+                    *self = Self::Disconnected;
+                    events.push(ClientEvent::Disconnected { reason });
+                    events
+                }
+            },
         }
+        .into_iter()
     }
 }

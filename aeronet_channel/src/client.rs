@@ -1,9 +1,8 @@
-use std::{time::Instant, iter};
+use std::time::Instant;
 
 use aeronet::{ClientKey, ClientTransport, TransportProtocol};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
-use either::Either;
 
 use crate::{ChannelError, ChannelServer, ConnectionInfo};
 
@@ -62,7 +61,9 @@ where
         let mut events = Vec::new();
 
         if self.send_connected {
-            events.push(ClientEvent::Connected { info: self.info.clone() });
+            events.push(ClientEvent::Connected {
+                info: self.info.clone(),
+            });
             self.send_connected = false;
         }
 
@@ -151,14 +152,15 @@ where
 
     fn update(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
         match self {
-            Self::Disconnected => Either::Left(iter::empty()),
-            Self::Connected(client) => Either::Right(match client.update() {
+            Self::Disconnected => vec![],
+            Self::Connected(client) => match client.update() {
                 (events, Ok(())) => events,
                 (mut events, Err(reason)) => {
                     events.push(ClientEvent::Disconnected { reason });
                     events
                 }
-            }.into_iter()),
+            },
         }
+        .into_iter()
     }
 }

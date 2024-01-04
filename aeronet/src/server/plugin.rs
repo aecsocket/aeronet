@@ -37,7 +37,10 @@ where
 }
 
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "T::ConnectingInfo: Debug"), Clone(bound = "T::ConnectingInfo: Clone"))]
+#[derivative(
+    Debug(bound = "T::ConnectingInfo: Debug"),
+    Clone(bound = "T::ConnectingInfo: Clone")
+)]
 pub struct RemoteConnecting<P, T>
 where
     P: TransportProtocol,
@@ -48,7 +51,10 @@ where
 }
 
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "T::ConnectedInfo: Debug"), Clone(bound = "T::ConnectedInfo: Clone"))]
+#[derivative(
+    Debug(bound = "T::ConnectedInfo: Debug"),
+    Clone(bound = "T::ConnectedInfo: Clone")
+)]
 pub struct RemoteConnected<P, T>
 where
     P: TransportProtocol,
@@ -93,8 +99,12 @@ fn recv<P, T>(
 {
     for event in server.update() {
         match event {
-            ServerEvent::Connecting { client, info } => connecting.send(RemoteConnecting { client, info }),
-            ServerEvent::Connected { client, info } => connected.send(RemoteConnected { client, info }),
+            ServerEvent::Connecting { client, info } => {
+                connecting.send(RemoteConnecting { client, info })
+            }
+            ServerEvent::Connected { client, info } => {
+                connected.send(RemoteConnected { client, info })
+            }
             ServerEvent::Disconnected { client, reason } => {
                 disconnected.send(RemoteDisconnected { client, reason })
             }
