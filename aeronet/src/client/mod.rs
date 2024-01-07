@@ -65,25 +65,25 @@ pub enum ClientState<A, B> {
 }
 
 impl<A, B> ClientState<A, B> {
+    /// Gets if this is a [`ClientState::Disconnected`].
+    /// 
+    /// This should be used to determine if the user is allowed to start
+    /// connecting to a server.
     pub fn is_disconnected(&self) -> bool {
-        match self {
-            Self::Disconnected => true,
-            _ => false,
-        }
+        matches!(self, Self::Disconnected)
     }
 
+    /// Gets if this is a [`ClientState::Connecting`].
     pub fn is_connecting(&self) -> bool {
-        match self {
-            Self::Connecting(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Connecting(_))
     }
 
+    /// Gets if this is a [`ClientState::Connected`].
+    /// 
+    /// This should be used to determine if the user is allowed to send messages
+    /// to the server.
     pub fn is_connected(&self) -> bool {
-        match self {
-            Self::Connected(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Connected(_))
     }
 }
 
@@ -109,13 +109,13 @@ where
     Connected {
         /// Info on the connection.
         ///
-        /// This is the same data as held by [`ClientState::Connecting`].
+        /// This is the same data as held by [`ClientState::Connected`].
         info: B,
     },
     /// The client has unrecoverably lost connection from its previously
     /// connected server.
     ///
-    /// This event is not raised when the user invokes a disconnect.
+    /// This event is not raised when the app invokes a disconnect.
     Disconnected {
         /// Why the client lost connection.
         reason: E,
@@ -132,9 +132,6 @@ where
         /// time at which the message was polled using
         /// [`ClientTransport::update`] is not necessarily when the app first
         /// became aware of this message.
-        ///
-        /// This value can be used for calculating an estimate of the round-trip
-        /// time.
         at: Instant,
     },
 }

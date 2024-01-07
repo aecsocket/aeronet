@@ -38,15 +38,15 @@ where
     let weights = P::Lane::VARIANTS.iter().map(|_| 0).collect::<Vec<_>>();
 
     let num_lanes = i32::from(num_lanes);
-    // socks
-    //     .configure_connection_lanes(&conn, num_lanes, &priorities, &weights)
-    //     .map_err(SteamTransportError::<S, R>::ConfigureLanes)?;
+    socks
+        .configure_connection_lanes(&conn, num_lanes, &priorities, &weights)
+        .map_err(SteamTransportError::<S, R>::ConfigureLanes)?;
 
     Ok(())
 }
 
 pub(super) fn recv_all<P, S, R, M>(
-    conn: &NetConnection<M>,
+    conn: &mut NetConnection<M>,
     info: &mut ConnectionInfo,
 ) -> (Vec<R>, Result<(), SteamTransportError<S, R>>)
 where
