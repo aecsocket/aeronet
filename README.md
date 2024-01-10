@@ -17,7 +17,7 @@ This crate aims to be:
     such as fragmentation, this crate won't re-implement it on top
 * Integrated with Bevy
   * Built with apps and games in mind, the abstractions chosen closely suit Bevy's app model, and
-    likely other frameworks
+    likely other similar frameworks
 
 This crate does not aim to be:
 * A high-level app networking library, featuring replication, rollback, etc.

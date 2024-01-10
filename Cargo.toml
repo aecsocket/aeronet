@@ -21,7 +21,8 @@ categories = [ "game-development", "network-programming" ]
 license = "MIT OR Apache-2.0"
 
 [workspace.lints.rust]
-# missing_docs = "warn"
+missing_docs = "warn"
+# unused_crate_dependencies = "warn"
 
 [workspace.lints.clippy]
 all = "warn"
@@ -43,7 +44,6 @@ ahash = "0.8.7"
 anyhow = "1.0.75"
 rand = "0.8.5"
 rand_distr = "0.4.3"
-bitcode = { version = "0.5.0", features = [ "derive" ] }
 
 proc-macro2 = "1.0.69"
 syn = "2.0.39"

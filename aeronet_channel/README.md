@@ -18,8 +18,8 @@ handle client connections. Then create and connect a [`ChannelClient`] to this s
 returned [`ClientKey`] to disconnect this client later.
 
 ```rust
-use aeronet::{TransportClient, TransportServer};
-use aeronet_channel::{ChannelClient, ChannelServer, ClientKey};
+use aeronet::{ClientTransport, ServerTransport, ClientKey};
+use aeronet_channel::{ChannelClient, ChannelServer};
 
 # #[derive(aeronet::Message)]
 # struct AppMessage(&'static str);
@@ -29,10 +29,10 @@ use aeronet_channel::{ChannelClient, ChannelServer, ClientKey};
 #     type C2S = AppMessage;
 #     type S2C = AppMessage;
 # }
-let mut server = ChannelServer::<AppProtocol>::new();
-let (mut client, client_key): (_, ClientKey) = ChannelClient::connected(&mut server);
+let mut server = ChannelServer::<AppProtocol>::open();
+let mut client = ChannelClient::connect_new(&mut server);
 
 client.send(AppMessage("hi!")).unwrap();
 
-server.disconnect(client_key);
+server.disconnect(client.key().unwrap());
 ```

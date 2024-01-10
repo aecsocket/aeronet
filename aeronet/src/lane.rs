@@ -26,6 +26,18 @@ pub enum LaneKind {
     ReliableOrdered,
 }
 
+/// App-defined type listing a set of lanes which a transport can use to send
+/// app messages along.
+/// 
+/// See [`LaneKind`] for documentation on lanes.
+/// 
+/// This trait should be derived - see [`aeronet_derive::LaneKey`]. Otherwise,
+/// you will have to make sure to follow the contract regarding panics.
+/// 
+/// # Panics
+/// 
+/// This trait must be implemented correctly, otherwise transport
+/// implementations may panic.
 pub trait LaneKey: Send + Sync + Debug + Clone + 'static {
     /// All variants of this type that may exist.
     /// 
@@ -53,7 +65,7 @@ pub trait LaneKey: Send + Sync + Debug + Clone + 'static {
     /// buffered messages sent out sooner.
     /// 
     /// This value is implementation-specific - some transports may choose to
-    /// respect this value, for others it may have no effect.
+    /// respect this value; for others, it may have no effect.
     fn priority(&self) -> i32;
 }
 
@@ -61,6 +73,8 @@ pub trait LaneKey: Send + Sync + Debug + Clone + 'static {
 /// 
 /// See [`LaneKey`] for an explanation of lanes.
 /// 
+/// This trait can be derived - see [`aeronet_derive::OnLane`].
+///
 /// Note that this only affects what lane an *outgoing* message is *sent out*
 /// on - it has no effect on incoming messages.
 /// 
@@ -69,6 +83,6 @@ pub trait OnLane {
     /// User-defined type of lane, output by [`OnLane::lane`].
     type Lane: LaneKey;
 
-    /// Gets what lane this value is sent out on.
+    /// What lane this value is sent out on.
     fn lane(&self) -> Self::Lane;
 }

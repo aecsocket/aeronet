@@ -23,7 +23,6 @@ bevy = [ "dep:bevy", "aeronet/bevy" ]
 aeronet.workspace = true
 
 derivative.workspace = true
-tracing.workspace = true
 thiserror.workspace = true
 slotmap.workspace = true
 crossbeam-channel.workspace = true
@@ -33,9 +32,13 @@ bevy = { workspace = true, optional = true }
 [dev-dependencies]
 bevy = { workspace = true, default-features = true }
 bevy_egui.workspace = true
-anyhow.workspace = true
 
 [[example]]
 name = "echo"
 path = "examples/echo.rs"
+required-features = [ "bevy" ]
+
+[[example]]
+name = "echo_conditioned"
+path = "examples/echo_conditioned.rs"
 required-features = [ "bevy" ]

@@ -10,36 +10,82 @@ use derivative::Derivative;
 
 use crate::{ClientKey, ClientState, TransportProtocol};
 
+/// Allows listening to client connections and transporting data between this
+/// server and connected clients.
+/// 
+/// See the [crate-level docs](crate).
 pub trait ServerTransport<P>
 where
     P: TransportProtocol,
 {
+    /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync + 'static;
 
+    /// Info on this server when it is in the [`ServerState::Opening`] state.
     type OpeningInfo: Send + Sync + 'static;
 
+    /// Info on this server when it is in the [`ServerState::Open`] state.
     type OpenInfo: Send + Sync + 'static;
 
+    /// Info on clients connected to this server when they are in the
+    /// [`ClientState::Connecting`] state.
     type ConnectingInfo: Send + Sync + 'static;
 
+    /// Info on clients connected to this server when they are in the
+    /// [`ClientState::Connected`] state.
     type ConnectedInfo: Send + Sync + 'static;
 
+    /// Reads the current state of this server.
     fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo>;
 
+    /// Reads the current state of a client.
+    /// 
+    /// If the client does not exist, [`ClientState::Disconnected`] is returned.
     fn client_state(
         &self,
         client: ClientKey,
     ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
 
+    /// Iterator over the keys of all clients currently recognized by this
+    /// server.
+    /// 
+    /// There is no guarantee about what state each client in this iterator is
+    /// in, it's just guaranteed that the server is tracking some sort of state
+    /// about it.
     fn clients(&self) -> impl Iterator<Item = ClientKey> + '_;
 
+    /// Attempts to send a message to a connected client.
+    /// 
+    /// # Errors
+    /// 
+    /// Errors if the transport failed to *attempt to* send the message, e.g.
+    /// if the server is not open, or if the client is not connected. If a
+    /// transmission error occurs later after this function's scope has
+    /// finished, then this will still return [`Ok`].
     fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
 
+    /// Forces a client to disconnect from this server.
+    /// 
+    /// This does *not* guarantee any graceful shutdown of the connection. If
+    /// you want this to be handled gracefully, you must implement a mechanism
+    /// for this yourself.
+    /// 
+    /// # Errors
+    /// 
+    /// Errors if the transport failed to *attempt to* disconnect the client,
+    /// e.g. if the server already knows that the client is disconnected.
     fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error>;
 
+    /// Updates the internal state of this transport, returning an iterator over
+    /// the events that it emitted while updating.
+    /// 
+    /// This should be called in your app's main update loop.
+    /// 
+    /// If this emits an event which changes the transport's state, then after
+    /// this function, the transport is guaranteed to be in this new state.
     fn update(
         &mut self,
-    ) -> impl Iterator<Item = ServerEvent<P, Self::ConnectingInfo, Self::ConnectedInfo, Self::Error>> + '_;
+    ) -> impl Iterator<Item = ServerEvent<P, Self::ConnectingInfo, Self::ConnectedInfo, Self::Error>>;
 }
 
 /// State of a [`ServerTransport`].

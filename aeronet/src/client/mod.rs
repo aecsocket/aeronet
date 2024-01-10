@@ -14,25 +14,45 @@ use derivative::Derivative;
 
 use crate::TransportProtocol;
 
+/// Allows connecting to a server and transporting data between this client and the server.
+/// 
+/// See the [crate-level docs](crate).
 pub trait ClientTransport<P>
 where
     P: TransportProtocol,
 {
+    /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync + 'static;
 
+    /// Info on this client when it is in the [`ClientState::Connecting`] state.
     type ConnectingInfo: Send + Sync + 'static;
 
+    /// Info on this client when it is in the [`ClientState::Connected`] state.
     type ConnectedInfo: Send + Sync + 'static;
 
+    /// Reads the current state of this client.
     fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
 
+    /// Attempts to send a message to the currently connected server.
+    /// 
+    /// # Errors
+    /// 
+    /// Errors if the transport failed to *attempt to* send the message, e.g.
+    /// if it is not connected to a server. If a transmission error occurs later
+    /// after this function's scope has finished, then this will still return
+    /// [`Ok`].
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error>;
 
+    /// Updates the internal state of this transport, returning an iterator over
+    /// the events that it emitted while updating.
+    /// 
+    /// This should be called in your app's main update loop.
+    /// 
     /// If this emits an event which changes the transport's state, then after
-    /// this call, the transport will be in this new state.
+    /// this function, the transport is guaranteed to be in this new state.
     fn update(
         &mut self,
-    ) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>> + '_;
+    ) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>>;
 }
 
 slotmap::new_key_type! {

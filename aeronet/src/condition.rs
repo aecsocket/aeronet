@@ -4,7 +4,7 @@ use std::{
 };
 
 use rand::Rng;
-use rand_distr::{Distribution, Normal, NormalError};
+use rand_distr::{Distribution, Normal};
 
 use crate::{
     ClientEvent, ClientKey, ClientState, ClientTransport, ServerEvent, ServerState,
@@ -12,6 +12,22 @@ use crate::{
 };
 
 /// Configuration for a [`ConditionedClient`] or [`ConditionedServer`].
+/// 
+/// **This is for testing purposes only!** You should never be using a
+/// conditioner in the release build of your app.
+/// 
+/// A useful strategy for testing networking code is to induce artificial packet
+/// loss and delays, and see how your app copes with it.
+/// 
+/// A conditioned client or server will add some unreliability to the incoming
+/// messages on that transport. Messages may be delayed for a random amount of
+/// time, or may even be dropped entirely. Whether a message is dropped or not
+/// is purely random, and this configuration allows you to tweak the values of
+/// this randomness.
+/// 
+/// Note that conditioners only work on the smallest unit of transmission
+/// exposed in the API - individual messages. They will only delay or drop
+/// incoming messages, without affecting outgoing messages at all.
 #[derive(Debug, Clone, Default)]
 pub struct ConditionerConfig {
     /// Chance of a message being dropped in transit.
@@ -23,19 +39,6 @@ pub struct ConditionerConfig {
     pub delay_mean: f32,
     /// Standard deviation, in seconds, of the time that messages are delayed.
     pub delay_std_dev: f32,
-}
-
-/// Error when creating a [`ConditionedClient`].
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum ConditionerError {
-    /// [`ConditionerConfig::loss_rate`] was not within the valid range.
-    #[error("loss rate out of range")]
-    LossRateOutOfRange,
-    /// [`ConditionerConfig::delay_mean`] and
-    /// [`ConditionerConfig::delay_std_dev`] produced an invalid normal
-    /// distribution.
-    #[error("invalid delay distribution")]
-    DelayDistr(#[source] NormalError),
 }
 
 #[derive(Debug)]
@@ -95,19 +98,16 @@ impl<R> Conditioner<R>
 where
     R: Recv,
 {
-    fn new(config: ConditionerConfig) -> Result<Self, ConditionerError> {
-        if !(0.0..=1.0).contains(&config.loss_rate) {
-            return Err(ConditionerError::LossRateOutOfRange);
-        }
-
+    fn new(config: ConditionerConfig) -> Self {
+        let loss_rate = config.loss_rate.clamp(0.0, 1.0);
         let delay_distr = Normal::new(config.delay_mean, config.delay_std_dev)
-            .map_err(ConditionerError::DelayDistr)?;
+            .expect("should be a valid normal distribution");
 
-        Ok(Self {
-            loss_rate: config.loss_rate,
+        Self {
+            loss_rate,
             delay_distr,
             recv_buf: Vec::new(),
-        })
+        }
     }
 
     fn condition(&mut self, recv: R) -> Option<R> {
@@ -152,7 +152,12 @@ where
     }
 }
 
+/// Wrapper around a [`ClientTransport`] which randomly delays and drops
+/// incoming messages.
+/// 
+/// See [`ConditionerConfig`] for details.
 #[derive(Debug)]
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ConditionedClient<P, T>
 where
     P: TransportProtocol,
@@ -167,11 +172,13 @@ where
     P: TransportProtocol,
     T: ClientTransport<P>,
 {
-    pub fn new(inner: T, config: ConditionerConfig) -> Result<Self, ConditionerError> {
-        let conditioner = Conditioner::new(config)?;
-        Ok(Self { inner, conditioner })
+    /// Wraps an existing transport in a conditioner.
+    pub fn new(inner: T, config: ConditionerConfig) -> Self {
+        let conditioner = Conditioner::new(config);
+        Self { inner, conditioner }
     }
 
+    /// Takes the wrapped transport out of this transport.
     pub fn into_inner(self) -> T {
         self.inner
     }
@@ -220,7 +227,7 @@ where
 
     fn update(
         &mut self,
-    ) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>> + '_ {
+    ) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>> {
         let mut events = Vec::new();
 
         events.extend(self.conditioner.buffered().map(|recv| ClientEvent::Recv {
@@ -244,7 +251,12 @@ where
     }
 }
 
+/// Wrapper around a [`ServerTransport`] which randomly delays and drops
+/// incoming messages.
+/// 
+/// See [`ConditionerConfig`] for details.
 #[derive(Debug)]
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
 pub struct ConditionedServer<P, T>
 where
     P: TransportProtocol,
@@ -259,11 +271,13 @@ where
     P: TransportProtocol,
     T: ServerTransport<P>,
 {
-    pub fn new(inner: T, config: ConditionerConfig) -> Result<Self, ConditionerError> {
-        let conditioner = Conditioner::new(config)?;
-        Ok(Self { inner, conditioner })
+    /// Wraps an existing transport in a conditioner.
+    pub fn new(inner: T, config: ConditionerConfig) -> Self {
+        let conditioner = Conditioner::new(config);
+        Self { inner, conditioner }
     }
 
+    /// Takes the wrapped transport out of this transport.
     pub fn into_inner(self) -> T {
         self.inner
     }
@@ -356,59 +370,3 @@ where
         self.inner.disconnect(client)
     }
 }
-
-// /// Utility for conditioning a network connection by adding artificial packet
-// /// loss and transmission delay.
-// ///
-// /// **This is for testing purposes only. For production use, never use a
-// /// conditioner! Use `()` instead, which implements this trait but does no
-// /// actual conditioning.**
-// ///
-// /// A useful strategy for testing transport implementations, and networking
-// code /// in general, is to induce artificial packet loss and delays and see
-// how your /// system copes with it. This trait defines a strategy for inducing
-// these /// effects, while being as transport-agnostic as possible.
-// ///
-// /// The standard implementation of this is [`SimpleConditioner`].
-// ///
-// /// # The type of `T`
-// ///
-// /// The type `T` here represents the type of data that gets conditioned, i.e.
-// /// potentially dropped or delayed, however this does not necessarily have to
-// /// be the same as the message type! If the underlying transport uses bytes
-// /// for communication, and these bytes make up a single packet rather than a
-// /// single message, then these bytes should be conditioned instead. This
-// leads /// to more comprehensive testing, as the transport must now deal with
-// entire /// packets potentially being dropped, rather than just messages,
-// which it /// should be able to handle.
-// ///
-// /// # Sending and receiving
-// ///
-// /// This trait is agnostic about which side of the transport process it
-// /// conditions - it can be applied to both outgoing and incoming data.
-// pub trait Conditioner<T>: Send + Sync + 'static {
-//     /// Passes data through the conditioner to determine if it will carry on
-//     /// being processed as normal by the transport.
-//     ///
-//     /// If the conditioner decides that this data will carry on being
-// processed     /// as normal, it will return `Some(T)` with the same data
-// passed in.     /// Otherwise, it can choose to delay or even drop the data
-// entirely, in     /// which case `None` is returned.
-//     ///
-//     /// If the data is delayed, it will eventually appear in
-//     /// [`Conditioner::buffered`].
-//     fn condition(&mut self, data: T) -> Option<T>;
-
-//     /// Gets any data that the conditioner has decided is ready for
-// processing.     ///
-//     /// Since the conditioner may delay sending and receiving data, it may
-//     /// always have some data ready for the transport to process - you don't
-//     /// know until you call this function. This function will consume any
-// data     /// which was buffered and is now ready to be processed further.
-//     ///
-//     /// A transport should call this right before/after dealing with the
-//     /// underlying transport layer, i.e. after receiving datagrams, and if
-// there     /// is any data returned by this function, append it to what it was
-// about to     /// process.
-//     fn buffered(&mut self) -> impl Iterator<Item = T> + Send;
-// }

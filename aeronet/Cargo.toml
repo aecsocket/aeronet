@@ -28,11 +28,9 @@ bevy-tokio-rt = [ "bevy", "bevy/multi-threaded", "dep:tokio" ]
 aeronet_derive.workspace = true
 
 derivative.workspace = true
-thiserror.workspace = true
 slotmap.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
-bitcode.workspace = true
 
 bevy = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, default-features = false, features = [ "rt-multi-thread" ] }

@@ -124,6 +124,13 @@ where
             }
         }
     }
+
+    pub fn key(&self) -> Option<ClientKey> {
+        match self {
+            Self::Disconnected => None,
+            Self::Connected(client) => Some(client.key),
+        }
+    }
 }
 
 impl<P> ClientTransport<P> for ChannelClient<P>
