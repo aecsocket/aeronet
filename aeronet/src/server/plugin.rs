@@ -1,6 +1,7 @@
 use std::{fmt::Debug, marker::PhantomData, time::Instant};
 
-use bevy::prelude::*;
+use bevy_ecs::prelude::*;
+use bevy_app::prelude::*;
 use derivative::Derivative;
 
 use crate::{ClientKey, ServerEvent, ServerTransport, TransportProtocol};
@@ -159,7 +160,6 @@ where
     pub at: Instant,
 }
 
-#[allow(clippy::too_many_arguments)]
 fn recv<P, T>(
     mut server: ResMut<T>,
     mut connecting: EventWriter<RemoteConnecting<P, T>>,

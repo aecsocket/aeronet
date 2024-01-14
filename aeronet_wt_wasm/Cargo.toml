@@ -21,7 +21,7 @@ all-features = true
 
 [features]
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = [ "dep:bevy", "aeronet/bevy" ]
+bevy = [ "dep:bevy_ecs", "aeronet/bevy" ]
 
 [dependencies]
 aeronet.workspace = true
@@ -34,7 +34,7 @@ wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 js-sys.workspace = true
 
-bevy = { workspace = true, optional = true }
+bevy_ecs = { workspace = true, optional = true }
 
 [dependencies.web-sys]
 workspace = true
@@ -47,11 +47,10 @@ features = [
 ]
 
 [dev-dependencies]
-aeronet_example.workspace = true
-bevy = { workspace = true, default-features = true }
+bevy.workspace = true
 bevy_egui.workspace = true
 
 [[example]]
-name = "wasm_echo_client"
-path = "examples/wasm_echo_client.rs"
+name = "echo_client"
+path = "examples/echo_client.rs"
 required-features = [ "bevy" ]

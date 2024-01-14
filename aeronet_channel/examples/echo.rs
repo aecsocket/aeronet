@@ -1,3 +1,6 @@
+//! Example creating a client and server pair, where the client can send a
+//! message, and the server just echoes back that message to the client.
+
 use std::mem;
 
 use aeronet::{

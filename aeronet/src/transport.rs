@@ -79,7 +79,7 @@ pub trait Rtt {
 
 /// Holds statistics on the messages sent across a transport.
 pub trait MessageStats {
-    /// Total number of messages sent, or attempted to be sent.
+    /// Total number of messages successfully sent.
     fn msgs_sent(&self) -> usize;
 
     /// Total number of messages successfully received.
@@ -90,7 +90,7 @@ pub trait MessageStats {
 ///
 /// This is used by transports which convert messages into a byte form.
 pub trait ByteStats {
-    /// Total number of message bytes sent, or attempted to be sent.
+    /// Total number of message bytes successfully sent.
     ///
     /// This only counts the bytes that make up a message, rather than all
     /// bytes including transport-layer wrappers and frames.

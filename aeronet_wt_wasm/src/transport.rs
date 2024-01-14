@@ -1,6 +1,6 @@
 use std::{fmt::Debug, time::Duration};
 
-use aeronet::{ChannelProtocol, OnChannel, Rtt, TryAsBytes, TryFromBytes};
+use aeronet::{Rtt, TryAsBytes, TryFromBytes, LaneProtocol, OnLane};
 use derivative::Derivative;
 use js_sys::{Array, Reflect, Uint8Array};
 use wasm_bindgen::JsValue;
@@ -172,8 +172,8 @@ impl TryFrom<&WebTransportStats> for EndpointInfo {
 #[derivative(Debug(bound = ""))]
 pub enum WebTransportError<P>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
     /// The backend that handles connections asynchronously is shut down or not
@@ -193,12 +193,12 @@ where
     #[error("failed to get stats: {0}")]
     GetStats(String),
     /// An error occurred while processing datagrams not bound to a specific
-    /// channel.
-    #[error("on datagram channel")]
-    OnDatagram(#[source] ChannelError<P>),
-    /// An error occurred while processing a channel.
+    /// lane.
+    #[error("on datagram lane")]
+    OnDatagram(#[source] LaneError<P>),
+    /// An error occurred while processing a lane.
     #[error("on {0:?}")]
-    OnChannel(P::Channel, #[source] ChannelError<P>),
+    OnLane(P::Lane, #[source] LaneError<P>),
     /// The client was forcefully disconnected by the app.
     #[error("force disconnect")]
     ForceDisconnect,
@@ -206,14 +206,13 @@ where
 
 const MAX_MSG_SIZE: u32 = u32::MAX;
 
-/// Error that occurs while processing a channel, either datagrams or QUIC
-/// streams.
+/// Error that occurs while processing a lane, either datagrams or QUIC streams.
 #[derive(Derivative, thiserror::Error)]
 #[derivative(Debug(bound = ""))]
-pub enum ChannelError<P>
+pub enum LaneError<P>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
     // establish

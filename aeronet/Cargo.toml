@@ -18,11 +18,11 @@ all-features = true
 
 [features]
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = [ "dep:bevy" ]
+bevy = [ "dep:bevy_ecs", "dep:bevy_app" ]
 
 ## Allows storing an async [`tokio`](https://docs.rs/tokio) runtime in a
 ## [`bevy`](https://docs.rs/bevy) resource.
-bevy-tokio-rt = [ "bevy", "bevy/multi-threaded", "dep:tokio" ]
+bevy-tokio-rt = [ "bevy", "dep:tokio" ]
 
 [dependencies]
 aeronet_derive.workspace = true
@@ -32,5 +32,7 @@ slotmap.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
 
-bevy = { workspace = true, optional = true }
+bevy_ecs = { workspace = true, optional = true }
+bevy_app = { workspace = true, optional = true }
+
 tokio = { workspace = true, optional = true, default-features = false, features = [ "rt-multi-thread" ] }

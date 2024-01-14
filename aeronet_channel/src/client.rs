@@ -10,6 +10,10 @@ type ClientState = aeronet::ClientState<(), ConnectionInfo>;
 
 type ClientEvent<P> = aeronet::ClientEvent<P, ConnectionInfo, ChannelError>;
 
+/// Implementation of [`ClientTransport`] using in-memory MPSC channels for
+/// transport.
+/// 
+/// See the [crate-level docs](crate).
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct ConnectedClient<P>
@@ -27,6 +31,7 @@ impl<P> ConnectedClient<P>
 where
     P: TransportProtocol,
 {
+    /// Creates a client and immediately connects it to an existing server.
     pub fn connect(server: &mut ChannelServer<P>) -> Self {
         let (send_c2s, recv_c2s) = crossbeam_channel::unbounded();
         let (send_s2c, recv_s2c) = crossbeam_channel::unbounded();
@@ -40,13 +45,17 @@ where
         }
     }
 
+    /// Key of this client as defined on the server, used for removing this
+    /// client from the server later.
     pub fn key(&self) -> ClientKey {
         self.key
     }
 
-    pub fn state(&self) -> ClientState {
-        ClientState::Connected(self.info.clone())
+    /// Statistics on the connection currently established by this client.
+    pub fn info(&self) -> ConnectionInfo {
+        self.info.clone()
     }
+
 
     pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), ChannelError> {
         let msg = msg.into();
@@ -87,7 +96,7 @@ where
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub enum ChannelClient<P>
 where
     P: TransportProtocol,
@@ -146,7 +155,7 @@ where
     fn state(&self) -> ClientState {
         match self {
             Self::Disconnected => ClientState::Disconnected,
-            Self::Connected(client) => client.state(),
+            Self::Connected(client) => ClientState::Connected(client.info()),
         }
     }
 

@@ -1,8 +1,11 @@
 use aeronet::MessageStats;
 
+/// Statistics on a connection using a channel transport.
 #[derive(Debug, Clone, Default)]
 pub struct ConnectionInfo {
+    /// Number of messages successfully sent.
     pub msgs_sent: usize,
+    /// Number of messages successfully received.
     pub msgs_recv: usize,
 }
 

@@ -1,6 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
-use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
+use aeronet::{TryAsBytes, TryFromBytes, LaneProtocol, OnLane};
 use js_sys::Reflect;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
@@ -23,8 +23,8 @@ impl WebTransport {
         url: impl AsRef<str>,
     ) -> Result<Self, WebTransportError<P>>
     where
-        P: ChannelProtocol,
-        P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+        P: LaneProtocol,
+        P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
         P::S2C: TryFromBytes,
     {
         let url = url.as_ref();

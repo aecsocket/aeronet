@@ -1,7 +1,7 @@
 mod backend;
 mod frontend;
 
-use aeronet::{ChannelProtocol, OnChannel, TryAsBytes, TryFromBytes};
+use aeronet::{TryAsBytes, TryFromBytes, LaneProtocol, OnLane};
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 
@@ -14,11 +14,11 @@ use crate::{EndpointInfo, WebTransportError};
 /// [`TransportClient`]: aeronet::TransportClient
 #[derive(Debug, Derivative)]
 #[derivative(Default(bound = ""))]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportClient<P>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
     state: State<P>,
@@ -27,23 +27,23 @@ where
 #[derive(Debug)]
 enum State<P>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
-    Disconnected { forced: bool },
+    Disconnected,
     Connecting(ConnectingClient<P>),
     Connected(ConnectedClient<P>),
 }
 
 impl<P> Default for State<P>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
     fn default() -> Self {
-        Self::Disconnected { forced: false }
+        Self::Disconnected
     }
 }
 
@@ -51,8 +51,8 @@ where
 #[derivative(Debug)]
 struct ConnectingClient<P>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
     #[derivative(Debug = "ignore")]
@@ -65,8 +65,8 @@ where
 #[derivative(Debug)]
 struct ConnectedClient<P>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
     info: Option<EndpointInfo>,

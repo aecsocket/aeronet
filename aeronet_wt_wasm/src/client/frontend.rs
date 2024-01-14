@@ -1,6 +1,6 @@
 use std::task::Poll;
 
-use aeronet::{ChannelProtocol, OnChannel, TransportClient, TryAsBytes, TryFromBytes};
+use aeronet::{TryAsBytes, TryFromBytes, LaneProtocol, OnLane, ClientTransport};
 use futures::channel::oneshot;
 use wasm_bindgen_futures::spawn_local;
 
@@ -10,8 +10,8 @@ use super::{backend, ConnectedClient, ConnectedClientResult, ConnectingClient, S
 
 impl<P> WebTransportClient<P>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
     /// Creates a new client which is not connecting to any server.
@@ -24,7 +24,7 @@ where
     #[must_use]
     pub fn closed() -> Self {
         Self {
-            state: State::Disconnected { forced: false },
+            state: State::Disconnected
         }
     }
 
@@ -70,10 +70,10 @@ type ClientEvent<P> = aeronet::ClientEvent<P, WebTransportClient<P>>;
 
 type ClientState = aeronet::ClientState<Option<EndpointInfo>>;
 
-impl<P> TransportClient<P> for WebTransportClient<P>
+impl<P> ClientTransport<P> for WebTransportClient<P>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
     type Error = WebTransportError<P>;
@@ -161,8 +161,8 @@ where
 
 impl<P> ConnectingClient<P>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
     fn new(config: WebTransportConfig, url: impl Into<String>) -> Self {
@@ -186,8 +186,8 @@ where
 
 impl<P> ConnectedClient<P>
 where
-    P: ChannelProtocol,
-    P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
     fn connection_info(&self) -> Option<EndpointInfo> {

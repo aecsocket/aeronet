@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy_ecs::prelude::*;
 use tokio::runtime;
 
 /// Wrapper resource around an async [`tokio`] runtime.
@@ -50,6 +50,8 @@ impl Default for TokioRuntime {
 
 #[cfg(test)]
 mod tests {
+    use bevy_app::prelude::*;
+
     use super::*;
 
     #[test]

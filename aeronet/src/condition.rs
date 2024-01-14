@@ -157,7 +157,7 @@ where
 /// 
 /// See [`ConditionerConfig`] for details.
 #[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ConditionedClient<P, T>
 where
     P: TransportProtocol,
@@ -256,7 +256,7 @@ where
 /// 
 /// See [`ConditionerConfig`] for details.
 #[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ConditionedServer<P, T>
 where
     P: TransportProtocol,

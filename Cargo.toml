@@ -4,10 +4,9 @@ members = [
     "aeronet",
     "aeronet_derive",
     #"aeronet_steam",
-    #"aeronet_example",
     "aeronet_channel",
     #"aeronet_wt_native",
-    #"aeronet_wt_wasm",
+    "aeronet_wt_wasm",
 ]
 
 [workspace.package]
@@ -37,39 +36,41 @@ aeronet_example = { version = "0.5.0", path = "aeronet_example" }
 
 derivative = "2.2.0"
 tracing = "0.1.40"
-thiserror = "1.0.50"
+thiserror = "1.0.56"
 either = "1.9.0"
-slotmap = "1.0.6"
+slotmap = "1.0.7"
 ahash = "0.8.7"
-anyhow = "1.0.75"
+anyhow = "1.0.79"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 
-proc-macro2 = "1.0.69"
-syn = "2.0.39"
-quote = "1.0.33"
+proc-macro2 = "1.0.76"
+syn = "2.0.48"
+quote = "1.0.35"
 const_format = "0.2.32"
 
-serde = "1.0.192"
+serde = "1.0.195"
 bincode = "1.3.3"
 
-tokio = { version = "1.34.0", default-features = false }
-futures = "0.3.29"
-crossbeam-channel = "0.5.8"
+tokio = { version = "1.35.1", default-features = false }
+futures = "0.3.30"
+crossbeam-channel = "0.5.11"
 
-bevy = { version = "0.12.1", default-features = false }
+bevy_ecs = { version = "0.12.1", default-features = false }
+bevy_app = { version = "0.12.1", default-features = false }
+bevy = "0.12.1"
 bevy_egui = "0.24.0"
 
-wtransport = "0.1.9"
+wtransport = "0.1.10"
 
-wasm-bindgen = "0.2.89"
-wasm-bindgen-futures = "0.4.39"
-js-sys = "0.3.65"
-web-sys = "0.3.66"
+wasm-bindgen = "0.2.90"
+wasm-bindgen-futures = "0.4.40"
+js-sys = "0.3.67"
+web-sys = "0.3.67"
 
-base64 = "0.21.5"
+base64 = "0.21.7"
 rcgen = "0.12.0"
-ring = "0.17.5"
-time = "0.3.30"
+ring = "0.17.7"
+time = "0.3.31"
 
 steamworks = { git = "https://github.com/Noxime/steamworks-rs" }

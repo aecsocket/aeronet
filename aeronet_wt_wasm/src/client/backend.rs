@@ -10,7 +10,7 @@ use wasm_bindgen_futures::{spawn_local, JsFuture};
 use crate::{
     util::{err_msg, StreamWriter},
     util::{StreamReader, WebTransport},
-    ChannelError, EndpointInfo, WebTransportConfig, WebTransportError, bind::WebTransportBidirectionalStream,
+    LaneError, EndpointInfo, WebTransportConfig, WebTransportError, bind::WebTransportBidirectionalStream,
 };
 
 use super::{ConnectedClient, ConnectedClientResult};
@@ -152,7 +152,7 @@ where
                         establish_stream(transport, channel.clone()).await
                     }
                 }
-                .map_err(|err| WebTransportError::OnChannel(channel.clone(), err))?;
+                .map_err(|err| WebTransportError::OnLane(channel.clone(), err))?;
                 Ok::<_, WebTransportError<P>>(channel)
             }
         }
@@ -174,14 +174,14 @@ async fn establish_stream<P>(
     transport: &WebTransport,
     channel: P::Channel,
     send_err: mpsc::UnboundedSender<WebTransportError<P>>,
-) -> Result<ChannelState<P>, ChannelError<P>>
+) -> Result<ChannelState<P>, LaneError<P>>
 where
     P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
     let streams = StreamReader::from(transport.incoming_bidirectional_streams().get_reader());
-    let (stream, _) = streams.read::<WebTransportBidirectionalStream>().await.map_err(|err| ChannelError::AcceptStream(err))?;
+    let (stream, _) = streams.read::<WebTransportBidirectionalStream>().await.map_err(|err| LaneError::AcceptStream(err))?;
     
     spawn_local(async move {
         debug!("Channel worker started");
@@ -189,7 +189,7 @@ where
             Ok(()) => debug!("Channel worker finished successfully"),
             Err(err) => {
                 debug!("Channel worker finished: {err:#}");
-                let _ = send_err.send(WebTransportError::<P, S, R>::OnChannel(channel, err));
+                let _ = send_err.send(WebTransportError::<P, S, R>::OnLane(channel, err));
             }
         }
     });
@@ -197,7 +197,7 @@ where
 
 async fn handle_stream<P>(
     stream: WebTransportBidirectionalStream,
-) -> Result<(), ChannelError<P>>
+) -> Result<(), LaneError<P>>
 where
     P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
@@ -221,7 +221,7 @@ where
         .datagrams()
         .writable()
         .get_writer()
-        .map_err(|_| WebTransportError::OnDatagram(ChannelError::WriterLocked))?;
+        .map_err(|_| WebTransportError::OnDatagram(LaneError::WriterLocked))?;
     let send_dgram = StreamWriter::from(send_dgram);
 
     let recv_dgram = transport.datagrams().readable().get_reader();
@@ -262,7 +262,7 @@ where
 async fn recv_stream<P>(
     reader: StreamReader,
     send_s2c: mpsc::UnboundedSender<P::S2C>,
-) -> Result<(), ChannelError<P>>
+) -> Result<(), LaneError<P>>
 where
     P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
@@ -273,28 +273,28 @@ where
         let (bytes, done) = reader
             .read::<Uint8Array>()
             .await
-            .map_err(ChannelError::RecvDatagram)?;
+            .map_err(LaneError::RecvDatagram)?;
         if done {
-            return Err(ChannelError::StreamClosed);
+            return Err(LaneError::StreamClosed);
         }
 
         let bytes = bytes.to_vec();
-        let msg = P::S2C::try_from_bytes(&bytes).map_err(ChannelError::Deserialize)?;
+        let msg = P::S2C::try_from_bytes(&bytes).map_err(LaneError::Deserialize)?;
         let _ = send_s2c.unbounded_send(msg);
     }
 }
 
-async fn send<P>(writer: &StreamWriter, msg: P::C2S) -> Result<(), ChannelError<P>>
+async fn send<P>(writer: &StreamWriter, msg: P::C2S) -> Result<(), LaneError<P>>
 where
     P: ChannelProtocol,
     P::C2S: TryAsBytes + OnChannel<Channel = P::Channel>,
     P::S2C: TryFromBytes,
 {
-    let serialized = msg.try_as_bytes().map_err(ChannelError::Serialize)?;
+    let serialized = msg.try_as_bytes().map_err(LaneError::Serialize)?;
     let bytes = serialized.as_ref();
 
     let len = bytes.len();
-    let len = u32::try_from(bytes.len()).map_err(|_| ChannelError::TooLarge(len))?;
+    let len = u32::try_from(bytes.len()).map_err(|_| LaneError::TooLarge(len))?;
 
     let chunk = Uint8Array::new_with_length(len);
     chunk.copy_from(bytes);
@@ -302,5 +302,5 @@ where
     writer
         .write(chunk)
         .await
-        .map_err(ChannelError::SendDatagram)
+        .map_err(LaneError::SendDatagram)
 }

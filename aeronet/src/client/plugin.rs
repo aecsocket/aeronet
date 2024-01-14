@@ -1,6 +1,7 @@
 use std::{fmt::Debug, marker::PhantomData, time::Instant};
 
-use bevy::prelude::*;
+use bevy_ecs::prelude::*;
+use bevy_app::prelude::*;
 use derivative::Derivative;
 
 use crate::{ClientEvent, ClientTransport, TransportProtocol};

@@ -1,3 +1,9 @@
+//! Example creating a client and server pair, where the client can send a
+//! message, and the server just echoes back that message to the client.
+//! 
+//! A conditioner is applied, which introduces artificial message loss and
+//! delays.
+
 use std::mem;
 
 use aeronet::{

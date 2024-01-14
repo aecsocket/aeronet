@@ -17,7 +17,7 @@ all-features = true
 
 [features]
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = [ "dep:bevy", "aeronet/bevy" ]
+bevy = [ "dep:bevy_ecs", "aeronet/bevy" ]
 
 [dependencies]
 aeronet.workspace = true
@@ -27,10 +27,10 @@ thiserror.workspace = true
 slotmap.workspace = true
 crossbeam-channel.workspace = true
 
-bevy = { workspace = true, optional = true }
+bevy_ecs = { workspace = true, optional = true }
 
 [dev-dependencies]
-bevy = { workspace = true, default-features = true }
+bevy.workspace = true
 bevy_egui.workspace = true
 
 [[example]]

@@ -13,9 +13,13 @@ type ClientState = aeronet::ClientState<(), ConnectionInfo>;
 
 type ServerEvent<P> = aeronet::ServerEvent<P, (), ConnectionInfo, ChannelError>;
 
+/// Implementation of [`ServerTransport`] using in-memory MPSC channels for
+/// transport.
+/// 
+/// See the [crate-level docs](crate).
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ChannelServer<P>
 where
     P: TransportProtocol,
@@ -42,10 +46,9 @@ impl<P> ChannelServer<P>
 where
     P: TransportProtocol,
 {
+    /// Creates a server with no connected clients.
     pub fn open() -> Self {
-        Self {
-            clients: SlotMap::default(),
-        }
+        Self::default()
     }
 
     pub(super) fn insert_client(
