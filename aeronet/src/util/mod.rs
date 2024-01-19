@@ -1,5 +1,6 @@
 //! Generic utilities.
 
 mod error;
+mod seq_array;
 
-pub use error::*;
+pub use {error::*, seq_array::*};
