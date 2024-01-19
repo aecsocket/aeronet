@@ -1,24 +1,24 @@
 use std::{fmt::Debug, marker::PhantomData, time::Instant};
 
-use bevy_ecs::prelude::*;
 use bevy_app::prelude::*;
+use bevy_ecs::prelude::*;
 use derivative::Derivative;
 
 use crate::{ClientEvent, ClientTransport, TransportProtocol};
 
 /// Forwards messages and events between the [`App`] and a [`ClientTransport`].
-/// 
+///
 /// See [`ClientTransportPlugin`] for a struct version of this plugin.
-/// 
+///
 /// With this plugin added, the transport `T` will automatically run
 /// [`ClientTransport::update`] on [`PreUpdate`] in the [`ClientTransportSet`],
 /// and send out the appropriate events.
-/// 
+///
 /// This plugin sends out the events:
 /// * [`LocalConnected`]
 /// * [`LocalDisconnected`]
 /// * [`FromServer`]
-/// 
+///
 /// These events can be read by your app to respond to incoming events. To send
 /// out messages, or to connect the transport to a remote endpoint, etc., you
 /// will need to inject the transport as a resource into your system.
@@ -35,7 +35,7 @@ where
 }
 
 /// Forwards messages and events between the [`App`] and a [`ClientTransport`].
-/// 
+///
 /// See [`client_transport_plugin`].
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
@@ -67,7 +67,7 @@ pub struct ClientTransportSet;
 ///
 /// After this event, you can run your game initialization logic such as
 /// receiving the initial world state and e.g. showing a spawn screen.
-/// 
+///
 /// See [`ClientEvent::Connected`].
 #[derive(Derivative, Event)]
 #[derivative(
@@ -89,7 +89,7 @@ where
 /// connected server.
 ///
 /// This event is not raised when the app invokes a disconnect.
-/// 
+///
 /// See [`ClientEvent::Disconnected`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
@@ -103,7 +103,7 @@ where
 }
 
 /// The client received a message from the server.
-/// 
+///
 /// See [`ClientEvent::Recv`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "P::S2C: Debug"), Clone(bound = "P::S2C: Clone"))]

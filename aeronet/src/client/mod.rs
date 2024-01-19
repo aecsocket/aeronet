@@ -15,7 +15,7 @@ use derivative::Derivative;
 use crate::TransportProtocol;
 
 /// Allows connecting to a server and transporting data between this client and the server.
-/// 
+///
 /// See the [crate-level docs](crate).
 pub trait ClientTransport<P>
 where
@@ -34,9 +34,9 @@ where
     fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
 
     /// Attempts to send a message to the currently connected server.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Errors if the transport failed to *attempt to* send the message, e.g.
     /// if it is not connected to a server. If a transmission error occurs later
     /// after this function's scope has finished, then this will still return
@@ -45,14 +45,12 @@ where
 
     /// Updates the internal state of this transport, returning an iterator over
     /// the events that it emitted while updating.
-    /// 
+    ///
     /// This should be called in your app's main update loop.
-    /// 
+    ///
     /// If this emits an event which changes the transport's state, then after
     /// this function, the transport is guaranteed to be in this new state.
-    fn update(
-        &mut self,
-    ) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>>;
+    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>>;
 }
 
 slotmap::new_key_type! {
@@ -86,7 +84,7 @@ pub enum ClientState<A, B> {
 
 impl<A, B> ClientState<A, B> {
     /// Gets if this is a [`ClientState::Disconnected`].
-    /// 
+    ///
     /// This should be used to determine if the user is allowed to start
     /// connecting to a server.
     pub fn is_disconnected(&self) -> bool {
@@ -99,7 +97,7 @@ impl<A, B> ClientState<A, B> {
     }
 
     /// Gets if this is a [`ClientState::Connected`].
-    /// 
+    ///
     /// This should be used to determine if the user is allowed to send messages
     /// to the server.
     pub fn is_connected(&self) -> bool {

@@ -8,7 +8,7 @@ mod message;
 mod on_lane;
 
 /// Implements `aeronet::Message` for the given type.
-/// 
+///
 /// This is just a marker trait, so no logic is actually implemented.
 ///
 /// # Usage

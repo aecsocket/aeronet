@@ -1,25 +1,25 @@
 use std::{fmt::Debug, marker::PhantomData, time::Instant};
 
-use bevy_ecs::prelude::*;
 use bevy_app::prelude::*;
+use bevy_ecs::prelude::*;
 use derivative::Derivative;
 
 use crate::{ClientKey, ServerEvent, ServerTransport, TransportProtocol};
 
 /// Forwards messages and events between the [`App`] and a [`ServerTransport`].
-/// 
+///
 /// See [`ServerTransportPlugin`] for a struct version of this plugin.
-/// 
+///
 /// With this plugin added, the transport `T` will automatically run
 /// [`ServerTransport::update`] on [`PreUpdate`] in the [`ServerTransportSet`],
 /// and send out the appropriate events.
-/// 
+///
 /// This plugin sends out the events:
 /// * [`RemoteConnecting`]
 /// * [`RemoteConnected`]
 /// * [`RemoteDisconnected`]
 /// * [`FromClient`]
-/// 
+///
 /// These events can be read by your app to respond to incoming events. To send
 /// out messages, or to disconnect a specific client, etc., you will need to
 /// inject the transport as a resource into your system.
@@ -37,7 +37,7 @@ where
 }
 
 /// Forwards messages and events between the [`App`] and a [`ServerTransport`].
-/// 
+///
 /// See [`server_transport_plugin`].
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
@@ -63,13 +63,13 @@ where
 pub struct ServerTransportSet;
 
 /// A remote client has requested to connect to this server.
-/// 
+///
 /// The client has been given a key, and the server is trying to establish
 /// communication with this client, but messages cannot be transported yet.
-/// 
+///
 /// This event can be followed by [`ServerEvent::Connected`] or
 /// [`ServerEvent::Disconnected`].
-/// 
+///
 /// See [`ServerEvent::Connecting`].
 #[derive(Derivative, Event)]
 #[derivative(
@@ -86,19 +86,19 @@ where
     /// Info on the connection.
     ///
     /// This is the same data as held by [`ClientState::Connecting`].
-    /// 
+    ///
     /// [`ClientState::Connecting`]: crate::ClientState::Connecting
     pub info: T::ConnectingInfo,
 }
 
 /// A remote client has fully established a connection to this server.
-/// 
+///
 /// This event can be followed by [`ServerEvent::Recv`] or
 /// [`ServerEvent::Disconnected`].
 ///
 /// After this event, you can run your player initialization logic such as
 /// spawning the player's model in the world.
-/// 
+///
 /// See [`ServerEvent::Connected`].
 #[derive(Derivative, Event)]
 #[derivative(
@@ -115,7 +115,7 @@ where
     /// Info on the connection.
     ///
     /// This is the same data as held by [`ClientState::Connected`].
-    /// 
+    ///
     /// [`ClientState::Connected`]: crate::ClientState::Connected
     pub info: T::ConnectedInfo,
 }
@@ -123,7 +123,7 @@ where
 /// A remote client has unrecoverably lost connection from this server.
 ///
 /// This event is not raised when the server forces a client to disconnect.
-/// 
+///
 /// See [`ServerEvent::Disconnected`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
@@ -139,7 +139,7 @@ where
 }
 
 /// The server received a message from a remote client.
-/// 
+///
 /// See [`ServerEvent::Recv`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "P::C2S: Debug"), Clone(bound = "P::C2S: Clone"))]

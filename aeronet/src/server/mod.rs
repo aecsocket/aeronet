@@ -12,7 +12,7 @@ use crate::{ClientKey, ClientState, TransportProtocol};
 
 /// Allows listening to client connections and transporting data between this
 /// server and connected clients.
-/// 
+///
 /// See the [crate-level docs](crate).
 pub trait ServerTransport<P>
 where
@@ -39,7 +39,7 @@ where
     fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo>;
 
     /// Reads the current state of a client.
-    /// 
+    ///
     /// If the client does not exist, [`ClientState::Disconnected`] is returned.
     fn client_state(
         &self,
@@ -48,16 +48,16 @@ where
 
     /// Iterator over the keys of all clients currently recognized by this
     /// server.
-    /// 
+    ///
     /// There is no guarantee about what state each client in this iterator is
     /// in, it's just guaranteed that the server is tracking some sort of state
     /// about it.
     fn clients(&self) -> impl Iterator<Item = ClientKey> + '_;
 
     /// Attempts to send a message to a connected client.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Errors if the transport failed to *attempt to* send the message, e.g.
     /// if the server is not open, or if the client is not connected. If a
     /// transmission error occurs later after this function's scope has
@@ -65,22 +65,22 @@ where
     fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
 
     /// Forces a client to disconnect from this server.
-    /// 
+    ///
     /// This does *not* guarantee any graceful shutdown of the connection. If
     /// you want this to be handled gracefully, you must implement a mechanism
     /// for this yourself.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Errors if the transport failed to *attempt to* disconnect the client,
     /// e.g. if the server already knows that the client is disconnected.
     fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error>;
 
     /// Updates the internal state of this transport, returning an iterator over
     /// the events that it emitted while updating.
-    /// 
+    ///
     /// This should be called in your app's main update loop.
-    /// 
+    ///
     /// If this emits an event which changes the transport's state, then after
     /// this function, the transport is guaranteed to be in this new state.
     fn update(
@@ -131,10 +131,10 @@ where
 {
     // client state
     /// A remote client has requested to connect to this server.
-    /// 
+    ///
     /// The client has been given a key, and the server is trying to establish
     /// communication with this client, but messages cannot be transported yet.
-    /// 
+    ///
     /// This event can be followed by [`ServerEvent::Connected`] or
     /// [`ServerEvent::Disconnected`].
     Connecting {
@@ -146,7 +146,7 @@ where
         info: A,
     },
     /// A remote client has fully established a connection to this server.
-    /// 
+    ///
     /// This event can be followed by [`ServerEvent::Recv`] or
     /// [`ServerEvent::Disconnected`].
     ///
