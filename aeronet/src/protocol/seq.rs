@@ -12,6 +12,8 @@ use bitcode::{Decode, Encode};
 /// sequence number should take this into account, and use the custom
 /// [`Seq::partial_cmp`] implementation which takes wraparound into
 /// consideration.
+///
+/// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Ord, Hash, Encode, Decode)]
 pub struct Seq(pub u16);
 
@@ -29,7 +31,7 @@ impl cmp::PartialOrd for Seq {
     /// of sequence numbers, treating e.g. `65535 cmp 0` as [`Greater`], but
     /// `1 cmp 0` as [`Less`].
     ///
-    /// See https://gafferongames.com/post/reliability_ordering_and_congestion_avoidance_over_udp/,
+    /// See <https://gafferongames.com/post/reliability_ordering_and_congestion_avoidance_over_udp/>,
     /// *Handling Sequence Number Wrap-Around*.
     ///
     /// [`Greater`]: cmp::Ordering::Greater

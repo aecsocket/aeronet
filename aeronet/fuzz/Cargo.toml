@@ -21,7 +21,7 @@ members = ["."]
 debug = 1
 
 [[bin]]
-name = "protocol"
-path = "fuzz_targets/protocol.rs"
+name = "frag"
+path = "fuzz_targets/frag.rs"
 test = false
 doc = false

@@ -33,7 +33,7 @@ where
 /// Wraps a shared reference to an error in order to make its [`fmt::Display`]
 /// impl write the entire error chain.
 ///
-/// See the [module-level docs](self).
+/// See [`PrettyError`].
 pub fn as_pretty<E>(err: &E) -> PrettyError<'_, E>
 where
     E: Error,

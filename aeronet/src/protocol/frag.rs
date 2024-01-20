@@ -4,9 +4,6 @@ use bitcode::{Decode, Encode};
 
 use super::Seq;
 
-#[doc(alias = "mtu")]
-pub const MAX_PACKET_SIZE: usize = 1024;
-
 #[derive(Debug, Clone, Encode, Decode)]
 struct PacketHeader {
     seq: Seq,
@@ -14,26 +11,54 @@ struct PacketHeader {
     num_frags: u8,
 }
 
+/// Maximum byte size of a single packet.
+#[doc(alias = "mtu")]
+pub const MAX_PACKET_SIZE: usize = 1024;
+
 // size of `bitcode::encode` on a value of this type must always be equal to
 // this value
-pub const HEADER_SIZE: usize = mem::size_of::<PacketHeader>();
+const HEADER_SIZE: usize = mem::size_of::<PacketHeader>();
 
-pub const PAYLOAD_SIZE: usize = MAX_PACKET_SIZE - HEADER_SIZE;
+const MAX_PAYLOAD_SIZE: usize = MAX_PACKET_SIZE - HEADER_SIZE;
 
-pub const PACKETS_BUF: usize = 256;
+const MAX_MESSAGE_SIZE: usize = MAX_PAYLOAD_SIZE * u8::MAX as usize;
 
-pub const MAX_MESSAGE_SIZE: usize = PAYLOAD_SIZE * u8::MAX as usize;
+const PACKETS_BUF: usize = 16;
 
+/// Error that occurs when using [`Fragmentation`] for packet fragmentation
+/// and reassembly.
+///
+/// Note that only conditions which are caused by a sender/receiver sending
+/// invalid *data* is considered an error; sending valid *data* but at an
+/// invalid *time* (i.e. receiving a packet 20 minutes after it was sent) is not
+/// considered an error.
+///
+/// Errors during receiving may be safely ignored - they won't corrupt the state
+/// of the fragmentation system.
 #[derive(Debug, thiserror::Error)]
 pub enum FragmentationError {
+    /// Attempted to send a message which was too big.
     #[error("message too big; {len} / {MAX_MESSAGE_SIZE} bytes")]
-    MessageTooBig { len: usize },
+    MessageTooBig {
+        /// Size of the message in bytes.
+        len: usize,
+    },
+    /// Received a packet which was too small to contain header data.
     #[error("packet too small; {len} / {HEADER_SIZE} bytes")]
-    PacketTooSmall { len: usize },
+    PacketTooSmall {
+        /// Size of the packet in bytes.
+        len: usize,
+    },
+    /// Received a packet which was too big.
     #[error("packet too big; {len} / {MAX_PACKET_SIZE} bytes")]
-    PacketTooBig { len: usize },
+    PacketTooBig {
+        /// Size of the packet in bytes.
+        len: usize,
+    },
+    /// Failed to decode a packet header.
     #[error("failed to decode packet header")]
     DecodeHeader(#[source] bitcode::Error),
+    /// Decoded packet header contained invalid data.
     #[error("invalid packet header")]
     InvalidHeader,
 }
@@ -83,7 +108,7 @@ impl Fragmentation {
     ) -> Result<impl Iterator<Item = Vec<u8>> + 'a, FragmentationError> {
         let seq = self.seq.next();
 
-        let chunks = bytes.chunks(PAYLOAD_SIZE);
+        let chunks = bytes.chunks(MAX_PAYLOAD_SIZE);
         let num_frags = u8::try_from(chunks.len())
             .map_err(|_| FragmentationError::MessageTooBig { len: bytes.len() })?;
 
@@ -99,7 +124,7 @@ impl Fragmentation {
                 .expect("does not use #[bitcode(with_serde)], so should never fail");
             debug_assert_eq!(HEADER_SIZE, packet.len());
 
-            packet.reserve_exact(PAYLOAD_SIZE);
+            packet.reserve_exact(MAX_PAYLOAD_SIZE);
             packet.extend(chunk);
             debug_assert!(packet.len() <= MAX_PACKET_SIZE);
 

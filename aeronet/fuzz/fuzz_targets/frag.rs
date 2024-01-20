@@ -4,6 +4,5 @@ use aeronet::protocol::Fragmentation;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
-    let mut frag = Fragmentation::new();
-    let _ = frag.reassemble(data);
+    let _ = Fragmentation::new().reassemble(data);
 });
