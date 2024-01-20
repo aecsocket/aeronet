@@ -142,10 +142,20 @@ impl Fragmentation {
 
         let header = bitcode::decode::<PacketHeader>(&packet[..HEADER_SIZE])
             .map_err(FragmentationError::DecodeHeader)?;
-
         let payload = &packet[HEADER_SIZE..];
+
+        self.reassemble_packet(header, payload)
+    }
+
+    fn reassemble_packet(
+        &mut self,
+        header: PacketHeader,
+        payload: &[u8],
+    ) -> Result<Option<Vec<u8>>, FragmentationError> {
         match header.num_frags {
             0 => Err(FragmentationError::InvalidHeader),
+            // quick path to avoid writing this into the packet buffer then
+            // immediately reading it back out
             1 => Ok(Some(payload.to_vec())),
             _ => Ok(self.reassemble_fragment(header, payload)),
         }
@@ -246,6 +256,65 @@ mod tests {
         assert_eq!(
             msg.as_bytes().to_vec(),
             frag.reassemble(&buf.pop_front().unwrap()).unwrap().unwrap(),
+        );
+    }
+
+    // TODO test this but with incomplete messages
+    #[test]
+    fn overflow_with_complete_messages() {
+        let mut frag = Fragmentation::new();
+
+        // works because after we reassemble a packet, we clear the buffer slot
+        for _ in 0..100 {
+            const MSG: &[u8] = b"a";
+
+            let packets = frag.fragment(MSG).unwrap().collect::<Vec<_>>();
+            for packet in packets {
+                assert_eq!(MSG, frag.reassemble(&packet).unwrap().unwrap().as_slice());
+            }
+        }
+
+        const MSG: &[u8] = b"Hello world";
+
+        let mut packets = frag.fragment(MSG).unwrap().collect::<Vec<_>>();
+        assert_eq!(
+            MSG,
+            frag.reassemble(&packets.pop().unwrap())
+                .unwrap()
+                .unwrap()
+                .as_slice()
+        );
+    }
+
+    #[test]
+    fn overflow_with_incomplete_messages() {
+        let mut frag = Fragmentation::new();
+
+        for seq in 0..100 {
+            // add a bunch of incomplete messages, which are waiting for more
+            // fragments
+            let header = PacketHeader {
+                seq: Seq(seq),
+                frag_id: 0,
+                // has to be different to the number of fragments that `msg`
+                // below will take up
+                num_frags: 10,
+            };
+            let _ = frag.reassemble_packet(header, &[]);
+        }
+
+        // try to get a new, complete, message
+        // message has to be big to get fragmented to avoid the fast path
+        let msg = format!("Hello world! {}", "abcd".repeat(300));
+        let mut packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
+
+        // this will give us None, because there's no free fragments to put the
+        // data in
+        // TODO fix this
+        println!(
+            "{:?}",
+            frag.reassemble(&packets.pop().unwrap())
+                .map(|x| x.map(String::from_utf8))
         );
     }
 }
