@@ -36,9 +36,8 @@ This crate aims to be:
 * Generic over as many transports as possible
   * You should be able to plug nearly anything in as the underlying transport layer, and have things
     work
-* A near-zero-cost abstraction
-  * You should only pay for what you use, so if the underlying protocol already implements a feature
-    such as fragmentation, this crate won't re-implement it on top
+  * To achieve this, aeronet provides its own implementation of certain protocol elements such as
+    fragmentation and reliable packets
 * Integrated with Bevy
   * Built with apps and games in mind, the abstractions chosen closely suit Bevy's app model, and
     likely other similar frameworks

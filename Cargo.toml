@@ -3,9 +3,9 @@ resolver = "2"
 members = [
     "aeronet",
     "aeronet_derive",
-    #"aeronet_steam",
     #"aeronet_channel",
-    #"aeronet_wt_native",
+    #"aeronet_steam",
+    "aeronet_wt_native",
     #"aeronet_wt_wasm",
 ]
 
