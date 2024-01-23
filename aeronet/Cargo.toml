@@ -30,6 +30,7 @@ aeronet_derive.workspace = true
 derivative.workspace = true
 thiserror.workspace = true
 slotmap.workspace = true
+bytes.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
 bitcode.workspace = true
