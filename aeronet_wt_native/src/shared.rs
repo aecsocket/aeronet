@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, time::Duration};
 
-use aeronet::protocol::Fragmentation;
+use aeronet::{protocol::{Fragmentation, Sequenced, Unsequenced}, LaneKind};
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
@@ -79,18 +79,38 @@ async fn handle_connection(
     }
 }
 
+/// # Packet layout
+/// 
+/// ## Unreliable
+/// 
+/// ```text
+/// 0      1               5             byte index
+/// +------+---------------+-----------
+///   lane   fragmentation   payload...  data
+/// ```
 #[derive(Debug)]
 pub enum LaneState {
-    /// ```text
-    /// 0      1               5                                                     MAX  byte index
-    /// +------+---------------+-------------------------------------------------------+
-    /// | lane | fragmentation | payload                                               |  data
-    /// ```
-    UnreliableUnsequenced { frag: Fragmentation },
-    /// ```text
-    /// 0      1               5                                                     MAX  byte index
-    /// +------+---------------+-------------------------------------------------------+
-    /// | lane | fragmentation | payload                                               |  data
-    /// ```
-    UnreliableSequenced { frag: Fragmentation },
+    UnreliableUnsequenced { frag: Fragmentation<Unsequenced> },
+    UnreliableSequenced { frag: Fragmentation<Sequenced> },
+}
+
+impl LaneState {
+    pub fn new(kind: LaneKind) -> Self {
+        match kind {
+            LaneKind::UnreliableUnsequenced => Self::UnreliableUnsequenced { frag: Fragmentation::unsequenced() },
+            LaneKind::UnreliableSequenced => Self::UnreliableSequenced { frag: Fragmentation::sequenced() },
+            _ => todo!()
+        }
+    }
+
+    pub fn update(&mut self) {
+        match self {
+            Self::UnreliableUnsequenced { frag } => {
+                frag.update();
+            }
+            Self::UnreliableSequenced { frag } => {
+                frag.update();
+            }
+        }
+    }
 }

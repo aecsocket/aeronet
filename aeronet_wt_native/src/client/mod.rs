@@ -11,7 +11,7 @@ use derivative::Derivative;
 use futures::channel::oneshot;
 use wtransport::{endpoint::IntoConnectOptions, ClientConfig};
 
-use crate::{shared::BackendConnection, BackendError};
+use crate::{shared::{BackendConnection, LaneState}, BackendError};
 
 type WebTransportError<P> =
     crate::WebTransportError<<P as TransportProtocol>::C2S, <P as TransportProtocol>::S2C>;
@@ -93,11 +93,6 @@ where
     _phantom: PhantomData<P>,
 }
 
-#[derive(Debug)]
-enum LaneState {
-    UnreliableUnsequenced { frag: Fragmentation },
-}
-
 impl<P> OpenClient<P>
 where
     P: LaneProtocol,
@@ -126,11 +121,9 @@ where
         Ok(())
     }
 
-    pub fn update(&mut self) -> (Vec<()>, Result<(), WebTransportError<P>>) {
+    pub fn update(&mut self) -> (Vec<ClientEvent<P>>, Result<(), WebTransportError<P>>) {
         for lane in &mut self.lanes {
-            match lane {
-                LaneState::UnreliableUnsequenced { frag } => frag.clean_up(),
-            }
+            lane.update();
         }
 
         let mut events = Vec::new();
