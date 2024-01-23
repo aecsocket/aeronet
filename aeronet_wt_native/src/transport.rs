@@ -2,7 +2,7 @@ use std::io;
 
 use aeronet::{protocol::FragmentationError, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
-use wtransport::error::ConnectingError;
+use wtransport::error::{ConnectingError, ConnectionError, SendDatagramError};
 
 #[derive(Derivative, thiserror::Error)]
 #[derivative(Debug(bound = ""))]
@@ -11,14 +11,8 @@ where
     S: TryAsBytes,
     R: TryFromBytes,
 {
-    #[error("backend closed")]
-    BackendClosed,
-    #[error("failed to create endpoint")]
-    CreateEndpoint(#[source] io::Error),
-    #[error("failed to connect to server")]
-    Connect(#[source] ConnectingError),
-    #[error("connection does not support datagrams")]
-    DatagramsNotSupported,
+    #[error("backend error")]
+    Backend(#[source] BackendError),
 
     #[error("failed to encode message")]
     Encode(#[source] S::Error),
@@ -27,4 +21,22 @@ where
 
     #[error("failed to decode message")]
     Decode(#[source] R::Error),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum BackendError {
+    #[error("closed")]
+    Closed,
+    #[error("failed to create endpoint")]
+    CreateEndpoint(#[source] io::Error),
+    #[error("failed to connect to server")]
+    Connect(#[source] ConnectingError),
+    #[error("connection does not support datagrams")]
+    DatagramsNotSupported,
+    #[error("failed to get local socket address")]
+    GetLocalAddr(#[source] io::Error),
+    #[error("lost connection")]
+    LostConnection(#[source] ConnectionError),
+    #[error("failed to send datagram")]
+    SendDatagram(#[source] SendDatagramError),
 }

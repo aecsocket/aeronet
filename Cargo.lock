@@ -122,6 +122,7 @@ dependencies = [
  "bevy",
  "bevy_ecs",
  "bevy_egui",
+ "bytes",
  "derivative",
  "futures",
  "rcgen",
