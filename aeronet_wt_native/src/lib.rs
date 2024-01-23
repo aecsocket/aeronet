@@ -3,7 +3,8 @@
 
 pub use wtransport;
 
-//mod client;
+mod client;
 //mod server;
+mod transport;
 
-//pub use {client::*, server::*};
+pub use {client::*, transport::* /* , server::* */};
