@@ -2,7 +2,6 @@
 #![doc = include_str!("../README.md")]
 
 pub use aeronet_derive::*;
-pub use bytes;
 
 mod client;
 mod condition;

@@ -1,19 +1,22 @@
 mod backend;
 
-use std::{future::Future, marker::PhantomData, net::SocketAddr, task::Poll, time::Duration};
+use std::{future::Future, marker::PhantomData, task::Poll, time::Duration};
 
 use aeronet::{
-    protocol::Fragmentation, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+    protocol::Fragmentation, LaneKey, LaneKind, LaneProtocol, OnLane, TransportProtocol,
+    TryAsBytes, TryFromBytes,
 };
 use bytes::Bytes;
 use derivative::Derivative;
-use futures::channel::{mpsc, oneshot};
+use futures::channel::oneshot;
 use wtransport::{endpoint::IntoConnectOptions, ClientConfig};
 
-use crate::BackendError;
+use crate::{shared::BackendConnection, BackendError};
 
 type WebTransportError<P> =
     crate::WebTransportError<<P as TransportProtocol>::C2S, <P as TransportProtocol>::S2C>;
+
+type ClientEvent<P> = aeronet::ClientEvent<P, (), WebTransportError<P>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
@@ -23,7 +26,7 @@ where
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
-    recv_open: oneshot::Receiver<Result<OpenState, BackendError>>,
+    recv_open: oneshot::Receiver<Result<BackendConnection, BackendError>>,
     _phantom: PhantomData<P>,
 }
 
@@ -49,12 +52,25 @@ where
 
     pub fn poll(&mut self) -> Poll<Result<OpenClient<P>, WebTransportError<P>>> {
         match self.recv_open.try_recv() {
-            Ok(Some(Ok(state))) => Poll::Ready(Ok(OpenClient {
-                state,
-                frag: Fragmentation::new(),
-                rtt: Duration::ZERO,
-                _phantom: PhantomData::default(),
-            })),
+            Ok(Some(Ok(raw))) => {
+                let mut lanes = Vec::new();
+                let num_lanes = P::Lane::VARIANTS.len();
+                lanes.reserve_exact(num_lanes);
+                lanes.extend(P::Lane::VARIANTS.iter().map(|lane| match lane.kind() {
+                    LaneKind::UnreliableUnsequenced => LaneState::UnreliableUnsequenced {
+                        frag: Fragmentation::default(),
+                    },
+                    _ => todo!(),
+                }));
+
+                Poll::Ready(Ok(OpenClient {
+                    conn: raw,
+                    lanes,
+                    rtt: Duration::ZERO,
+                    events: Vec::new(),
+                    _phantom: PhantomData::default(),
+                }))
+            }
             Ok(Some(Err(err))) => Poll::Ready(Err(WebTransportError::<P>::Backend(err))),
             Ok(None) => Poll::Pending,
             Err(_) => Poll::Ready(Err(WebTransportError::<P>::Backend(BackendError::Closed))),
@@ -62,28 +78,24 @@ where
     }
 }
 
-#[derive(Debug)]
-struct OpenState {
-    local_addr: SocketAddr,
-    remote_addr: SocketAddr,
-    send_c2s: mpsc::UnboundedSender<Bytes>,
-    recv_s2c: mpsc::Receiver<Bytes>,
-    recv_rtt: mpsc::Receiver<Duration>,
-    recv_err: oneshot::Receiver<BackendError>,
-}
-
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
+#[derivative(Debug(bound = "P::S2C: std::fmt::Debug"))]
 pub struct OpenClient<P>
 where
     P: LaneProtocol,
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
-    state: OpenState,
-    frag: Fragmentation,
+    conn: BackendConnection,
+    lanes: Vec<LaneState>,
     rtt: Duration,
+    events: Vec<ClientEvent<P>>,
     _phantom: PhantomData<P>,
+}
+
+#[derive(Debug)]
+enum LaneState {
+    UnreliableUnsequenced { frag: Fragmentation },
 }
 
 impl<P> OpenClient<P>
@@ -95,24 +107,41 @@ where
     pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), WebTransportError<P>> {
         let msg: P::C2S = msg.into();
         let bytes = msg.try_as_bytes().map_err(WebTransportError::<P>::Encode)?;
-        let frags = self
-            .frag
-            .fragment(bytes.as_ref())
-            .map_err(WebTransportError::<P>::Fragment)?;
+
+        let lane = &mut self.lanes[msg.lane().variant()];
+        match lane {
+            LaneState::UnreliableUnsequenced { frag } => {
+                for packet in frag
+                    .fragment(bytes.as_ref())
+                    .map_err(WebTransportError::<P>::Fragment)?
+                {
+                    self.conn
+                        .send_c2s
+                        .unbounded_send(Bytes::from(packet))
+                        .map_err(|_| WebTransportError::<P>::Backend(BackendError::Closed))?;
+                }
+            }
+        }
 
         Ok(())
     }
 
     pub fn update(&mut self) -> (Vec<()>, Result<(), WebTransportError<P>>) {
+        for lane in &mut self.lanes {
+            match lane {
+                LaneState::UnreliableUnsequenced { frag } => frag.clean_up(),
+            }
+        }
+
         let mut events = Vec::new();
 
-        while let Ok(Some(packet)) = self.state.recv_s2c.try_next() {}
+        while let Ok(Some(packet)) = self.conn.recv_s2c.try_next() {}
 
-        while let Ok(Some(rtt)) = self.state.recv_rtt.try_next() {
+        while let Ok(Some(rtt)) = self.conn.recv_rtt.try_next() {
             self.rtt = rtt;
         }
 
-        match self.state.recv_err.try_recv() {
+        match self.conn.recv_err.try_recv() {
             Ok(Some(err)) => (events, Err(WebTransportError::<P>::Backend(err))),
             Ok(None) => (events, Ok(())),
             Err(_) => (

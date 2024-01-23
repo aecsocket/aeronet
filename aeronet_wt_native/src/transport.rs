@@ -21,10 +21,12 @@ where
 
     #[error("failed to decode message")]
     Decode(#[source] R::Error),
+    #[error("failed to reassemble message")]
+    Reassemble(#[source] FragmentationError),
 }
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum BackendError {
+pub enum BackendError {
     #[error("closed")]
     Closed,
     #[error("failed to create endpoint")]

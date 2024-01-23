@@ -1,4 +1,7 @@
-use std::{array, mem, time::{Duration, Instant}};
+use std::{
+    array, mem,
+    time::{Duration, Instant},
+};
 
 use bitcode::{Decode, Encode};
 
@@ -16,7 +19,7 @@ struct PacketHeader {
 }
 
 /// Maximum byte size of a single packet.
-/// 
+///
 /// This value is a rough estimate of the MTU size for a typical internet
 /// connection, with some allowance for e.g. VPNs. The maximum size of a
 /// packet produced by [`Fragmentation`] will never be greater than this size.
@@ -25,7 +28,7 @@ pub const MAX_PACKET_SIZE: usize = 1024;
 
 /// Size of [`PacketHeader`] both in raw bytes in memory, and the byte size as
 /// output by [`bitcode::encode`].
-/// 
+///
 /// These two sizes must *always* be the same - this is checked through
 /// `debug_assert`s.
 const HEADER_SIZE: usize = mem::size_of::<PacketHeader>();
@@ -34,21 +37,21 @@ const HEADER_SIZE: usize = mem::size_of::<PacketHeader>();
 const MAX_PAYLOAD_SIZE: usize = MAX_PACKET_SIZE - HEADER_SIZE;
 
 /// Maximum size of a user-defined message when it is sent fragmented.
-/// 
+///
 /// A message can only be split up into a limited amount of fragments, so a
 /// single message can only be as big as `MAX_PAYLOAD_SIZE * NUM_FRAGMENTS`.
 const MAX_MESSAGE_SIZE: usize = MAX_PAYLOAD_SIZE * u8::MAX as usize;
 
 /// Maximum number of fragmented messages which are tracked by the receiver.
-/// 
+///
 /// When a fragment comes in with a new sequence number, it is tracked
 /// internally in the messages buffer. Only a limited amount of these messages
 /// can be tracked at once, and the limit is defined by this number.
 const MESSAGES_BUF: usize = 256;
 
-/// After a message has not received a new fragment for this duration, it will
-/// be cleaned up.
-/// 
+/// After a buffered message has not received a new fragment for this duration,
+/// it will be cleaned up.
+///
 /// Since fragments may never be delivered to the receiver, the receiver may be
 /// stuck waiting for fragments to complete a message that the sender will never
 /// send out again. This will eventually consume all the slots in the message
@@ -96,7 +99,15 @@ pub enum FragmentationError {
 
 #[derive(Debug)]
 pub struct Fragmentation {
-    seq: Seq,
+    /// Next sequence number for outgoing messages.
+    send_seq: Seq,
+    /// Sequence number of the latest message identified.
+    /// 
+    /// Note that, as soon as the first fragment of a message is received, this
+    /// value is updated to that fragment's sequence number. *Not* when the full
+    /// message has been received.
+    recv_seq: Seq,
+    /// Buffers for incoming messages.
     // Instead of storing like a `Option<MessageBuffer>` for each element, which
     // would allow us a more "type-safe" test for if a certain message slot
     // actually contains a message, we can just say that certain values in
@@ -109,7 +120,8 @@ pub struct Fragmentation {
 impl Default for Fragmentation {
     fn default() -> Self {
         Self {
-            seq: Seq::default(),
+            send_seq: Seq::default(),
+            recv_seq: Seq::default(),
             messages: Box::new(array::from_fn(|_| MessageBuffer::default())),
         }
     }
@@ -178,7 +190,7 @@ impl Fragmentation {
         &'a mut self,
         bytes: &'a [u8],
     ) -> Result<impl Iterator<Item = Vec<u8>> + 'a, FragmentationError> {
-        let seq = self.seq.next();
+        let seq = self.send_seq.next();
 
         let chunks = bytes.chunks(MAX_PAYLOAD_SIZE);
         let num_frags = u8::try_from(chunks.len())
@@ -199,6 +211,8 @@ impl Fragmentation {
             packet.reserve_exact(MAX_PAYLOAD_SIZE.min(chunk.len()));
             packet.extend(chunk);
             debug_assert!(packet.len() <= MAX_PACKET_SIZE);
+            // ensures quick path in Bytes::from(Vec<u8>)
+            debug_assert_eq!(packet.capacity(), packet.len());
 
             packet
         }))
@@ -226,7 +240,7 @@ impl Fragmentation {
     ) -> Result<Option<Vec<u8>>, FragmentationError> {
         match header.num_frags {
             0 => Err(FragmentationError::InvalidHeader),
-            // quick path to avoid writing this into the packet buffer then
+            // quick path to avoid writing this into the message buffer then
             // immediately reading it back out
             1 => Ok(Some(payload.to_vec())),
             _ => Ok(self.reassemble_fragment(header, payload)),
@@ -343,11 +357,8 @@ mod tests {
         assert!(matches!(frag.reassemble(&packet2), Ok(None)));
         assert_eq!(
             msg.as_bytes(),
-            frag.reassemble(&packet1)
-                .unwrap()
-                .unwrap()
-                .as_slice()
-            );
+            frag.reassemble(&packet1).unwrap().unwrap().as_slice()
+        );
     }
 
     #[test]
