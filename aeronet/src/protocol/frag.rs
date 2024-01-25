@@ -13,7 +13,7 @@ use super::Seq;
 
 /// Metadata for a [`Fragmentation`] packet.
 #[derive(Debug, Clone, Encode, Decode)]
-struct PacketHeader {
+struct FragHeader {
     /// Sequence number of this packet's message.
     seq: Seq,
     /// Index of this fragment in the total message.
@@ -35,7 +35,7 @@ pub const MAX_PACKET_SIZE: usize = 1024;
 ///
 /// These two sizes must *always* be the same - this is checked through
 /// `debug_assert`s.
-const HEADER_SIZE: usize = mem::size_of::<PacketHeader>();
+const HEADER_SIZE: usize = mem::size_of::<FragHeader>();
 
 /// Maximum size of the user-defined payload sent in a single packet.
 const MAX_PAYLOAD_SIZE: usize = MAX_PACKET_SIZE - HEADER_SIZE;
@@ -125,7 +125,7 @@ pub struct Fragmentation<S> {
     // MessageBuffer are invalid, and therefore represent a free slot -
     // see MessageBuffer::is_occupied.
     // This is done to save memory.
-    messages: Box<[MessageBuffer; MESSAGES_BUF as usize]>,
+    messages: Box<[MessageBuffer; MESSAGES_BUF]>,
     _phantom: PhantomData<S>,
 }
 
@@ -245,7 +245,7 @@ where
         Ok(chunks.enumerate().map(move |(frag_id, chunk)| {
             let frag_id = u8::try_from(frag_id)
                 .expect("`num_frags` is a u8, so `frag_id` should be convertible");
-            let header = PacketHeader {
+            let header = FragHeader {
                 seq,
                 frag_id,
                 num_frags,
@@ -290,7 +290,7 @@ where
             return Err(FragmentationError::PacketTooBig { len: packet.len() });
         }
 
-        let header = bitcode::decode::<PacketHeader>(&packet[..HEADER_SIZE])
+        let header = bitcode::decode::<FragHeader>(&packet[..HEADER_SIZE])
             .map_err(FragmentationError::DecodeHeader)?;
         let payload = &packet[HEADER_SIZE..];
 
@@ -299,7 +299,7 @@ where
 
     fn reassemble_packet(
         &mut self,
-        header: PacketHeader,
+        header: FragHeader,
         payload: &[u8],
     ) -> Result<Option<Bytes>, FragmentationError> {
         if S::is_sequenced() && header.seq < self.latest_seq {
@@ -316,7 +316,7 @@ where
         }
     }
 
-    fn reassemble_fragment(&mut self, header: PacketHeader, payload: &[u8]) -> Option<Bytes> {
+    fn reassemble_fragment(&mut self, header: FragHeader, payload: &[u8]) -> Option<Bytes> {
         let buf = &mut self.messages[header.seq.0 as usize % MESSAGES_BUF];
         if !buf.is_occupied() {
             // let's initialize it
@@ -361,7 +361,6 @@ where
     }
 }
 
-// TODO these tests need to be cleaned up, they're more of just a playground right now
 #[cfg(test)]
 mod tests {
     use super::*;

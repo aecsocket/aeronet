@@ -11,7 +11,10 @@ use derivative::Derivative;
 use futures::channel::oneshot;
 use wtransport::{endpoint::IntoConnectOptions, ClientConfig};
 
-use crate::{shared::{BackendConnection, LaneState}, BackendError};
+use crate::{
+    shared::{BackendConnection, LaneState},
+    BackendError,
+};
 
 type WebTransportError<P> =
     crate::WebTransportError<<P as TransportProtocol>::C2S, <P as TransportProtocol>::S2C>;

@@ -45,7 +45,8 @@
 //! [`TryAsBytes`]: crate::TryAsBytes
 //! [`TryFromBytes`]: crate::TryFromBytes
 
+mod ack;
 mod frag;
 mod seq;
 
-pub use {frag::*, seq::*};
+pub use {ack::*, frag::*, seq::*};

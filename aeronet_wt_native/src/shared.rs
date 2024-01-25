@@ -1,6 +1,9 @@
 use std::{net::SocketAddr, time::Duration};
 
-use aeronet::{protocol::{Fragmentation, Sequenced, Unsequenced}, LaneKind};
+use aeronet::{
+    protocol::{Fragmentation, Sequenced, Unsequenced},
+    LaneKind,
+};
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
@@ -80,9 +83,9 @@ async fn handle_connection(
 }
 
 /// # Packet layout
-/// 
+///
 /// ## Unreliable
-/// 
+///
 /// ```text
 /// 0      1               5             byte index
 /// +------+---------------+-----------
@@ -92,14 +95,21 @@ async fn handle_connection(
 pub enum LaneState {
     UnreliableUnsequenced { frag: Fragmentation<Unsequenced> },
     UnreliableSequenced { frag: Fragmentation<Sequenced> },
+    ReliableUnordered {},
+    ReliableOrdered {},
 }
 
 impl LaneState {
     pub fn new(kind: LaneKind) -> Self {
         match kind {
-            LaneKind::UnreliableUnsequenced => Self::UnreliableUnsequenced { frag: Fragmentation::unsequenced() },
-            LaneKind::UnreliableSequenced => Self::UnreliableSequenced { frag: Fragmentation::sequenced() },
-            _ => todo!()
+            LaneKind::UnreliableUnsequenced => Self::UnreliableUnsequenced {
+                frag: Fragmentation::unsequenced(),
+            },
+            LaneKind::UnreliableSequenced => Self::UnreliableSequenced {
+                frag: Fragmentation::sequenced(),
+            },
+            LaneKind::ReliableUnordered => todo!(),
+            LaneKind::ReliableOrdered => todo!(),
         }
     }
 
@@ -111,6 +121,8 @@ impl LaneState {
             Self::UnreliableSequenced { frag } => {
                 frag.update();
             }
+            Self::ReliableUnordered {} => todo!(),
+            Self::ReliableOrdered {} => todo!(),
         }
     }
 }
