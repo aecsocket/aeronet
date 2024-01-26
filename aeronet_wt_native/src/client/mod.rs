@@ -1,6 +1,6 @@
 mod backend;
 
-use std::{future::Future, marker::PhantomData, task::Poll, time::Duration};
+use std::{fmt::Debug, future::Future, marker::PhantomData, task::Poll, time::Duration};
 
 use aeronet::{
     protocol::Fragmentation, LaneKey, LaneKind, LaneProtocol, OnLane, TransportProtocol,
@@ -12,7 +12,7 @@ use futures::channel::oneshot;
 use wtransport::{endpoint::IntoConnectOptions, ClientConfig};
 
 use crate::{
-    shared::{BackendConnection, LaneState},
+    shared::{LaneState, SyncConnection},
     BackendError,
 };
 
@@ -23,39 +23,39 @@ type ClientEvent<P> = aeronet::ClientEvent<P, (), WebTransportError<P>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct OpeningClient<P>
+pub struct ConnectingClient<P>
 where
     P: LaneProtocol,
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
-    recv_open: oneshot::Receiver<Result<BackendConnection, BackendError>>,
+    recv_conn: oneshot::Receiver<Result<SyncConnection, BackendError>>,
     _phantom: PhantomData<P>,
 }
 
-impl<P> OpeningClient<P>
+impl<P> ConnectingClient<P>
 where
     P: LaneProtocol,
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
-    pub fn open(
+    pub fn connect(
         config: ClientConfig,
         options: impl IntoConnectOptions,
     ) -> (Self, impl Future<Output = ()> + Send) {
         let options = options.into_options();
-        let (send_open, recv_open) = oneshot::channel();
+        let (send_con, recv_conn) = oneshot::channel();
         let frontend = Self {
-            recv_open,
+            recv_conn,
             _phantom: PhantomData::default(),
         };
-        let backend = backend::open(config, options, send_open);
+        let backend = backend::connect(config, options, send_con);
         (frontend, backend)
     }
 
-    pub fn poll(&mut self) -> Poll<Result<OpenClient<P>, WebTransportError<P>>> {
-        match self.recv_open.try_recv() {
-            Ok(Some(Ok(raw))) => {
+    pub fn poll(&mut self) -> Poll<Result<ConnectedClient<P>, WebTransportError<P>>> {
+        match self.recv_conn.try_recv() {
+            Ok(Some(Ok(conn))) => {
                 let mut lanes = Vec::new();
                 let num_lanes = P::Lane::VARIANTS.len();
                 lanes.reserve_exact(num_lanes);
@@ -66,8 +66,8 @@ where
                     _ => todo!(),
                 }));
 
-                Poll::Ready(Ok(OpenClient {
-                    conn: raw,
+                Poll::Ready(Ok(ConnectedClient {
+                    conn,
                     lanes,
                     rtt: Duration::ZERO,
                     events: Vec::new(),
@@ -82,21 +82,21 @@ where
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = "P::S2C: std::fmt::Debug"))]
-pub struct OpenClient<P>
+#[derivative(Debug(bound = "P::S2C: Debug"))]
+pub struct ConnectedClient<P>
 where
     P: LaneProtocol,
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
-    conn: BackendConnection,
+    conn: SyncConnection,
     lanes: Vec<LaneState>,
     rtt: Duration,
     events: Vec<ClientEvent<P>>,
     _phantom: PhantomData<P>,
 }
 
-impl<P> OpenClient<P>
+impl<P> ConnectedClient<P>
 where
     P: LaneProtocol,
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
@@ -106,8 +106,9 @@ where
         let msg: P::C2S = msg.into();
         let bytes = msg.try_as_bytes().map_err(WebTransportError::<P>::Encode)?;
 
-        let lane = &mut self.lanes[msg.lane().variant()];
-        match lane {
+        let lane_index = msg.lane().variant();
+        let lane = &mut self.lanes[lane_index];
+        /*match lane {
             LaneState::UnreliableUnsequenced { frag } => {
                 for packet in frag
                     .fragment(bytes.as_ref())
@@ -119,7 +120,7 @@ where
                         .map_err(|_| WebTransportError::<P>::Backend(BackendError::Closed))?;
                 }
             }
-        }
+        }*/
 
         Ok(())
     }

@@ -18,8 +18,7 @@ const MSG_BUF_CAP: usize = 64;
 const UPDATE_DURATION: Duration = Duration::from_secs(1);
 
 #[derive(Debug)]
-pub struct BackendConnection {
-    pub local_addr: SocketAddr,
+pub struct SyncConnection {
     pub remote_addr: SocketAddr,
     pub send_c2s: mpsc::UnboundedSender<Bytes>,
     pub recv_s2c: mpsc::Receiver<Bytes>,
@@ -27,18 +26,16 @@ pub struct BackendConnection {
     pub recv_err: oneshot::Receiver<BackendError>,
 }
 
-pub async fn open_connection(
+pub async fn start_connection(
     conn: Connection,
-    local_addr: SocketAddr,
-    send_open: oneshot::Sender<Result<BackendConnection, BackendError>>,
+    send_conn: oneshot::Sender<Result<SyncConnection, BackendError>>,
 ) {
     let remote_addr = conn.remote_address();
     let (send_c2s, recv_c2s) = mpsc::unbounded();
     let (send_s2c, recv_s2c) = mpsc::channel(MSG_BUF_CAP);
     let (send_rtt, recv_rtt) = mpsc::channel(1);
     let (send_err, recv_err) = oneshot::channel();
-    let _ = send_open.send(Ok(BackendConnection {
-        local_addr,
+    let _ = send_conn.send(Ok(SyncConnection {
         remote_addr,
         send_c2s,
         recv_s2c,
@@ -46,6 +43,7 @@ pub async fn open_connection(
         recv_err,
     }));
 
+    debug!("Connected backend");
     match handle_connection(conn, recv_c2s, send_s2c, send_rtt).await {
         Ok(()) => debug!("Closed backend"),
         Err(err) => {
@@ -124,5 +122,9 @@ impl LaneState {
             Self::ReliableUnordered {} => todo!(),
             Self::ReliableOrdered {} => todo!(),
         }
+    }
+
+    pub fn send(&mut self, bytes: &[u8]) {
+        todo!()
     }
 }

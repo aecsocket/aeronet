@@ -5,28 +5,28 @@ use tracing::debug;
 use wtransport::{endpoint::ConnectOptions, ClientConfig, Connection, Endpoint};
 
 use crate::{
-    shared::{self, BackendConnection},
+    shared::{self, SyncConnection},
     BackendError,
 };
 
-pub(super) async fn open(
+pub(super) async fn connect(
     config: ClientConfig,
     options: ConnectOptions,
-    send_open: oneshot::Sender<Result<BackendConnection, BackendError>>,
+    send_conn: oneshot::Sender<Result<SyncConnection, BackendError>>,
 ) {
-    debug!("Opened backend");
-    let (conn, local_addr) = match connect(config, options).await {
+    debug!("Connecting backend");
+    let (conn, local_addr) = match create(config, options).await {
         Ok(conn) => conn,
         Err(err) => {
-            let _ = send_open.send(Err(err));
+            let _ = send_conn.send(Err(err));
             return;
         }
     };
 
-    shared::open_connection(conn, local_addr, send_open).await
+    shared::start_connection(conn, send_conn).await
 }
 
-async fn connect(
+async fn create(
     config: ClientConfig,
     options: ConnectOptions,
 ) -> Result<(Connection, SocketAddr), BackendError> {

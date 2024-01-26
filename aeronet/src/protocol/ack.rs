@@ -2,22 +2,22 @@ use bitcode::{Decode, Encode};
 
 use super::Seq;
 
-/// Metadata for an [`Acks`] packet.
+/// Metadata for an [`Acknowledge`] packet.
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct AckHeader {
-    pub seq: Seq,
-    pub latest_ack: Seq,
-    pub prev_acks: u32,
+struct AckHeader {
+    seq: Seq,
+    latest_ack: Seq,
+    prev_acks: u32,
 }
 
 const MESSAGES_BUF: usize = 256;
 
 #[derive(Debug)]
-pub struct Acks {
+pub struct Acknowledge {
     messages: Box<[MessageBuffer; MESSAGES_BUF]>,
 }
 
-impl Default for Acks {
+impl Default for Acknowledge {
     fn default() -> Self {
         Self {
             messages: Box::new(std::array::from_fn(|_| MessageBuffer::default())),
@@ -30,4 +30,4 @@ struct MessageBuffer {
     acked: bool,
 }
 
-impl Acks {}
+impl Acknowledge {}
