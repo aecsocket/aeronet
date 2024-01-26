@@ -1,18 +1,19 @@
 mod backend;
 
-use std::{fmt::Debug, future::Future, marker::PhantomData, task::Poll, time::Duration};
+use std::{
+    fmt::Debug, future::Future, marker::PhantomData, net::SocketAddr, task::Poll, time::Duration,
+};
 
 use aeronet::{
     protocol::Fragmentation, LaneKey, LaneKind, LaneProtocol, OnLane, TransportProtocol,
     TryAsBytes, TryFromBytes,
 };
-use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::oneshot;
 use wtransport::{endpoint::IntoConnectOptions, ClientConfig};
 
 use crate::{
-    shared::{LaneState, SyncConnection},
+    shared::{ConnectionFrontend, LaneState},
     BackendError,
 };
 
@@ -29,8 +30,15 @@ where
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
-    recv_conn: oneshot::Receiver<Result<SyncConnection, BackendError>>,
+    recv_conn: oneshot::Receiver<Result<ConnectedClientInner, BackendError>>,
     _phantom: PhantomData<P>,
+}
+
+#[derive(Debug)]
+struct ConnectedClientInner {
+    chan: ConnectionFrontend,
+    local_addr: SocketAddr,
+    initial_rtt: Duration,
 }
 
 impl<P> ConnectingClient<P>
@@ -44,18 +52,18 @@ where
         options: impl IntoConnectOptions,
     ) -> (Self, impl Future<Output = ()> + Send) {
         let options = options.into_options();
-        let (send_con, recv_conn) = oneshot::channel();
+        let (send_conn, recv_conn) = oneshot::channel();
         let frontend = Self {
             recv_conn,
             _phantom: PhantomData::default(),
         };
-        let backend = backend::connect(config, options, send_con);
+        let backend = backend::connect(config, options, send_conn);
         (frontend, backend)
     }
 
     pub fn poll(&mut self) -> Poll<Result<ConnectedClient<P>, WebTransportError<P>>> {
         match self.recv_conn.try_recv() {
-            Ok(Some(Ok(conn))) => {
+            Ok(Some(Ok(inner))) => {
                 let mut lanes = Vec::new();
                 let num_lanes = P::Lane::VARIANTS.len();
                 lanes.reserve_exact(num_lanes);
@@ -67,9 +75,10 @@ where
                 }));
 
                 Poll::Ready(Ok(ConnectedClient {
-                    conn,
+                    chan: inner.chan,
+                    local_addr: inner.local_addr,
+                    rtt: inner.initial_rtt,
                     lanes,
-                    rtt: Duration::ZERO,
                     events: Vec::new(),
                     _phantom: PhantomData::default(),
                 }))
@@ -89,9 +98,10 @@ where
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
-    conn: SyncConnection,
-    lanes: Vec<LaneState>,
+    chan: ConnectionFrontend,
+    local_addr: SocketAddr,
     rtt: Duration,
+    lanes: Vec<LaneState>,
     events: Vec<ClientEvent<P>>,
     _phantom: PhantomData<P>,
 }
@@ -132,13 +142,13 @@ where
 
         let mut events = Vec::new();
 
-        while let Ok(Some(packet)) = self.conn.recv_s2c.try_next() {}
+        while let Ok(Some(packet)) = self.chan.recv_s2c.try_next() {}
 
-        while let Ok(Some(rtt)) = self.conn.recv_rtt.try_next() {
+        while let Ok(Some(rtt)) = self.chan.recv_rtt.try_next() {
             self.rtt = rtt;
         }
 
-        match self.conn.recv_err.try_recv() {
+        match self.chan.recv_err.try_recv() {
             Ok(Some(err)) => (events, Err(WebTransportError::<P>::Backend(err))),
             Ok(None) => (events, Ok(())),
             Err(_) => (

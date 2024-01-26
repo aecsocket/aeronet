@@ -1,6 +1,6 @@
 use std::io;
 
-use aeronet::{protocol::FragmentationError, TryAsBytes, TryFromBytes};
+use aeronet::{protocol::FragmentationError, ClientKey, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use wtransport::error::{ConnectingError, ConnectionError, SendDatagramError};
 
@@ -33,6 +33,11 @@ where
     /// Failed to reassemble a message from packets.
     #[error("failed to reassemble message")]
     Reassemble(#[source] FragmentationError),
+
+    #[error("no client with key {0}")]
+    NoClient(ClientKey),
+    #[error("already responded to this session request")]
+    AlreadyRespondedToRequest,
 }
 
 #[derive(Debug, thiserror::Error)]

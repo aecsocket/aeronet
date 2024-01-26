@@ -18,7 +18,7 @@ const MSG_BUF_CAP: usize = 64;
 const UPDATE_DURATION: Duration = Duration::from_secs(1);
 
 #[derive(Debug)]
-pub struct SyncConnection {
+pub struct ConnectionFrontend {
     pub remote_addr: SocketAddr,
     pub send_c2s: mpsc::UnboundedSender<Bytes>,
     pub recv_s2c: mpsc::Receiver<Bytes>,
@@ -26,34 +26,49 @@ pub struct SyncConnection {
     pub recv_err: oneshot::Receiver<BackendError>,
 }
 
-pub async fn start_connection(
-    conn: Connection,
-    send_conn: oneshot::Sender<Result<SyncConnection, BackendError>>,
-) {
+#[derive(Debug)]
+pub struct ConnectionBackend {
+    recv_c2s: mpsc::UnboundedReceiver<Bytes>,
+    send_s2c: mpsc::Sender<Bytes>,
+    send_rtt: mpsc::Sender<Duration>,
+    send_err: oneshot::Sender<BackendError>,
+}
+
+pub fn connection_channel(conn: &Connection) -> (ConnectionFrontend, ConnectionBackend) {
     let remote_addr = conn.remote_address();
     let (send_c2s, recv_c2s) = mpsc::unbounded();
     let (send_s2c, recv_s2c) = mpsc::channel(MSG_BUF_CAP);
     let (send_rtt, recv_rtt) = mpsc::channel(1);
     let (send_err, recv_err) = oneshot::channel();
-    let _ = send_conn.send(Ok(SyncConnection {
-        remote_addr,
-        send_c2s,
-        recv_s2c,
-        recv_rtt,
-        recv_err,
-    }));
+    (
+        ConnectionFrontend {
+            remote_addr,
+            send_c2s,
+            recv_s2c,
+            recv_rtt,
+            recv_err,
+        },
+        ConnectionBackend {
+            recv_c2s,
+            send_s2c,
+            send_rtt,
+            send_err,
+        },
+    )
+}
 
+pub async fn handle_connection(conn: Connection, chan: ConnectionBackend) {
     debug!("Connected backend");
-    match handle_connection(conn, recv_c2s, send_s2c, send_rtt).await {
+    match try_handle_connection(conn, chan.recv_c2s, chan.send_s2c, chan.send_rtt).await {
         Ok(()) => debug!("Closed backend"),
         Err(err) => {
             debug!("Closed backend: {:#}", aeronet::util::as_pretty(&err));
-            let _ = send_err.send(err);
+            let _ = chan.send_err.send(err);
         }
     }
 }
 
-async fn handle_connection(
+async fn try_handle_connection(
     conn: Connection,
     mut recv_c2s: mpsc::UnboundedReceiver<Bytes>,
     mut send_s2c: mpsc::Sender<Bytes>,

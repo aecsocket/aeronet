@@ -1,44 +1,53 @@
-use std::net::SocketAddr;
-
 use futures::channel::oneshot;
 use tracing::debug;
-use wtransport::{endpoint::ConnectOptions, ClientConfig, Connection, Endpoint};
+use wtransport::{endpoint::ConnectOptions, ClientConfig, Endpoint};
 
-use crate::{
-    shared::{self, SyncConnection},
-    BackendError,
-};
+use crate::{shared, BackendError};
+
+use super::ConnectedClientInner;
 
 pub(super) async fn connect(
     config: ClientConfig,
     options: ConnectOptions,
-    send_conn: oneshot::Sender<Result<SyncConnection, BackendError>>,
+    send_conn: oneshot::Sender<Result<ConnectedClientInner, BackendError>>,
 ) {
     debug!("Connecting backend");
-    let (conn, local_addr) = match create(config, options).await {
-        Ok(conn) => conn,
+    let endpoint = match Endpoint::client(config).map_err(BackendError::CreateEndpoint) {
+        Ok(t) => t,
         Err(err) => {
             let _ = send_conn.send(Err(err));
             return;
         }
     };
-
-    shared::start_connection(conn, send_conn).await
-}
-
-async fn create(
-    config: ClientConfig,
-    options: ConnectOptions,
-) -> Result<(Connection, SocketAddr), BackendError> {
-    let endpoint = Endpoint::client(config).map_err(BackendError::CreateEndpoint)?;
-    let conn = endpoint
+    let local_addr = match endpoint.local_addr().map_err(BackendError::GetLocalAddr) {
+        Ok(t) => t,
+        Err(err) => {
+            let _ = send_conn.send(Err(err));
+            return;
+        }
+    };
+    let conn = match endpoint
         .connect(options)
         .await
-        .map_err(BackendError::Connect)?;
+        .map_err(BackendError::Connect)
+    {
+        Ok(t) => t,
+        Err(err) => {
+            let _ = send_conn.send(Err(err));
+            return;
+        }
+    };
     if conn.max_datagram_size().is_none() {
-        return Err(BackendError::DatagramsNotSupported);
+        let _ = send_conn.send(Err(BackendError::DatagramsNotSupported));
+        return;
     }
-    let local_addr = endpoint.local_addr().map_err(BackendError::GetLocalAddr)?;
+    let initial_rtt = conn.rtt();
 
-    Ok((conn, local_addr))
+    let (chan_frontend, chan_backend) = shared::connection_channel(&conn);
+    let _ = send_conn.send(Ok(ConnectedClientInner {
+        chan: chan_frontend,
+        local_addr,
+        initial_rtt,
+    }));
+    shared::handle_connection(conn, chan_backend).await
 }
