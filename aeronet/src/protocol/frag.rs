@@ -64,6 +64,17 @@ const MESSAGES_BUF: usize = 256;
 const CLEAN_UP_AFTER: Duration = Duration::from_secs(3);
 
 /// Error that occurs when using [`Fragmentation`].
+#[derive(Debug, thiserror::Error)]
+pub enum FragmentationError {
+    /// Attempted to send a message which was too big.
+    #[error("message too big; {len} / {MAX_MESSAGE_SIZE} bytes")]
+    MessageTooBig {
+        /// Size of the message in bytes.
+        len: usize,
+    },
+}
+
+/// Error that occurs when using [`Fragmentation::reassemble`].
 ///
 /// Note that only conditions which are caused by a sender/receiver sending
 /// invalid *data* is considered an error; sending valid *data* but at an
@@ -73,13 +84,7 @@ const CLEAN_UP_AFTER: Duration = Duration::from_secs(3);
 /// Errors during reassembly may be safely ignored - they won't corrupt the state
 /// of the fragmentation system - or they can be bubbled up. Up to you.
 #[derive(Debug, thiserror::Error)]
-pub enum FragmentationError {
-    /// Attempted to send a message which was too big.
-    #[error("message too big; {len} / {MAX_MESSAGE_SIZE} bytes")]
-    MessageTooBig {
-        /// Size of the message in bytes.
-        len: usize,
-    },
+pub enum ReassemblyError {
     /// Received a packet which was too small to contain header data.
     #[error("packet too small; {len} / {HEADER_SIZE} bytes")]
     PacketTooSmall {
@@ -281,17 +286,17 @@ where
     pub fn reassemble(
         &mut self,
         packet: &impl AsRef<[u8]>,
-    ) -> Result<Option<Bytes>, FragmentationError> {
+    ) -> Result<Option<Bytes>, ReassemblyError> {
         let packet = packet.as_ref();
         if packet.len() < HEADER_SIZE {
-            return Err(FragmentationError::PacketTooSmall { len: packet.len() });
+            return Err(ReassemblyError::PacketTooSmall { len: packet.len() });
         }
         if packet.len() > MAX_PACKET_SIZE {
-            return Err(FragmentationError::PacketTooBig { len: packet.len() });
+            return Err(ReassemblyError::PacketTooBig { len: packet.len() });
         }
 
         let header = bitcode::decode::<FragHeader>(&packet[..HEADER_SIZE])
-            .map_err(FragmentationError::DecodeHeader)?;
+            .map_err(ReassemblyError::DecodeHeader)?;
         let payload = &packet[HEADER_SIZE..];
 
         self.reassemble_packet(header, payload)
@@ -301,14 +306,14 @@ where
         &mut self,
         header: FragHeader,
         payload: &[u8],
-    ) -> Result<Option<Bytes>, FragmentationError> {
+    ) -> Result<Option<Bytes>, ReassemblyError> {
         if S::is_sequenced() && header.seq < self.latest_seq {
             return Ok(None);
         }
         self.latest_seq = header.seq;
 
         match header.num_frags {
-            0 => Err(FragmentationError::InvalidHeader),
+            0 => Err(ReassemblyError::InvalidHeader),
             // quick path to avoid writing this into the message buffer then
             // immediately reading it back out
             1 => Ok(Some(Bytes::from(payload.to_vec()))),

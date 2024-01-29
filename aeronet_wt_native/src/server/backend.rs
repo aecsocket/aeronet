@@ -94,7 +94,7 @@ async fn handle_incoming(
 
     let Ok(resp) = recv_resp.await else { return };
     let conn = match resp {
-        ConnectionResponse::Accept => match req.accept().await {
+        ConnectionResponse::Accepted => match req.accept().await {
             Ok(conn) => conn,
             Err(err) => {
                 let _ = send_conn.send(Err(BackendError::AcceptSession(err)));

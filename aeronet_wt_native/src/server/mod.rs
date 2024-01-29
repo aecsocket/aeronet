@@ -106,7 +106,7 @@ enum Client {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConnectionResponse {
-    Accept,
+    Accepted,
     Forbidden,
 }
 
@@ -121,7 +121,7 @@ where
     }
 
     pub fn accept_request(&mut self, client: ClientKey) -> Result<(), WebTransportError<P>> {
-        self.respond_to_request(client, ConnectionResponse::Accept)
+        self.respond_to_request(client, ConnectionResponse::Accepted)
     }
 
     pub fn reject_request(&mut self, client: ClientKey) -> Result<(), WebTransportError<P>> {
@@ -162,18 +162,49 @@ where
             });
         }
 
+        let mut clients_to_remove = Vec::new();
         for (client_key, client_state) in self.clients.iter_mut() {
-            match client_state {
-                Client::Incoming(incoming) => match incoming.recv_req.try_recv() {
-                    Ok(Some(x)) => todo!(),
-                    _ => todo!(),
-                },
-                _ => todo!(),
-            }
+            update_client(
+                client_key,
+                client_state,
+                &mut clients_to_remove,
+                &mut events,
+            );
+        }
+
+        for client_key in clients_to_remove {
+            self.clients.remove(client_key);
         }
 
         (events, Ok(()))
     }
 }
 
-fn update_client(client_key: ClientKey, client_state: &mut Client) {}
+fn update_client<P>(
+    client_key: ClientKey,
+    client_state: &mut Client,
+    clients_to_remove: &mut Vec<ClientKey>,
+    events: &mut Vec<ServerEvent<P>>,
+) where
+    P: LaneProtocol,
+    P::C2S: TryFromBytes,
+    P::S2C: TryAsBytes + OnLane<Lane = P::Lane>,
+{
+    match client_state {
+        Client::Incoming(incoming) => match incoming.recv_req.try_recv() {
+            Ok(Some(Ok(requesting))) => todo!(),
+            Ok(Some(Err(x))) => todo!(),
+            Ok(None) => {}
+            Err(_) => {
+                events.push(ServerEvent::Disconnected {
+                    client: client_key,
+                    reason: WebTransportError::<P>::Backend(BackendError::Closed),
+                });
+                clients_to_remove.push(client_key);
+            }
+        },
+        Client::Requesting(requesting) => {}
+        Client::Incoming(incoming) => {}
+        Client::Connected(connected) => {}
+    }
+}

@@ -23,7 +23,7 @@ use crate::{LaneKey, Message};
 /// struct MyProtocol;
 ///
 /// impl TransportProtocol for MyProtocol {
-///     // client-to-server and server-to-client messages are the same type
+///     // client-to-server and server-to-client messages may be the same type
 ///     type C2S = MyMessage;
 ///     type S2C = MyMessage;
 /// }
@@ -78,29 +78,51 @@ pub trait Rtt {
 }
 
 /// Holds statistics on the messages sent across a transport.
+///
+/// In this context, "successful" means that the message was sent out along the
+/// underlying transport mechanism, and the receiver should have been able to
+/// receive the message, if there were no undetectable transport errors. If a
+/// message was sent but not acknowledged, it still counts as a successful send.
 pub trait MessageStats {
-    /// Total number of messages successfully sent.
+    /// Number of messages successfully sent.
     fn msgs_sent(&self) -> usize;
 
-    /// Total number of messages successfully received.
+    /// Number of messages successfully received.
     fn msgs_recv(&self) -> usize;
 }
 
 /// Holds statistics on the bytes sent across a transport.
 ///
 /// This is used by transports which convert messages into a byte form.
+///
+/// In this context, "successful" means that the message was sent out along the
+/// underlying transport mechanism, and the receiver should have been able to
+/// receive the message, if there were no undetectable transport errors. If a
+/// message was sent but not acknowledged, it still counts as a successful send.
 pub trait ByteStats {
-    /// Total number of message bytes successfully sent.
+    /// Number of message bytes successfully sent.
     ///
-    /// This only counts the bytes that make up a message, rather than all
-    /// bytes including transport-layer wrappers and frames.
-    fn bytes_sent(&self) -> usize;
+    /// This only counts the bytes which make up a message payload, and excludes
+    /// any metadata e.g. packet frames and headers.
+    fn msg_bytes_sent(&self) -> usize;
 
-    /// Total number of bytes successfully received.
+    /// Number of message bytes successfully received.
     ///
-    /// This only counts the bytes that make up a message, rather than all
-    /// bytes including transport-layer wrappers and frames.
-    fn bytes_recv(&self) -> usize;
+    /// This only counts the bytes which make up a message payload, and excludes
+    /// any metadata e.g. packet frames and headers.
+    fn msg_bytes_recv(&self) -> usize;
+
+    /// Number of total bytes successfully sent.
+    ///
+    /// This counts all bytes sent along the transport (or at least as many as
+    /// can be tracked), including packet frames and headers.
+    fn total_bytes_sent(&self) -> usize;
+
+    /// Number of total bytes successfully received.
+    ///
+    /// This counts all bytes sent along the transport (or at least as many as
+    /// can be tracked), including packet frames and headers.
+    fn total_bytes_recv(&self) -> usize;
 }
 
 /// Allows access to the local socket address of a connection.

@@ -12,7 +12,7 @@ use futures::{
 use tracing::debug;
 use wtransport::Connection;
 
-use crate::BackendError;
+use crate::{BackendError, WebTransportError};
 
 const MSG_BUF_CAP: usize = 64;
 const UPDATE_DURATION: Duration = Duration::from_secs(1);
@@ -139,7 +139,21 @@ impl LaneState {
         }
     }
 
-    pub fn send(&mut self, bytes: &[u8]) {
-        todo!()
+    pub fn outgoing_packets(
+        &mut self,
+        bytes: &[u8],
+    ) -> Result<impl Iterator<Item = Bytes>, BackendError> {
+        Ok(std::iter::empty()) // todo
+    }
+
+    pub fn recv(&mut self, packet: &[u8]) -> Result<(), BackendError> {
+        match self {
+            Self::UnreliableUnsequenced { frag } => {
+                let Some(msg_bytes) = frag.reassemble(packet).map_err(BackendError::Reassemble)?
+                else {
+                    return Ok(());
+                };
+            }
+        }
     }
 }

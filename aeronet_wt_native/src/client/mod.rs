@@ -5,8 +5,8 @@ use std::{
 };
 
 use aeronet::{
-    protocol::Fragmentation, LaneKey, LaneKind, LaneProtocol, OnLane, TransportProtocol,
-    TryAsBytes, TryFromBytes,
+    ClientState, ClientTransport, LaneKey, LaneProtocol, OnLane, TransportProtocol, TryAsBytes,
+    TryFromBytes,
 };
 use derivative::Derivative;
 use futures::channel::oneshot;
@@ -14,13 +14,13 @@ use wtransport::{endpoint::IntoConnectOptions, ClientConfig};
 
 use crate::{
     shared::{ConnectionFrontend, LaneState},
-    BackendError,
+    BackendError, ConnectionInfo,
 };
 
 type WebTransportError<P> =
     crate::WebTransportError<<P as TransportProtocol>::C2S, <P as TransportProtocol>::S2C>;
 
-type ClientEvent<P> = aeronet::ClientEvent<P, (), WebTransportError<P>>;
+type ClientEvent<P> = aeronet::ClientEvent<P, ConnectionInfo, WebTransportError<P>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
@@ -32,13 +32,6 @@ where
 {
     recv_conn: oneshot::Receiver<Result<ConnectedClientInner, BackendError>>,
     _phantom: PhantomData<P>,
-}
-
-#[derive(Debug)]
-struct ConnectedClientInner {
-    chan: ConnectionFrontend,
-    local_addr: SocketAddr,
-    initial_rtt: Duration,
 }
 
 impl<P> ConnectingClient<P>
@@ -67,19 +60,20 @@ where
                 let mut lanes = Vec::new();
                 let num_lanes = P::Lane::VARIANTS.len();
                 lanes.reserve_exact(num_lanes);
-                lanes.extend(P::Lane::VARIANTS.iter().map(|lane| match lane.kind() {
-                    LaneKind::UnreliableUnsequenced => LaneState::UnreliableUnsequenced {
-                        frag: Fragmentation::default(),
-                    },
-                    _ => todo!(),
-                }));
+                lanes.extend(
+                    P::Lane::VARIANTS
+                        .iter()
+                        .map(|lane| LaneState::new(lane.kind())),
+                );
 
                 Poll::Ready(Ok(ConnectedClient {
                     chan: inner.chan,
                     local_addr: inner.local_addr,
-                    rtt: inner.initial_rtt,
                     lanes,
-                    events: Vec::new(),
+                    conn_info: ConnectionInfo {
+                        rtt: inner.initial_rtt,
+                        ..Default::default()
+                    },
                     _phantom: PhantomData::default(),
                 }))
             }
@@ -88,6 +82,13 @@ where
             Err(_) => Poll::Ready(Err(WebTransportError::<P>::Backend(BackendError::Closed))),
         }
     }
+}
+
+#[derive(Debug)]
+struct ConnectedClientInner {
+    chan: ConnectionFrontend,
+    local_addr: SocketAddr,
+    initial_rtt: Duration,
 }
 
 #[derive(Derivative)]
@@ -100,9 +101,8 @@ where
 {
     chan: ConnectionFrontend,
     local_addr: SocketAddr,
-    rtt: Duration,
     lanes: Vec<LaneState>,
-    events: Vec<ClientEvent<P>>,
+    conn_info: ConnectionInfo,
     _phantom: PhantomData<P>,
 }
 
@@ -112,26 +112,30 @@ where
     P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryFromBytes,
 {
+    pub fn connection_info(&self) -> ConnectionInfo {
+        self.conn_info.clone()
+    }
+
     pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), WebTransportError<P>> {
         let msg: P::C2S = msg.into();
-        let bytes = msg.try_as_bytes().map_err(WebTransportError::<P>::Encode)?;
+        let msg_bytes = msg.try_as_bytes().map_err(WebTransportError::<P>::Encode)?;
+        let msg_bytes_len = msg_bytes.as_ref().len();
 
         let lane_index = msg.lane().variant();
-        let lane = &mut self.lanes[lane_index];
-        /*match lane {
-            LaneState::UnreliableUnsequenced { frag } => {
-                for packet in frag
-                    .fragment(bytes.as_ref())
-                    .map_err(WebTransportError::<P>::Fragment)?
-                {
-                    self.conn
-                        .send_c2s
-                        .unbounded_send(Bytes::from(packet))
-                        .map_err(|_| WebTransportError::<P>::Backend(BackendError::Closed))?;
-                }
-            }
-        }*/
+        for packet in self.lanes[lane_index]
+            .outgoing_packets(msg_bytes.as_ref())
+            .map_err(WebTransportError::<P>::Backend)?
+        {
+            let packet_len = packet.len();
+            self.chan
+                .send_c2s
+                .unbounded_send(packet)
+                .map_err(|_| WebTransportError::<P>::Backend(BackendError::Closed))?;
+            self.conn_info.total_bytes_sent += packet_len;
+        }
 
+        self.conn_info.msg_bytes_sent += msg_bytes_len;
+        self.conn_info.msgs_sent += 1;
         Ok(())
     }
 
@@ -142,10 +146,26 @@ where
 
         let mut events = Vec::new();
 
-        while let Ok(Some(packet)) = self.chan.recv_s2c.try_next() {}
+        while let Ok(Some(packet)) = self.chan.recv_s2c.try_next() {
+            self.conn_info.total_bytes_recv += packet.len();
+            match lane {
+                LaneState::UnreliableUnsequenced { frag } => {
+                    let Some(msg_bytes) = frag
+                        .reassemble(&packet)
+                        .map_err(BackendError::Reassemble)
+                        .unwrap()
+                    else {
+                        continue;
+                    };
+                    self.conn_info.msg_bytes_recv += msg_bytes.len();
+                    let msg = P::S2C::try_from_bytes(&msg_bytes);
+                }
+            }
+            todo!()
+        }
 
         while let Ok(Some(rtt)) = self.chan.recv_rtt.try_next() {
-            self.rtt = rtt;
+            self.conn_info.rtt = rtt;
         }
 
         match self.chan.recv_err.try_recv() {
@@ -156,5 +176,116 @@ where
                 Err(WebTransportError::<P>::Backend(BackendError::Closed)),
             ),
         }
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = "P::S2C: Debug"), Default(bound = ""))]
+pub enum WebTransportClient<P>
+where
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryFromBytes,
+{
+    #[derivative(Default)]
+    Disconnected,
+    Connecting(ConnectingClient<P>),
+    Connected(ConnectedClient<P>),
+}
+
+impl<P> WebTransportClient<P>
+where
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryFromBytes,
+{
+    pub fn connect_new(
+        config: ClientConfig,
+        options: impl IntoConnectOptions,
+    ) -> (Self, impl Future<Output = ()> + Send) {
+        let (frontend, backend) = ConnectingClient::connect(config, options);
+        (Self::Connecting(frontend), backend)
+    }
+
+    pub fn connect(
+        &mut self,
+        config: ClientConfig,
+        options: impl IntoConnectOptions,
+    ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
+        match self {
+            Self::Disconnected => {
+                let (this, backend) = Self::connect_new(config, options);
+                *self = this;
+                Ok(backend)
+            }
+            Self::Connecting(_) | Self::Connected(_) => {
+                Err(WebTransportError::<P>::AlreadyConnected)
+            }
+        }
+    }
+
+    pub fn disconnect(&mut self) -> Result<(), WebTransportError<P>> {
+        match self {
+            Self::Disconnected => Err(WebTransportError::<P>::AlreadyDisconnected),
+            Self::Connecting(_) | Self::Connected(_) => {
+                *self = Self::Disconnected;
+                Ok(())
+            }
+        }
+    }
+}
+
+impl<P> ClientTransport<P> for WebTransportClient<P>
+where
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryFromBytes,
+{
+    type Error = WebTransportError<P>;
+
+    type ConnectingInfo = ();
+
+    type ConnectedInfo = ConnectionInfo;
+
+    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
+        match self {
+            Self::Disconnected => ClientState::Disconnected,
+            Self::Connecting(_) => ClientState::Connecting(()),
+            Self::Connected(client) => ClientState::Connected(client.connection_info()),
+        }
+    }
+
+    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
+        match self {
+            Self::Disconnected | Self::Connecting(_) => Err(WebTransportError::<P>::NotConnected),
+            Self::Connected(client) => client.send(msg),
+        }
+    }
+
+    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
+        match self {
+            Self::Disconnected => vec![],
+            Self::Connecting(client) => match client.poll() {
+                Poll::Pending => vec![],
+                Poll::Ready(Ok(client)) => {
+                    let info = client.conn_info.clone();
+                    *self = Self::Connected(client);
+                    vec![ClientEvent::Connected { info }]
+                }
+                Poll::Ready(Err(reason)) => {
+                    *self = Self::Disconnected;
+                    vec![ClientEvent::Disconnected { reason }]
+                }
+            },
+            Self::Connected(client) => match client.update() {
+                (events, Ok(())) => events,
+                (mut events, Err(reason)) => {
+                    events.push(ClientEvent::Disconnected { reason });
+                    *self = Self::Disconnected;
+                    events
+                }
+            },
+        }
+        .into_iter()
     }
 }
