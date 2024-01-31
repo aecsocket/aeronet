@@ -9,12 +9,13 @@ mod condition;
 mod lane;
 mod message;
 mod server;
+mod stats;
 mod transport;
 
 pub mod protocol;
 pub mod util;
 
-pub use {client::*, condition::*, lane::*, message::*, server::*, transport::*};
+pub use {client::*, condition::*, lane::*, message::*, server::*, stats::*, transport::*};
 
 #[cfg(feature = "bevy-tokio-rt")]
 mod runtime;

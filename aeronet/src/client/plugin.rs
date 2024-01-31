@@ -1,4 +1,4 @@
-use std::{fmt::Debug, marker::PhantomData, time::Instant};
+use std::{fmt::Debug, marker::PhantomData};
 
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
@@ -29,7 +29,7 @@ where
 {
     app.add_event::<LocalConnected<P, T>>()
         .add_event::<LocalDisconnected<P, T>>()
-        .add_event::<FromServer<P>>()
+        .add_event::<FromServer<P, T>>()
         .configure_sets(PreUpdate, ClientTransportSet)
         .add_systems(PreUpdate, recv::<P, T>.in_set(ClientTransportSet));
 }
@@ -41,9 +41,7 @@ where
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct ClientTransportPlugin<P, T> {
     #[derivative(Debug = "ignore")]
-    _phantom_p: PhantomData<P>,
-    #[derivative(Debug = "ignore")]
-    _phantom_t: PhantomData<T>,
+    _phantom: PhantomData<(P, T)>,
 }
 
 impl<P, T> Plugin for ClientTransportPlugin<P, T>
@@ -79,10 +77,8 @@ where
     P: TransportProtocol,
     T: ClientTransport<P>,
 {
-    /// Info on the connection.
-    ///
-    /// This is the same data as held by [`ClientState::Connecting`].
-    pub info: T::ConnectedInfo,
+    #[derivative(Debug = "ignore")]
+    pub _phantom: PhantomData<(P, T)>,
 }
 
 /// The client has unrecoverably lost connection from its previously
@@ -107,35 +103,36 @@ where
 /// See [`ClientEvent::Recv`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "P::S2C: Debug"), Clone(bound = "P::S2C: Clone"))]
-pub struct FromServer<P: TransportProtocol> {
+pub struct FromServer<P, T>
+where
+    P: TransportProtocol,
+    T: ClientTransport<P> + Resource,
+{
     /// The message received.
     pub msg: P::S2C,
-    /// When the message was first received.
-    ///
-    /// Since the transport may use e.g. an async task to receive data, the
-    /// time at which the message was polled using
-    /// [`ClientTransport::update`] is not necessarily when the app first
-    /// became aware of this message.
-    ///
-    /// This value can be used for calculating an estimate of the round-trip
-    /// time.
-    pub at: Instant,
+    #[derivative(Debug = "ignore")]
+    pub _phantom: PhantomData<T>,
 }
 
 fn recv<P, T>(
     mut client: ResMut<T>,
     mut connected: EventWriter<LocalConnected<P, T>>,
     mut disconnected: EventWriter<LocalDisconnected<P, T>>,
-    mut recv: EventWriter<FromServer<P>>,
+    mut recv: EventWriter<FromServer<P, T>>,
 ) where
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
 {
     for event in client.update() {
         match event {
-            ClientEvent::Connected { info } => connected.send(LocalConnected { info }),
+            ClientEvent::Connected => connected.send(LocalConnected {
+                _phantom: PhantomData::default(),
+            }),
             ClientEvent::Disconnected { reason } => disconnected.send(LocalDisconnected { reason }),
-            ClientEvent::Recv { msg, at } => recv.send(FromServer { msg, at }),
+            ClientEvent::Recv { msg } => recv.send(FromServer {
+                msg,
+                _phantom: PhantomData::default(),
+            }),
         }
     }
 }

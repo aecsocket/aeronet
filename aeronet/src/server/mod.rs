@@ -4,7 +4,7 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use std::{error::Error, fmt::Debug, time::Instant};
+use std::{error::Error, fmt::Debug};
 
 use derivative::Derivative;
 
@@ -83,9 +83,7 @@ where
     ///
     /// If this emits an event which changes the transport's state, then after
     /// this function, the transport is guaranteed to be in this new state.
-    fn update(
-        &mut self,
-    ) -> impl Iterator<Item = ServerEvent<P, Self::ConnectingInfo, Self::ConnectedInfo, Self::Error>>;
+    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>>;
 }
 
 /// State of a [`ServerTransport`].
@@ -121,10 +119,10 @@ impl<A, B> ServerState<A, B> {
 /// Event emitted by a [`ServerTransport`].
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::C2S: Debug, A: Debug, B: Debug, E: Debug"),
-    Clone(bound = "P::C2S: Clone, A: Clone, B: Clone, E: Clone")
+    Debug(bound = "P::C2S: Debug, E: Debug"),
+    Clone(bound = "P::C2S: Clone, E: Clone")
 )]
-pub enum ServerEvent<P, A, B, E>
+pub enum ServerEvent<P, E>
 where
     P: TransportProtocol,
     E: Error,
@@ -140,10 +138,6 @@ where
     Connecting {
         /// Key of the client.
         client: ClientKey,
-        /// Info on the connection.
-        ///
-        /// This is the same data as held by [`ClientState::Connecting`].
-        info: A,
     },
     /// A remote client has fully established a connection to this server.
     ///
@@ -155,10 +149,6 @@ where
     Connected {
         /// Key of the client.
         client: ClientKey,
-        /// Info on the connection.
-        ///
-        /// This is the same data as held by [`ClientState::Connected`].
-        info: B,
     },
     /// A remote client has unrecoverably lost connection from this server.
     ///
@@ -177,12 +167,5 @@ where
         client: ClientKey,
         /// The message received.
         msg: P::C2S,
-        /// When the message was first received.
-        ///
-        /// Since the transport may use e.g. an async task to receive data, the
-        /// time at which the message was polled using
-        /// [`ServerTransport::update`] is not necessarily when the app first
-        /// became aware of this message.
-        at: Instant,
     },
 }

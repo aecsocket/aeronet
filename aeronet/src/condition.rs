@@ -25,6 +25,10 @@ use crate::{
 /// is purely random, and this configuration allows you to tweak the values of
 /// this randomness.
 ///
+/// The randomness of how long messages are delayed for is based on a normal
+/// distribution with mean `delay_mean` and standard deviation `delay_std_dev`.
+/// If the sample produces a negative value, the message is not delayed at all.
+///
 /// Note that conditioners only work on the smallest unit of transmission
 /// exposed in the API - individual messages. They will only delay or drop
 /// incoming messages, without affecting outgoing messages at all.
@@ -35,69 +39,37 @@ pub struct ConditionerConfig {
     /// Represented by a percentage value in the range `0.0..=1.0`. Smaller
     /// values mean a lower chance of messages being dropped.
     pub loss_rate: f32,
-    /// Average mean time, in seconds, that messages is delayed.
+    /// Mean average time, in seconds, that messages is delayed.
     pub delay_mean: f32,
     /// Standard deviation, in seconds, of the time that messages are delayed.
     pub delay_std_dev: f32,
 }
 
 #[derive(Debug)]
-struct Conditioner<R>
-where
-    R: Recv,
-{
+struct Conditioner<E> {
     loss_rate: f32,
     delay_distr: Normal<f32>,
-    recv_buf: Vec<R>,
+    event_buf: Vec<ScheduledEvent<E>>,
 }
 
-trait Recv {
-    fn at(&self) -> Instant;
-
-    fn with_at(self, at: Instant) -> Self;
+#[derive(Debug)]
+struct ScheduledEvent<E> {
+    event: E,
+    send_at: Instant,
 }
 
 #[derive(Debug)]
 struct ClientRecv<M> {
     msg: M,
-    at: Instant,
-}
-
-impl<M> Recv for ClientRecv<M> {
-    fn at(&self) -> Instant {
-        self.at
-    }
-
-    fn with_at(self, at: Instant) -> Self {
-        ClientRecv { msg: self.msg, at }
-    }
 }
 
 #[derive(Debug)]
 struct ServerRecv<M> {
     client: ClientKey,
     msg: M,
-    at: Instant,
 }
 
-impl<M> Recv for ServerRecv<M> {
-    fn at(&self) -> Instant {
-        self.at
-    }
-
-    fn with_at(self, at: Instant) -> Self {
-        ServerRecv {
-            client: self.client,
-            msg: self.msg,
-            at,
-        }
-    }
-}
-
-impl<R> Conditioner<R>
-where
-    R: Recv,
-{
+impl<E> Conditioner<E> {
     fn new(config: ConditionerConfig) -> Self {
         let loss_rate = config.loss_rate.clamp(0.0, 1.0);
         let delay_distr = Normal::new(config.delay_mean, config.delay_std_dev)
@@ -106,11 +78,11 @@ where
         Self {
             loss_rate,
             delay_distr,
-            recv_buf: Vec::new(),
+            event_buf: Vec::new(),
         }
     }
 
-    fn condition(&mut self, recv: R) -> Option<R> {
+    fn condition(&mut self, event: E) -> Option<E> {
         let mut rng = rand::thread_rng();
         if rng.gen::<f32>() < self.loss_rate {
             // Instantly discard this
@@ -118,33 +90,27 @@ where
         }
 
         // Schedule this to be ready later
-        let delay_sec = self.delay_distr.sample(&mut rand::thread_rng());
-        let delay = if delay_sec <= 0.0 {
-            Duration::ZERO
-        } else {
-            Duration::from_secs_f32(delay_sec)
-        };
-        let ready_at = recv.at() + delay;
-
-        if Instant::now() > ready_at {
-            return Some(recv);
+        let delay_sec = self.delay_distr.sample(&mut rand::thread_rng()).max(0.0);
+        let send_at = Instant::now() + Duration::from_secs_f32(delay_sec);
+        if Instant::now() > send_at {
+            return Some(event);
         }
 
-        self.recv_buf.push(recv.with_at(ready_at));
+        self.event_buf.push(ScheduledEvent { event, send_at });
 
         None
     }
 
-    fn buffered(&mut self) -> impl Iterator<Item = R> {
+    fn buffered(&mut self) -> impl Iterator<Item = E> {
         let now = Instant::now();
 
-        let recv_buf = mem::take(&mut self.recv_buf);
+        let event_buf = mem::take(&mut self.event_buf);
         let mut buffered = Vec::new();
-        for recv in recv_buf {
-            if now > recv.at() {
-                buffered.push(recv);
+        for event in event_buf {
+            if now > event.send_at {
+                buffered.push(event.event);
             } else {
-                self.recv_buf.push(recv);
+                self.event_buf.push(event);
             }
         }
 
@@ -225,20 +191,19 @@ where
         self.inner.send(msg)
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>> {
+    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error>> {
         let mut events = Vec::new();
 
-        events.extend(self.conditioner.buffered().map(|recv| ClientEvent::Recv {
-            msg: recv.msg,
-            at: recv.at,
-        }));
+        events.extend(
+            self.conditioner
+                .buffered()
+                .map(|recv| ClientEvent::Recv { msg: recv.msg }),
+        );
 
         for event in self.inner.update() {
-            if let ClientEvent::Recv { msg, at } = event {
-                if let Some(ClientRecv { msg, at }) =
-                    self.conditioner.condition(ClientRecv { msg, at })
-                {
-                    events.push(ClientEvent::Recv { msg, at });
+            if let ClientEvent::Recv { msg } = event {
+                if let Some(ClientRecv { msg }) = self.conditioner.condition(ClientRecv { msg }) {
+                    events.push(ClientEvent::Recv { msg });
                 }
             } else {
                 events.push(event);
@@ -337,24 +302,20 @@ where
         self.inner.send(client, msg)
     }
 
-    fn update(
-        &mut self,
-    ) -> impl Iterator<Item = ServerEvent<P, Self::ConnectingInfo, Self::ConnectedInfo, Self::Error>>
-    {
+    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>> {
         let mut events = Vec::new();
 
         events.extend(self.conditioner.buffered().map(|recv| ServerEvent::Recv {
             client: recv.client,
             msg: recv.msg,
-            at: recv.at,
         }));
 
         for event in self.inner.update() {
-            if let ServerEvent::Recv { client, msg, at } = event {
-                if let Some(ServerRecv { client, msg, at }) =
-                    self.conditioner.condition(ServerRecv { client, msg, at })
+            if let ServerEvent::Recv { client, msg } = event {
+                if let Some(ServerRecv { client, msg }) =
+                    self.conditioner.condition(ServerRecv { client, msg })
                 {
-                    events.push(ServerEvent::Recv { client, msg, at });
+                    events.push(ServerEvent::Recv { client, msg });
                 }
             } else {
                 events.push(event);

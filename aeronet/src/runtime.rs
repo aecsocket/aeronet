@@ -1,5 +1,4 @@
 use bevy_ecs::prelude::*;
-use tokio::runtime;
 
 /// Wrapper resource around an async [`tokio`] runtime.
 ///
@@ -36,11 +35,11 @@ use tokio::runtime;
 ///
 /// If the runtime cannot be created when initialized, the app will panic.
 #[derive(Debug, Resource)]
-pub struct TokioRuntime(pub runtime::Runtime);
+pub struct TokioRuntime(pub tokio::runtime::Runtime);
 
 impl Default for TokioRuntime {
     fn default() -> Self {
-        let rt = runtime::Builder::new_multi_thread()
+        let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .expect("should be able to create tokio runtime");

@@ -7,7 +7,6 @@ pub use plugin::*;
 use std::{
     error::Error,
     fmt::{self, Debug},
-    time::Instant,
 };
 
 use derivative::Derivative;
@@ -50,7 +49,7 @@ where
     ///
     /// If this emits an event which changes the transport's state, then after
     /// this function, the transport is guaranteed to be in this new state.
-    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::ConnectedInfo, Self::Error>>;
+    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error>>;
 }
 
 slotmap::new_key_type! {
@@ -108,10 +107,10 @@ impl<A, B> ClientState<A, B> {
 /// Event emitted by a [`ClientTransport`].
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::S2C: Debug, B: Debug, E: Debug"),
-    Clone(bound = "P::S2C: Clone, B: Clone, E: Clone")
+    Debug(bound = "P::S2C: Debug, E: Debug"),
+    Clone(bound = "P::S2C: Clone, E: Clone")
 )]
-pub enum ClientEvent<P, B, E>
+pub enum ClientEvent<P, E>
 where
     P: TransportProtocol,
     E: Error,
@@ -124,12 +123,7 @@ where
     ///
     /// After this event, you can run your game initialization logic such as
     /// receiving the initial world state and e.g. showing a spawn screen.
-    Connected {
-        /// Info on the connection.
-        ///
-        /// This is the same data as held by [`ClientState::Connected`].
-        info: B,
-    },
+    Connected,
     /// The client has unrecoverably lost connection from its previously
     /// connected server.
     ///
@@ -144,12 +138,5 @@ where
     Recv {
         /// The message received.
         msg: P::S2C,
-        /// When the message was first received.
-        ///
-        /// Since the transport may use e.g. an async task to receive data, the
-        /// time at which the message was polled using
-        /// [`ClientTransport::update`] is not necessarily when the app first
-        /// became aware of this message.
-        at: Instant,
     },
 }

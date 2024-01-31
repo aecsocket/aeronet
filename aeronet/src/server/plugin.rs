@@ -1,4 +1,4 @@
-use std::{fmt::Debug, marker::PhantomData, time::Instant};
+use std::{fmt::Debug, marker::PhantomData};
 
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
@@ -31,7 +31,7 @@ where
     app.add_event::<RemoteConnecting<P, T>>()
         .add_event::<RemoteConnected<P, T>>()
         .add_event::<RemoteDisconnected<P, T>>()
-        .add_event::<FromClient<P>>()
+        .add_event::<FromClient<P, T>>()
         .configure_sets(PreUpdate, ServerTransportSet)
         .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet));
 }
@@ -83,12 +83,7 @@ where
 {
     /// Key of the client.
     pub client: ClientKey,
-    /// Info on the connection.
-    ///
-    /// This is the same data as held by [`ClientState::Connecting`].
-    ///
-    /// [`ClientState::Connecting`]: crate::ClientState::Connecting
-    pub info: T::ConnectingInfo,
+    pub _phantom: PhantomData<(P, T)>,
 }
 
 /// A remote client has fully established a connection to this server.
@@ -112,12 +107,7 @@ where
 {
     /// Key of the client.
     pub client: ClientKey,
-    /// Info on the connection.
-    ///
-    /// This is the same data as held by [`ClientState::Connected`].
-    ///
-    /// [`ClientState::Connected`]: crate::ClientState::Connected
-    pub info: T::ConnectedInfo,
+    pub _phantom: PhantomData<(P, T)>,
 }
 
 /// A remote client has unrecoverably lost connection from this server.
@@ -143,21 +133,16 @@ where
 /// See [`ServerEvent::Recv`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "P::C2S: Debug"), Clone(bound = "P::C2S: Clone"))]
-pub struct FromClient<P>
+pub struct FromClient<P, T>
 where
     P: TransportProtocol,
+    T: ServerTransport<P>,
 {
     /// Key of the client.
     pub client: ClientKey,
     /// The message received.
     pub msg: P::C2S,
-    /// When the message was first received.
-    ///
-    /// Since the transport may use e.g. an async task to receive data, the
-    /// time at which the message was polled using
-    /// [`ServerTransport::update`] is not necessarily when the app first
-    /// became aware of this message.
-    pub at: Instant,
+    pub _phantom: PhantomData<T>,
 }
 
 fn recv<P, T>(
@@ -165,23 +150,29 @@ fn recv<P, T>(
     mut connecting: EventWriter<RemoteConnecting<P, T>>,
     mut connected: EventWriter<RemoteConnected<P, T>>,
     mut disconnected: EventWriter<RemoteDisconnected<P, T>>,
-    mut recv: EventWriter<FromClient<P>>,
+    mut recv: EventWriter<FromClient<P, T>>,
 ) where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
 {
     for event in server.update() {
         match event {
-            ServerEvent::Connecting { client, info } => {
-                connecting.send(RemoteConnecting { client, info })
-            }
-            ServerEvent::Connected { client, info } => {
-                connected.send(RemoteConnected { client, info })
-            }
+            ServerEvent::Connecting { client } => connecting.send(RemoteConnecting {
+                client,
+                _phantom: PhantomData::default(),
+            }),
+            ServerEvent::Connected { client } => connected.send(RemoteConnected {
+                client,
+                _phantom: PhantomData::default(),
+            }),
             ServerEvent::Disconnected { client, reason } => {
                 disconnected.send(RemoteDisconnected { client, reason })
             }
-            ServerEvent::Recv { client, msg, at } => recv.send(FromClient { client, msg, at }),
+            ServerEvent::Recv { client, msg } => recv.send(FromClient {
+                client,
+                msg,
+                _phantom: PhantomData::default(),
+            }),
         }
     }
 }
