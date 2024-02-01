@@ -13,7 +13,7 @@ mod backend;
 type WebTransportError<P> =
     crate::WebTransportError<<P as TransportProtocol>::S2C, <P as TransportProtocol>::C2S>;
 
-type ServerEvent<P> = aeronet::ServerEvent<P, (), (), WebTransportError<P>>;
+type ServerEvent<P> = aeronet::ServerEvent<P, WebTransportError<P>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]

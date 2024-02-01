@@ -21,22 +21,22 @@ where
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync + 'static;
 
-    /// Info on this server when it is in the [`ServerState::Opening`] state.
-    type OpeningInfo: Send + Sync + 'static;
+    /// Statistics on this server when it is in [`ServerState::Opening`].
+    type OpeningStats: Send + Sync + 'static;
 
-    /// Info on this server when it is in the [`ServerState::Open`] state.
-    type OpenInfo: Send + Sync + 'static;
+    /// Statistics on this server when it is in [`ServerState::Open`].
+    type OpenStats: Send + Sync + 'static;
 
-    /// Info on clients connected to this server when they are in the
-    /// [`ClientState::Connecting`] state.
-    type ConnectingInfo: Send + Sync + 'static;
+    /// Statistics on clients connected to this server when they are in
+    /// [`ClientState::Connecting`].
+    type ConnectingStats: Send + Sync + 'static;
 
-    /// Info on clients connected to this server when they are in the
-    /// [`ClientState::Connected`] state.
-    type ConnectedInfo: Send + Sync + 'static;
+    /// Statistics on clients connected to this server when they are in
+    /// [`ClientState::Connected`].
+    type ConnectedStats: Send + Sync + 'static;
 
     /// Reads the current state of this server.
-    fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo>;
+    fn state(&self) -> ServerState<Self::OpeningStats, Self::OpenStats>;
 
     /// Reads the current state of a client.
     ///
@@ -44,7 +44,7 @@ where
     fn client_state(
         &self,
         client: ClientKey,
-    ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
+    ) -> ClientState<Self::ConnectingStats, Self::ConnectedStats>;
 
     /// Iterator over the keys of all clients currently recognized by this
     /// server.
@@ -52,7 +52,7 @@ where
     /// There is no guarantee about what state each client in this iterator is
     /// in, it's just guaranteed that the server is tracking some sort of state
     /// about it.
-    fn clients(&self) -> impl Iterator<Item = ClientKey> + '_;
+    fn client_keys(&self) -> impl Iterator<Item = ClientKey> + '_;
 
     /// Attempts to send a message to a connected client.
     ///
@@ -82,7 +82,9 @@ where
     /// This should be called in your app's main update loop.
     ///
     /// If this emits an event which changes the transport's state, then after
-    /// this function, the transport is guaranteed to be in this new state.
+    /// this function, the transport is guaranteed to be in this new state. Only
+    /// up to one state-changing event will be produced by this function per
+    /// function call.
     fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>>;
 }
 

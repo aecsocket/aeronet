@@ -23,14 +23,14 @@ where
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync + 'static;
 
-    /// Info on this client when it is in the [`ClientState::Connecting`] state.
-    type ConnectingInfo: Send + Sync + 'static;
+    /// Statistics on this client when it is in [`ClientState::Connecting`].
+    type ConnectingStats: Send + Sync + 'static;
 
-    /// Info on this client when it is in the [`ClientState::Connected`] state.
-    type ConnectedInfo: Send + Sync + 'static;
+    /// Statistics on this client when it is in [`ClientState::Connected`].
+    type ConnectedStats: Send + Sync + 'static;
 
     /// Reads the current state of this client.
-    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
+    fn state(&self) -> ClientState<Self::ConnectingStats, Self::ConnectedStats>;
 
     /// Attempts to send a message to the currently connected server.
     ///
@@ -48,7 +48,9 @@ where
     /// This should be called in your app's main update loop.
     ///
     /// If this emits an event which changes the transport's state, then after
-    /// this function, the transport is guaranteed to be in this new state.
+    /// this function, the transport is guaranteed to be in this new state. Only
+    /// up to one state-changing event will be produced by this function per
+    /// function call.
     fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error>>;
 }
 

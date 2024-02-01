@@ -20,7 +20,7 @@ use crate::{
 type WebTransportError<P> =
     crate::WebTransportError<<P as TransportProtocol>::C2S, <P as TransportProtocol>::S2C>;
 
-type ClientEvent<P> = aeronet::ClientEvent<P, ConnectionInfo, WebTransportError<P>>;
+type ClientEvent<P> = aeronet::ClientEvent<P, WebTransportError<P>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
@@ -243,11 +243,11 @@ where
 {
     type Error = WebTransportError<P>;
 
-    type ConnectingInfo = ();
+    type ConnectingStats = ();
 
-    type ConnectedInfo = ConnectionInfo;
+    type ConnectedStats = ConnectionInfo;
 
-    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
+    fn state(&self) -> ClientState<Self::ConnectingStats, Self::ConnectedStats> {
         match self {
             Self::Disconnected => ClientState::Disconnected,
             Self::Connecting(_) => ClientState::Connecting(()),
@@ -268,9 +268,8 @@ where
             Self::Connecting(client) => match client.poll() {
                 Poll::Pending => vec![],
                 Poll::Ready(Ok(client)) => {
-                    let info = client.conn_info.clone();
                     *self = Self::Connected(client);
-                    vec![ClientEvent::Connected { info }]
+                    vec![ClientEvent::Connected]
                 }
                 Poll::Ready(Err(reason)) => {
                     *self = Self::Disconnected;

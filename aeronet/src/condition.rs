@@ -179,11 +179,11 @@ where
 {
     type Error = T::Error;
 
-    type ConnectingInfo = T::ConnectingInfo;
+    type ConnectingStats = T::ConnectingStats;
 
-    type ConnectedInfo = T::ConnectedInfo;
+    type ConnectedStats = T::ConnectedStats;
 
-    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
+    fn state(&self) -> ClientState<Self::ConnectingStats, Self::ConnectedStats> {
         self.inner.state()
     }
 
@@ -275,27 +275,27 @@ where
 {
     type Error = T::Error;
 
-    type OpeningInfo = T::OpeningInfo;
+    type OpeningStats = T::OpeningStats;
 
-    type OpenInfo = T::OpenInfo;
+    type OpenStats = T::OpenStats;
 
-    type ConnectingInfo = T::ConnectingInfo;
+    type ConnectingStats = T::ConnectingStats;
 
-    type ConnectedInfo = T::ConnectedInfo;
+    type ConnectedStats = T::ConnectedStats;
 
-    fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo> {
+    fn state(&self) -> ServerState<Self::OpeningStats, Self::OpenStats> {
         self.inner.state()
     }
 
     fn client_state(
         &self,
         client: ClientKey,
-    ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
+    ) -> ClientState<Self::ConnectingStats, Self::ConnectedStats> {
         self.inner.client_state(client)
     }
 
-    fn clients(&self) -> impl Iterator<Item = ClientKey> {
-        self.inner.clients()
+    fn client_keys(&self) -> impl Iterator<Item = ClientKey> {
+        self.inner.client_keys()
     }
 
     fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
