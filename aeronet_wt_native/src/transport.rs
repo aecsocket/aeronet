@@ -1,15 +1,17 @@
-use std::{io, time::Duration};
+use std::{io, net::SocketAddr, time::Duration};
 
 use aeronet::{
     protocol::{FragmentationError, ReassemblyError},
-    ByteStats, ClientKey, MessageStats, Rtt, TryAsBytes, TryFromBytes,
+    ByteStats, ClientKey, MessageStats, RemoteAddr, Rtt, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 use wtransport::error::{ConnectingError, ConnectionError, SendDatagramError};
 
 /// Statistics on a WebTransport client/server connection.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ConnectionInfo {
+    /// See [`RemoteAddr`].
+    pub remote_addr: SocketAddr,
     /// See [`Rtt`].
     pub rtt: Duration,
     /// See [`MessageStats::msgs_sent`].
@@ -24,6 +26,21 @@ pub struct ConnectionInfo {
     pub total_bytes_sent: usize,
     /// See [`ByteStats::total_bytes_recv`].
     pub total_bytes_recv: usize,
+}
+
+impl ConnectionInfo {
+    pub fn new(remote_addr: SocketAddr, rtt: Duration) -> Self {
+        Self {
+            remote_addr,
+            rtt,
+            msgs_sent: 0,
+            msgs_recv: 0,
+            msg_bytes_sent: 0,
+            msg_bytes_recv: 0,
+            total_bytes_sent: 0,
+            total_bytes_recv: 0,
+        }
+    }
 }
 
 impl Rtt for ConnectionInfo {
@@ -60,6 +77,12 @@ impl ByteStats for ConnectionInfo {
     }
 }
 
+impl RemoteAddr for ConnectionInfo {
+    fn remote_addr(&self) -> SocketAddr {
+        self.remote_addr
+    }
+}
+
 /// Error that occurs when processing a [`WebTransportClient`] or
 /// [`WebTransportServer`].
 ///
@@ -90,6 +113,9 @@ where
     AlreadyDisconnected,
     #[error("client not connected")]
     NotConnected,
+
+    #[error("server not open")]
+    NotOpen,
     #[error("no client with key {0}")]
     NoClient(ClientKey),
     #[error("already responded to this session request")]

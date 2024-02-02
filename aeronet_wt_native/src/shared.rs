@@ -147,13 +147,6 @@ impl LaneState {
     }
 
     pub fn recv(&mut self, packet: &[u8]) -> Result<(), BackendError> {
-        match self {
-            Self::UnreliableUnsequenced { frag } => {
-                let Some(msg_bytes) = frag.reassemble(packet).map_err(BackendError::Reassemble)?
-                else {
-                    return Ok(());
-                };
-            }
-        }
+        todo!()
     }
 }

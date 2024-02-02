@@ -68,14 +68,11 @@ pub struct ClientTransportSet;
 ///
 /// See [`ClientEvent::Connected`].
 #[derive(Derivative, Event)]
-#[derivative(
-    Debug(bound = "T::ConnectedInfo: Debug"),
-    Clone(bound = "T::ConnectedInfo: Clone")
-)]
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct LocalConnected<P, T>
 where
     P: TransportProtocol,
-    T: ClientTransport<P>,
+    T: ClientTransport<P> + Resource,
 {
     #[derivative(Debug = "ignore")]
     pub _phantom: PhantomData<(P, T)>,
@@ -92,7 +89,7 @@ where
 pub struct LocalDisconnected<P, T>
 where
     P: TransportProtocol,
-    T: ClientTransport<P>,
+    T: ClientTransport<P> + Resource,
 {
     /// Why the client lost connection.
     pub reason: T::Error,

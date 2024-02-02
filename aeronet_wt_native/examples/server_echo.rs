@@ -2,14 +2,10 @@
 
 use std::time::Duration;
 
-use aeronet::{ClientState, TokioRuntime, TransportServer};
-use aeronet_example::{EchoProtocol, LOG_FILTER};
-use aeronet_wt_native::{ServerEvent, WebTransportServer};
+use aeronet::{ClientState, TokioRuntime};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
-
-type Server = WebTransportServer<EchoProtocol>;
 
 // logic
 
@@ -24,7 +20,7 @@ fn main() {
     App::new()
         .add_plugins((
             LogPlugin {
-                filter: LOG_FILTER.to_string(),
+                filter: "aeronet=debug".into(),
                 ..default()
             },
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
@@ -46,12 +42,10 @@ fn setup(mut commands: Commands, rt: Res<TokioRuntime>) {
 }
 
 fn create(rt: &TokioRuntime) -> Result<Server> {
-    let cert = tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(Certificate::load(
-            "./aeronet_wt_native/examples/cert.pem",
-            "./aeronet_wt_native/examples/key.pem",
-        ))?;
+    let cert = rt.0.block_on(Certificate::load(
+        "./aeronet_wt_native/examples/cert.pem",
+        "./aeronet_wt_native/examples/key.pem",
+    ))?;
 
     let config = ServerConfig::builder()
         .with_bind_default(25565)

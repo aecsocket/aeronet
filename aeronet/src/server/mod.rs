@@ -14,37 +14,34 @@ use crate::{ClientKey, ClientState, TransportProtocol};
 /// server and connected clients.
 ///
 /// See the [crate-level docs](crate).
-pub trait ServerTransport<P>
-where
-    P: TransportProtocol,
-{
+pub trait ServerTransport<P: TransportProtocol> {
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync + 'static;
 
-    /// Statistics on this server when it is in [`ServerState::Opening`].
-    type OpeningStats: Send + Sync + 'static;
+    /// Info on this server when it is in [`ServerState::Opening`].
+    type OpeningInfo;
 
-    /// Statistics on this server when it is in [`ServerState::Open`].
-    type OpenStats: Send + Sync + 'static;
+    /// Info on this server when it is in [`ServerState::Open`].
+    type OpenInfo;
 
-    /// Statistics on clients connected to this server when they are in
+    /// Info on clients connected to this server when they are in
     /// [`ClientState::Connecting`].
-    type ConnectingStats: Send + Sync + 'static;
+    type ConnectingInfo;
 
-    /// Statistics on clients connected to this server when they are in
+    /// Info on clients connected to this server when they are in
     /// [`ClientState::Connected`].
-    type ConnectedStats: Send + Sync + 'static;
+    type ConnectedInfo;
 
     /// Reads the current state of this server.
-    fn state(&self) -> ServerState<Self::OpeningStats, Self::OpenStats>;
+    fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo>;
 
     /// Reads the current state of a client.
     ///
     /// If the client does not exist, [`ClientState::Disconnected`] is returned.
     fn client_state(
         &self,
-        client: ClientKey,
-    ) -> ClientState<Self::ConnectingStats, Self::ConnectedStats>;
+        client_key: ClientKey,
+    ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
 
     /// Iterator over the keys of all clients currently recognized by this
     /// server.
@@ -62,7 +59,7 @@ where
     /// if the server is not open, or if the client is not connected. If a
     /// transmission error occurs later after this function's scope has
     /// finished, then this will still return [`Ok`].
-    fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
+    fn send(&mut self, client_key: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
 
     /// Forces a client to disconnect from this server.
     ///
@@ -74,7 +71,7 @@ where
     ///
     /// Errors if the transport failed to *attempt to* disconnect the client,
     /// e.g. if the server already knows that the client is disconnected.
-    fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error>;
+    fn disconnect(&mut self, client_key: ClientKey) -> Result<(), Self::Error>;
 
     /// Updates the internal state of this transport, returning an iterator over
     /// the events that it emitted while updating.
@@ -124,11 +121,16 @@ impl<A, B> ServerState<A, B> {
     Debug(bound = "P::C2S: Debug, E: Debug"),
     Clone(bound = "P::C2S: Clone, E: Clone")
 )]
-pub enum ServerEvent<P, E>
-where
-    P: TransportProtocol,
-    E: Error,
-{
+pub enum ServerEvent<P: TransportProtocol, E> {
+    // server state
+    /// The server has changed state to [`ServerState::Open`].
+    Opened,
+    /// The server has changed state to [`ServerState::Closed`].
+    Closed {
+        /// Why the server closed.
+        reason: E,
+    },
+
     // client state
     /// A remote client has requested to connect to this server.
     ///

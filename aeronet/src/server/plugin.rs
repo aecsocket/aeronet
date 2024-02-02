@@ -62,6 +62,30 @@ where
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub struct ServerTransportSet;
 
+#[derive(Derivative, Event)]
+#[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
+pub struct ServerOpened<P, T>
+where
+    P: TransportProtocol,
+    T: ServerTransport<P> + Resource,
+{
+    pub _phantom: PhantomData<(P, T)>,
+}
+
+#[derive(Derivative, Event)]
+#[derivative(
+    Debug(bound = "T::Error: Debug"),
+    Clone(bound = "T::Error: Clone"),
+    Default(bound = "T::Error: Default")
+)]
+pub struct ServerClosed<P, T>
+where
+    P: TransportProtocol,
+    T: ServerTransport<P> + Resource,
+{
+    pub reason: T::Error,
+}
+
 /// A remote client has requested to connect to this server.
 ///
 /// The client has been given a key, and the server is trying to establish
@@ -72,14 +96,11 @@ pub struct ServerTransportSet;
 ///
 /// See [`ServerEvent::Connecting`].
 #[derive(Derivative, Event)]
-#[derivative(
-    Debug(bound = "T::ConnectingInfo: Debug"),
-    Clone(bound = "T::ConnectingInfo: Clone")
-)]
+#[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct RemoteConnecting<P, T>
 where
     P: TransportProtocol,
-    T: ServerTransport<P>,
+    T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
     pub client: ClientKey,
@@ -96,14 +117,11 @@ where
 ///
 /// See [`ServerEvent::Connected`].
 #[derive(Derivative, Event)]
-#[derivative(
-    Debug(bound = "T::ConnectedInfo: Debug"),
-    Clone(bound = "T::ConnectedInfo: Clone")
-)]
+#[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct RemoteConnected<P, T>
 where
     P: TransportProtocol,
-    T: ServerTransport<P>,
+    T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
     pub client: ClientKey,
@@ -116,11 +134,15 @@ where
 ///
 /// See [`ServerEvent::Disconnected`].
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+#[derivative(
+    Debug(bound = "T::Error: Debug"),
+    Clone(bound = "T::Error: Clone"),
+    Default(bound = "T::Error: Default")
+)]
 pub struct RemoteDisconnected<P, T>
 where
     P: TransportProtocol,
-    T: ServerTransport<P>,
+    T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
     pub client: ClientKey,
@@ -132,11 +154,15 @@ where
 ///
 /// See [`ServerEvent::Recv`].
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "P::C2S: Debug"), Clone(bound = "P::C2S: Clone"))]
+#[derivative(
+    Debug(bound = "P::C2S: Debug"),
+    Clone(bound = "P::C2S: Clone"),
+    Default(bound = "P::C2S: Default")
+)]
 pub struct FromClient<P, T>
 where
     P: TransportProtocol,
-    T: ServerTransport<P>,
+    T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
     pub client: ClientKey,
@@ -147,6 +173,8 @@ where
 
 fn recv<P, T>(
     mut server: ResMut<T>,
+    mut opened: EventWriter<ServerOpened<P, T>>,
+    mut closed: EventWriter<ServerClosed<P, T>>,
     mut connecting: EventWriter<RemoteConnecting<P, T>>,
     mut connected: EventWriter<RemoteConnected<P, T>>,
     mut disconnected: EventWriter<RemoteDisconnected<P, T>>,
@@ -157,13 +185,18 @@ fn recv<P, T>(
 {
     for event in server.update() {
         match event {
+            ServerEvent::Opened => opened.send(ServerOpened::default()),
+            ServerEvent::Closed { reason } => closed.send(ServerClosed {
+                reason,
+                ..Default::default()
+            }),
             ServerEvent::Connecting { client } => connecting.send(RemoteConnecting {
                 client,
-                _phantom: PhantomData::default(),
+                ..Default::default()
             }),
             ServerEvent::Connected { client } => connected.send(RemoteConnected {
                 client,
-                _phantom: PhantomData::default(),
+                ..Default::default()
             }),
             ServerEvent::Disconnected { client, reason } => {
                 disconnected.send(RemoteDisconnected { client, reason })
@@ -171,7 +204,7 @@ fn recv<P, T>(
             ServerEvent::Recv { client, msg } => recv.send(FromClient {
                 client,
                 msg,
-                _phantom: PhantomData::default(),
+                ..Default::default()
             }),
         }
     }

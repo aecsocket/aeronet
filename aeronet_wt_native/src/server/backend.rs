@@ -7,7 +7,7 @@ use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
 use crate::{
     server::{ClientIncoming, OpenServerInner},
-    shared, BackendError, ConnectionResponse,
+    shared, BackendError, ConnectionResponse, RemoteConnectingClientInfo,
 };
 
 use super::ClientRequesting;
@@ -84,10 +84,13 @@ async fn handle_incoming(
     let (send_conn, recv_conn) = oneshot::channel();
     debug!("Connection request from {}", req.path());
     let _ = send_req.send(Ok(ClientRequesting {
-        authority: req.authority().to_string(),
-        path: req.path().to_string(),
-        origin: req.origin().map(ToString::to_string),
-        user_agent: req.user_agent().map(ToString::to_string),
+        info: RemoteConnectingClientInfo {
+            authority: req.authority().to_string(),
+            path: req.path().to_string(),
+            origin: req.origin().map(ToString::to_string),
+            user_agent: req.user_agent().map(ToString::to_string),
+            headers: req.headers().clone(),
+        },
         send_resp: Some(send_resp),
         recv_conn,
     }));

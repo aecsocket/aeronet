@@ -16,21 +16,19 @@ use crate::TransportProtocol;
 /// Allows connecting to a server and transporting data between this client and the server.
 ///
 /// See the [crate-level docs](crate).
-pub trait ClientTransport<P>
-where
-    P: TransportProtocol,
-{
+pub trait ClientTransport<P: TransportProtocol> {
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync + 'static;
 
-    /// Statistics on this client when it is in [`ClientState::Connecting`].
-    type ConnectingStats: Send + Sync + 'static;
+    /// Info on this client when it is in [`ClientState::Connecting`].
+    type ConnectingInfo;
 
-    /// Statistics on this client when it is in [`ClientState::Connected`].
-    type ConnectedStats: Send + Sync + 'static;
+    /// Info on this client when it is in [`ClientState::Connected`].
+    type ConnectedInfo;
 
-    /// Reads the current state of this client.
-    fn state(&self) -> ClientState<Self::ConnectingStats, Self::ConnectedStats>;
+    /// Gets the current state of this client, optionally with the connection
+    /// info.
+    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
 
     /// Attempts to send a message to the currently connected server.
     ///
@@ -112,11 +110,7 @@ impl<A, B> ClientState<A, B> {
     Debug(bound = "P::S2C: Debug, E: Debug"),
     Clone(bound = "P::S2C: Clone, E: Clone")
 )]
-pub enum ClientEvent<P, E>
-where
-    P: TransportProtocol,
-    E: Error,
-{
+pub enum ClientEvent<P: TransportProtocol, E> {
     // state
     /// The client has fully established a connection to the server.
     ///

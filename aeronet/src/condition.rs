@@ -179,11 +179,11 @@ where
 {
     type Error = T::Error;
 
-    type ConnectingStats = T::ConnectingStats;
+    type ConnectingInfo = T::ConnectingInfo;
 
-    type ConnectedStats = T::ConnectedStats;
+    type ConnectedInfo = T::ConnectedInfo;
 
-    fn state(&self) -> ClientState<Self::ConnectingStats, Self::ConnectedStats> {
+    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         self.inner.state()
     }
 
@@ -275,22 +275,22 @@ where
 {
     type Error = T::Error;
 
-    type OpeningStats = T::OpeningStats;
+    type OpeningInfo = T::OpeningInfo;
 
-    type OpenStats = T::OpenStats;
+    type OpenInfo = T::OpenInfo;
 
-    type ConnectingStats = T::ConnectingStats;
+    type ConnectingInfo = T::ConnectingInfo;
 
-    type ConnectedStats = T::ConnectedStats;
+    type ConnectedInfo = T::ConnectedInfo;
 
-    fn state(&self) -> ServerState<Self::OpeningStats, Self::OpenStats> {
+    fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo> {
         self.inner.state()
     }
 
     fn client_state(
         &self,
         client: ClientKey,
-    ) -> ClientState<Self::ConnectingStats, Self::ConnectedStats> {
+    ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         self.inner.client_state(client)
     }
 

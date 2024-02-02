@@ -1,14 +1,19 @@
-use std::{future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
+mod backend;
+mod wrapper;
 
-use aeronet::{ClientKey, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes};
+pub use wrapper::*;
+
+use std::{collections::HashMap, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
+
+use aeronet::{
+    ClientKey, ClientState, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+};
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
 use wtransport::ServerConfig;
 
-use crate::{shared::ConnectionFrontend, BackendError};
-
-mod backend;
+use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo};
 
 type WebTransportError<P> =
     crate::WebTransportError<<P as TransportProtocol>::S2C, <P as TransportProtocol>::C2S>;
@@ -17,12 +22,7 @@ type ServerEvent<P> = aeronet::ServerEvent<P, WebTransportError<P>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct OpeningServer<P>
-where
-    P: LaneProtocol,
-    P::C2S: TryFromBytes,
-    P::S2C: TryAsBytes + OnLane<Lane = P::Lane>,
-{
+pub struct OpeningServer<P: TransportProtocol> {
     recv_open: oneshot::Receiver<Result<OpenServerInner, BackendError>>,
     _phantom: PhantomData<P>,
 }
@@ -68,12 +68,7 @@ where
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct OpenServer<P>
-where
-    P: LaneProtocol,
-    P::C2S: TryFromBytes,
-    P::S2C: TryAsBytes + OnLane<Lane = P::Lane>,
-{
+pub struct OpenServer<P: TransportProtocol> {
     local_addr: SocketAddr,
     recv_client: mpsc::Receiver<ClientIncoming>,
     clients: SlotMap<ClientKey, Client>,
@@ -89,12 +84,18 @@ struct ClientIncoming {
 
 #[derive(Debug)]
 struct ClientRequesting {
-    authority: String,
-    path: String,
-    origin: Option<String>,
-    user_agent: Option<String>,
+    info: RemoteConnectingClientInfo,
     send_resp: Option<oneshot::Sender<ConnectionResponse>>,
     recv_conn: oneshot::Receiver<Result<ConnectionFrontend, BackendError>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RemoteConnectingClientInfo {
+    pub authority: String,
+    pub path: String,
+    pub origin: Option<String>,
+    pub user_agent: Option<String>,
+    pub headers: HashMap<String, String>,
 }
 
 #[derive(Debug)]
@@ -120,24 +121,39 @@ where
         self.local_addr
     }
 
-    pub fn accept_request(&mut self, client: ClientKey) -> Result<(), WebTransportError<P>> {
-        self.respond_to_request(client, ConnectionResponse::Accepted)
+    pub fn client_state(
+        &self,
+        client_key: ClientKey,
+    ) -> ClientState<RemoteConnectingClientInfo, ConnectionInfo> {
+        match self.clients.get(client_key) {
+            None | Some(Client::Incoming(_)) => ClientState::Disconnected,
+            Some(Client::Requesting(client)) => ClientState::Connecting(client.info.clone()),
+            Some(Client::Connected(client)) => ClientState::Connected(todo!()),
+        }
     }
 
-    pub fn reject_request(&mut self, client: ClientKey) -> Result<(), WebTransportError<P>> {
-        self.respond_to_request(client, ConnectionResponse::Forbidden)
+    pub fn client_keys(&self) -> impl Iterator<Item = ClientKey> + '_ {
+        self.clients.keys()
+    }
+
+    pub fn accept_request(&mut self, client_key: ClientKey) -> Result<(), WebTransportError<P>> {
+        self.respond_to_request(client_key, ConnectionResponse::Accepted)
+    }
+
+    pub fn reject_request(&mut self, client_key: ClientKey) -> Result<(), WebTransportError<P>> {
+        self.respond_to_request(client_key, ConnectionResponse::Forbidden)
     }
 
     fn respond_to_request(
         &mut self,
-        client: ClientKey,
+        client_key: ClientKey,
         resp: ConnectionResponse,
     ) -> Result<(), WebTransportError<P>> {
-        let Some(Client::Requesting(client_state)) = self.clients.get_mut(client) else {
-            return Err(WebTransportError::<P>::NoClient(client));
+        let Some(Client::Requesting(client)) = self.clients.get_mut(client_key) else {
+            return Err(WebTransportError::<P>::NoClient(client_key));
         };
 
-        match client_state.send_resp.take() {
+        match client.send_resp.take() {
             Some(send_resp) => {
                 let _ = send_resp.send(resp);
                 Ok(())
@@ -146,30 +162,34 @@ where
         }
     }
 
+    pub fn send(
+        &mut self,
+        client_key: ClientKey,
+        msg: impl Into<P::S2C>,
+    ) -> Result<(), WebTransportError<P>> {
+        todo!()
+    }
+
+    pub fn disconnect(&mut self, client_key: ClientKey) -> Result<(), WebTransportError<P>> {
+        todo!()
+    }
+
     pub fn update(&mut self) -> (Vec<ServerEvent<P>>, Result<(), WebTransportError<P>>) {
         let mut events = Vec::new();
 
-        while let Ok(Some(mut incoming)) = self.recv_client.try_next() {
-            let send_key = incoming
+        while let Ok(Some(mut client)) = self.recv_client.try_next() {
+            let send_key = client
                 .send_key
                 .take()
                 .expect("should have a sender after receiving client from backend");
-            let client_key = self.clients.insert(Client::Incoming(incoming));
+            let client_key = self.clients.insert(Client::Incoming(client));
             let _ = send_key.send(client_key);
-            events.push(ServerEvent::Connecting {
-                client: client_key,
-                info: (),
-            });
+            events.push(ServerEvent::Connecting { client: client_key });
         }
 
         let mut clients_to_remove = Vec::new();
-        for (client_key, client_state) in self.clients.iter_mut() {
-            update_client(
-                client_key,
-                client_state,
-                &mut clients_to_remove,
-                &mut events,
-            );
+        for (client_key, client) in self.clients.iter_mut() {
+            update_client(client_key, client, &mut clients_to_remove, &mut events);
         }
 
         for client_key in clients_to_remove {
@@ -182,7 +202,7 @@ where
 
 fn update_client<P>(
     client_key: ClientKey,
-    client_state: &mut Client,
+    client: &mut Client,
     clients_to_remove: &mut Vec<ClientKey>,
     events: &mut Vec<ServerEvent<P>>,
 ) where
@@ -190,8 +210,8 @@ fn update_client<P>(
     P::C2S: TryFromBytes,
     P::S2C: TryAsBytes + OnLane<Lane = P::Lane>,
 {
-    match client_state {
-        Client::Incoming(incoming) => match incoming.recv_req.try_recv() {
+    match client {
+        Client::Incoming(client) => match client.recv_req.try_recv() {
             Ok(Some(Ok(requesting))) => todo!(),
             Ok(Some(Err(x))) => todo!(),
             Ok(None) => {}
@@ -203,8 +223,8 @@ fn update_client<P>(
                 clients_to_remove.push(client_key);
             }
         },
-        Client::Requesting(requesting) => {}
-        Client::Incoming(incoming) => {}
-        Client::Connected(connected) => {}
+        Client::Requesting(client) => {}
+        Client::Incoming(client) => {}
+        Client::Connected(client) => {}
     }
 }

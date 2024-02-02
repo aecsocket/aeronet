@@ -6,16 +6,16 @@ pub use bytes;
 
 mod client;
 mod condition;
+mod conn_info;
 mod lane;
 mod message;
 mod server;
-mod stats;
 mod transport;
 
 pub mod protocol;
 pub mod util;
 
-pub use {client::*, condition::*, lane::*, message::*, server::*, stats::*, transport::*};
+pub use {client::*, condition::*, conn_info::*, lane::*, message::*, server::*, transport::*};
 
 #[cfg(feature = "bevy-tokio-rt")]
 mod runtime;

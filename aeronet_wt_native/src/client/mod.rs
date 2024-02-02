@@ -148,19 +148,6 @@ where
 
         while let Ok(Some(packet)) = self.chan.recv_s2c.try_next() {
             self.conn_info.total_bytes_recv += packet.len();
-            match lane {
-                LaneState::UnreliableUnsequenced { frag } => {
-                    let Some(msg_bytes) = frag
-                        .reassemble(&packet)
-                        .map_err(BackendError::Reassemble)
-                        .unwrap()
-                    else {
-                        continue;
-                    };
-                    self.conn_info.msg_bytes_recv += msg_bytes.len();
-                    let msg = P::S2C::try_from_bytes(&msg_bytes);
-                }
-            }
             todo!()
         }
 
@@ -243,11 +230,11 @@ where
 {
     type Error = WebTransportError<P>;
 
-    type ConnectingStats = ();
+    type ConnectingInfo = ();
 
-    type ConnectedStats = ConnectionInfo;
+    type ConnectedInfo = ConnectionInfo;
 
-    fn state(&self) -> ClientState<Self::ConnectingStats, Self::ConnectedStats> {
+    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         match self {
             Self::Disconnected => ClientState::Disconnected,
             Self::Connecting(_) => ClientState::Connecting(()),

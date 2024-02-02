@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use crate::{ClientKey, ClientTransport, LaneProtocol, ServerTransport};
+
 // todo docs
 /// | [`LaneKind`]              | Fragmentation | Reliability | Sequencing |
 /// |---------------------------|---------------|-------------|------------|
@@ -85,4 +87,20 @@ pub trait OnLane {
 
     /// What lane this value is sent out on.
     fn lane(&self) -> Self::Lane;
+}
+
+pub trait ClientLaneTransport<P>
+where
+    P: LaneProtocol,
+    Self: ClientTransport<P>,
+{
+    type LaneStats;
+
+    fn lane_stats(&self, lane: P::Lane) -> Option<Self::LaneStats>;
+}
+
+pub trait ServerLaneTransport<P: LaneProtocol>: ServerTransport<P> {
+    type LaneStats;
+
+    fn lane_stats(&self, client: ClientKey, lane: P::Lane) -> Option<Self::LaneStats>;
 }

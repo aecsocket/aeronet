@@ -38,6 +38,4 @@ bitcode.workspace = true
 bevy_ecs = { workspace = true, optional = true }
 bevy_app = { workspace = true, optional = true }
 
-tokio = { workspace = true, optional = true, default-features = false, features = [
-    "rt-multi-thread",
-] }
+tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }
