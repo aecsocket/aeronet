@@ -1,4 +1,26 @@
+//! Headless WebTransport echo server.
 //!
+//! Connect to it from WASM in a Chromium browser by running the command below
+//! in a terminal.
+/*
+# pick whichever Chromium browser you use
+chromium \
+brave \
+--webtransport-developer-mode \
+--ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
+*/
+//!
+//! Then navigate to <https://webtransport.day/> and connect to
+//! `https://[::1]:25565`. Make sure to close any browser windows before running
+//! the command.
+//!
+//! If you run the `gencert` example, update the hash above to match your newly
+//! generated certificate fingerprint.
+//!
+//! **IMPORTANT NOTE:** After receiving a `ServerEvent::Connecting` (indicating
+//! that a client is connecting), you *must* either `accept` or `reject` the
+//! request using the server. Otherwise, the client will be stuck in limbo
+//! and will take up a client slot permanently!
 
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
@@ -12,7 +34,7 @@ use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
 
-// config
+// protocol
 
 #[derive(Debug, Clone, LaneKey)]
 #[lane_kind(ReliableOrdered)]
@@ -61,13 +83,6 @@ impl LaneProtocol for AppProtocol {
 }
 
 // logic
-
-/*
-chromium \
-brave \
---webtransport-developer-mode \
---ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
-*/
 
 fn main() {
     App::new()
@@ -123,6 +138,18 @@ fn create(rt: &TokioRuntime) -> Result<WebTransportServer<AppProtocol>> {
     Ok(server)
 }
 
+// The arguments in these Bevy systems look scary, but don't worry, they're just
+// type parameters for aeronet events, which are always `<P, T>``, where:
+// * `P` is your app's protocol
+// * `T` is the transport implementation you're using
+//   (you have to pass in `P` again here)
+// It's recommended that you add type aliases for events, i.e.
+// ```
+// type ServerOpened = aeronet::ServerOpened<MyProtocol, MyTransportServer<MyProtocol>>;
+//
+// fn on_opened(mut events: EventReader<ServerOpened>) { /* .. */ }
+// ```
+
 fn on_opened(mut events: EventReader<ServerOpened<AppProtocol, WebTransportServer<AppProtocol>>>) {
     for ServerOpened { .. } in events.read() {
         info!("Opened server for connections");
@@ -140,13 +167,19 @@ fn on_incoming(
     mut server: ResMut<WebTransportServer<AppProtocol>>,
 ) {
     for RemoteConnecting { client, .. } in events.read() {
+        // Once the server sends out an event saying that a client is connecting
+        // (`RemoteConnecting`) you can get its `client_state` and read its
+        // connection info, to decide if you want to accept or reject it.
         if let ClientState::Connecting(info) = server.client_state(*client) {
             info!(
                 "Client {client} incoming from {}{} ({:?})",
                 info.authority, info.path, info.origin,
             );
         }
-        let _ = server.accept_request(*client);
+        // IMPORTANT NOTE: You must either accept or reject the request after
+        // receiving it. You don't have to do it immediately, but you do
+        // have to do it eventually - the sooner the better.
+        let _ = server.reject_request(*client);
     }
 }
 
