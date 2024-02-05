@@ -12,7 +12,7 @@ use futures::{
 use tracing::debug;
 use wtransport::Connection;
 
-use crate::{BackendError, WebTransportError};
+use crate::BackendError;
 
 const MSG_BUF_CAP: usize = 64;
 const UPDATE_DURATION: Duration = Duration::from_secs(1);
@@ -62,7 +62,7 @@ pub async fn handle_connection(conn: Connection, chan: ConnectionBackend) {
     match try_handle_connection(conn, chan.recv_c2s, chan.send_s2c, chan.send_rtt).await {
         Ok(()) => debug!("Closed backend"),
         Err(err) => {
-            debug!("Closed backend: {:#}", aeronet::util::as_pretty(&err));
+            debug!("Closed backend: {:#}", aeronet::util::pretty_error(&err));
             let _ = chan.send_err.send(err);
         }
     }
@@ -81,15 +81,18 @@ async fn try_handle_connection(
         futures::select! {
             result = conn.receive_datagram().fuse() => {
                 let datagram = result.map_err(BackendError::LostConnection)?;
-                let _ = send_s2c.send(datagram.payload());
+                let _ = send_s2c.send(datagram.payload()).await;
             }
             msg = recv_c2s.next() => {
-                let Some(msg) = msg else { return Ok(()) };
+                let Some(msg) = msg else {
+                    // frontend closed
+                    return Ok(());
+                };
                 conn.send_datagram(msg).map_err(BackendError::SendDatagram)?;
             }
             _ = tokio::time::sleep(UPDATE_DURATION).fuse() => {
                 // do another loop at least every second, so we run the stuff
-                // before this `select!` fairly often
+                // before this `select!` fairly often (updating RTT)
             }
         }
     }

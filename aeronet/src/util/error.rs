@@ -34,7 +34,7 @@ where
 /// impl write the entire error chain.
 ///
 /// See [`PrettyError`].
-pub fn as_pretty<E>(err: &E) -> PrettyError<'_, E>
+pub fn pretty_error<E>(err: &E) -> PrettyError<'_, E>
 where
     E: Error,
 {

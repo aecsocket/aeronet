@@ -40,7 +40,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// If the client does not exist, [`ClientState::Disconnected`] is returned.
     fn client_state(
         &self,
-        client_key: ClientKey,
+        client: ClientKey,
     ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
 
     /// Iterator over the keys of all clients currently recognized by this
@@ -59,7 +59,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// if the server is not open, or if the client is not connected. If a
     /// transmission error occurs later after this function's scope has
     /// finished, then this will still return [`Ok`].
-    fn send(&mut self, client_key: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
+    fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
 
     /// Forces a client to disconnect from this server.
     ///
@@ -71,7 +71,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     ///
     /// Errors if the transport failed to *attempt to* disconnect the client,
     /// e.g. if the server already knows that the client is disconnected.
-    fn disconnect(&mut self, client_key: ClientKey) -> Result<(), Self::Error>;
+    fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error>;
 
     /// Updates the internal state of this transport, returning an iterator over
     /// the events that it emitted while updating.
@@ -123,9 +123,11 @@ impl<A, B> ServerState<A, B> {
 )]
 pub enum ServerEvent<P: TransportProtocol, E> {
     // server state
-    /// The server has changed state to [`ServerState::Open`].
+    /// The server has completed setup and is ready to accept client
+    /// connections, changing state to [`ServerState::Open`].
     Opened,
-    /// The server has changed state to [`ServerState::Closed`].
+    /// The server can no longer handle client connections, changing state to
+    /// [`ServerState::Closed`].
     Closed {
         /// Why the server closed.
         reason: E,

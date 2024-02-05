@@ -212,10 +212,10 @@ impl MessageBuffer {
 impl<S> Default for Fragmentation<S> {
     fn default() -> Self {
         Self {
-            send_seq: Seq::default(),
-            latest_seq: Seq::default(),
+            send_seq: Seq(0),
+            latest_seq: Seq(0),
             messages: Box::new(array::from_fn(|_| MessageBuffer::default())),
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         }
     }
 }

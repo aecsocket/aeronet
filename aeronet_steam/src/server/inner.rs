@@ -104,7 +104,7 @@ where
             sock,
             clients: SlotMap::default(),
             steam_id_to_client: AHashMap::default(),
-            _phantom_p: PhantomData::default(),
+            _phantom_p: PhantomData,
         })
     }
 

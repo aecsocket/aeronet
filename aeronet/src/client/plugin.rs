@@ -75,6 +75,7 @@ where
     T: ClientTransport<P> + Resource,
 {
     #[derivative(Debug = "ignore")]
+    #[doc(hidden)]
     pub _phantom: PhantomData<(P, T)>,
 }
 
@@ -108,6 +109,7 @@ where
     /// The message received.
     pub msg: P::S2C,
     #[derivative(Debug = "ignore")]
+    #[doc(hidden)]
     pub _phantom: PhantomData<T>,
 }
 
@@ -123,12 +125,12 @@ fn recv<P, T>(
     for event in client.update() {
         match event {
             ClientEvent::Connected => connected.send(LocalConnected {
-                _phantom: PhantomData::default(),
+                _phantom: PhantomData,
             }),
             ClientEvent::Disconnected { reason } => disconnected.send(LocalDisconnected { reason }),
             ClientEvent::Recv { msg } => recv.send(FromServer {
                 msg,
-                _phantom: PhantomData::default(),
+                _phantom: PhantomData,
             }),
         }
     }

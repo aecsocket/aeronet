@@ -41,12 +41,14 @@ pub(super) async fn connect(
         let _ = send_conn.send(Err(BackendError::DatagramsNotSupported));
         return;
     }
+    let remote_addr = conn.remote_address();
     let initial_rtt = conn.rtt();
 
     let (chan_frontend, chan_backend) = shared::connection_channel(&conn);
     let _ = send_conn.send(Ok(ConnectedClientInner {
         chan: chan_frontend,
         local_addr,
+        remote_addr,
         initial_rtt,
     }));
     shared::handle_connection(conn, chan_backend).await

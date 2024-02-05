@@ -10,11 +10,11 @@ use bitcode::{Decode, Encode};
 /// The number is stored internally as a [`u16`], which means it will wrap
 /// around fairly quickly as many messages can be sent per second. Users of a
 /// sequence number should take this into account, and use the custom
-/// [`Seq::partial_cmp`] implementation which takes wraparound into
+/// [`Seq::cmp`] implementation which takes wraparound into
 /// consideration.
 ///
 /// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Ord, Hash, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Encode, Decode)]
 pub struct Seq(pub u16);
 
 impl Seq {
@@ -26,30 +26,66 @@ impl Seq {
     }
 }
 
-impl cmp::PartialOrd for Seq {
+impl cmp::Ord for Seq {
     /// Logically compares `self` to `other` in a way that respects wrap-around
-    /// of sequence numbers, treating e.g. `65535 cmp 0` as [`Greater`], but
-    /// `1 cmp 0` as [`Less`].
+    /// of sequence numbers, treating e.g. `0 cmp 1` as [`Less`] (as expected),
+    /// but `0 cmp 65535` as [`Greater`].
     ///
     /// See <https://gafferongames.com/post/reliability_ordering_and_congestion_avoidance_over_udp/>,
     /// *Handling Sequence Number Wrap-Around*.
     ///
+    /// If the two values compared have a real difference equal to or larger
+    /// than `u16::MAX / 2`, no guarantees are upheld.
+    ///
     /// [`Greater`]: cmp::Ordering::Greater
     /// [`Less`]: cmp::Ordering::Less
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        const HALF: u16 = u16::MAX / 2;
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        // The implementation used is a variant of `slotmap`'s generation
+        // comparison function:
+        // https://github.com/orlp/slotmap/blob/c905b6ced490551476cb7c37778eb8128bdea7ba/src/util.rs#L10
+        // It has been adapted to use u16s and Ordering.
+        // This is used instead of the Gaffer On Games code because it produces
+        // smaller assembly, but has a tiny difference in behaviour around `u16::MAX / 2`.
 
         let s1 = self.0;
         let s2 = other.0;
 
-        if s1 == s2 {
-            return Some(cmp::Ordering::Equal);
-        }
+        // alternate impl
+        // s1.wrapping_add(HALF.wrapping_sub(s2)).cmp(&(u16::MAX / 2))
+        (s1 as i16).wrapping_sub(s2 as i16).cmp(&0)
+    }
+}
 
-        if ((s1 > s2) && (s1 - s2 <= HALF)) || ((s1 < s2) && (s2 - s1 > HALF)) {
-            Some(cmp::Ordering::Greater)
-        } else {
-            Some(cmp::Ordering::Less)
-        }
+impl cmp::PartialOrd for Seq {
+    /// See [`Seq::cmp`].
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn increasing_wraparound() {
+        assert!(Seq(0) < Seq(1));
+        assert!(Seq(1) < Seq(2));
+        assert!(Seq(u16::MAX - 3) < Seq(u16::MAX));
+        assert!(Seq(u16::MAX - 2) < Seq(u16::MAX));
+        assert!(Seq(u16::MAX - 1) < Seq(u16::MAX));
+
+        assert!(Seq(u16::MAX) < Seq(0));
+        assert!(Seq(u16::MAX) < Seq(1));
+        assert!(Seq(u16::MAX) < Seq(2));
+
+        assert!(Seq(u16::MAX - 3) < Seq(2));
+
+        // NOTE: we explicitly don't test what happens when the difference
+        // is around u16::MAX, because we guarantee no behaviour there
+        // that's like saying that a packet arrived after 32,000 other packets;
+        // if that happens, then we're kinda screwed anyway
+        // we also don't test decreasing wraparound because that won't happen
+        // in our use-case
     }
 }

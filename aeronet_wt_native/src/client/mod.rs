@@ -48,7 +48,7 @@ where
         let (send_conn, recv_conn) = oneshot::channel();
         let frontend = Self {
             recv_conn,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         let backend = backend::connect(config, options, send_conn);
         (frontend, backend)
@@ -70,16 +70,13 @@ where
                     chan: inner.chan,
                     local_addr: inner.local_addr,
                     lanes,
-                    conn_info: ConnectionInfo {
-                        rtt: inner.initial_rtt,
-                        ..Default::default()
-                    },
-                    _phantom: PhantomData::default(),
+                    conn_info: ConnectionInfo::new(inner.remote_addr, inner.initial_rtt),
+                    _phantom: PhantomData,
                 }))
             }
-            Ok(Some(Err(err))) => Poll::Ready(Err(WebTransportError::<P>::Backend(err))),
+            Ok(Some(Err(err))) => Poll::Ready(Err(err.into())),
             Ok(None) => Poll::Pending,
-            Err(_) => Poll::Ready(Err(WebTransportError::<P>::Backend(BackendError::Closed))),
+            Err(_) => Poll::Ready(Err(WebTransportError::<P>::backend_closed())),
         }
     }
 }
@@ -88,6 +85,7 @@ where
 struct ConnectedClientInner {
     chan: ConnectionFrontend,
     local_addr: SocketAddr,
+    remote_addr: SocketAddr,
     initial_rtt: Duration,
 }
 
@@ -122,15 +120,12 @@ where
         let msg_bytes_len = msg_bytes.as_ref().len();
 
         let lane_index = msg.lane().variant();
-        for packet in self.lanes[lane_index]
-            .outgoing_packets(msg_bytes.as_ref())
-            .map_err(WebTransportError::<P>::Backend)?
-        {
+        for packet in self.lanes[lane_index].outgoing_packets(msg_bytes.as_ref())? {
             let packet_len = packet.len();
             self.chan
                 .send_c2s
                 .unbounded_send(packet)
-                .map_err(|_| WebTransportError::<P>::Backend(BackendError::Closed))?;
+                .map_err(|_| WebTransportError::<P>::backend_closed())?;
             self.conn_info.total_bytes_sent += packet_len;
         }
 
@@ -156,12 +151,9 @@ where
         }
 
         match self.chan.recv_err.try_recv() {
-            Ok(Some(err)) => (events, Err(WebTransportError::<P>::Backend(err))),
+            Ok(Some(err)) => (events, Err(err.into())),
             Ok(None) => (events, Ok(())),
-            Err(_) => (
-                events,
-                Err(WebTransportError::<P>::Backend(BackendError::Closed)),
-            ),
+            Err(_) => (events, Err(WebTransportError::<P>::backend_closed())),
         }
     }
 }

@@ -87,7 +87,7 @@ where
             conn: Some(conn),
             recv_connected,
             _status_changed_cb: status_changed_cb,
-            _phantom_p: PhantomData::default(),
+            _phantom_p: PhantomData,
         })
     }
 
@@ -179,7 +179,7 @@ where
             info: ConnectionInfo::default(),
             recv_err,
             _status_changed_cb: status_changed_cb,
-            _phantom_p: PhantomData::default(),
+            _phantom_p: PhantomData,
         }
     }
 

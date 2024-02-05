@@ -90,14 +90,14 @@ impl RemoteAddr for ConnectionInfo {
 /// [`WebTransportServer`]: crate::WebTransportServer
 #[derive(Derivative, thiserror::Error)]
 #[derivative(Debug(bound = ""))]
-pub enum WebTransportError<S, R>
-where
-    S: TryAsBytes,
-    R: TryFromBytes,
-{
+pub enum WebTransportError<S: TryAsBytes, R: TryFromBytes> {
     /// An error occurred on the backend which handles the connection loop.
     #[error("backend error")]
-    Backend(#[source] BackendError),
+    Backend(
+        #[from]
+        #[source]
+        BackendError,
+    ),
 
     /// Failed to encode a message into its byte form.
     #[error("failed to encode message")]
@@ -114,12 +114,24 @@ where
     #[error("client not connected")]
     NotConnected,
 
+    #[error("server already open")]
+    AlreadyOpen,
+    #[error("server already closed")]
+    AlreadyClosed,
     #[error("server not open")]
     NotOpen,
     #[error("no client with key {0}")]
     NoClient(ClientKey),
     #[error("already responded to this session request")]
     AlreadyRespondedToRequest,
+}
+
+impl<S: TryAsBytes, R: TryFromBytes> WebTransportError<S, R> {
+    /// Creates a [`WebTransportError::Backend`] with source
+    /// [`BackendError::Closed`].
+    pub fn backend_closed() -> Self {
+        Self::Backend(BackendError::Closed)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

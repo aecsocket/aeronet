@@ -28,7 +28,9 @@ where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
 {
-    app.add_event::<RemoteConnecting<P, T>>()
+    app.add_event::<ServerOpened<P, T>>()
+        .add_event::<ServerClosed<P, T>>()
+        .add_event::<RemoteConnecting<P, T>>()
         .add_event::<RemoteConnected<P, T>>()
         .add_event::<RemoteDisconnected<P, T>>()
         .add_event::<FromClient<P, T>>()
@@ -62,6 +64,10 @@ where
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub struct ServerTransportSet;
 
+/// The server has completed setup and is ready to accept client
+/// connections, changing state to [`ServerState::Open`].
+///
+/// See [`ServerEvent::Opened`]
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct ServerOpened<P, T>
@@ -69,9 +75,15 @@ where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
 {
+    #[derivative(Debug = "ignore")]
+    #[doc(hidden)]
     pub _phantom: PhantomData<(P, T)>,
 }
 
+/// The server can no longer handle client connections, changing state to
+/// [`ServerState::Closed`].
+///
+/// See [`ServerEvent::Closed`].
 #[derive(Derivative, Event)]
 #[derivative(
     Debug(bound = "T::Error: Debug"),
@@ -83,6 +95,7 @@ where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
 {
+    /// Why the server closed.
     pub reason: T::Error,
 }
 
@@ -104,6 +117,8 @@ where
 {
     /// Key of the client.
     pub client: ClientKey,
+    #[derivative(Debug = "ignore")]
+    #[doc(hidden)]
     pub _phantom: PhantomData<(P, T)>,
 }
 
@@ -125,6 +140,8 @@ where
 {
     /// Key of the client.
     pub client: ClientKey,
+    #[derivative(Debug = "ignore")]
+    #[doc(hidden)]
     pub _phantom: PhantomData<(P, T)>,
 }
 
@@ -168,6 +185,8 @@ where
     pub client: ClientKey,
     /// The message received.
     pub msg: P::C2S,
+    #[derivative(Debug = "ignore")]
+    #[doc(hidden)]
     pub _phantom: PhantomData<T>,
 }
 
@@ -186,10 +205,7 @@ fn recv<P, T>(
     for event in server.update() {
         match event {
             ServerEvent::Opened => opened.send(ServerOpened::default()),
-            ServerEvent::Closed { reason } => closed.send(ServerClosed {
-                reason,
-                ..Default::default()
-            }),
+            ServerEvent::Closed { reason } => closed.send(ServerClosed { reason }),
             ServerEvent::Connecting { client } => connecting.send(RemoteConnecting {
                 client,
                 ..Default::default()
@@ -204,7 +220,7 @@ fn recv<P, T>(
             ServerEvent::Recv { client, msg } => recv.send(FromClient {
                 client,
                 msg,
-                ..Default::default()
+                _phantom: PhantomData,
             }),
         }
     }

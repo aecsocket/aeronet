@@ -6,8 +6,8 @@ use tracing::{debug, debug_span, Instrument};
 use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
 use crate::{
-    server::{ClientIncoming, OpenServerInner},
-    shared, BackendError, ConnectionResponse, RemoteConnectingClientInfo,
+    server::{ClientInitialConnection, ClientRequestingKey, ConnectionResponse, OpenServerInner},
+    shared, BackendError, ClientRequestingInfo,
 };
 
 use super::ClientRequesting;
@@ -53,16 +53,14 @@ pub(super) async fn open(
         let (send_key, recv_key) = oneshot::channel();
         let (send_req, recv_req) = oneshot::channel();
         let _ = send_client
-            .send(ClientIncoming {
-                send_key: Some(send_key),
-                recv_req,
-            })
+            .send(ClientRequestingKey { send_key, recv_req })
             .await;
         let Ok(key) = recv_key.await else { continue };
+        debug!("Incoming session {key}");
 
         tokio::spawn(
             handle_incoming(session, send_req)
-                .instrument(debug_span!("Client", key = tracing::field::display(key))),
+                .instrument(debug_span!("Session", key = tracing::field::display(key))),
         );
     }
 }
@@ -71,7 +69,6 @@ async fn handle_incoming(
     session: IncomingSession,
     send_req: oneshot::Sender<Result<ClientRequesting, BackendError>>,
 ) {
-    debug!("Incoming session");
     let req = match session.await {
         Ok(req) => req,
         Err(err) => {
@@ -82,9 +79,14 @@ async fn handle_incoming(
 
     let (send_resp, recv_resp) = oneshot::channel();
     let (send_conn, recv_conn) = oneshot::channel();
-    debug!("Connection request from {}", req.path());
+    debug!(
+        "Connection request from {}{} ({:?})",
+        req.authority(),
+        req.path(),
+        req.origin()
+    );
     let _ = send_req.send(Ok(ClientRequesting {
-        info: RemoteConnectingClientInfo {
+        info: ClientRequestingInfo {
             authority: req.authority().to_string(),
             path: req.path().to_string(),
             origin: req.origin().map(ToString::to_string),
@@ -111,6 +113,10 @@ async fn handle_incoming(
     };
 
     let (chan_frontend, chan_backend) = shared::connection_channel(&conn);
-    let _ = send_conn.send(Ok(chan_frontend));
+    let _ = send_conn.send(Ok(ClientInitialConnection {
+        conn: chan_frontend,
+        remote_addr: conn.remote_address(),
+        initial_rtt: conn.rtt(),
+    }));
     shared::handle_connection(conn, chan_backend).await
 }

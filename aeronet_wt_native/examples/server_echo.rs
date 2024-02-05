@@ -1,11 +1,64 @@
 //!
 
-use std::time::Duration;
+use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
-use aeronet::{ClientState, TokioRuntime};
+use aeronet::{
+    ClientState, FromClient, LaneKey, LaneProtocol, Message, OnLane, RemoteConnected,
+    RemoteConnecting, RemoteDisconnected, ServerClosed, ServerOpened, ServerTransport,
+    ServerTransportPlugin, TokioRuntime, TransportProtocol, TryAsBytes, TryFromBytes,
+};
+use aeronet_wt_native::WebTransportServer;
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use wtransport::{tls::Certificate, ServerConfig};
+
+// config
+
+#[derive(Debug, Clone, LaneKey)]
+#[lane_kind(ReliableOrdered)]
+struct AppLane;
+
+#[derive(Debug, Clone, Message, OnLane)]
+#[lane_type(AppLane)]
+#[on_lane(AppLane)]
+struct AppMessage(String);
+
+impl<T: Into<String>> From<T> for AppMessage {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
+
+impl TryAsBytes for AppMessage {
+    type Output<'a> = &'a [u8];
+    type Error = Infallible;
+
+    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
+        Ok(self.0.as_bytes())
+    }
+}
+
+impl TryFromBytes for AppMessage {
+    type Error = FromUtf8Error;
+
+    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>
+    where
+        Self: Sized,
+    {
+        String::from_utf8(buf.to_vec()).map(AppMessage)
+    }
+}
+
+struct AppProtocol;
+
+impl TransportProtocol for AppProtocol {
+    type C2S = AppMessage;
+    type S2C = AppMessage;
+}
+
+impl LaneProtocol for AppProtocol {
+    type Lane = AppLane;
+}
 
 // logic
 
@@ -24,10 +77,21 @@ fn main() {
                 ..default()
             },
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
+            ServerTransportPlugin::<AppProtocol, WebTransportServer<_>>::default(),
         ))
         .init_resource::<TokioRuntime>()
         .add_systems(Startup, setup)
-        .add_systems(Update, update_server)
+        .add_systems(
+            Update,
+            (
+                on_opened,
+                on_closed,
+                on_incoming,
+                on_connected,
+                on_disconnected,
+                on_recv,
+            ),
+        )
         .run();
 }
 
@@ -41,7 +105,7 @@ fn setup(mut commands: Commands, rt: Res<TokioRuntime>) {
     }
 }
 
-fn create(rt: &TokioRuntime) -> Result<Server> {
+fn create(rt: &TokioRuntime) -> Result<WebTransportServer<AppProtocol>> {
     let cert = rt.0.block_on(Certificate::load(
         "./aeronet_wt_native/examples/cert.pem",
         "./aeronet_wt_native/examples/key.pem",
@@ -53,43 +117,74 @@ fn create(rt: &TokioRuntime) -> Result<Server> {
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
 
-    let (server, backend) = WebTransportServer::opening(config);
+    let (server, backend) = WebTransportServer::open_new(config);
     rt.0.spawn(backend);
 
-    Ok(WebTransportServer::from(server))
+    Ok(server)
 }
 
-fn update_server(mut server: ResMut<Server>) {
-    for event in server.recv() {
-        match event {
-            ServerEvent::Opened => info!("Opened server for connections"),
-            ServerEvent::Incoming { client } => info!("{client:?} incoming"),
-            ServerEvent::Accepted {
-                client,
-                authority,
-                path,
-                ..
-            } => info!("{client:?} accepted from {authority}{path}"),
-            ServerEvent::Connected { client } => {
-                let ClientState::Connected { info } = server.client_state(client) else {
-                    unreachable!();
-                };
-                info!("{client:?} connected from {}", info.remote_addr);
-                let _ = server.send(client, "Welcome!");
-                let _ = server.send(client, "Send me some text, and I will send it back!");
-            }
-            ServerEvent::Recv { client, msg } => {
-                info!("{client:?} > {}", msg.0);
-                let msg = format!("You sent: {}", msg.0);
-                let _ = server.send(client, msg);
-            }
-            ServerEvent::Disconnected { client, cause } => info!(
-                "{client:?} disconnected: {:#}",
-                aeronet::error::as_pretty(&cause)
-            ),
-            ServerEvent::Closed { cause } => {
-                info!("Server closed: {:#}", aeronet::error::as_pretty(&cause))
-            }
+fn on_opened(mut events: EventReader<ServerOpened<AppProtocol, WebTransportServer<AppProtocol>>>) {
+    for ServerOpened { .. } in events.read() {
+        info!("Opened server for connections");
+    }
+}
+
+fn on_closed(mut events: EventReader<ServerClosed<AppProtocol, WebTransportServer<AppProtocol>>>) {
+    for ServerClosed { reason } in events.read() {
+        info!("Server closed: {:#}", aeronet::util::pretty_error(&reason))
+    }
+}
+
+fn on_incoming(
+    mut events: EventReader<RemoteConnecting<AppProtocol, WebTransportServer<AppProtocol>>>,
+    mut server: ResMut<WebTransportServer<AppProtocol>>,
+) {
+    for RemoteConnecting { client, .. } in events.read() {
+        if let ClientState::Connecting(info) = server.client_state(*client) {
+            info!(
+                "Client {client} incoming from {}{} ({:?})",
+                info.authority, info.path, info.origin,
+            );
         }
+        let _ = server.accept_request(*client);
+    }
+}
+
+fn on_connected(
+    mut events: EventReader<RemoteConnected<AppProtocol, WebTransportServer<AppProtocol>>>,
+    mut server: ResMut<WebTransportServer<AppProtocol>>,
+) {
+    for RemoteConnected { client, .. } in events.read() {
+        if let ClientState::Connected(info) = server.client_state(*client) {
+            info!(
+                "Client {client} connected on {} (RTT: {:?})",
+                info.remote_addr, info.rtt
+            );
+        };
+        let _ = server.send(*client, "Welcome!");
+        let _ = server.send(*client, "Send me some UTF-8 text, and I will send it back");
+    }
+}
+
+fn on_disconnected(
+    mut events: EventReader<RemoteDisconnected<AppProtocol, WebTransportServer<AppProtocol>>>,
+) {
+    for RemoteDisconnected { client, reason } in events.read() {
+        info!(
+            "Client {client} disconnected: {:#}",
+            aeronet::util::pretty_error(reason)
+        );
+    }
+}
+
+fn on_recv(
+    mut events: EventReader<FromClient<AppProtocol, WebTransportServer<AppProtocol>>>,
+    mut server: ResMut<WebTransportServer<AppProtocol>>,
+) {
+    for FromClient { client, msg, .. } in events.read() {
+        info!("{client} > {}", msg.0);
+        let resp = format!("You sent: {}", msg.0);
+        info!("{client} < {resp}");
+        let _ = server.send(*client, AppMessage(resp));
     }
 }
