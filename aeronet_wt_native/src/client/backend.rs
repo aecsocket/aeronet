@@ -46,7 +46,7 @@ pub(super) async fn connect(
 
     let (chan_frontend, chan_backend) = shared::connection_channel(&conn);
     let _ = send_conn.send(Ok(ConnectedClientInner {
-        chan: chan_frontend,
+        conn: chan_frontend,
         local_addr,
         remote_addr,
         initial_rtt,

@@ -6,7 +6,7 @@ use tracing::{debug, debug_span, Instrument};
 use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
 
 use crate::{
-    server::{ClientInitialConnection, ClientRequestingKey, ConnectionResponse, OpenServerInner},
+    server::{ClientRequestingKey, ConnectionResponse, OpenServerInner},
     shared, BackendError, ClientRequestingInfo,
 };
 
@@ -113,10 +113,6 @@ async fn handle_incoming(
     };
 
     let (chan_frontend, chan_backend) = shared::connection_channel(&conn);
-    let _ = send_conn.send(Ok(ClientInitialConnection {
-        conn: chan_frontend,
-        remote_addr: conn.remote_address(),
-        initial_rtt: conn.rtt(),
-    }));
+    let _ = send_conn.send(Ok(chan_frontend));
     shared::handle_connection(conn, chan_backend).await
 }

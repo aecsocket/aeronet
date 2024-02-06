@@ -8,6 +8,9 @@ chromium \
 brave \
 --webtransport-developer-mode \
 --ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
+
+TODO: find the right command for Firefox
+
 */
 //!
 //! Then navigate to <https://webtransport.day/> and connect to
@@ -25,8 +28,8 @@ brave \
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
-    ClientState, FromClient, LaneKey, LaneProtocol, Message, OnLane, RemoteConnected,
-    RemoteConnecting, RemoteDisconnected, ServerClosed, ServerOpened, ServerTransport,
+    ClientState, FromClient, LaneKey, LaneProtocol, Message, OnLane, RemoteClientConnected,
+    RemoteClientConnecting, RemoteClientDisconnected, ServerClosed, ServerOpened, ServerTransport,
     ServerTransportPlugin, TokioRuntime, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use aeronet_wt_native::WebTransportServer;
@@ -163,10 +166,10 @@ fn on_closed(mut events: EventReader<ServerClosed<AppProtocol, WebTransportServe
 }
 
 fn on_incoming(
-    mut events: EventReader<RemoteConnecting<AppProtocol, WebTransportServer<AppProtocol>>>,
+    mut events: EventReader<RemoteClientConnecting<AppProtocol, WebTransportServer<AppProtocol>>>,
     mut server: ResMut<WebTransportServer<AppProtocol>>,
 ) {
-    for RemoteConnecting { client, .. } in events.read() {
+    for RemoteClientConnecting { client, .. } in events.read() {
         // Once the server sends out an event saying that a client is connecting
         // (`RemoteConnecting`) you can get its `client_state` and read its
         // connection info, to decide if you want to accept or reject it.
@@ -184,10 +187,10 @@ fn on_incoming(
 }
 
 fn on_connected(
-    mut events: EventReader<RemoteConnected<AppProtocol, WebTransportServer<AppProtocol>>>,
+    mut events: EventReader<RemoteClientConnected<AppProtocol, WebTransportServer<AppProtocol>>>,
     mut server: ResMut<WebTransportServer<AppProtocol>>,
 ) {
-    for RemoteConnected { client, .. } in events.read() {
+    for RemoteClientConnected { client, .. } in events.read() {
         if let ClientState::Connected(info) = server.client_state(*client) {
             info!(
                 "Client {client} connected on {} (RTT: {:?})",
@@ -200,9 +203,9 @@ fn on_connected(
 }
 
 fn on_disconnected(
-    mut events: EventReader<RemoteDisconnected<AppProtocol, WebTransportServer<AppProtocol>>>,
+    mut events: EventReader<RemoteClientDisconnected<AppProtocol, WebTransportServer<AppProtocol>>>,
 ) {
-    for RemoteDisconnected { client, reason } in events.read() {
+    for RemoteClientDisconnected { client, reason } in events.read() {
         info!(
             "Client {client} disconnected: {:#}",
             aeronet::util::pretty_error(reason)

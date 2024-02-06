@@ -27,8 +27,8 @@ where
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
 {
-    app.add_event::<LocalConnected<P, T>>()
-        .add_event::<LocalDisconnected<P, T>>()
+    app.add_event::<LocalClientConnected<P, T>>()
+        .add_event::<LocalClientDisconnected<P, T>>()
         .add_event::<FromServer<P, T>>()
         .configure_sets(PreUpdate, ClientTransportSet)
         .add_systems(PreUpdate, recv::<P, T>.in_set(ClientTransportSet));
@@ -69,7 +69,7 @@ pub struct ClientTransportSet;
 /// See [`ClientEvent::Connected`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
-pub struct LocalConnected<P, T>
+pub struct LocalClientConnected<P, T>
 where
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
@@ -87,7 +87,7 @@ where
 /// See [`ClientEvent::Disconnected`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
-pub struct LocalDisconnected<P, T>
+pub struct LocalClientDisconnected<P, T>
 where
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
@@ -115,8 +115,8 @@ where
 
 fn recv<P, T>(
     mut client: ResMut<T>,
-    mut connected: EventWriter<LocalConnected<P, T>>,
-    mut disconnected: EventWriter<LocalDisconnected<P, T>>,
+    mut connected: EventWriter<LocalClientConnected<P, T>>,
+    mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
     mut recv: EventWriter<FromServer<P, T>>,
 ) where
     P: TransportProtocol,
@@ -124,10 +124,12 @@ fn recv<P, T>(
 {
     for event in client.update() {
         match event {
-            ClientEvent::Connected => connected.send(LocalConnected {
+            ClientEvent::Connected => connected.send(LocalClientConnected {
                 _phantom: PhantomData,
             }),
-            ClientEvent::Disconnected { reason } => disconnected.send(LocalDisconnected { reason }),
+            ClientEvent::Disconnected { reason } => {
+                disconnected.send(LocalClientDisconnected { reason })
+            }
             ClientEvent::Recv { msg } => recv.send(FromServer {
                 msg,
                 _phantom: PhantomData,

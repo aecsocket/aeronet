@@ -2,7 +2,7 @@ use std::{fmt::Debug, future::Future, net::SocketAddr, task::Poll};
 
 use aeronet::{
     ClientKey, ClientState, LaneProtocol, LocalAddr, OnLane, ServerEvent, ServerState,
-    ServerTransport, TransportProtocol, TryAsBytes, TryFromBytes,
+    ServerTransport, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 use either::Either;
@@ -18,7 +18,7 @@ use super::WebTransportError;
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub enum WebTransportServer<P: TransportProtocol> {
+pub enum WebTransportServer<P> {
     /// See [`ServerState::Closed`].
     #[derivative(Default)]
     Closed,
@@ -44,7 +44,7 @@ where
     ///
     /// # Errors
     ///
-    /// Errors if `self` is not [`Self::Closed`].
+    /// Errors if `self` is not [`WebTransportServer::Closed`].
     pub fn open(
         &mut self,
         config: ServerConfig,
@@ -59,6 +59,12 @@ where
         }
     }
 
+    /// Closes the server, immediately and disgracefully shutting down all
+    /// client connections.
+    ///
+    /// # Errors
+    ///
+    /// Errors if `self` is [`WebTransportServer::Closed`].
     pub fn close(&mut self) -> Result<(), WebTransportError<P>> {
         match self {
             Self::Closed => Err(WebTransportError::<P>::AlreadyClosed),
@@ -96,7 +102,7 @@ where
 
     type OpeningInfo = ();
 
-    type OpenInfo = OpenServerInfo;
+    type OpenInfo = ServerOpenInfo;
 
     type ConnectingInfo = ClientRequestingInfo;
 
@@ -106,7 +112,7 @@ where
         match self {
             Self::Closed => ServerState::Closed,
             Self::Opening(_) => ServerState::Opening(()),
-            Self::Open(server) => ServerState::Open(OpenServerInfo {
+            Self::Open(server) => ServerState::Open(ServerOpenInfo {
                 local_addr: server.local_addr(),
             }),
         }
@@ -114,11 +120,11 @@ where
 
     fn client_state(
         &self,
-        client_key: ClientKey,
+        client: ClientKey,
     ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         match self {
             Self::Closed | Self::Opening(_) => ClientState::Disconnected,
-            Self::Open(server) => server.client_state(client_key),
+            Self::Open(server) => server.client_state(client),
         }
     }
 
@@ -129,17 +135,17 @@ where
         }
     }
 
-    fn send(&mut self, client_key: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
+    fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
         match self {
             Self::Closed | Self::Opening(_) => Err(WebTransportError::<P>::NotOpen),
-            Self::Open(server) => server.send(client_key, msg),
+            Self::Open(server) => server.send(client, msg),
         }
     }
 
-    fn disconnect(&mut self, client_key: ClientKey) -> Result<(), Self::Error> {
+    fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error> {
         match self {
             Self::Closed | Self::Opening(_) => Err(WebTransportError::<P>::NotOpen),
-            Self::Open(server) => server.disconnect(client_key),
+            Self::Open(server) => server.disconnect(client),
         }
     }
 
@@ -172,12 +178,12 @@ where
 
 /// Info on a [`WebTransportServer`] in the [`ServerState::Open`] state.
 #[derive(Debug, Clone)]
-pub struct OpenServerInfo {
+pub struct ServerOpenInfo {
     /// See [`LocalAddr`].
     pub local_addr: SocketAddr,
 }
 
-impl LocalAddr for OpenServerInfo {
+impl LocalAddr for ServerOpenInfo {
     fn local_addr(&self) -> SocketAddr {
         self.local_addr
     }

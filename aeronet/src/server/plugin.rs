@@ -15,9 +15,11 @@ use crate::{ClientKey, ServerEvent, ServerTransport, TransportProtocol};
 /// and send out the appropriate events.
 ///
 /// This plugin sends out the events:
-/// * [`RemoteConnecting`]
-/// * [`RemoteConnected`]
-/// * [`RemoteDisconnected`]
+/// * [`ServerOpened`]
+/// * [`ServerClosed`]
+/// * [`RemoteClientConnecting`]
+/// * [`RemoteClientConnected`]
+/// * [`RemoteClientDisconnected`]
 /// * [`FromClient`]
 ///
 /// These events can be read by your app to respond to incoming events. To send
@@ -30,9 +32,9 @@ where
 {
     app.add_event::<ServerOpened<P, T>>()
         .add_event::<ServerClosed<P, T>>()
-        .add_event::<RemoteConnecting<P, T>>()
-        .add_event::<RemoteConnected<P, T>>()
-        .add_event::<RemoteDisconnected<P, T>>()
+        .add_event::<RemoteClientConnecting<P, T>>()
+        .add_event::<RemoteClientConnected<P, T>>()
+        .add_event::<RemoteClientDisconnected<P, T>>()
         .add_event::<FromClient<P, T>>()
         .configure_sets(PreUpdate, ServerTransportSet)
         .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet));
@@ -69,7 +71,7 @@ pub struct ServerTransportSet;
 ///
 /// See [`ServerEvent::Opened`]
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct ServerOpened<P, T>
 where
     P: TransportProtocol,
@@ -85,11 +87,7 @@ where
 ///
 /// See [`ServerEvent::Closed`].
 #[derive(Derivative, Event)]
-#[derivative(
-    Debug(bound = "T::Error: Debug"),
-    Clone(bound = "T::Error: Clone"),
-    Default(bound = "T::Error: Default")
-)]
+#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
 pub struct ServerClosed<P, T>
 where
     P: TransportProtocol,
@@ -109,8 +107,8 @@ where
 ///
 /// See [`ServerEvent::Connecting`].
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
-pub struct RemoteConnecting<P, T>
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct RemoteClientConnecting<P, T>
 where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
@@ -132,8 +130,8 @@ where
 ///
 /// See [`ServerEvent::Connected`].
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
-pub struct RemoteConnected<P, T>
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct RemoteClientConnected<P, T>
 where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
@@ -151,12 +149,8 @@ where
 ///
 /// See [`ServerEvent::Disconnected`].
 #[derive(Derivative, Event)]
-#[derivative(
-    Debug(bound = "T::Error: Debug"),
-    Clone(bound = "T::Error: Clone"),
-    Default(bound = "T::Error: Default")
-)]
-pub struct RemoteDisconnected<P, T>
+#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+pub struct RemoteClientDisconnected<P, T>
 where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
@@ -171,11 +165,7 @@ where
 ///
 /// See [`ServerEvent::Recv`].
 #[derive(Derivative, Event)]
-#[derivative(
-    Debug(bound = "P::C2S: Debug"),
-    Clone(bound = "P::C2S: Clone"),
-    Default(bound = "P::C2S: Default")
-)]
+#[derivative(Debug(bound = "P::C2S: Debug"), Clone(bound = "P::C2S: Clone"))]
 pub struct FromClient<P, T>
 where
     P: TransportProtocol,
@@ -194,9 +184,9 @@ fn recv<P, T>(
     mut server: ResMut<T>,
     mut opened: EventWriter<ServerOpened<P, T>>,
     mut closed: EventWriter<ServerClosed<P, T>>,
-    mut connecting: EventWriter<RemoteConnecting<P, T>>,
-    mut connected: EventWriter<RemoteConnected<P, T>>,
-    mut disconnected: EventWriter<RemoteDisconnected<P, T>>,
+    mut connecting: EventWriter<RemoteClientConnecting<P, T>>,
+    mut connected: EventWriter<RemoteClientConnected<P, T>>,
+    mut disconnected: EventWriter<RemoteClientDisconnected<P, T>>,
     mut recv: EventWriter<FromClient<P, T>>,
 ) where
     P: TransportProtocol,
@@ -204,18 +194,20 @@ fn recv<P, T>(
 {
     for event in server.update() {
         match event {
-            ServerEvent::Opened => opened.send(ServerOpened::default()),
-            ServerEvent::Closed { reason } => closed.send(ServerClosed { reason }),
-            ServerEvent::Connecting { client } => connecting.send(RemoteConnecting {
-                client,
-                ..Default::default()
+            ServerEvent::Opened => opened.send(ServerOpened {
+                _phantom: PhantomData,
             }),
-            ServerEvent::Connected { client } => connected.send(RemoteConnected {
+            ServerEvent::Closed { reason } => closed.send(ServerClosed { reason }),
+            ServerEvent::Connecting { client } => connecting.send(RemoteClientConnecting {
                 client,
-                ..Default::default()
+                _phantom: PhantomData,
+            }),
+            ServerEvent::Connected { client } => connected.send(RemoteClientConnected {
+                client,
+                _phantom: PhantomData,
             }),
             ServerEvent::Disconnected { client, reason } => {
-                disconnected.send(RemoteDisconnected { client, reason })
+                disconnected.send(RemoteClientDisconnected { client, reason })
             }
             ServerEvent::Recv { client, msg } => recv.send(FromClient {
                 client,

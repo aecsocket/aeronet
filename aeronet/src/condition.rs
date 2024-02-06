@@ -32,16 +32,27 @@ use crate::{
 /// Note that conditioners only work on the smallest unit of transmission
 /// exposed in the API - individual messages. They will only delay or drop
 /// incoming messages, without affecting outgoing messages at all.
+///
+/// # Validity
+///
+/// This configuration is valid if each field meets its validity requirements.
 #[derive(Debug, Clone, Default)]
 pub struct ConditionerConfig {
     /// Chance of a message being dropped in transit.
     ///
     /// Represented by a percentage value in the range `0.0..=1.0`. Smaller
     /// values mean a lower chance of messages being dropped.
+    ///
+    /// If the value is outside this range, it will be clamped. Therefore, this
+    /// value is always valid.
     pub loss_rate: f32,
     /// Mean average time, in seconds, that messages is delayed.
+    ///
+    /// This value is always valid.
     pub delay_mean: f32,
     /// Standard deviation, in seconds, of the time that messages are delayed.
+    ///
+    /// If this is non-finite, this value is invalid.
     pub delay_std_dev: f32,
 }
 
@@ -139,6 +150,10 @@ where
     T: ClientTransport<P>,
 {
     /// Wraps an existing transport in a conditioner.
+    ///
+    /// # Panics
+    ///
+    /// Paniics if the configuration provided is invalid.
     pub fn new(inner: T, config: ConditionerConfig) -> Self {
         let conditioner = Conditioner::new(config);
         Self { inner, conditioner }
@@ -147,6 +162,15 @@ where
     /// Takes the wrapped transport out of this transport.
     pub fn into_inner(self) -> T {
         self.inner
+    }
+
+    /// Sets the configuration of the existing conditioner on this transport.
+    ///
+    /// # Panics
+    ///
+    /// Paniics if the configuration provided is invalid.
+    pub fn set_config(&mut self, config: ConditionerConfig) {
+        self.conditioner = Conditioner::new(config);
     }
 }
 
@@ -235,6 +259,10 @@ where
     T: ServerTransport<P>,
 {
     /// Wraps an existing transport in a conditioner.
+    ///
+    /// # Panics
+    ///
+    /// Paniics if the configuration provided is invalid.
     pub fn new(inner: T, config: ConditionerConfig) -> Self {
         let conditioner = Conditioner::new(config);
         Self { inner, conditioner }
@@ -243,6 +271,15 @@ where
     /// Takes the wrapped transport out of this transport.
     pub fn into_inner(self) -> T {
         self.inner
+    }
+
+    /// Sets the configuration of the existing conditioner on this transport.
+    ///
+    /// # Panics
+    ///
+    /// Paniics if the configuration provided is invalid.
+    pub fn set_config(&mut self, config: ConditionerConfig) {
+        self.conditioner = Conditioner::new(config);
     }
 }
 
