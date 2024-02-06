@@ -39,10 +39,18 @@ use wtransport::{tls::Certificate, ServerConfig};
 
 // protocol
 
+// Defines what kind of lanes are available to transport messages over on this
+// app's protocol.
+//
+// This can also be an enum, with each variant representing a different lane,
+// and each lane having different guarantees.
 #[derive(Debug, Clone, LaneKey)]
 #[lane_kind(ReliableOrdered)]
 struct AppLane;
 
+// Type of message that is transported between clients and servers.
+// This is up to you, the user, to define. You can have different types
+// for client-to-server and server-to-client transport.
 #[derive(Debug, Clone, Message, OnLane)]
 #[lane_type(AppLane)]
 #[on_lane(AppLane)]
@@ -54,6 +62,7 @@ impl<T: Into<String>> From<T> for AppMessage {
     }
 }
 
+// Defines how this message type can be converted to/from a [u8] form.
 impl TryAsBytes for AppMessage {
     type Output<'a> = &'a [u8];
     type Error = Infallible;
@@ -91,7 +100,7 @@ fn main() {
     App::new()
         .add_plugins((
             LogPlugin {
-                filter: "aeronet=debug".into(),
+                filter: "wgpu=error,naga=warn,aeronet=debug".into(),
                 ..default()
             },
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
@@ -108,7 +117,8 @@ fn main() {
                 on_connected,
                 on_disconnected,
                 on_recv,
-            ),
+            )
+                .chain(),
         )
         .run();
 }
@@ -136,13 +146,13 @@ fn create(rt: &TokioRuntime) -> Result<WebTransportServer<AppProtocol>> {
         .build();
 
     let (server, backend) = WebTransportServer::open_new(config);
-    rt.0.spawn(backend);
+    rt.spawn(backend);
 
     Ok(server)
 }
 
 // The arguments in these Bevy systems look scary, but don't worry, they're just
-// type parameters for aeronet events, which are always `<P, T>``, where:
+// type parameters for aeronet events, which are always `<P, T>`, where:
 // * `P` is your app's protocol
 // * `T` is the transport implementation you're using
 //   (you have to pass in `P` again here)
@@ -182,7 +192,7 @@ fn on_incoming(
         // IMPORTANT NOTE: You must either accept or reject the request after
         // receiving it. You don't have to do it immediately, but you do
         // have to do it eventually - the sooner the better.
-        let _ = server.reject_request(*client);
+        let _ = server.accept_request(*client);
     }
 }
 

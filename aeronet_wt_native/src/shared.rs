@@ -34,12 +34,18 @@ pub struct ConnectionBackend {
     send_err: oneshot::Sender<BackendError>,
 }
 
-pub fn connection_channel(conn: &Connection) -> (ConnectionFrontend, ConnectionBackend) {
+pub fn connection_channel(
+    conn: &Connection,
+) -> Result<(ConnectionFrontend, ConnectionBackend), BackendError> {
+    if conn.max_datagram_size().is_none() {
+        return Err(BackendError::DatagramsNotSupported);
+    }
+
     let (send_c2s, recv_c2s) = mpsc::unbounded();
     let (send_s2c, recv_s2c) = mpsc::channel(MSG_BUF_CAP);
     let (send_rtt, recv_rtt) = mpsc::channel(1);
     let (send_err, recv_err) = oneshot::channel();
-    (
+    Ok((
         ConnectionFrontend {
             send_c2s,
             recv_s2c,
@@ -53,7 +59,7 @@ pub fn connection_channel(conn: &Connection) -> (ConnectionFrontend, ConnectionB
             send_rtt,
             send_err,
         },
-    )
+    ))
 }
 
 impl ConnectionFrontend {
@@ -104,7 +110,9 @@ async fn try_handle_connection(
 ) -> Result<(), BackendError> {
     debug!("Starting connection loop");
     loop {
-        let _ = send_rtt.send(conn.rtt());
+        // if we failed to send, then buffer's probably full
+        // but we don't care, RTT is a lossy bit of info anyway
+        let _ = send_rtt.try_send(conn.rtt());
 
         futures::select! {
             result = conn.receive_datagram().fuse() => {
@@ -152,8 +160,8 @@ impl LaneState {
             LaneKind::UnreliableSequenced => Self::UnreliableSequenced {
                 frag: Fragmentation::sequenced(),
             },
-            LaneKind::ReliableUnordered => todo!(),
-            LaneKind::ReliableOrdered => todo!(),
+            LaneKind::ReliableUnordered => Self::ReliableUnordered {},
+            LaneKind::ReliableOrdered => Self::ReliableOrdered {},
         }
     }
 
@@ -165,8 +173,8 @@ impl LaneState {
             Self::UnreliableSequenced { frag } => {
                 frag.update();
             }
-            Self::ReliableUnordered {} => todo!(),
-            Self::ReliableOrdered {} => todo!(),
+            Self::ReliableUnordered {} => {}
+            Self::ReliableOrdered {} => {}
         }
     }
 

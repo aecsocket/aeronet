@@ -1,11 +1,10 @@
 mod backend;
 mod wrapper;
 
+use bytes::Bytes;
 pub use wrapper::*;
 
-use std::{
-    fmt::Debug, future::Future, marker::PhantomData, net::SocketAddr, task::Poll, time::Duration,
-};
+use std::{fmt::Debug, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
 
 use aeronet::{LaneKey, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
@@ -33,8 +32,6 @@ pub struct ConnectingClient<P> {
 struct ConnectedClientInner {
     conn: ConnectionFrontend,
     local_addr: SocketAddr,
-    remote_addr: SocketAddr,
-    initial_rtt: Duration,
 }
 
 impl<P> ConnectingClient<P>
@@ -107,6 +104,11 @@ where
         let msg_bytes = msg.try_as_bytes().map_err(WebTransportError::<P>::Encode)?;
         let msg_bytes_len = msg_bytes.as_ref().len();
 
+        // TODO
+        let _ = self.conn.send(Bytes::from(msg_bytes.as_ref().to_vec()));
+
+        /*
+
         let lane_index = msg.lane().variant();
         for packet in self.lanes[lane_index].outgoing_packets(msg_bytes.as_ref())? {
             let packet_len = packet.len();
@@ -114,7 +116,7 @@ where
                 .send(packet)
                 .map_err(|_| WebTransportError::<P>::backend_closed())?;
             self.conn.info.total_bytes_sent += packet_len;
-        }
+        }*/
 
         self.conn.info.msg_bytes_sent += msg_bytes_len;
         self.conn.info.msgs_sent += 1;
@@ -132,7 +134,12 @@ where
 
         while let Some(packet) = self.conn.recv() {
             self.conn.info.total_bytes_recv += packet.len();
-            todo!()
+            // TODO frag and stuff
+            let msg = match P::S2C::try_from_bytes(&packet) {
+                Ok(msg) => msg,
+                Err(err) => return (events, Err(WebTransportError::<P>::Decode(err))),
+            };
+            events.push(ClientEvent::Recv { msg });
         }
 
         (

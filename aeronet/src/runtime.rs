@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use bevy_ecs::prelude::*;
 
 /// Wrapper resource around an async [`tokio`] runtime.
@@ -44,6 +46,20 @@ impl Default for TokioRuntime {
             .build()
             .expect("should be able to create tokio runtime");
         Self(rt)
+    }
+}
+
+impl Deref for TokioRuntime {
+    type Target = tokio::runtime::Runtime;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for TokioRuntime {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

@@ -277,7 +277,7 @@ where
         }
     }
 
-    pub fn clean_up(&mut self) {
+    pub fn clear(&mut self) {
         for buf in self.messages.iter_mut() {
             buf.free();
         }
@@ -478,7 +478,7 @@ mod tests {
         assert!(matches!(frag.reassemble(&packets[1]), Ok(None)));
 
         // but after cleanup, this *should* work
-        frag.clean_up();
+        frag.clear();
 
         let packets = frag.fragment(&msg).unwrap().collect::<Vec<_>>();
         assert_eq!(2, packets.len());

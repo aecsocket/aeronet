@@ -112,7 +112,13 @@ async fn handle_incoming(
         }
     };
 
-    let (chan_frontend, chan_backend) = shared::connection_channel(&conn);
+    let (chan_frontend, chan_backend) = match shared::connection_channel(&conn) {
+        Ok(t) => t,
+        Err(err) => {
+            let _ = send_conn.send(Err(err));
+            return;
+        }
+    };
     let _ = send_conn.send(Ok(chan_frontend));
     shared::handle_connection(conn, chan_backend).await
 }
