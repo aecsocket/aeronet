@@ -256,8 +256,8 @@ where
                 num_frags,
             };
             let mut packet = bitcode::encode(&header)
-                .expect("does not use #[bitcode(with_serde)], so should never fail");
-            debug_assert_eq!(HEADER_SIZE, packet.len());
+            .expect("does not use #[bitcode(with_serde)], so should never fail");
+        debug_assert_eq!(HEADER_SIZE, packet.len());
 
             packet.reserve_exact(MAX_PAYLOAD_SIZE.min(chunk.len()));
             packet.extend(chunk);

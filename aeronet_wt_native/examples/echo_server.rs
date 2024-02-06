@@ -31,6 +31,7 @@ use aeronet::{
     ClientState, FromClient, LaneKey, LaneProtocol, Message, OnLane, RemoteClientConnected,
     RemoteClientConnecting, RemoteClientDisconnected, ServerClosed, ServerOpened, ServerTransport,
     ServerTransportPlugin, TokioRuntime, TransportProtocol, TryAsBytes, TryFromBytes,
+    VersionedProtocol,
 };
 use aeronet_wt_native::WebTransportServer;
 use anyhow::Result;
@@ -92,6 +93,11 @@ impl TransportProtocol for AppProtocol {
 
 impl LaneProtocol for AppProtocol {
     type Lane = AppLane;
+}
+
+impl VersionedProtocol for AppProtocol {
+    // TODO this has to be randomly generated at compile time
+    const VERSION: u64 = 1337;
 }
 
 // logic

@@ -12,6 +12,8 @@ use std::error::Error;
 /// This trait can be derived - see [`aeronet_derive::Message`].
 pub trait Message: Send + Sync + 'static {}
 
+impl Message for () {}
+
 /// Attempt to convert this type into a slice of bytes.
 ///
 /// Transports may require this as a bound on the outgoing message type, if the

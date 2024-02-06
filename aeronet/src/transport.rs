@@ -57,14 +57,14 @@ pub trait LaneProtocol: TransportProtocol {
     type Lane: LaneKey;
 }
 
-// /// Defines a version number of a protocol.
-// ///
-// /// Before finalizing a connection, a transport may wish to assert that it is
-// /// talking to an endpoint which is using the same protocol. This allows you to
-// /// define a version number unique for your app and build.
-// ///
-// /// This number should probably be auto-generated at compile time.
-// pub trait VersionedProtocol: TransportProtocol {
-//     /// Version number of this protocol.
-//     const VERSION: u64;
-// }
+/// Defines a version number of a protocol.
+///
+/// Before finalizing a connection, a transport may wish to assert that it is
+/// talking to an endpoint which is using the same protocol. This allows you to
+/// define a version number unique for your app and build.
+///
+/// This number should probably be auto-generated at compile time.
+pub trait VersionedProtocol: TransportProtocol {
+    /// Version number of this protocol.
+    const VERSION: u64;
+}

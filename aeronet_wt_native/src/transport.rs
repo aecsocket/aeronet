@@ -5,7 +5,7 @@ use aeronet::{
     ByteStats, ClientKey, MessageStats, RemoteAddr, Rtt, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
-use wtransport::error::{ConnectingError, ConnectionError, SendDatagramError};
+use wtransport::error::{ConnectingError, ConnectionError, SendDatagramError, StreamOpeningError};
 
 /// Statistics on a WebTransport client/server connection.
 #[derive(Debug, Clone)]
@@ -146,6 +146,16 @@ pub enum BackendError {
     DatagramsNotSupported,
     #[error("failed to get local socket address")]
     GetLocalAddr(#[source] io::Error),
+
+    #[error("failed to start opening management stream")]
+    OpeningStream(#[source] ConnectionError),
+    #[error("failed to open management stream")]
+    OpenStream(#[source] StreamOpeningError),
+    #[error("failed to accept management stream")]
+    AcceptStream(#[source] ConnectionError),
+    #[error("peer responded with invalid protocol version")]
+    InvalidVersion,
+
     #[error("lost connection")]
     LostConnection(#[source] ConnectionError),
     #[error("failed to send datagram")]

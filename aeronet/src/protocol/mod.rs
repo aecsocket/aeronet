@@ -48,5 +48,6 @@
 mod ack;
 mod frag;
 mod seq;
+mod versioning;
 
-pub use {ack::*, frag::*, seq::*};
+pub use {ack::*, frag::*, seq::*, versioning::*};

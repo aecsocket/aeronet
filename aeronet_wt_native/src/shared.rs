@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use aeronet::{
-    protocol::{Fragmentation, Sequenced, Unsequenced},
-    LaneKind,
+    protocol::{Fragmentation, Sequenced, Unsequenced, Versioning},
+    LaneKind, VersionedProtocol,
 };
 use bytes::Bytes;
 use futures::{
@@ -23,6 +23,11 @@ pub struct ConnectionFrontend {
     recv_s2c: mpsc::Receiver<Bytes>,
     recv_rtt: mpsc::Receiver<Duration>,
     recv_err: oneshot::Receiver<BackendError>,
+    /// Connection statistics.
+    ///
+    /// `remote_addr`, `rtt`, and `total_bytes_(sent|recv)` are managed by this
+    /// struct itself. All other fields are managed by the user of the
+    /// connection.
     pub info: ConnectionInfo,
 }
 
@@ -34,11 +39,40 @@ pub struct ConnectionBackend {
     send_err: oneshot::Sender<BackendError>,
 }
 
-pub fn connection_channel(
+#[derive(Debug, Clone, Encode, Decode)]
+struct ConnectionHeader {}
+
+pub async fn connection_channel<P: VersionedProtocol, const OPENS: bool>(
     conn: &Connection,
 ) -> Result<(ConnectionFrontend, ConnectionBackend), BackendError> {
     if conn.max_datagram_size().is_none() {
         return Err(BackendError::DatagramsNotSupported);
+    }
+
+    let versioning = Versioning::<P>::new();
+    if OPENS {
+        let (mut send_mgmt, mut recv_mgmt) = conn
+            .open_bi()
+            .await
+            .map_err(BackendError::OpeningStream)?
+            .await
+            .map_err(BackendError::OpenStream)?;
+
+        let _ = send_mgmt.write_all(&versioning.create_header());
+        let mut buf = [0; 64];
+        let bytes_read = recv_mgmt
+            .read(&mut buf)
+            .await
+            .map_err(todo!())?
+            .ok_or(todo!())?;
+        let buf = &buf[..bytes_read];
+        if !versioning.check_header(buf) {
+            return Err(BackendError::InvalidVersion);
+        }
+    } else {
+        let (send_mgmt, recv_mgmt) = conn.accept_bi().await.map_err(BackendError::AcceptStream)?;
+
+        let mut buf = [0; 64];
     }
 
     let (send_c2s, recv_c2s) = mpsc::unbounded();
@@ -69,7 +103,8 @@ impl ConnectionFrontend {
         }
     }
 
-    pub fn send(&self, msg: Bytes) -> Result<(), BackendError> {
+    pub fn send(&mut self, msg: Bytes) -> Result<(), BackendError> {
+        self.info.total_bytes_sent += msg.len();
         self.send_c2s
             .unbounded_send(msg)
             .map_err(|_| BackendError::Closed)
@@ -78,7 +113,10 @@ impl ConnectionFrontend {
     pub fn recv(&mut self) -> Option<Bytes> {
         match self.recv_s2c.try_next() {
             Ok(None) | Err(_) => None,
-            Ok(Some(msg)) => Some(msg),
+            Ok(Some(msg)) => {
+                self.info.total_bytes_recv += msg.len();
+                Some(msg)
+            }
         }
     }
 

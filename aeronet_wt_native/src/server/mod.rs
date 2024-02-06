@@ -102,10 +102,16 @@ struct ClientRequesting {
 }
 
 #[derive(Debug)]
+struct ClientConnected {
+    conn: ConnectionFrontend,
+    // TODO lane state
+}
+
+#[derive(Debug)]
 enum Client {
     Incoming(ClientIncoming),
     Requesting(ClientRequesting),
-    Connected(ConnectionFrontend),
+    Connected(ClientConnected),
 }
 
 #[derive(Debug, Clone)]
@@ -140,7 +146,7 @@ where
         match self.clients.get(client) {
             None | Some(Client::Incoming(_)) => ClientState::Disconnected,
             Some(Client::Requesting(client)) => ClientState::Connecting(client.info.clone()),
-            Some(Client::Connected(client)) => ClientState::Connected(client.info.clone()),
+            Some(Client::Connected(client)) => ClientState::Connected(client.conn.info.clone()),
         }
     }
 
@@ -179,7 +185,7 @@ where
         client: ClientKey,
         msg: impl Into<P::S2C>,
     ) -> Result<(), WebTransportError<P>> {
-        let Some(Client::Connected(client)) = self.clients.get(client) else {
+        let Some(Client::Connected(client)) = self.clients.get_mut(client) else {
             return Err(WebTransportError::<P>::NoClient(client));
         };
 
@@ -188,6 +194,7 @@ where
         let buf = msg.try_as_bytes().map_err(WebTransportError::<P>::Encode)?;
         let buf = Bytes::from(buf.as_ref().to_vec());
         client
+            .conn
             .send(buf)
             .map_err(|_| WebTransportError::<P>::backend_closed())
     }
@@ -258,7 +265,7 @@ where
         Client::Requesting(client) => match client.recv_conn.try_recv() {
             Ok(None) => Ok(()),
             Ok(Some(Ok(conn))) => {
-                *state = Client::Connected(conn);
+                *state = Client::Connected(ClientConnected { conn });
                 events.push(ServerEvent::Connected { client: client_key });
                 Ok(())
             }
@@ -266,9 +273,9 @@ where
             Err(_) => Err(Some(WebTransportError::<P>::backend_closed())),
         },
         Client::Connected(client) => {
-            client.update();
+            client.conn.update();
 
-            while let Some(packet) = client.recv() {
+            while let Some(packet) = client.conn.recv() {
                 // TODO this isnt how it actually works but like
                 let msg = P::C2S::try_from_bytes(&packet)
                     .map_err(|err| Some(WebTransportError::<P>::Decode(err)))?;
@@ -279,6 +286,7 @@ where
             }
 
             client
+                .conn
                 .recv_err()
                 .map_err(|err| Some(WebTransportError::<P>::Backend(err)))
         }

@@ -56,6 +56,7 @@ where
 
     pub fn poll(&mut self) -> Poll<Result<ConnectedClient<P>, WebTransportError<P>>> {
         match self.recv_conn.try_recv() {
+            Ok(None) => Poll::Pending,
             Ok(Some(Ok(inner))) => {
                 let mut lanes = Vec::new();
                 let num_lanes = P::Lane::VARIANTS.len();
@@ -74,7 +75,6 @@ where
                 }))
             }
             Ok(Some(Err(err))) => Poll::Ready(Err(err.into())),
-            Ok(None) => Poll::Pending,
             Err(_) => Poll::Ready(Err(WebTransportError::<P>::backend_closed())),
         }
     }
@@ -133,7 +133,6 @@ where
         let mut events = Vec::new();
 
         while let Some(packet) = self.conn.recv() {
-            self.conn.info.total_bytes_recv += packet.len();
             // TODO frag and stuff
             let msg = match P::S2C::try_from_bytes(&packet) {
                 Ok(msg) => msg,

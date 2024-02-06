@@ -5,7 +5,7 @@ use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 use aeronet::{
     ClientState, ClientTransport, ClientTransportPlugin, FromServer, LaneKey, LaneProtocol,
     LocalClientConnected, LocalClientDisconnected, Message, OnLane, TokioRuntime,
-    TransportProtocol, TryAsBytes, TryFromBytes,
+    TransportProtocol, TryAsBytes, TryFromBytes, VersionedProtocol,
 };
 use aeronet_wt_native::WebTransportClient;
 use bevy::{log::LogPlugin, prelude::*};
@@ -67,6 +67,11 @@ impl TransportProtocol for AppProtocol {
 
 impl LaneProtocol for AppProtocol {
     type Lane = AppLane;
+}
+
+impl VersionedProtocol for AppProtocol {
+    // TODO this has to be randomly generated at compile time
+    const VERSION: u64 = 1337;
 }
 
 // logic
