@@ -52,7 +52,7 @@ pub struct ConditionerConfig {
     pub delay_mean: f32,
     /// Standard deviation, in seconds, of the time that messages are delayed.
     ///
-    /// If this is non-finite, this value is invalid.
+    /// This value is only valid if it is finite.
     pub delay_std_dev: f32,
 }
 
@@ -81,7 +81,7 @@ struct ServerRecv<M> {
 }
 
 impl<E> Conditioner<E> {
-    fn new(config: ConditionerConfig) -> Self {
+    fn new(config: &ConditionerConfig) -> Self {
         let loss_rate = config.loss_rate.clamp(0.0, 1.0);
         let delay_distr = Normal::new(config.delay_mean, config.delay_std_dev)
             .expect("should be a valid normal distribution");
@@ -91,6 +91,12 @@ impl<E> Conditioner<E> {
             delay_distr,
             event_buf: Vec::new(),
         }
+    }
+
+    fn set_config(&mut self, config: &ConditionerConfig) {
+        let from = Self::new(config);
+        self.loss_rate = from.loss_rate;
+        self.delay_distr = from.delay_distr;
     }
 
     fn condition(&mut self, event: E) -> Option<E> {
@@ -154,7 +160,7 @@ where
     /// # Panics
     ///
     /// Paniics if the configuration provided is invalid.
-    pub fn new(inner: T, config: ConditionerConfig) -> Self {
+    pub fn new(inner: T, config: &ConditionerConfig) -> Self {
         let conditioner = Conditioner::new(config);
         Self { inner, conditioner }
     }
@@ -166,11 +172,13 @@ where
 
     /// Sets the configuration of the existing conditioner on this transport.
     ///
+    /// This will not change the state of any buffered messages.
+    ///
     /// # Panics
     ///
-    /// Paniics if the configuration provided is invalid.
-    pub fn set_config(&mut self, config: ConditionerConfig) {
-        self.conditioner = Conditioner::new(config);
+    /// Panics if the configuration provided is invalid.
+    pub fn set_config(&mut self, config: &ConditionerConfig) {
+        self.conditioner.set_config(config);
     }
 }
 
@@ -263,7 +271,7 @@ where
     /// # Panics
     ///
     /// Paniics if the configuration provided is invalid.
-    pub fn new(inner: T, config: ConditionerConfig) -> Self {
+    pub fn new(inner: T, config: &ConditionerConfig) -> Self {
         let conditioner = Conditioner::new(config);
         Self { inner, conditioner }
     }
@@ -275,11 +283,13 @@ where
 
     /// Sets the configuration of the existing conditioner on this transport.
     ///
+    /// This will not change the state of any buffered messages.
+    ///
     /// # Panics
     ///
-    /// Paniics if the configuration provided is invalid.
-    pub fn set_config(&mut self, config: ConditionerConfig) {
-        self.conditioner = Conditioner::new(config);
+    /// Panics if the configuration provided is invalid.
+    pub fn set_config(&mut self, config: &ConditionerConfig) {
+        self.conditioner.set_config(config);
     }
 }
 

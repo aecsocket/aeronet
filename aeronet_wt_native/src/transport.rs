@@ -1,7 +1,7 @@
 use std::{io, net::SocketAddr, time::Duration};
 
 use aeronet::{
-    protocol::{FragmentationError, ReassemblyError},
+    protocol::{FragmentationError, NegotiationError, ReassemblyError},
     ByteStats, ClientKey, MessageStats, RemoteAddr, Rtt, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
@@ -153,8 +153,8 @@ pub enum BackendError {
     OpenStream(#[source] StreamOpeningError),
     #[error("failed to accept management stream")]
     AcceptStream(#[source] ConnectionError),
-    #[error("peer responded with invalid protocol version")]
-    InvalidVersion,
+    #[error("failed to negotiate protocol")]
+    Negotiate(#[source] NegotiationError),
 
     #[error("lost connection")]
     LostConnection(#[source] ConnectionError),

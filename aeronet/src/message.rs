@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{convert::Infallible, error::Error};
 
 /// Smallest unit of data which can be sent between transports.
 ///
@@ -39,6 +39,15 @@ pub trait TryAsBytes {
     fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error>;
 }
 
+impl TryAsBytes for () {
+    type Output<'a> = &'a [u8; 0];
+    type Error = Infallible;
+
+    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
+        Ok(&[])
+    }
+}
+
 /// Attempt to convert a sequence of bytes into a value of this type.
 ///
 /// Transports may require this as a bound on the incoming message type, if the
@@ -57,4 +66,15 @@ pub trait TryFromBytes {
     fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>
     where
         Self: Sized;
+}
+
+impl TryFromBytes for () {
+    type Error = Infallible;
+
+    fn try_from_bytes(_: &[u8]) -> Result<Self, Self::Error>
+    where
+        Self: Sized,
+    {
+        Ok(())
+    }
 }

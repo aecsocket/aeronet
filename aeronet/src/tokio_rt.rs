@@ -27,7 +27,7 @@ use bevy_ecs::prelude::*;
 /// # use bevy::prelude::*;
 /// # use aeronet::TokioRuntime;
 /// fn run_something_async(rt: Res<TokioRuntime>) {
-///     rt.0.spawn(async move {
+///     rt.spawn(async move {
 ///         do_the_async_thing();
 ///     });
 /// }
@@ -72,8 +72,11 @@ mod tests {
     #[test]
     fn resource_in_app() {
         let mut app = App::new();
-        app.init_resource::<TokioRuntime>();
+        app.init_resource::<TokioRuntime>()
+            .add_systems(Update, use_rt);
 
         app.update();
     }
+
+    fn use_rt(_: Res<TokioRuntime>) {}
 }

@@ -30,7 +30,7 @@ struct FragHeader {
 #[doc(alias = "mtu")]
 pub const MAX_PACKET_SIZE: usize = 1024;
 
-/// Size of [`PacketHeader`] both in raw bytes in memory, and the byte size as
+/// Size of [`FragHeader`] both in raw bytes in memory, and the byte size as
 /// output by [`bitcode::encode`].
 ///
 /// These two sizes must *always* be the same - this is checked through
@@ -116,13 +116,14 @@ pub enum ReassemblyError {
 #[derivative(Debug(bound = ""))]
 pub struct Fragmentation<S> {
     /// Next sequence number for outgoing messages.
-    send_seq: Seq,
-    /// Sequence number of the latest message identified.
+    next_send_seq: Seq,
+    /// Sequence number of the last message received, but not necessarily
+    /// completed.
     ///
     /// Note that, as soon as the first fragment of a message is received, this
     /// value is updated to that fragment's sequence number. *Not* when the full
     /// message has been received.
-    latest_seq: Seq,
+    last_recv_seq: Seq,
     /// Buffer for incoming messages.
     // Instead of storing like a `Option<MessageBuffer>` for each element, which
     // would allow us a more "type-safe" test for if a certain message slot
@@ -131,6 +132,7 @@ pub struct Fragmentation<S> {
     // see MessageBuffer::is_occupied.
     // This is done to save memory.
     messages: Box<[MessageBuffer; MESSAGES_BUF]>,
+    #[derivative(Debug = "ignore")]
     _phantom: PhantomData<S>,
 }
 
@@ -212,8 +214,8 @@ impl MessageBuffer {
 impl<S> Default for Fragmentation<S> {
     fn default() -> Self {
         Self {
-            send_seq: Seq(0),
-            latest_seq: Seq(0),
+            next_send_seq: Seq(0),
+            last_recv_seq: Seq(0),
             messages: Box::new(array::from_fn(|_| MessageBuffer::default())),
             _phantom: PhantomData,
         }
@@ -221,27 +223,27 @@ impl<S> Default for Fragmentation<S> {
 }
 
 impl Fragmentation<Unsequenced> {
+    #[must_use]
     pub fn unsequenced() -> Self {
         Self::default()
     }
 }
 
 impl Fragmentation<Sequenced> {
+    #[must_use]
     pub fn sequenced() -> Self {
         Self::default()
     }
 }
 
-impl<S> Fragmentation<S>
-where
-    S: SequencingStrategy,
-{
+impl<S: SequencingStrategy> Fragmentation<S> {
+    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn fragment<'a>(
         &'a mut self,
         bytes: &'a impl AsRef<[u8]>,
     ) -> Result<impl Iterator<Item = Bytes> + 'a, FragmentationError> {
         let bytes = bytes.as_ref();
-        let seq = self.send_seq.next();
+        let seq = self.next_send_seq.next();
 
         let chunks = bytes.chunks(MAX_PAYLOAD_SIZE);
         let num_frags = u8::try_from(chunks.len())
@@ -256,8 +258,8 @@ where
                 num_frags,
             };
             let mut packet = bitcode::encode(&header)
-            .expect("does not use #[bitcode(with_serde)], so should never fail");
-        debug_assert_eq!(HEADER_SIZE, packet.len());
+                .expect("does not use #[bitcode(with_serde)], so encoding should never fail");
+            debug_assert_eq!(HEADER_SIZE, packet.len());
 
             packet.reserve_exact(MAX_PAYLOAD_SIZE.min(chunk.len()));
             packet.extend(chunk);
@@ -269,7 +271,7 @@ where
         }))
     }
 
-    pub fn update(&mut self) {
+    pub fn clean_up(&mut self) {
         for buf in self.messages.iter_mut() {
             if buf.is_occupied() && buf.last_recv_at.elapsed() > CLEAN_UP_AFTER {
                 buf.free();
@@ -307,21 +309,21 @@ where
         header: FragHeader,
         payload: &[u8],
     ) -> Result<Option<Bytes>, ReassemblyError> {
-        if S::is_sequenced() && header.seq < self.latest_seq {
+        if S::is_sequenced() && header.seq < self.last_recv_seq {
             return Ok(None);
         }
-        self.latest_seq = header.seq;
+        self.last_recv_seq = header.seq;
 
         match header.num_frags {
             0 => Err(ReassemblyError::InvalidHeader),
             // quick path to avoid writing this into the message buffer then
             // immediately reading it back out
             1 => Ok(Some(Bytes::from(payload.to_vec()))),
-            _ => Ok(self.reassemble_fragment(header, payload)),
+            _ => Ok(self.reassemble_fragment(&header, payload)),
         }
     }
 
-    fn reassemble_fragment(&mut self, header: FragHeader, payload: &[u8]) -> Option<Bytes> {
+    fn reassemble_fragment(&mut self, header: &FragHeader, payload: &[u8]) -> Option<Bytes> {
         let buf = &mut self.messages[header.seq.0 as usize % MESSAGES_BUF];
         if !buf.is_occupied() {
             // let's initialize it

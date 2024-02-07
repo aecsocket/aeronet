@@ -1,3 +1,7 @@
+use std::fmt;
+
+use bitcode::{Decode, Encode};
+
 use crate::{LaneKey, Message};
 
 /// Defines what types of messages are transported between the client and the
@@ -57,14 +61,30 @@ pub trait LaneProtocol: TransportProtocol {
     type Lane: LaneKey;
 }
 
+///
+/// This is treated as an opaque value, and is only used for equality
+/// comparison. No ordering guarantees are made (i.e. `20` is not
+/// necessarily a newer version than `10`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode)]
+pub struct ProtocolVersion(pub u32);
+
+impl fmt::Display for ProtocolVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:08x}", self.0)
+    }
+}
+
 /// Defines a version number of a protocol.
 ///
 /// Before finalizing a connection, a transport may wish to assert that it is
-/// talking to an endpoint which is using the same protocol. This allows you to
-/// define a version number unique for your app and build.
+/// talking to an endpoint which is using the same version of the same protocol.
+/// This allows you to define a version number unique for your app and build,
+/// which both sides of the connection compare before finalizing connection.
 ///
-/// This number should probably be auto-generated at compile time.
+/// This number may be a constant which is manually updated by the developer
+/// when a breaking protocol change occurs, or may be auto-generated at compile
+/// time using i.e. the source files as inputs to a hash function.
 pub trait VersionedProtocol: TransportProtocol {
     /// Version number of this protocol.
-    const VERSION: u64;
+    const VERSION: ProtocolVersion;
 }

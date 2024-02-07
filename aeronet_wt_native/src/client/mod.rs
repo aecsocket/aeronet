@@ -6,7 +6,9 @@ pub use wrapper::*;
 
 use std::{fmt::Debug, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
 
-use aeronet::{LaneKey, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes};
+use aeronet::{
+    LaneKey, LaneKind, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+};
 use derivative::Derivative;
 use futures::channel::oneshot;
 use wtransport::{endpoint::IntoConnectOptions, ClientConfig};
@@ -70,7 +72,10 @@ where
                 Poll::Ready(Ok(ConnectedClient {
                     conn: inner.conn,
                     local_addr: inner.local_addr,
-                    lanes,
+                    // !! TODO
+                    // lanes,
+                    lanes: vec![LaneState::new(LaneKind::UnreliableUnsequenced)],
+                    // !! TODO
                     _phantom: PhantomData,
                 }))
             }
@@ -105,7 +110,16 @@ where
         let msg_bytes_len = msg_bytes.as_ref().len();
 
         // TODO
-        let _ = self.conn.send(Bytes::from(msg_bytes.as_ref().to_vec()));
+
+        let LaneState::UnreliableUnsequenced { mut frag } = self.lanes[0] else {
+            unreachable!()
+        };
+        for packet in frag
+            .fragment(&msg_bytes.as_ref())
+            .map_err(|err| WebTransportError::<P>::Backend(BackendError::Fragment(err)))?
+        {
+            let _ = self.conn.send(packet);
+        }
 
         /*
 
@@ -134,11 +148,16 @@ where
 
         while let Some(packet) = self.conn.recv() {
             // TODO frag and stuff
-            let msg = match P::S2C::try_from_bytes(&packet) {
-                Ok(msg) => msg,
-                Err(err) => return (events, Err(WebTransportError::<P>::Decode(err))),
+            let LaneState::UnreliableUnsequenced { mut frag } = self.lanes[0] else {
+                unreachable!()
             };
-            events.push(ClientEvent::Recv { msg });
+            if let Ok(Some(msg_bytes)) = frag.reassemble(&packet) {
+                let msg = match P::S2C::try_from_bytes(&msg_bytes) {
+                    Ok(msg) => msg,
+                    Err(err) => return (events, Err(WebTransportError::<P>::Decode(err))),
+                };
+                events.push(ClientEvent::Recv { msg });
+            }
         }
 
         (

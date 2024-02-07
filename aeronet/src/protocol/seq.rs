@@ -19,6 +19,7 @@ pub struct Seq(pub u16);
 
 impl Seq {
     /// Returns the current sequence value and increments `self`.
+    #[must_use]
     pub fn next(&mut self) -> Seq {
         let cur = *self;
         self.0 = self.0.wrapping_add(1);
@@ -52,6 +53,7 @@ impl cmp::Ord for Seq {
 
         // alternate impl
         // s1.wrapping_add(HALF.wrapping_sub(s2)).cmp(&(u16::MAX / 2))
+        #[allow(clippy::cast_possible_wrap)] // that's exactly what we want
         (s1 as i16).wrapping_sub(s2 as i16).cmp(&0)
     }
 }

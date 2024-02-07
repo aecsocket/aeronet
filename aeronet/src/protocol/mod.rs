@@ -22,15 +22,18 @@
 //! Which features are provided by this protocol, and which must be implemented
 //! externally?
 //!
-//! | Feature        | Description                                                                                        | Provided          |
-//! |----------------|----------------------------------------------------------------------------------------------------|-------------------|
-//! | encryption     | unauthorized third parties can't read the network data in transit                                  |                   |
-//! | authentication | only clients who have permission to use this app can connect                                       |                   |
-//! | validation     | the message was not tampered with or corrupted in transit                                          |                   |
-//! | correct size   | bytes are received in the same "chunks" that they are sent - i.e. datagram style, not stream style |                   |
-//! | fragmentation  | large messages are sent using multiple packets                                                     | [`Fragmentation`] |
-//! | reliability    | messages will be resent until it's guaranteed that the receiver received the entire message        | todo              |
-//! | ordering       | messages will be received in the same order they were sent                                         | todo              |
+//! | Feature        | Description                                                           | Provided?         |
+//! |----------------|-----------------------------------------------------------------------|-------------------|
+//! | encryption     | unauthorized third parties can't read the network data in transit     | -                 |
+//! | authentication | only clients who have permission to use this app can connect          | -                 |
+//! | validation     | the message was not tampered with or corrupted in transit             | -                 |
+//! | framing        | message boundary is maintained by API (i.e. not just stream of bytes) | -                 |
+//! | negotiation    | makes sure that both peers are using the same protocol before talking | [`Negotiation`]   |
+//! | fragmentation  | large messages are sent using multiple packets                        | [`Fragmentation`] |
+//! | reliability    | messages sent reliably are guaranteed to be received by the peer      | todo              |
+//! | ordering       | messages will be received in the same order they were sent            | todo              |
+//!
+//! The client acts as the initiator in all aeronet-provided features.
 //!
 //! # Fuzzing
 //!
@@ -47,7 +50,11 @@
 
 mod ack;
 mod frag;
+mod negotiation;
 mod seq;
-mod versioning;
 
-pub use {ack::*, frag::*, seq::*, versioning::*};
+pub use {ack::*, frag::*, negotiation::*, seq::*};
+
+fn expect_encode<T: bitcode::Encode>(t: &T) -> Vec<u8> {
+    bitcode::encode(t).expect("does not use #[bitcode(with_serde)], so encoding should never fail")
+}

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use aeronet::{
-    protocol::{Fragmentation, Sequenced, Unsequenced, Versioning},
+    protocol::{Fragmentation, Negotiation, Sequenced, Unsequenced},
     LaneKind, VersionedProtocol,
 };
 use bytes::Bytes;
@@ -39,18 +39,15 @@ pub struct ConnectionBackend {
     send_err: oneshot::Sender<BackendError>,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-struct ConnectionHeader {}
-
-pub async fn connection_channel<P: VersionedProtocol, const OPENS: bool>(
+pub async fn connection_channel<P: VersionedProtocol, const SERVER: bool>(
     conn: &Connection,
 ) -> Result<(ConnectionFrontend, ConnectionBackend), BackendError> {
     if conn.max_datagram_size().is_none() {
         return Err(BackendError::DatagramsNotSupported);
     }
 
-    let versioning = Versioning::<P>::new();
-    if OPENS {
+    let versioning = Negotiation::<P>::new();
+    if SERVER {
         let (mut send_mgmt, mut recv_mgmt) = conn
             .open_bi()
             .await
@@ -58,21 +55,33 @@ pub async fn connection_channel<P: VersionedProtocol, const OPENS: bool>(
             .await
             .map_err(BackendError::OpenStream)?;
 
-        let _ = send_mgmt.write_all(&versioning.create_header());
-        let mut buf = [0; 64];
+        // send request
+        let _ = send_mgmt.write_all(&versioning.create_req());
+        let mut resp_buf = [0; 64];
         let bytes_read = recv_mgmt
-            .read(&mut buf)
+            .read(&mut resp_buf)
             .await
             .map_err(todo!())?
             .ok_or(todo!())?;
-        let buf = &buf[..bytes_read];
-        if !versioning.check_header(buf) {
-            return Err(BackendError::InvalidVersion);
+        // read and check response
+        if !versioning.check_resp(&resp_buf[..bytes_read]) {
+            return Err(BackendError::Negotiate);
         }
     } else {
         let (send_mgmt, recv_mgmt) = conn.accept_bi().await.map_err(BackendError::AcceptStream)?;
 
-        let mut buf = [0; 64];
+        // read and check request
+        let mut req_buf = [0; 64];
+        let bytes_read = recv_mgmt
+            .read(&mut req_buf)
+            .await
+            .map_err(todo!())?
+            .ok_or(todo!())?;
+        if !versioning.check_req(&req_buf[..bytes_read]) {
+            return Err(BackendError::Negotiate);
+        }
+        // send response
+        let _ = send_mgmt.write_all(&versioning.create_resp());
     }
 
     let (send_c2s, recv_c2s) = mpsc::unbounded();
@@ -129,48 +138,6 @@ impl ConnectionFrontend {
     }
 }
 
-pub async fn handle_connection(conn: Connection, chan: ConnectionBackend) {
-    debug!("Connected backend");
-    match try_handle_connection(conn, chan.recv_c2s, chan.send_s2c, chan.send_rtt).await {
-        Ok(()) => debug!("Closed backend"),
-        Err(err) => {
-            debug!("Closed backend: {:#}", aeronet::util::pretty_error(&err));
-            let _ = chan.send_err.send(err);
-        }
-    }
-}
-
-async fn try_handle_connection(
-    conn: Connection,
-    mut recv_c2s: mpsc::UnboundedReceiver<Bytes>,
-    mut send_s2c: mpsc::Sender<Bytes>,
-    mut send_rtt: mpsc::Sender<Duration>,
-) -> Result<(), BackendError> {
-    debug!("Starting connection loop");
-    loop {
-        // if we failed to send, then buffer's probably full
-        // but we don't care, RTT is a lossy bit of info anyway
-        let _ = send_rtt.try_send(conn.rtt());
-
-        futures::select! {
-            result = conn.receive_datagram().fuse() => {
-                let datagram = result.map_err(BackendError::LostConnection)?;
-                let _ = send_s2c.send(datagram.payload()).await;
-            }
-            msg = recv_c2s.next() => {
-                let Some(msg) = msg else {
-                    // frontend closed
-                    return Ok(());
-                };
-                conn.send_datagram(msg).map_err(BackendError::SendDatagram)?;
-            }
-            _ = tokio::time::sleep(UPDATE_DURATION).fuse() => {
-                // do another loop at least every second, so we run the stuff
-                // before this `select!` fairly often (updating RTT)
-            }
-        }
-    }
-}
 
 /// # Packet layout
 ///
@@ -206,10 +173,10 @@ impl LaneState {
     pub fn update(&mut self) {
         match self {
             Self::UnreliableUnsequenced { frag } => {
-                frag.update();
+                frag.clean_up();
             }
             Self::UnreliableSequenced { frag } => {
-                frag.update();
+                frag.clean_up();
             }
             Self::ReliableUnordered {} => {}
             Self::ReliableOrdered {} => {}

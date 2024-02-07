@@ -6,7 +6,7 @@ pub use bytes;
 
 mod client;
 mod condition;
-mod conn_info;
+mod connection_info;
 mod lane;
 mod message;
 mod server;
@@ -15,10 +15,12 @@ mod transport;
 pub mod protocol;
 pub mod util;
 
-pub use {client::*, condition::*, conn_info::*, lane::*, message::*, server::*, transport::*};
+pub use {
+    client::*, condition::*, connection_info::*, lane::*, message::*, server::*, transport::*,
+};
 
 #[cfg(feature = "bevy-tokio-rt")]
-mod runtime;
+mod tokio_rt;
 
 #[cfg(feature = "bevy-tokio-rt")]
-pub use runtime::*;
+pub use tokio_rt::*;
