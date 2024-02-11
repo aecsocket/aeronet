@@ -123,6 +123,7 @@ dependencies = [
  "bevy",
  "bevy_ecs",
  "bevy_egui",
+ "bitcode",
  "bytes",
  "derivative",
  "either",

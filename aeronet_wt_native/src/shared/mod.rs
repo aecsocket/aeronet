@@ -1,15 +1,12 @@
 use std::time::Duration;
 
 use aeronet::{
-    protocol::{Fragmentation, Negotiation, Sequenced, Unsequenced},
-    LaneKind, VersionedProtocol,
+    protocol::{Fragmentation, Negotiation, NegotiationError, Sequenced, Unsequenced},
+    LaneKind, ProtocolVersion, VersionedProtocol,
 };
+use bitcode::{Decode, Encode};
 use bytes::Bytes;
-use futures::{
-    channel::{mpsc, oneshot},
-    FutureExt, SinkExt, StreamExt,
-};
-use tracing::debug;
+use futures::channel::{mpsc, oneshot};
 use wtransport::Connection;
 
 use crate::{BackendError, ConnectionInfo};
@@ -46,42 +43,50 @@ pub async fn connection_channel<P: VersionedProtocol, const SERVER: bool>(
         return Err(BackendError::DatagramsNotSupported);
     }
 
-    let versioning = Negotiation::<P>::new();
+    const OK: &[u8] = b"ok";
+
+    let negotiation = Negotiation::from_protocol::<P>();
     if SERVER {
-        let (mut send_mgmt, mut recv_mgmt) = conn
+        let (mut send_managed, mut recv_managed) = conn
             .open_bi()
             .await
             .map_err(BackendError::OpeningStream)?
             .await
             .map_err(BackendError::OpenStream)?;
 
-        // send request
-        let _ = send_mgmt.write_all(&versioning.create_req());
-        let mut resp_buf = [0; 64];
-        let bytes_read = recv_mgmt
+        // recv response
+        let mut resp_buf = [0; Negotiation::HEADER_LEN];
+        let bytes_read = recv_managed
             .read(&mut resp_buf)
             .await
-            .map_err(todo!())?
-            .ok_or(todo!())?;
-        // read and check response
-        if !versioning.check_resp(&resp_buf[..bytes_read]) {
-            return Err(BackendError::Negotiate);
+            .map_err(BackendError::RecvNegotiateResponse)?
+            .ok_or(BackendError::ManagedStreamClosed)?;
+        if bytes_read != Negotiation::HEADER_LEN {
+            return Err(BackendError::Negotiate(NegotiationError::InvalidHeader));
         }
+        negotiation
+            .check_response(&resp_buf[..bytes_read])
+            .map_err(BackendError::Negotiate)?;
+        let _ = send_managed.write_all(OK);
     } else {
-        let (send_mgmt, recv_mgmt) = conn.accept_bi().await.map_err(BackendError::AcceptStream)?;
+        let (mut send_managed, mut recv_managed) =
+            conn.accept_bi().await.map_err(BackendError::AcceptStream)?;
 
-        // read and check request
-        let mut req_buf = [0; 64];
-        let bytes_read = recv_mgmt
-            .read(&mut req_buf)
+        // send request
+        let _ = send_managed.write_all(&negotiation.create_request());
+        // wait for OK
+        let mut resp_buf = [0; OK.len()];
+        let bytes_read = recv_managed
+            .read(&mut resp_buf)
             .await
-            .map_err(todo!())?
-            .ok_or(todo!())?;
-        if !versioning.check_req(&req_buf[..bytes_read]) {
-            return Err(BackendError::Negotiate);
+            .map_err(BackendError::RecvNegotiateResponse)?
+            .ok_or(BackendError::ManagedStreamClosed)?;
+        if bytes_read != OK.len() {
+            return Err(BackendError::Negotiate(NegotiationError::InvalidHeader));
         }
-        // send response
-        let _ = send_mgmt.write_all(&versioning.create_resp());
+        if &resp_buf[..bytes_read] != OK {
+            return Err(BackendError::Negotiate(NegotiationError::InvalidHeader));
+        }
     }
 
     let (send_c2s, recv_c2s) = mpsc::unbounded();
@@ -137,7 +142,6 @@ impl ConnectionFrontend {
         }
     }
 }
-
 
 /// # Packet layout
 ///

@@ -33,6 +33,7 @@ either.workspace = true
 slotmap.workspace = true
 bytes.workspace = true
 futures.workspace = true
+bitcode.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 wtransport.workspace = true
 

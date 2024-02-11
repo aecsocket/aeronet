@@ -5,7 +5,9 @@ use aeronet::{
     ByteStats, ClientKey, MessageStats, RemoteAddr, Rtt, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
-use wtransport::error::{ConnectingError, ConnectionError, SendDatagramError, StreamOpeningError};
+use wtransport::error::{
+    ConnectingError, ConnectionError, SendDatagramError, StreamOpeningError, StreamReadError,
+};
 
 /// Statistics on a WebTransport client/server connection.
 #[derive(Debug, Clone)]
@@ -155,6 +157,10 @@ pub enum BackendError {
     AcceptStream(#[source] ConnectionError),
     #[error("failed to negotiate protocol")]
     Negotiate(#[source] NegotiationError),
+    #[error("failed to receive negotiation response")]
+    RecvNegotiateResponse(#[source] StreamReadError),
+    #[error("managed stream closed")]
+    ManagedStreamClosed,
 
     #[error("lost connection")]
     LostConnection(#[source] ConnectionError),

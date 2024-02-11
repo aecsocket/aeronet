@@ -1,5 +1,3 @@
-use bitcode::{Decode, Encode};
-
 use crate::{ProtocolVersion, VersionedProtocol};
 
 /// Allows two peers to confirm that they are using the same version of the same
@@ -31,8 +29,8 @@ pub struct Negotiation {
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum NegotiationError {
-    #[error("invalid protocol string")]
-    InvalidProtocol,
+    #[error("invalid protocol header")]
+    InvalidHeader,
     #[error("wrong protocol version - ours: {ours}, theirs: {theirs}")]
     WrongVersion {
         ours: ProtocolVersion,
@@ -40,16 +38,51 @@ pub enum NegotiationError {
     },
 }
 
-const VERSION_PREFIX: &[u8; 8] = b"aeronet/";
+const HEADER_PREFIX: &[u8; 8] = b"aeronet/";
+const VERSION_LEN: usize = 8;
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
-struct Request {
-    prefix: [u8; 8],
-    version: ProtocolVersion,
+impl Negotiation {
+    pub const HEADER_LEN: usize = HEADER_PREFIX.len() + VERSION_LEN;
+
+    pub fn from_version(version: ProtocolVersion) -> Self {
+        Self { version }
+    }
+
+    pub fn from_protocol<P: VersionedProtocol>() -> Self {
+        Self::from_version(P::VERSION)
+    }
+
+    pub fn create_request(&self) -> Vec<u8> {
+        let version = format!("{:08x}", self.version.0).into_bytes();
+        debug_assert_eq!(VERSION_LEN, version.len());
+        let packet = [HEADER_PREFIX.as_slice(), version.as_slice()].concat();
+        debug_assert_eq!(Self::HEADER_LEN, packet.len());
+        packet
+    }
+
+    pub fn check_response(&self, packet: &[u8]) -> Result<(), NegotiationError> {
+        if packet.len() != Self::HEADER_LEN {
+            return Err(NegotiationError::InvalidHeader);
+        }
+        if !packet.starts_with(HEADER_PREFIX) {
+            return Err(NegotiationError::InvalidHeader);
+        }
+        let version_str = String::from_utf8(packet[HEADER_PREFIX.len()..].to_vec())
+            .map_err(|_| NegotiationError::InvalidHeader)?;
+        let ours = self.version;
+        let theirs = u32::from_str_radix(&version_str, 16)
+            .map_err(|_| NegotiationError::InvalidHeader)
+            .map(ProtocolVersion)?;
+        if theirs != ours {
+            return Err(NegotiationError::WrongVersion { ours, theirs });
+        }
+        Ok(())
+    }
 }
 
+/*
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
-enum Response {
+pub enum NegotiationResponse {
     Accepted,
     Rejected,
 }
@@ -69,7 +102,7 @@ impl Negotiation {
     #[must_use]
     pub fn create_req(&self) -> Vec<u8> {
         super::expect_encode(&Request {
-            prefix: VERSION_PREFIX.to_owned(),
+            prefix: HEADER_PREFIX.to_owned(),
             version: self.version,
         })
     }
@@ -77,9 +110,9 @@ impl Negotiation {
     #[must_use]
     pub fn check_req(&self, packet: &[u8]) -> Result<(), NegotiationError> {
         let req =
-            bitcode::decode::<Request>(packet).map_err(|_| NegotiationError::InvalidProtocol)?;
-        if req.prefix != *VERSION_PREFIX {
-            return Err(NegotiationError::InvalidProtocol);
+            bitcode::decode::<Request>(packet).map_err(|_| NegotiationError::InvalidHeader)?;
+        if req.prefix != *HEADER_PREFIX {
+            return Err(NegotiationError::InvalidHeader);
         }
 
         let ours = self.version;
@@ -93,8 +126,8 @@ impl Negotiation {
 
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
     #[must_use]
-    pub fn create_resp(&self) -> Bytes {
-        expect_encode(&VersionResponse::new::<P>()).into()
+    pub fn create_resp(&self) -> Vec<u8> {
+        super::expect_encode(&Response {}).into()
     }
 
     #[must_use]
@@ -170,3 +203,4 @@ mod tests {
         assert!(versioning_b.check_resp(&resp_b));
     }*/
 }
+*/
