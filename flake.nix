@@ -20,13 +20,12 @@
           };
           rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
         in
-        with pkgs;
         {
-          devShells.default = mkShell rec {
-            nativeBuildInputs = [
+          devShells.default = pkgs.mkShell rec {
+            nativeBuildInputs = with pkgs; [
               pkg-config
             ];
-            buildInputs = [
+            buildInputs = with pkgs; [
               rustToolchain
               llvmPackages.clangUseLLVM
               mold
@@ -40,7 +39,7 @@
               libxkbcommon
               wayland
             ];
-            LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
+            LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
           };
         }
       );
