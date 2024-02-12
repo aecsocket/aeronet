@@ -2,7 +2,7 @@ use std::{fmt::Debug, future::Future, net::SocketAddr, task::Poll};
 
 use aeronet::{
     ClientKey, ClientState, LaneProtocol, LocalAddr, OnLane, ServerEvent, ServerState,
-    ServerTransport, TryAsBytes, TryFromBytes,
+    ServerTransport, TryAsBytes, TryFromBytes, VersionedProtocol,
 };
 use derivative::Derivative;
 use either::Either;
@@ -30,7 +30,7 @@ pub enum WebTransportServer<P> {
 
 impl<P> WebTransportServer<P>
 where
-    P: LaneProtocol,
+    P: LaneProtocol + VersionedProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
@@ -94,7 +94,7 @@ where
 
 impl<P> ServerTransport<P> for WebTransportServer<P>
 where
-    P: LaneProtocol,
+    P: LaneProtocol + VersionedProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {

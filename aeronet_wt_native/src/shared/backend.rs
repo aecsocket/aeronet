@@ -1,3 +1,16 @@
+use std::time::Duration;
+
+use bytes::Bytes;
+use futures::{channel::mpsc, FutureExt, SinkExt, StreamExt};
+use tracing::debug;
+use wtransport::Connection;
+
+use crate::BackendError;
+
+use super::ConnectionBackend;
+
+const UPDATE_DURATION: Duration = Duration::from_secs(1);
+
 pub async fn handle_connection(conn: Connection, chan: ConnectionBackend) {
     debug!("Connected backend");
     match try_handle_connection(conn, chan.recv_c2s, chan.send_s2c, chan.send_rtt).await {

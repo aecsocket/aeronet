@@ -1,7 +1,8 @@
 use std::{future::Future, task::Poll};
 
 use aeronet::{
-    ClientState, ClientTransport, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+    ClientState, ClientTransport, LaneProtocol, OnLane, TransportProtocol, TryAsBytes,
+    TryFromBytes, VersionedProtocol,
 };
 use derivative::Derivative;
 use wtransport::{endpoint::IntoConnectOptions, ClientConfig};
@@ -28,7 +29,7 @@ pub enum WebTransportClient<P: TransportProtocol> {
 
 impl<P> WebTransportClient<P>
 where
-    P: LaneProtocol,
+    P: LaneProtocol + VersionedProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
@@ -70,7 +71,7 @@ where
 
 impl<P> ClientTransport<P> for WebTransportClient<P>
 where
-    P: LaneProtocol,
+    P: LaneProtocol + VersionedProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {

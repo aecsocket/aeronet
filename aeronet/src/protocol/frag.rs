@@ -144,7 +144,8 @@ mod private {
 ///
 /// This is a *sealed trait*.
 pub trait SequencingStrategy: private::Sealed {
-    fn is_sequenced() -> bool;
+    /// If this represents a sequenced strategy.
+    const SEQUENCED: bool;
 }
 
 /// All messages will be received, regardless of if the received fragment has
@@ -155,9 +156,7 @@ pub struct Unsequenced;
 impl private::Sealed for Unsequenced {}
 
 impl SequencingStrategy for Unsequenced {
-    fn is_sequenced() -> bool {
-        false
-    }
+    const SEQUENCED: bool = false;
 }
 
 /// A message will only be received if its fragment number is strictly lower
@@ -168,9 +167,7 @@ pub struct Sequenced;
 impl private::Sealed for Sequenced {}
 
 impl SequencingStrategy for Sequenced {
-    fn is_sequenced() -> bool {
-        true
-    }
+    const SEQUENCED: bool = true;
 }
 
 #[derive(Debug)]
@@ -309,7 +306,7 @@ impl<S: SequencingStrategy> Fragmentation<S> {
         header: FragHeader,
         payload: &[u8],
     ) -> Result<Option<Bytes>, ReassemblyError> {
-        if S::is_sequenced() && header.seq < self.last_recv_seq {
+        if S::SEQUENCED && header.seq < self.last_recv_seq {
             return Ok(None);
         }
         self.last_recv_seq = header.seq;

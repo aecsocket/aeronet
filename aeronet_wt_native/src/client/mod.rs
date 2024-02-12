@@ -1,13 +1,14 @@
 mod backend;
 mod wrapper;
 
-use bytes::Bytes;
+use tracing::debug;
 pub use wrapper::*;
 
 use std::{fmt::Debug, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
 
 use aeronet::{
     LaneKey, LaneKind, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+    VersionedProtocol,
 };
 use derivative::Derivative;
 use futures::channel::oneshot;
@@ -38,7 +39,7 @@ struct ConnectedClientInner {
 
 impl<P> ConnectingClient<P>
 where
-    P: LaneProtocol,
+    P: LaneProtocol + VersionedProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
@@ -52,7 +53,7 @@ where
             recv_conn,
             _phantom: PhantomData,
         };
-        let backend = backend::connect(config, options, send_conn);
+        let backend = backend::connect::<P>(config, options, send_conn);
         (frontend, backend)
     }
 
@@ -111,7 +112,7 @@ where
 
         // TODO
 
-        let LaneState::UnreliableUnsequenced { mut frag } = self.lanes[0] else {
+        let LaneState::UnreliableUnsequenced { ref mut frag } = &mut self.lanes[0] else {
             unreachable!()
         };
         for packet in frag
@@ -148,7 +149,7 @@ where
 
         while let Some(packet) = self.conn.recv() {
             // TODO frag and stuff
-            let LaneState::UnreliableUnsequenced { mut frag } = self.lanes[0] else {
+            let LaneState::UnreliableUnsequenced { ref mut frag } = self.lanes[0] else {
                 unreachable!()
             };
             if let Ok(Some(msg_bytes)) = frag.reassemble(&packet) {
@@ -162,9 +163,10 @@ where
 
         (
             events,
-            self.conn
-                .recv_err()
-                .map_err(WebTransportError::<P>::Backend),
+            self.conn.recv_err().map_err(|err| {
+                debug!("Disconnected: {:#}", aeronet::util::pretty_error(&err));
+                WebTransportError::<P>::Backend(err)
+            }),
         )
     }
 }

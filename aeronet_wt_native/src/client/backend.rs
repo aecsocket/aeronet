@@ -1,3 +1,4 @@
+use aeronet::VersionedProtocol;
 use futures::channel::oneshot;
 use tracing::debug;
 use wtransport::{endpoint::ConnectOptions, ClientConfig, Endpoint};
@@ -6,7 +7,7 @@ use crate::{shared, BackendError};
 
 use super::ConnectedClientInner;
 
-pub(super) async fn connect(
+pub(super) async fn connect<P: VersionedProtocol>(
     config: ClientConfig,
     options: ConnectOptions,
     send_conn: oneshot::Sender<Result<ConnectedClientInner, BackendError>>,
@@ -38,7 +39,7 @@ pub(super) async fn connect(
         }
     };
 
-    let (chan_frontend, chan_backend) = match shared::connection_channel(&conn) {
+    let (chan_frontend, chan_backend) = match shared::connection_channel::<P, false>(&conn).await {
         Ok(t) => t,
         Err(err) => {
             let _ = send_conn.send(Err(err));

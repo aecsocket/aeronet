@@ -7,6 +7,7 @@ use aeronet::{
 use derivative::Derivative;
 use wtransport::error::{
     ConnectingError, ConnectionError, SendDatagramError, StreamOpeningError, StreamReadError,
+    StreamWriteError,
 };
 
 /// Statistics on a WebTransport client/server connection.
@@ -138,7 +139,7 @@ impl<S: TryAsBytes, R: TryFromBytes> WebTransportError<S, R> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum BackendError {
-    #[error("closed")]
+    #[error("backend closed")]
     Closed,
     #[error("failed to create endpoint")]
     CreateEndpoint(#[source] io::Error),
@@ -149,18 +150,24 @@ pub enum BackendError {
     #[error("failed to get local socket address")]
     GetLocalAddr(#[source] io::Error),
 
-    #[error("failed to start opening management stream")]
-    OpeningStream(#[source] ConnectionError),
-    #[error("failed to open management stream")]
-    OpenStream(#[source] StreamOpeningError),
-    #[error("failed to accept management stream")]
-    AcceptStream(#[source] ConnectionError),
+    #[error("failed to start opening managed stream")]
+    OpeningManaged(#[source] ConnectionError),
+    #[error("failed to open managed stream")]
+    OpenManaged(#[source] StreamOpeningError),
+    #[error("failed to accept managed stream")]
+    AcceptManaged(#[source] ConnectionError),
+    #[error("failed to send along managed stream")]
+    SendManaged(#[source] StreamWriteError),
     #[error("failed to negotiate protocol")]
     Negotiate(#[source] NegotiationError),
     #[error("failed to receive negotiation response")]
     RecvNegotiateResponse(#[source] StreamReadError),
+    #[error("failed to receive negotiation ok")]
+    RecvNegotiateOk,
     #[error("managed stream closed")]
     ManagedStreamClosed,
+    #[error("connection closed")]
+    ConnectionClosed,
 
     #[error("lost connection")]
     LostConnection(#[source] ConnectionError),

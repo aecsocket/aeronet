@@ -4,7 +4,7 @@ use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
     ClientState, ClientTransport, ClientTransportPlugin, FromServer, LaneKey, LaneProtocol,
-    LocalClientConnected, LocalClientDisconnected, Message, OnLane, TokioRuntime,
+    LocalClientConnected, LocalClientDisconnected, Message, OnLane, ProtocolVersion, TokioRuntime,
     TransportProtocol, TryAsBytes, TryFromBytes, VersionedProtocol,
 };
 use aeronet_wt_native::WebTransportClient;
@@ -71,7 +71,7 @@ impl LaneProtocol for AppProtocol {
 
 impl VersionedProtocol for AppProtocol {
     // TODO this has to be randomly generated at compile time
-    const VERSION: u64 = 1337;
+    const VERSION: ProtocolVersion = ProtocolVersion(0x1234);
 }
 
 // logic
@@ -115,7 +115,7 @@ fn on_disconnected(
 ) {
     for LocalClientDisconnected { reason } in events.read() {
         ui_state.log.push(format!(
-            "Disconnected: {}",
+            "Disconnected: {:#}",
             aeronet::util::pretty_error(&reason)
         ));
     }

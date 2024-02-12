@@ -1,18 +1,21 @@
+mod backend;
+
+pub use backend::*;
+use tracing::debug;
+
 use std::time::Duration;
 
 use aeronet::{
     protocol::{Fragmentation, Negotiation, NegotiationError, Sequenced, Unsequenced},
-    LaneKind, ProtocolVersion, VersionedProtocol,
+    LaneKind, VersionedProtocol,
 };
-use bitcode::{Decode, Encode};
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
-use wtransport::Connection;
+use wtransport::{Connection, RecvStream, SendStream};
 
 use crate::{BackendError, ConnectionInfo};
 
 const MSG_BUF_CAP: usize = 64;
-const UPDATE_DURATION: Duration = Duration::from_secs(1);
 
 #[derive(Debug)]
 pub struct ConnectionFrontend {
@@ -34,6 +37,8 @@ pub struct ConnectionBackend {
     send_s2c: mpsc::Sender<Bytes>,
     send_rtt: mpsc::Sender<Duration>,
     send_err: oneshot::Sender<BackendError>,
+    _send_managed: SendStream,
+    _recv_managed: RecvStream,
 }
 
 pub async fn connection_channel<P: VersionedProtocol, const SERVER: bool>(
@@ -43,18 +48,21 @@ pub async fn connection_channel<P: VersionedProtocol, const SERVER: bool>(
         return Err(BackendError::DatagramsNotSupported);
     }
 
-    const OK: &[u8] = b"ok";
-
+    debug!(
+        "Starting negotiation - our protocol version: {}",
+        P::VERSION
+    );
     let negotiation = Negotiation::from_protocol::<P>();
-    if SERVER {
+    let (send_managed, recv_managed) = if SERVER {
         let (mut send_managed, mut recv_managed) = conn
             .open_bi()
             .await
-            .map_err(BackendError::OpeningStream)?
+            .map_err(BackendError::OpeningManaged)?
             .await
-            .map_err(BackendError::OpenStream)?;
+            .map_err(BackendError::OpenManaged)?;
 
         // recv response
+        debug!("Opened managed stream, waiting for response");
         let mut resp_buf = [0; Negotiation::HEADER_LEN];
         let bytes_read = recv_managed
             .read(&mut resp_buf)
@@ -64,30 +72,50 @@ pub async fn connection_channel<P: VersionedProtocol, const SERVER: bool>(
         if bytes_read != Negotiation::HEADER_LEN {
             return Err(BackendError::Negotiate(NegotiationError::InvalidHeader));
         }
+        // check response
         negotiation
             .check_response(&resp_buf[..bytes_read])
             .map_err(BackendError::Negotiate)?;
-        let _ = send_managed.write_all(OK);
+        // send ok
+        debug!("Negotiation success, sending ok");
+        send_managed
+            .write_all(Negotiation::OK)
+            .await
+            .map_err(BackendError::SendManaged)?;
+
+        (send_managed, recv_managed)
     } else {
-        let (mut send_managed, mut recv_managed) =
-            conn.accept_bi().await.map_err(BackendError::AcceptStream)?;
+        let (mut send_managed, mut recv_managed) = conn
+            .accept_bi()
+            .await
+            .map_err(BackendError::AcceptManaged)?;
 
         // send request
-        let _ = send_managed.write_all(&negotiation.create_request());
-        // wait for OK
-        let mut resp_buf = [0; OK.len()];
+        debug!("Opened managed stream, sending request");
+        send_managed
+            .write_all(&negotiation.create_request())
+            .await
+            .map_err(BackendError::SendManaged)?;
+        // wait for ok
+        debug!("Waiting for ok");
+        let mut resp_buf = [0; Negotiation::OK.len()];
         let bytes_read = recv_managed
             .read(&mut resp_buf)
             .await
-            .map_err(BackendError::RecvNegotiateResponse)?
-            .ok_or(BackendError::ManagedStreamClosed)?;
-        if bytes_read != OK.len() {
-            return Err(BackendError::Negotiate(NegotiationError::InvalidHeader));
+            // if there's a read error, it's probably because server closed connection
+            // likely because we have the wrong protocol version
+            .ok()
+            .flatten()
+            .ok_or(BackendError::Negotiate(NegotiationError::OurWrongVersion {
+                ours: P::VERSION,
+            }))?;
+        if bytes_read != Negotiation::OK.len() || &resp_buf[..bytes_read] != Negotiation::OK {
+            return Err(BackendError::RecvNegotiateOk);
         }
-        if &resp_buf[..bytes_read] != OK {
-            return Err(BackendError::Negotiate(NegotiationError::InvalidHeader));
-        }
-    }
+        debug!("Negotiation success");
+
+        (send_managed, recv_managed)
+    };
 
     let (send_c2s, recv_c2s) = mpsc::unbounded();
     let (send_s2c, recv_s2c) = mpsc::channel(MSG_BUF_CAP);
@@ -106,6 +134,12 @@ pub async fn connection_channel<P: VersionedProtocol, const SERVER: bool>(
             send_s2c,
             send_rtt,
             send_err,
+            // we have to keep the managed streams alive
+            // so we'll just pass them to the backend
+            // this also lets us expand the functionality of managed streams
+            // in the future
+            _send_managed: send_managed,
+            _recv_managed: recv_managed,
         },
     ))
 }

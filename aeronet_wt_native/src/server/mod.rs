@@ -1,12 +1,14 @@
 mod backend;
 mod wrapper;
 
+use tracing::debug;
 pub use wrapper::*;
 
 use std::{collections::HashMap, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
 
 use aeronet::{
     ClientKey, ClientState, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+    VersionedProtocol,
 };
 use bytes::Bytes;
 use derivative::Derivative;
@@ -40,7 +42,7 @@ struct OpenServerInner {
 
 impl<P> OpeningServer<P>
 where
-    P: LaneProtocol,
+    P: LaneProtocol + VersionedProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
@@ -50,7 +52,7 @@ where
             recv_open,
             _phantom: PhantomData,
         };
-        let backend = backend::open(config, send_open);
+        let backend = backend::open::<P>(config, send_open);
         (frontend, backend)
     }
 
@@ -285,10 +287,13 @@ where
                 });
             }
 
-            client
-                .conn
-                .recv_err()
-                .map_err(|err| Some(WebTransportError::<P>::Backend(err)))
+            client.conn.recv_err().map_err(|err| {
+                debug!(
+                    "{client_key} disconnected: {:#}",
+                    aeronet::util::pretty_error(&err)
+                );
+                Some(WebTransportError::<P>::Backend(err))
+            })
         }
     }
 }

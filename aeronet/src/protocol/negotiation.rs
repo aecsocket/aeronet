@@ -31,11 +31,13 @@ pub struct Negotiation {
 pub enum NegotiationError {
     #[error("invalid protocol header")]
     InvalidHeader,
-    #[error("wrong protocol version - ours: {ours}, theirs: {theirs}")]
-    WrongVersion {
+    #[error("their side has wrong protocol version - ours: {ours}, theirs: {theirs}")]
+    TheirWrongVersion {
         ours: ProtocolVersion,
         theirs: ProtocolVersion,
     },
+    #[error("our side has wrong protocol version - ours: {ours}")]
+    OurWrongVersion { ours: ProtocolVersion },
 }
 
 const HEADER_PREFIX: &[u8; 8] = b"aeronet/";
@@ -43,6 +45,8 @@ const VERSION_LEN: usize = 8;
 
 impl Negotiation {
     pub const HEADER_LEN: usize = HEADER_PREFIX.len() + VERSION_LEN;
+
+    pub const OK: &'static [u8; 2] = b"ok";
 
     pub fn from_version(version: ProtocolVersion) -> Self {
         Self { version }
@@ -74,7 +78,7 @@ impl Negotiation {
             .map_err(|_| NegotiationError::InvalidHeader)
             .map(ProtocolVersion)?;
         if theirs != ours {
-            return Err(NegotiationError::WrongVersion { ours, theirs });
+            return Err(NegotiationError::TheirWrongVersion { ours, theirs });
         }
         Ok(())
     }

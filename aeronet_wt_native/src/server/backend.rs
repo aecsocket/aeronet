@@ -1,3 +1,4 @@
+use aeronet::VersionedProtocol;
 use futures::{
     channel::{mpsc, oneshot},
     FutureExt, SinkExt,
@@ -12,7 +13,7 @@ use crate::{
 
 use super::ClientRequesting;
 
-pub(super) async fn open(
+pub(super) async fn open<P: VersionedProtocol>(
     config: ServerConfig,
     send_open: oneshot::Sender<Result<OpenServerInner, BackendError>>,
 ) {
@@ -59,13 +60,13 @@ pub(super) async fn open(
         debug!("Incoming session {key}");
 
         tokio::spawn(
-            handle_incoming(session, send_req)
+            handle_incoming::<P>(session, send_req)
                 .instrument(debug_span!("Session", key = tracing::field::display(key))),
         );
     }
 }
 
-async fn handle_incoming(
+async fn handle_incoming<P: VersionedProtocol>(
     session: IncomingSession,
     send_req: oneshot::Sender<Result<ClientRequesting, BackendError>>,
 ) {
@@ -112,7 +113,7 @@ async fn handle_incoming(
         }
     };
 
-    let (chan_frontend, chan_backend) = match shared::connection_channel(&conn) {
+    let (chan_frontend, chan_backend) = match shared::connection_channel::<P, true>(&conn).await {
         Ok(t) => t,
         Err(err) => {
             let _ = send_conn.send(Err(err));

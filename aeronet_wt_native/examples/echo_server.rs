@@ -28,10 +28,10 @@ TODO: find the right command for Firefox
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
-    ClientState, FromClient, LaneKey, LaneProtocol, Message, OnLane, RemoteClientConnected,
-    RemoteClientConnecting, RemoteClientDisconnected, ServerClosed, ServerOpened, ServerTransport,
-    ServerTransportPlugin, TokioRuntime, TransportProtocol, TryAsBytes, TryFromBytes,
-    VersionedProtocol,
+    ClientState, FromClient, LaneKey, LaneProtocol, Message, OnLane, ProtocolVersion,
+    RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected, ServerClosed,
+    ServerOpened, ServerTransport, ServerTransportPlugin, TokioRuntime, TransportProtocol,
+    TryAsBytes, TryFromBytes, VersionedProtocol,
 };
 use aeronet_wt_native::WebTransportServer;
 use anyhow::Result;
@@ -97,7 +97,7 @@ impl LaneProtocol for AppProtocol {
 
 impl VersionedProtocol for AppProtocol {
     // TODO this has to be randomly generated at compile time
-    const VERSION: u64 = 1337;
+    const VERSION: ProtocolVersion = ProtocolVersion(0x1234);
 }
 
 // logic
