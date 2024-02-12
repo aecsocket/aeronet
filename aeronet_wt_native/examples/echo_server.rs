@@ -96,7 +96,7 @@ impl LaneProtocol for AppProtocol {
 
 impl VersionedProtocol for AppProtocol {
     // TODO this has to be randomly generated at compile time
-    const VERSION: ProtocolVersion = ProtocolVersion(u32::MAX);
+    const VERSION: ProtocolVersion = ProtocolVersion(0x1234);
 }
 
 // logic
