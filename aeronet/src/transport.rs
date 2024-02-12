@@ -70,7 +70,13 @@ pub struct ProtocolVersion(pub u32);
 
 impl fmt::Display for ProtocolVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:08x}", self.0)
+        write!(f, "{:#010x}", self.0)
+    }
+}
+
+impl<T: VersionedProtocol> From<T> for ProtocolVersion {
+    fn from(_: T) -> Self {
+        T::VERSION
     }
 }
 

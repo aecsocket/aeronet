@@ -46,8 +46,6 @@ const VERSION_LEN: usize = 8;
 impl Negotiation {
     pub const HEADER_LEN: usize = HEADER_PREFIX.len() + VERSION_LEN;
 
-    pub const OK: &'static [u8; 2] = b"ok";
-
     pub fn from_version(version: ProtocolVersion) -> Self {
         Self { version }
     }
@@ -64,7 +62,7 @@ impl Negotiation {
         packet
     }
 
-    pub fn check_response(&self, packet: &[u8]) -> Result<(), NegotiationError> {
+    pub fn check_request(&self, packet: &[u8]) -> Result<(), NegotiationError> {
         if packet.len() != Self::HEADER_LEN {
             return Err(NegotiationError::InvalidHeader);
         }
@@ -81,71 +79,6 @@ impl Negotiation {
             return Err(NegotiationError::TheirWrongVersion { ours, theirs });
         }
         Ok(())
-    }
-}
-
-/*
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
-pub enum NegotiationResponse {
-    Accepted,
-    Rejected,
-}
-
-impl Negotiation {
-    #[must_use]
-    pub fn from_version(version: ProtocolVersion) -> Self {
-        Self { version }
-    }
-
-    #[must_use]
-    pub fn from_protocol<P: VersionedProtocol>() -> Self {
-        Self::from_version(P::VERSION)
-    }
-
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    #[must_use]
-    pub fn create_req(&self) -> Vec<u8> {
-        super::expect_encode(&Request {
-            prefix: HEADER_PREFIX.to_owned(),
-            version: self.version,
-        })
-    }
-
-    #[must_use]
-    pub fn check_req(&self, packet: &[u8]) -> Result<(), NegotiationError> {
-        let req =
-            bitcode::decode::<Request>(packet).map_err(|_| NegotiationError::InvalidHeader)?;
-        if req.prefix != *HEADER_PREFIX {
-            return Err(NegotiationError::InvalidHeader);
-        }
-
-        let ours = self.version;
-        let theirs = req.version;
-        if ours == theirs {
-            Ok(())
-        } else {
-            Err(NegotiationError::WrongVersion { ours, theirs })
-        }
-    }
-
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    #[must_use]
-    pub fn create_resp(&self) -> Vec<u8> {
-        super::expect_encode(&Response {}).into()
-    }
-
-    #[must_use]
-    pub fn check_resp(&self, packet: &[u8]) -> Result<(), ()> {
-        match bitcode::decode::<VersionResponse>(packet) {
-            Ok(req) if req == VersionResponse::new::<P>() => Ok(()),
-            Ok(_) | Err(_) => Err(()),
-        }
-    }
-
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    #[must_use]
-    pub fn send_result(&self, result: VersionResult) -> Bytes {
-        expect_encode(&result).into()
     }
 }
 
@@ -177,34 +110,23 @@ mod tests {
         const VERSION: ProtocolVersion = ProtocolVersion(2);
     }
 
-    /*
     #[test]
     fn same_protocol() {
-        let versioning = Negotiation::<ProtocolA>::new();
-        let req = versioning.create_req();
-        assert!(versioning.check_req(&req));
-        let resp = versioning.create_resp();
-        assert!(versioning.check_resp(&resp));
+        let neg = Negotiation::from_protocol::<ProtocolA>();
+        let req = neg.create_request();
+        neg.check_request(&req).unwrap();
     }
 
     #[test]
     fn different_protocol() {
-        let versioning_a = Negotiation::<ProtocolA>::new();
-        let versioning_b = Negotiation::<ProtocolB>::new();
+        let neg_a = Negotiation::from_protocol::<ProtocolA>();
+        let neg_b = Negotiation::from_protocol::<ProtocolB>();
 
-        let req_a = versioning_a.create_req();
-        let req_b = versioning_b.create_req();
-        assert!(versioning_a.check_req(&req_a));
-        assert!(versioning_a.check_req(&req_b));
-        assert!(versioning_b.check_req(&req_a));
-        assert!(versioning_b.check_req(&req_b));
-
-        let resp_a = versioning_a.create_resp();
-        let resp_b = versioning_b.create_resp();
-        assert!(versioning_a.check_resp(&resp_a));
-        assert!(!versioning_a.check_resp(&resp_b));
-        assert!(!versioning_b.check_resp(&resp_a));
-        assert!(versioning_b.check_resp(&resp_b));
-    }*/
+        let req_a = neg_a.create_request();
+        let req_b = neg_b.create_request();
+        assert!(matches!(neg_a.check_request(&req_a), Ok(())));
+        assert!(matches!(neg_a.check_request(&req_b), Err(_)));
+        assert!(matches!(neg_b.check_request(&req_a), Err(_)));
+        assert!(matches!(neg_b.check_request(&req_b), Ok(())));
+    }
 }
-*/

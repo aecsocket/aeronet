@@ -162,8 +162,10 @@ pub enum BackendError {
     Negotiate(#[source] NegotiationError),
     #[error("failed to receive negotiation response")]
     RecvNegotiateResponse(#[source] StreamReadError),
-    #[error("failed to receive negotiation ok")]
-    RecvNegotiateOk,
+    #[error("negotiation response was invalid")]
+    InvalidNegotiateResponse,
+    #[error("received negotiation error")]
+    NegotiateErr,
     #[error("managed stream closed")]
     ManagedStreamClosed,
     #[error("connection closed")]

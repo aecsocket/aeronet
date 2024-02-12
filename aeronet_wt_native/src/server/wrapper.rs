@@ -2,13 +2,14 @@ use std::{fmt::Debug, future::Future, net::SocketAddr, task::Poll};
 
 use aeronet::{
     ClientKey, ClientState, LaneProtocol, LocalAddr, OnLane, ServerEvent, ServerState,
-    ServerTransport, TryAsBytes, TryFromBytes, VersionedProtocol,
+    ServerTransport, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 use either::Either;
-use wtransport::ServerConfig;
 
-use crate::{ClientRequestingInfo, ConnectionInfo, OpenServer, OpeningServer};
+use crate::{
+    ClientRequestingInfo, ConnectionInfo, OpenServer, OpeningServer, WebTransportServerConfig,
+};
 
 use super::WebTransportError;
 
@@ -30,12 +31,15 @@ pub enum WebTransportServer<P> {
 
 impl<P> WebTransportServer<P>
 where
-    P: LaneProtocol + VersionedProtocol,
+    P: LaneProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
     /// See [`OpeningServer::open`].
-    pub fn open_new(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
+    pub fn open_new(
+        config: impl Into<WebTransportServerConfig>,
+    ) -> (Self, impl Future<Output = ()> + Send) {
+        let config = config.into();
         let (server, backend) = OpeningServer::open(config);
         (Self::Opening(server), backend)
     }
@@ -47,10 +51,11 @@ where
     /// Errors if `self` is not [`WebTransportServer::Closed`].
     pub fn open(
         &mut self,
-        config: ServerConfig,
+        config: impl Into<WebTransportServerConfig>,
     ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
         match self {
             Self::Closed => {
+                let config = config.into();
                 let (this, backend) = Self::open_new(config);
                 *self = this;
                 Ok(backend)
@@ -94,7 +99,7 @@ where
 
 impl<P> ServerTransport<P> for WebTransportServer<P>
 where
-    P: LaneProtocol + VersionedProtocol,
+    P: LaneProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {

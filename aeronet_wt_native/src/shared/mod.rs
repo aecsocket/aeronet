@@ -1,13 +1,13 @@
 mod backend;
+mod negotiation;
 
 pub use backend::*;
-use tracing::debug;
 
 use std::time::Duration;
 
 use aeronet::{
-    protocol::{Fragmentation, Negotiation, NegotiationError, Sequenced, Unsequenced},
-    LaneKind, VersionedProtocol,
+    protocol::{Fragmentation, Sequenced, Unsequenced},
+    LaneKind, ProtocolVersion,
 };
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
@@ -41,80 +41,18 @@ pub struct ConnectionBackend {
     _recv_managed: RecvStream,
 }
 
-pub async fn connection_channel<P: VersionedProtocol, const SERVER: bool>(
+pub async fn connection_channel<const SERVER: bool>(
     conn: &Connection,
+    version: ProtocolVersion,
 ) -> Result<(ConnectionFrontend, ConnectionBackend), BackendError> {
     if conn.max_datagram_size().is_none() {
         return Err(BackendError::DatagramsNotSupported);
     }
 
-    debug!(
-        "Starting negotiation - our protocol version: {}",
-        P::VERSION
-    );
-    let negotiation = Negotiation::from_protocol::<P>();
     let (send_managed, recv_managed) = if SERVER {
-        let (mut send_managed, mut recv_managed) = conn
-            .open_bi()
-            .await
-            .map_err(BackendError::OpeningManaged)?
-            .await
-            .map_err(BackendError::OpenManaged)?;
-
-        // recv response
-        debug!("Opened managed stream, waiting for response");
-        let mut resp_buf = [0; Negotiation::HEADER_LEN];
-        let bytes_read = recv_managed
-            .read(&mut resp_buf)
-            .await
-            .map_err(BackendError::RecvNegotiateResponse)?
-            .ok_or(BackendError::ManagedStreamClosed)?;
-        if bytes_read != Negotiation::HEADER_LEN {
-            return Err(BackendError::Negotiate(NegotiationError::InvalidHeader));
-        }
-        // check response
-        negotiation
-            .check_response(&resp_buf[..bytes_read])
-            .map_err(BackendError::Negotiate)?;
-        // send ok
-        debug!("Negotiation success, sending ok");
-        send_managed
-            .write_all(Negotiation::OK)
-            .await
-            .map_err(BackendError::SendManaged)?;
-
-        (send_managed, recv_managed)
+        negotiation::server(&conn, version).await?
     } else {
-        let (mut send_managed, mut recv_managed) = conn
-            .accept_bi()
-            .await
-            .map_err(BackendError::AcceptManaged)?;
-
-        // send request
-        debug!("Opened managed stream, sending request");
-        send_managed
-            .write_all(&negotiation.create_request())
-            .await
-            .map_err(BackendError::SendManaged)?;
-        // wait for ok
-        debug!("Waiting for ok");
-        let mut resp_buf = [0; Negotiation::OK.len()];
-        let bytes_read = recv_managed
-            .read(&mut resp_buf)
-            .await
-            // if there's a read error, it's probably because server closed connection
-            // likely because we have the wrong protocol version
-            .ok()
-            .flatten()
-            .ok_or(BackendError::Negotiate(NegotiationError::OurWrongVersion {
-                ours: P::VERSION,
-            }))?;
-        if bytes_read != Negotiation::OK.len() || &resp_buf[..bytes_read] != Negotiation::OK {
-            return Err(BackendError::RecvNegotiateOk);
-        }
-        debug!("Negotiation success");
-
-        (send_managed, recv_managed)
+        negotiation::client(&conn, version).await?
     };
 
     let (send_c2s, recv_c2s) = mpsc::unbounded();

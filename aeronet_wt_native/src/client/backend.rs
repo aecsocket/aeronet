@@ -1,19 +1,17 @@
-use aeronet::VersionedProtocol;
 use futures::channel::oneshot;
 use tracing::debug;
-use wtransport::{endpoint::ConnectOptions, ClientConfig, Endpoint};
+use wtransport::Endpoint;
 
-use crate::{shared, BackendError};
+use crate::{shared, BackendError, WebTransportClientConfig};
 
 use super::ConnectedClientInner;
 
-pub(super) async fn connect<P: VersionedProtocol>(
-    config: ClientConfig,
-    options: ConnectOptions,
+pub(super) async fn connect(
+    config: WebTransportClientConfig,
     send_conn: oneshot::Sender<Result<ConnectedClientInner, BackendError>>,
 ) {
     debug!("Connecting backend");
-    let endpoint = match Endpoint::client(config).map_err(BackendError::CreateEndpoint) {
+    let endpoint = match Endpoint::client(config.wt_config).map_err(BackendError::CreateEndpoint) {
         Ok(t) => t,
         Err(err) => {
             let _ = send_conn.send(Err(err));
@@ -28,7 +26,7 @@ pub(super) async fn connect<P: VersionedProtocol>(
         }
     };
     let conn = match endpoint
-        .connect(options)
+        .connect(config.target)
         .await
         .map_err(BackendError::Connect)
     {
@@ -39,13 +37,14 @@ pub(super) async fn connect<P: VersionedProtocol>(
         }
     };
 
-    let (chan_frontend, chan_backend) = match shared::connection_channel::<P, false>(&conn).await {
-        Ok(t) => t,
-        Err(err) => {
-            let _ = send_conn.send(Err(err));
-            return;
-        }
-    };
+    let (chan_frontend, chan_backend) =
+        match shared::connection_channel::<false>(&conn, config.version).await {
+            Ok(t) => t,
+            Err(err) => {
+                let _ = send_conn.send(Err(err));
+                return;
+            }
+        };
     let _ = send_conn.send(Ok(ConnectedClientInner {
         conn: chan_frontend,
         local_addr,

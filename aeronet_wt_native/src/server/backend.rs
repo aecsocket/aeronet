@@ -1,24 +1,24 @@
-use aeronet::VersionedProtocol;
+use aeronet::ProtocolVersion;
 use futures::{
     channel::{mpsc, oneshot},
     FutureExt, SinkExt,
 };
 use tracing::{debug, debug_span, Instrument};
-use wtransport::{endpoint::IncomingSession, Endpoint, ServerConfig};
+use wtransport::{endpoint::IncomingSession, Endpoint};
 
 use crate::{
     server::{ClientRequestingKey, ConnectionResponse, OpenServerInner},
-    shared, BackendError, ClientRequestingInfo,
+    shared, BackendError, ClientRequestingInfo, WebTransportServerConfig,
 };
 
 use super::ClientRequesting;
 
-pub(super) async fn open<P: VersionedProtocol>(
-    config: ServerConfig,
+pub(super) async fn open(
+    config: WebTransportServerConfig,
     send_open: oneshot::Sender<Result<OpenServerInner, BackendError>>,
 ) {
     debug!("Opening backend");
-    let endpoint = match Endpoint::server(config).map_err(BackendError::CreateEndpoint) {
+    let endpoint = match Endpoint::server(config.wt_config).map_err(BackendError::CreateEndpoint) {
         Ok(t) => t,
         Err(err) => {
             let _ = send_open.send(Err(err));
@@ -60,14 +60,15 @@ pub(super) async fn open<P: VersionedProtocol>(
         debug!("Incoming session {key}");
 
         tokio::spawn(
-            handle_incoming::<P>(session, send_req)
+            handle_incoming(session, config.version, send_req)
                 .instrument(debug_span!("Session", key = tracing::field::display(key))),
         );
     }
 }
 
-async fn handle_incoming<P: VersionedProtocol>(
+async fn handle_incoming(
     session: IncomingSession,
+    version: ProtocolVersion,
     send_req: oneshot::Sender<Result<ClientRequesting, BackendError>>,
 ) {
     let req = match session.await {
@@ -113,13 +114,14 @@ async fn handle_incoming<P: VersionedProtocol>(
         }
     };
 
-    let (chan_frontend, chan_backend) = match shared::connection_channel::<P, true>(&conn).await {
-        Ok(t) => t,
-        Err(err) => {
-            let _ = send_conn.send(Err(err));
-            return;
-        }
-    };
+    let (chan_frontend, chan_backend) =
+        match shared::connection_channel::<true>(&conn, version).await {
+            Ok(t) => t,
+            Err(err) => {
+                let _ = send_conn.send(Err(err));
+                return;
+            }
+        };
     let _ = send_conn.send(Ok(chan_frontend));
     shared::handle_connection(conn, chan_backend).await
 }

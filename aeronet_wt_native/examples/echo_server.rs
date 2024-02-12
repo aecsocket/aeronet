@@ -33,10 +33,9 @@ use aeronet::{
     ServerOpened, ServerTransport, ServerTransportPlugin, TokioRuntime, TransportProtocol,
     TryAsBytes, TryFromBytes, VersionedProtocol,
 };
-use aeronet_wt_native::WebTransportServer;
+use aeronet_wt_native::{WebTransportServer, WebTransportServerConfig};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
-use wtransport::{tls::Certificate, ServerConfig};
 
 // protocol
 
@@ -97,7 +96,7 @@ impl LaneProtocol for AppProtocol {
 
 impl VersionedProtocol for AppProtocol {
     // TODO this has to be randomly generated at compile time
-    const VERSION: ProtocolVersion = ProtocolVersion(0x1234);
+    const VERSION: ProtocolVersion = ProtocolVersion(u32::MAX);
 }
 
 // logic
@@ -140,18 +139,22 @@ fn setup(mut commands: Commands, rt: Res<TokioRuntime>) {
 }
 
 fn create(rt: &TokioRuntime) -> Result<WebTransportServer<AppProtocol>> {
-    let cert = rt.0.block_on(Certificate::load(
+    let cert = rt.block_on(aeronet_wt_native::wtransport::tls::Certificate::load(
         "./aeronet_wt_native/examples/cert.pem",
         "./aeronet_wt_native/examples/key.pem",
     ))?;
 
-    let config = ServerConfig::builder()
-        .with_bind_default(25565)
-        .with_certificate(cert)
-        .keep_alive_interval(Some(Duration::from_secs(5)))
-        .build();
-
-    let (server, backend) = WebTransportServer::open_new(config);
+    let (server, backend) = WebTransportServer::open_new(
+        WebTransportServerConfig::builder()
+            .wt_config(
+                aeronet_wt_native::wtransport::ServerConfig::builder()
+                    .with_bind_default(25565)
+                    .with_certificate(cert)
+                    .keep_alive_interval(Some(Duration::from_secs(5)))
+                    .build(),
+            )
+            .version(AppProtocol),
+    );
     rt.spawn(backend);
 
     Ok(server)

@@ -1,13 +1,11 @@
 use std::{future::Future, task::Poll};
 
 use aeronet::{
-    ClientState, ClientTransport, LaneProtocol, OnLane, TransportProtocol, TryAsBytes,
-    TryFromBytes, VersionedProtocol,
+    ClientState, ClientTransport, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
-use wtransport::{endpoint::IntoConnectOptions, ClientConfig};
 
-use crate::{ConnectedClient, ConnectingClient, ConnectionInfo};
+use crate::{ConnectedClient, ConnectingClient, ConnectionInfo, WebTransportClientConfig};
 
 use super::{ClientEvent, WebTransportError};
 
@@ -29,26 +27,26 @@ pub enum WebTransportClient<P: TransportProtocol> {
 
 impl<P> WebTransportClient<P>
 where
-    P: LaneProtocol + VersionedProtocol,
+    P: LaneProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
     pub fn connect_new(
-        config: ClientConfig,
-        options: impl IntoConnectOptions,
+        config: impl Into<WebTransportClientConfig>,
     ) -> (Self, impl Future<Output = ()> + Send) {
-        let (frontend, backend) = ConnectingClient::connect(config, options);
+        let config = config.into();
+        let (frontend, backend) = ConnectingClient::connect(config);
         (Self::Connecting(frontend), backend)
     }
 
     pub fn connect(
         &mut self,
-        config: ClientConfig,
-        options: impl IntoConnectOptions,
+        config: impl Into<WebTransportClientConfig>,
     ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
         match self {
             Self::Disconnected => {
-                let (this, backend) = Self::connect_new(config, options);
+                let config = config.into();
+                let (this, backend) = Self::connect_new(config);
                 *self = this;
                 Ok(backend)
             }
@@ -57,7 +55,14 @@ where
             }
         }
     }
+}
 
+impl<P> WebTransportClient<P>
+where
+    P: LaneProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+{
     pub fn disconnect(&mut self) -> Result<(), WebTransportError<P>> {
         match self {
             Self::Disconnected => Err(WebTransportError::<P>::AlreadyDisconnected),
@@ -71,7 +76,7 @@ where
 
 impl<P> ClientTransport<P> for WebTransportClient<P>
 where
-    P: LaneProtocol + VersionedProtocol,
+    P: LaneProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {

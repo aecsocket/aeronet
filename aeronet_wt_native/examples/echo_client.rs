@@ -7,10 +7,9 @@ use aeronet::{
     LocalClientConnected, LocalClientDisconnected, Message, OnLane, ProtocolVersion, TokioRuntime,
     TransportProtocol, TryAsBytes, TryFromBytes, VersionedProtocol,
 };
-use aeronet_wt_native::WebTransportClient;
+use aeronet_wt_native::{WebTransportClient, WebTransportClientConfig};
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-use wtransport::ClientConfig;
 
 // protocol
 
@@ -203,13 +202,19 @@ fn ui(
 }
 
 fn connect(rt: &TokioRuntime, client: &mut WebTransportClient<AppProtocol>, url: String) {
-    let config = ClientConfig::builder()
-        .with_bind_default()
-        .with_no_cert_validation()
-        .keep_alive_interval(Some(Duration::from_secs(5)))
-        .build();
     let backend = client
-        .connect(config, url)
+        .connect(
+            WebTransportClientConfig::builder()
+                .wt_config(
+                    aeronet_wt_native::wtransport::ClientConfig::builder()
+                        .with_bind_default()
+                        .with_no_cert_validation()
+                        .keep_alive_interval(Some(Duration::from_secs(5)))
+                        .build(),
+                )
+                .version(AppProtocol)
+                .target(url),
+        )
         .expect("backend should be disconnected");
     rt.spawn(backend);
 }

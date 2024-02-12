@@ -1,20 +1,20 @@
 mod backend;
+mod config;
 mod wrapper;
 
+pub use {config::WebTransportServerConfig, wrapper::*};
+
 use tracing::debug;
-pub use wrapper::*;
 
 use std::{collections::HashMap, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
 
 use aeronet::{
     ClientKey, ClientState, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
-    VersionedProtocol,
 };
 use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
-use wtransport::ServerConfig;
 
 use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo};
 
@@ -42,17 +42,20 @@ struct OpenServerInner {
 
 impl<P> OpeningServer<P>
 where
-    P: LaneProtocol + VersionedProtocol,
+    P: LaneProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
-    pub fn open(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
+    pub fn open(
+        config: impl Into<WebTransportServerConfig>,
+    ) -> (Self, impl Future<Output = ()> + Send) {
+        let config = config.into();
         let (send_open, recv_open) = oneshot::channel();
         let frontend = Self {
             recv_open,
             _phantom: PhantomData,
         };
-        let backend = backend::open::<P>(config, send_open);
+        let backend = backend::open(config, send_open);
         (frontend, backend)
     }
 

@@ -1,18 +1,17 @@
 mod backend;
+mod config;
 mod wrapper;
 
 use tracing::debug;
-pub use wrapper::*;
+pub use {config::WebTransportClientConfig, wrapper::*};
 
 use std::{fmt::Debug, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
 
 use aeronet::{
     LaneKey, LaneKind, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
-    VersionedProtocol,
 };
 use derivative::Derivative;
 use futures::channel::oneshot;
-use wtransport::{endpoint::IntoConnectOptions, ClientConfig};
 
 use crate::{
     shared::{ConnectionFrontend, LaneState},
@@ -39,21 +38,20 @@ struct ConnectedClientInner {
 
 impl<P> ConnectingClient<P>
 where
-    P: LaneProtocol + VersionedProtocol,
+    P: LaneProtocol,
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
     pub fn connect(
-        config: ClientConfig,
-        options: impl IntoConnectOptions,
+        config: impl Into<WebTransportClientConfig>,
     ) -> (Self, impl Future<Output = ()> + Send) {
-        let options = options.into_options();
+        let config = config.into();
         let (send_conn, recv_conn) = oneshot::channel();
         let frontend = Self {
             recv_conn,
             _phantom: PhantomData,
         };
-        let backend = backend::connect::<P>(config, options, send_conn);
+        let backend = backend::connect(config, send_conn);
         (frontend, backend)
     }
 
