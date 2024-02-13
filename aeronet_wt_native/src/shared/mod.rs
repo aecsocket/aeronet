@@ -1,7 +1,8 @@
 mod backend;
-mod negotiation;
+mod frontend;
+mod negotiate;
 
-pub use backend::*;
+pub(crate) use backend::*;
 
 use std::time::Duration;
 
@@ -50,9 +51,9 @@ pub async fn connection_channel<const SERVER: bool>(
     }
 
     let (send_managed, recv_managed) = if SERVER {
-        negotiation::server(&conn, version).await?
+        negotiate::server(&conn, version).await?
     } else {
-        negotiation::client(&conn, version).await?
+        negotiate::client(&conn, version).await?
     };
 
     let (send_c2s, recv_c2s) = mpsc::unbounded();
@@ -80,39 +81,6 @@ pub async fn connection_channel<const SERVER: bool>(
             _recv_managed: recv_managed,
         },
     ))
-}
-
-impl ConnectionFrontend {
-    pub fn update(&mut self) {
-        while let Ok(Some(rtt)) = self.recv_rtt.try_next() {
-            self.info.rtt = rtt;
-        }
-    }
-
-    pub fn send(&mut self, msg: Bytes) -> Result<(), BackendError> {
-        self.info.total_bytes_sent += msg.len();
-        self.send_c2s
-            .unbounded_send(msg)
-            .map_err(|_| BackendError::Closed)
-    }
-
-    pub fn recv(&mut self) -> Option<Bytes> {
-        match self.recv_s2c.try_next() {
-            Ok(None) | Err(_) => None,
-            Ok(Some(msg)) => {
-                self.info.total_bytes_recv += msg.len();
-                Some(msg)
-            }
-        }
-    }
-
-    pub fn recv_err(&mut self) -> Result<(), BackendError> {
-        match self.recv_err.try_recv() {
-            Ok(None) => Ok(()),
-            Ok(Some(err)) => Err(err),
-            Err(_) => Err(BackendError::Closed),
-        }
-    }
 }
 
 /// # Packet layout

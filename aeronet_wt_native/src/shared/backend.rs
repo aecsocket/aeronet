@@ -11,7 +11,7 @@ use super::ConnectionBackend;
 
 const UPDATE_DURATION: Duration = Duration::from_secs(1);
 
-pub async fn handle_connection(conn: Connection, chan: ConnectionBackend) {
+pub(crate) async fn handle_connection(conn: Connection, chan: ConnectionBackend) {
     debug!("Connected backend");
     match try_handle_connection(conn, chan.recv_c2s, chan.send_s2c, chan.send_rtt).await {
         Ok(()) => debug!("Closed backend"),

@@ -1,7 +1,10 @@
 use std::{io, net::SocketAddr, time::Duration};
 
 use aeronet::{
-    protocol::{FragmentationError, NegotiationError, ReassemblyError},
+    protocol::{
+        FragmentationError, Negotiation, NegotiationRequestError, NegotiationResponseError,
+        ReassemblyError, WrongProtocolVersion,
+    },
     ByteStats, ClientKey, MessageStats, RemoteAddr, Rtt, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
@@ -158,16 +161,29 @@ pub enum BackendError {
     AcceptManaged(#[source] ConnectionError),
     #[error("failed to send along managed stream")]
     SendManaged(#[source] StreamWriteError),
-    #[error("failed to negotiate protocol")]
-    Negotiate(#[source] NegotiationError),
-    #[error("failed to receive negotiation response")]
-    RecvNegotiateResponse(#[source] StreamReadError),
-    #[error("negotiation response was invalid")]
-    InvalidNegotiateResponse,
+    #[error("failed to receive from managed stream")]
+    RecvManaged(#[source] StreamReadError),
     #[error("managed stream closed")]
     ManagedStreamClosed,
-    #[error("connection closed")]
-    ConnectionClosed,
+
+    #[error(
+        "invalid negotiation request length - expected {}, was {len}",
+        Negotiation::REQUEST_LEN
+    )]
+    NegotiateRequestLength { len: usize },
+    #[error("failed to read negotiation request")]
+    ReadNegotiateRequest(#[source] NegotiationRequestError),
+
+    #[error(
+        "invalid negotiation response length - expected {}, was {len}",
+        Negotiation::RESPONSE_LEN
+    )]
+    NegotiateResponseLength { len: usize },
+    #[error("failed to read negotiation response")]
+    ReadNegotiateResponse(#[source] NegotiationResponseError),
+
+    #[error("wrong protocol version")]
+    WrongVersion(#[source] WrongProtocolVersion),
 
     #[error("lost connection")]
     LostConnection(#[source] ConnectionError),
