@@ -54,7 +54,3 @@ mod negotiation;
 mod seq;
 
 pub use {ack::*, frag::*, negotiation::*, seq::*};
-
-fn expect_encode<T: bitcode::Encode>(t: &T) -> Vec<u8> {
-    bitcode::encode(t).expect("does not use #[bitcode(with_serde)], so encoding should never fail")
-}

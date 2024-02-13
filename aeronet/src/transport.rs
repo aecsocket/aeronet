@@ -61,6 +61,7 @@ pub trait LaneProtocol: TransportProtocol {
     type Lane: LaneKey;
 }
 
+/// Unique version number of a transport protocol.
 ///
 /// This is treated as an opaque value, and is only used for equality
 /// comparison. No ordering guarantees are made (i.e. `20` is not

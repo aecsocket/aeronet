@@ -1,69 +1,111 @@
-use crate::{ProtocolVersion, VersionedProtocol};
+use crate::ProtocolVersion;
 
 /// Allows two peers to confirm that they are using the same version of the same
 /// protocol.
 ///
-/// Since an endpoint can connect to an arbitrary client
+/// Since a client can connect to any arbitrary server, we could be connecting
+/// to a server which is running a different version of our current protocol or
+/// even a different protocol entirely. We need a way to ensure that both
+/// endpoints are communicating with the same protocol, which is what
+/// negotiation ensures.
 ///
 /// # Usage
 ///
 /// Negotiation should be done after communication between two endpoints is
-/// possible reliably, and should be
+/// possible reliably, and if successful, the connection can then be finalized.
 ///
 /// # Process
 ///
 /// * Client connects to server and reliable ordered communication is possible
 ///   * This may be using some sort of managed stream or channel which the
 ///     regular transport methods don't use
-/// * Client sends a request with its version number
+///   * For example, the WebTransport implementation uses datagrams for regular
+///     communication, but opens a bidirectional managed stream to perform
+///     negotiation
+/// * Client sends a request with a protocol header including its version number
+///   * Currently this header is an ASCII string:
+///     ```text
+///     aeronet/xxxxxxxx
+///     ```
+///     where the `xxxxxxxx` is the hex form of the version number
 /// * Server compares this request's version against its own, but does not
 ///   reveal its protocol version to the client
-/// * If the server accepts the protocol string, server sends an accepted
+///   * This is done on purpose to give the server full control over if they
+///     want to accept a client with a particular protocol header
+/// * If the server accepts the protocol header, server sends an accepted
 ///   message and finalizes the connection
-/// * If the server rejects the protocol string, server sends a rejected
+///   * Client receives the OK and finalizes the connection
+/// * If the server rejects the protocol header, server sends a rejected
 ///   message and drops the connection
+///   * Client is aware that the connection was rejected because of their
+///     protocol version
 #[derive(Debug)]
 pub struct Negotiation {
     version: ProtocolVersion,
 }
 
+/// Error that occurs when using [`Negotiation`].
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum NegotiationError {
+    /// This server read an invalid protocol header.
+    ///
+    /// This could be because of e.g. corruption during transport, or the other
+    /// side is not using an aeronet protocol.
     #[error("invalid protocol header")]
     InvalidHeader,
+    /// This server read a valid protocol header, but there was a version
+    /// mismatch.
     #[error("their side has wrong protocol version - ours: {ours}, theirs: {theirs}")]
     TheirWrongVersion {
+        /// The server's protocol version.
         ours: ProtocolVersion,
+        /// The client's requested protocol version.
         theirs: ProtocolVersion,
     },
+    /// This client sent a protocol string, but the server rejected it.
     #[error("our side has wrong protocol version - ours: {ours}")]
-    OurWrongVersion { ours: ProtocolVersion },
+    OurWrongVersion {
+        /// The client's protocol version.
+        ours: ProtocolVersion,
+    },
 }
 
 const HEADER_PREFIX: &[u8; 8] = b"aeronet/";
 const VERSION_LEN: usize = 8;
+const HEADER_LEN: usize = HEADER_PREFIX.len() + VERSION_LEN;
 
 impl Negotiation {
-    pub const HEADER_LEN: usize = HEADER_PREFIX.len() + VERSION_LEN;
+    /// Length in bytes of the protocol header.
+    pub const HEADER_LEN: usize = HEADER_LEN;
 
-    pub fn from_version(version: ProtocolVersion) -> Self {
-        Self { version }
+    /// Creates a value given a protocol version to use.
+    pub fn new(version: impl Into<ProtocolVersion>) -> Self {
+        Self {
+            version: version.into(),
+        }
     }
 
-    pub fn from_protocol<P: VersionedProtocol>() -> Self {
-        Self::from_version(P::VERSION)
-    }
-
-    pub fn create_request(&self) -> Vec<u8> {
-        let version = format!("{:08x}", self.version.0).into_bytes();
-        debug_assert_eq!(VERSION_LEN, version.len());
-        let packet = [HEADER_PREFIX.as_slice(), version.as_slice()].concat();
-        debug_assert_eq!(Self::HEADER_LEN, packet.len());
+    /// Creates a client-to-server packet to request negotiation.
+    pub fn create_request(&self) -> [u8; HEADER_LEN] {
+        let version: [u8; VERSION_LEN] = format!("{:08x}", self.version.0)
+            .into_bytes()
+            .try_into()
+            .expect("formatted string should be 8 bytes long");
+        let mut packet = [0; HEADER_LEN];
+        packet[..HEADER_PREFIX.len()].copy_from_slice(HEADER_PREFIX);
+        packet[HEADER_PREFIX.len()..].copy_from_slice(&version);
         packet
     }
 
+    /// Validates a client-to-server negotiation request packet, to check if
+    /// this server should accept the client that sent the packet.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the packet contained incorrect data, and this connection
+    /// should not be accepted.
     pub fn check_request(&self, packet: &[u8]) -> Result<(), NegotiationError> {
-        if packet.len() != Self::HEADER_LEN {
+        if packet.len() != HEADER_LEN {
             return Err(NegotiationError::InvalidHeader);
         }
         if !packet.starts_with(HEADER_PREFIX) {
@@ -84,43 +126,22 @@ impl Negotiation {
 
 #[cfg(test)]
 mod tests {
-    use crate::TransportProtocol;
-
     use super::*;
 
-    struct ProtocolA;
-
-    impl TransportProtocol for ProtocolA {
-        type C2S = ();
-        type S2C = ();
-    }
-
-    impl VersionedProtocol for ProtocolA {
-        const VERSION: ProtocolVersion = ProtocolVersion(1);
-    }
-
-    struct ProtocolB;
-
-    impl TransportProtocol for ProtocolB {
-        type C2S = ();
-        type S2C = ();
-    }
-
-    impl VersionedProtocol for ProtocolB {
-        const VERSION: ProtocolVersion = ProtocolVersion(2);
-    }
+    const VERSION_A: ProtocolVersion = ProtocolVersion(1);
+    const VERSION_B: ProtocolVersion = ProtocolVersion(2);
 
     #[test]
     fn same_protocol() {
-        let neg = Negotiation::from_protocol::<ProtocolA>();
+        let neg = Negotiation::new(VERSION_A);
         let req = neg.create_request();
-        neg.check_request(&req).unwrap();
+        assert!(matches!(neg.check_request(&req), Ok(())));
     }
 
     #[test]
     fn different_protocol() {
-        let neg_a = Negotiation::from_protocol::<ProtocolA>();
-        let neg_b = Negotiation::from_protocol::<ProtocolB>();
+        let neg_a = Negotiation::new(VERSION_A);
+        let neg_b = Negotiation::new(VERSION_B);
 
         let req_a = neg_a.create_request();
         let req_b = neg_b.create_request();

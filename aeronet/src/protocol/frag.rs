@@ -28,7 +28,7 @@ struct FragHeader {
 /// connection, with some allowance for e.g. VPNs. The maximum size of a
 /// packet produced by [`Fragmentation`] will never be greater than this size.
 #[doc(alias = "mtu")]
-pub const MAX_PACKET_SIZE: usize = 1024;
+const MAX_PACKET_SIZE: usize = 1024;
 
 /// Size of [`FragHeader`] both in raw bytes in memory, and the byte size as
 /// output by [`bitcode::encode`].
@@ -67,7 +67,7 @@ const CLEAN_UP_AFTER: Duration = Duration::from_secs(3);
 #[derive(Debug, thiserror::Error)]
 pub enum FragmentationError {
     /// Attempted to send a message which was too big.
-    #[error("message too big; {len} / {MAX_MESSAGE_SIZE} bytes")]
+    #[error("message too big - {len} / {MAX_MESSAGE_SIZE} bytes")]
     MessageTooBig {
         /// Size of the message in bytes.
         len: usize,
@@ -329,10 +329,7 @@ impl<S: SequencingStrategy> Fragmentation<S> {
 
         // make sure that `buf` really does point to the same message that we're
         // meant to be reassembling
-        if buf.seq != header.seq {
-            return None;
-        }
-        if buf.num_frags != header.num_frags {
+        if buf.seq != header.seq || buf.num_frags != header.num_frags {
             return None;
         }
 

@@ -20,7 +20,7 @@ pub(super) async fn client(
         .map_err(BackendError::OpeningManaged)?
         .await
         .map_err(BackendError::OpenManaged)?;
-    let negotiation = Negotiation::from_version(version);
+    let negotiation = Negotiation::new(version);
 
     debug!("Opened managed stream, sending negotiation request");
     send_managed
@@ -55,7 +55,7 @@ pub(super) async fn server(
         .accept_bi()
         .await
         .map_err(BackendError::AcceptManaged)?;
-    let negotiation = Negotiation::from_version(version);
+    let negotiation = Negotiation::new(version);
 
     match (async {
         debug!("Accepted managed stream, waiting for negotiation request");
