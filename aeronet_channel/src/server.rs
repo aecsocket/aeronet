@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use aeronet::{ClientKey, ServerTransport, TransportProtocol};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
@@ -11,28 +9,22 @@ type ServerState = aeronet::ServerState<(), ()>;
 
 type ClientState = aeronet::ClientState<(), ConnectionInfo>;
 
-type ServerEvent<P> = aeronet::ServerEvent<P, (), ConnectionInfo, ChannelError>;
+type ServerEvent<P> = aeronet::ServerEvent<P, ChannelError>;
 
 /// Implementation of [`ServerTransport`] using in-memory MPSC channels for
 /// transport.
-/// 
+///
 /// See the [crate-level docs](crate).
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct ChannelServer<P>
-where
-    P: TransportProtocol,
-{
+pub struct ChannelServer<P: TransportProtocol> {
     clients: SlotMap<ClientKey, Client<P>>,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-enum Client<P>
-where
-    P: TransportProtocol,
-{
+enum Client<P: TransportProtocol> {
     Connected {
         recv_c2s: Receiver<P::C2S>,
         send_s2c: Sender<P::S2C>,
@@ -42,10 +34,7 @@ where
     Disconnected,
 }
 
-impl<P> ChannelServer<P>
-where
-    P: TransportProtocol,
-{
+impl<P: TransportProtocol> ChannelServer<P> {
     /// Creates a server with no connected clients.
     pub fn open() -> Self {
         Self::default()
@@ -65,10 +54,7 @@ where
     }
 }
 
-impl<P> ServerTransport<P> for ChannelServer<P>
-where
-    P: TransportProtocol,
-{
+impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
     type Error = ChannelError;
 
     type OpeningInfo = ();
@@ -90,7 +76,7 @@ where
         }
     }
 
-    fn clients(&self) -> impl Iterator<Item = ClientKey> {
+    fn client_keys(&self) -> impl Iterator<Item = ClientKey> + '_ {
         self.clients.keys()
     }
 
@@ -126,14 +112,12 @@ where
     }
 }
 
-fn update_client<P>(
+fn update_client<P: TransportProtocol>(
     client: ClientKey,
     data: &mut Client<P>,
     events: &mut Vec<ServerEvent<P>>,
     to_remove: &mut Vec<ClientKey>,
-) where
-    P: TransportProtocol,
-{
+) {
     match data {
         Client::Connected {
             recv_c2s,
@@ -142,21 +126,14 @@ fn update_client<P>(
             ..
         } => {
             if *send_connected {
-                events.push(ServerEvent::Connecting { client, info: () });
-                events.push(ServerEvent::Connected {
-                    client,
-                    info: info.clone(),
-                });
+                events.push(ServerEvent::Connecting { client });
+                events.push(ServerEvent::Connected { client });
                 *send_connected = false;
             }
 
             match recv_c2s.try_recv() {
                 Ok(msg) => {
-                    events.push(ServerEvent::Recv {
-                        client,
-                        msg,
-                        at: Instant::now(),
-                    });
+                    events.push(ServerEvent::Recv { client, msg });
                     info.msgs_recv += 1;
                 }
                 Err(TryRecvError::Empty) => {}

@@ -104,6 +104,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "aeronet_channel"
+version = "0.5.0"
+dependencies = [
+ "aeronet",
+ "bevy",
+ "bevy_ecs",
+ "bevy_egui",
+ "crossbeam-channel",
+ "derivative",
+ "slotmap",
+ "thiserror",
+]
+
+[[package]]
 name = "aeronet_derive"
 version = "0.5.0"
 dependencies = [

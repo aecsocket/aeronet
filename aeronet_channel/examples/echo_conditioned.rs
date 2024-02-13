@@ -1,15 +1,13 @@
 //! Example creating a client and server pair, where the client can send a
 //! message, and the server just echoes back that message to the client.
-//! 
-//! A conditioner is applied, which introduces artificial message loss and
-//! delays.
 
 use std::mem;
 
 use aeronet::{
-    ClientTransport, ClientTransportPlugin, FromClient, FromServer, LocalConnected, Message,
-    RemoteConnected, RemoteConnecting, RemoteDisconnected, ServerTransport, ServerTransportPlugin,
-    TransportProtocol, ConditionedClient, ConditionedServer, ConditionerConfig,
+    ClientTransport, ClientTransportPlugin, ConditionedClient, ConditionedServer,
+    ConditionerConfig, FromClient, FromServer, LocalClientConnected, Message,
+    RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected, ServerTransport,
+    ServerTransportPlugin, TransportProtocol,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::prelude::*;
@@ -27,15 +25,14 @@ impl TransportProtocol for AppProtocol {
     type S2C = AppMessage;
 }
 
-type Client = ConditionedClient<AppProtocol, ChannelClient<AppProtocol>>;
-
-type Server = ConditionedServer<AppProtocol, ChannelServer<AppProtocol>>;
-
 const CONDITIONER_CONFIG: ConditionerConfig = ConditionerConfig {
     loss_rate: 0.25,
     delay_mean: 1.0,
     delay_std_dev: 0.5,
 };
+
+type Client = ConditionedClient<AppProtocol, ChannelClient<AppProtocol>>;
+type Server = ConditionedServer<AppProtocol, ChannelServer<AppProtocol>>;
 
 // Logic
 
@@ -64,30 +61,41 @@ fn main() {
         .add_systems(
             Update,
             (
-                (client_update_log, client_ui).chain(),
-                (server_update_log, server_ui).chain(),
+                (client_on_connected, client_on_recv, client_ui).chain(),
+                (
+                    server_on_connecting,
+                    server_on_connected,
+                    server_on_recv,
+                    server_on_disconnected,
+                    server_ui,
+                )
+                    .chain(),
             ),
         )
         .run();
 }
 
 fn setup(mut commands: Commands) {
-    let mut server = ConditionedServer::new(ChannelServer::<AppProtocol>::open(), CONDITIONER_CONFIG);
-    let client = ConditionedClient::new(ChannelClient::connect_new(&mut server), CONDITIONER_CONFIG);
-    commands.insert_resource(server);
-    commands.insert_resource(client);
+    let mut server = ChannelServer::<AppProtocol>::open();
+    let client = ChannelClient::connect_new(&mut server);
+    commands.insert_resource(ConditionedServer::new(server, &CONDITIONER_CONFIG));
+    commands.insert_resource(ConditionedClient::new(client, &CONDITIONER_CONFIG));
 }
 
-fn client_update_log(
+fn client_on_connected(
     mut ui_state: ResMut<ClientUiState>,
-    mut connected: EventReader<LocalConnected<AppProtocol, Client>>,
-    mut recv: EventReader<FromServer<AppProtocol>>,
+    mut events: EventReader<LocalClientConnected<AppProtocol, Client>>,
 ) {
-    for LocalConnected { .. } in connected.read() {
+    for LocalClientConnected { .. } in events.read() {
         ui_state.log.push(format!("Connected"));
     }
+}
 
-    for FromServer { msg, .. } in recv.read() {
+fn client_on_recv(
+    mut ui_state: ResMut<ClientUiState>,
+    mut events: EventReader<FromServer<AppProtocol, Client>>,
+) {
+    for FromServer { msg, .. } in events.read() {
         ui_state.log.push(format!("> {}", msg.0));
     }
 }
@@ -137,34 +145,46 @@ fn client_ui(
     });
 }
 
-fn server_update_log(
+fn server_on_connecting(
     mut ui_state: ResMut<ServerUiState>,
-    mut server: ResMut<Server>,
-    mut connecting: EventReader<RemoteConnecting<AppProtocol, Server>>,
-    mut connected: EventReader<RemoteConnected<AppProtocol, Server>>,
-    mut disconnected: EventReader<RemoteDisconnected<AppProtocol, Server>>,
-    mut recv: EventReader<FromClient<AppProtocol>>,
+    mut events: EventReader<RemoteClientConnecting<AppProtocol, Server>>,
 ) {
-    for RemoteConnecting { client, .. } in connecting.read() {
+    for RemoteClientConnecting { client, .. } in events.read() {
         ui_state.log.push(format!("Client {client} connecting"));
     }
+}
 
-    for RemoteConnected { client, .. } in connected.read() {
+fn server_on_connected(
+    mut ui_state: ResMut<ServerUiState>,
+    mut events: EventReader<RemoteClientConnected<AppProtocol, Server>>,
+) {
+    for RemoteClientConnected { client, .. } in events.read() {
         ui_state.log.push(format!("Client {client} connected"));
     }
+}
 
-    for RemoteDisconnected { client, reason } in disconnected.read() {
-        ui_state
-            .log
-            .push(format!("Client {client} disconnected: {reason:#}"));
-    }
-
+fn server_on_recv(
+    mut ui_state: ResMut<ServerUiState>,
+    mut recv: EventReader<FromClient<AppProtocol, Server>>,
+    mut server: ResMut<Server>,
+) {
     for FromClient { client, msg, .. } in recv.read() {
         ui_state.log.push(format!("{client} > {}", msg.0));
 
         let resp = format!("You sent: {}", msg.0);
         ui_state.log.push(format!("{client} < {resp}"));
         let _ = server.send(*client, AppMessage(resp));
+    }
+}
+
+fn server_on_disconnected(
+    mut ui_state: ResMut<ServerUiState>,
+    mut events: EventReader<RemoteClientDisconnected<AppProtocol, Server>>,
+) {
+    for RemoteClientDisconnected { client, reason } in events.read() {
+        ui_state
+            .log
+            .push(format!("Client {client} disconnected: {reason:#}"));
     }
 }
 

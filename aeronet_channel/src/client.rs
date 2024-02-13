@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use aeronet::{ClientKey, ClientTransport, TransportProtocol};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
@@ -8,18 +6,15 @@ use crate::{ChannelError, ChannelServer, ConnectionInfo};
 
 type ClientState = aeronet::ClientState<(), ConnectionInfo>;
 
-type ClientEvent<P> = aeronet::ClientEvent<P, ConnectionInfo, ChannelError>;
+type ClientEvent<P> = aeronet::ClientEvent<P, ChannelError>;
 
 /// Implementation of [`ClientTransport`] using in-memory MPSC channels for
 /// transport.
-/// 
+///
 /// See the [crate-level docs](crate).
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct ConnectedClient<P>
-where
-    P: TransportProtocol,
-{
+pub struct ConnectedClient<P: TransportProtocol> {
     send_c2s: Sender<P::C2S>,
     recv_s2c: Receiver<P::S2C>,
     key: ClientKey,
@@ -27,10 +22,7 @@ where
     send_connected: bool,
 }
 
-impl<P> ConnectedClient<P>
-where
-    P: TransportProtocol,
-{
+impl<P: TransportProtocol> ConnectedClient<P> {
     /// Creates a client and immediately connects it to an existing server.
     pub fn connect(server: &mut ChannelServer<P>) -> Self {
         let (send_c2s, recv_c2s) = crossbeam_channel::unbounded();
@@ -56,7 +48,6 @@ where
         self.info.clone()
     }
 
-
     pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), ChannelError> {
         let msg = msg.into();
         self.send_c2s
@@ -70,18 +61,13 @@ where
         let mut events = Vec::new();
 
         if self.send_connected {
-            events.push(ClientEvent::Connected {
-                info: self.info.clone(),
-            });
+            events.push(ClientEvent::Connected);
             self.send_connected = false;
         }
 
         match self.recv_s2c.try_recv() {
             Ok(msg) => {
-                events.push(ClientEvent::Recv {
-                    msg,
-                    at: Instant::now(),
-                });
+                events.push(ClientEvent::Recv { msg });
                 self.info.msgs_recv += 1;
             }
             Err(TryRecvError::Empty) => {}
@@ -97,19 +83,13 @@ where
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub enum ChannelClient<P>
-where
-    P: TransportProtocol,
-{
+pub enum ChannelClient<P: TransportProtocol> {
     #[derivative(Default)]
     Disconnected,
     Connected(ConnectedClient<P>),
 }
 
-impl<P> ChannelClient<P>
-where
-    P: TransportProtocol,
-{
+impl<P: TransportProtocol> ChannelClient<P> {
     pub fn connect_new(server: &mut ChannelServer<P>) -> Self {
         Self::Connected(ConnectedClient::connect(server))
     }
@@ -142,10 +122,7 @@ where
     }
 }
 
-impl<P> ClientTransport<P> for ChannelClient<P>
-where
-    P: TransportProtocol,
-{
+impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
     type Error = ChannelError;
 
     type ConnectingInfo = ();
