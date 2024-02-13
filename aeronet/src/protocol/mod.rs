@@ -50,7 +50,7 @@
 
 mod ack;
 mod frag;
-mod negotiation;
+mod negotiate;
 mod seq;
 
-pub use {ack::*, frag::*, negotiation::*, seq::*};
+pub use {ack::*, frag::*, negotiate::*, seq::*};

@@ -219,6 +219,7 @@ where
                 recv_req: client.recv_req,
             }));
             let _ = client.send_key.send(client_key);
+            debug!("Assigned new client {client_key}");
             // don't send a connecting event yet;
             // send it once the user has the opportunity to accept/reject it
         }
@@ -236,6 +237,7 @@ where
             }
         }
         for client_key in clients_to_remove {
+            debug!("Removed client {client_key}");
             self.clients.remove(client_key);
         }
 
@@ -290,13 +292,10 @@ where
                 });
             }
 
-            client.conn.recv_err().map_err(|err| {
-                debug!(
-                    "{client_key} disconnected: {:#}",
-                    aeronet::util::pretty_error(&err)
-                );
-                Some(WebTransportError::<P>::Backend(err))
-            })
+            client
+                .conn
+                .recv_err()
+                .map_err(|err| Some(WebTransportError::<P>::Backend(err)))
         }
     }
 }

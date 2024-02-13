@@ -16,6 +16,10 @@ use crate::ProtocolVersion;
 /// Negotiation should be done after communication between two endpoints is
 /// possible reliably, and if successful, the connection can then be finalized.
 ///
+/// * On the client, use [`Negotiation::request`] then
+///   [`Negotiation::recv_response`].
+/// * On the server, use [`Negotiation::recv_request`].
+///
 /// # Process
 ///
 /// * Client connects to server and reliable ordered communication is possible
@@ -102,7 +106,7 @@ impl Negotiation {
     /// Length in bytes of the negotiation response packet.
     pub const RESPONSE_LEN: usize = RESPONSE_LEN;
 
-    /// Creates a value given a protocol version to use.
+    /// Creates a negotiation object given a protocol version to use.
     pub fn new(version: impl Into<ProtocolVersion>) -> Self {
         Self {
             version: version.into(),
@@ -171,6 +175,12 @@ impl Negotiation {
         (Ok(()), Some([OK, 0, 0, 0, 0]))
     }
 
+    /// Reads and parses a negotiation response packet.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the response indicates that the connection is unsuccessful,
+    /// or if the response is malformed.
     pub fn recv_response(
         &self,
         packet: &[u8; RESPONSE_LEN],

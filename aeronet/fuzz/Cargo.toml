@@ -25,3 +25,9 @@ name = "frag"
 path = "fuzz_targets/frag.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "negotiation"
+path = "fuzz_targets/negotiation.rs"
+test = false
+doc = false
