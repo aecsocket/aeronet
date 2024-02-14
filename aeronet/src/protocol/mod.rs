@@ -28,6 +28,7 @@
 //! | authentication | only clients who have permission to use this app can connect          | -                 |
 //! | validation     | the message was not tampered with or corrupted in transit             | -                 |
 //! | framing        | message boundary is maintained by API (i.e. not just stream of bytes) | -                 |
+//! | buffering      | combines small messages into one big packet (i.e. Nagle)              | - (maybe?)        |
 //! | negotiation    | makes sure that both peers are using the same protocol before talking | [`Negotiation`]   |
 //! | fragmentation  | large messages are sent using multiple packets                        | [`Fragmentation`] |
 //! | reliability    | messages sent reliably are guaranteed to be received by the peer      | todo              |

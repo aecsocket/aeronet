@@ -2,7 +2,7 @@ mod backend;
 mod frontend;
 mod negotiate;
 
-pub(crate) use backend::*;
+pub use backend::*;
 
 use std::time::Duration;
 
@@ -127,14 +127,45 @@ impl LaneState {
         }
     }
 
-    pub fn outgoing_packets(
-        &mut self,
-        bytes: &[u8],
-    ) -> Result<impl Iterator<Item = Bytes>, BackendError> {
-        Ok(std::iter::empty()) // todo
+    pub fn sending<'a>(
+        &'a mut self,
+        bytes: &'a [u8],
+        lane: u8,
+    ) -> Result<impl Iterator<Item = Bytes> + 'a, BackendError> {
+        match self {
+            Self::UnreliableUnsequenced { frag } => {
+                sending_unreliable::<Unsequenced>(frag, bytes, lane)
+            }
+            Self::UnreliableSequenced { frag } => {
+                sending_unreliable::<Sequenced>(frag, bytes, lane)
+            }
+            _ => todo!(),
+        }
     }
 
     pub fn recv(&mut self, packet: &[u8]) -> Result<(), BackendError> {
         todo!()
     }
+}
+
+fn sending_unreliable<'a, S>(
+    frag: &'a mut Fragmentation<S>,
+    bytes: &'a [u8],
+    lane: u8,
+) -> Result<impl Iterator<Item = Bytes> + 'a, BackendError> {
+    Ok(frag
+        .fragment(bytes)
+        .map_err(BackendError::Fragment)?
+        .map(move |frag| {
+            let mut packet = Vec::new();
+            let header_start = 1;
+            let payload_start = 1 + frag.header.len();
+            packet.reserve_exact(payload_start + frag.payload.len());
+
+            packet[0] = lane;
+            packet[header_start..payload_start].copy_from_slice(&frag.header);
+            packet[payload_start..].copy_from_slice(&frag.payload);
+
+            Bytes::from(packet)
+        }))
 }

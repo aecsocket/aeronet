@@ -19,7 +19,6 @@ pub struct Seq(pub u16);
 
 impl Seq {
     /// Returns the current sequence value and increments `self`.
-    #[must_use]
     pub fn next(&mut self) -> Seq {
         let cur = *self;
         self.0 = self.0.wrapping_add(1);

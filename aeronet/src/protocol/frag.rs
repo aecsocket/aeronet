@@ -63,7 +63,7 @@ const MESSAGES_BUF: usize = 256;
 /// prevents this issue.
 const CLEAN_UP_AFTER: Duration = Duration::from_secs(3);
 
-/// Error that occurs when using [`Fragmentation`].
+/// Error that occurs when using [`Fragmentation::fragment`].
 #[derive(Debug, thiserror::Error)]
 pub enum FragmentationError {
     /// Attempted to send a message which was too big.
@@ -233,38 +233,40 @@ impl Fragmentation<Sequenced> {
     }
 }
 
-impl<S: SequencingStrategy> Fragmentation<S> {
+#[derive(Debug, Clone)]
+pub struct FragmentedPacket<'a> {
+    pub header: Bytes,
+    pub payload: &'a [u8],
+}
+
+impl<S> Fragmentation<S> {
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn fragment<'a>(
         &'a mut self,
-        bytes: &'a impl AsRef<[u8]>,
-    ) -> Result<impl Iterator<Item = Bytes> + 'a, FragmentationError> {
-        let bytes = bytes.as_ref();
+        msg: &'a [u8],
+    ) -> Result<impl Iterator<Item = FragmentedPacket<'a>> + 'a, FragmentationError> {
         let seq = self.next_send_seq.next();
 
-        let chunks = bytes.chunks(MAX_PAYLOAD_SIZE);
+        let chunks = msg.chunks(MAX_PAYLOAD_SIZE);
         let num_frags = u8::try_from(chunks.len())
-            .map_err(|_| FragmentationError::MessageTooBig { len: bytes.len() })?;
+            .map_err(|_| FragmentationError::MessageTooBig { len: msg.len() })?;
 
-        Ok(chunks.enumerate().map(move |(frag_id, chunk)| {
+        Ok(chunks.enumerate().map(move |(frag_id, payload)| {
             let frag_id = u8::try_from(frag_id)
                 .expect("`num_frags` is a u8, so `frag_id` should be convertible");
-            let header = FragHeader {
+            let header = bitcode::encode(&FragHeader {
                 seq,
                 frag_id,
                 num_frags,
-            };
-            let mut packet = bitcode::encode(&header)
-                .expect("does not use #[bitcode(with_serde)], so encoding should never fail");
-            debug_assert_eq!(HEADER_SIZE, packet.len());
+            })
+            .expect("does not use #[bitcode(with_serde)], so encoding should never fail");
+            debug_assert_eq!(HEADER_SIZE, header.len());
 
-            packet.reserve_exact(MAX_PAYLOAD_SIZE.min(chunk.len()));
-            packet.extend(chunk);
-            debug_assert!(packet.len() <= MAX_PACKET_SIZE);
             // ensures quick path in Bytes::from(Vec<u8>)
-            debug_assert_eq!(packet.capacity(), packet.len());
+            debug_assert_eq!(header.capacity(), header.len());
+            let header = Bytes::from(header);
 
-            Bytes::from(packet)
+            FragmentedPacket { header, payload }
         }))
     }
 
@@ -281,12 +283,10 @@ impl<S: SequencingStrategy> Fragmentation<S> {
             buf.free();
         }
     }
+}
 
-    pub fn reassemble(
-        &mut self,
-        packet: &impl AsRef<[u8]>,
-    ) -> Result<Option<Bytes>, ReassemblyError> {
-        let packet = packet.as_ref();
+impl<S: SequencingStrategy> Fragmentation<S> {
+    pub fn reassemble(&mut self, packet: &[u8]) -> Result<Option<Bytes>, ReassemblyError> {
         if packet.len() < HEADER_SIZE {
             return Err(ReassemblyError::PacketTooSmall { len: packet.len() });
         }
@@ -418,7 +418,7 @@ mod tests {
     fn large1() {
         let mut frag = Fragmentation::unsequenced();
         let msg = "x".repeat(1024);
-        let packets = frag.fragment(&msg).unwrap().collect::<Vec<_>>();
+        let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
         assert_eq!(2, packets.len());
         assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
         assert_eq!(msg, frag.reassemble(&packets[1]).unwrap().unwrap());
@@ -428,7 +428,7 @@ mod tests {
     fn large2() {
         let mut frag = Fragmentation::unsequenced();
         let msg = "x".repeat(2048);
-        let packets = frag.fragment(&msg).unwrap().collect::<Vec<_>>();
+        let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
         assert_eq!(3, packets.len());
         assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
         assert!(matches!(frag.reassemble(&packets[1]), Ok(None)));
@@ -447,7 +447,7 @@ mod tests {
         }
 
         let msg = "x".repeat(1024);
-        let packets = frag.fragment(&msg).unwrap().collect::<Vec<_>>();
+        let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
         assert_eq!(2, packets.len());
         assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
         assert_eq!(msg, frag.reassemble(&packets[1]).unwrap().unwrap());
@@ -459,7 +459,7 @@ mod tests {
 
         for _ in 0..256 {
             let msg = "x".repeat(1024);
-            let packets = frag.fragment(&msg).unwrap().collect::<Vec<_>>();
+            let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
             assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
             // crucially: we *don't* give it packets[1], so that the message is
             // in a partially complete state
@@ -468,7 +468,7 @@ mod tests {
         let msg = "x".repeat(1024);
         // all the message buffers will be full, so we won't be able to
         // reassemble this message
-        let packets = frag.fragment(&msg).unwrap().collect::<Vec<_>>();
+        let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
         assert_eq!(2, packets.len());
         assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
         assert!(matches!(frag.reassemble(&packets[1]), Ok(None)));
@@ -476,7 +476,7 @@ mod tests {
         // but after cleanup, this *should* work
         frag.clear();
 
-        let packets = frag.fragment(&msg).unwrap().collect::<Vec<_>>();
+        let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
         assert_eq!(2, packets.len());
         assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
         assert_eq!(msg, frag.reassemble(&packets[1]).unwrap().unwrap());
