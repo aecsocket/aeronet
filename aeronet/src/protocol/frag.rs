@@ -108,13 +108,9 @@ pub enum ReassemblyError {
 /// Handles splitting and reassembling a single large message into multiple
 /// smaller packets for sending over a network.
 ///
-/// The `S` type parameter is either [`Unsequenced`] or [`Sequenced`],
-/// controlling the [`SequencingStrategy`].
-///
-/// See [`Fragmentation::fragment`].
-#[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
-pub struct Fragmentation<S> {
+/// See [`Fragmentation::fragment`] and [`Fragmentation::reassemble`].
+#[derive(Debug)]
+pub struct Fragmentation {
     /// Next sequence number for outgoing messages.
     next_send_seq: Seq,
     /// Sequence number of the last message received, but not necessarily
@@ -132,8 +128,6 @@ pub struct Fragmentation<S> {
     // see MessageBuffer::is_occupied.
     // This is done to save memory.
     messages: Box<[MessageBuffer; MESSAGES_BUF]>,
-    #[derivative(Debug = "ignore")]
-    _phantom: PhantomData<S>,
 }
 
 mod private {
@@ -148,8 +142,6 @@ pub trait SequencingStrategy: private::Sealed {
     const SEQUENCED: bool;
 }
 
-/// All messages will be received, regardless of if the received fragment has
-/// a lower sequence number than a previous fragment.
 #[derive(Debug)]
 pub struct Unsequenced;
 
@@ -159,8 +151,6 @@ impl SequencingStrategy for Unsequenced {
     const SEQUENCED: bool = false;
 }
 
-/// A message will only be received if its fragment number is strictly lower
-/// than the latest sequence number received.
 #[derive(Debug)]
 pub struct Sequenced;
 
@@ -208,38 +198,37 @@ impl MessageBuffer {
     }
 }
 
-impl<S> Default for Fragmentation<S> {
+impl Default for Fragmentation {
     fn default() -> Self {
         Self {
             next_send_seq: Seq(0),
             last_recv_seq: Seq(0),
             messages: Box::new(array::from_fn(|_| MessageBuffer::default())),
-            _phantom: PhantomData,
         }
     }
 }
 
-impl Fragmentation<Unsequenced> {
+impl Fragmentation {
     #[must_use]
-    pub fn unsequenced() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl Fragmentation<Sequenced> {
-    #[must_use]
-    pub fn sequenced() -> Self {
-        Self::default()
-    }
-}
-
+/// Packet from [`Fragmentation::fragment`].
 #[derive(Debug, Clone)]
 pub struct FragmentedPacket<'a> {
+    /// Bytes to add before the payload.
     pub header: Bytes,
+    /// Original message payload which this fragment carries.
     pub payload: &'a [u8],
 }
 
-impl<S> Fragmentation<S> {
+impl Fragmentation {
+    /// Splits a message up into individual fragmented packets and creates the
+    /// appropriate headers for each packet.
+    ///
+    /// This will increase the sequence number.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn fragment<'a>(
         &'a mut self,
@@ -283,10 +272,43 @@ impl<S> Fragmentation<S> {
             buf.free();
         }
     }
-}
 
-impl<S: SequencingStrategy> Fragmentation<S> {
-    pub fn reassemble(&mut self, packet: &[u8]) -> Result<Option<Bytes>, ReassemblyError> {
+    /// Receives a fragmented packet and attempts to reassemble this fragment
+    /// into a message.
+    ///
+    /// If this returns `Ok(Some(..))`, the resulting bytes will be the fully
+    /// reassembled bytes of the message.
+    ///
+    /// Unsequenced: all messages will be received, regardless of if the
+    /// received fragment has a lower sequence number than a previous fragment.
+    ///
+    /// # Errors
+    ///
+    /// If the packet was malformed, this returns an error.
+    pub fn reassemble_unseq(&mut self, packet: &[u8]) -> Result<Option<Bytes>, ReassemblyError> {
+        self.reassemble::<false>(packet)
+    }
+
+    /// Receives a fragmented packet and attempts to reassemble this fragment
+    /// into a message.
+    ///
+    /// If this returns `Ok(Some(..))`, the resulting bytes will be the fully
+    /// reassembled bytes of the message.
+    ///
+    /// Sequenced: a message will only be received if its fragment number is
+    /// strictly lower than the latest sequence number received.
+    ///
+    /// # Errors
+    ///
+    /// If the packet was malformed, this returns an error.
+    pub fn reassemble_seq(&mut self, packet: &[u8]) -> Result<Option<Bytes>, ReassemblyError> {
+        self.reassemble::<true>(packet)
+    }
+
+    fn reassemble<const SEQUENCED: bool>(
+        &mut self,
+        packet: &[u8],
+    ) -> Result<Option<Bytes>, ReassemblyError> {
         if packet.len() < HEADER_SIZE {
             return Err(ReassemblyError::PacketTooSmall { len: packet.len() });
         }
@@ -298,15 +320,15 @@ impl<S: SequencingStrategy> Fragmentation<S> {
             .map_err(ReassemblyError::DecodeHeader)?;
         let payload = &packet[HEADER_SIZE..];
 
-        self.reassemble_packet(header, payload)
+        self.reassemble_packet::<SEQUENCED>(header, payload)
     }
 
-    fn reassemble_packet(
+    fn reassemble_packet<const SEQUENCED: bool>(
         &mut self,
         header: FragHeader,
         payload: &[u8],
     ) -> Result<Option<Bytes>, ReassemblyError> {
-        if S::SEQUENCED && header.seq < self.last_recv_seq {
+        if SEQUENCED && header.seq < self.last_recv_seq {
             return Ok(None);
         }
         self.last_recv_seq = header.seq;
@@ -372,95 +394,95 @@ mod tests {
 
     #[test]
     fn unsequenced_in_order() {
-        let mut frag = Fragmentation::unsequenced();
+        let mut frag = Fragmentation::new();
         let packets1 = frag.fragment(&MSG1).unwrap().collect::<Vec<_>>();
         let packets2 = frag.fragment(&MSG2).unwrap().collect::<Vec<_>>();
         let packets3 = frag.fragment(&MSG3).unwrap().collect::<Vec<_>>();
-        assert_eq!(MSG1, frag.reassemble(&packets1[0]).unwrap().unwrap());
-        assert_eq!(MSG2, frag.reassemble(&packets2[0]).unwrap().unwrap());
-        assert_eq!(MSG3, frag.reassemble(&packets3[0]).unwrap().unwrap());
+        assert_eq!(MSG1, frag.reassemble_unseq(&packets1[0]).unwrap().unwrap());
+        assert_eq!(MSG2, frag.reassemble_unseq(&packets2[0]).unwrap().unwrap());
+        assert_eq!(MSG3, frag.reassemble_unseq(&packets3[0]).unwrap().unwrap());
     }
 
     #[test]
     fn sequenced_in_order() {
-        let mut frag = Fragmentation::sequenced();
+        let mut frag = Fragmentation::new();
         let packets1 = frag.fragment(&MSG1).unwrap().collect::<Vec<_>>();
         let packets2 = frag.fragment(&MSG2).unwrap().collect::<Vec<_>>();
         let packets3 = frag.fragment(&MSG3).unwrap().collect::<Vec<_>>();
-        assert_eq!(MSG1, frag.reassemble(&packets1[0]).unwrap().unwrap());
-        assert_eq!(MSG2, frag.reassemble(&packets2[0]).unwrap().unwrap());
-        assert_eq!(MSG3, frag.reassemble(&packets3[0]).unwrap().unwrap());
+        assert_eq!(MSG1, frag.reassemble_seq(&packets1[0]).unwrap().unwrap());
+        assert_eq!(MSG2, frag.reassemble_seq(&packets2[0]).unwrap().unwrap());
+        assert_eq!(MSG3, frag.reassemble_seq(&packets3[0]).unwrap().unwrap());
     }
 
     #[test]
     fn unsequenced_out_of_order() {
-        let mut frag = Fragmentation::unsequenced();
+        let mut frag = Fragmentation::new();
         let packets1 = frag.fragment(&MSG1).unwrap().collect::<Vec<_>>();
         let packets2 = frag.fragment(&MSG2).unwrap().collect::<Vec<_>>();
         let packets3 = frag.fragment(&MSG3).unwrap().collect::<Vec<_>>();
-        assert_eq!(MSG2, frag.reassemble(&packets2[0]).unwrap().unwrap());
-        assert_eq!(MSG1, frag.reassemble(&packets1[0]).unwrap().unwrap());
-        assert_eq!(MSG3, frag.reassemble(&packets3[0]).unwrap().unwrap());
+        assert_eq!(MSG2, frag.reassemble_unseq(&packets2[0]).unwrap().unwrap());
+        assert_eq!(MSG1, frag.reassemble_unseq(&packets1[0]).unwrap().unwrap());
+        assert_eq!(MSG3, frag.reassemble_unseq(&packets3[0]).unwrap().unwrap());
     }
 
     #[test]
     fn sequenced_out_of_order() {
-        let mut frag = Fragmentation::sequenced();
+        let mut frag = Fragmentation::new();
         let packets1 = frag.fragment(&MSG1).unwrap().collect::<Vec<_>>();
         let packets2 = frag.fragment(&MSG2).unwrap().collect::<Vec<_>>();
         let packets3 = frag.fragment(&MSG3).unwrap().collect::<Vec<_>>();
-        assert_eq!(MSG2, frag.reassemble(&packets2[0]).unwrap().unwrap());
-        assert!(matches!(frag.reassemble(&packets1[0]), Ok(None)));
-        assert_eq!(MSG3, frag.reassemble(&packets3[0]).unwrap().unwrap());
+        assert_eq!(MSG2, frag.reassemble_seq(&packets2[0]).unwrap().unwrap());
+        assert!(matches!(frag.reassemble_seq(&packets1[0]), Ok(None)));
+        assert_eq!(MSG3, frag.reassemble_seq(&packets3[0]).unwrap().unwrap());
     }
 
     #[test]
     fn large1() {
-        let mut frag = Fragmentation::unsequenced();
+        let mut frag = Fragmentation::new();
         let msg = "x".repeat(1024);
         let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
         assert_eq!(2, packets.len());
-        assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
-        assert_eq!(msg, frag.reassemble(&packets[1]).unwrap().unwrap());
+        assert!(matches!(frag.reassemble_unseq(&packets[0]), Ok(None)));
+        assert_eq!(msg, frag.reassemble_unseq(&packets[1]).unwrap().unwrap());
     }
 
     #[test]
     fn large2() {
-        let mut frag = Fragmentation::unsequenced();
+        let mut frag = Fragmentation::new();
         let msg = "x".repeat(2048);
         let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
         assert_eq!(3, packets.len());
-        assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
-        assert!(matches!(frag.reassemble(&packets[1]), Ok(None)));
-        assert_eq!(msg, frag.reassemble(&packets[2]).unwrap().unwrap());
+        assert!(matches!(frag.reassemble_unseq(&packets[0]), Ok(None)));
+        assert!(matches!(frag.reassemble_unseq(&packets[1]), Ok(None)));
+        assert_eq!(msg, frag.reassemble_unseq(&packets[2]).unwrap().unwrap());
     }
 
     #[test]
     fn overflow_with_complete_messages() {
-        let mut frag = Fragmentation::unsequenced();
+        let mut frag = Fragmentation::new();
 
         // since these are all completely reassembled messages, the message
         // buffer will be ready to receive new messages afterwards
         for _ in 0..256 {
             let packets = frag.fragment(&MSG1).unwrap().collect::<Vec<_>>();
-            assert_eq!(MSG1, frag.reassemble(&packets[0]).unwrap().unwrap());
+            assert_eq!(MSG1, frag.reassemble_unseq(&packets[0]).unwrap().unwrap());
         }
 
         let msg = "x".repeat(1024);
         let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
         assert_eq!(2, packets.len());
-        assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
-        assert_eq!(msg, frag.reassemble(&packets[1]).unwrap().unwrap());
+        assert!(matches!(frag.reassemble_unseq(&packets[0]), Ok(None)));
+        assert_eq!(msg, frag.reassemble_unseq(&packets[1]).unwrap().unwrap());
     }
 
     #[test]
     fn overflow_with_incomplete_messages() {
-        let mut frag = Fragmentation::unsequenced();
+        let mut frag = Fragmentation::new();
 
         for _ in 0..256 {
             let msg = "x".repeat(1024);
             let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
-            assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
+            assert!(matches!(frag.reassemble_unseq(&packets[0]), Ok(None)));
             // crucially: we *don't* give it packets[1], so that the message is
             // in a partially complete state
         }
@@ -470,15 +492,15 @@ mod tests {
         // reassemble this message
         let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
         assert_eq!(2, packets.len());
-        assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
-        assert!(matches!(frag.reassemble(&packets[1]), Ok(None)));
+        assert!(matches!(frag.reassemble_unseq(&packets[0]), Ok(None)));
+        assert!(matches!(frag.reassemble_unseq(&packets[1]), Ok(None)));
 
         // but after cleanup, this *should* work
         frag.clear();
 
         let packets = frag.fragment(msg.as_bytes()).unwrap().collect::<Vec<_>>();
         assert_eq!(2, packets.len());
-        assert!(matches!(frag.reassemble(&packets[0]), Ok(None)));
-        assert_eq!(msg, frag.reassemble(&packets[1]).unwrap().unwrap());
+        assert!(matches!(frag.reassemble_unseq(&packets[0]), Ok(None)));
+        assert_eq!(msg, frag.reassemble_unseq(&packets[1]).unwrap().unwrap());
     }
 }

@@ -6,10 +6,7 @@ pub use backend::*;
 
 use std::time::Duration;
 
-use aeronet::{
-    protocol::{Fragmentation, Sequenced, Unsequenced},
-    LaneKind, ProtocolVersion,
-};
+use aeronet::{protocol::Fragmentation, LaneKind, ProtocolVersion};
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
 use wtransport::{Connection, RecvStream, SendStream};
@@ -94,8 +91,8 @@ pub async fn connection_channel<const SERVER: bool>(
 /// ```
 #[derive(Debug)]
 pub enum LaneState {
-    UnreliableUnsequenced { frag: Fragmentation<Unsequenced> },
-    UnreliableSequenced { frag: Fragmentation<Sequenced> },
+    UnreliableUnsequenced { frag: Fragmentation },
+    UnreliableSequenced { frag: Fragmentation },
     ReliableUnordered {},
     ReliableOrdered {},
 }
@@ -104,10 +101,10 @@ impl LaneState {
     pub fn new(kind: LaneKind) -> Self {
         match kind {
             LaneKind::UnreliableUnsequenced => Self::UnreliableUnsequenced {
-                frag: Fragmentation::unsequenced(),
+                frag: Fragmentation::new(),
             },
             LaneKind::UnreliableSequenced => Self::UnreliableSequenced {
-                frag: Fragmentation::sequenced(),
+                frag: Fragmentation::new(),
             },
             LaneKind::ReliableUnordered => Self::ReliableUnordered {},
             LaneKind::ReliableOrdered => Self::ReliableOrdered {},
@@ -133,12 +130,21 @@ impl LaneState {
         lane: u8,
     ) -> Result<impl Iterator<Item = Bytes> + 'a, BackendError> {
         match self {
-            Self::UnreliableUnsequenced { frag } => {
-                sending_unreliable::<Unsequenced>(frag, bytes, lane)
-            }
-            Self::UnreliableSequenced { frag } => {
-                sending_unreliable::<Sequenced>(frag, bytes, lane)
-            }
+            Self::UnreliableUnsequenced { frag } | Self::UnreliableSequenced { frag } => Ok(frag
+                .fragment(bytes)
+                .map_err(BackendError::Fragment)?
+                .map(move |frag| {
+                    let mut packet = Vec::new();
+                    let header_start = 1;
+                    let payload_start = header_start + frag.header.len();
+                    packet.reserve_exact(payload_start + frag.payload.len());
+
+                    packet[0] = lane;
+                    packet[header_start..payload_start].copy_from_slice(&frag.header);
+                    packet[payload_start..].copy_from_slice(&frag.payload);
+
+                    Bytes::from(packet)
+                })),
             _ => todo!(),
         }
     }
@@ -146,26 +152,4 @@ impl LaneState {
     pub fn recv(&mut self, packet: &[u8]) -> Result<(), BackendError> {
         todo!()
     }
-}
-
-fn sending_unreliable<'a, S>(
-    frag: &'a mut Fragmentation<S>,
-    bytes: &'a [u8],
-    lane: u8,
-) -> Result<impl Iterator<Item = Bytes> + 'a, BackendError> {
-    Ok(frag
-        .fragment(bytes)
-        .map_err(BackendError::Fragment)?
-        .map(move |frag| {
-            let mut packet = Vec::new();
-            let header_start = 1;
-            let payload_start = 1 + frag.header.len();
-            packet.reserve_exact(payload_start + frag.payload.len());
-
-            packet[0] = lane;
-            packet[header_start..payload_start].copy_from_slice(&frag.header);
-            packet[payload_start..].copy_from_slice(&frag.payload);
-
-            Bytes::from(packet)
-        }))
 }

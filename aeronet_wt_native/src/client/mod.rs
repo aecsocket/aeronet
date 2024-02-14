@@ -108,6 +108,9 @@ where
         let msg_bytes = msg.try_as_bytes().map_err(WebTransportError::<P>::Encode)?;
         let msg_bytes_len = msg_bytes.as_ref().len();
 
+        let lane = msg.lane().variant();
+        self.lanes[lane].sending(msg_bytes.as_ref(), lane);
+
         // TODO
 
         let LaneState::UnreliableUnsequenced { ref mut frag } = &mut self.lanes[0] else {
