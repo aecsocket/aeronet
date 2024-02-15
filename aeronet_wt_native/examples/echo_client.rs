@@ -19,7 +19,7 @@ use bevy_egui::{egui, EguiContexts, EguiPlugin};
 // This can also be an enum, with each variant representing a different lane,
 // and each lane having different guarantees.
 #[derive(Debug, Clone, LaneKey)]
-#[lane_kind(ReliableOrdered)]
+#[lane_kind(UnreliableSequenced)]
 struct AppLane;
 
 // Type of message that is transported between clients and servers.

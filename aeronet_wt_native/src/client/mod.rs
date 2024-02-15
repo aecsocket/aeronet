@@ -2,19 +2,16 @@ mod backend;
 mod config;
 mod wrapper;
 
-use tracing::debug;
 pub use {config::WebTransportClientConfig, wrapper::*};
 
 use std::{fmt::Debug, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
 
-use aeronet::{
-    LaneKey, LaneKind, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
-};
+use aeronet::{LaneKey, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use futures::channel::oneshot;
 
 use crate::{
-    shared::{ConnectionFrontend, LaneState},
+    shared::{ConnectionFrontend, Lanes},
     BackendError, ConnectionInfo,
 };
 
@@ -45,6 +42,8 @@ where
     pub fn connect(
         config: impl Into<WebTransportClientConfig>,
     ) -> (Self, impl Future<Output = ()> + Send) {
+        u8::try_from(P::Lane::VARIANTS.len())
+            .expect("there should be no more than `u8::MAX` lanes");
         let config = config.into();
         let (send_conn, recv_conn) = oneshot::channel();
         let frontend = Self {
@@ -58,26 +57,12 @@ where
     pub fn poll(&mut self) -> Poll<Result<ConnectedClient<P>, WebTransportError<P>>> {
         match self.recv_conn.try_recv() {
             Ok(None) => Poll::Pending,
-            Ok(Some(Ok(inner))) => {
-                let mut lanes = Vec::new();
-                let num_lanes = P::Lane::VARIANTS.len();
-                lanes.reserve_exact(num_lanes);
-                lanes.extend(
-                    P::Lane::VARIANTS
-                        .iter()
-                        .map(|lane| LaneState::new(lane.kind())),
-                );
-
-                Poll::Ready(Ok(ConnectedClient {
-                    conn: inner.conn,
-                    local_addr: inner.local_addr,
-                    // !! TODO
-                    // lanes,
-                    lanes: vec![LaneState::new(LaneKind::UnreliableUnsequenced)],
-                    // !! TODO
-                    _phantom: PhantomData,
-                }))
-            }
+            Ok(Some(Ok(inner))) => Poll::Ready(Ok(ConnectedClient {
+                conn: inner.conn,
+                local_addr: inner.local_addr,
+                lanes: Lanes::new(),
+                _phantom: PhantomData,
+            })),
             Ok(Some(Err(err))) => Poll::Ready(Err(err.into())),
             Err(_) => Poll::Ready(Err(WebTransportError::<P>::backend_closed())),
         }
@@ -89,7 +74,7 @@ where
 pub struct ConnectedClient<P> {
     conn: ConnectionFrontend,
     local_addr: SocketAddr,
-    lanes: Vec<LaneState>,
+    lanes: Lanes<P>,
     _phantom: PhantomData<P>,
 }
 
@@ -106,68 +91,36 @@ where
     pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), WebTransportError<P>> {
         let msg: P::C2S = msg.into();
         let msg_bytes = msg.try_as_bytes().map_err(WebTransportError::<P>::Encode)?;
-        let msg_bytes_len = msg_bytes.as_ref().len();
-
-        let lane = msg.lane().variant();
-        self.lanes[lane].sending(msg_bytes.as_ref(), lane);
-
-        // TODO
-
-        let LaneState::UnreliableUnsequenced { ref mut frag } = &mut self.lanes[0] else {
-            unreachable!()
-        };
-        for packet in frag
-            .fragment(&msg_bytes.as_ref())
-            .map_err(|err| WebTransportError::<P>::Backend(BackendError::Fragment(err)))?
-        {
-            let _ = self.conn.send(packet);
-        }
-
-        /*
-
-        let lane_index = msg.lane().variant();
-        for packet in self.lanes[lane_index].outgoing_packets(msg_bytes.as_ref())? {
-            let packet_len = packet.len();
-            self.conn
-                .send(packet)
-                .map_err(|_| WebTransportError::<P>::backend_closed())?;
-            self.conn.info.total_bytes_sent += packet_len;
-        }*/
-
-        self.conn.info.msg_bytes_sent += msg_bytes_len;
-        self.conn.info.msgs_sent += 1;
-        Ok(())
+        self.lanes
+            .send(msg_bytes.as_ref(), msg.lane(), &mut self.conn)
+            .map_err(WebTransportError::<P>::Backend)
     }
 
     pub fn update(&mut self) -> (Vec<ClientEvent<P>>, Result<(), WebTransportError<P>>) {
-        self.conn.update();
-
-        for lane in &mut self.lanes {
-            lane.update();
-        }
-
         let mut events = Vec::new();
+        let result = self._update(&mut events);
+        (events, result)
+    }
+
+    fn _update(&mut self, events: &mut Vec<ClientEvent<P>>) -> Result<(), WebTransportError<P>> {
+        self.conn.update();
+        self.lanes.update();
 
         while let Some(packet) = self.conn.recv() {
-            // TODO frag and stuff
-            let LaneState::UnreliableUnsequenced { ref mut frag } = self.lanes[0] else {
-                unreachable!()
-            };
-            if let Ok(Some(msg_bytes)) = frag.reassemble(&packet) {
-                let msg = match P::S2C::try_from_bytes(&msg_bytes) {
-                    Ok(msg) => msg,
-                    Err(err) => return (events, Err(WebTransportError::<P>::Decode(err))),
-                };
+            self.conn.info.total_bytes_recv += packet.len();
+            if let Some(msg_bytes) = self
+                .lanes
+                .recv(&packet)
+                .map_err(WebTransportError::<P>::Backend)?
+            {
+                let msg =
+                    P::S2C::try_from_bytes(&msg_bytes).map_err(WebTransportError::<P>::Decode)?;
                 events.push(ClientEvent::Recv { msg });
             }
         }
 
-        (
-            events,
-            self.conn.recv_err().map_err(|err| {
-                debug!("Disconnected: {:#}", aeronet::util::pretty_error(&err));
-                WebTransportError::<P>::Backend(err)
-            }),
-        )
+        self.conn
+            .recv_err()
+            .map_err(WebTransportError::<P>::Backend)
     }
 }

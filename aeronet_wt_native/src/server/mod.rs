@@ -16,7 +16,10 @@ use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
 
-use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo};
+use crate::{
+    shared::{ConnectionFrontend, Lanes},
+    BackendError, ConnectionInfo,
+};
 
 type WebTransportError<P> =
     crate::WebTransportError<<P as TransportProtocol>::S2C, <P as TransportProtocol>::C2S>;
@@ -83,7 +86,7 @@ where
 pub struct OpenServer<P> {
     local_addr: SocketAddr,
     recv_client: mpsc::Receiver<ClientRequestingKey>,
-    clients: SlotMap<ClientKey, Client>,
+    clients: SlotMap<ClientKey, Client<P>>,
     _send_closed: oneshot::Sender<()>,
     _phantom: PhantomData<P>,
 }
@@ -106,17 +109,19 @@ struct ClientRequesting {
     recv_conn: oneshot::Receiver<Result<ConnectionFrontend, BackendError>>,
 }
 
-#[derive(Debug)]
-struct ClientConnected {
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+struct ClientConnected<P> {
     conn: ConnectionFrontend,
-    // TODO lane state
+    lanes: Lanes<P>,
 }
 
-#[derive(Debug)]
-enum Client {
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+enum Client<P> {
     Incoming(ClientIncoming),
     Requesting(ClientRequesting),
-    Connected(ClientConnected),
+    Connected(ClientConnected<P>),
 }
 
 #[derive(Debug, Clone)]
@@ -194,14 +199,12 @@ where
             return Err(WebTransportError::<P>::NoClient(client));
         };
 
-        // TODO not actually how it works cause we have to do frag and stuff
         let msg: P::S2C = msg.into();
-        let buf = msg.try_as_bytes().map_err(WebTransportError::<P>::Encode)?;
-        let buf = Bytes::from(buf.as_ref().to_vec());
+        let msg_bytes = msg.try_as_bytes().map_err(WebTransportError::<P>::Encode)?;
         client
-            .conn
-            .send(buf)
-            .map_err(|_| WebTransportError::<P>::backend_closed())
+            .lanes
+            .send(msg_bytes.as_ref(), msg.lane(), &mut client.conn)
+            .map_err(WebTransportError::<P>::Backend)
     }
 
     pub fn disconnect(&mut self, client: ClientKey) -> Result<(), WebTransportError<P>> {
@@ -247,7 +250,7 @@ where
 
 fn update_client<P>(
     client_key: ClientKey,
-    state: &mut Client,
+    state: &mut Client<P>,
     events: &mut Vec<ServerEvent<P>>,
 ) -> Result<(), Option<WebTransportError<P>>>
 where
@@ -272,7 +275,10 @@ where
         Client::Requesting(client) => match client.recv_conn.try_recv() {
             Ok(None) => Ok(()),
             Ok(Some(Ok(conn))) => {
-                *state = Client::Connected(ClientConnected { conn });
+                *state = Client::Connected(ClientConnected {
+                    conn,
+                    lanes: Lanes::new(),
+                });
                 events.push(ServerEvent::Connected { client: client_key });
                 Ok(())
             }
@@ -281,15 +287,22 @@ where
         },
         Client::Connected(client) => {
             client.conn.update();
+            client.lanes.update();
 
             while let Some(packet) = client.conn.recv() {
-                // TODO this isnt how it actually works but like
-                let msg = P::C2S::try_from_bytes(&packet)
-                    .map_err(|err| Some(WebTransportError::<P>::Decode(err)))?;
-                events.push(ServerEvent::Recv {
-                    client: client_key,
-                    msg,
-                });
+                if let Some(msg_bytes) = client
+                    .lanes
+                    .recv(&packet)
+                    .map_err(|err| Some(WebTransportError::<P>::Backend(err)))?
+                {
+                    let msg = P::C2S::try_from_bytes(&msg_bytes)
+                        .map_err(|err| Some(WebTransportError::<P>::Decode(err)))?;
+                    events.push(ServerEvent::Recv {
+                        client: client_key,
+                        msg,
+                    });
+                }
+                client.conn.info.total_bytes_recv += packet.len();
             }
 
             client
