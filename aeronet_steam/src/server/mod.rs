@@ -166,6 +166,22 @@ where
         }
     }
 
+    pub fn send(
+        &mut self,
+        client: ClientKey,
+        msg: impl Into<P::S2C>,
+    ) -> Result<(), SteamTransportError<P>> {
+        let Some(Client::Connected { info, conn, .. }) = self.clients.get(client) else {
+            return Err(SteamTransportError::<P>::NotConnected { client });
+        };
+
+        conn.send_message(data, send_flags)
+    }
+
+    pub fn disconnect(&mut self, client: ClientKey) -> Result<(), SteamTransportError<P>> {
+        todo!()
+    }
+
     pub fn poll(&mut self) -> Vec<ServerEvent<P>> {
         let mut events = Vec::new();
 
@@ -184,7 +200,7 @@ where
         }
 
         for (client_key, client) in self.clients.iter_mut() {
-            self.update_client(client_key, client, &mut events);
+            Self::poll_client(client_key, client, &mut events);
         }
 
         events
@@ -208,19 +224,17 @@ where
         events.push(ServerEvent::Connecting { client: client_key });
     }
 
-    fn on_connected(
-        &mut self,
-        event: ConnectedEvent<M>,
-        events: &mut Vec<ServerEvent<P>>,
-    ) -> Option<ServerEvent<P>> {
+    fn on_connected(&mut self, event: ConnectedEvent<M>, events: &mut Vec<ServerEvent<P>>) {
         let Some(steam_id) = event.remote().steam_id() else {
             return;
         };
-        let Some(client_key) = *self.id_to_client.get(&steam_id) else {
-            warn!("ID to client map did not contain {steam_id}");
+        let Some(client_key) = self.id_to_client.get(&steam_id) else {
+            warn!("ID to client map did not contain {steam_id:?}");
+            return;
         };
-        let Some(client) = self.clients.get_mut(client_key) else {
+        let Some(client) = self.clients.get_mut(*client_key) else {
             warn!("Client map did not contain key {client_key}");
+            return;
         };
 
         let conn = event.take_connection();
@@ -242,14 +256,16 @@ where
             info,
             conn,
         };
-        events.push(ServerEvent::Connected { client: client_key });
+        events.push(ServerEvent::Connected {
+            client: *client_key,
+        });
     }
 
     fn on_disconnected(&mut self, event: DisconnectedEvent, events: &mut Vec<ServerEvent<P>>) {
         let Some(steam_id) = event.remote().steam_id() else {
             return;
         };
-        let Some(client) = self.steam_id_to_client.remove(&steam_id) else {
+        let Some(client) = self.id_to_client.remove(&steam_id) else {
             return;
         };
         let Some(_) = self.clients.remove(client) else {
@@ -262,7 +278,7 @@ where
         });
     }
 
-    fn update_client(
+    fn poll_client(
         client_key: ClientKey,
         client: &mut Client<M>,
         events: &mut Vec<ServerEvent<P>>,

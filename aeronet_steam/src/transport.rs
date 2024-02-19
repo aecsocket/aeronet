@@ -93,8 +93,8 @@ pub enum SteamTransportError<S: TryAsBytes, R: TryFromBytes> {
     AlreadyConnected,
     /// Attempted to perform an action which requires a connection, while no
     /// connection is established.
-    #[error("client not connected")]
-    NotConnected,
+    #[error("client {client} not connected")]
+    NotConnected { client: ClientKey },
     /// Failed to start connecting the client to the given remote.
     #[error("client failed to start connecting")]
     StartConnecting,

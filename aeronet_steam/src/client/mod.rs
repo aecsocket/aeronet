@@ -117,4 +117,14 @@ where
     pub fn info(&self) -> ConnectionInfo {
         self.info.clone()
     }
+
+    pub fn poll(&mut self) -> (Vec<ClientEvent<P>>, Result<(), SteamTransportError<P>>) {
+        let mut events = Vec::new();
+        let result = self._poll(&mut events);
+        (events, result)
+    }
+
+    fn _poll(&mut self, events: &mut Vec<ClientEvent<P>>) -> Result<(), SteamTransportError<P>> {
+        todo!()
+    }
 }
