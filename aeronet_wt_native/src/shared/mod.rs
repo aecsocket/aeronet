@@ -3,13 +3,15 @@ mod frontend;
 mod negotiate;
 
 pub use backend::*;
+use bitcode::{Decode, Encode};
 use derivative::Derivative;
+use integer_encoding::VarInt;
 
 use std::{marker::PhantomData, time::Duration};
 
 use aeronet::{
-    protocol::Fragmentation, LaneKey, LaneKind, LaneProtocol, ProtocolVersion, TryAsBytes,
-    TryFromBytes,
+    protocol::{Fragmentation, Sequenced, Unsequenced, FRAG_HEADER_SIZE, MTU},
+    LaneKey, LaneKind, LaneProtocol, ProtocolVersion, TryAsBytes, TryFromBytes,
 };
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
@@ -92,34 +94,30 @@ pub struct Lanes<P> {
     _phantom: PhantomData<P>,
 }
 
+#[derive(Debug, Clone, Encode, Decode)]
+struct LaneHeader {
+    lane: u64,
+}
+
 #[derive(Debug)]
 enum LaneState {
-    UnreliableUnsequenced { frag: Fragmentation },
-    UnreliableSequenced { frag: Fragmentation },
+    UnreliableUnsequenced { frag: Fragmentation<Unsequenced> },
+    UnreliableSequenced { frag: Fragmentation<Sequenced> },
     ReliableUnordered {},
     ReliableOrdered {},
 }
 
 impl<P: LaneProtocol> Lanes<P> {
-    pub fn validate_protocol() {
-        assert!(
-            P::Lane::VARIANTS.len() < usize::from(u8::MAX),
-            "assertion failed: number of lanes in protocol < u8::MAX",
-        );
-    }
-
     pub fn new() -> Self {
-        Self::validate_protocol();
-
+        u64::try_from(P::Lane::VARIANTS.len()).expect("must be no more than `u64::MAX` lanes");
         let mut lanes = Vec::new();
-        let num_lanes = P::Lane::VARIANTS.len();
-        lanes.reserve_exact(num_lanes);
+        lanes.reserve_exact(P::Lane::VARIANTS.len());
         lanes.extend(P::Lane::VARIANTS.iter().map(|lane| match lane.kind() {
             LaneKind::UnreliableUnsequenced => LaneState::UnreliableUnsequenced {
-                frag: Fragmentation::new(),
+                frag: Fragmentation::unsequenced(),
             },
             LaneKind::UnreliableSequenced => LaneState::UnreliableSequenced {
-                frag: Fragmentation::new(),
+                frag: Fragmentation::sequenced(),
             },
             LaneKind::ReliableUnordered => LaneState::ReliableUnordered {},
             LaneKind::ReliableOrdered => LaneState::ReliableOrdered {},
@@ -134,8 +132,8 @@ impl<P: LaneProtocol> Lanes<P> {
     pub fn update(&mut self) {
         for lane in &mut self.lanes {
             match lane {
-                LaneState::UnreliableUnsequenced { frag }
-                | LaneState::UnreliableSequenced { frag } => frag.clean_up(),
+                LaneState::UnreliableUnsequenced { frag } => frag.clean_up(),
+                LaneState::UnreliableSequenced { frag } => frag.clean_up(),
                 LaneState::ReliableUnordered {} | LaneState::ReliableOrdered {} => {}
             }
         }
@@ -147,43 +145,54 @@ impl<P: LaneProtocol> Lanes<P> {
         lane: P::Lane,
         conn: &mut ConnectionFrontend,
     ) -> Result<(), BackendError> {
-        for packet in self.create_outgoing(msg, lane)? {
+        self.create_outgoing(msg, lane, |packet| {
             conn.info.total_bytes_sent += packet.len();
             let _ = conn.send(packet);
-        }
+        })?;
         conn.info.msg_bytes_sent += msg.len();
         conn.info.msgs_sent += 1;
         Ok(())
     }
 
-    fn create_outgoing<'a>(
-        &'a mut self,
-        msg: &'a [u8],
+    fn create_outgoing(
+        &mut self,
+        msg: &[u8],
         lane: P::Lane,
-    ) -> Result<impl Iterator<Item = Bytes> + 'a, BackendError> {
-        let lane_state = self.lanes
+        f: impl FnMut(Bytes),
+    ) -> Result<(), BackendError> {
+        let lane_state = self
+            .lanes
             .get_mut(lane.variant())
-            .expect("P::Lane should not violate contract: `P::Lane::variant` should be in range of `P::Lane::VARIANTS`");
+            .expect("`P::Lane::variant` should be a valid index into `P::Lane::VARIANTS`");
+        let lane = u64::try_from(lane.variant()).expect("should be validated on construction");
+        let lane_header = lane.encode_var_vec();
+
+        fn unreliable<'a, S>(
+            msg: &'a [u8],
+            lane_header: &[u8],
+            frag: &mut Fragmentation<S>,
+            f: impl FnMut(Bytes),
+        ) -> Result<(), BackendError> {
+            let payload_size = MTU - lane_header.len() - FRAG_HEADER_SIZE;
+            frag.fragment(msg, payload_size)
+                .map_err(BackendError::Fragment)?
+                .map(|frag_packet| {
+                    let frag_start = lane_header.len();
+                    let payload_start = frag_start + FRAG_HEADER_SIZE;
+                    let mut packet =
+                        vec![0; payload_start + frag_packet.payload.len()].into_boxed_slice();
+                    packet[..frag_start].copy_from_slice(lane_header);
+                    packet[frag_start..payload_start].copy_from_slice(&frag_packet.header);
+                    packet[payload_start..].copy_from_slice(&frag_packet.payload);
+                    Bytes::from(packet.into_vec())
+                })
+                .for_each(f);
+            Ok(())
+        }
 
         match lane_state {
-            LaneState::UnreliableUnsequenced { frag } | LaneState::UnreliableSequenced { frag } => {
-                Ok(frag
-                    .fragment(msg)
-                    .map_err(BackendError::Fragment)?
-                    .map(move |frag| {
-                        let header_start = 1;
-                        let payload_start = header_start + frag.header.len();
-                        let len = payload_start + frag.payload.len();
-                        let mut packet = vec![0; len].into_boxed_slice();
-
-                        packet[0] = u8::try_from(lane.variant())
-                            .expect("should be validated on construction");
-                        packet[header_start..payload_start].copy_from_slice(&frag.header);
-                        packet[payload_start..].copy_from_slice(&frag.payload);
-
-                        Bytes::from(packet)
-                    }))
-            }
+            LaneState::UnreliableUnsequenced { frag } => unreliable(msg, &lane_header, frag, f),
+            LaneState::UnreliableSequenced { frag } => unreliable(msg, &lane_header, frag, f),
             _ => todo!(),
         }
     }
@@ -192,52 +201,38 @@ impl<P: LaneProtocol> Lanes<P> {
         &mut self,
         conn: &mut ConnectionFrontend,
     ) -> Result<Option<R>, WebTransportError<S, R>> {
+        while let Some(packet) = conn.recv() {
+            conn.info.total_bytes_recv += packet.len();
+            if let Some(msg_bytes) = self
+                .recv_incoming(&packet)
+                .map_err(WebTransportError::<S, R>::Backend)?
+            {
+                let msg =
+                    R::try_from_bytes(&msg_bytes).map_err(WebTransportError::<S, R>::Decode)?;
+                conn.info.msg_bytes_recv += msg_bytes.len();
+                return Ok(Some(msg));
+            }
+        }
+        Ok(None)
     }
 
     fn recv_incoming(&mut self, packet: &[u8]) -> Result<Option<Bytes>, BackendError> {
-        let lane_index = *packet.get(0).ok_or_else(|| todo!())?;
+        let (lane_index, bytes_read) = u64::decode_var(packet).ok_or_else(|| todo!())?;
         let lane_state = self
             .lanes
-            .get_mut(usize::from(lane_index))
+            .get_mut(usize::try_from(lane_index).map_err(|_| todo!())?)
             .ok_or_else(|| todo!())?;
 
-        let packet = &packet[1..];
+        let packet = &packet[bytes_read..];
         match lane_state {
-            LaneState::UnreliableUnsequenced { frag } => frag
-                .reassemble_unseq(packet)
-                .map_err(BackendError::Reassemble),
-            LaneState::UnreliableSequenced { frag } => frag
-                .reassemble_seq(packet)
-                .map_err(BackendError::Reassemble),
+            LaneState::UnreliableUnsequenced { frag } => {
+                frag.reassemble(packet).map_err(BackendError::Reassemble)
+            }
+            LaneState::UnreliableSequenced { frag } => {
+                frag.reassemble(packet).map_err(BackendError::Reassemble)
+            }
             LaneState::ReliableUnordered {} => todo!(),
             LaneState::ReliableOrdered {} => todo!(),
-        }
-    }
-}
-
-pub struct Recv<'a, P, S, R> {
-    conn: &'a mut ConnectionFrontend,
-    lanes: &'a mut LaneState,
-    _phantom: PhantomData<(P, S, R)>,
-}
-
-impl<'a, P, S, R> Iterator for Recv<'a, P, S, R> {
-    type Item = R;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(packet) = self.conn.recv() {
-            if let Some(msg_bytes) = self
-                .lanes
-                .recv(&packet)
-                .map_err(WebTransportError::<P>::Backend)?
-            {
-                let msg =
-                    P::S2C::try_from_bytes(&msg_bytes).map_err(WebTransportError::<P>::Decode)?;
-                self.conn.info.msg_bytes_recv += msg_bytes.len();
-
-                events.push(ClientEvent::Recv { msg });
-            }
-            conn.info.total_bytes_recv += packet.len();
         }
     }
 }

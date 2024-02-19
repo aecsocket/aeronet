@@ -91,6 +91,7 @@ name = "aeronet"
 version = "0.5.0"
 dependencies = [
  "aeronet_derive",
+ "assert_matches",
  "bevy_app",
  "bevy_ecs",
  "bitcode",
@@ -99,6 +100,7 @@ dependencies = [
  "rand",
  "rand_distr",
  "slotmap",
+ "static_assertions",
  "thiserror",
  "tokio",
 ]
@@ -137,10 +139,12 @@ dependencies = [
  "bevy",
  "bevy_ecs",
  "bevy_egui",
+ "bitcode",
  "bytes",
  "derivative",
  "either",
  "futures",
+ "integer-encoding",
  "rcgen",
  "ring 0.17.7",
  "slotmap",
@@ -333,6 +337,12 @@ dependencies = [
  "quote",
  "syn 1.0.109",
 ]
+
+[[package]]
+name = "assert_matches"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
 
 [[package]]
 name = "async-broadcast"
@@ -2450,6 +2460,12 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
 ]
+
+[[package]]
+name = "integer-encoding"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "924df4f0e24e2e7f9cdd90babb0b96f93b20f3ecfa949ea9e6613756b8c8e1bf"
 
 [[package]]
 name = "io-kit-sys"

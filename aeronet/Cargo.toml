@@ -34,8 +34,12 @@ bytes.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
 bitcode.workspace = true
+static_assertions.workspace = true
 
 bevy_ecs = { workspace = true, optional = true }
 bevy_app = { workspace = true, optional = true }
 
 tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }
+
+[dev-dependencies]
+assert_matches.workspace = true

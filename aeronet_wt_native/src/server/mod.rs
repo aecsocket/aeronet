@@ -11,7 +11,6 @@ use std::{collections::HashMap, future::Future, marker::PhantomData, net::Socket
 use aeronet::{
     ClientKey, ClientState, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
 };
-use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
@@ -288,21 +287,11 @@ where
         Client::Connected(client) => {
             client.conn.update();
             client.lanes.update();
-
-            while let Some(packet) = client.conn.recv() {
-                if let Some(msg_bytes) = client
-                    .lanes
-                    .recv(&packet)
-                    .map_err(|err| Some(WebTransportError::<P>::Backend(err)))?
-                {
-                    let msg = P::C2S::try_from_bytes(&msg_bytes)
-                        .map_err(|err| Some(WebTransportError::<P>::Decode(err)))?;
-                    events.push(ServerEvent::Recv {
-                        client: client_key,
-                        msg,
-                    });
-                }
-                client.conn.info.total_bytes_recv += packet.len();
+            while let Some(msg) = client.lanes.recv(&mut client.conn)? {
+                events.push(ServerEvent::Recv {
+                    client: client_key,
+                    msg,
+                });
             }
 
             client

@@ -105,18 +105,8 @@ where
     fn _update(&mut self, events: &mut Vec<ClientEvent<P>>) -> Result<(), WebTransportError<P>> {
         self.conn.update();
         self.lanes.update();
-
-        while let Some(packet) = self.conn.recv() {
-            self.conn.info.total_bytes_recv += packet.len();
-            if let Some(msg_bytes) = self
-                .lanes
-                .recv(&packet)
-                .map_err(WebTransportError::<P>::Backend)?
-            {
-                let msg =
-                    P::S2C::try_from_bytes(&msg_bytes).map_err(WebTransportError::<P>::Decode)?;
-                events.push(ClientEvent::Recv { msg });
-            }
+        while let Some(msg) = self.lanes.recv(&mut self.conn)? {
+            events.push(ClientEvent::Recv { msg });
         }
 
         self.conn
