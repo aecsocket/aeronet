@@ -20,8 +20,9 @@ all-features = true
 ## Enables [`bevy`](https://docs.rs/bevy) support.
 bevy = ["dep:bevy_ecs", "dep:bevy_app"]
 
-## Provides a `Runtime` implementation based on Bevy's async task pool.
-bevy-async = ["bevy", "dep:bevy_tasks", "dep:async-io"]
+## Allows storing an async [`tokio`](https://docs.rs/tokio) runtime in a
+## [`bevy`](https://docs.rs/bevy) resource.
+bevy-tokio-rt = ["bevy", "dep:tokio"]
 
 [dependencies]
 aeronet_derive.workspace = true
@@ -38,8 +39,7 @@ static_assertions.workspace = true
 bevy_ecs = { workspace = true, optional = true }
 bevy_app = { workspace = true, optional = true }
 
-bevy_tasks = { workspace = true, optional = true }
-async-io = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }
 
 [dev-dependencies]
 assert_matches.workspace = true

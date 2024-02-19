@@ -27,7 +27,13 @@ test = false
 doc = false
 
 [[bin]]
-name = "negotiation"
-path = "fuzz_targets/negotiation.rs"
+name = "negotiate_req"
+path = "fuzz_targets/negotiate_req.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "negotiate_resp"
+path = "fuzz_targets/negotiate_resp.rs"
 test = false
 doc = false

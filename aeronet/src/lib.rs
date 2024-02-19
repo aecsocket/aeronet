@@ -9,7 +9,6 @@ mod condition;
 mod connection_info;
 mod lane;
 mod message;
-mod runtime;
 mod server;
 mod transport;
 
@@ -17,6 +16,11 @@ pub mod protocol;
 pub mod util;
 
 pub use {
-    client::*, condition::*, connection_info::*, lane::*, message::*, runtime::*, server::*,
-    transport::*,
+    client::*, condition::*, connection_info::*, lane::*, message::*, server::*, transport::*,
 };
+
+#[cfg(feature = "bevy-tokio-rt")]
+mod tokio_rt;
+
+#[cfg(feature = "bevy-tokio-rt")]
+pub use tokio_rt::*;

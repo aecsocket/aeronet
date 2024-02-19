@@ -44,7 +44,7 @@ ahash = "0.8.7"
 anyhow = "1.0.79"
 rand = "0.8.5"
 rand_distr = "0.4.3"
-bitcode = "0.5.0"
+bitcode = "0.5.1"
 integer-encoding = "4.0.0"
 static_assertions = "1.1.0"
 assert_matches = "1.5.0"
@@ -56,12 +56,10 @@ const_format = "0.2.32"
 
 futures = "0.3.30"
 crossbeam-channel = "0.5.11"
-async-io = "2.3.1"
 tokio = { version = "1.36.0", default-features = false }
 
 bevy_ecs = { version = "0.13.0", default-features = false }
 bevy_app = { version = "0.13.0", default-features = false }
-bevy_tasks = { version = "0.13.0", default-features = false }
 bevy = "0.13.0"
 bevy_egui = "0.24.0"
 

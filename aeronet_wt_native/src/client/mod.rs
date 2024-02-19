@@ -4,11 +4,9 @@ mod wrapper;
 
 pub use {config::WebTransportClientConfig, wrapper::*};
 
-use std::{
-    fmt::Debug, future::Future, marker::PhantomData, net::SocketAddr, sync::Arc, task::Poll,
-};
+use std::{fmt::Debug, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
 
-use aeronet::{LaneProtocol, OnLane, Runtime, TransportProtocol, TryAsBytes, TryFromBytes};
+use aeronet::{LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use futures::channel::oneshot;
 
@@ -42,7 +40,6 @@ where
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
     pub fn connect(
-        runtime: Arc<dyn Runtime>,
         config: impl Into<WebTransportClientConfig>,
     ) -> (Self, impl Future<Output = ()> + Send) {
         let config = config.into();
@@ -51,7 +48,7 @@ where
             recv_conn,
             _phantom: PhantomData,
         };
-        let backend = backend::connect(runtime, config, send_conn);
+        let backend = backend::connect(config, send_conn);
         (frontend, backend)
     }
 

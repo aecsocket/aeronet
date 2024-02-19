@@ -1,6 +1,3 @@
-use std::sync::Arc;
-
-use aeronet::Runtime;
 use futures::channel::oneshot;
 use tracing::debug;
 use wtransport::Endpoint;
@@ -10,7 +7,6 @@ use crate::{shared, BackendError, WebTransportClientConfig};
 use super::ConnectedClientInner;
 
 pub(super) async fn connect(
-    runtime: Arc<dyn Runtime>,
     config: WebTransportClientConfig,
     send_conn: oneshot::Sender<Result<ConnectedClientInner, BackendError>>,
 ) {
@@ -53,5 +49,5 @@ pub(super) async fn connect(
         conn: chan_frontend,
         local_addr,
     }));
-    shared::handle_connection(runtime.as_ref(), conn, chan_backend).await
+    shared::handle_connection(conn, chan_backend).await
 }

@@ -18,7 +18,7 @@ all-features = true
 
 [features]
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = ["dep:bevy_ecs", "aeronet/bevy-async"]
+bevy = ["dep:bevy_ecs", "aeronet/bevy-tokio-rt"]
 
 ## Enables [`rustls/dangerous-configuration`](https://docs.rs/rustls/latest/rustls/#crate-features).
 dangerous-configuration = ["wtransport/dangerous-configuration"]
@@ -37,13 +37,13 @@ bitcode.workspace = true
 integer-encoding.workspace = true
 wtransport.workspace = true
 
+tokio = { workspace = true, features = ["rt"] }
 bevy_ecs = { workspace = true, optional = true }
 
 [dev-dependencies]
 bevy.workspace = true
 bevy_egui.workspace = true
 anyhow.workspace = true
-tokio = { workspace = true }
 
 base64.workspace = true
 rcgen.workspace = true

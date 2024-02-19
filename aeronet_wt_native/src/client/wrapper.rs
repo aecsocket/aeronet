@@ -1,8 +1,7 @@
-use std::{future::Future, sync::Arc, task::Poll};
+use std::{future::Future, task::Poll};
 
 use aeronet::{
-    ClientState, ClientTransport, LaneProtocol, OnLane, Runtime, TransportProtocol, TryAsBytes,
-    TryFromBytes,
+    ClientState, ClientTransport, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 
@@ -33,23 +32,21 @@ where
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
     pub fn connect_new(
-        runtime: Arc<dyn Runtime>,
         config: impl Into<WebTransportClientConfig>,
     ) -> (Self, impl Future<Output = ()> + Send) {
         let config = config.into();
-        let (frontend, backend) = ConnectingClient::connect(runtime, config);
+        let (frontend, backend) = ConnectingClient::connect(config);
         (Self::Connecting(frontend), backend)
     }
 
     pub fn connect(
         &mut self,
-        runtime: Arc<dyn Runtime>,
         config: impl Into<WebTransportClientConfig>,
     ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
         match self {
             Self::Disconnected => {
                 let config = config.into();
-                let (this, backend) = Self::connect_new(runtime, config);
+                let (this, backend) = Self::connect_new(config);
                 *self = this;
                 Ok(backend)
             }
