@@ -127,8 +127,10 @@ pub enum WebTransportError<S: TryAsBytes, R: TryFromBytes> {
     AlreadyClosed,
     #[error("server not open")]
     NotOpen,
-    #[error("no client with key {0}")]
-    NoClient(ClientKey),
+    #[error("no client with key {client}")]
+    NoClient { client: ClientKey },
+    #[error("client {client} is already connected")]
+    ClientAlreadyConnected { client: ClientKey },
     #[error("already responded to this session request")]
     AlreadyRespondedToRequest,
 }

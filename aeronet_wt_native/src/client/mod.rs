@@ -95,13 +95,13 @@ where
             .map_err(WebTransportError::<P>::Backend)
     }
 
-    pub fn update(&mut self) -> (Vec<ClientEvent<P>>, Result<(), WebTransportError<P>>) {
+    pub fn poll(&mut self) -> (Vec<ClientEvent<P>>, Result<(), WebTransportError<P>>) {
         let mut events = Vec::new();
-        let result = self._update(&mut events);
+        let result = self._poll(&mut events);
         (events, result)
     }
 
-    fn _update(&mut self, events: &mut Vec<ClientEvent<P>>) -> Result<(), WebTransportError<P>> {
+    fn _poll(&mut self, events: &mut Vec<ClientEvent<P>>) -> Result<(), WebTransportError<P>> {
         self.conn.update();
         self.lanes.update();
         while let Some(msg) = self.lanes.recv(&mut self.conn)? {

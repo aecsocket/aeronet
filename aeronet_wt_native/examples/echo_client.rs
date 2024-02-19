@@ -3,12 +3,12 @@
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
-    BevyRuntime, ClientState, ClientTransport, ClientTransportPlugin, FromServer, LaneKey,
-    LaneProtocol, LocalClientConnected, LocalClientDisconnected, Message, OnLane, ProtocolVersion,
+    ClientState, ClientTransport, ClientTransportPlugin, FromServer, LaneKey, LaneProtocol,
+    LocalClientConnected, LocalClientDisconnected, Message, OnLane, ProtocolVersion, TokioRuntime,
     TransportProtocol, TryAsBytes, TryFromBytes, VersionedProtocol,
 };
 use aeronet_wt_native::{WebTransportClient, WebTransportClientConfig};
-use bevy::{log::LogPlugin, prelude::*, tasks::AsyncComputeTaskPool};
+use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 // protocol
@@ -19,7 +19,7 @@ use bevy_egui::{egui, EguiContexts, EguiPlugin};
 // This can also be an enum, with each variant representing a different lane,
 // and each lane having different guarantees.
 #[derive(Debug, Clone, Copy, LaneKey)]
-#[lane_kind(ReliableOrdered)]
+#[lane_kind(UnreliableSequenced)]
 struct AppLane;
 
 // Type of message that is transported between clients and servers.
@@ -84,6 +84,7 @@ fn main() {
             EguiPlugin,
             ClientTransportPlugin::<AppProtocol, WebTransportClient<_>>::default(),
         ))
+        .init_resource::<TokioRuntime>()
         .init_resource::<WebTransportClient<AppProtocol>>()
         .init_resource::<UiState>()
         .add_systems(Update, (on_connected, on_disconnected, on_recv, ui).chain())
@@ -128,6 +129,7 @@ fn on_recv(
 }
 
 fn ui(
+    runtime: Res<TokioRuntime>,
     mut egui: EguiContexts,
     mut client: ResMut<WebTransportClient<AppProtocol>>,
     mut ui_state: ResMut<UiState>,
@@ -143,7 +145,7 @@ fn ui(
                     .inner;
                 if let Some(url) = url {
                     ui_state.log.push(format!("Connecting to {url}"));
-                    connect(client.as_mut(), url);
+                    connect(runtime.as_ref(), client.as_mut(), url);
                 }
             });
 
@@ -180,6 +182,10 @@ fn ui(
                 ui.label(format!("{:?}", info.rtt));
                 ui.end_row();
 
+                ui.label("Messages sent/received");
+                ui.label(format!("{} sent / {} recv", info.msgs_sent, info.msgs_recv));
+                ui.end_row();
+
                 ui.label("Message bytes sent/received");
                 ui.label(format!(
                     "{} sent / {} recv",
@@ -198,10 +204,9 @@ fn ui(
     });
 }
 
-fn connect(client: &mut WebTransportClient<AppProtocol>, url: String) {
+fn connect(runtime: &TokioRuntime, client: &mut WebTransportClient<AppProtocol>, url: String) {
     let backend = client
         .connect(
-            BevyRuntime::arc(),
             WebTransportClientConfig::builder()
                 .wt_config(
                     aeronet_wt_native::wtransport::ClientConfig::builder()
@@ -214,7 +219,7 @@ fn connect(client: &mut WebTransportClient<AppProtocol>, url: String) {
                 .target(url),
         )
         .expect("backend should be disconnected");
-    AsyncComputeTaskPool::get().spawn(backend).detach();
+    runtime.spawn(backend);
 }
 
 pub fn text_input(ui: &mut egui::Ui, text: &mut String) -> Option<String> {

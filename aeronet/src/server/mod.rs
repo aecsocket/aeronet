@@ -82,7 +82,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// this function, the transport is guaranteed to be in this new state. Only
     /// up to one state-changing event will be produced by this function per
     /// function call.
-    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>>;
+    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>>;
 }
 
 /// State of a [`ServerTransport`].

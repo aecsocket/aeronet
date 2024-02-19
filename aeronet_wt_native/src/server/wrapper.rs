@@ -8,7 +8,7 @@ use derivative::Derivative;
 use either::Either;
 
 use crate::{
-    ClientRequestingInfo, ConnectionInfo, OpenServer, OpeningServer, WebTransportServerConfig,
+    ConnectionInfo, OpenServer, OpeningServer, RemoteRequestingInfo, WebTransportServerConfig,
 };
 
 use super::WebTransportError;
@@ -109,7 +109,7 @@ where
 
     type OpenInfo = ServerOpenInfo;
 
-    type ConnectingInfo = ClientRequestingInfo;
+    type ConnectingInfo = RemoteRequestingInfo;
 
     type ConnectedInfo = ConnectionInfo;
 
@@ -154,7 +154,7 @@ where
         }
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>> {
+    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>> {
         match self {
             Self::Closed => vec![],
             Self::Opening(server) => match server.poll() {
@@ -168,14 +168,7 @@ where
                     vec![ServerEvent::Closed { reason }]
                 }
             },
-            Self::Open(server) => match server.update() {
-                (events, Ok(())) => events,
-                (mut events, Err(reason)) => {
-                    *self = Self::Closed;
-                    events.push(ServerEvent::Closed { reason });
-                    events
-                }
-            },
+            Self::Open(server) => server.poll(),
         }
         .into_iter()
     }

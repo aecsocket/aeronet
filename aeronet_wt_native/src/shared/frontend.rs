@@ -12,7 +12,6 @@ impl ConnectionFrontend {
     }
 
     pub fn send(&mut self, msg: Bytes) -> Result<(), BackendError> {
-        self.info.total_bytes_sent += msg.len();
         self.send_c2s
             .unbounded_send(msg)
             .map_err(|_| BackendError::Closed)
@@ -21,10 +20,7 @@ impl ConnectionFrontend {
     pub fn recv(&mut self) -> Option<Bytes> {
         match self.recv_s2c.try_next() {
             Ok(None) | Err(_) => None,
-            Ok(Some(msg)) => {
-                self.info.total_bytes_recv += msg.len();
-                Some(msg)
-            }
+            Ok(Some(msg)) => Some(msg),
         }
     }
 

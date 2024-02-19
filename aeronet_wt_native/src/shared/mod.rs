@@ -145,7 +145,9 @@ impl<P: LaneProtocol> Lanes<P> {
         lane: P::Lane,
         conn: &mut ConnectionFrontend,
     ) -> Result<(), BackendError> {
+        tracing::info!("msg len = {}", msg.len());
         self.create_outgoing(msg, lane, |packet| {
+            tracing::info!("pkt len = {}", packet.len());
             conn.info.total_bytes_sent += packet.len();
             let _ = conn.send(packet);
         })?;
@@ -210,6 +212,7 @@ impl<P: LaneProtocol> Lanes<P> {
                 let msg =
                     R::try_from_bytes(&msg_bytes).map_err(WebTransportError::<S, R>::Decode)?;
                 conn.info.msg_bytes_recv += msg_bytes.len();
+                conn.info.msgs_recv += 1;
                 return Ok(Some(msg));
             }
         }

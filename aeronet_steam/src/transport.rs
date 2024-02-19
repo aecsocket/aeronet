@@ -1,15 +1,47 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, time::Duration};
 
-use aeronet::{ByteStats, MessageStats, TryAsBytes, TryFromBytes};
+use aeronet::{ByteStats, ClientKey, MessageStats, Rtt, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use steamworks::{networking_types::NetConnectionEnd, SteamError};
 
-#[derive(Debug, Clone, Default)]
+/// Statistics on a Steamworks client/server connection.
+#[derive(Debug, Clone)]
 pub struct ConnectionInfo {
+    /// See [`Rtt`].
+    pub rtt: Duration,
+    /// See [`MessageStats::msgs_sent`].
     pub msgs_sent: usize,
+    /// See [`MessageStats::msgs_recv`].
     pub msgs_recv: usize,
-    pub bytes_sent: usize,
-    pub bytes_recv: usize,
+    /// See [`ByteStats::msg_bytes_sent`].
+    pub msg_bytes_sent: usize,
+    /// See [`ByteStats::msg_bytes_recv`].
+    pub msg_bytes_recv: usize,
+    /// See [`ByteStats::total_bytes_sent`].
+    pub total_bytes_sent: usize,
+    /// See [`ByteStats::total_bytes_recv`].
+    pub total_bytes_recv: usize,
+}
+
+impl ConnectionInfo {
+    #[must_use]
+    pub fn new(rtt: Duration) -> Self {
+        Self {
+            rtt,
+            msgs_sent: 0,
+            msgs_recv: 0,
+            msg_bytes_sent: 0,
+            msg_bytes_recv: 0,
+            total_bytes_sent: 0,
+            total_bytes_recv: 0,
+        }
+    }
+}
+
+impl Rtt for ConnectionInfo {
+    fn rtt(&self) -> Duration {
+        self.rtt
+    }
 }
 
 impl MessageStats for ConnectionInfo {
@@ -23,12 +55,20 @@ impl MessageStats for ConnectionInfo {
 }
 
 impl ByteStats for ConnectionInfo {
-    fn bytes_sent(&self) -> usize {
-        self.bytes_sent
+    fn msg_bytes_recv(&self) -> usize {
+        self.msg_bytes_recv
     }
 
-    fn bytes_recv(&self) -> usize {
-        self.bytes_recv
+    fn msg_bytes_sent(&self) -> usize {
+        self.msg_bytes_sent
+    }
+
+    fn total_bytes_sent(&self) -> usize {
+        self.total_bytes_sent
+    }
+
+    fn total_bytes_recv(&self) -> usize {
+        self.total_bytes_recv
     }
 }
 
@@ -39,11 +79,7 @@ impl ByteStats for ConnectionInfo {
     // TODO: `steamworks::InvalidHandle` should derive Clone
     // Clone(bound = "<P::Send as TryAsBytes>::Error: Clone, <P::Recv as TryFromBytes>::Error: Clone")
 )]
-pub enum SteamTransportError<S, R>
-where
-    S: TryAsBytes,
-    R: TryFromBytes,
-{
+pub enum SteamTransportError<S: TryAsBytes, R: TryFromBytes> {
     #[error("internal error")]
     InternalError,
 
@@ -81,15 +117,12 @@ where
     CreateListenSocket,
 
     // server-side clients
-    /// Attempted to perform an action on a client which not connected.
-    #[error("no client with the given key")]
-    NoClient,
-    #[error("client not connecting")]
-    NotConnecting,
-    #[error("client session already accepted/rejected")]
-    SessionAlreadyDecided,
-    #[error("failed to accept/reject client")]
-    DecideSession(#[source] SteamError),
+    #[error("no client with key {client}")]
+    NoClient { client: ClientKey },
+    #[error("client {client} is already connected")]
+    ClientAlreadyConnected { client: ClientKey },
+    #[error("already responded to this session request")]
+    AlreadyRespondedToRequest,
 
     // connect
     /// Failed to configure the lanes of the connection.
@@ -108,3 +141,5 @@ where
     #[error("failed to deserialize message")]
     Deserialize(#[source] R::Error),
 }
+
+pub enum BackendError {}

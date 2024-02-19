@@ -1,42 +1,30 @@
 use std::net::SocketAddr;
 
-use aeronet::{LaneProtocol, TryFromBytes, TryAsBytes, OnLane, ClientKey, ServerTransport};
+use aeronet::{
+    ClientKey, ClientState, LaneProtocol, OnLane, ServerState, ServerTransport, TransportProtocol,
+    TryAsBytes, TryFromBytes,
+};
 use derivative::Derivative;
-use steamworks::{ServerManager, Manager};
+use steamworks::{Manager, ServerManager};
 
-use crate::{OpenServer, RemoteConnectingInfo, RemoteConnectedInfo};
+use crate::{OpenServer, RemoteConnectedInfo, RemoteConnectingInfo};
 
-use super::{SteamTransportError, ServerState, ClientState, ServerEvent};
+use super::{ServerEvent, SteamTransportError};
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub enum SteamServerTransport<P, M = ServerManager>
-where
-    P: LaneProtocol,
-    P::C2S: TryFromBytes,
-    P::S2C: TryAsBytes + OnLane<Lane = P::Lane>,
-    M: Manager + Send + Sync + 'static,
-{
+pub enum SteamServerTransport<P: TransportProtocol, M = ServerManager> {
     #[derivative(Default)]
     Closed,
     Open(OpenServer<P, M>),
 }
 
-// impl<P, M> bevy::prelude::Resource for SteamServerTransport<P, M>
-// where
-//     P: LaneProtocol,
-//     P::C2S: TryFromBytes,
-//     P::S2C: TryAsBytes + OnLane<Lane = P::Lane>,
-//     M: Manager + Send + Sync + 'static,
-// {
-// }
-
 impl<P, M> SteamServerTransport<P, M>
 where
     P: LaneProtocol,
-    P::C2S: TryFromBytes,
-    P::S2C: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     M: Manager + Send + Sync + 'static,
 {
     pub fn open_new_ip(
@@ -48,9 +36,9 @@ where
 
     pub fn open_new_p2p(
         steam: &steamworks::Client<M>,
-        port: i32,
+        virtual_port: i32,
     ) -> Result<Self, SteamTransportError<P>> {
-        OpenServer::open_p2p(steam, port).map(Self::Open)
+        OpenServer::open_p2p(steam, virtual_port).map(Self::Open)
     }
 
     pub fn open_ip(
@@ -70,11 +58,11 @@ where
     pub fn open_p2p(
         &mut self,
         steam: &steamworks::Client<M>,
-        port: i32,
+        virtual_port: i32,
     ) -> Result<(), SteamTransportError<P>> {
         match self {
             Self::Closed => {
-                *self = Self::open_new_p2p(steam, port)?;
+                *self = Self::open_new_p2p(steam, virtual_port)?;
                 Ok(())
             }
             Self::Open(_) => Err(SteamTransportError::<P>::AlreadyOpen),
@@ -91,17 +79,17 @@ where
         }
     }
 
-    pub fn accept_client(&mut self, client: ClientKey) -> Result<(), SteamTransportError<P>> {
+    pub fn accept_request(&mut self, client: ClientKey) -> Result<(), SteamTransportError<P>> {
         match self {
             Self::Closed => Err(SteamTransportError::<P>::NotOpen),
-            Self::Open(server) => server.accept_client(client),
+            Self::Open(server) => server.accept_request(client),
         }
     }
 
-    pub fn reject_client(&mut self, client: ClientKey) -> Result<(), SteamTransportError<P>> {
+    pub fn reject_request(&mut self, client: ClientKey) -> Result<(), SteamTransportError<P>> {
         match self {
             Self::Closed => Err(SteamTransportError::<P>::NotOpen),
-            Self::Open(server) => server.reject_client(client),
+            Self::Open(server) => server.reject_request(client),
         }
     }
 }
@@ -109,8 +97,8 @@ where
 impl<P, M> ServerTransport<P> for SteamServerTransport<P, M>
 where
     P: LaneProtocol,
-    P::C2S: TryFromBytes,
-    P::S2C: TryAsBytes + OnLane<Lane = P::Lane>,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     M: Manager + Send + Sync + 'static,
 {
     type Error = SteamTransportError<P>;
@@ -123,24 +111,27 @@ where
 
     type ConnectedInfo = RemoteConnectedInfo;
 
-    fn state(&self) -> ServerState {
+    fn state(&self) -> ServerState<(), ()> {
         match self {
             Self::Closed => ServerState::Closed,
             Self::Open(_) => ServerState::Open(()),
         }
     }
 
-    fn client_state(&self, client: ClientKey) -> ClientState {
+    fn client_state(
+        &self,
+        client: ClientKey,
+    ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         match self {
             Self::Closed => ClientState::Disconnected,
             Self::Open(server) => server.client_state(client),
         }
     }
 
-    fn clients(&self) -> impl Iterator<Item = ClientKey> {
+    fn client_keys(&self) -> impl Iterator<Item = ClientKey> + '_ {
         match self {
             Self::Closed => None,
-            Self::Open(server) => Some(server.clients()),
+            Self::Open(server) => Some(server.client_keys()),
         }
         .into_iter()
         .flatten()
@@ -160,10 +151,10 @@ where
         }
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P>> {
+    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P>> {
         match self {
             Self::Closed => vec![],
-            Self::Open(server) => server.update(),
+            Self::Open(server) => server.poll(),
         }
         .into_iter()
     }

@@ -101,7 +101,7 @@ where
         }
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
+    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
         match self {
             Self::Disconnected => vec![],
             Self::Connecting(client) => match client.poll() {
@@ -115,7 +115,7 @@ where
                     vec![ClientEvent::Disconnected { reason }]
                 }
             },
-            Self::Connected(client) => match client.update() {
+            Self::Connected(client) => match client.poll() {
                 (events, Ok(())) => events,
                 (mut events, Err(reason)) => {
                     events.push(ClientEvent::Disconnected { reason });

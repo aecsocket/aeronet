@@ -223,7 +223,7 @@ where
         self.inner.send(msg)
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error>> {
+    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error>> {
         let mut events = Vec::new();
 
         events.extend(
@@ -232,7 +232,7 @@ where
                 .map(|recv| ClientEvent::Recv { msg: recv.msg }),
         );
 
-        for event in self.inner.update() {
+        for event in self.inner.poll() {
             if let ClientEvent::Recv { msg } = event {
                 if let Some(ClientRecv { msg }) = self.conditioner.condition(ClientRecv { msg }) {
                     events.push(ClientEvent::Recv { msg });
@@ -349,7 +349,7 @@ where
         self.inner.send(client, msg)
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>> {
+    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>> {
         let mut events = Vec::new();
 
         events.extend(self.conditioner.buffered().map(|recv| ServerEvent::Recv {
@@ -357,7 +357,7 @@ where
             msg: recv.msg,
         }));
 
-        for event in self.inner.update() {
+        for event in self.inner.poll() {
             if let ServerEvent::Recv { client, msg } = event {
                 if let Some(ServerRecv { client, msg }) =
                     self.conditioner.condition(ServerRecv { client, msg })

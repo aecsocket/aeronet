@@ -122,7 +122,7 @@ fn recv<P, T>(
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
 {
-    for event in client.update() {
+    for event in client.poll() {
         match event {
             ClientEvent::Connected => {
                 connected.send(LocalClientConnected {

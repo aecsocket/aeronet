@@ -91,12 +91,12 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
         Ok(())
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ServerEvent<P>> {
+    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P>> {
         let mut events = Vec::new();
         let mut to_remove = Vec::new();
 
         for (client, data) in &mut self.clients {
-            update_client(client, data, &mut events, &mut to_remove);
+            Self::poll_client(client, data, &mut events, &mut to_remove);
         }
 
         for client in to_remove {
@@ -113,42 +113,44 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
     }
 }
 
-fn update_client<P: TransportProtocol>(
-    client: ClientKey,
-    data: &mut Client<P>,
-    events: &mut Vec<ServerEvent<P>>,
-    to_remove: &mut Vec<ClientKey>,
-) {
-    match data {
-        Client::Connected {
-            recv_c2s,
-            info,
-            send_connected,
-            ..
-        } => {
-            if *send_connected {
-                events.push(ServerEvent::Connecting { client });
-                events.push(ServerEvent::Connected { client });
-                *send_connected = false;
-            }
+impl<P: TransportProtocol> ChannelServer<P> {
+    fn poll_client(
+        client: ClientKey,
+        data: &mut Client<P>,
+        events: &mut Vec<ServerEvent<P>>,
+        to_remove: &mut Vec<ClientKey>,
+    ) {
+        match data {
+            Client::Connected {
+                recv_c2s,
+                info,
+                send_connected,
+                ..
+            } => {
+                if *send_connected {
+                    events.push(ServerEvent::Connecting { client });
+                    events.push(ServerEvent::Connected { client });
+                    *send_connected = false;
+                }
 
-            match recv_c2s.try_recv() {
-                Ok(msg) => {
-                    events.push(ServerEvent::Recv { client, msg });
-                    info.msgs_recv += 1;
-                }
-                Err(TryRecvError::Empty) => {}
-                Err(TryRecvError::Disconnected) => {
-                    *data = Client::Disconnected;
+                match recv_c2s.try_recv() {
+                    Ok(msg) => {
+                        events.push(ServerEvent::Recv { client, msg });
+                        info.msgs_recv += 1;
+                    }
+                    Err(TryRecvError::Empty) => {}
+                    Err(TryRecvError::Disconnected) => {
+                        *data = Client::Disconnected;
+                    }
                 }
             }
-        }
-        Client::Disconnected => {
-            events.push(ServerEvent::Disconnected {
-                client,
-                reason: ChannelError::Disconnected,
-            });
-            to_remove.push(client);
+            Client::Disconnected => {
+                events.push(ServerEvent::Disconnected {
+                    client,
+                    reason: ChannelError::Disconnected,
+                });
+                to_remove.push(client);
+            }
         }
     }
 }

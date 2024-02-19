@@ -18,7 +18,7 @@ all-features = true
 
 [features]
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = [ "dep:bevy", "aeronet/bevy", "aeronet/bevy-tokio-rt" ]
+bevy = ["dep:bevy", "aeronet/bevy", "aeronet/bevy-tokio-rt"]
 
 [dependencies]
 aeronet.workspace = true
@@ -30,7 +30,7 @@ slotmap.workspace = true
 ahash.workspace = true
 futures.workspace = true
 rand.workspace = true
-tokio = { workspace = true, default-features = false, features = [ "rt" ] }
+tokio = { workspace = true, default-features = false, features = ["rt"] }
 wtransport.workspace = true
 steamworks.workspace = true
 
@@ -44,9 +44,9 @@ anyhow.workspace = true
 [[example]]
 name = "client"
 path = "examples/client.rs"
-required-features = [ "bevy" ]
+required-features = ["bevy"]
 
 [[example]]
 name = "server"
 path = "examples/server.rs"
-required-features = [ "bevy" ]
+required-features = ["bevy"]

@@ -1,26 +1,17 @@
 use std::{net::SocketAddr, task::Poll};
 
-use aeronet::{
-    ClientTransport, LaneProtocol, OnLane, TryAsBytes,
-    TryFromBytes,
-};
+use aeronet::{ClientState, ClientTransport, LaneProtocol, OnLane, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use steamworks::{ClientManager, Manager, SteamId};
 
-use crate::{ConnectingClient, ConnectedClient, ConnectionInfo};
+use crate::{ConnectedClient, ConnectingClient, ConnectionInfo};
 
-use super::{SteamTransportError, ClientState, ClientEvent};
+use super::{ClientEvent, SteamTransportError};
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub enum SteamClientTransport<P, M = ClientManager>
-where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryFromBytes,
-    M: Manager + Send + Sync + 'static,
-{
+pub enum SteamClientTransport<P, M = ClientManager> {
     #[derivative(Default)]
     Disconnected,
     Connecting(ConnectingClient<P, M>),
@@ -30,33 +21,33 @@ where
 impl<P, M> SteamClientTransport<P, M>
 where
     P: LaneProtocol,
-    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryFromBytes,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     M: Manager + Send + Sync + 'static,
 {
     pub fn connect_new_ip(
         steam: steamworks::Client<M>,
-        remote: SocketAddr,
+        target: SocketAddr,
     ) -> Result<Self, SteamTransportError<P>> {
-        ConnectingClient::connect_ip(steam, remote).map(Self::Connecting)
+        ConnectingClient::connect_ip(steam, target).map(Self::Connecting)
     }
 
     pub fn connect_new_p2p(
         steam: steamworks::Client<M>,
-        remote: SteamId,
-        port: i32,
+        target: SteamId,
+        virtual_port: i32,
     ) -> Result<Self, SteamTransportError<P>> {
-        ConnectingClient::connect_p2p(steam, remote, port).map(Self::Connecting)
+        ConnectingClient::connect_p2p(steam, target, virtual_port).map(Self::Connecting)
     }
 
     pub fn connect_ip(
         &mut self,
         steam: steamworks::Client<M>,
-        remote: SocketAddr,
+        target: SocketAddr,
     ) -> Result<(), SteamTransportError<P>> {
         match self {
             Self::Disconnected => {
-                *self = Self::connect_new_ip(steam, remote)?;
+                *self = Self::connect_new_ip(steam, target)?;
                 Ok(())
             }
             _ => Err(SteamTransportError::<P>::AlreadyConnected),
@@ -66,12 +57,12 @@ where
     pub fn connect_p2p(
         &mut self,
         steam: steamworks::Client<M>,
-        remote: SteamId,
-        port: i32,
+        target: SteamId,
+        virtual_port: i32,
     ) -> Result<(), SteamTransportError<P>> {
         match self {
             Self::Disconnected => {
-                *self = Self::connect_new_p2p(steam, remote, port)?;
+                *self = Self::connect_new_p2p(steam, target, virtual_port)?;
                 Ok(())
             }
             _ => Err(SteamTransportError::<P>::AlreadyConnected),
@@ -89,11 +80,12 @@ where
     }
 }
 
-impl<P> ClientTransport<P> for SteamClientTransport<P>
+impl<P, M> ClientTransport<P> for SteamClientTransport<P, M>
 where
     P: LaneProtocol,
-    P::C2S: TryAsBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryFromBytes,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    M: Manager + Send + Sync + 'static,
 {
     type Error = SteamTransportError<P>;
 
@@ -101,7 +93,7 @@ where
 
     type ConnectedInfo = ConnectionInfo;
 
-    fn state(&self) -> ClientState {
+    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         match self {
             Self::Disconnected => ClientState::Disconnected,
             Self::Connecting(_) => ClientState::Connecting(()),
@@ -117,24 +109,21 @@ where
         }
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
+    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
         match self {
             Self::Disconnected => vec![],
             Self::Connecting(client) => match client.poll() {
                 Poll::Pending => vec![],
                 Poll::Ready(Ok(client)) => {
-                    let event = ClientEvent::Connected {
-                        info: client.info(),
-                    };
                     *self = Self::Connected(client);
-                    vec![event]
+                    vec![ClientEvent::Connected]
                 }
                 Poll::Ready(Err(reason)) => {
                     *self = Self::Disconnected;
                     vec![ClientEvent::Disconnected { reason }]
                 }
             },
-            Self::Connected(client) => match client.update() {
+            Self::Connected(client) => match client.poll() {
                 (events, Ok(())) => events,
                 (mut events, Err(reason)) => {
                     *self = Self::Disconnected;

@@ -192,7 +192,7 @@ fn recv<P, T>(
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
 {
-    for event in server.update() {
+    for event in server.poll() {
         match event {
             ServerEvent::Opened => {
                 opened.send(ServerOpened {

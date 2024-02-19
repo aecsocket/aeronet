@@ -8,7 +8,7 @@ use wtransport::{endpoint::IncomingSession, Endpoint};
 
 use crate::{
     server::{ClientRequestingKey, ConnectionResponse, OpenServerInner},
-    shared, BackendError, ClientRequestingInfo, WebTransportServerConfig,
+    shared, BackendError, RemoteRequestingInfo, WebTransportServerConfig,
 };
 
 use super::ClientRequesting;
@@ -88,14 +88,14 @@ async fn handle_incoming(
         req.origin()
     );
     let _ = send_req.send(Ok(ClientRequesting {
-        info: ClientRequestingInfo {
+        info: RemoteRequestingInfo {
             authority: req.authority().to_string(),
             path: req.path().to_string(),
             origin: req.origin().map(ToString::to_string),
             user_agent: req.user_agent().map(ToString::to_string),
             headers: req.headers().clone(),
         },
-        send_resp: Some(send_resp),
+        send_resp,
         recv_conn,
     }));
 
@@ -108,7 +108,7 @@ async fn handle_incoming(
                 return;
             }
         },
-        ConnectionResponse::Forbidden => {
+        ConnectionResponse::Rejected => {
             req.forbidden().await;
             return;
         }

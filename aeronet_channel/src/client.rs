@@ -59,7 +59,7 @@ impl<P: TransportProtocol> ConnectedClient<P> {
         Ok(())
     }
 
-    pub fn update(&mut self) -> (Vec<ClientEvent<P>>, Result<(), ChannelError>) {
+    pub fn poll(&mut self) -> (Vec<ClientEvent<P>>, Result<(), ChannelError>) {
         let mut events = Vec::new();
 
         if self.send_connected {
@@ -147,10 +147,10 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
         }
     }
 
-    fn update(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
+    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
         match self {
             Self::Disconnected => vec![],
-            Self::Connected(client) => match client.update() {
+            Self::Connected(client) => match client.poll() {
                 (events, Ok(())) => events,
                 (mut events, Err(reason)) => {
                     events.push(ClientEvent::Disconnected { reason });

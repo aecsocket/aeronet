@@ -22,17 +22,18 @@
 //! Which features are provided by this protocol, and which must be implemented
 //! externally?
 //!
-//! | Feature        | Description                                                           | Provided?         |
-//! |----------------|-----------------------------------------------------------------------|-------------------|
-//! | encryption     | unauthorized third parties can't read the network data in transit     | -                 |
-//! | authentication | only clients who have permission to use this app can connect          | -                 |
-//! | validation     | the message was not tampered with or corrupted in transit             | -                 |
-//! | framing        | message boundary is maintained by API (i.e. not just stream of bytes) | -                 |
-//! | buffering      | combines small messages into one big packet (i.e. Nagle)              | - (maybe?)        |
-//! | negotiation    | makes sure that both peers are using the same protocol before talking | [`Negotiation`]   |
-//! | fragmentation  | large messages are sent using multiple packets                        | [`Fragmentation`] |
-//! | reliability    | messages sent reliably are guaranteed to be received by the peer      | todo              |
-//! | ordering       | messages will be received in the same order they were sent            | todo              |
+//! | Feature            | Description                                                           | Provided?         |
+//! |--------------------|-----------------------------------------------------------------------|-------------------|
+//! | encryption         | unauthorized third parties can't read the network data in transit     | -                 |
+//! | authentication     | only clients who have permission to use this app can connect          | -                 |
+//! | validation         | the message was not tampered with or corrupted in transit             | -                 |
+//! | framing            | message boundary is maintained by API (i.e. not just stream of bytes) | -                 |
+//! | congestion control | controls how fast data is sent, in order to not flood the network     | -                 |
+//! | buffering          | combines small messages into one big packet (i.e. Nagle)              | - (maybe?)        |
+//! | negotiation        | makes sure that both peers are using the same protocol before talking | [`Negotiation`]   |
+//! | fragmentation      | large messages are sent using multiple packets                        | [`Fragmentation`] |
+//! | reliability        | messages sent reliably are guaranteed to be received by the peer      | todo              |
+//! | ordering           | messages will be received in the same order they were sent            | todo              |
 //!
 //! The client acts as the initiator in all aeronet-provided features.
 //!
@@ -42,7 +43,11 @@
 //! makes use of both testing and fuzzing.
 //!
 //! To fuzz a particular component, run this from the `/aeronet` directory:
-//! * [`Fragmentation`] - `cargo fuzz run frag`
+//! * [`Fragmentation`]
+//!   * `cargo fuzz run frag`
+//! * [`Negotiation`]
+//!   * `cargo fuzz run negotiate_req`
+//!   * `cargo fuzz run negotiate_resp`
 //!
 //! [`ClientTransport`]: crate::ClientTransport
 //! [`ServerTransport`]: crate::ServerTransport

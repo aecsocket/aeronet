@@ -97,34 +97,31 @@ struct ClientRequestingKey {
 }
 
 #[derive(Debug)]
-struct ClientIncoming {
-    recv_req: oneshot::Receiver<Result<ClientRequesting, BackendError>>,
-}
-
-#[derive(Debug)]
 struct ClientRequesting {
-    info: ClientRequestingInfo,
-    send_resp: Option<oneshot::Sender<ConnectionResponse>>,
+    info: RemoteRequestingInfo,
+    send_resp: oneshot::Sender<ConnectionResponse>,
     recv_conn: oneshot::Receiver<Result<ConnectionFrontend, BackendError>>,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-struct ClientConnected<P> {
-    conn: ConnectionFrontend,
-    lanes: Lanes<P>,
-}
-
-#[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
 enum Client<P> {
-    Incoming(ClientIncoming),
-    Requesting(ClientRequesting),
-    Connected(ClientConnected<P>),
+    Incoming {
+        recv_req: oneshot::Receiver<Result<ClientRequesting, BackendError>>,
+    },
+    Requesting {
+        info: RemoteRequestingInfo,
+        send_resp: Option<oneshot::Sender<ConnectionResponse>>,
+        recv_conn: oneshot::Receiver<Result<ConnectionFrontend, BackendError>>,
+    },
+    Connected {
+        conn: ConnectionFrontend,
+        lanes: Lanes<P>,
+    },
 }
 
 #[derive(Debug, Clone)]
-pub struct ClientRequestingInfo {
+pub struct RemoteRequestingInfo {
     pub authority: String,
     pub path: String,
     pub origin: Option<String>,
@@ -135,7 +132,7 @@ pub struct ClientRequestingInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum ConnectionResponse {
     Accepted,
-    Forbidden,
+    Rejected,
 }
 
 impl<P> OpenServer<P>
@@ -153,11 +150,11 @@ where
     pub fn client_state(
         &self,
         client: ClientKey,
-    ) -> ClientState<ClientRequestingInfo, ConnectionInfo> {
+    ) -> ClientState<RemoteRequestingInfo, ConnectionInfo> {
         match self.clients.get(client) {
-            None | Some(Client::Incoming(_)) => ClientState::Disconnected,
-            Some(Client::Requesting(client)) => ClientState::Connecting(client.info.clone()),
-            Some(Client::Connected(client)) => ClientState::Connected(client.conn.info.clone()),
+            None | Some(Client::Incoming { .. }) => ClientState::Disconnected,
+            Some(Client::Requesting { info, .. }) => ClientState::Connecting(info.clone()),
+            Some(Client::Connected { conn, .. }) => ClientState::Connected(conn.info.clone()),
         }
     }
 
@@ -170,7 +167,7 @@ where
     }
 
     pub fn reject_request(&mut self, client: ClientKey) -> Result<(), WebTransportError<P>> {
-        self.respond_to_request(client, ConnectionResponse::Forbidden)
+        self.respond_to_request(client, ConnectionResponse::Rejected)
     }
 
     fn respond_to_request(
@@ -178,16 +175,18 @@ where
         client: ClientKey,
         resp: ConnectionResponse,
     ) -> Result<(), WebTransportError<P>> {
-        let Some(Client::Requesting(client)) = self.clients.get_mut(client) else {
-            return Err(WebTransportError::<P>::NoClient(client));
-        };
-
-        match client.send_resp.take() {
-            Some(send_resp) => {
-                let _ = send_resp.send(resp);
-                Ok(())
+        match self.clients.get_mut(client) {
+            None | Some(Client::Incoming { .. }) => {
+                Err(WebTransportError::<P>::NoClient { client })
             }
-            None => Err(WebTransportError::<P>::AlreadyRespondedToRequest),
+            Some(Client::Requesting { send_resp, .. }) => match send_resp.take() {
+                Some(send_resp) => {
+                    let _ = send_resp.send(resp);
+                    Ok(())
+                }
+                None => Err(WebTransportError::<P>::AlreadyRespondedToRequest),
+            },
+            Some(Client::Connected { .. }) => Err(WebTransportError::<P>::AlreadyConnected),
         }
     }
 
@@ -196,32 +195,31 @@ where
         client: ClientKey,
         msg: impl Into<P::S2C>,
     ) -> Result<(), WebTransportError<P>> {
-        let Some(Client::Connected(client)) = self.clients.get_mut(client) else {
-            return Err(WebTransportError::<P>::NoClient(client));
+        let Some(Client::Connected { conn, lanes }) = self.clients.get_mut(client) else {
+            return Err(WebTransportError::<P>::NoClient { client });
         };
 
         let msg: P::S2C = msg.into();
         let msg_bytes = msg.try_as_bytes().map_err(WebTransportError::<P>::Encode)?;
-        client
-            .lanes
-            .send(msg_bytes.as_ref(), msg.lane(), &mut client.conn)
+        lanes
+            .send(msg_bytes.as_ref(), msg.lane(), conn)
             .map_err(WebTransportError::<P>::Backend)
     }
 
     pub fn disconnect(&mut self, client: ClientKey) -> Result<(), WebTransportError<P>> {
         match self.clients.remove(client) {
-            None => Err(WebTransportError::<P>::NoClient(client)),
+            None => Err(WebTransportError::<P>::NoClient { client }),
             Some(_) => Ok(()),
         }
     }
 
-    pub fn update(&mut self) -> (Vec<ServerEvent<P>>, Result<(), WebTransportError<P>>) {
+    pub fn poll(&mut self) -> Vec<ServerEvent<P>> {
         let mut events = Vec::new();
 
         while let Ok(Some(client)) = self.recv_client.try_next() {
-            let client_key = self.clients.insert(Client::Incoming(ClientIncoming {
+            let client_key = self.clients.insert(Client::Incoming {
                 recv_req: client.recv_req,
-            }));
+            });
             let _ = client.send_key.send(client_key);
             debug!("Assigned new client {client_key}");
             // don't send a connecting event yet;
@@ -230,7 +228,7 @@ where
 
         let mut clients_to_remove = Vec::new();
         for (client_key, client) in &mut self.clients {
-            if let Err(reason) = update_client(client_key, client, &mut events) {
+            if let Err(reason) = Self::poll_client(client_key, client, &mut events) {
                 clients_to_remove.push(client_key);
                 if let Some(reason) = reason {
                     events.push(ServerEvent::Disconnected {
@@ -245,60 +243,57 @@ where
             self.clients.remove(client_key);
         }
 
-        (events, Ok(()))
+        events
     }
-}
 
-fn update_client<P>(
-    client_key: ClientKey,
-    state: &mut Client<P>,
-    events: &mut Vec<ServerEvent<P>>,
-) -> Result<(), Option<WebTransportError<P>>>
-where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-{
-    match state {
-        Client::Incoming(client) => match client.recv_req.try_recv() {
-            Ok(None) => Ok(()),
-            Ok(Some(Ok(requesting))) => {
-                *state = Client::Requesting(requesting);
-                events.push(ServerEvent::Connecting { client: client_key });
-                Ok(())
-            }
-            // silently remove, because we haven't actually emitted a
-            // `Connecting` event for this client yet, so we can't send a
-            // `Disconnected`
-            Ok(Some(Err(_))) | Err(_) => Err(None),
-        },
-        Client::Requesting(client) => match client.recv_conn.try_recv() {
-            Ok(None) => Ok(()),
-            Ok(Some(Ok(conn))) => {
-                *state = Client::Connected(ClientConnected {
-                    conn,
-                    lanes: Lanes::new(),
-                });
-                events.push(ServerEvent::Connected { client: client_key });
-                Ok(())
-            }
-            Ok(Some(Err(err))) => Err(Some(err.into())),
-            Err(_) => Err(Some(WebTransportError::<P>::backend_closed())),
-        },
-        Client::Connected(client) => {
-            client.conn.update();
-            client.lanes.update();
-            while let Some(msg) = client.lanes.recv(&mut client.conn)? {
-                events.push(ServerEvent::Recv {
-                    client: client_key,
-                    msg,
-                });
-            }
+    fn poll_client(
+        client_key: ClientKey,
+        state: &mut Client<P>,
+        events: &mut Vec<ServerEvent<P>>,
+    ) -> Result<(), Option<WebTransportError<P>>> {
+        match state {
+            Client::Incoming { recv_req } => match recv_req.try_recv() {
+                Ok(None) => Ok(()),
+                Ok(Some(Ok(requesting))) => {
+                    *state = Client::Requesting {
+                        info: requesting.info,
+                        send_resp: Some(requesting.send_resp),
+                        recv_conn: requesting.recv_conn,
+                    };
+                    events.push(ServerEvent::Connecting { client: client_key });
+                    Ok(())
+                }
+                // silently remove, because we haven't actually emitted a
+                // `Connecting` event for this client yet, so we can't send a
+                // `Disconnected`
+                Ok(Some(Err(_))) | Err(_) => Err(None),
+            },
+            Client::Requesting { recv_conn, .. } => match recv_conn.try_recv() {
+                Ok(None) => Ok(()),
+                Ok(Some(Ok(conn))) => {
+                    *state = Client::Connected {
+                        conn,
+                        lanes: Lanes::new(),
+                    };
+                    events.push(ServerEvent::Connected { client: client_key });
+                    Ok(())
+                }
+                Ok(Some(Err(err))) => Err(Some(err.into())),
+                Err(_) => Err(Some(WebTransportError::<P>::backend_closed())),
+            },
+            Client::Connected { conn, lanes } => {
+                conn.update();
+                lanes.update();
+                while let Some(msg) = lanes.recv(conn)? {
+                    events.push(ServerEvent::Recv {
+                        client: client_key,
+                        msg,
+                    });
+                }
 
-            client
-                .conn
-                .recv_err()
-                .map_err(|err| Some(WebTransportError::<P>::Backend(err)))
+                conn.recv_err()
+                    .map_err(|err| Some(WebTransportError::<P>::Backend(err)))
+            }
         }
     }
 }
