@@ -49,5 +49,5 @@ pub(super) async fn connect(
         conn: chan_frontend,
         local_addr,
     }));
-    shared::handle_connection(conn, chan_backend).await
+    shared::handle_connection(conn, chan_backend).await;
 }

@@ -35,6 +35,7 @@ pub struct ConnectionInfo {
 }
 
 impl ConnectionInfo {
+    #[must_use]
     pub fn new(remote_addr: SocketAddr, rtt: Duration) -> Self {
         Self {
             remote_addr,
@@ -89,8 +90,8 @@ impl RemoteAddr for ConnectionInfo {
     }
 }
 
-/// Error that occurs when processing a [`WebTransportClient`] or
-/// [`WebTransportServer`].
+/// Error that occurs when interacting with the [`WebTransportClient`] or
+/// [`WebTransportServer`] frontends.
 ///
 /// [`WebTransportClient`]: crate::WebTransportClient
 /// [`WebTransportServer`]: crate::WebTransportServer
@@ -167,31 +168,33 @@ pub enum BackendError {
     ManagedStreamClosed,
 
     #[error(
-        "invalid negotiation request length - expected {}, was {len}",
+        "invalid negotiation request length - expected {}, was {len} bytes",
         Negotiation::REQUEST_LEN
     )]
     NegotiateRequestLength { len: usize },
     #[error("failed to read negotiation request")]
     ReadNegotiateRequest(#[source] NegotiationRequestError),
-
     #[error(
-        "invalid negotiation response length - expected {}, was {len}",
+        "invalid negotiation response length - expected {}, was {len} bytes",
         Negotiation::RESPONSE_LEN
     )]
     NegotiateResponseLength { len: usize },
     #[error("failed to read negotiation response")]
     ReadNegotiateResponse(#[source] NegotiationResponseError),
-
     #[error("wrong protocol version")]
     WrongVersion(#[source] WrongProtocolVersion),
 
-    #[error("lost connection")]
-    LostConnection(#[source] ConnectionError),
     #[error("failed to send datagram")]
     SendDatagram(#[source] SendDatagramError),
-
     #[error("failed to fragment message")]
     Fragment(#[source] FragmentationError),
+
+    #[error("lost connection")]
+    LostConnection(#[source] ConnectionError),
+    #[error("failed to read lane")]
+    ReadLane,
+    #[error("received message on invalid lane index {lane_index}")]
+    RecvOnInvalidLane { lane_index: usize },
     #[error("failed to reassemble packet")]
     Reassemble(#[source] ReassemblyError),
 

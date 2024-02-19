@@ -199,14 +199,21 @@ impl<S> Fragmentation<S> {
     /// Splits a message up into individual fragmented packets and creates the
     /// appropriate headers for each packet.
     ///
+    /// `payload_size` specifies the size of the payload in each fragment
+    /// returned in the iterator.
+    ///
     /// This will increase the sequence number.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the message was not a valid message which could be fragmented.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    pub fn fragment<'a, 'b>(
-        &'a mut self,
-        msg: &'b [u8],
+    pub fn fragment<'a>(
+        &mut self,
+        msg: &'a [u8],
         payload_size: usize,
-    ) -> Result<impl Iterator<Item = FragmentedPacket<'b>> + 'b, FragmentationError> {
-        let seq = self.next_send_seq.next();
+    ) -> Result<impl Iterator<Item = FragmentedPacket<'a>> + 'a, FragmentationError> {
+        let seq = self.next_send_seq.get_and_increment();
 
         let chunks = msg.chunks(payload_size);
         let num_frags = NonZeroU8::new(u8::try_from(chunks.len()).map_err(|_| {
@@ -271,30 +278,26 @@ impl<S: SequencingStrategy> Fragmentation<S> {
             .map_err(ReassemblyError::DecodeHeader)?;
         let payload = &packet[FRAG_HEADER_SIZE..];
 
-        self.reassemble_packet(header, payload)
+        Ok(self.reassemble_packet(&header, payload))
     }
 
-    fn reassemble_packet(
-        &mut self,
-        header: FragHeader,
-        payload: &[u8],
-    ) -> Result<Option<Bytes>, ReassemblyError> {
+    fn reassemble_packet(&mut self, header: &FragHeader, payload: &[u8]) -> Option<Bytes> {
         if S::SEQUENCED && header.seq < self.last_recv_seq {
-            return Ok(None);
+            return None;
         }
         self.last_recv_seq = header.seq;
 
         match header.num_frags.get() {
             // quick path to avoid writing this into the message buffer then
             // immediately reading it back out
-            1 => Ok(Some(Bytes::from(payload.to_vec()))),
-            _ => Ok(self.reassemble_fragment(&header, payload)),
+            1 => Some(Bytes::from(payload.to_vec())),
+            _ => self.reassemble_fragment(header, payload),
         }
     }
 
     fn reassemble_fragment(&mut self, header: &FragHeader, payload: &[u8]) -> Option<Bytes> {
         let buf_opt = &mut self.messages[header.seq.0 as usize % MESSAGES_BUF];
-        let buf = buf_opt.get_or_insert_with(|| MessageBuffer::new(&header));
+        let buf = buf_opt.get_or_insert_with(|| MessageBuffer::new(header));
 
         // make sure that `buf` really does point to the same message that we're
         // meant to be reassembling

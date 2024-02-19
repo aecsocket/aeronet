@@ -82,6 +82,7 @@ where
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
+    #[must_use]
     pub fn connection_info(&self) -> ConnectionInfo {
         self.conn.info.clone()
     }

@@ -36,6 +36,7 @@ enum Client<P: TransportProtocol> {
 
 impl<P: TransportProtocol> ChannelServer<P> {
     /// Creates a server with no connected clients.
+    #[must_use]
     pub fn open() -> Self {
         Self::default()
     }
@@ -94,7 +95,7 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
         let mut events = Vec::new();
         let mut to_remove = Vec::new();
 
-        for (client, data) in self.clients.iter_mut() {
+        for (client, data) in &mut self.clients {
             update_client(client, data, &mut events, &mut to_remove);
         }
 

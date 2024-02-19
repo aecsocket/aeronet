@@ -39,11 +39,13 @@ impl<P: TransportProtocol> ConnectedClient<P> {
 
     /// Key of this client as defined on the server, used for removing this
     /// client from the server later.
+    #[must_use]
     pub fn key(&self) -> ClientKey {
         self.key
     }
 
     /// Statistics on the connection currently established by this client.
+    #[must_use]
     pub fn info(&self) -> ConnectionInfo {
         self.info.clone()
     }
@@ -114,6 +116,7 @@ impl<P: TransportProtocol> ChannelClient<P> {
         }
     }
 
+    #[must_use]
     pub fn key(&self) -> Option<ClientKey> {
         match self {
             Self::Disconnected => None,
@@ -129,6 +132,7 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
 
     type ConnectedInfo = ConnectionInfo;
 
+    #[must_use]
     fn state(&self) -> ClientState {
         match self {
             Self::Disconnected => ClientState::Disconnected,

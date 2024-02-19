@@ -114,6 +114,8 @@ impl Negotiation {
     }
 
     /// Creates a client-to-server packet to request negotiation.
+    #[allow(clippy::missing_panics_doc)] // shouldn't panic
+    #[must_use]
     pub fn request(&self) -> [u8; REQUEST_LEN] {
         let version: [u8; VERSION_LEN] = format!("{:08x}", self.version.0)
             .into_bytes()
@@ -146,7 +148,7 @@ impl Negotiation {
         Result<(), NegotiationRequestError>,
         Option<[u8; RESPONSE_LEN]>,
     ) {
-        let theirs = match (|| {
+        let result = (|| {
             if !packet.starts_with(REQUEST_PREFIX) {
                 return Err(NegotiationRequestError::Prefix);
             }
@@ -156,7 +158,8 @@ impl Negotiation {
                 .map_err(NegotiationRequestError::VersionParse)
                 .map(ProtocolVersion)?;
             Ok(theirs)
-        })() {
+        })();
+        let theirs = match result {
             Ok(theirs) => theirs,
             Err(err) => return (Err(err), None),
         };
@@ -181,6 +184,7 @@ impl Negotiation {
     ///
     /// Errors if the response indicates that the connection is unsuccessful,
     /// or if the response is malformed.
+    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn recv_response(
         &self,
         packet: &[u8; RESPONSE_LEN],
@@ -193,9 +197,9 @@ impl Negotiation {
                     .map(ProtocolVersion)
                     .expect("slice of 1..5 should be 4 items long");
                 let ours = self.version;
-                return Err(NegotiationResponseError::WrongVersion(
+                Err(NegotiationResponseError::WrongVersion(
                     WrongProtocolVersion { ours, theirs },
-                ));
+                ))
             }
             discrim => Err(NegotiationResponseError::Discriminator { discrim }),
         }

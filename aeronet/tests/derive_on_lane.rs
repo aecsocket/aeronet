@@ -1,6 +1,6 @@
 use aeronet::{LaneKey, OnLane};
 
-#[derive(Debug, Clone, LaneKey)]
+#[derive(Debug, Clone, Copy, LaneKey)]
 enum MyLane {
     #[lane_kind(UnreliableUnsequenced)]
     A,

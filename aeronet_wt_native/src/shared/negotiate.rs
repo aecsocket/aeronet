@@ -38,7 +38,9 @@ pub(super) async fn client(
 
     negotiation.recv_response(&resp).map_err(|err| match err {
         NegotiationResponseError::WrongVersion(err) => BackendError::WrongVersion(err),
-        err => BackendError::ReadNegotiateResponse(err),
+        err @ NegotiationResponseError::Discriminator { .. } => {
+            BackendError::ReadNegotiateResponse(err)
+        }
     })?;
 
     debug!("Negotiation success");

@@ -34,11 +34,11 @@ pub(super) async fn open(
     };
 
     let (mut send_client, recv_client) = mpsc::channel(1);
-    let (_send_closed, mut recv_closed) = oneshot::channel();
+    let (send_closed, mut recv_closed) = oneshot::channel();
     let _ = send_open.send(Ok(OpenServerInner {
         local_addr,
         recv_client,
-        _send_closed,
+        send_closed,
     }));
 
     loop {
@@ -123,5 +123,5 @@ async fn handle_incoming(
             }
         };
     let _ = send_conn.send(Ok(chan_frontend));
-    shared::handle_connection(conn, chan_backend).await
+    shared::handle_connection(conn, chan_backend).await;
 }

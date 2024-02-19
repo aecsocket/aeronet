@@ -40,7 +40,7 @@ pub enum LaneKind {
 ///
 /// This trait must be implemented correctly, otherwise transport
 /// implementations may panic.
-pub trait LaneKey: Send + Sync + Debug + Clone + 'static {
+pub trait LaneKey: Send + Sync + Debug + Clone + Copy + 'static {
     /// All variants of this type that may exist.
     ///
     /// # Panics

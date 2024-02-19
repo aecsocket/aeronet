@@ -18,7 +18,7 @@ use bevy_egui::{egui, EguiContexts, EguiPlugin};
 //
 // This can also be an enum, with each variant representing a different lane,
 // and each lane having different guarantees.
-#[derive(Debug, Clone, LaneKey)]
+#[derive(Debug, Clone, Copy, LaneKey)]
 #[lane_kind(ReliableOrdered)]
 struct AppLane;
 
@@ -69,8 +69,7 @@ impl LaneProtocol for AppProtocol {
 }
 
 impl VersionedProtocol for AppProtocol {
-    // TODO this has to be randomly generated at compile time
-    const VERSION: ProtocolVersion = ProtocolVersion(0x1234);
+    const VERSION: ProtocolVersion = ProtocolVersion(0xabcd1234);
 }
 
 // logic

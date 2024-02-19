@@ -1,10 +1,10 @@
 use aeronet::LaneKey;
 
-#[derive(Debug, Clone, LaneKey)]
+#[derive(Debug, Clone, Copy, LaneKey)]
 #[lane_kind(UnreliableUnsequenced)]
 struct MyLaneStruct;
 
-#[derive(Debug, Clone, LaneKey)]
+#[derive(Debug, Clone, Copy, LaneKey)]
 enum MyLaneEnum {
     #[lane_kind(UnreliableUnsequenced)]
     Variant1,

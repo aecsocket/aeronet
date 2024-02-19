@@ -54,9 +54,9 @@ pub async fn connection_channel<const SERVER: bool>(
     }
 
     let (send_managed, recv_managed) = if SERVER {
-        negotiate::server(&conn, version).await?
+        negotiate::server(conn, version).await?
     } else {
-        negotiate::client(&conn, version).await?
+        negotiate::client(conn, version).await?
     };
 
     let (send_c2s, recv_c2s) = mpsc::unbounded();
@@ -160,15 +160,8 @@ impl<P: LaneProtocol> Lanes<P> {
         lane: P::Lane,
         f: impl FnMut(Bytes),
     ) -> Result<(), BackendError> {
-        let lane_state = self
-            .lanes
-            .get_mut(lane.variant())
-            .expect("`P::Lane::variant` should be a valid index into `P::Lane::VARIANTS`");
-        let lane = u64::try_from(lane.variant()).expect("should be validated on construction");
-        let lane_header = lane.encode_var_vec();
-
-        fn unreliable<'a, S>(
-            msg: &'a [u8],
+        fn unreliable<S>(
+            msg: &[u8],
             lane_header: &[u8],
             frag: &mut Fragmentation<S>,
             f: impl FnMut(Bytes),
@@ -183,12 +176,19 @@ impl<P: LaneProtocol> Lanes<P> {
                         vec![0; payload_start + frag_packet.payload.len()].into_boxed_slice();
                     packet[..frag_start].copy_from_slice(lane_header);
                     packet[frag_start..payload_start].copy_from_slice(&frag_packet.header);
-                    packet[payload_start..].copy_from_slice(&frag_packet.payload);
+                    packet[payload_start..].copy_from_slice(frag_packet.payload);
                     Bytes::from(packet.into_vec())
                 })
                 .for_each(f);
             Ok(())
         }
+
+        let lane_state = self
+            .lanes
+            .get_mut(lane.variant())
+            .expect("`P::Lane::variant` should be a valid index into `P::Lane::VARIANTS`");
+        let lane = u64::try_from(lane.variant()).expect("should be validated on construction");
+        let lane_header = lane.encode_var_vec();
 
         match lane_state {
             LaneState::UnreliableUnsequenced { frag } => unreliable(msg, &lane_header, frag, f),
@@ -217,11 +217,12 @@ impl<P: LaneProtocol> Lanes<P> {
     }
 
     fn recv_incoming(&mut self, packet: &[u8]) -> Result<Option<Bytes>, BackendError> {
-        let (lane_index, bytes_read) = u64::decode_var(packet).ok_or_else(|| todo!())?;
+        let (lane_index, bytes_read) = u64::decode_var(packet).ok_or(BackendError::ReadLane)?;
+        let lane_index = usize::try_from(lane_index).map_err(|_| BackendError::ReadLane)?;
         let lane_state = self
             .lanes
-            .get_mut(usize::try_from(lane_index).map_err(|_| todo!())?)
-            .ok_or_else(|| todo!())?;
+            .get_mut(lane_index)
+            .ok_or(BackendError::RecvOnInvalidLane { lane_index })?;
 
         let packet = &packet[bytes_read..];
         match lane_state {

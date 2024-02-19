@@ -29,6 +29,8 @@ async fn try_handle_connection(
     mut send_rtt: mpsc::Sender<Duration>,
 ) -> Result<(), BackendError> {
     debug!("Starting connection loop");
+    // in `futures::select!`, if you use `()` the macro breaks
+    #[allow(clippy::ignored_unit_patterns)]
     loop {
         // if we failed to send, then buffer's probably full
         // but we don't care, RTT is a lossy bit of info anyway

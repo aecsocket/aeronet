@@ -39,7 +39,7 @@ pub struct OpeningServer<P> {
 struct OpenServerInner {
     local_addr: SocketAddr,
     recv_client: mpsc::Receiver<ClientRequestingKey>,
-    _send_closed: oneshot::Sender<()>,
+    send_closed: oneshot::Sender<()>,
 }
 
 impl<P> OpeningServer<P>
@@ -68,7 +68,7 @@ where
                 local_addr: inner.local_addr,
                 recv_client: inner.recv_client,
                 clients: SlotMap::default(),
-                _send_closed: inner._send_closed,
+                _send_closed: inner.send_closed,
                 _phantom: PhantomData,
             })),
             Ok(Some(Err(err))) => Poll::Ready(Err(err.into())),
@@ -144,10 +144,12 @@ where
     P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
+    #[must_use]
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
     }
 
+    #[must_use]
     pub fn client_state(
         &self,
         client: ClientKey,
@@ -227,7 +229,7 @@ where
         }
 
         let mut clients_to_remove = Vec::new();
-        for (client_key, client) in self.clients.iter_mut() {
+        for (client_key, client) in &mut self.clients {
             if let Err(reason) = update_client(client_key, client, &mut events) {
                 clients_to_remove.push(client_key);
                 if let Some(reason) = reason {
@@ -268,8 +270,7 @@ where
             // silently remove, because we haven't actually emitted a
             // `Connecting` event for this client yet, so we can't send a
             // `Disconnected`
-            Ok(Some(Err(_))) => Err(None),
-            Err(_) => Err(None),
+            Ok(Some(Err(_))) | Err(_) => Err(None),
         },
         Client::Requesting(client) => match client.recv_conn.try_recv() {
             Ok(None) => Ok(()),

@@ -7,13 +7,17 @@ pub struct WebTransportServerConfig {
 }
 
 impl WebTransportServerConfig {
+    #[must_use]
     pub fn builder() -> builder::Builder<builder::WantsWtConfig> {
         builder::builder()
     }
 }
 
 pub mod builder {
-    use super::*;
+    use aeronet::ProtocolVersion;
+    use wtransport::ServerConfig;
+
+    use crate::WebTransportServerConfig;
 
     pub struct WantsWtConfig;
 
@@ -28,6 +32,7 @@ pub mod builder {
     }
 
     impl Builder<WantsWtConfig> {
+        #[allow(clippy::unused_self)] // it's a builder
         pub fn wt_config(self, wt_config: impl Into<ServerConfig>) -> Builder<WantsVersion> {
             Builder(WantsVersion {
                 wt_config: wt_config.into(),
