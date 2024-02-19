@@ -6,10 +6,14 @@ pub use {config::WebTransportServerConfig, wrapper::*};
 
 use tracing::debug;
 
-use std::{collections::HashMap, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
+use std::{
+    collections::HashMap, future::Future, marker::PhantomData, net::SocketAddr, sync::Arc,
+    task::Poll,
+};
 
 use aeronet::{
-    ClientKey, ClientState, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+    ClientKey, ClientState, LaneProtocol, OnLane, Runtime, TransportProtocol, TryAsBytes,
+    TryFromBytes,
 };
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
@@ -49,6 +53,7 @@ where
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
     pub fn open(
+        runtime: Arc<dyn Runtime>,
         config: impl Into<WebTransportServerConfig>,
     ) -> (Self, impl Future<Output = ()> + Send) {
         let config = config.into();
@@ -57,7 +62,7 @@ where
             recv_open,
             _phantom: PhantomData,
         };
-        let backend = backend::open(config, send_open);
+        let backend = backend::open(runtime, config, send_open);
         (frontend, backend)
     }
 

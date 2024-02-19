@@ -4,9 +4,11 @@ mod wrapper;
 
 pub use {config::WebTransportClientConfig, wrapper::*};
 
-use std::{fmt::Debug, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
+use std::{
+    fmt::Debug, future::Future, marker::PhantomData, net::SocketAddr, sync::Arc, task::Poll,
+};
 
-use aeronet::{LaneKey, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes};
+use aeronet::{LaneProtocol, OnLane, Runtime, TransportProtocol, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use futures::channel::oneshot;
 
@@ -40,17 +42,16 @@ where
     P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
 {
     pub fn connect(
+        runtime: Arc<dyn Runtime>,
         config: impl Into<WebTransportClientConfig>,
     ) -> (Self, impl Future<Output = ()> + Send) {
-        u8::try_from(P::Lane::VARIANTS.len())
-            .expect("there should be no more than `u8::MAX` lanes");
         let config = config.into();
         let (send_conn, recv_conn) = oneshot::channel();
         let frontend = Self {
             recv_conn,
             _phantom: PhantomData,
         };
-        let backend = backend::connect(config, send_conn);
+        let backend = backend::connect(runtime, config, send_conn);
         (frontend, backend)
     }
 

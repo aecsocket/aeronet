@@ -1,7 +1,7 @@
-use std::{fmt::Debug, future::Future, net::SocketAddr, task::Poll};
+use std::{fmt::Debug, future::Future, net::SocketAddr, sync::Arc, task::Poll};
 
 use aeronet::{
-    ClientKey, ClientState, LaneProtocol, LocalAddr, OnLane, ServerEvent, ServerState,
+    ClientKey, ClientState, LaneProtocol, LocalAddr, OnLane, Runtime, ServerEvent, ServerState,
     ServerTransport, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
@@ -37,10 +37,11 @@ where
 {
     /// See [`OpeningServer::open`].
     pub fn open_new(
+        runtime: Arc<dyn Runtime>,
         config: impl Into<WebTransportServerConfig>,
     ) -> (Self, impl Future<Output = ()> + Send) {
         let config = config.into();
-        let (server, backend) = OpeningServer::open(config);
+        let (server, backend) = OpeningServer::open(runtime, config);
         (Self::Opening(server), backend)
     }
 
@@ -51,12 +52,13 @@ where
     /// Errors if `self` is not [`WebTransportServer::Closed`].
     pub fn open(
         &mut self,
+        runtime: Arc<dyn Runtime>,
         config: impl Into<WebTransportServerConfig>,
     ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
         match self {
             Self::Closed => {
                 let config = config.into();
-                let (this, backend) = Self::open_new(config);
+                let (this, backend) = Self::open_new(runtime, config);
                 *self = this;
                 Ok(backend)
             }

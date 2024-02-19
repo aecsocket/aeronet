@@ -28,14 +28,14 @@ TODO: find the right command for Firefox
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
-    ClientState, FromClient, LaneKey, LaneProtocol, Message, OnLane, ProtocolVersion,
+    BevyRuntime, ClientState, FromClient, LaneKey, LaneProtocol, Message, OnLane, ProtocolVersion,
     RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected, ServerClosed,
-    ServerOpened, ServerTransport, ServerTransportPlugin, TokioRuntime, TransportProtocol,
-    TryAsBytes, TryFromBytes, VersionedProtocol,
+    ServerOpened, ServerTransport, ServerTransportPlugin, TransportProtocol, TryAsBytes,
+    TryFromBytes, VersionedProtocol,
 };
 use aeronet_wt_native::{WebTransportServer, WebTransportServerConfig};
 use anyhow::Result;
-use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
+use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*, tasks::AsyncComputeTaskPool};
 
 // protocol
 
@@ -45,7 +45,7 @@ use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 // This can also be an enum, with each variant representing a different lane,
 // and each lane having different guarantees.
 #[derive(Debug, Clone, LaneKey)]
-#[lane_kind(UnreliableSequenced)]
+#[lane_kind(ReliableOrdered)]
 struct AppLane;
 
 // Type of message that is transported between clients and servers.
@@ -111,7 +111,6 @@ fn main() {
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
             ServerTransportPlugin::<AppProtocol, WebTransportServer<_>>::default(),
         ))
-        .init_resource::<TokioRuntime>()
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -128,8 +127,8 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands, rt: Res<TokioRuntime>) {
-    match create(rt.as_ref()) {
+fn setup(mut commands: Commands) {
+    match create() {
         Ok(server) => {
             info!("Created server");
             commands.insert_resource(server);
@@ -138,13 +137,19 @@ fn setup(mut commands: Commands, rt: Res<TokioRuntime>) {
     }
 }
 
-fn create(rt: &TokioRuntime) -> Result<WebTransportServer<AppProtocol>> {
-    let cert = rt.block_on(aeronet_wt_native::wtransport::tls::Certificate::load(
-        "./aeronet_wt_native/examples/cert.pem",
-        "./aeronet_wt_native/examples/key.pem",
-    ))?;
+fn create() -> Result<WebTransportServer<AppProtocol>> {
+    // must be a Tokio runtime because wtransport isn't runtime agnostic yet
+    let cert = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(aeronet_wt_native::wtransport::tls::Certificate::load(
+            "./aeronet_wt_native/examples/cert.pem",
+            "./aeronet_wt_native/examples/key.pem",
+        ))?;
 
     let (server, backend) = WebTransportServer::open_new(
+        BevyRuntime::arc(),
         WebTransportServerConfig::builder()
             .wt_config(
                 aeronet_wt_native::wtransport::ServerConfig::builder()
@@ -155,7 +160,7 @@ fn create(rt: &TokioRuntime) -> Result<WebTransportServer<AppProtocol>> {
             )
             .version(AppProtocol),
     );
-    rt.spawn(backend);
+    AsyncComputeTaskPool::get().spawn(backend).detach();
 
     Ok(server)
 }

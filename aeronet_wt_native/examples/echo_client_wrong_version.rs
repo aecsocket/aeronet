@@ -85,7 +85,6 @@ fn main() {
             EguiPlugin,
             ClientTransportPlugin::<AppProtocol, WebTransportClient<_>>::default(),
         ))
-        .init_resource::<TokioRuntime>()
         .init_resource::<WebTransportClient<AppProtocol>>()
         .init_resource::<UiState>()
         .add_systems(Update, (on_connected, on_disconnected, on_recv, ui).chain())

@@ -1,4 +1,6 @@
-use aeronet::ProtocolVersion;
+use std::sync::Arc;
+
+use aeronet::{ProtocolVersion, Runtime};
 use futures::{
     channel::{mpsc, oneshot},
     FutureExt, SinkExt,
@@ -14,6 +16,7 @@ use crate::{
 use super::ClientRequesting;
 
 pub(super) async fn open(
+    runtime: Arc<dyn Runtime>,
     config: WebTransportServerConfig,
     send_open: oneshot::Sender<Result<OpenServerInner, BackendError>>,
 ) {
@@ -59,14 +62,15 @@ pub(super) async fn open(
         let Ok(key) = recv_key.await else { continue };
         debug!("Incoming session {key}");
 
-        tokio::spawn(
-            handle_incoming(session, config.version, send_req)
+        runtime.spawn(Box::pin(
+            handle_incoming(runtime.clone(), session, config.version, send_req)
                 .instrument(debug_span!("Session", key = tracing::field::display(key))),
-        );
+        ));
     }
 }
 
 async fn handle_incoming(
+    runtime: Arc<dyn Runtime>,
     session: IncomingSession,
     version: ProtocolVersion,
     send_req: oneshot::Sender<Result<ClientRequesting, BackendError>>,
@@ -123,5 +127,5 @@ async fn handle_incoming(
             }
         };
     let _ = send_conn.send(Ok(chan_frontend));
-    shared::handle_connection(conn, chan_backend).await
+    shared::handle_connection(runtime.as_ref(), conn, chan_backend).await
 }

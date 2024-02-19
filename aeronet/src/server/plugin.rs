@@ -194,26 +194,36 @@ fn recv<P, T>(
 {
     for event in server.update() {
         match event {
-            ServerEvent::Opened => opened.send(ServerOpened {
-                _phantom: PhantomData,
-            }),
-            ServerEvent::Closed { reason } => closed.send(ServerClosed { reason }),
-            ServerEvent::Connecting { client } => connecting.send(RemoteClientConnecting {
-                client,
-                _phantom: PhantomData,
-            }),
-            ServerEvent::Connected { client } => connected.send(RemoteClientConnected {
-                client,
-                _phantom: PhantomData,
-            }),
-            ServerEvent::Disconnected { client, reason } => {
-                disconnected.send(RemoteClientDisconnected { client, reason })
+            ServerEvent::Opened => {
+                opened.send(ServerOpened {
+                    _phantom: PhantomData,
+                });
             }
-            ServerEvent::Recv { client, msg } => recv.send(FromClient {
-                client,
-                msg,
-                _phantom: PhantomData,
-            }),
+            ServerEvent::Closed { reason } => {
+                closed.send(ServerClosed { reason });
+            }
+            ServerEvent::Connecting { client } => {
+                connecting.send(RemoteClientConnecting {
+                    client,
+                    _phantom: PhantomData,
+                });
+            }
+            ServerEvent::Connected { client } => {
+                connected.send(RemoteClientConnected {
+                    client,
+                    _phantom: PhantomData,
+                });
+            }
+            ServerEvent::Disconnected { client, reason } => {
+                disconnected.send(RemoteClientDisconnected { client, reason });
+            }
+            ServerEvent::Recv { client, msg } => {
+                recv.send(FromClient {
+                    client,
+                    msg,
+                    _phantom: PhantomData,
+                });
+            }
         }
     }
 }

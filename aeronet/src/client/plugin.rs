@@ -124,16 +124,20 @@ fn recv<P, T>(
 {
     for event in client.update() {
         match event {
-            ClientEvent::Connected => connected.send(LocalClientConnected {
-                _phantom: PhantomData,
-            }),
-            ClientEvent::Disconnected { reason } => {
-                disconnected.send(LocalClientDisconnected { reason })
+            ClientEvent::Connected => {
+                connected.send(LocalClientConnected {
+                    _phantom: PhantomData,
+                });
             }
-            ClientEvent::Recv { msg } => recv.send(FromServer {
-                msg,
-                _phantom: PhantomData,
-            }),
+            ClientEvent::Disconnected { reason } => {
+                disconnected.send(LocalClientDisconnected { reason });
+            }
+            ClientEvent::Recv { msg } => {
+                recv.send(FromServer {
+                    msg,
+                    _phantom: PhantomData,
+                });
+            }
         }
     }
 }
