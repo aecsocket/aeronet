@@ -3,7 +3,7 @@ mod wrapper;
 
 pub use wrapper::*;
 
-use std::{future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
+use std::{future::Future, marker::PhantomData, task::Poll};
 
 use aeronet::{
     LaneConfig, LaneProtocol, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
@@ -19,14 +19,11 @@ type WebTransportError<P> =
 
 type ClientEvent<P> = aeronet::client::ClientEvent<P, WebTransportError<P>>;
 
-#[cfg(target_family = "wasm")]
-type NativeClientConfig = web_sys::WebTransportOptions;
-
-#[cfg(not(target_family = "wasm"))]
-type NativeClientConfig = wtransport::ClientConfig;
-
 pub struct WebTransportClientConfig {
-    pub native: NativeClientConfig,
+    #[cfg(target_family = "wasm")]
+    pub native: web_sys::WebTransportOptions,
+    #[cfg(not(target_family = "wasm"))]
+    pub native: wtransport::ClientConfig,
     pub version: ProtocolVersion,
     pub max_packet_len: usize,
     pub lanes: Vec<LaneConfig>,
@@ -45,7 +42,7 @@ pub struct ConnectingClient<P> {
 struct ConnectedInner {
     conn: ConnectionFrontend,
     #[cfg(not(target_family = "wasm"))]
-    local_addr: SocketAddr,
+    local_addr: std::net::SocketAddr,
 }
 
 impl<P> ConnectingClient<P>
@@ -83,12 +80,23 @@ where
     }
 }
 
+#[cfg(target_family = "wasm")]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+pub struct ConnectedClient<P> {
+    conn: ConnectionFrontend,
+    #[derivative(Debug = "ignore")]
+    _phantom: PhantomData<P>,
+}
+
+#[cfg(not(target_family = "wasm"))]
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct ConnectedClient<P> {
     conn: ConnectionFrontend,
     #[cfg(not(target_family = "wasm"))]
-    local_addr: SocketAddr,
+    local_addr: std::net::SocketAddr,
+    #[derivative(Debug = "ignore")]
     _phantom: PhantomData<P>,
 }
 
@@ -100,7 +108,7 @@ where
 {
     #[cfg(not(target_family = "wasm"))]
     #[must_use]
-    pub fn local_addr(&self) -> SocketAddr {
+    pub fn local_addr(&self) -> std::net::SocketAddr {
         self.local_addr
     }
 

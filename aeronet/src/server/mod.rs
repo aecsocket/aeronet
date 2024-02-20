@@ -19,7 +19,7 @@ use crate::{
 /// See the [crate-level docs](crate).
 pub trait ServerTransport<P: TransportProtocol> {
     /// Error type of operations performed on this transport.
-    type Error: Error + Send + Sync + 'static;
+    type Error: Error + Send + Sync;
 
     /// Info on this server when it is in [`ServerState::Opening`].
     type OpeningInfo;

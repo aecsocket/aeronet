@@ -29,6 +29,7 @@ pub fn client_transport_plugin<P, T>(app: &mut App)
 where
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
+    T::Error: Send + Sync,
 {
     app.add_event::<LocalClientConnected<P, T>>()
         .add_event::<LocalClientDisconnected<P, T>>()

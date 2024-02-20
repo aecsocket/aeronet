@@ -1,14 +1,14 @@
 //!
 
-use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
+use std::{convert::Infallible, string::FromUtf8Error};
 
 use aeronet::{
     client::{
         ClientState, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
         LocalClientDisconnected,
     },
-    LaneKey, LaneProtocol, Message, OnLane, ProtocolVersion, TokioRuntime, TransportProtocol,
-    TryAsBytes, TryFromBytes,
+    LaneKey, LaneProtocol, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes,
+    TryFromBytes,
 };
 use aeronet_webtransport::{WebTransportClient, WebTransportClientConfig, MTU};
 use bevy::{log::LogPlugin, prelude::*};
@@ -78,20 +78,23 @@ type Client = WebTransportClient<AppProtocol>;
 // logic
 
 fn main() {
-    App::new()
-        .add_plugins((
-            DefaultPlugins.set(LogPlugin {
-                filter: "wgpu=error,naga=warn,aeronet=debug".into(),
-                ..default()
-            }),
-            EguiPlugin,
-            ClientTransportPlugin::<_, Client>::default(),
-        ))
-        .init_resource::<TokioRuntime>()
-        .init_resource::<Client>()
-        .init_resource::<UiState>()
-        .add_systems(Update, (on_connected, on_disconnected, on_recv, ui).chain())
-        .run();
+    let mut app = App::new();
+    app.add_plugins((
+        DefaultPlugins.set(LogPlugin {
+            filter: "wgpu=error,naga=warn,aeronet=debug,aeronet_webtransport=debug".into(),
+            ..default()
+        }),
+        EguiPlugin,
+        ClientTransportPlugin::<_, Client>::default(),
+    ))
+    .init_resource::<Client>()
+    .init_resource::<UiState>()
+    .add_systems(Update, (on_connected, on_disconnected, on_recv, ui).chain());
+
+    #[cfg(not(target_family = "wasm"))]
+    app.init_resource::<aeronet::TokioRuntime>();
+
+    app.run();
 }
 
 #[derive(Debug, Default, Resource)]
@@ -132,7 +135,7 @@ fn on_recv(
 }
 
 fn ui(
-    runtime: Res<TokioRuntime>,
+    #[cfg(not(target_family = "wasm"))] runtime: Res<aeronet::TokioRuntime>,
     mut egui: EguiContexts,
     mut client: ResMut<WebTransportClient<AppProtocol>>,
     mut ui_state: ResMut<UiState>,
@@ -148,7 +151,12 @@ fn ui(
                     .inner;
                 if let Some(url) = url {
                     ui_state.log.push(format!("Connecting to {url}"));
-                    connect(runtime.as_ref(), client.as_mut(), url);
+                    connect(
+                        #[cfg(not(target_family = "wasm"))]
+                        runtime.as_ref(),
+                        client.as_mut(),
+                        url,
+                    );
                 }
             });
 
@@ -209,7 +217,7 @@ fn ui(
 
 #[cfg(target_family = "wasm")]
 fn native_config() -> aeronet_webtransport::web_sys::WebTransportOptions {
-    todo!()
+    aeronet_webtransport::web_sys::WebTransportOptions::new()
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -217,11 +225,15 @@ fn native_config() -> aeronet_webtransport::wtransport::ClientConfig {
     aeronet_webtransport::wtransport::ClientConfig::builder()
         .with_bind_default()
         .with_no_cert_validation()
-        .keep_alive_interval(Some(Duration::from_secs(5)))
+        .keep_alive_interval(Some(std::time::Duration::from_secs(5)))
         .build()
 }
 
-fn connect(runtime: &TokioRuntime, client: &mut WebTransportClient<AppProtocol>, url: String) {
+fn connect(
+    #[cfg(not(target_family = "wasm"))] runtime: &aeronet::TokioRuntime,
+    client: &mut WebTransportClient<AppProtocol>,
+    url: String,
+) {
     let backend = client
         .connect(WebTransportClientConfig {
             native: native_config(),
@@ -231,6 +243,9 @@ fn connect(runtime: &TokioRuntime, client: &mut WebTransportClient<AppProtocol>,
             url,
         })
         .expect("backend should be disconnected");
+    #[cfg(target_family = "wasm")]
+    wasm_bindgen_futures::spawn_local(backend);
+    #[cfg(not(target_family = "wasm"))]
     runtime.spawn(backend);
 }
 

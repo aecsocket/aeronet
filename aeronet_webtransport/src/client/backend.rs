@@ -20,7 +20,7 @@ pub async fn connect(
     let connecting = match endpoint
         .connect(&config.url)
         .await
-        .map_err(BackendError::Connect)
+        .map_err(|err| BackendError::Connect(err.into()))
     {
         Ok(connecting) => connecting,
         Err(err) => {
@@ -32,7 +32,7 @@ pub async fn connect(
     let conn = match connecting
         .wait_connect()
         .await
-        .map_err(BackendError::Connecting)
+        .map_err(|err| BackendError::Connecting(err.into()))
     {
         Ok(conn) => conn,
         Err(err) => {
@@ -73,7 +73,7 @@ pub async fn connect(
 }
 
 #[cfg(target_family = "wasm")]
-async fn client_endpoint(config: web_sys::WebTransportOptions) -> Result<Endpoint, BackendError> {
+async fn create_endpoint(config: web_sys::WebTransportOptions) -> Result<Endpoint, BackendError> {
     Ok(xwt::current::Endpoint { options: config })
 }
 

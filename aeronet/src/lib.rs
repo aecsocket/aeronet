@@ -19,6 +19,5 @@ pub mod condition;
 
 #[cfg(feature = "bevy-tokio-rt")]
 mod tokio_rt;
-
 #[cfg(feature = "bevy-tokio-rt")]
 pub use tokio_rt::*;

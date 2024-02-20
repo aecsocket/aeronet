@@ -1,0 +1,9 @@
+[package]
+name = "gencert"
+version = "0.1.0"
+
+[dependencies]
+base64.workspace = true
+rcgen.workspace = true
+ring.workspace = true
+time.workspace = true

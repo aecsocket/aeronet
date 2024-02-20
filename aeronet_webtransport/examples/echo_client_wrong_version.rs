@@ -81,7 +81,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins.set(LogPlugin {
-                filter: "wgpu=error,naga=warn,aeronet=debug".into(),
+                filter: "wgpu=error,naga=warn,aeronet=debug,aeronet_webtransport=debug".into(),
                 ..default()
             }),
             EguiPlugin,

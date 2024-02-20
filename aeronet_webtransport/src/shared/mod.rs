@@ -1,5 +1,6 @@
 mod negotiate;
 
+use derivative::Derivative;
 use tracing::debug;
 use xwt::current::{Connection, RecvStream, SendStream};
 use xwt_core::datagram::{Receive, Send};
@@ -28,13 +29,16 @@ pub struct ConnectionFrontend {
     lanes: Lanes,
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct ConnectionBackend {
     recv_c2s: mpsc::UnboundedReceiver<Bytes>,
     send_s2c: mpsc::Sender<Bytes>,
     send_rtt: mpsc::Sender<Duration>,
     send_err: oneshot::Sender<BackendError>,
+    #[derivative(Debug = "ignore")]
     _send_managed: SendStream,
+    #[derivative(Debug = "ignore")]
     _recv_managed: RecvStream,
 }
 
@@ -42,7 +46,7 @@ pub async fn connection_channel<const SERVER: bool>(
     conn: &Connection,
     version: ProtocolVersion,
     max_packet_len: usize,
-    configs: &[LaneConfig],
+    lanes: &[LaneConfig],
 ) -> Result<(ConnectionFrontend, ConnectionBackend), BackendError> {
     let (send_managed, recv_managed) = if SERVER {
         negotiate::server(conn, version).await?
@@ -61,7 +65,7 @@ pub async fn connection_channel<const SERVER: bool>(
             recv_s2c,
             recv_rtt,
             recv_err,
-            lanes: Lanes::new(max_packet_len, configs),
+            lanes: Lanes::new(max_packet_len, lanes),
         },
         ConnectionBackend {
             recv_c2s,
@@ -145,7 +149,15 @@ impl ConnectionFrontend {
 impl ConnectionBackend {
     pub async fn handle(self, conn: Connection) {
         debug!("Connected backend");
-        match try_handle_connection(conn, self.recv_c2s, self.send_s2c, self.send_rtt).await {
+        match try_handle_connection(
+            conn,
+            self.recv_c2s,
+            self.send_s2c,
+            #[cfg(not(target_family = "wasm"))]
+            self.send_rtt,
+        )
+        .await
+        {
             Ok(()) => debug!("Closed backend"),
             Err(err) => {
                 debug!("Closed backend: {:#}", aeronet::util::pretty_error(&err));
@@ -159,7 +171,7 @@ async fn try_handle_connection(
     conn: Connection,
     mut recv_c2s: mpsc::UnboundedReceiver<Bytes>,
     mut send_s2c: mpsc::Sender<Bytes>,
-    mut send_rtt: mpsc::Sender<Duration>,
+    #[cfg(not(target_family = "wasm"))] mut send_rtt: mpsc::Sender<Duration>,
 ) -> Result<(), BackendError> {
     debug!("Starting connection loop");
     // in `futures::select!`, if you use `()` the macro breaks
@@ -172,7 +184,8 @@ async fn try_handle_connection(
 
         futures::select! {
             result = conn.receive_datagram().fuse() => {
-                let datagram = result.map_err(BackendError::LostConnection)?;
+                // OMG WTF ERROR HERE!!! RangeError: supplied view is not large enough.
+                let datagram = result.map_err(|err| BackendError::LostConnection(err.into()))?;
                 let _ = send_s2c.send(to_bytes(datagram)).await;
             }
             msg = recv_c2s.next() => {
@@ -180,7 +193,7 @@ async fn try_handle_connection(
                     // frontend closed
                     return Ok(());
                 };
-                conn.send_datagram(msg).await.map_err(BackendError::SendDatagram)?;
+                conn.send_datagram(msg).await.map_err(|err| BackendError::SendDatagram(err.into()))?;
             }
         }
     }
@@ -192,8 +205,8 @@ async fn try_handle_connection(
 // TODO upstream this to xwt
 
 #[cfg(target_family = "wasm")]
-fn to_bytes(datagram: xwt::current::Datagram) -> Bytes {
-    Bytes::from(datagram.0)
+fn to_bytes(datagram: Vec<u8>) -> Bytes {
+    Bytes::from(datagram)
 }
 
 #[cfg(not(target_family = "wasm"))]

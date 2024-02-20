@@ -1,18 +1,44 @@
+//! Headless WebTransport echo server.
 //!
+//! Connect to it from WASM in a Chromium browser by running the command below
+//! in a terminal.
+/*
+# pick whichever Chromium browser you use
+chromium \
+brave \
+--webtransport-developer-mode \
+--ignore-certificate-errors-spki-list=x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
+
+TODO: find the right command for Firefox
+
+*/
+//!
+//! Then navigate to <https://webtransport.day/> and connect to
+//! `https://[::1]:25565`. Make sure to close any browser windows before running
+//! the command.
+//!
+//! If you run the `gencert` example, update the hash above to match your newly
+//! generated certificate fingerprint.
+//!
+//! **IMPORTANT NOTE:** After receiving a `ServerEvent::Connecting` (indicating
+//! that a client is connecting), you *must* either `accept` or `reject` the
+//! request using the server. Otherwise, the client will be stuck in limbo
+//! and will take up a client slot permanently!
 
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
-    client::{
-        ClientState, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
-        LocalClientDisconnected,
+    client::ClientState,
+    server::{
+        FromClient, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
+        ServerClosed, ServerOpened, ServerTransport, ServerTransportPlugin,
     },
     LaneKey, LaneProtocol, Message, OnLane, ProtocolVersion, TokioRuntime, TransportProtocol,
     TryAsBytes, TryFromBytes,
 };
-use aeronet_webtransport::{WebTransportClient, WebTransportClientConfig, MTU};
-use bevy::{log::LogPlugin, prelude::*};
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use aeronet_webtransport::{WebTransportServer, WebTransportServerConfig, MTU};
+use anyhow::Result;
+use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 
 // protocol
 
@@ -71,175 +97,146 @@ impl LaneProtocol for AppProtocol {
     type Lane = AppLane;
 }
 
-const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(0x8080);
+const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(0xdeadbeefbadc0de);
 
-type Client = WebTransportClient<AppProtocol>;
+type Server = WebTransportServer<AppProtocol>;
 
 // logic
 
 fn main() {
     App::new()
         .add_plugins((
-            DefaultPlugins.set(LogPlugin {
-                filter: "wgpu=error,naga=warn,aeronet=debug".into(),
+            LogPlugin {
+                filter: "wgpu=error,naga=warn,aeronet=debug,aeronet_webtransport=debug".into(),
                 ..default()
-            }),
-            EguiPlugin,
-            ClientTransportPlugin::<_, Client>::default(),
+            },
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
+            ServerTransportPlugin::<AppProtocol, Server>::default(),
         ))
         .init_resource::<TokioRuntime>()
-        .init_resource::<Client>()
-        .init_resource::<UiState>()
-        .add_systems(Update, (on_connected, on_disconnected, on_recv, ui).chain())
+        .add_systems(Startup, setup)
+        .add_systems(
+            Update,
+            (
+                on_opened,
+                on_closed,
+                on_incoming,
+                on_connected,
+                on_disconnected,
+                on_recv,
+            )
+                .chain(),
+        )
         .run();
 }
 
-#[derive(Debug, Default, Resource)]
-struct UiState {
-    url: String,
-    log: Vec<String>,
-    msg: String,
+fn setup(mut commands: Commands, rt: Res<TokioRuntime>) {
+    match create(rt.as_ref()) {
+        Ok(server) => {
+            info!("Created server");
+            commands.insert_resource(server);
+        }
+        Err(err) => panic!("Failed to create server: {err:#}"),
+    }
+}
+
+fn create(rt: &TokioRuntime) -> Result<WebTransportServer<AppProtocol>> {
+    // must be a Tokio runtime because wtransport isn't runtime agnostic yet
+    let cert = rt.block_on(aeronet_webtransport::wtransport::tls::Certificate::load(
+        "./aeronet_webtransport/examples/cert.pem",
+        "./aeronet_webtransport/examples/key.pem",
+    ))?;
+
+    let (server, backend) = WebTransportServer::open_new(WebTransportServerConfig {
+        native: aeronet_webtransport::wtransport::ServerConfig::builder()
+            .with_bind_default(25565)
+            .with_certificate(cert)
+            .keep_alive_interval(Some(Duration::from_secs(5)))
+            .build(),
+        version: PROTOCOL_VERSION,
+        max_packet_len: MTU,
+        lanes: AppLane::config(),
+    });
+    rt.spawn(backend);
+
+    Ok(server)
+}
+
+// The arguments in these Bevy systems look scary, but don't worry, they're just
+// type parameters for aeronet events, which are always `<P, T>`, where:
+// * `P` is your app's protocol
+// * `T` is the transport implementation you're using
+//   (you have to pass in `P` again here)
+// It's recommended that you add type aliases for events, i.e.
+// ```
+// type ServerOpened = aeronet::ServerOpened<MyProtocol, MyTransportServer<MyProtocol>>;
+//
+// fn on_opened(mut events: EventReader<ServerOpened>) { /* .. */ }
+// ```
+
+fn on_opened(mut events: EventReader<ServerOpened<AppProtocol, Server>>) {
+    for ServerOpened { .. } in events.read() {
+        info!("Opened server for connections");
+    }
+}
+
+fn on_closed(mut events: EventReader<ServerClosed<AppProtocol, Server>>) {
+    for ServerClosed { reason } in events.read() {
+        info!("Server closed: {:#}", aeronet::util::pretty_error(&reason))
+    }
+}
+
+fn on_incoming(
+    mut events: EventReader<RemoteClientConnecting<AppProtocol, Server>>,
+    mut server: ResMut<Server>,
+) {
+    for RemoteClientConnecting { client, .. } in events.read() {
+        // Once the server sends out an event saying that a client is connecting
+        // (`RemoteConnecting`) you can get its `client_state` and read its
+        // connection info, to decide if you want to accept or reject it.
+        if let ClientState::Connecting(info) = server.client_state(*client) {
+            info!(
+                "Client {client} incoming from {}{} ({:?})",
+                info.authority, info.path, info.origin,
+            );
+        }
+        // IMPORTANT NOTE: You must either accept or reject the request after
+        // receiving it. You don't have to do it immediately, but you do
+        // have to do it eventually - the sooner the better.
+        let _ = server.accept_request(*client);
+    }
 }
 
 fn on_connected(
-    mut events: EventReader<LocalClientConnected<AppProtocol, Client>>,
-    mut ui_state: ResMut<UiState>,
+    mut events: EventReader<RemoteClientConnected<AppProtocol, Server>>,
+    mut server: ResMut<Server>,
 ) {
-    for LocalClientConnected { .. } in events.read() {
-        ui_state.log.push(format!("Connected"));
+    for RemoteClientConnected { client, .. } in events.read() {
+        if let ClientState::Connected(info) = server.client_state(*client) {
+            info!(
+                "Client {client} connected on {} (RTT: {:?})",
+                info.remote_addr, info.rtt
+            );
+        };
+        let _ = server.send(*client, "Welcome!");
+        let _ = server.send(*client, "Send me some UTF-8 text, and I will send it back");
     }
 }
 
-fn on_disconnected(
-    mut events: EventReader<LocalClientDisconnected<AppProtocol, Client>>,
-    mut ui_state: ResMut<UiState>,
-) {
-    for LocalClientDisconnected { reason } in events.read() {
-        ui_state.log.push(format!(
-            "Disconnected: {:#}",
-            aeronet::util::pretty_error(&reason)
-        ));
+fn on_disconnected(mut events: EventReader<RemoteClientDisconnected<AppProtocol, Server>>) {
+    for RemoteClientDisconnected { client, reason } in events.read() {
+        info!(
+            "Client {client} disconnected: {:#}",
+            aeronet::util::pretty_error(reason)
+        );
     }
 }
 
-fn on_recv(
-    mut events: EventReader<FromServer<AppProtocol, Client>>,
-    mut ui_state: ResMut<UiState>,
-) {
-    for FromServer { msg, .. } in events.read() {
-        ui_state.log.push(format!("> {}", msg.0));
-    }
-}
-
-fn ui(
-    runtime: Res<TokioRuntime>,
-    mut egui: EguiContexts,
-    mut client: ResMut<WebTransportClient<AppProtocol>>,
-    mut ui_state: ResMut<UiState>,
-) {
-    egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
-        ui.horizontal(|ui| {
-            ui.add_enabled_ui(client.state().is_disconnected(), |ui| {
-                let url = ui
-                    .horizontal(|ui| {
-                        ui.label("URL");
-                        text_input(ui, &mut ui_state.url)
-                    })
-                    .inner;
-                if let Some(url) = url {
-                    ui_state.log.push(format!("Connecting to {url}"));
-                    connect(runtime.as_ref(), client.as_mut(), url);
-                }
-            });
-
-            ui.add_enabled_ui(!client.state().is_disconnected(), |ui| {
-                if ui.button("Disconnect").clicked() {
-                    ui_state.log.push(format!("Disconnected by user"));
-                    client
-                        .disconnect()
-                        .expect("client should not already be disconnected");
-                }
-            });
-        });
-
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for line in &ui_state.log {
-                ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
-            }
-        });
-
-        if let ClientState::Connected(info) = client.state() {
-            let msg = ui
-                .horizontal(|ui| {
-                    ui.label("Send");
-                    text_input(ui, &mut ui_state.msg)
-                })
-                .inner;
-            if let Some(msg) = msg {
-                ui_state.log.push(format!("< {msg}"));
-                client.send(msg).expect("should be able to send message");
-            }
-
-            egui::Grid::new("stats").show(ui, |ui| {
-                ui.label("RTT");
-                ui.label(format!("{:?}", info.rtt));
-                ui.end_row();
-
-                ui.label("Messages sent/received");
-                ui.label(format!("{} sent / {} recv", info.msgs_sent, info.msgs_recv));
-                ui.end_row();
-
-                ui.label("Message bytes sent/received");
-                ui.label(format!(
-                    "{} sent / {} recv",
-                    info.msg_bytes_sent, info.msg_bytes_recv
-                ));
-                ui.end_row();
-
-                ui.label("Total bytes sent/received");
-                ui.label(format!(
-                    "{} sent / {} recv",
-                    info.total_bytes_sent, info.total_bytes_recv
-                ));
-                ui.end_row();
-            });
-        }
-    });
-}
-
-#[cfg(target_family = "wasm")]
-fn native_config() -> aeronet_webtransport::web_sys::WebTransportOptions {
-    todo!()
-}
-
-#[cfg(not(target_family = "wasm"))]
-fn native_config() -> aeronet_webtransport::wtransport::ClientConfig {
-    aeronet_webtransport::wtransport::ClientConfig::builder()
-        .with_bind_default()
-        .with_no_cert_validation()
-        .keep_alive_interval(Some(Duration::from_secs(5)))
-        .build()
-}
-
-fn connect(runtime: &TokioRuntime, client: &mut WebTransportClient<AppProtocol>, url: String) {
-    let backend = client
-        .connect(WebTransportClientConfig {
-            native: native_config(),
-            version: PROTOCOL_VERSION,
-            max_packet_len: MTU,
-            lanes: AppLane::config(),
-            url,
-        })
-        .expect("backend should be disconnected");
-    runtime.spawn(backend);
-}
-
-pub fn text_input(ui: &mut egui::Ui, text: &mut String) -> Option<String> {
-    let resp = ui.text_edit_singleline(text);
-    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !text.is_empty() {
-        ui.memory_mut(|m| m.request_focus(resp.id));
-        Some(std::mem::take(text))
-    } else {
-        None
+fn on_recv(mut events: EventReader<FromClient<AppProtocol, Server>>, mut server: ResMut<Server>) {
+    for FromClient { client, msg, .. } in events.read() {
+        info!("{client} > {}", msg.0);
+        let resp = format!("You sent: {}", msg.0);
+        info!("{client} < {resp}");
+        let _ = server.send(*client, AppMessage(resp));
     }
 }

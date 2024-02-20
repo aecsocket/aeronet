@@ -7,13 +7,12 @@ mod transport;
 
 pub use {client::*, transport::*};
 
-#[cfg(not(target_family = "wasm"))]
-mod server;
-#[cfg(not(target_family = "wasm"))]
-pub use server::*;
-
-#[cfg(target_family = "wasm")]
-pub use web_sys;
-
-#[cfg(not(target_family = "wasm"))]
-pub use wtransport;
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+        pub use web_sys;
+    } else {
+        mod server;
+        pub use server::*;
+        pub use wtransport;
+    }
+}

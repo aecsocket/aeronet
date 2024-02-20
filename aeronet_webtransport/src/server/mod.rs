@@ -102,6 +102,7 @@ where
             _phantom: PhantomData,
         };
         let backend = backend::open(config, send_open);
+        debug!("crt backend");
         (frontend, backend)
     }
 

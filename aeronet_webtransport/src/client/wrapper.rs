@@ -38,7 +38,7 @@ where
     pub fn connect(
         &mut self,
         config: impl Into<WebTransportClientConfig>,
-    ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
+    ) -> Result<impl Future<Output = ()> + maybe::Send, WebTransportError<P>> {
         match self {
             Self::Disconnected => {
                 let config = config.into();

@@ -70,7 +70,7 @@ xwt-core = "0.2.2"
 wtransport = "0.1.10"
 
 web-sys = "0.3.67"
-xwt-web-sys = "0.5.1"
+wasm-bindgen-futures = "0.4.41"
 
 base64 = "0.21.7"
 rcgen = "0.12.0"

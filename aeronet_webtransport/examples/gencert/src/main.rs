@@ -1,6 +1,5 @@
-//!
-
-// https://raw.githubusercontent.com/BiagioFesta/wtransport/master/wtransport/examples/gencert.rs
+//! Based on
+//! https://raw.githubusercontent.com/BiagioFesta/wtransport/master/wtransport/examples/gencert.rs
 
 use base64::{engine::general_purpose::STANDARD as Base64Engine, Engine};
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, PKCS_ECDSA_P256_SHA256};
@@ -31,12 +30,12 @@ fn main() {
 
     let certificate = rcgen::Certificate::from_params(cert_params).unwrap();
 
-    fs::File::create("./aeronet_wt_native/examples/cert.pem")
+    fs::File::create("./aeronet_webtransport/examples/cert.pem")
         .unwrap()
         .write_all(certificate.serialize_pem().unwrap().as_bytes())
         .unwrap();
 
-    fs::File::create("./aeronet_wt_native/examples/key.pem")
+    fs::File::create("./aeronet_webtransport/examples/key.pem")
         .unwrap()
         .write_all(certificate.serialize_private_key_pem().as_bytes())
         .unwrap();

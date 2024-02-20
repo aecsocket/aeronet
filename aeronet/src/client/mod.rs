@@ -18,7 +18,7 @@ use crate::TransportProtocol;
 /// See the [crate-level docs](crate).
 pub trait ClientTransport<P: TransportProtocol> {
     /// Error type of operations performed on this transport.
-    type Error: Error + Send + Sync + 'static;
+    type Error: Error + Send + Sync;
 
     /// Info on this client when it is in [`ClientState::Connecting`].
     type ConnectingInfo;

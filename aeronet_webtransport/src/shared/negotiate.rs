@@ -5,7 +5,7 @@ use aeronet_protocol::{
 };
 use tracing::debug;
 use xwt::current::{Connection, RecvStream, SendStream};
-use xwt_core::{AcceptBiStream, OpenBiStream, OpeningBiStream, Read, Write, WriteChunk};
+use xwt_core::{AcceptBiStream, OpenBiStream, OpeningBiStream, Read, Write};
 
 use crate::BackendError;
 
@@ -16,24 +16,24 @@ pub(super) async fn client(
     let (mut send_managed, mut recv_managed) = conn
         .open_bi()
         .await
-        .map_err(BackendError::OpeningManaged)?
+        .map_err(|err| BackendError::OpeningManaged(err.into()))?
         .wait_bi()
         .await
-        .map_err(BackendError::OpenManaged)?;
+        .map_err(|err| BackendError::OpenManaged(err.into()))?;
     let negotiation = Negotiation::new(version);
 
     debug!("Opened managed stream, sending negotiation request");
     send_managed
         .write(&negotiation.request())
         .await
-        .map_err(BackendError::SendManaged)?;
+        .map_err(|err| BackendError::SendManaged(err.into()))?;
 
     debug!("Waiting for response");
     let mut resp = [0; NEG_RESPONSE_LEN];
     let bytes_read = recv_managed
         .read(&mut resp)
         .await
-        .map_err(BackendError::RecvManaged)?
+        .map_err(|err| BackendError::RecvManaged(From::from(err)))?
         .ok_or(BackendError::ManagedStreamClosed)?;
     if bytes_read != NEG_RESPONSE_LEN {
         return Err(BackendError::NegotiateResponseLength { len: bytes_read });
@@ -55,7 +55,7 @@ pub(super) async fn server(
     let (mut send_managed, mut recv_managed) = conn
         .accept_bi()
         .await
-        .map_err(BackendError::AcceptManaged)?;
+        .map_err(|err| BackendError::AcceptManaged(err.into()))?;
     let negotiation = Negotiation::new(version);
 
     debug!("Accepted managed stream, waiting for negotiation request");
@@ -63,7 +63,7 @@ pub(super) async fn server(
     let bytes_read = recv_managed
         .read(&mut req)
         .await
-        .map_err(BackendError::RecvManaged)?
+        .map_err(|err| BackendError::RecvManaged(err.into()))?
         .ok_or(BackendError::ManagedStreamClosed)?;
     if bytes_read != NEG_REQUEST_LEN {
         return Err(BackendError::NegotiateRequestLength { len: bytes_read });
@@ -72,9 +72,9 @@ pub(super) async fn server(
     let (result, resp) = negotiation.recv_request(&req);
     if let Some(resp) = resp {
         send_managed
-            .write_chunk(&resp)
+            .write(&resp)
             .await
-            .map_err(BackendError::SendManaged)?;
+            .map_err(|err| BackendError::SendManaged(err.into()))?;
     }
     if let Err(err) = result {
         // if there was an error, and we sent some bytes back,
