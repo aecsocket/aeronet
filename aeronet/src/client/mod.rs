@@ -26,8 +26,12 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// Info on this client when it is in [`ClientState::Connected`].
     type ConnectedInfo;
 
-    /// Gets the current state of this client, optionally with the connection
-    /// info.
+    /// Gets the current state of this client.
+    ///
+    /// This can be used to access statistics on the connection, such as number
+    /// of bytes sent or [`Rtt`], if the transport provides them.
+    ///
+    /// [`Rtt`]: crate::Rtt
     fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
 
     /// Attempts to send a message to the currently connected server.
@@ -70,6 +74,8 @@ impl fmt::Display for ClientKey {
 }
 
 /// State of a [`ClientTransport`].
+///
+/// See [`ClientTransport::state`].
 #[derive(Debug, Clone)]
 pub enum ClientState<A, B> {
     /// Not connected to a server, and making no attempts to connect to one.

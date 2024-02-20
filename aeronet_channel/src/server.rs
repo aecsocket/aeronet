@@ -1,15 +1,15 @@
-use aeronet::{ClientKey, ServerTransport, TransportProtocol};
+use aeronet::{
+    client::{ClientKey, ClientState},
+    server::{ServerState, ServerTransport},
+    TransportProtocol,
+};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;
 
 use crate::{ChannelError, ConnectionInfo};
 
-type ServerState = aeronet::ServerState<(), ()>;
-
-type ClientState = aeronet::ClientState<(), ConnectionInfo>;
-
-type ServerEvent<P> = aeronet::ServerEvent<P, ChannelError>;
+type ServerEvent<P> = aeronet::server::ServerEvent<P, ChannelError>;
 
 /// Implementation of [`ServerTransport`] using in-memory MPSC channels for
 /// transport.
@@ -66,11 +66,14 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
 
     type ConnectedInfo = ConnectionInfo;
 
-    fn state(&self) -> ServerState {
+    fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo> {
         ServerState::Open(())
     }
 
-    fn client_state(&self, client: ClientKey) -> ClientState {
+    fn client_state(
+        &self,
+        client: ClientKey,
+    ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         match self.clients.get(client) {
             Some(Client::Connected { info, .. }) => ClientState::Connected(info.clone()),
             Some(Client::Disconnected) | None => ClientState::Disconnected,

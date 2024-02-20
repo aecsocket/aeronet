@@ -30,8 +30,6 @@ pub fn message(input: TokenStream) -> TokenStream {
 ///
 /// * `#[lane_kind(kind)]` determines which kind of lane this variant
 ///   represents, where `kind` is a variant of `LaneKind`.
-/// * `#[lane_priority(value)]` determines the priority of this lane, relative
-///   to other lanes, where `value` is an `i32`.
 ///
 /// # Usage
 ///
@@ -58,7 +56,7 @@ pub fn message(input: TokenStream) -> TokenStream {
 ///     HighPriority,
 /// }
 /// ```
-#[proc_macro_derive(LaneKey, attributes(lane_kind, lane_priority))]
+#[proc_macro_derive(LaneKey, attributes(lane_kind))]
 pub fn lane_key(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     lane_key::derive(&input)
@@ -72,6 +70,8 @@ pub fn lane_key(input: TokenStream) -> TokenStream {
 ///
 /// * `#[lane_type(type)]` determines what `type` implementing [`LaneKey`] this
 ///   message is sent along.
+/// * `#[on_lane(lane)]` determines what variant of `lane_type` this variant
+///   maps to.
 ///
 /// # Usage
 ///
@@ -92,7 +92,7 @@ pub fn lane_key(input: TokenStream) -> TokenStream {
 /// ```
 ///
 /// ## Enum
-///
+
 /// The type requires the attribute `#[lane_type(..)]`.
 ///
 /// All variants require the attribute `#[on_lane(..)]`.
@@ -126,6 +126,5 @@ pub fn on_lane(input: TokenStream) -> TokenStream {
 }
 
 const LANE_KIND: &str = "lane_kind";
-const LANE_PRIORITY: &str = "lane_priority";
 const LANE_TYPE: &str = "lane_type";
 const ON_LANE: &str = "on_lane";

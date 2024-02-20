@@ -8,7 +8,10 @@ use std::{error::Error, fmt::Debug};
 
 use derivative::Derivative;
 
-use crate::{ClientKey, ClientState, TransportProtocol};
+use crate::{
+    client::{ClientKey, ClientState},
+    TransportProtocol,
+};
 
 /// Allows listening to client connections and transporting data between this
 /// server and connected clients.
@@ -86,6 +89,11 @@ pub trait ServerTransport<P: TransportProtocol> {
 }
 
 /// State of a [`ServerTransport`].
+///
+/// This can be used to access statistics on a client connection, such as number
+/// of bytes sent or [`Rtt`], if the transport provides them.
+///
+/// [`Rtt`]: crate::Rtt
 #[derive(Debug, Clone)]
 pub enum ServerState<A, B> {
     /// Not listening to client connections, and making no attempts to start

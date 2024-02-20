@@ -1,12 +1,15 @@
-use aeronet::{ClientKey, ClientTransport, TransportProtocol};
+use aeronet::{
+    client::{ClientKey, ClientTransport},
+    TransportProtocol,
+};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 
 use crate::{ChannelError, ChannelServer, ConnectionInfo};
 
-type ClientState = aeronet::ClientState<(), ConnectionInfo>;
+type ClientState = aeronet::client::ClientState<(), ConnectionInfo>;
 
-type ClientEvent<P> = aeronet::ClientEvent<P, ChannelError>;
+type ClientEvent<P> = aeronet::client::ClientEvent<P, ChannelError>;
 
 /// Implementation of [`ClientTransport`] using in-memory MPSC channels for
 /// transport.

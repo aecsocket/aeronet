@@ -1,12 +1,13 @@
 //! Example creating a client and server pair, where the client can send a
 //! message, and the server just echoes back that message to the client.
 
-use std::mem;
-
 use aeronet::{
-    ClientTransport, ClientTransportPlugin, FromClient, FromServer, LocalClientConnected, Message,
-    RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected, ServerTransport,
-    ServerTransportPlugin, TransportProtocol,
+    client::{ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected},
+    server::{
+        FromClient, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
+        ServerTransport, ServerTransportPlugin,
+    },
+    Message, TransportProtocol,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::prelude::*;
@@ -23,6 +24,9 @@ impl TransportProtocol for AppProtocol {
     type C2S = AppMessage;
     type S2C = AppMessage;
 }
+
+type Client = ChannelClient<AppProtocol>;
+type Server = ChannelServer<AppProtocol>;
 
 // Logic
 
@@ -42,8 +46,8 @@ fn main() {
         .add_plugins((
             DefaultPlugins,
             EguiPlugin,
-            ClientTransportPlugin::<AppProtocol, ChannelClient<_>>::default(),
-            ServerTransportPlugin::<AppProtocol, ChannelServer<_>>::default(),
+            ClientTransportPlugin::<_, Client>::default(),
+            ServerTransportPlugin::<_, Server>::default(),
         ))
         .init_resource::<ClientUiState>()
         .init_resource::<ServerUiState>()
@@ -66,15 +70,15 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    let mut server = ChannelServer::<AppProtocol>::open();
-    let client = ChannelClient::connect_new(&mut server);
+    let mut server = Server::open();
+    let client = Client::connect_new(&mut server);
     commands.insert_resource(server);
     commands.insert_resource(client);
 }
 
 fn client_on_connected(
     mut ui_state: ResMut<ClientUiState>,
-    mut events: EventReader<LocalClientConnected<AppProtocol, ChannelClient<AppProtocol>>>,
+    mut events: EventReader<LocalClientConnected<AppProtocol, Client>>,
 ) {
     for LocalClientConnected { .. } in events.read() {
         ui_state.log.push(format!("Connected"));
@@ -83,7 +87,7 @@ fn client_on_connected(
 
 fn client_on_recv(
     mut ui_state: ResMut<ClientUiState>,
-    mut events: EventReader<FromServer<AppProtocol, ChannelClient<AppProtocol>>>,
+    mut events: EventReader<FromServer<AppProtocol, Client>>,
 ) {
     for FromServer { msg, .. } in events.read() {
         ui_state.log.push(format!("> {}", msg.0));
@@ -93,7 +97,7 @@ fn client_on_recv(
 fn client_ui(
     mut egui: EguiContexts,
     mut ui_state: ResMut<ClientUiState>,
-    mut client: ResMut<ChannelClient<AppProtocol>>,
+    mut client: ResMut<Client>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -117,7 +121,7 @@ fn client_ui(
                 (|| {
                     ui.memory_mut(|m| m.request_focus(msg_resp.id));
 
-                    let msg = mem::take(&mut ui_state.msg);
+                    let msg = std::mem::take(&mut ui_state.msg);
                     if msg.is_empty() {
                         return;
                     }
@@ -137,7 +141,7 @@ fn client_ui(
 
 fn server_on_connecting(
     mut ui_state: ResMut<ServerUiState>,
-    mut events: EventReader<RemoteClientConnecting<AppProtocol, ChannelServer<AppProtocol>>>,
+    mut events: EventReader<RemoteClientConnecting<AppProtocol, Server>>,
 ) {
     for RemoteClientConnecting { client, .. } in events.read() {
         ui_state.log.push(format!("Client {client} connecting"));
@@ -146,7 +150,7 @@ fn server_on_connecting(
 
 fn server_on_connected(
     mut ui_state: ResMut<ServerUiState>,
-    mut events: EventReader<RemoteClientConnected<AppProtocol, ChannelServer<AppProtocol>>>,
+    mut events: EventReader<RemoteClientConnected<AppProtocol, Server>>,
 ) {
     for RemoteClientConnected { client, .. } in events.read() {
         ui_state.log.push(format!("Client {client} connected"));
@@ -155,8 +159,8 @@ fn server_on_connected(
 
 fn server_on_recv(
     mut ui_state: ResMut<ServerUiState>,
-    mut recv: EventReader<FromClient<AppProtocol, ChannelServer<AppProtocol>>>,
-    mut server: ResMut<ChannelServer<AppProtocol>>,
+    mut recv: EventReader<FromClient<AppProtocol, Server>>,
+    mut server: ResMut<Server>,
 ) {
     for FromClient { client, msg, .. } in recv.read() {
         ui_state.log.push(format!("{client} > {}", msg.0));
@@ -169,7 +173,7 @@ fn server_on_recv(
 
 fn server_on_disconnected(
     mut ui_state: ResMut<ServerUiState>,
-    mut events: EventReader<RemoteClientDisconnected<AppProtocol, ChannelServer<AppProtocol>>>,
+    mut events: EventReader<RemoteClientDisconnected<AppProtocol, Server>>,
 ) {
     for RemoteClientDisconnected { client, reason } in events.read() {
         ui_state

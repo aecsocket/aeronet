@@ -2,22 +2,20 @@
 #![doc = include_str!("../README.md")]
 
 pub use aeronet_derive::*;
-pub use bytes;
 
-mod client;
-mod condition;
+pub mod client;
+pub mod server;
+
 mod connection_info;
 mod lane;
 mod message;
-mod server;
 mod transport;
+pub use {connection_info::*, lane::*, message::*, transport::*};
 
-pub mod protocol;
 pub mod util;
 
-pub use {
-    client::*, condition::*, connection_info::*, lane::*, message::*, server::*, transport::*,
-};
+#[cfg(feature = "condition")]
+pub mod condition;
 
 #[cfg(feature = "bevy-tokio-rt")]
 mod tokio_rt;

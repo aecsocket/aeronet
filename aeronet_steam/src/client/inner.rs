@@ -46,50 +46,6 @@ where
     P::S2C: TryFromBytes,
     M: Manager + Send + Sync + 'static,
 {
-    pub fn connect_p2p(
-        steam: steamworks::Client<M>,
-        remote: SteamId,
-        port: i32,
-    ) -> Result<Self, SteamTransportError<P>> {
-        let conn = steam.networking_sockets().connect_p2p(
-            NetworkingIdentity::new_steam_id(remote),
-            port,
-            [],
-        );
-        Self::connect(steam, conn)
-    }
-
-    pub fn connect_ip(
-        steam: steamworks::Client<M>,
-        remote: SocketAddr,
-    ) -> Result<Self, SteamTransportError<P>> {
-        let conn = steam.networking_sockets().connect_by_ip_address(remote, []);
-        Self::connect(steam, conn)
-    }
-
-    fn connect(
-        steam: steamworks::Client<M>,
-        conn: Result<NetConnection<M>, InvalidHandle>,
-    ) -> Result<Self, SteamTransportError<P>> {
-        shared::assert_valid_protocol::<P>();
-
-        let (send_connected, recv_connected) = oneshot::channel();
-        let mut send_connected = Some(send_connected);
-        let status_changed_cb = steam.register_callback(move |event| {
-            Self::on_connection_status_changed(&mut send_connected, event)
-        });
-
-        let conn = conn.map_err(|_| SteamTransportError::<P>::StartConnecting)?;
-        shared::configure_lanes::<P, P::C2S, P::S2C, M>(&steam.networking_sockets(), &conn)?;
-
-        Ok(Self {
-            steam,
-            conn: Some(conn),
-            recv_connected,
-            _status_changed_cb: status_changed_cb,
-            _phantom_p: PhantomData,
-        })
-    }
 
     fn on_connection_status_changed(
         send_connected: &mut Option<oneshot::Sender<Result<(), SteamTransportError<P>>>>,

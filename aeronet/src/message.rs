@@ -1,5 +1,7 @@
 use std::{convert::Infallible, error::Error};
 
+use bytes::Bytes;
+
 /// Smallest unit of data which can be sent between transports.
 ///
 /// A message is the smallest unit of transmission that transports use, as far
@@ -48,6 +50,24 @@ impl TryAsBytes for () {
     }
 }
 
+impl TryAsBytes for Vec<u8> {
+    type Output<'a> = &'a [u8];
+    type Error = Infallible;
+
+    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
+        Ok(self.as_slice())
+    }
+}
+
+impl TryAsBytes for Bytes {
+    type Output<'a> = &'a [u8];
+    type Error = Infallible;
+
+    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
+        Ok(self)
+    }
+}
+
 /// Attempt to convert a sequence of bytes into a value of this type.
 ///
 /// Transports may require this as a bound on the incoming message type, if the
@@ -71,10 +91,23 @@ pub trait TryFromBytes {
 impl TryFromBytes for () {
     type Error = Infallible;
 
-    fn try_from_bytes(_: &[u8]) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-    {
+    fn try_from_bytes(_: &[u8]) -> Result<Self, Self::Error> {
         Ok(())
+    }
+}
+
+impl TryFromBytes for Vec<u8> {
+    type Error = Infallible;
+
+    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
+        Ok(buf.to_vec())
+    }
+}
+
+impl TryFromBytes for Bytes {
+    type Error = Infallible;
+
+    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
+        Ok(Bytes::from(buf.to_vec()))
     }
 }

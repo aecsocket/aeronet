@@ -4,7 +4,10 @@ use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use derivative::Derivative;
 
-use crate::{ClientEvent, ClientTransport, TransportProtocol};
+use crate::{
+    client::{ClientEvent, ClientTransport},
+    TransportProtocol,
+};
 
 /// Forwards messages and events between the [`App`] and a [`ClientTransport`].
 ///
@@ -75,8 +78,7 @@ where
     T: ClientTransport<P> + Resource,
 {
     #[derivative(Debug = "ignore")]
-    #[doc(hidden)]
-    pub _phantom: PhantomData<(P, T)>,
+    _phantom: PhantomData<(P, T)>,
 }
 
 /// The client has unrecoverably lost connection from its previously
@@ -109,8 +111,7 @@ where
     /// The message received.
     pub msg: P::S2C,
     #[derivative(Debug = "ignore")]
-    #[doc(hidden)]
-    pub _phantom: PhantomData<T>,
+    _phantom: PhantomData<T>,
 }
 
 fn recv<P, T>(

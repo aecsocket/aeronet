@@ -4,7 +4,9 @@ use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use derivative::Derivative;
 
-use crate::{ClientKey, ServerEvent, ServerTransport, TransportProtocol};
+use crate::{client::ClientKey, TransportProtocol};
+
+use super::{ServerEvent, ServerTransport};
 
 /// Forwards messages and events between the [`App`] and a [`ServerTransport`].
 ///
@@ -116,8 +118,7 @@ where
     /// Key of the client.
     pub client: ClientKey,
     #[derivative(Debug = "ignore")]
-    #[doc(hidden)]
-    pub _phantom: PhantomData<(P, T)>,
+    _phantom: PhantomData<(P, T)>,
 }
 
 /// A remote client has fully established a connection to this server.
@@ -139,8 +140,7 @@ where
     /// Key of the client.
     pub client: ClientKey,
     #[derivative(Debug = "ignore")]
-    #[doc(hidden)]
-    pub _phantom: PhantomData<(P, T)>,
+    _phantom: PhantomData<(P, T)>,
 }
 
 /// A remote client has unrecoverably lost connection from this server.
@@ -176,8 +176,7 @@ where
     /// The message received.
     pub msg: P::C2S,
     #[derivative(Debug = "ignore")]
-    #[doc(hidden)]
-    pub _phantom: PhantomData<T>,
+    _phantom: PhantomData<T>,
 }
 
 fn recv<P, T>(

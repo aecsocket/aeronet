@@ -7,14 +7,9 @@ use std::{error::Error, fmt};
 /// [`as_pretty`] to wrap that reference a [`PrettyError`], making the
 /// alternative [`fmt::Display`] impl format the entire error chain, in the
 /// same style as [`anyhow`](https://docs.rs/anyhow).
-pub struct PrettyError<'a, E>(&'a E)
-where
-    E: Error;
+pub struct PrettyError<'a, E>(&'a E);
 
-impl<E> fmt::Display for PrettyError<'_, E>
-where
-    E: Error,
-{
+impl<E: Error> fmt::Display for PrettyError<'_, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)?;
 
@@ -34,9 +29,6 @@ where
 /// impl write the entire error chain.
 ///
 /// See [`PrettyError`].
-pub fn pretty_error<E>(err: &E) -> PrettyError<'_, E>
-where
-    E: Error,
-{
+pub fn pretty_error<E: Error>(err: &E) -> PrettyError<'_, E> {
     PrettyError(err)
 }

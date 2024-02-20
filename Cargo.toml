@@ -3,10 +3,10 @@ resolver = "2"
 members = [
     "aeronet",
     "aeronet_derive",
+    "aeronet_protocol",
     "aeronet_channel",
-    "aeronet_steam",
-    "aeronet_wt_native",
-    #"aeronet_wt_wasm",
+    "aeronet_webtransport",
+    #"aeronet_steam",
 ]
 
 [workspace.package]
@@ -32,10 +32,9 @@ similar_names = "allow"
 [workspace.dependencies]
 aeronet = { version = "0.5.0", path = "aeronet" }
 aeronet_derive = { version = "0.5.0", path = "aeronet_derive" }
-aeronet_example = { version = "0.5.0", path = "aeronet_example" }
-
-derivative = "2.2.0"
+aeronet_protocol = { version = "0.5.0", path = "aeronet_protocol" }
 tracing = "0.1.40"
+derivative = "2.2.0"
 thiserror = "1.0.56"
 either = "1.9.0"
 slotmap = "1.0.7"
@@ -44,10 +43,13 @@ ahash = "0.8.7"
 anyhow = "1.0.79"
 rand = "0.8.5"
 rand_distr = "0.4.3"
-bitcode = "0.5.1"
 integer-encoding = "4.0.0"
 static_assertions = "1.1.0"
 assert_matches = "1.5.0"
+cfg-if = "1.0.0"
+
+bitcode = "0.5.1"
+serde = { version = "1.0.197", features = ["derive"] }
 
 proc-macro2 = "1.0.76"
 syn = "2.0.48"
@@ -63,12 +65,12 @@ bevy_app = { version = "0.13.0", default-features = false }
 bevy = "0.13.0"
 bevy_egui = "0.25.0"
 
+xwt = "0.5.0"
+xwt-core = "0.2.2"
 wtransport = "0.1.10"
 
-wasm-bindgen = "0.2.90"
-wasm-bindgen-futures = "0.4.40"
-js-sys = "0.3.67"
 web-sys = "0.3.67"
+xwt-web-sys = "0.5.1"
 
 base64 = "0.21.7"
 rcgen = "0.12.0"

@@ -7,8 +7,9 @@ use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
 use crate::{
-    ClientEvent, ClientKey, ClientState, ClientTransport, ServerEvent, ServerState,
-    ServerTransport, TransportProtocol,
+    client::{ClientEvent, ClientKey, ClientState, ClientTransport},
+    server::{ServerEvent, ServerState, ServerTransport},
+    TransportProtocol,
 };
 
 /// Configuration for a [`ConditionedClient`] or [`ConditionedServer`].

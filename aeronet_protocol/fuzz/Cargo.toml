@@ -1,0 +1,45 @@
+[package]
+name = "aeronet_protocol_fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.aeronet_protocol]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "frag"
+path = "fuzz_targets/frag.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "lanes"
+path = "fuzz_targets/lanes.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "negotiate_req"
+path = "fuzz_targets/negotiate_req.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "negotiate_resp"
+path = "fuzz_targets/negotiate_resp.rs"
+test = false
+doc = false

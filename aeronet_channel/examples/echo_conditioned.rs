@@ -1,13 +1,14 @@
 //! Example creating a client and server pair, where the client can send a
 //! message, and the server just echoes back that message to the client.
 
-use std::mem;
-
 use aeronet::{
-    ClientTransport, ClientTransportPlugin, ConditionedClient, ConditionedServer,
-    ConditionerConfig, FromClient, FromServer, LocalClientConnected, Message,
-    RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected, ServerTransport,
-    ServerTransportPlugin, TransportProtocol,
+    client::{ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected},
+    condition::{ConditionedClient, ConditionedServer, ConditionerConfig},
+    server::{
+        FromClient, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
+        ServerTransport, ServerTransportPlugin,
+    },
+    Message, TransportProtocol,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::prelude::*;
@@ -25,14 +26,14 @@ impl TransportProtocol for AppProtocol {
     type S2C = AppMessage;
 }
 
-const CONDITIONER_CONFIG: ConditionerConfig = ConditionerConfig {
-    loss_rate: 0.25,
-    delay_mean: 1.0,
-    delay_std_dev: 0.5,
-};
-
 type Client = ConditionedClient<AppProtocol, ChannelClient<AppProtocol>>;
 type Server = ConditionedServer<AppProtocol, ChannelServer<AppProtocol>>;
+
+const CONDITIONER_CONFIG: ConditionerConfig = ConditionerConfig {
+    loss_rate: 0.25,
+    delay_mean: 2.0,
+    delay_std_dev: 0.5,
+};
 
 // Logic
 
@@ -76,10 +77,10 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    let mut server = ChannelServer::<AppProtocol>::open();
-    let client = ChannelClient::connect_new(&mut server);
-    commands.insert_resource(ConditionedServer::new(server, &CONDITIONER_CONFIG));
-    commands.insert_resource(ConditionedClient::new(client, &CONDITIONER_CONFIG));
+    let mut server = Server::new(ChannelServer::open(), &CONDITIONER_CONFIG);
+    let client = Client::new(ChannelClient::connect_new(&mut server), &CONDITIONER_CONFIG);
+    commands.insert_resource(server);
+    commands.insert_resource(client);
 }
 
 fn client_on_connected(
@@ -127,7 +128,7 @@ fn client_ui(
                 (|| {
                     ui.memory_mut(|m| m.request_focus(msg_resp.id));
 
-                    let msg = mem::take(&mut ui_state.msg);
+                    let msg = std::mem::take(&mut ui_state.msg);
                     if msg.is_empty() {
                         return;
                     }

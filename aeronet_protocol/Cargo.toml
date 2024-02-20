@@ -1,0 +1,29 @@
+[package]
+name = "aeronet_protocol"
+description = "Protocol feature implementations for aeronet transports"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+aeronet.workspace = true
+thiserror.workspace = true
+bytes.workspace = true
+bitcode.workspace = true
+integer-encoding.workspace = true
+const_format.workspace = true
+static_assertions.workspace = true
+
+[dev-dependencies]
+assert_matches.workspace = true

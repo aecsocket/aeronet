@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::{ClientKey, ClientTransport, LaneProtocol, ServerTransport};
+use crate::TransportProtocol;
 
 // todo docs
 /// | [`LaneKind`]              | Fragmentation | Reliability | Sequencing |
@@ -28,52 +28,57 @@ pub enum LaneKind {
     ReliableOrdered,
 }
 
+#[derive(Debug, Clone)]
+pub struct LaneConfig {
+    pub kind: LaneKind,
+}
+
 /// App-defined type listing a set of lanes which a transport can use to send
 /// app messages along.
 ///
-/// See [`LaneKind`] for documentation on lanes.
+/// See [`LaneKind`] for an explanation of lanes.
 ///
 /// This trait should be derived - see [`aeronet_derive::LaneKey`]. Otherwise,
 /// you will have to make sure to follow the contract regarding panics.
 ///
-/// # Panics
+/// # Panic safety
 ///
 /// This trait must be implemented correctly, otherwise transport
 /// implementations may panic.
 pub trait LaneKey: Send + Sync + Debug + Clone + Copy + 'static {
     /// All variants of this type that may exist.
     ///
-    /// # Panics
+    /// # Panic safety
     ///
     /// This must contain every possible value that may exist, otherwise
     /// transport implementations may panic.
     const VARIANTS: &'static [Self];
 
+    fn config() -> Vec<LaneConfig> {
+        Self::VARIANTS
+            .iter()
+            .map(|variant| LaneConfig {
+                kind: variant.kind(),
+            })
+            .collect()
+    }
+
     /// Index of this value in the [`LaneKey::VARIANTS`] array.
     ///
-    /// # Panics
+    /// # Panic safety
     ///
     /// This must be a valid index in the variants array, meaning:
     /// * it is not out of the bounds of the array
     /// * the value in the variants array at this index is identical to `self`
-    fn variant(&self) -> usize;
+    fn index(&self) -> usize;
 
     /// What kind of lane this value represents.
     fn kind(&self) -> LaneKind;
-
-    /// Relative priority of this lane compared to other lanes.
-    ///
-    /// When bandwidth is limited, lanes with a higher priority will have their
-    /// buffered messages sent out sooner.
-    ///
-    /// This value is implementation-specific - some transports may choose to
-    /// respect this value; for others, it may have no effect.
-    fn priority(&self) -> i32;
 }
 
 /// Defines what lane a [`Message`] is sent on.
 ///
-/// See [`LaneKey`] for an explanation of lanes.
+/// See [`LaneKind`] for an explanation of lanes.
 ///
 /// This trait can be derived - see [`aeronet_derive::OnLane`].
 ///
@@ -89,18 +94,18 @@ pub trait OnLane {
     fn lane(&self) -> Self::Lane;
 }
 
-pub trait ClientLaneTransport<P>
-where
-    P: LaneProtocol,
-    Self: ClientTransport<P>,
-{
-    type LaneStats;
-
-    fn lane_stats(&self, lane: P::Lane) -> Option<Self::LaneStats>;
-}
-
-pub trait ServerLaneTransport<P: LaneProtocol>: ServerTransport<P> {
-    type LaneStats;
-
-    fn lane_stats(&self, client: ClientKey, lane: P::Lane) -> Option<Self::LaneStats>;
+/// Defines what type of [`LaneKey`] that [`Message`]s are sent over.
+///
+/// Transports may send messages on different [lanes](LaneKey), and need a way
+/// to determine:
+/// * What are all of the possible lanes available to send messages on?
+///   * For example, if a transport needs to set up lanes in advance, it needs
+///     to know all of the possible lanes beforehand.
+/// * What specific lane is this specific message sent on?
+///
+/// This trait allows the user to specify which user-defined type, implementing
+/// [`LaneKey`], is used for these functions.
+pub trait LaneProtocol: TransportProtocol {
+    /// User-defined type of lane that the transport uses.
+    type Lane: LaneKey;
 }
