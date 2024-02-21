@@ -33,8 +33,8 @@ use aeronet::{
         FromClient, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
         ServerClosed, ServerOpened, ServerTransport, ServerTransportPlugin,
     },
-    LaneKey, LaneProtocol, Message, OnLane, ProtocolVersion, TokioRuntime, TransportProtocol,
-    TryAsBytes, TryFromBytes,
+    LaneKey, Message, OnLane, ProtocolVersion, TokioRuntime, TransportProtocol, TryAsBytes,
+    TryFromBytes,
 };
 use aeronet_webtransport::{WebTransportServer, WebTransportServerConfig, MTU};
 use anyhow::Result;
@@ -91,10 +91,6 @@ struct AppProtocol;
 impl TransportProtocol for AppProtocol {
     type C2S = AppMessage;
     type S2C = AppMessage;
-}
-
-impl LaneProtocol for AppProtocol {
-    type Lane = AppLane;
 }
 
 const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(0xdeadbeefbadc0de);

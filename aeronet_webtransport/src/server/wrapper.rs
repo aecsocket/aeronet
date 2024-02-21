@@ -3,7 +3,7 @@ use std::{fmt::Debug, future::Future, net::SocketAddr, task::Poll};
 use aeronet::{
     client::{ClientKey, ClientState},
     server::{ServerState, ServerTransport},
-    LaneProtocol, LocalAddr, OnLane, TryAsBytes, TryFromBytes,
+    LocalAddr, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 use either::Either;
@@ -32,9 +32,9 @@ pub enum WebTransportServer<P> {
 
 impl<P> WebTransportServer<P>
 where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P: TransportProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
     /// See [`OpeningServer::open`].
     pub fn open_new(
@@ -100,9 +100,9 @@ where
 
 impl<P> ServerTransport<P> for WebTransportServer<P>
 where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P: TransportProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
     type Error = WebTransportError<P>;
 

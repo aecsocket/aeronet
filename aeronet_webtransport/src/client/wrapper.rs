@@ -2,7 +2,7 @@ use std::{future::Future, task::Poll};
 
 use aeronet::{
     client::{ClientState, ClientTransport},
-    LaneProtocol, OnLane, TryAsBytes, TryFromBytes,
+    OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 use xwt_core::utils::maybe;
@@ -23,9 +23,9 @@ pub enum WebTransportClient<P> {
 
 impl<P> WebTransportClient<P>
 where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P: TransportProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
     pub fn connect_new(
         config: impl Into<WebTransportClientConfig>,
@@ -65,9 +65,9 @@ where
 
 impl<P> ClientTransport<P> for WebTransportClient<P>
 where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P: TransportProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
     type Error = WebTransportError<P>;
 

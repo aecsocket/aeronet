@@ -1,7 +1,5 @@
 use std::fmt::Debug;
 
-use crate::TransportProtocol;
-
 // todo docs
 /// | [`LaneKind`]              | Fragmentation | Reliability | Sequencing |
 /// |---------------------------|---------------|-------------|------------|
@@ -92,20 +90,4 @@ pub trait OnLane {
 
     /// What lane this value is sent out on.
     fn lane(&self) -> Self::Lane;
-}
-
-/// Defines what type of [`LaneKey`] that [`Message`]s are sent over.
-///
-/// Transports may send messages on different [lanes](LaneKey), and need a way
-/// to determine:
-/// * What are all of the possible lanes available to send messages on?
-///   * For example, if a transport needs to set up lanes in advance, it needs
-///     to know all of the possible lanes beforehand.
-/// * What specific lane is this specific message sent on?
-///
-/// This trait allows the user to specify which user-defined type, implementing
-/// [`LaneKey`], is used for these functions.
-pub trait LaneProtocol: TransportProtocol {
-    /// User-defined type of lane that the transport uses.
-    type Lane: LaneKey;
 }

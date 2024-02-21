@@ -43,11 +43,24 @@ pub struct ConnectionBackend {
 }
 
 pub async fn connection_channel<const SERVER: bool>(
-    conn: &Connection,
+    conn: &mut Connection,
     version: ProtocolVersion,
     max_packet_len: usize,
     lanes: &[LaneConfig],
 ) -> Result<(ConnectionFrontend, ConnectionBackend), BackendError> {
+    #[cfg(target_family = "wasm")]
+    {
+        // xwt creates a datagram receive buffer which is the size of
+        // `webtransport.datagrams().max_packet_size()`
+        // this value might increase after path MTU discovery,
+        // so it will start off at a lower value
+        // we manually increase the length of the buffer to the user-defined one
+        conn.max_datagram_size = max_packet_len;
+        *conn.datagram_read_buffer.lock().await =
+            Some(js_sys::Uint8Array::new_with_length(max_packet_len));
+        debug!("Set receive buffer length to {max_packet_len}");
+    }
+
     let (send_managed, recv_managed) = if SERVER {
         negotiate::server(conn, version).await?
     } else {
@@ -60,7 +73,7 @@ pub async fn connection_channel<const SERVER: bool>(
     let (send_err, recv_err) = oneshot::channel();
     Ok((
         ConnectionFrontend {
-            info: ConnectionInfo::from(conn),
+            info: ConnectionInfo::from(&*conn),
             send_c2s,
             recv_s2c,
             recv_rtt,
@@ -185,7 +198,8 @@ async fn try_handle_connection(
         futures::select! {
             result = conn.receive_datagram().fuse() => {
                 // OMG WTF ERROR HERE!!! RangeError: supplied view is not large enough.
-                let datagram = result.map_err(|err| BackendError::LostConnection(err.into()))?;
+                tracing::info!("In the future select loop: {:?}", result);
+                let datagram = result.map_err(|err| BackendError::RecvDatagram(err.into()))?;
                 let _ = send_s2c.send(to_bytes(datagram)).await;
             }
             msg = recv_c2s.next() => {
@@ -206,6 +220,7 @@ async fn try_handle_connection(
 
 #[cfg(target_family = "wasm")]
 fn to_bytes(datagram: Vec<u8>) -> Bytes {
+    debug_assert_eq!(datagram.capacity(), datagram.len());
     Bytes::from(datagram)
 }
 

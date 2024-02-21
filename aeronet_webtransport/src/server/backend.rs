@@ -126,15 +126,21 @@ async fn handle_incoming(
         }
     };
 
-    let conn = xwt::current::Connection(conn);
-    let (chan_frontend, chan_backend) =
-        match shared::connection_channel::<true>(&conn, version, max_packet_len, &lanes).await {
-            Ok(t) => t,
-            Err(err) => {
-                let _ = send_conn.send(Err(err));
-                return;
-            }
-        };
+    let mut conn = xwt::current::Connection(conn);
+    let (chan_frontend, chan_backend) = match shared::connection_channel::<true>(
+        &mut conn,
+        version,
+        max_packet_len,
+        &lanes,
+    )
+    .await
+    {
+        Ok(t) => t,
+        Err(err) => {
+            let _ = send_conn.send(Err(err));
+            return;
+        }
+    };
     let _ = send_conn.send(Ok(chan_frontend));
     chan_backend.handle(conn).await;
 }

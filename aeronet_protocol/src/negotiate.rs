@@ -172,7 +172,7 @@ impl Negotiation {
             resp[0] = OK;
             (Ok(()), Some(resp))
         } else {
-            resp[1] = ERR;
+            resp[0] = ERR;
             resp[1..].copy_from_slice(&self.version.0.to_be_bytes());
             (
                 Err(NegotiationRequestError::WrongVersion(

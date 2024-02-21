@@ -7,8 +7,7 @@ use aeronet::{
         ClientState, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
         LocalClientDisconnected,
     },
-    LaneKey, LaneProtocol, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes,
-    TryFromBytes,
+    LaneKey, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use aeronet_webtransport::{WebTransportClient, WebTransportClientConfig, MTU};
 use bevy::{log::LogPlugin, prelude::*};
@@ -65,10 +64,6 @@ struct AppProtocol;
 impl TransportProtocol for AppProtocol {
     type C2S = AppMessage;
     type S2C = AppMessage;
-}
-
-impl LaneProtocol for AppProtocol {
-    type Lane = AppLane;
 }
 
 const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(0xdeadbeefbadc0de);

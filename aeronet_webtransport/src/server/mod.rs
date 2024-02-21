@@ -8,7 +8,7 @@ use std::{collections::HashMap, future::Future, marker::PhantomData, net::Socket
 
 use aeronet::{
     client::{ClientKey, ClientState},
-    LaneConfig, LaneProtocol, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
+    LaneConfig, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
@@ -88,9 +88,9 @@ enum ConnectionResponse {
 
 impl<P> OpeningServer<P>
 where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P: TransportProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
     pub fn open(
         config: impl Into<WebTransportServerConfig>,
@@ -102,7 +102,6 @@ where
             _phantom: PhantomData,
         };
         let backend = backend::open(config, send_open);
-        debug!("crt backend");
         (frontend, backend)
     }
 
@@ -137,9 +136,9 @@ pub struct OpenServer<P> {
 
 impl<P> OpenServer<P>
 where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P: TransportProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
     #[must_use]
     pub fn local_addr(&self) -> SocketAddr {

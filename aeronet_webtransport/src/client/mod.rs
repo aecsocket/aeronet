@@ -5,9 +5,7 @@ pub use wrapper::*;
 
 use std::{future::Future, marker::PhantomData, task::Poll};
 
-use aeronet::{
-    LaneConfig, LaneProtocol, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
-};
+use aeronet::{LaneConfig, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use futures::channel::oneshot;
 use xwt_core::utils::maybe;
@@ -47,9 +45,9 @@ struct ConnectedInner {
 
 impl<P> ConnectingClient<P>
 where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P: TransportProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
     pub fn connect(
         config: impl Into<WebTransportClientConfig>,
@@ -102,9 +100,9 @@ pub struct ConnectedClient<P> {
 
 impl<P> ConnectedClient<P>
 where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P: TransportProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
     #[cfg(not(target_family = "wasm"))]
     #[must_use]

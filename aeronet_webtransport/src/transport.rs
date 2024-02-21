@@ -1,4 +1,4 @@
-use std::{io, time::Duration};
+use std::time::Duration;
 
 use aeronet::{client::ClientKey, ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
 use aeronet_protocol::{
@@ -195,7 +195,7 @@ cfg_if::cfg_if! {
         }
 
         impl From<std::convert::Infallible> for JsError {
-            fn from(value: std::convert::Infallible) -> Self {
+            fn from(_: std::convert::Infallible) -> Self {
                 unreachable!()
             }
         }
@@ -209,10 +209,10 @@ pub enum BackendError {
 
     #[cfg(not(target_family = "wasm"))]
     #[error("failed to create endpoint")]
-    CreateEndpoint(#[source] io::Error),
+    CreateEndpoint(#[source] std::io::Error),
     #[cfg(not(target_family = "wasm"))]
     #[error("failed to get local socket address")]
-    GetLocalAddr(#[source] io::Error),
+    GetLocalAddr(#[source] std::io::Error),
 
     #[error("failed to start connection")]
     Connect(
@@ -280,8 +280,8 @@ pub enum BackendError {
     #[error("managed stream closed")]
     ManagedStreamClosed,
 
-    #[error("lost connection")]
-    LostConnection(
+    #[error("failed to receive datagram")]
+    RecvDatagram(
         #[source]
         #[cfg(target_family = "wasm")]
         JsError,

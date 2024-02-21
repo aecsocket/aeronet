@@ -43,6 +43,7 @@ xwt-core.workspace = true
 bevy_ecs = { workspace = true, optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
+js-sys.workspace = true
 web-sys.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]

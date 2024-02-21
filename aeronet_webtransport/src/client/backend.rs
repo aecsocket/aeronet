@@ -29,7 +29,7 @@ pub async fn connect(
         }
     };
 
-    let conn = match connecting
+    let mut conn = match connecting
         .wait_connect()
         .await
         .map_err(|err| BackendError::Connecting(err.into()))
@@ -42,7 +42,7 @@ pub async fn connect(
     };
 
     let (chan_frontend, chan_backend) = match shared::connection_channel::<false>(
-        &conn,
+        &mut conn,
         config.version,
         config.max_packet_len,
         &config.lanes,
