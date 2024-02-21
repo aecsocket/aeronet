@@ -5,14 +5,14 @@ use tracing::debug;
 use xwt::current::{Connection, RecvStream, SendStream};
 use xwt_core::datagram::{Receive, Send};
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use aeronet::{LaneConfig, LaneKey, OnLane, ProtocolVersion, TryAsBytes, TryFromBytes};
 use aeronet_protocol::Lanes;
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
-    FutureExt, SinkExt, StreamExt,
+    SinkExt, StreamExt,
 };
 
 use crate::{BackendError, ConnectionInfo, WebTransportError};
@@ -55,6 +55,8 @@ pub async fn connection_channel<const SERVER: bool>(
         // this value might increase after path MTU discovery,
         // so it will start off at a lower value
         // we manually increase the length of the buffer to the user-defined one
+        let max_packet_len =
+            u32::try_from(max_packet_len).expect("max_packet_len should be less than `u32::MAX`");
         conn.max_datagram_size = max_packet_len;
         *conn.datagram_read_buffer.lock().await =
             Some(js_sys::Uint8Array::new_with_length(max_packet_len));
@@ -161,17 +163,26 @@ impl ConnectionFrontend {
 
 impl ConnectionBackend {
     pub async fn handle(self, conn: Connection) {
+        // This fn handles receiving and sending datagrams. While we could impl
+        // this as a `futures::select!`, this won't actually work on WASM
+        // because `receive_datagram` is not cancel-safe.
+        // So instead, we split this up into two async tasks, and run them both.
+
         debug!("Connected backend");
-        match try_handle_connection(
-            conn,
-            self.recv_c2s,
-            self.send_s2c,
-            #[cfg(not(target_family = "wasm"))]
-            self.send_rtt,
-        )
-        .await
-        {
-            Ok(()) => debug!("Closed backend"),
+        let conn = Arc::new(conn);
+
+        let fut_incoming = {
+            let conn = conn.clone();
+            connection_incoming(
+                conn.clone(),
+                self.send_s2c,
+                #[cfg(not(target_family = "wasm"))]
+                self.send_rtt,
+            )
+        };
+        let fut_outgoing = connection_outgoing(conn, self.recv_c2s);
+        match futures::try_join!(fut_incoming, fut_outgoing) {
+            Ok(_) => debug!("Closed backend"),
             Err(err) => {
                 debug!("Closed backend: {:#}", aeronet::util::pretty_error(&err));
                 let _ = self.send_err.send(err);
@@ -180,36 +191,55 @@ impl ConnectionBackend {
     }
 }
 
-async fn try_handle_connection(
-    conn: Connection,
-    mut recv_c2s: mpsc::UnboundedReceiver<Bytes>,
+async fn connection_incoming(
+    conn: Arc<Connection>,
     mut send_s2c: mpsc::Sender<Bytes>,
     #[cfg(not(target_family = "wasm"))] mut send_rtt: mpsc::Sender<Duration>,
 ) -> Result<(), BackendError> {
-    debug!("Starting connection loop");
-    // in `futures::select!`, if you use `()` the macro breaks
-    #[allow(clippy::ignored_unit_patterns)]
     loop {
         // if we failed to send, then buffer's probably full
         // but we don't care, RTT is a lossy bit of info anyway
         #[cfg(not(target_family = "wasm"))]
-        let _ = send_rtt.try_send(conn.0.rtt());
-
-        futures::select! {
-            result = conn.receive_datagram().fuse() => {
-                // OMG WTF ERROR HERE!!! RangeError: supplied view is not large enough.
-                tracing::info!("In the future select loop: {:?}", result);
-                let datagram = result.map_err(|err| BackendError::RecvDatagram(err.into()))?;
-                let _ = send_s2c.send(to_bytes(datagram)).await;
-            }
-            msg = recv_c2s.next() => {
-                let Some(msg) = msg else {
-                    // frontend closed
-                    return Ok(());
-                };
-                conn.send_datagram(msg).await.map_err(|err| BackendError::SendDatagram(err.into()))?;
+        if let Err(err) = send_rtt.try_send(conn.0.rtt()) {
+            if err.is_disconnected() {
+                // frontend closed
+                return Ok(());
             }
         }
+
+        let datagram = conn
+            .receive_datagram()
+            .await
+            .map_err(|err| BackendError::RecvDatagram(err.into()))?;
+        if send_s2c.send(to_bytes(datagram)).await.is_err() {
+            // backend closed
+            return Ok(());
+        }
+
+        #[cfg(target_family = "wasm")] // TODO
+        {
+            // after the `receive_datagram` call, xwt shrinks the
+            // internal recv buffer to fit the size of the dgram
+            // so we manually resize it back
+            // TODO this is a bug and should be fixed
+            *conn.datagram_read_buffer.lock().await =
+                Some(js_sys::Uint8Array::new_with_length(conn.max_datagram_size));
+        }
+    }
+}
+
+async fn connection_outgoing(
+    conn: Arc<Connection>,
+    mut recv_c2s: mpsc::UnboundedReceiver<Bytes>,
+) -> Result<(), BackendError> {
+    loop {
+        let Some(msg) = recv_c2s.next().await else {
+            // backend closed
+            return Ok(());
+        };
+        conn.send_datagram(msg)
+            .await
+            .map_err(|err| BackendError::SendDatagram(err.into()))?;
     }
 }
 

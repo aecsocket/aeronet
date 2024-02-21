@@ -65,8 +65,8 @@ bevy_app = { version = "0.13.0", default-features = false }
 bevy = "0.13.0"
 bevy_egui = "0.25.0"
 
-xwt = "0.5.0"
-xwt-core = "0.2.2"
+xwt = { git = "https://github.com/MOZGIII/xwt", branch = "dg-fix" }
+xwt-core = { git = "https://github.com/MOZGIII/xwt", branch = "dg-fix" }
 wtransport = "0.1.10"
 
 js-sys = "0.3.67"

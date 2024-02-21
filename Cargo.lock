@@ -4512,8 +4512,7 @@ dependencies = [
 [[package]]
 name = "web-sys-async-io"
 version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc617932d9c2a41a3f8a77eb5b57f099305d56e2b443b8417c00e921e72c2789"
+source = "git+https://github.com/MOZGIII/xwt?branch=dg-fix#a27a1dd36c4cc0236338338246ac3284b8240926"
 dependencies = [
  "js-sys",
  "tokio",
@@ -4525,8 +4524,7 @@ dependencies = [
 [[package]]
 name = "web-sys-stream-utils"
 version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d9c81ef25314f96f388e1365fc413ae43af447400ffcd565357e452200485e7"
+source = "git+https://github.com/MOZGIII/xwt?branch=dg-fix#a27a1dd36c4cc0236338338246ac3284b8240926"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -5136,8 +5134,7 @@ checksum = "0fcb9cbac069e033553e8bb871be2fbdffcab578eb25bd0f7c508cedc6dcd75a"
 [[package]]
 name = "xwt"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "169ebcf1f766c402faa3ccadce123687176b4363dbd13423fafe18584efe0c65"
+source = "git+https://github.com/MOZGIII/xwt?branch=dg-fix#a27a1dd36c4cc0236338338246ac3284b8240926"
 dependencies = [
  "xwt-web-sys",
  "xwt-wtransport",
@@ -5146,8 +5143,7 @@ dependencies = [
 [[package]]
 name = "xwt-core"
 version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bf44ee4af307907eaba5452e33d0bbe56d4104e2ee17a8f1d42b3b379d74fdf"
+source = "git+https://github.com/MOZGIII/xwt?branch=dg-fix#a27a1dd36c4cc0236338338246ac3284b8240926"
 dependencies = [
  "async-trait",
  "tokio",
@@ -5156,8 +5152,7 @@ dependencies = [
 [[package]]
 name = "xwt-web-sys"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45f63b94f40ee8a4a3bb4a7f31748dc6bb545f333035e06e4322e346ec5ec35f"
+source = "git+https://github.com/MOZGIII/xwt?branch=dg-fix#a27a1dd36c4cc0236338338246ac3284b8240926"
 dependencies = [
  "js-sys",
  "tokio",
@@ -5172,8 +5167,7 @@ dependencies = [
 [[package]]
 name = "xwt-wtransport"
 version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0175356081d0f7b2ab6edea006ba39b07616c441b159401824921a31c64bf20d"
+source = "git+https://github.com/MOZGIII/xwt?branch=dg-fix#a27a1dd36c4cc0236338338246ac3284b8240926"
 dependencies = [
  "wtransport",
  "xwt-core",

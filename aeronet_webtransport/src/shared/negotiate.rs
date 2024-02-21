@@ -79,7 +79,8 @@ pub(super) async fn server(
     if let Err(err) = result {
         // if there was an error, and we sent some bytes back,
         // wait for them to be flushed, then drop the streams
-        wait_finish(&mut send_managed).await;
+        #[cfg(not(target_family = "wasm"))]
+        let _ = send_managed.0.finish().await;
         return Err(match err {
             NegotiationRequestError::WrongVersion(err) => BackendError::WrongProtocolVersion(err),
             err => BackendError::ReadNegotiateRequest(err),
@@ -88,14 +89,4 @@ pub(super) async fn server(
 
     debug!("Negotiation success");
     Ok((send_managed, recv_managed))
-}
-
-#[cfg(target_family = "wasm")]
-async fn wait_finish(_: &mut SendStream) {
-    // TODO - there has to be a way to do this in WASM right?
-}
-
-#[cfg(not(target_family = "wasm"))]
-async fn wait_finish(stream: &mut SendStream) {
-    let _ = stream.0.finish().await;
 }
