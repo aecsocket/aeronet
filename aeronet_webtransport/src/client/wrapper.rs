@@ -28,20 +28,18 @@ where
     P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
     pub fn connect_new(
-        config: impl Into<WebTransportClientConfig>,
+        config: WebTransportClientConfig,
     ) -> (Self, impl Future<Output = ()> + maybe::Send) {
-        let config = config.into();
         let (frontend, backend) = ConnectingClient::connect(config);
         (Self::Connecting(frontend), backend)
     }
 
     pub fn connect(
         &mut self,
-        config: impl Into<WebTransportClientConfig>,
+        config: WebTransportClientConfig,
     ) -> Result<impl Future<Output = ()> + maybe::Send, WebTransportError<P>> {
         match self {
             Self::Disconnected => {
-                let config = config.into();
                 let (this, backend) = Self::connect_new(config);
                 *self = this;
                 Ok(backend)

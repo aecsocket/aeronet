@@ -50,9 +50,8 @@ where
     P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
     pub fn connect(
-        config: impl Into<WebTransportClientConfig>,
+        config: WebTransportClientConfig,
     ) -> (Self, impl Future<Output = ()> + maybe::Send) {
-        let config = config.into();
         let (send_conn, recv_conn) = oneshot::channel();
         (
             Self {
@@ -116,7 +115,7 @@ where
     }
 
     pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), WebTransportError<P>> {
-        self.conn.send(msg.into())
+        self.conn.send(&msg.into())
     }
 
     pub fn poll(&mut self) -> (Vec<ClientEvent<P>>, Result<(), WebTransportError<P>>) {

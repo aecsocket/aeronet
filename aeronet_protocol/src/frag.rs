@@ -44,7 +44,7 @@ const MESSAGES_BUF: usize = 256;
 const CLEAN_UP_AFTER: Duration = Duration::from_secs(3);
 
 /// Error that occurs when using [`Fragmentation::fragment`].
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum FragmentationError {
     /// Attempted to fragment a message with no bytes.
     #[error("empty message")]

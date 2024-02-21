@@ -43,11 +43,16 @@ pub struct LanePacket<'a> {
 }
 
 impl Lanes {
-    pub fn new(max_packet_len: usize, configs: &[LaneConfig]) -> Self {
+    // todo docs
+    /// # Panics
+    ///
+    /// Panics if `max_packet_len` is 0, or if `configs.len() > u64::MAX`.
+    #[must_use]
+    pub fn new(max_packet_len: usize, lanes: &[LaneConfig]) -> Self {
         assert!(max_packet_len > 0);
-        u64::try_from(configs.len()).expect("should be less than `u64::MAX` lanes");
+        u64::try_from(lanes.len()).expect("should be less than `u64::MAX` lanes");
 
-        let lanes = configs
+        let lanes = lanes
             .iter()
             .map(|config| match config.kind {
                 LaneKind::UnreliableUnsequenced => LaneState::UnreliableUnsequenced {

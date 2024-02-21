@@ -1,63 +1,81 @@
-# `aeronet_protocol`
+# `aeronet`
 
-[![crates.io](https://img.shields.io/crates/v/aeronet_protocol.svg)](https://crates.io/crates/aeronet_protocol)
-[![docs.rs](https://img.shields.io/docsrs/aeronet_protocol)](https://docs.rs/aeronet_protocol)
+[![crates.io](https://img.shields.io/crates/v/aeronet.svg)](https://crates.io/crates/aeronet)
+[![docs.rs](https://img.shields.io/docsrs/aeronet)](https://docs.rs/aeronet)
 
-//! Provides implementations for parts of the aeronet protocol.
-//!
-//! Since not all transports will offer the same guarantees and use the same
-//! protocol, this crate offers its own implementation of specific network
-//! features which are agnostic to the underlying protocol (they just take in
-//! and spit out bytes).
-//!
-//! # Terminology
-//!
-//! * *message* - the smallest unit of transmission used by the standard
-//!   transport API, i.e. [`ClientTransport`] and [`ServerTransport`], but
-//!   represented in its byte form ([`TryAsBytes`] / [`TryFromBytes`]).
-//! * *packet* - the smallest unit of transmission used by the protocol, which
-//!   holds a packet header and a payload.
-//! * *packet header* - prefix to a packet which holds metadata about what it's
-//!   carrying
-//! * *payload* - either a part of, or the entirety of, the message that this
-//!   packet wants to transport
-//!
-//! # Features
-//!
-//! Which features are provided by this protocol, and which must be implemented
-//! externally?
-//!
-//! | Feature            | Description                                                           | Provided?         |
-//! |--------------------|-----------------------------------------------------------------------|-------------------|
-//! | encryption         | unauthorized third parties can't read the network data in transit     | -                 |
-//! | authentication     | only clients who have permission to use this app can connect          | -                 |
-//! | validation         | the message was not tampered with or corrupted in transit             | -                 |
-//! | framing            | message boundary is maintained by API (i.e. not just stream of bytes) | -                 |
-//! | congestion control | controls how fast data is sent, in order to not flood the network     | -                 |
-//! | buffering          | combines small messages into one big packet (like Nagle)              | -                 |
-//! | negotiation        | makes sure that both peers are using the same protocol before talking | [`Negotiation`]   |
-//! | fragmentation      | large messages are sent using multiple packets                        | [`Fragmentation`] |
-//! | lane management    | messages can be sent over different lanes ("channels")                | [`Lanes`]         |
-//! | reliability        | messages sent reliably are guaranteed to be received by the peer      | todo              |
-//! | ordering           | messages will be received in the same order they were sent            | todo              |
-//!
-//! The client acts as the initiator in all aeronet-provided features.
-//!
-//! # Fuzzing
-//!
-//! To ensure that protocol code works correctly in all situations, the code
-//! makes use of both unit testing and fuzzing.
-//!
-//! To fuzz a particular component, run this from the `/aeronet_protocol` directory:
-//! * [`Negotiation`]
-//!   * `cargo +nightly fuzz run negotiate_req`
-//!   * `cargo +nightly fuzz run negotiate_resp`
-//! * [`Fragmentation`]
-//!   * `cargo +nightly fuzz run frag`
-//! * [`Lanes`]
-//!   * `cargo +nightly fuzz run lanes`
-//!
-//! [`ClientTransport`]: crate::ClientTransport
-//! [`ServerTransport`]: crate::ServerTransport
-//! [`TryAsBytes`]: crate::TryAsBytes
-//! [`TryFromBytes`]: crate::TryFromBytes
+A *light-as-air* client/server networking library with first-class support for Bevy, providing a
+consistent API which can be implemented by different transport mechanisms.
+
+# Transport
+
+The main purpose of this crate is to provide an API for transmitting messages between a client and
+a server over any type of connection - in-memory channels, networked, WASM, etc. This is done
+through the traits [`ClientTransport`] and [`ServerTransport`].
+
+The current transport implementations available are:
+* [`aeronet_channel`](https://docs.rs/aeronet_channel) - in-memory MPSC channels, useful for
+  non-networked scenarios such as a local singleplayer server
+  * `cargo run --package aeronet_channel --example echo --features "bevy"`
+* [`aeronet_webtransport`](https://docs.rs/aeronet_webtransport) - allows transport using the
+  [WebTransport](https://www.w3.org/TR/webtransport/) protocol
+  * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration"`
+  * `cargo run --package aeronet_webtransport --example echo_server --features "bevy dangerous-configuration"`
+* [`aeronet_steam`](https://docs.rs/aeronet_steam) - uses Steam's
+  [NetworkingSockets](https://partner.steamgames.com/doc/api/ISteamNetworkingSockets) API to send
+  data over Steam's relay network
+  * `cargo run --package aeronet_steam --example echo_client --features "bevy"`
+  * `cargo run --package aeronet_steam --example echo_server --features "bevy"`
+
+# Goals
+
+This crate aims to be:
+* Generic over as many transports as possible
+  * You should be able to plug nearly anything in as the underlying transport layer, and have things
+    work
+  * To achieve this, aeronet provides its own implementation of certain protocol elements such as
+    fragmentation and reliable packets
+* Integrated with Bevy
+  * Built with apps and games in mind, the abstractions chosen closely suit Bevy's app model, and
+    likely other similar frameworks
+
+This crate does not aim to be:
+* A high-level app networking library, featuring replication, rollback, etc.
+  * This crate only concerns the transport of data payloads, not what the payloads actualy contain
+
+# Overview
+
+## Messages
+
+The smallest unit of transmission that the API exposes is a [`Message`]. This is a user-defined type
+which contains the data that your app wants to send out and receive. The client-to-server and
+server-to-client message types may be different.
+
+## Lanes
+
+Lanes define the manner in which a message is delivered to the other side, such as unreliable,
+reliable ordered, etc. These are similar to *streams* or *channels* in some protocols, but lanes are
+abstractions over the manner of delivery, rather than the individual stream or channel.
+
+The name "lanes" was chosen in order to reduce ambiguity:
+* *streams* may be confused with TCP or WebTransport streams
+* *channels* may be confused with MPSC channels
+
+Note that not all transports support lanes, however the types that are supported are listed in
+[`LaneKind`].
+
+## Bevy plugin
+
+*Feature flag: `bevy`*
+
+Behind the `bevy` feature flag, this crate provides plugins for automatically processing a client
+and server transport via [`ClientTransportPlugin`] and [`ServerTransportPlugin`] respectively. These
+will automatically update the transports and send out events when e.g. a client connects, or a
+message is received.
+
+## Conditioning
+
+*Feature flag: `condition` - depends on `getrandom`, which may not work in WASM*
+
+A common strategy used for ensuring that your network code is robust against failure is to add
+artificial packet loss and delays. This crate provides a utility for this via [`ConditionerConfig`],
+[`ConditionedClient`] and [`ConditionedServer`].

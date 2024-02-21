@@ -17,17 +17,22 @@ workspace = true
 all-features = true
 
 [features]
+## Enables serialization of certain types with
+## [`serde`](https://docs.rs/serde).
+serde = ["dep:serde"]
+
+## Enables serialization of certain types with
+## [`bitcode`](https://docs.rs/bitcode).
+bitcode = ["dep:bitcode"]
+
+## Enables [`ConditionedClient`] and [`ConditionedServer`].
+condition = ["dep:rand", "dep:rand_distr"]
+
 ## Enables [`bevy`](https://docs.rs/bevy) support.
 bevy = ["dep:bevy_ecs", "dep:bevy_app"]
 
-serde = ["dep:serde"]
-
-bitcode = ["dep:bitcode"]
-
-condition = ["dep:rand", "dep:rand_distr"]
-
-## Allows storing an async [`tokio`](https://docs.rs/tokio) runtime in a
-## [`bevy`](https://docs.rs/bevy) resource.
+## Allows storing an async multi-threaded [`tokio`](https://docs.rs/tokio)
+## runtime in a [`bevy`](https://docs.rs/bevy) resource.
 bevy-tokio-rt = ["bevy", "dep:tokio"]
 
 [dependencies]
@@ -36,14 +41,14 @@ derivative.workspace = true
 slotmap.workspace = true
 bytes.workspace = true
 
-bevy_ecs = { workspace = true, optional = true }
-bevy_app = { workspace = true, optional = true }
-
 serde = { workspace = true, optional = true }
 
 bitcode = { workspace = true, optional = true }
 
 rand = { workspace = true, optional = true }
 rand_distr = { workspace = true, optional = true }
+
+bevy_ecs = { workspace = true, optional = true }
+bevy_app = { workspace = true, optional = true }
 
 tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }

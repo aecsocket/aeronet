@@ -1,8 +1,13 @@
 use std::{fmt::Debug, time::Duration};
 
-use aeronet::{ByteStats, ClientKey, MessageStats, Rtt, TryAsBytes, TryFromBytes};
+use aeronet::{client::ClientKey, ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
+use aeronet_protocol::{
+    LaneRecvError, LaneSendError, NegotiationRequestError, NegotiationResponseError,
+};
 use derivative::Derivative;
 use steamworks::{networking_types::NetConnectionEnd, SteamError};
+
+pub const MTU: usize = 512 * 1024;
 
 /// Statistics on a Steamworks client/server connection.
 #[derive(Debug, Clone)]
@@ -93,13 +98,15 @@ pub enum SteamTransportError<S: TryAsBytes, R: TryFromBytes> {
     AlreadyConnected,
     /// Attempted to perform an action which requires a connection, while no
     /// connection is established.
-    #[error("client {client} not connected")]
-    NotConnected { client: ClientKey },
+    #[error("client not connected")]
+    NotConnected,
     /// Failed to start connecting the client to the given remote.
     #[error("client failed to start connecting")]
     StartConnecting,
     #[error("client connection rejected by server")]
     ConnectionRejected,
+    #[error("connection lost")]
+    ConnectionLost,
 
     // server
     /// Attempted to close the server while it was already closed.
@@ -125,21 +132,27 @@ pub enum SteamTransportError<S: TryAsBytes, R: TryFromBytes> {
     AlreadyRespondedToRequest,
 
     // connect
-    /// Failed to configure the lanes of the connection.
-    #[error("failed to configure lanes")]
-    ConfigureLanes(#[source] SteamError),
     #[error("disconnected: {0:?}")]
     Disconnected(NetConnectionEnd),
-    #[error("lost connection")]
-    ConnectionLost,
+    #[error("failed to send negotiation request")]
+    SendNegotiateRequest(#[source] SteamError),
+    #[error("failed to read negotiation request")]
+    NegotiateRequest(#[source] NegotiationRequestError),
+    #[error("failed to read negotiation response")]
+    NegotiateResponse(#[source] NegotiationResponseError),
 
     // transport
     #[error("failed to serialize message")]
-    Serialize(#[source] S::Error),
+    AsBytes(#[source] S::Error),
+    #[error("failed to send on lane")]
+    LaneSend(#[source] LaneSendError),
     #[error("failed to send message")]
     Send(#[source] SteamError),
-    #[error("failed to deserialize message")]
-    Deserialize(#[source] R::Error),
-}
 
-pub enum BackendError {}
+    #[error("failed to deserialize message")]
+    FromBytes(#[source] R::Error),
+    #[error("failed to receive on lane")]
+    LaneRecv(#[source] LaneRecvError),
+    #[error("failed to receive messages")]
+    Recv,
+}

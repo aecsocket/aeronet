@@ -92,10 +92,7 @@ where
     P::C2S: TryAsBytes + TryFromBytes + OnLane,
     P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
-    pub fn open(
-        config: impl Into<WebTransportServerConfig>,
-    ) -> (Self, impl Future<Output = ()> + Send) {
-        let config = config.into();
+    pub fn open(config: WebTransportServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel();
         let frontend = Self {
             recv_open,
@@ -199,7 +196,7 @@ where
         };
 
         let msg = msg.into();
-        conn.send(msg)
+        conn.send(&msg)
     }
 
     pub fn disconnect(&mut self, client: ClientKey) -> Result<(), WebTransportError<P>> {

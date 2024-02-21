@@ -22,15 +22,15 @@ bevy = ["dep:bevy", "aeronet/bevy", "aeronet/bevy-tokio-rt"]
 
 [dependencies]
 aeronet.workspace = true
-
+aeronet_protocol.workspace = true
 derivative.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
 slotmap.workspace = true
 ahash.workspace = true
+bytes.workspace = true
 futures.workspace = true
-rand.workspace = true
-tokio = { workspace = true, default-features = false, features = ["rt"] }
+either.workspace = true
 wtransport.workspace = true
 steamworks.workspace = true
 

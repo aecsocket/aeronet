@@ -104,11 +104,10 @@ impl ConnectionFrontend {
         }
     }
 
-    pub fn send<S, R>(&mut self, msg: S) -> Result<(), WebTransportError<S, R>>
-    where
-        S: TryAsBytes + OnLane,
-        R: TryFromBytes,
-    {
+    pub fn send<S: TryAsBytes + OnLane, R: TryFromBytes>(
+        &mut self,
+        msg: &S,
+    ) -> Result<(), WebTransportError<S, R>> {
         let msg_bytes = msg.try_as_bytes().map_err(WebTransportError::AsBytes)?;
         let msg_bytes = msg_bytes.as_ref();
 
@@ -131,17 +130,15 @@ impl ConnectionFrontend {
         Ok(())
     }
 
-    pub fn recv<S, R>(&mut self) -> Result<Option<R>, WebTransportError<S, R>>
-    where
-        S: TryAsBytes + OnLane,
-        R: TryFromBytes,
-    {
+    pub fn recv<S: TryAsBytes, R: TryFromBytes>(
+        &mut self,
+    ) -> Result<Option<R>, WebTransportError<S, R>> {
         while let Ok(Some(packet)) = self.recv_s2c.try_next() {
             self.info.total_bytes_recv += packet.len();
             if let Some(msg_bytes) = self
                 .lanes
                 .recv(&packet)
-                .map_err(|err| WebTransportError::Backend(BackendError::LaneRecv(err)))?
+                .map_err(|err| BackendError::LaneRecv(err))?
             {
                 let msg = R::try_from_bytes(&msg_bytes).map_err(WebTransportError::FromBytes)?;
                 self.info.msg_bytes_recv += msg_bytes.len();
@@ -207,6 +204,7 @@ async fn connection_incoming(
             }
         }
 
+        #[allow(clippy::useless_conversion)] // multi-target support
         let datagram = conn
             .receive_datagram()
             .await
@@ -237,6 +235,8 @@ async fn connection_outgoing(
             // backend closed
             return Ok(());
         };
+
+        #[allow(clippy::useless_conversion)] // multi-target support
         conn.send_datagram(msg)
             .await
             .map_err(|err| BackendError::SendDatagram(err.into()))?;
@@ -255,6 +255,7 @@ fn to_bytes(datagram: Vec<u8>) -> Bytes {
 }
 
 #[cfg(not(target_family = "wasm"))]
+#[allow(clippy::needless_pass_by_value)] // multi-target support
 fn to_bytes(datagram: xwt::current::Datagram) -> Bytes {
     datagram.0.payload()
 }

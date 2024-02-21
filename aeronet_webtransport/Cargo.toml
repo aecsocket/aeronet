@@ -36,7 +36,6 @@ slotmap.workspace = true
 bytes.workspace = true
 cfg-if.workspace = true
 futures.workspace = true
-bitcode.workspace = true
 xwt.workspace = true
 xwt-core.workspace = true
 

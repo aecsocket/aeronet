@@ -3,7 +3,7 @@ use std::time::Duration;
 use aeronet::{client::ClientKey, ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
 use aeronet_protocol::{
     LaneRecvError, LaneSendError, NegotiationRequestError, NegotiationResponseError,
-    WrongProtocolVersion, NEG_REQUEST_LEN, NEG_RESPONSE_LEN,
+    WrongProtocolVersion,
 };
 use derivative::Derivative;
 
@@ -299,12 +299,8 @@ pub enum BackendError {
         <xwt::current::Connection as xwt_core::datagram::Send>::Error,
     ),
 
-    #[error("invalid negotiation request length - expected {NEG_REQUEST_LEN}, was {len} bytes")]
-    NegotiateRequestLength { len: usize },
     #[error("failed to read negotiation request")]
     ReadNegotiateRequest(#[source] NegotiationRequestError),
-    #[error("invalid negotiation response length - expected {NEG_RESPONSE_LEN}, was {len} bytes")]
-    NegotiateResponseLength { len: usize },
     #[error("failed to read negotiation response")]
     ReadNegotiateResponse(#[source] NegotiationResponseError),
     #[error("wrong protocol version")]

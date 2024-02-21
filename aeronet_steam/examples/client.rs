@@ -1,27 +1,44 @@
-use std::{convert::Infallible, mem, string::FromUtf8Error};
+use std::{convert::Infallible, net::SocketAddr, string::FromUtf8Error};
 
 use aeronet::{
-    ClientTransport, ClientTransportPlugin, FromServer, LaneKey, LaneProtocol, LocalConnected,
-    LocalDisconnected, Message, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+    client::{
+        ClientState, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
+        LocalClientDisconnected,
+    },
+    LaneKey, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
 };
-use aeronet_steam::SteamClientTransport;
-use bevy::prelude::*;
+use aeronet_steam::{ConnectTarget, SteamClientTransport, SteamClientTransportConfig, MTU};
+use bevy::{log::LogPlugin, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
-// Protocol
+// protocol
 
-#[derive(Debug, Clone, LaneKey)]
-#[lane_kind(ReliableOrdered)]
+// Defines what kind of lanes are available to transport messages over on this
+// app's protocol.
+//
+// This can also be an enum, with each variant representing a different lane,
+// and each lane having different guarantees.
+#[derive(Debug, Clone, Copy, LaneKey)]
+#[lane_kind(UnreliableSequenced)]
 struct AppLane;
 
+// Type of message that is transported between clients and servers.
+// This is up to you, the user, to define. You can have different types
+// for client-to-server and server-to-client transport.
 #[derive(Debug, Clone, Message, OnLane)]
 #[lane_type(AppLane)]
 #[on_lane(AppLane)]
 struct AppMessage(String);
 
+impl<T: Into<String>> From<T> for AppMessage {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
+
+// Defines how this message type can be converted to/from a [u8] form.
 impl TryAsBytes for AppMessage {
     type Output<'a> = &'a [u8];
-
     type Error = Infallible;
 
     fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
@@ -32,7 +49,10 @@ impl TryAsBytes for AppMessage {
 impl TryFromBytes for AppMessage {
     type Error = FromUtf8Error;
 
-    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>
+    where
+        Self: Sized,
+    {
         String::from_utf8(buf.to_vec()).map(AppMessage)
     }
 }
@@ -44,26 +64,37 @@ impl TransportProtocol for AppProtocol {
     type S2C = AppMessage;
 }
 
-impl LaneProtocol for AppProtocol {
-    type Lane = AppLane;
-}
+const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(0xdeadbeefbadc0de);
 
-// App
+type Client = SteamClientTransport<AppProtocol>;
+
+// logic
 
 fn main() {
-    App::new()
-        .add_plugins((
-            DefaultPlugins,
-            EguiPlugin,
-            ClientTransportPlugin::<AppProtocol, SteamClientTransport<_>>::default(),
-        ))
-        .init_resource::<UiState>()
-        .add_systems(Startup, setup)
-        .add_systems(Update, (update_steam, (add_to_log, ui).chain()))
-        .run();
+    let mut app = App::new();
+    app.add_plugins((
+        DefaultPlugins.set(LogPlugin {
+            filter: "wgpu=error,naga=warn,aeronet=debug,aeronet_webtransport=debug".into(),
+            ..default()
+        }),
+        EguiPlugin,
+        ClientTransportPlugin::<_, Client>::default(),
+    ))
+    .init_resource::<Client>()
+    .init_resource::<UiState>()
+    .add_systems(Startup, setup)
+    .add_systems(
+        Update,
+        (update_steam, on_connected, on_disconnected, on_recv, ui).chain(),
+    );
+
+    #[cfg(not(target_family = "wasm"))]
+    app.init_resource::<aeronet::TokioRuntime>();
+
+    app.run();
 }
 
-#[derive(Resource)]
+#[derive(Clone, Resource, Deref, DerefMut)]
 struct SteamClient(steamworks::Client);
 
 fn setup(world: &mut World) {
@@ -80,136 +111,145 @@ fn update_steam(steam: NonSend<steamworks::SingleClient>) {
     steam.run_callbacks();
 }
 
-#[derive(Debug, Clone, Resource, Default)]
+#[derive(Debug, Default, Resource)]
 struct UiState {
+    ip: String,
     log: Vec<String>,
-    addr: String,
     msg: String,
 }
 
-fn add_to_log(
+fn on_connected(
+    mut events: EventReader<LocalClientConnected<AppProtocol, Client>>,
     mut ui_state: ResMut<UiState>,
-    mut connected: EventReader<LocalConnected<AppProtocol, SteamClientTransport<AppProtocol>>>,
-    mut disconnected: EventReader<
-        LocalDisconnected<AppProtocol, SteamClientTransport<AppProtocol>>,
-    >,
-    mut recv: EventReader<FromServer<AppProtocol>>,
 ) {
-    for LocalConnected { .. } in connected.read() {
+    for LocalClientConnected { .. } in events.read() {
         ui_state.log.push(format!("Connected"));
     }
+}
 
-    for LocalDisconnected { reason } in disconnected.read() {
-        ui_state.log.push(format!("Disconnected: {:#}", reason));
+fn on_disconnected(
+    mut events: EventReader<LocalClientDisconnected<AppProtocol, Client>>,
+    mut ui_state: ResMut<UiState>,
+) {
+    for LocalClientDisconnected { reason } in events.read() {
+        ui_state.log.push(format!(
+            "Disconnected: {:#}",
+            aeronet::util::pretty_error(&reason)
+        ));
     }
+}
 
-    for FromServer { msg, .. } in recv.read() {
+fn on_recv(
+    mut events: EventReader<FromServer<AppProtocol, Client>>,
+    mut ui_state: ResMut<UiState>,
+) {
+    for FromServer { msg, .. } in events.read() {
         ui_state.log.push(format!("> {}", msg.0));
     }
 }
 
 fn ui(
-    mut egui: EguiContexts,
-    mut ui_state: ResMut<UiState>,
     steam: Res<SteamClient>,
-    mut client: ResMut<SteamClientTransport<AppProtocol>>,
+    mut egui: EguiContexts,
+    mut client: ResMut<Client>,
+    mut ui_state: ResMut<UiState>,
 ) {
-    egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
-        connection(client.as_mut(), steam.as_ref(), ui_state.as_mut(), ui);
+    egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
+        ui.horizontal(|ui| {
+            ui.add_enabled_ui(client.state().is_disconnected(), |ui| {
+                let ip = ui
+                    .horizontal(|ui| {
+                        ui.label("IP");
+                        text_input(ui, &mut ui_state.ip)
+                    })
+                    .inner;
+                match ip.map(|ip| ip.parse::<SocketAddr>()) {
+                    Some(Ok(ip)) => {
+                        ui_state.log.push(format!("Connecting to {ip}"));
+                        connect(&steam, client.as_mut(), ip);
+                    }
+                    Some(Err(err)) => {
+                        ui_state.log.push(format!("Failed to parse IP: {err:#}"));
+                    }
+                    _ => {}
+                }
+            });
 
-        ui.separator();
+            ui.add_enabled_ui(!client.state().is_disconnected(), |ui| {
+                if ui.button("Disconnect").clicked() {
+                    ui_state.log.push(format!("Disconnected by user"));
+                    client
+                        .disconnect()
+                        .expect("client should not already be disconnected");
+                }
+            });
+        });
 
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for line in ui_state.log.iter() {
+            for line in &ui_state.log {
                 ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
             }
         });
 
-        ui.separator();
-
-        sending(client.as_mut(), ui_state.as_mut(), ui);
-    });
-}
-
-fn connection(
-    client: &mut SteamClientTransport<AppProtocol>,
-    steam: &SteamClient,
-    ui_state: &mut UiState,
-    ui: &mut egui::Ui,
-) {
-    ui.horizontal(|ui| {
-        ui.label("IP Address");
-
-        let addr_resp = ui.add_enabled(
-            client.state().is_disconnected(),
-            egui::TextEdit::singleline(&mut ui_state.addr).hint_text("127.0.0.1:27015 [enter]"),
-        );
-
-        if client.state().is_disconnected() {
-            let mut connect = false;
-            connect |= addr_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            connect |= ui.button("Connect").clicked();
-
-            if connect {
-                let addr = match ui_state.addr.parse() {
-                    Ok(addr) => addr,
-                    Err(err) => {
-                        ui_state.log.push(format!(
-                            "Failed to parse socket address: {:#}",
-                            aeronet::util::as_pretty(&err),
-                        ));
-                        return;
-                    }
-                };
-
-                match client.connect_ip(steam.0.clone(), addr) {
-                    Ok(()) => ui_state.log.push(format!("Connecting to {addr:?}")),
-                    Err(err) => ui_state.log.push(format!(
-                        "Failed to connect to {addr:?}: {:#}",
-                        aeronet::util::as_pretty(&err)
-                    )),
-                }
+        if let ClientState::Connected(info) = client.state() {
+            let msg = ui
+                .horizontal(|ui| {
+                    ui.label("Send");
+                    text_input(ui, &mut ui_state.msg)
+                })
+                .inner;
+            if let Some(msg) = msg {
+                ui_state.log.push(format!("< {msg}"));
+                client.send(msg).expect("should be able to send message");
             }
-        } else {
-            if ui.button("Disconnect").clicked() {
-                ui_state.log.push(format!("Disconnected by user"));
-                let _ = client.disconnect();
-            }
+
+            egui::Grid::new("stats").show(ui, |ui| {
+                ui.label("RTT");
+                ui.label(format!("{:?}", info.rtt));
+                ui.end_row();
+
+                ui.label("Messages sent/received");
+                ui.label(format!("{} sent / {} recv", info.msgs_sent, info.msgs_recv));
+                ui.end_row();
+
+                ui.label("Message bytes sent/received");
+                ui.label(format!(
+                    "{} sent / {} recv",
+                    info.msg_bytes_sent, info.msg_bytes_recv
+                ));
+                ui.end_row();
+
+                ui.label("Total bytes sent/received");
+                ui.label(format!(
+                    "{} sent / {} recv",
+                    info.total_bytes_sent, info.total_bytes_recv
+                ));
+                ui.end_row();
+            });
         }
     });
 }
 
-fn sending(
-    client: &mut SteamClientTransport<AppProtocol>,
-    ui_state: &mut UiState,
-    ui: &mut egui::Ui,
-) {
-    ui.horizontal(|ui| {
-        ui.add_enabled_ui(client.state().is_connected(), |ui| {
-            ui.label("Message");
-            let msg_resp =
-                ui.add(egui::TextEdit::singleline(&mut ui_state.msg).hint_text("[enter]"));
+fn connect(steam: &steamworks::Client, client: &mut Client, target: SocketAddr) {
+    client
+        .connect(
+            steam.clone(),
+            SteamClientTransportConfig {
+                version: PROTOCOL_VERSION,
+                max_packet_len: MTU,
+                lanes: AppLane::config(),
+                target: ConnectTarget::Ip(target),
+            },
+        )
+        .expect("backend should be disconnected");
+}
 
-            let mut send = false;
-            send |= msg_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            send |= ui.button("Send").clicked();
-
-            if send {
-                ui.memory_mut(|m| m.request_focus(msg_resp.id));
-                let msg = mem::take(&mut ui_state.msg);
-                if msg.is_empty() {
-                    return;
-                }
-
-                let log = match client.send(AppMessage(msg.clone())) {
-                    Ok(()) => format!("< {msg}"),
-                    Err(err) => format!(
-                        "Failed to send message: {:#}",
-                        aeronet::util::as_pretty(&err)
-                    ),
-                };
-                ui_state.log.push(log);
-            }
-        });
-    });
+pub fn text_input(ui: &mut egui::Ui, text: &mut String) -> Option<String> {
+    let resp = ui.text_edit_singleline(text);
+    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !text.is_empty() {
+        ui.memory_mut(|m| m.request_focus(resp.id));
+        Some(std::mem::take(text))
+    } else {
+        None
+    }
 }

@@ -132,7 +132,7 @@ fn on_recv(
 fn ui(
     #[cfg(not(target_family = "wasm"))] runtime: Res<aeronet::TokioRuntime>,
     mut egui: EguiContexts,
-    mut client: ResMut<WebTransportClient<AppProtocol>>,
+    mut client: ResMut<Client>,
     mut ui_state: ResMut<UiState>,
 ) {
     egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
@@ -226,7 +226,7 @@ fn native_config() -> aeronet_webtransport::wtransport::ClientConfig {
 
 fn connect(
     #[cfg(not(target_family = "wasm"))] runtime: &aeronet::TokioRuntime,
-    client: &mut WebTransportClient<AppProtocol>,
+    client: &mut Client,
     url: String,
 ) {
     let backend = client

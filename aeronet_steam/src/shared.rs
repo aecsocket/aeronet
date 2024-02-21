@@ -1,79 +1,111 @@
-use aeronet::{LaneKey, LaneProtocol, TryAsBytes, TryFromBytes};
-use steamworks::{networking_sockets::{NetConnection, NetworkingSockets}, Manager};
+use std::{marker::PhantomData, time::Duration};
 
-use crate::{SteamTransportError, ConnectionInfo};
+use aeronet::{LaneConfig, LaneKey, OnLane, TryAsBytes, TryFromBytes};
+use aeronet_protocol::Lanes;
+use derivative::Derivative;
+use steamworks::{
+    networking_sockets::NetConnection,
+    networking_types::{NetworkingMessage, SendFlags},
+};
 
-// https://partner.steamgames.com/doc/api/ISteamNetworkingSockets
-// "The max number of lanes on Steam is 255, which is a very large number and
-// not recommended!"
-fn num_lanes<P>() -> u8
-where
-    P: LaneProtocol,
-{
-    u8::try_from(P::Lane::VARIANTS.len()).expect("there should be less than 256 lanes")
+use crate::{ConnectionInfo, SteamTransportError};
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+pub struct ConnectionFrontend<M> {
+    pub info: ConnectionInfo,
+    #[derivative(Debug = "ignore")]
+    conn: NetConnection<M>,
+    lanes: Lanes,
 }
 
-pub(super) fn assert_valid_protocol<P>()
-where
-    P: LaneProtocol,
-{
-    let _ = num_lanes::<P>();
-}
-
-pub(super) fn configure_lanes<P, S, R, M>(
-    socks: &NetworkingSockets<M>,
-    conn: &NetConnection<M>,
-) -> Result<(), SteamTransportError<S, R>>
-where
-    P: LaneProtocol,
-    S: TryAsBytes,
-    R: TryFromBytes,
-    M: Manager + Send + Sync + 'static,
-{
-    let num_lanes = num_lanes::<P>();
-    let priorities = P::Lane::VARIANTS
-        .iter()
-        .map(|lane| lane.priority())
-        .collect::<Vec<_>>();
-    let weights = P::Lane::VARIANTS.iter().map(|_| 0).collect::<Vec<_>>();
-
-    let num_lanes = i32::from(num_lanes);
-    socks
-        .configure_connection_lanes(&conn, num_lanes, &priorities, &weights)
-        .map_err(SteamTransportError::<S, R>::ConfigureLanes)?;
-
-    Ok(())
-}
-
-pub(super) fn recv_all<P, S, R, M>(
-    conn: &mut NetConnection<M>,
-    info: &mut ConnectionInfo,
-) -> (Vec<R>, Result<(), SteamTransportError<S, R>>)
-where
-    P: LaneProtocol,
-    S: TryAsBytes,
-    R: TryFromBytes,
-    M: Manager + Send + Sync + 'static,
-{
-    let mut msgs = Vec::new();
-    loop {
-        let buf = conn.receive_messages(64).unwrap_or_default();
-        if buf.is_empty() {
-            break;
-        }
-
-        for msg in buf {
-            let bytes = msg.data();
-            let msg = match R::try_from_bytes(bytes).map_err(SteamTransportError::<S, R>::Deserialize) {
-                Ok(msg) => msg,
-                Err(err) => return (msgs, Err(err)),
-            };
-
-            info.msgs_recv += 1;
-            info.bytes_recv += bytes.len();
-            msgs.push(msg);
+impl<M: 'static> ConnectionFrontend<M> {
+    pub fn new(conn: NetConnection<M>, max_packet_len: usize, lanes: &[LaneConfig]) -> Self {
+        Self {
+            info: ConnectionInfo::new(Duration::ZERO), // TODO
+            conn,
+            lanes: Lanes::new(max_packet_len, lanes),
         }
     }
 
-    (msgs, Ok(()))
+    pub fn send<S: TryAsBytes + OnLane, R: TryFromBytes>(
+        &mut self,
+        msg: S,
+    ) -> Result<(), SteamTransportError<S, R>> {
+        let msg_bytes = msg.try_as_bytes().map_err(SteamTransportError::AsBytes)?;
+        let msg_bytes = msg_bytes.as_ref();
+
+        for packet in self
+            .lanes
+            .send(msg_bytes, msg.lane().index())
+            .map_err(SteamTransportError::LaneSend)?
+        {
+            let mut bytes = vec![0; packet.header.len() + packet.payload.len()].into_boxed_slice();
+            bytes[..packet.header.len()].copy_from_slice(&packet.header);
+            bytes[packet.header.len()..].copy_from_slice(packet.payload);
+
+            self.info.total_bytes_sent += bytes.len();
+            self.conn
+                .send_message(&bytes, SendFlags::UNRELIABLE_NO_NAGLE)
+                .map_err(SteamTransportError::Send)?;
+        }
+        self.info.msg_bytes_sent += msg_bytes.len();
+        self.info.msgs_sent += 1;
+        Ok(())
+    }
+
+    pub fn recv<'a, S: TryAsBytes + 'a, R: TryFromBytes + 'a>(
+        &'a mut self,
+    ) -> impl Iterator<Item = Result<R, SteamTransportError<S, R>>> + 'a {
+        Recv {
+            conn: self,
+            buf: Vec::new().into_iter(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+pub struct Recv<'a, M, S, R> {
+    conn: &'a mut ConnectionFrontend<M>,
+    #[derivative(Debug = "ignore")]
+    buf: std::vec::IntoIter<NetworkingMessage<M>>,
+    #[derivative(Debug = "ignore")]
+    _phantom: PhantomData<(S, R)>,
+}
+
+impl<'a, M: 'static, S: TryAsBytes, R: TryFromBytes> Iterator for Recv<'a, M, S, R> {
+    type Item = Result<R, SteamTransportError<S, R>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut packet = self.buf.next();
+        if packet.is_none() {
+            self.buf = match self.conn.conn.receive_messages(64) {
+                Ok(buf) => buf.into_iter(),
+                Err(_) => return Some(Err(SteamTransportError::Recv)),
+            };
+            packet = self.buf.next();
+        }
+        let packet = packet?;
+
+        let packet = packet.data();
+        self.conn.info.total_bytes_recv += packet.len();
+        let msg_bytes = match self
+            .conn
+            .lanes
+            .recv(packet)
+            .map_err(SteamTransportError::LaneRecv)
+        {
+            Ok(msg_bytes) => msg_bytes,
+            Err(err) => return Some(Err(err.into())),
+        }?;
+        let msg = match R::try_from_bytes(&msg_bytes).map_err(SteamTransportError::FromBytes) {
+            Ok(msg) => msg,
+            Err(err) => return Some(Err(err.into())),
+        };
+        self.conn.info.msg_bytes_recv += msg_bytes.len();
+        self.conn.info.msgs_recv += 1;
+        Some(Ok(msg))
+    }
 }

@@ -9,7 +9,7 @@ pub async fn connect(
     config: WebTransportClientConfig,
     send_conn: oneshot::Sender<Result<ConnectedInner, BackendError>>,
 ) {
-    let endpoint = match create_endpoint(config.native).await {
+    let endpoint = match create_endpoint(config.native) {
         Ok(endpoint) => endpoint,
         Err(err) => {
             let _ = send_conn.send(Err(err));
@@ -17,6 +17,7 @@ pub async fn connect(
         }
     };
 
+    #[allow(clippy::useless_conversion)] // multi-target support
     let connecting = match endpoint
         .connect(&config.url)
         .await
@@ -29,6 +30,7 @@ pub async fn connect(
         }
     };
 
+    #[allow(clippy::useless_conversion)] // multi-target support
     let mut conn = match connecting
         .wait_connect()
         .await
@@ -73,12 +75,13 @@ pub async fn connect(
 }
 
 #[cfg(target_family = "wasm")]
-async fn create_endpoint(config: web_sys::WebTransportOptions) -> Result<Endpoint, BackendError> {
+#[allow(clippy::unnecessary_wraps)] // multi-target support
+fn create_endpoint(config: web_sys::WebTransportOptions) -> Result<Endpoint, BackendError> {
     Ok(xwt::current::Endpoint { options: config })
 }
 
 #[cfg(not(target_family = "wasm"))]
-async fn create_endpoint(config: wtransport::ClientConfig) -> Result<Endpoint, BackendError> {
+fn create_endpoint(config: wtransport::ClientConfig) -> Result<Endpoint, BackendError> {
     let endpoint = wtransport::Endpoint::client(config).map_err(BackendError::CreateEndpoint)?;
     Ok(xwt::current::Endpoint(endpoint))
 }

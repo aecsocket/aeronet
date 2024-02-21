@@ -63,6 +63,9 @@ pub struct WrongProtocolVersion {
 /// [`Negotiation::recv_request`].
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum NegotiationRequestError {
+    /// Response had an invalid length.
+    #[error("invalid length - expected {NEG_REQUEST_LEN}, got {len}")]
+    WrongLength { len: usize },
     /// Request had an invalid prefix, indicating it is not using this crate's
     /// protocol.
     #[error("invalid request prefix")]
@@ -82,6 +85,9 @@ pub enum NegotiationRequestError {
 /// [`Negotiation::recv_response`].
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum NegotiationResponseError {
+    /// Response had an invalid length.
+    #[error("invalid length - expected {NEG_RESPONSE_LEN}, got {len}")]
+    WrongLength { len: usize },
     /// Response had an invalid discriminator, determining if it was an OK
     /// or erroring result.
     #[error("invalid discriminator - got {discrim}")]
@@ -106,10 +112,8 @@ pub const NEG_RESPONSE_LEN: usize = 9;
 
 impl Negotiation {
     /// Creates a negotiation object given a protocol version to use.
-    pub fn new(version: impl Into<ProtocolVersion>) -> Self {
-        Self {
-            version: version.into(),
-        }
+    pub fn new(version: ProtocolVersion) -> Self {
+        Self { version }
     }
 
     /// Creates a client-to-server packet to request negotiation.
@@ -131,6 +135,8 @@ impl Negotiation {
     /// Validates a client-to-server negotiation request packet, to check if
     /// this server should accept the client that sent the packet.
     ///
+    /// This will error if the packet is not of length [`NEG_REQUEST_LEN`].
+    ///
     /// This returns a `(result, response)` pair.
     ///
     /// # Errors
@@ -143,6 +149,39 @@ impl Negotiation {
     /// If `response` is [`Some`], then you must send this data back to the
     /// client.
     pub fn recv_request(
+        &self,
+        packet: &[u8],
+    ) -> (
+        Result<(), NegotiationRequestError>,
+        Option<[u8; NEG_RESPONSE_LEN]>,
+    ) {
+        let packet = match <&[u8; NEG_REQUEST_LEN]>::try_from(packet) {
+            Ok(packet) => packet,
+            Err(_) => {
+                return (
+                    Err(NegotiationRequestError::WrongLength { len: packet.len() }),
+                    None,
+                )
+            }
+        };
+        self.recv_request(packet)
+    }
+
+    /// Validates a client-to-server negotiation request packet, to check if
+    /// this server should accept the client that sent the packet.
+    ///
+    /// This returns a `(result, response)` pair.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the packet contained incorrect data, and this connection
+    /// should not be accepted.
+    ///
+    /// # Response
+    ///
+    /// If `response` is [`Some`], then you must send this data back to the
+    /// client.
+    pub fn recv_request_sized(
         &self,
         packet: &[u8; NEG_REQUEST_LEN],
     ) -> (
@@ -185,12 +224,26 @@ impl Negotiation {
 
     /// Reads and parses a negotiation response packet.
     ///
+    /// This will error if the packet is not of length [`NEG_RESPONSE_LEN`].
+    ///
+    /// # Errors
+    ///
+    /// Errors if the response indicates that the connection is unsuccessful,
+    /// or if the response is malformed.
+    pub fn recv_response(&self, packet: &[u8]) -> Result<(), NegotiationResponseError> {
+        let packet = <&[u8; NEG_RESPONSE_LEN]>::try_from(packet)
+            .map_err(|_| NegotiationResponseError::WrongLength { len: packet.len() })?;
+        self.recv_response(packet)
+    }
+
+    /// Reads and parses a negotiation response packet.
+    ///
     /// # Errors
     ///
     /// Errors if the response indicates that the connection is unsuccessful,
     /// or if the response is malformed.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    pub fn recv_response(
+    pub fn recv_response_sized(
         &self,
         packet: &[u8; NEG_RESPONSE_LEN],
     ) -> Result<(), NegotiationResponseError> {

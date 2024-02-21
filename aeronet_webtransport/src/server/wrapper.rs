@@ -37,10 +37,7 @@ where
     P::S2C: TryAsBytes + TryFromBytes + OnLane,
 {
     /// See [`OpeningServer::open`].
-    pub fn open_new(
-        config: impl Into<WebTransportServerConfig>,
-    ) -> (Self, impl Future<Output = ()> + Send) {
-        let config = config.into();
+    pub fn open_new(config: WebTransportServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (server, backend) = OpeningServer::open(config);
         (Self::Opening(server), backend)
     }
@@ -52,11 +49,10 @@ where
     /// Errors if `self` is not [`WebTransportServer::Closed`].
     pub fn open(
         &mut self,
-        config: impl Into<WebTransportServerConfig>,
+        config: WebTransportServerConfig,
     ) -> Result<impl Future<Output = ()> + Send, WebTransportError<P>> {
         match self {
             Self::Closed => {
-                let config = config.into();
                 let (this, backend) = Self::open_new(config);
                 *self = this;
                 Ok(backend)
