@@ -3,7 +3,7 @@
 [![crates.io](https://img.shields.io/crates/v/aeronet.svg)](https://crates.io/crates/aeronet)
 [![docs.rs](https://img.shields.io/docsrs/aeronet)](https://docs.rs/aeronet)
 
-A *light-as-air* client/server networking library with first-class support for Bevy, providing a
+A *light-as-air* client/server transport library with first-class support for Bevy, providing a
 consistent API which can be implemented by different transport mechanisms.
 
 # Transport
@@ -17,12 +17,15 @@ The current transport implementations available are:
   non-networked scenarios such as a local singleplayer server
   * `cargo run --package aeronet_channel --example echo --features "bevy"`
 * [`aeronet_webtransport`](https://docs.rs/aeronet_webtransport) - allows transport using the
-  [WebTransport](https://www.w3.org/TR/webtransport/) protocol
+  [WebTransport](https://www.w3.org/TR/webtransport/) protocol, for both native desktop apps as well
+  as WASM using [`xwt`](https://docs.rs/xwt)
   * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration"`
-  * `cargo run --package aeronet_webtransport --example echo_server --features "bevy dangerous-configuration"`
+  * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration" --target wasm32-unknown-unknown`
+    * Requires `wasm-server-runner` to be installed
+  * `cargo run --package aeronet_webtransport --example echo_server --features "bevy"`
 * [`aeronet_steam`](https://docs.rs/aeronet_steam) - uses Steam's
   [NetworkingSockets](https://partner.steamgames.com/doc/api/ISteamNetworkingSockets) API to send
-  data over Steam's relay network
+  data over Steam's relay network, using [`steamworks`](https://docs.rs/steamworks) under the hood
   * `cargo run --package aeronet_steam --example echo_client --features "bevy"`
   * `cargo run --package aeronet_steam --example echo_server --features "bevy"`
 
@@ -40,7 +43,7 @@ This crate aims to be:
 
 This crate does not aim to be:
 * A high-level app networking library, featuring replication, rollback, etc.
-  * This crate only concerns the transport of data payloads, not what the payloads actualy contain
+  * This crate only concerns the transport of data payloads, not what the payloads actually contain
 
 # Overview
 
@@ -68,8 +71,8 @@ Note that not all transports support lanes, however the types that are supported
 *Feature flag: `bevy`*
 
 Behind the `bevy` feature flag, this crate provides plugins for automatically processing a client
-and server transport via [`ClientTransportPlugin`] and [`ServerTransportPlugin`] respectively. These
-will automatically update the transports and send out events when e.g. a client connects, or a
+and server transport via [`ClientTransportPlugin`] and [`ServerTransportPlugin`] respectively.
+These will automatically update the transports and send out events when e.g. a client connects, or a
 message is received.
 
 ## Conditioning
@@ -77,5 +80,19 @@ message is received.
 *Feature flag: `condition` - depends on `getrandom`, which may not work in WASM*
 
 A common strategy used for ensuring that your network code is robust against failure is to add
-artificial packet loss and delays. This crate provides a utility for this via [`ConditionerConfig`],
-[`ConditionedClient`] and [`ConditionedServer`].
+artificial packet loss and delays. This crate provides a utility for this via the [`condition`]
+module.
+
+## Protocol
+
+*Crate: `aeronet_protocol`*
+
+This crate provides a reusable set of transport-level abstractions which can be used by transport
+implementations, if they do not support certain features already. This makes providing a new
+transport implementation easy, since you just plug in these features into the underlying byte stream
+or whatever other mechanism your transport uses.
+
+[`ClientTransport`]: crate::client::ClientTransport
+[`ServerTransport`]: crate::server::ServerTransport
+[`ClientTransportPlugin`]: crate::client::ClientTransportPlugin
+[`ServerTransportPlugin`]: crate::server::ServerTransportPlugin

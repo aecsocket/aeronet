@@ -1,9 +1,6 @@
 # 0.5.0
 
-* `Message` is now a derive macro, not an automatically impl'd trait
-* WebTransport WASM client first draft
-* Clients now have three states: disconnected, connecting, connected
-  * As opposed to disconnected, connected
+* Complete overhaul of the crate (again)
 
 # 0.4.1
 
