@@ -79,6 +79,7 @@ pub(super) async fn server(
         ));
     }
 
+    debug!("req = {}", req.len());
     let (result, resp) = negotiation.recv_request(&req);
     if let Some(resp) = resp {
         #[allow(clippy::useless_conversion)] // multi-target support

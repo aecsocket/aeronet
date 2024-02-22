@@ -164,7 +164,7 @@ impl Negotiation {
                 )
             }
         };
-        self.recv_request(packet)
+        self.recv_request_sized(packet)
     }
 
     /// Validates a client-to-server negotiation request packet, to check if
@@ -233,7 +233,7 @@ impl Negotiation {
     pub fn recv_response(&self, packet: &[u8]) -> Result<(), NegotiationResponseError> {
         let packet = <&[u8; NEG_RESPONSE_LEN]>::try_from(packet)
             .map_err(|_| NegotiationResponseError::WrongLength { len: packet.len() })?;
-        self.recv_response(packet)
+        self.recv_response_sized(packet)
     }
 
     /// Reads and parses a negotiation response packet.

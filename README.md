@@ -22,7 +22,7 @@ The current transport implementations available are:
   * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration"`
   * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration" --target wasm32-unknown-unknown`
     * Requires `wasm-server-runner` to be installed
-  * `cargo run --package aeronet_webtransport --example echo_server --features "bevy"`
+  * `cargo run --package aeronet_webtransport --example echo_server --features "bevy aeronet/bevy-tokio-rt"`
 * [`aeronet_steam`](https://docs.rs/aeronet_steam) - uses Steam's
   [NetworkingSockets](https://partner.steamgames.com/doc/api/ISteamNetworkingSockets) API to send
   data over Steam's relay network, using [`steamworks`](https://docs.rs/steamworks) under the hood

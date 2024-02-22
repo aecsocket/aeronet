@@ -5,14 +5,14 @@ use tracing::debug;
 use xwt::current::{Connection, RecvStream, SendStream};
 use xwt_core::datagram::{Receive, Send};
 
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use aeronet::{LaneConfig, LaneKey, OnLane, ProtocolVersion, TryAsBytes, TryFromBytes};
 use aeronet_protocol::Lanes;
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
-    SinkExt, StreamExt,
+    FutureExt, SinkExt, StreamExt,
 };
 
 use crate::{BackendError, ConnectionInfo, WebTransportError};
@@ -27,6 +27,7 @@ pub struct ConnectionFrontend {
     recv_rtt: mpsc::Receiver<Duration>,
     recv_err: oneshot::Receiver<BackendError>,
     lanes: Lanes,
+    _send_closed: oneshot::Sender<()>,
 }
 
 #[derive(Derivative)]
@@ -36,6 +37,7 @@ pub struct ConnectionBackend {
     send_s2c: mpsc::Sender<Bytes>,
     send_rtt: mpsc::Sender<Duration>,
     send_err: oneshot::Sender<BackendError>,
+    recv_closed: oneshot::Receiver<()>,
     #[derivative(Debug = "ignore")]
     _send_managed: SendStream,
     #[derivative(Debug = "ignore")]
@@ -50,17 +52,15 @@ pub async fn connection_channel<const SERVER: bool>(
 ) -> Result<(ConnectionFrontend, ConnectionBackend), BackendError> {
     #[cfg(target_family = "wasm")]
     {
-        // xwt creates a datagram receive buffer which is the size of
-        // `webtransport.datagrams().max_packet_size()`
-        // this value might increase after path MTU discovery,
-        // so it will start off at a lower value
-        // we manually increase the length of the buffer to the user-defined one
-        let max_packet_len =
-            u32::try_from(max_packet_len).expect("max_packet_len should be less than `u32::MAX`");
-        conn.max_datagram_size = max_packet_len;
-        *conn.datagram_read_buffer.lock().await =
-            Some(js_sys::Uint8Array::new_with_length(max_packet_len));
-        debug!("Set receive buffer length to {max_packet_len}");
+        debug!(
+            "Receive buffer length is {}",
+            conn.datagram_read_buffer
+                .lock()
+                .await
+                .as_ref()
+                .expect("read buffer was just created")
+                .byte_length()
+        );
     }
 
     let (send_managed, recv_managed) = if SERVER {
@@ -73,6 +73,7 @@ pub async fn connection_channel<const SERVER: bool>(
     let (send_s2c, recv_s2c) = mpsc::channel(MSG_BUF_CAP);
     let (send_rtt, recv_rtt) = mpsc::channel(1);
     let (send_err, recv_err) = oneshot::channel();
+    let (send_closed, recv_closed) = oneshot::channel();
     Ok((
         ConnectionFrontend {
             info: ConnectionInfo::from(&*conn),
@@ -80,6 +81,7 @@ pub async fn connection_channel<const SERVER: bool>(
             recv_s2c,
             recv_rtt,
             recv_err,
+            _send_closed: send_closed,
             lanes: Lanes::new(max_packet_len, lanes),
         },
         ConnectionBackend {
@@ -87,6 +89,7 @@ pub async fn connection_channel<const SERVER: bool>(
             send_s2c,
             send_rtt,
             send_err,
+            recv_closed,
             // we have to keep the managed streams alive
             // so we'll just pass them to the backend
             // this also lets us expand the functionality of managed streams
@@ -166,20 +169,32 @@ impl ConnectionBackend {
         // So instead, we split this up into two async tasks, and run them both.
 
         debug!("Connected backend");
-        let conn = Arc::new(conn);
-
-        let fut_incoming = {
-            let conn = conn.clone();
-            connection_incoming(
-                conn.clone(),
-                self.send_s2c,
-                #[cfg(not(target_family = "wasm"))]
-                self.send_rtt,
-            )
-        };
-        let fut_outgoing = connection_outgoing(conn, self.recv_c2s);
-        match futures::try_join!(fut_incoming, fut_outgoing) {
-            Ok(_) => debug!("Closed backend"),
+        let fut_incoming = connection_incoming(
+            &conn,
+            self.send_s2c,
+            #[cfg(not(target_family = "wasm"))]
+            self.send_rtt,
+        );
+        let fut_outgoing = connection_outgoing(&conn, self.recv_c2s);
+        match futures::select! {
+            r = fut_incoming.fuse() => r,
+            r = fut_outgoing.fuse() => r,
+            _ = self.recv_closed => Ok(()),
+        } {
+            Ok(_) => {
+                #[cfg(target_family = "wasm")]
+                {
+                    let mut close_info = web_sys::WebTransportCloseInfo::new();
+                    close_info.close_code(10);
+                    conn.transport.close_with_close_info(&close_info);
+                    // wait for the closing info to be sent
+                    // otherwise the peer will just timeout instead of cleanly close
+                    // TODO: this doesn't actually work. maybe because xwt manually calls close
+                    // on drop?
+                    let _ = wasm_bindgen_futures::JsFuture::from(conn.transport.closed()).await;
+                }
+                debug!("Closed backend");
+            }
             Err(err) => {
                 debug!("Closed backend: {:#}", aeronet::util::pretty_error(&err));
                 let _ = self.send_err.send(err);
@@ -189,7 +204,7 @@ impl ConnectionBackend {
 }
 
 async fn connection_incoming(
-    conn: Arc<Connection>,
+    conn: &Connection,
     mut send_s2c: mpsc::Sender<Bytes>,
     #[cfg(not(target_family = "wasm"))] mut send_rtt: mpsc::Sender<Duration>,
 ) -> Result<(), BackendError> {
@@ -213,21 +228,11 @@ async fn connection_incoming(
             // backend closed
             return Ok(());
         }
-
-        #[cfg(target_family = "wasm")] // TODO
-        {
-            // after the `receive_datagram` call, xwt shrinks the
-            // internal recv buffer to fit the size of the dgram
-            // so we manually resize it back
-            // TODO this is a bug and should be fixed
-            *conn.datagram_read_buffer.lock().await =
-                Some(js_sys::Uint8Array::new_with_length(conn.max_datagram_size));
-        }
     }
 }
 
 async fn connection_outgoing(
-    conn: Arc<Connection>,
+    conn: &Connection,
     mut recv_c2s: mpsc::UnboundedReceiver<Bytes>,
 ) -> Result<(), BackendError> {
     loop {

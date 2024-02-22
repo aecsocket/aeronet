@@ -43,7 +43,8 @@ bevy_ecs = { workspace = true, optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 js-sys.workspace = true
-web-sys.workspace = true
+web-sys = { workspace = true, features = ["WebTransportCloseInfo"] }
+wasm-bindgen-futures.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 wtransport.workspace = true
@@ -53,9 +54,6 @@ tokio = { workspace = true, features = ["rt"] }
 bevy.workspace = true
 bevy_egui.workspace = true
 anyhow.workspace = true
-
-[target.'cfg(target_family = "wasm")'.dev-dependencies]
-wasm-bindgen-futures.workspace = true
 
 [[example]]
 name = "echo_client"

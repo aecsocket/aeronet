@@ -65,7 +65,7 @@ bevy_app = { version = "0.13.0", default-features = false }
 bevy = "0.13.0"
 bevy_egui = "0.25.0"
 
-xwt = "0.5.0"
+xwt = "0.6.0"
 xwt-core = "0.2.2"
 wtransport = "0.1.10"
 
