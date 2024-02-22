@@ -10,3 +10,4 @@ implementation of aeronet using the [`steamworks`](https://crates.io/crates/stea
 
 * Remove fragmentation from the protocol, and only keep sequencing + reliable
   * Steam already fragments messages, so we don't need to double fragment it
+* Use poll groups?

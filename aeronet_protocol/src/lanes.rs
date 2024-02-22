@@ -20,13 +20,13 @@ enum LaneState {
     ReliableOrdered {},
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum LaneSendError {
     #[error("failed to fragment message")]
     Fragment(#[source] FragmentationError),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum LaneRecvError {
     #[error("failed to read lane index")]
     ReadIndex,
@@ -46,7 +46,7 @@ impl Lanes {
     // todo docs
     /// # Panics
     ///
-    /// Panics if `max_packet_len` is 0, or if `configs.len() > u64::MAX`.
+    /// Panics if `max_packet_len` is 0, or if `lanes.len() > u64::MAX`.
     #[must_use]
     pub fn new(max_packet_len: usize, lanes: &[LaneConfig]) -> Self {
         assert!(max_packet_len > 0);

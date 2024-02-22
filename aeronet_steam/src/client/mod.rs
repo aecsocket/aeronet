@@ -2,8 +2,9 @@ mod wrapper;
 
 use aeronet::{LaneConfig, ProtocolVersion};
 use aeronet_protocol::Negotiation;
-use steamworks::networking_types::{
-    NetConnectionStatusChanged, NetworkingConnectionState, SendFlags,
+use steamworks::{
+    networking_sockets::NetworkingSockets,
+    networking_types::{NetConnectionStatusChanged, NetworkingConnectionState, SendFlags},
 };
 pub use wrapper::*;
 
@@ -76,14 +77,22 @@ pub struct ConnectingClient<P, M = ClientManager> {
     #[derivative(Debug = "ignore")]
     recv_connected: oneshot::Receiver<Result<(), BackendError>>,
     #[derivative(Debug = "ignore")]
-    _status_changed_cb: CallbackHandle<M>,
+    status_changed_cb: CallbackHandle<M>,
     #[derivative(Debug = "ignore")]
     _phantom: PhantomData<P>,
+}
+
+impl<P, M> Drop for ConnectingClient<P, M> {
+    fn drop(&mut self) {
+        self.status_changed_cb.disconnect();
+    }
 }
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 struct ClientInner<M> {
+    #[derivative(Debug = "ignore")]
+    socks: NetworkingSockets<M>,
     #[derivative(Debug = "ignore")]
     steam: steamworks::Client<M>,
     #[derivative(Debug = "ignore")]
@@ -102,15 +111,12 @@ where
         steam: steamworks::Client<M>,
         config: SteamClientTransportConfig,
     ) -> Result<Self, SteamTransportError<P>> {
+        let socks = steam.networking_sockets();
         let conn = match config.target {
-            ConnectTarget::Ip(target) => {
-                steam.networking_sockets().connect_by_ip_address(target, [])
+            ConnectTarget::Ip(target) => socks.connect_by_ip_address(target, []),
+            ConnectTarget::Peer { id, virtual_port } => {
+                socks.connect_p2p(NetworkingIdentity::new_steam_id(id), virtual_port, [])
             }
-            ConnectTarget::Peer { id, virtual_port } => steam.networking_sockets().connect_p2p(
-                NetworkingIdentity::new_steam_id(id),
-                virtual_port,
-                [],
-            ),
         }
         .map_err(|_| SteamTransportError::<P>::StartConnecting)?;
 
@@ -122,12 +128,13 @@ where
 
         Ok(Self {
             inner: Some(ClientInner {
+                socks,
                 steam,
                 conn,
                 config,
             }),
             recv_connected,
-            _status_changed_cb: status_changed_cb,
+            status_changed_cb,
             _phantom: PhantomData,
         })
     }
@@ -234,12 +241,14 @@ where
 
                 Poll::Ready(Ok(ConnectedClient {
                     conn: ConnectionFrontend::new(
+                        &inner.socks,
                         inner.conn,
                         inner.config.max_packet_len,
                         &inner.config.lanes,
                     ),
+                    socks: inner.socks,
                     recv_err,
-                    _status_changed_cb: status_changed_cb,
+                    status_changed_cb,
                     _phantom: PhantomData,
                 }))
             }
@@ -252,11 +261,19 @@ where
 #[derivative(Debug(bound = ""))]
 pub struct ConnectedClient<P, M = ClientManager> {
     conn: ConnectionFrontend<M>,
+    #[derivative(Debug = "ignore")]
+    socks: NetworkingSockets<M>,
     recv_err: oneshot::Receiver<BackendError>,
     #[derivative(Debug = "ignore")]
-    _status_changed_cb: CallbackHandle<M>,
+    status_changed_cb: CallbackHandle<M>,
     #[derivative(Debug = "ignore")]
     _phantom: PhantomData<P>,
+}
+
+impl<P, M> Drop for ConnectedClient<P, M> {
+    fn drop(&mut self) {
+        self.status_changed_cb.disconnect();
+    }
 }
 
 impl<P, M> ConnectedClient<P, M>
@@ -294,6 +311,7 @@ where
     }
 
     fn _poll(&mut self, events: &mut Vec<ClientEvent<P>>) -> Result<(), SteamTransportError<P>> {
+        self.conn.update(&self.socks);
         for msg in self.conn.recv::<P::C2S, P::S2C>() {
             let msg = msg?;
             events.push(ClientEvent::Recv { msg });

@@ -1,10 +1,10 @@
-use std::{marker::PhantomData, time::Duration};
+use std::marker::PhantomData;
 
 use aeronet::{LaneConfig, LaneIndex, OnLane, TryAsBytes, TryFromBytes};
 use aeronet_protocol::Lanes;
 use derivative::Derivative;
 use steamworks::{
-    networking_sockets::NetConnection,
+    networking_sockets::{NetConnection, NetworkingSockets},
     networking_types::{NetworkingMessage, SendFlags},
 };
 
@@ -20,12 +20,21 @@ pub struct ConnectionFrontend<M> {
 }
 
 impl<M: 'static> ConnectionFrontend<M> {
-    pub fn new(conn: NetConnection<M>, max_packet_len: usize, lanes: &[LaneConfig]) -> Self {
+    pub fn new(
+        socks: &NetworkingSockets<M>,
+        conn: NetConnection<M>,
+        max_packet_len: usize,
+        lanes: &[LaneConfig],
+    ) -> Self {
         Self {
-            info: ConnectionInfo::new(Duration::ZERO), // TODO
+            info: ConnectionInfo::from_connection(socks, &conn),
             conn,
             lanes: Lanes::new(max_packet_len, lanes),
         }
+    }
+
+    pub fn update(&mut self, socks: &NetworkingSockets<M>) {
+        self.info.update_from_connection(socks, &self.conn);
     }
 
     pub fn send<S: TryAsBytes + OnLane, R: TryFromBytes>(

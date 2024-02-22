@@ -6,13 +6,18 @@ use aeronet_protocol::{
     WrongProtocolVersion,
 };
 use derivative::Derivative;
-use steamworks::{networking_types::NetConnectionEnd, SteamError};
+use steamworks::{
+    networking_sockets::{NetConnection, NetworkingSockets},
+    networking_types::NetConnectionEnd,
+    SteamError,
+};
 
 pub const MTU: usize = 512 * 1024;
 
 /// Statistics on a Steamworks client/server connection.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ConnectionInfo {
+    // generic
     /// See [`Rtt`].
     pub rtt: Duration,
     /// See [`MessageStats::msgs_sent`].
@@ -27,19 +32,61 @@ pub struct ConnectionInfo {
     pub total_bytes_sent: usize,
     /// See [`ByteStats::total_bytes_recv`].
     pub total_bytes_recv: usize,
+    // Steam-specific
+    pub connection_quality_local: f32,
+    pub connection_quality_remote: f32,
+    pub out_packets_per_sec: f32,
+    pub out_bytes_per_sec: f32,
+    pub in_packets_per_sec: f32,
+    pub in_bytes_per_sec: f32,
+    pub send_rate_bytes_per_sec: u32,
+    pub pending: u32,
+    pub queued_send_bytes: u64,
 }
 
 impl ConnectionInfo {
     #[must_use]
-    pub fn new(rtt: Duration) -> Self {
+    pub fn from_connection<M: 'static>(
+        socks: &NetworkingSockets<M>,
+        conn: &NetConnection<M>,
+    ) -> Self {
+        let Ok((info, _)) = socks.get_realtime_connection_status(conn, 0) else {
+            return Self::default();
+        };
+
         Self {
-            rtt,
-            msgs_sent: 0,
-            msgs_recv: 0,
-            msg_bytes_sent: 0,
-            msg_bytes_recv: 0,
-            total_bytes_sent: 0,
-            total_bytes_recv: 0,
+            rtt: u64::try_from(info.ping())
+                .map(Duration::from_millis)
+                .unwrap_or_default(),
+            connection_quality_local: info.connection_quality_local(),
+            connection_quality_remote: info.connection_quality_remote(),
+            out_packets_per_sec: info.out_packets_per_sec(),
+            out_bytes_per_sec: info.out_bytes_per_sec(),
+            in_packets_per_sec: info.in_packets_per_sec(),
+            in_bytes_per_sec: info.in_bytes_per_sec(),
+            send_rate_bytes_per_sec: u32::try_from(info.send_rate_bytes_per_sec())
+                .unwrap_or_default(),
+            pending: u32::try_from(info.pending_unreliable()).unwrap_or_default(),
+            queued_send_bytes: u64::try_from(info.queued_send_bytes()).unwrap_or_default(),
+            ..Default::default()
+        }
+    }
+
+    pub fn update_from_connection<M: 'static>(
+        &mut self,
+        socks: &NetworkingSockets<M>,
+        conn: &NetConnection<M>,
+    ) {
+        let src = Self::from_connection(socks, conn);
+        *self = Self {
+            rtt: self.rtt,
+            msgs_sent: self.msgs_sent,
+            msgs_recv: self.msgs_recv,
+            msg_bytes_sent: self.msg_bytes_sent,
+            msg_bytes_recv: self.msg_bytes_recv,
+            total_bytes_sent: self.total_bytes_sent,
+            total_bytes_recv: self.total_bytes_recv,
+            ..src
         }
     }
 }
@@ -82,8 +129,7 @@ impl ByteStats for ConnectionInfo {
 #[derive(Derivative, thiserror::Error)]
 #[derivative(
     Debug(bound = "S::Error: Debug, R::Error: Debug"),
-    // TODO: `steamworks::InvalidHandle` should derive Clone
-    // Clone(bound = "<P::Send as TryAsBytes>::Error: Clone, <P::Recv as TryFromBytes>::Error: Clone")
+    Clone(bound = "S::Error: Clone, R::Error: Clone")
 )]
 pub enum SteamTransportError<S: TryAsBytes, R: TryFromBytes> {
     #[error("internal error")]

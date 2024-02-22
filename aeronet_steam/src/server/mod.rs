@@ -13,7 +13,7 @@ use ahash::AHashMap;
 use derivative::Derivative;
 use slotmap::SlotMap;
 use steamworks::{
-    networking_sockets::{ListenSocket, NetConnection},
+    networking_sockets::{ListenSocket, NetConnection, NetworkingSockets},
     networking_types::{
         ConnectedEvent, ConnectionRequest, DisconnectedEvent, ListenSocketEvent, NetConnectionEnd,
         SendFlags,
@@ -46,6 +46,8 @@ pub enum ListenTarget {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct OpenServer<P, M = ServerManager> {
+    #[derivative(Debug = "ignore")]
+    socks: NetworkingSockets<M>,
     #[derivative(Debug = "ignore")]
     sock: ListenSocket<M>,
     config: SteamServerTransportConfig,
@@ -105,6 +107,7 @@ where
         .map_err(|_| SteamTransportError::<P>::CreateListenSocket)?;
 
         Ok(Self {
+            socks,
             sock,
             config,
             clients: SlotMap::default(),
@@ -210,7 +213,9 @@ where
 
         let mut clients_to_remove = Vec::new();
         for (client_key, client) in self.clients.iter_mut() {
-            if let Err(reason) = Self::poll_client(&self.config, client_key, client, &mut events) {
+            if let Err(reason) =
+                Self::poll_client(&self.socks, &self.config, client_key, client, &mut events)
+            {
                 events.push(ServerEvent::Disconnected {
                     client: client_key,
                     reason,
@@ -294,6 +299,7 @@ where
     }
 
     fn poll_client(
+        socks: &NetworkingSockets<M>,
         config: &SteamServerTransportConfig,
         client_key: ClientKey,
         client: &mut Client<M>,
@@ -328,11 +334,17 @@ where
                 })?;
                 *client = Client::Connected {
                     steam_id: *steam_id,
-                    conn: ConnectionFrontend::new(conn, config.max_packet_len, &config.lanes),
+                    conn: ConnectionFrontend::new(
+                        socks,
+                        conn,
+                        config.max_packet_len,
+                        &config.lanes,
+                    ),
                 };
                 Ok(())
             }
             Client::Connected { conn, .. } => {
+                conn.update(socks);
                 for msg in conn.recv() {
                     let msg = msg?;
                     events.push(ServerEvent::Recv {

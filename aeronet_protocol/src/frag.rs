@@ -68,7 +68,7 @@ pub enum FragmentationError {
 ///
 /// Errors during reassembly may be safely ignored - they won't corrupt the
 /// state of the fragmentation system - or they can be bubbled up. Up to you.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum ReassemblyError {
     /// Received a packet which was too small to contain header data.
     #[error("packet too small - {len} / {FRAG_HEADER_LEN} bytes")]
@@ -78,7 +78,7 @@ pub enum ReassemblyError {
     },
     /// Failed to decode a packet header.
     #[error("failed to decode packet header")]
-    DecodeHeader(#[source] bitcode::Error),
+    DecodeHeader,
     /// The decoded packet header contained invalid data.
     #[error("invalid packet header")]
     InvalidHeader,
@@ -272,7 +272,7 @@ impl<S: SequencingStrategy> Fragmentation<S> {
         }
 
         let header = bitcode::decode::<FragHeader>(&packet[..FRAG_HEADER_LEN])
-            .map_err(ReassemblyError::DecodeHeader)?;
+            .map_err(|_| ReassemblyError::DecodeHeader)?;
         let payload = &packet[FRAG_HEADER_LEN..];
 
         Ok(self.reassemble_packet(&header, payload))

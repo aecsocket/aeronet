@@ -78,4 +78,5 @@ rcgen = "0.12.0"
 ring = "0.17.7"
 time = "0.3.31"
 
-steamworks = "0.11.0"
+steamworks = { git = "https://github.com/Noxime/steamworks-rs/" }
+# steamworks = "0.11.0"
