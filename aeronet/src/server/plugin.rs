@@ -10,11 +10,29 @@ use super::{ServerEvent, ServerTransport};
 
 /// Forwards messages and events between the [`App`] and a [`ServerTransport`].
 ///
-/// See [`ServerTransportPlugin`] for a struct version of this plugin.
+/// See [`ServerTransportPlugin`].
+pub fn server_transport_plugin<P, T>(app: &mut App)
+where
+    P: TransportProtocol,
+    T: ServerTransport<P> + Resource,
+{
+    app.add_event::<ServerOpened<P, T>>()
+        .add_event::<ServerClosed<P, T>>()
+        .add_event::<RemoteClientConnecting<P, T>>()
+        .add_event::<RemoteClientConnected<P, T>>()
+        .add_event::<RemoteClientDisconnected<P, T>>()
+        .add_event::<FromClient<P, T>>()
+        .configure_sets(PreUpdate, ServerTransportSet::Recv)
+        .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Recv));
+}
+
+/// Forwards messages and events between the [`App`] and a [`ServerTransport`].
+///
+/// See [`server_transport_plugin`] for a function version of this plugin.
 ///
 /// With this plugin added, the transport `T` will automatically run
-/// [`ServerTransport::update`] on [`PreUpdate`] in the [`ServerTransportSet`],
-/// and send out the appropriate events.
+/// [`ServerTransport::poll`] on [`PreUpdate`] in the set
+/// [`ServerTransportSet::Recv`], and send out the appropriate events.
 ///
 /// This plugin sends out the events:
 /// * [`ServerOpened`]
@@ -27,24 +45,6 @@ use super::{ServerEvent, ServerTransport};
 /// These events can be read by your app to respond to incoming events. To send
 /// out messages, or to disconnect a specific client, etc., you will need to
 /// inject the transport as a resource into your system.
-pub fn server_transport_plugin<P, T>(app: &mut App)
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
-    app.add_event::<ServerOpened<P, T>>()
-        .add_event::<ServerClosed<P, T>>()
-        .add_event::<RemoteClientConnecting<P, T>>()
-        .add_event::<RemoteClientConnected<P, T>>()
-        .add_event::<RemoteClientDisconnected<P, T>>()
-        .add_event::<FromClient<P, T>>()
-        .configure_sets(PreUpdate, ServerTransportSet)
-        .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet));
-}
-
-/// Forwards messages and events between the [`App`] and a [`ServerTransport`].
-///
-/// See [`server_transport_plugin`].
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct ServerTransportPlugin<P, T> {
@@ -64,14 +64,19 @@ where
     }
 }
 
-/// Runs the [`server_transport_plugin`] systems.
+/// Runs the [`ServerTransportPlugin`] systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub struct ServerTransportSet;
+pub enum ServerTransportSet {
+    /// Handles receiving data from the transport.
+    Recv,
+}
 
 /// The server has completed setup and is ready to accept client
 /// connections, changing state to [`ServerState::Open`].
 ///
 /// See [`ServerEvent::Opened`]
+///
+/// [`ServerState::Open`]: crate::server::ServerState::Open
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct ServerOpened<P, T>
@@ -80,14 +85,15 @@ where
     T: ServerTransport<P> + Resource,
 {
     #[derivative(Debug = "ignore")]
-    #[doc(hidden)]
-    pub _phantom: PhantomData<(P, T)>,
+    _phantom: PhantomData<(P, T)>,
 }
 
 /// The server can no longer handle client connections, changing state to
 /// [`ServerState::Closed`].
 ///
 /// See [`ServerEvent::Closed`].
+///
+/// [`ServerState::Closed`]: crate::server::ServerState::Closed
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
 pub struct ServerClosed<P, T>

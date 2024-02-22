@@ -30,18 +30,15 @@ use const_format::formatcp;
 ///     communication, but opens a bidirectional managed stream to perform
 ///     negotiation
 /// * Client sends a request with a protocol string including its version number
-///   * Currently this is an ASCII string:
-///     ```text
-///     aeronet/xxxxxxxxxxxxxxxx
-///     ```
+///   * Currently this is an ASCII string: `aeronet/xxxxxxxxxxxxxxxx``
 ///     where the `xxxxxxxxxxxxxxxx` (16 bytes) is the hex form of the version
 ///     number
 /// * Server compares this request's version against its own
 /// * If the server accepts the protocol string, server sends an accepted
 ///   message and finalizes the connection
 ///   * Client receives the OK and finalizes the connection
-/// * If the server rejects the protocol string, server sends a rejected
-///   message along with its own protocol version, and drops the connection
+/// * If the server rejects the protocol string, server sends a rejected message
+///   along with its own protocol version, and drops the connection
 ///   * Client is aware that the connection was rejected because of their
 ///     protocol version, and gets the required protocol version
 #[derive(Debug, Clone)]

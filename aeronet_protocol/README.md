@@ -20,9 +20,12 @@ protocol. That is, they just take in and spit out bytes.
   carrying
 * *payload* - either a part of, or the entirety of, the message that this
   packet wants to transport
+
 # Features
+
 Which features are provided by this protocol, and which must be implemented
 externally?
+
 | Feature            | Description                                                           | Provided?         |
 |--------------------|-----------------------------------------------------------------------|-------------------|
 | encryption         | unauthorized third parties can't read the network data in transit     | -                 |
@@ -36,10 +39,14 @@ externally?
 | lane management    | messages can be sent over different lanes ("channels")                | [`Lanes`]         |
 | reliability        | messages sent reliably are guaranteed to be received by the peer      | todo              |
 | ordering           | messages will be received in the same order they were sent            | todo              |
+
 The client acts as the initiator in all aeronet-provided features.
+
 # Fuzzing
+
 To ensure that protocol code works correctly in all situations, the code
 makes use of both unit testing and fuzzing.
+
 To fuzz a particular component, run this from the `/aeronet_protocol` directory:
 * [`Negotiation`]
   * `cargo +nightly fuzz run negotiate_req`

@@ -36,6 +36,8 @@ use bevy_ecs::prelude::*;
 /// ```
 ///
 /// If the runtime cannot be created when initialized, the app will panic.
+///
+/// [`App::init_resource`]: bevy_app::prelude::App::init_resource
 #[derive(Debug, Resource)]
 pub struct TokioRuntime(pub tokio::runtime::Runtime);
 

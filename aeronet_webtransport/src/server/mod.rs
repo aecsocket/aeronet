@@ -120,7 +120,7 @@ where
 
 /// [`ServerState::Open`] variant of [`WebTransportServer`].
 ///
-/// [`ServerState::Open`]: aeronet::ServerState::Open
+/// [`ServerState::Open`]: aeronet::server::ServerState::Open
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct OpenServer<P> {

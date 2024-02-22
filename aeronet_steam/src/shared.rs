@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, time::Duration};
 
-use aeronet::{LaneConfig, LaneKey, OnLane, TryAsBytes, TryFromBytes};
+use aeronet::{LaneConfig, LaneIndex, OnLane, TryAsBytes, TryFromBytes};
 use aeronet_protocol::Lanes;
 use derivative::Derivative;
 use steamworks::{

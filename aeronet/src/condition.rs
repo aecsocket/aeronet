@@ -1,3 +1,22 @@
+//! Provides transport conditioner implementations which randomly drop and
+//! delay transport messages.
+//!
+//! **This is for testing purposes only!** You should never be using a
+//! conditioner in the release build of your app.
+//!
+//! A useful strategy for testing networking code is to induce artificial packet
+//! loss and delays, and see how your app copes with it.
+//!
+//! A conditioned client or server will add some unreliability to the incoming
+//! messages on that transport. Messages may be delayed for a random amount of
+//! time, or may even be dropped entirely. Whether a message is dropped or not
+//! is purely random, and this configuration allows you to tweak the values of
+//! this randomness.
+//!
+//! Note that conditioners only work on the smallest unit of transmission
+//! exposed in the API - individual messages. They will only delay or drop
+//! incoming messages, without affecting outgoing messages at all.
+
 use std::{
     mem, ops,
     time::{Duration, Instant},
@@ -14,25 +33,9 @@ use crate::{
 
 /// Configuration for a [`ConditionedClient`] or [`ConditionedServer`].
 ///
-/// **This is for testing purposes only!** You should never be using a
-/// conditioner in the release build of your app.
-///
-/// A useful strategy for testing networking code is to induce artificial packet
-/// loss and delays, and see how your app copes with it.
-///
-/// A conditioned client or server will add some unreliability to the incoming
-/// messages on that transport. Messages may be delayed for a random amount of
-/// time, or may even be dropped entirely. Whether a message is dropped or not
-/// is purely random, and this configuration allows you to tweak the values of
-/// this randomness.
-///
 /// The randomness of how long messages are delayed for is based on a normal
 /// distribution with mean `delay_mean` and standard deviation `delay_std_dev`.
 /// If the sample produces a negative value, the message is not delayed at all.
-///
-/// Note that conditioners only work on the smallest unit of transmission
-/// exposed in the API - individual messages. They will only delay or drop
-/// incoming messages, without affecting outgoing messages at all.
 ///
 /// # Validity
 ///
@@ -139,7 +142,7 @@ impl<E> Conditioner<E> {
 /// Wrapper around a [`ClientTransport`] which randomly delays and drops
 /// incoming messages.
 ///
-/// See [`ConditionerConfig`] for details.
+/// See the [module-level docs](self).
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ConditionedClient<P, T>
@@ -250,7 +253,7 @@ where
 /// Wrapper around a [`ServerTransport`] which randomly delays and drops
 /// incoming messages.
 ///
-/// See [`ConditionerConfig`] for details.
+/// See the [module-level docs](self).
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ConditionedServer<P, T>

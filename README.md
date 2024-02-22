@@ -19,7 +19,7 @@ The current transport implementations available are:
 * [`aeronet_webtransport`](https://docs.rs/aeronet_webtransport) - allows transport using the
   [WebTransport](https://www.w3.org/TR/webtransport/) protocol, for both native desktop apps as well
   as WASM using [`xwt`](https://docs.rs/xwt)
-  * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration"`
+  * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration aeronet/bevy-tokio-rt"`
   * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration" --target wasm32-unknown-unknown`
     * Requires `wasm-server-runner` to be installed
   * `cargo run --package aeronet_webtransport --example echo_server --features "bevy aeronet/bevy-tokio-rt"`
@@ -59,10 +59,6 @@ Lanes define the manner in which a message is delivered to the other side, such 
 reliable ordered, etc. These are similar to *streams* or *channels* in some protocols, but lanes are
 abstractions over the manner of delivery, rather than the individual stream or channel.
 
-The name "lanes" was chosen in order to reduce ambiguity:
-* *streams* may be confused with TCP or WebTransport streams
-* *channels* may be confused with MPSC channels
-
 Note that not all transports support lanes, however the types that are supported are listed in
 [`LaneKind`].
 
@@ -70,10 +66,9 @@ Note that not all transports support lanes, however the types that are supported
 
 *Feature flag: `bevy`*
 
-Behind the `bevy` feature flag, this crate provides plugins for automatically processing a client
-and server transport via [`ClientTransportPlugin`] and [`ServerTransportPlugin`] respectively.
-These will automatically update the transports and send out events when e.g. a client connects, or a
-message is received.
+This crate provides plugins for automatically processing a client and server transport via
+[`ClientTransportPlugin`] and [`ServerTransportPlugin`] respectively. These will automatically
+update the transports and send out events when e.g. a client connects, or a message is received.
 
 ## Conditioning
 

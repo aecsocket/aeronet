@@ -161,13 +161,14 @@ fn create(rt: &TokioRuntime) -> Result<WebTransportServer<AppProtocol>> {
 // The arguments in these Bevy systems look scary, but don't worry, they're just
 // type parameters for aeronet events, which are always `<P, T>`, where:
 // * `P` is your app's protocol
-// * `T` is the transport implementation you're using
-//   (you have to pass in `P` again here)
+// * `T` is the transport implementation you're using (you have to pass in `P`
+//   again here)
 // It's recommended that you add type aliases for events, i.e.
 // ```
 // type ServerOpened = aeronet::ServerOpened<MyProtocol, MyTransportServer<MyProtocol>>;
 //
-// fn on_opened(mut events: EventReader<ServerOpened>) { /* .. */ }
+// fn on_opened(mut events: EventReader<ServerOpened>) { /* .. */
+// }
 // ```
 
 fn on_opened(mut events: EventReader<ServerOpened<AppProtocol, Server>>) {

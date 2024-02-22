@@ -24,14 +24,16 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
     let kind = get_lane_kind(&input.attrs, input)?;
 
     Ok(quote! {
+        impl #impl_generics ::aeronet::LaneIndex for #name #type_generics #where_clause {
+            fn index(&self) -> usize {
+                0
+            }
+        }
+
         impl #impl_generics ::aeronet::LaneKey for #name #type_generics #where_clause {
             const VARIANTS: &'static [Self] = &[
                 Self
             ];
-
-            fn index(&self) -> usize {
-                0
-            }
 
             fn kind(&self) -> ::aeronet::LaneKind {
                 #kind
@@ -94,16 +96,18 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         .collect::<Vec<_>>();
 
     Ok(quote! {
-        impl #impl_generics ::aeronet::LaneKey for #name #type_generics #where_clause {
-            const VARIANTS: &'static [Self] = &[
-                #(#all_variants),*
-            ];
-
+        impl #impl_generics ::aeronet::LaneIndex for #name #type_generics #where_clause {
             fn index(&self) -> usize {
                 match *self {
                     #(#index_body),*
                 }
             }
+        }
+
+        impl #impl_generics ::aeronet::LaneKey for #name #type_generics #where_clause {
+            const VARIANTS: &'static [Self] = &[
+                #(#all_variants),*
+            ];
 
             fn kind(&self) -> ::aeronet::LaneKind {
                 match *self {

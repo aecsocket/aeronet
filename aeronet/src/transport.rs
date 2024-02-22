@@ -18,7 +18,7 @@ use crate::Message;
 /// use aeronet::{Message, TransportProtocol};
 ///
 /// #[derive(Debug, Message)]
-/// struct MyMessage { /* ... */ }
+/// struct MyMessage {/* ... */}
 ///
 /// struct MyProtocol;
 ///
@@ -33,8 +33,8 @@ use crate::Message;
 /// [`ServerTransport`]. However, the types of messages sent client-to-server
 /// (C2S) and server-to-client (S2C) may be different.
 ///
-/// [`ClientTransport`]: crate::ClientTransport
-/// [`ServerTransport`]: crate::ServerTransport
+/// [`ClientTransport`]: crate::client::ClientTransport
+/// [`ServerTransport`]: crate::server::ServerTransport
 /// [`TryAsBytes`]: crate::TryAsBytes
 pub trait TransportProtocol: Send + Sync + 'static {
     /// Type of message sent from the client to the server.
@@ -45,6 +45,9 @@ pub trait TransportProtocol: Send + Sync + 'static {
 }
 
 /// Unique version number of a transport protocol.
+///
+/// This may be used at the protocol level to ensure that two endpoints are
+/// communicating on the same version of the same protocol.
 ///
 /// This is treated as an opaque value, and is only used for equality
 /// comparison. No ordering guarantees are made (i.e. `20` is not

@@ -1,3 +1,7 @@
+//! Server-side traits and items.
+//!
+//! See the [crate-level docs](crate).
+
 #[cfg(feature = "bevy")]
 mod plugin;
 
@@ -36,9 +40,16 @@ pub trait ServerTransport<P: TransportProtocol> {
     type ConnectedInfo;
 
     /// Reads the current state of this server.
+    ///
+    /// This can be used to access info such as the server's
+    /// [local address](crate::LocalAddr), if the transport exposes it.
     fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo>;
 
     /// Reads the current state of a client.
+    ///
+    /// This can be used to access statistics on the connection, such as number
+    /// of bytes sent or [round-trip time](crate::Rtt), if the transport exposes
+    /// it.
     ///
     /// If the client does not exist, [`ClientState::Disconnected`] is returned.
     fn client_state(
@@ -90,10 +101,7 @@ pub trait ServerTransport<P: TransportProtocol> {
 
 /// State of a [`ServerTransport`].
 ///
-/// This can be used to access statistics on a client connection, such as number
-/// of bytes sent or [`Rtt`], if the transport provides them.
-///
-/// [`Rtt`]: crate::Rtt
+/// See [`ServerTransport::state`].
 #[derive(Debug, Clone)]
 pub enum ServerState<A, B> {
     /// Not listening to client connections, and making no attempts to start

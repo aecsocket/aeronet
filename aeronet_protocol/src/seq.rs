@@ -46,7 +46,8 @@ impl cmp::Ord for Seq {
         // https://github.com/orlp/slotmap/blob/c905b6ced490551476cb7c37778eb8128bdea7ba/src/util.rs#L10
         // It has been adapted to use u16s and Ordering.
         // This is used instead of the Gaffer On Games code because it produces
-        // smaller assembly, but has a tiny difference in behaviour around `u16::MAX / 2`.
+        // smaller assembly, but has a tiny difference in behaviour around `u16::MAX /
+        // 2`.
 
         let s1 = self.0;
         let s2 = other.0;

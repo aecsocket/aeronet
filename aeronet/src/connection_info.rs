@@ -6,7 +6,7 @@ use std::{net::SocketAddr, time::Duration};
 /// * a message is sent
 /// * the other endpoint receives it
 /// * the other endpoint processes the message
-/// * a reponse message is received
+/// * a response message is received
 ///
 /// This will never give the exact RTT value, as it is constantly in flux as
 /// network conditions change. However, it aims to be a good-enough estimate for

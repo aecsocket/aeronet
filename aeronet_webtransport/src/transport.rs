@@ -25,6 +25,8 @@ pub const MTU: usize = 1200;
 #[derive(Debug, Clone)]
 pub struct ConnectionInfo {
     /// See [`RemoteAddr`].
+    ///
+    /// [`RemoteAddr`]: aeronet::RemoteAddr
     #[cfg(not(target_family = "wasm"))]
     pub remote_addr: std::net::SocketAddr,
     /// See [`Rtt`].

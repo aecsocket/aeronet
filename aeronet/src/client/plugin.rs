@@ -11,20 +11,7 @@ use crate::{
 
 /// Forwards messages and events between the [`App`] and a [`ClientTransport`].
 ///
-/// See [`ClientTransportPlugin`] for a struct version of this plugin.
-///
-/// With this plugin added, the transport `T` will automatically run
-/// [`ClientTransport::update`] on [`PreUpdate`] in the [`ClientTransportSet`],
-/// and send out the appropriate events.
-///
-/// This plugin sends out the events:
-/// * [`LocalConnected`]
-/// * [`LocalDisconnected`]
-/// * [`FromServer`]
-///
-/// These events can be read by your app to respond to incoming events. To send
-/// out messages, or to connect the transport to a remote endpoint, etc., you
-/// will need to inject the transport as a resource into your system.
+/// See [`ClientTransportPlugin`].
 pub fn client_transport_plugin<P, T>(app: &mut App)
 where
     P: TransportProtocol,
@@ -34,13 +21,26 @@ where
     app.add_event::<LocalClientConnected<P, T>>()
         .add_event::<LocalClientDisconnected<P, T>>()
         .add_event::<FromServer<P, T>>()
-        .configure_sets(PreUpdate, ClientTransportSet)
-        .add_systems(PreUpdate, recv::<P, T>.in_set(ClientTransportSet));
+        .configure_sets(PreUpdate, ClientTransportSet::Recv)
+        .add_systems(PreUpdate, recv::<P, T>.in_set(ClientTransportSet::Recv));
 }
 
 /// Forwards messages and events between the [`App`] and a [`ClientTransport`].
 ///
-/// See [`client_transport_plugin`].
+/// See [`client_transport_plugin`] for a function version of this plugin.
+///
+/// With this plugin added, the transport `T` will automatically run
+/// [`ClientTransport::poll`] on [`PreUpdate`] in the set
+/// [`ClientTransportSet::Recv`], and send out the appropriate events.
+///
+/// This plugin sends out the events:
+/// * [`LocalClientConnected`]
+/// * [`LocalClientDisconnected`]
+/// * [`FromServer`]
+///
+/// These events can be read by your app to respond to incoming events. To send
+/// out messages, or to connect the transport to a remote endpoint, etc., you
+/// will need to inject the transport as a resource into your system.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct ClientTransportPlugin<P, T> {
@@ -58,9 +58,12 @@ where
     }
 }
 
-/// Runs the [`client_transport_plugin`] systems.
+/// Runs the [`ClientTransportPlugin`] systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub struct ClientTransportSet;
+pub enum ClientTransportSet {
+    /// Handles receiving data from the transport.
+    Recv,
+}
 
 /// The client has fully established a connection to the server.
 ///

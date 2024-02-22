@@ -36,3 +36,5 @@ client.send(AppMessage("hi!")).unwrap();
 
 server.disconnect(client.key().unwrap());
 ```
+
+[`ClientKey`]: aeronet::client::ClientKey

@@ -66,8 +66,8 @@ pub enum FragmentationError {
 /// invalid *time* (i.e. receiving a packet 20 minutes after it was sent) is not
 /// considered an error.
 ///
-/// Errors during reassembly may be safely ignored - they won't corrupt the state
-/// of the fragmentation system - or they can be bubbled up. Up to you.
+/// Errors during reassembly may be safely ignored - they won't corrupt the
+/// state of the fragmentation system - or they can be bubbled up. Up to you.
 #[derive(Debug, thiserror::Error)]
 pub enum ReassemblyError {
     /// Received a packet which was too small to contain header data.
@@ -110,7 +110,8 @@ mod private {
     pub trait Sealed {}
 }
 
-/// How messages with incrementing sequence numbers are handled by [`Fragmentation`].
+/// How messages with incrementing sequence numbers are handled by
+/// [`Fragmentation`].
 ///
 /// This is a *sealed trait*.
 pub trait SequencingStrategy: private::Sealed {

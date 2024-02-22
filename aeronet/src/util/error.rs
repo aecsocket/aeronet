@@ -4,7 +4,7 @@ use std::{error::Error, fmt};
 ///
 /// In some situations, such as when reading an error from a Bevy event reader,
 /// you may only have access to an error behind a shared reference. Use
-/// [`as_pretty`] to wrap that reference a [`PrettyError`], making the
+/// [`pretty_error`] to wrap that reference a [`PrettyError`], making the
 /// alternative [`fmt::Display`] impl format the entire error chain, in the
 /// same style as [`anyhow`](https://docs.rs/anyhow).
 pub struct PrettyError<'a, E>(&'a E);

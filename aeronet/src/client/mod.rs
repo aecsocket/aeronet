@@ -1,3 +1,7 @@
+//! Client-side traits and items.
+//!
+//! See the [crate-level docs](crate).
+
 #[cfg(feature = "bevy")]
 mod plugin;
 
@@ -13,7 +17,8 @@ use derivative::Derivative;
 
 use crate::TransportProtocol;
 
-/// Allows connecting to a server and transporting data between this client and the server.
+/// Allows connecting to a server and transporting data between this client and
+/// the server.
 ///
 /// See the [crate-level docs](crate).
 pub trait ClientTransport<P: TransportProtocol> {
@@ -29,9 +34,8 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// Gets the current state of this client.
     ///
     /// This can be used to access statistics on the connection, such as number
-    /// of bytes sent or [`Rtt`], if the transport provides them.
-    ///
-    /// [`Rtt`]: crate::Rtt
+    /// of bytes sent or [round-trip time](crate::Rtt), if the transport exposes
+    /// it.
     fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
 
     /// Attempts to send a message to the currently connected server.
@@ -57,13 +61,16 @@ pub trait ClientTransport<P: TransportProtocol> {
 }
 
 slotmap::new_key_type! {
-    /// Unique key identifying a client connected to a server.
+    /// Key identifying a unique client connected to a server.
     ///
     /// This key is unique for each individual session that a server accepts,
     /// even if a new client takes the slot/allocation of a previous client. To
     /// enforce this behavior, the key is implemented as a
     /// [`slotmap::new_key_type`] and intended to be used in a
     /// [`slotmap::SlotMap`].
+    ///
+    /// New sessions coming from the same physical client (e.g. the same socket
+    /// address) get different keys.
     pub struct ClientKey;
 }
 
