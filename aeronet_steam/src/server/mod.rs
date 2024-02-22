@@ -1,5 +1,6 @@
 mod wrapper;
 
+use aeronet_protocol::{Negotiation, NegotiationRequestError};
 pub use wrapper::*;
 
 use std::{marker::PhantomData, net::SocketAddr};
@@ -12,13 +13,14 @@ use ahash::AHashMap;
 use derivative::Derivative;
 use slotmap::SlotMap;
 use steamworks::{
-    networking_sockets::ListenSocket,
+    networking_sockets::{ListenSocket, NetConnection},
     networking_types::{
         ConnectedEvent, ConnectionRequest, DisconnectedEvent, ListenSocketEvent, NetConnectionEnd,
+        SendFlags,
     },
     Manager, ServerManager, SteamId,
 };
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::{shared::ConnectionFrontend, ConnectionInfo};
 
@@ -60,6 +62,12 @@ enum Client<M> {
         steam_id: SteamId,
         #[derivative(Debug = "ignore")]
         req: Option<ConnectionRequest<M>>,
+    },
+    Negotiating {
+        steam_id: SteamId,
+        negotiation: Negotiation,
+        #[derivative(Debug = "ignore")]
+        conn: Option<NetConnection<M>>,
     },
     Connected {
         steam_id: SteamId,
@@ -113,6 +121,11 @@ where
         match self.clients.get(client) {
             None => ClientState::Disconnected,
             Some(Client::Requesting { steam_id, .. }) => {
+                ClientState::Connecting(RemoteConnectingInfo {
+                    steam_id: *steam_id,
+                })
+            }
+            Some(Client::Negotiating { steam_id, .. }) => {
                 ClientState::Connecting(RemoteConnectingInfo {
                     steam_id: *steam_id,
                 })
@@ -197,7 +210,7 @@ where
 
         let mut clients_to_remove = Vec::new();
         for (client_key, client) in self.clients.iter_mut() {
-            if let Err(reason) = Self::poll_client(client_key, client, &mut events) {
+            if let Err(reason) = Self::poll_client(&self.config, client_key, client, &mut events) {
                 events.push(ServerEvent::Disconnected {
                     client: client_key,
                     reason,
@@ -215,10 +228,17 @@ where
 
     fn on_connecting(&mut self, req: ConnectionRequest<M>, events: &mut Vec<ServerEvent<P>>) {
         let Some(steam_id) = req.remote().steam_id() else {
+            debug!(
+                "Client with identity {:?} attempted to connect with non-Steam ID identity",
+                req.remote()
+            );
             req.reject(NetConnectionEnd::AppGeneric, None);
             return;
         };
         if self.id_to_client.contains_key(&steam_id) {
+            debug!(
+                "Client with Steam ID {steam_id:?} attempted to connect, but the same Steam ID is already connected"
+            );
             req.reject(NetConnectionEnd::AppGeneric, None);
             return;
         }
@@ -245,11 +265,11 @@ where
         };
 
         let conn = event.take_connection();
-        // TODO setup conn - negotiate
-
-        *client = Client::Connected {
+        *client = Client::Negotiating {
             steam_id,
-            conn: ConnectionFrontend::new(conn, self.config.max_packet_len, &self.config.lanes),
+            conn: Some(conn),
+            negotiation: Negotiation::new(self.config.version),
+            //conn: ConnectionFrontend::new(conn, self.config.max_packet_len, &self.config.lanes),
         };
         events.push(ServerEvent::Connected {
             client: *client_key,
@@ -274,12 +294,44 @@ where
     }
 
     fn poll_client(
+        config: &SteamServerTransportConfig,
         client_key: ClientKey,
         client: &mut Client<M>,
         events: &mut Vec<ServerEvent<P>>,
     ) -> Result<(), SteamTransportError<P>> {
         match client {
             Client::Requesting { .. } => Ok(()),
+            Client::Negotiating {
+                steam_id,
+                conn,
+                negotiation,
+            } => {
+                let mut conn = conn.take().unwrap();
+                let Some(msg) = conn
+                    .receive_messages(1)
+                    .map_err(|_| SteamTransportError::<P>::Recv)?
+                    .pop()
+                else {
+                    return Ok(());
+                };
+
+                let (result, resp) = negotiation.recv_request(msg.data());
+                if let Some(resp) = resp {
+                    conn.send_message(&resp, SendFlags::RELIABLE_NO_NAGLE)
+                        .map_err(SteamTransportError::<P>::Send)?;
+                }
+                result.map_err(|err| match err {
+                    NegotiationRequestError::WrongVersion(err) => {
+                        SteamTransportError::<P>::WrongProtocolVersion(err)
+                    }
+                    err => SteamTransportError::<P>::NegotiateRequest(err),
+                })?;
+                *client = Client::Connected {
+                    steam_id: *steam_id,
+                    conn: ConnectionFrontend::new(conn, config.max_packet_len, &config.lanes),
+                };
+                Ok(())
+            }
             Client::Connected { conn, .. } => {
                 for msg in conn.recv() {
                     let msg = msg?;

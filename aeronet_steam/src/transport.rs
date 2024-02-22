@@ -3,6 +3,7 @@ use std::{fmt::Debug, time::Duration};
 use aeronet::{client::ClientKey, ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
 use aeronet_protocol::{
     LaneRecvError, LaneSendError, NegotiationRequestError, NegotiationResponseError,
+    WrongProtocolVersion,
 };
 use derivative::Derivative;
 use steamworks::{networking_types::NetConnectionEnd, SteamError};
@@ -140,6 +141,8 @@ pub enum SteamTransportError<S: TryAsBytes, R: TryFromBytes> {
     NegotiateRequest(#[source] NegotiationRequestError),
     #[error("failed to read negotiation response")]
     NegotiateResponse(#[source] NegotiationResponseError),
+    #[error("wrong protocol version")]
+    WrongProtocolVersion(#[source] WrongProtocolVersion),
 
     // transport
     #[error("failed to serialize message")]

@@ -74,7 +74,7 @@ fn main() {
     let mut app = App::new();
     app.add_plugins((
         DefaultPlugins.set(LogPlugin {
-            filter: "wgpu=error,naga=warn,aeronet=debug,aeronet_webtransport=debug".into(),
+            filter: "wgpu=error,naga=warn,aeronet=debug".into(),
             ..default()
         }),
         EguiPlugin,

@@ -103,7 +103,7 @@ fn main() {
     App::new()
         .add_plugins((
             LogPlugin {
-                filter: "wgpu=error,naga=warn,aeronet=debug,aeronet_webtransport=debug".into(),
+                filter: "wgpu=error,naga=warn,aeronet=debug".into(),
                 ..default()
             },
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
