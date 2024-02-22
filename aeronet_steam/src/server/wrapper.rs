@@ -1,20 +1,19 @@
-use std::net::SocketAddr;
-
 use aeronet::{
-    ClientKey, ClientState, LaneProtocol, OnLane, ServerState, ServerTransport, TransportProtocol,
-    TryAsBytes, TryFromBytes,
+    client::{ClientKey, ClientState},
+    server::{ServerState, ServerTransport},
+    OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 use steamworks::{Manager, ServerManager};
 
-use crate::{OpenServer, RemoteConnectedInfo, RemoteConnectingInfo};
+use crate::{OpenServer, RemoteConnectedInfo, RemoteConnectingInfo, SteamServerTransportConfig};
 
 use super::{ServerEvent, SteamTransportError};
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub enum SteamServerTransport<P: TransportProtocol, M = ServerManager> {
+pub enum SteamServerTransport<P, M = ServerManager> {
     #[derivative(Default)]
     Closed,
     Open(OpenServer<P, M>),
@@ -22,47 +21,26 @@ pub enum SteamServerTransport<P: TransportProtocol, M = ServerManager> {
 
 impl<P, M> SteamServerTransport<P, M>
 where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P: TransportProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane,
     M: Manager + Send + Sync + 'static,
 {
-    pub fn open_new_ip(
+    pub fn open_new(
         steam: &steamworks::Client<M>,
-        addr: SocketAddr,
+        config: SteamServerTransportConfig,
     ) -> Result<Self, SteamTransportError<P>> {
-        OpenServer::open_ip(steam, addr).map(Self::Open)
+        OpenServer::open(steam, config).map(Self::Open)
     }
 
-    pub fn open_new_p2p(
-        steam: &steamworks::Client<M>,
-        virtual_port: i32,
-    ) -> Result<Self, SteamTransportError<P>> {
-        OpenServer::open_p2p(steam, virtual_port).map(Self::Open)
-    }
-
-    pub fn open_ip(
+    pub fn open(
         &mut self,
         steam: &steamworks::Client<M>,
-        addr: SocketAddr,
+        config: SteamServerTransportConfig,
     ) -> Result<(), SteamTransportError<P>> {
         match self {
             Self::Closed => {
-                *self = Self::open_new_ip(steam, addr)?;
-                Ok(())
-            }
-            Self::Open(_) => Err(SteamTransportError::<P>::AlreadyOpen),
-        }
-    }
-
-    pub fn open_p2p(
-        &mut self,
-        steam: &steamworks::Client<M>,
-        virtual_port: i32,
-    ) -> Result<(), SteamTransportError<P>> {
-        match self {
-            Self::Closed => {
-                *self = Self::open_new_p2p(steam, virtual_port)?;
+                *self = Self::open_new(steam, config)?;
                 Ok(())
             }
             Self::Open(_) => Err(SteamTransportError::<P>::AlreadyOpen),
@@ -96,9 +74,9 @@ where
 
 impl<P, M> ServerTransport<P> for SteamServerTransport<P, M>
 where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P: TransportProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane,
     M: Manager + Send + Sync + 'static,
 {
     type Error = SteamTransportError<P>;

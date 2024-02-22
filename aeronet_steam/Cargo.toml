@@ -42,11 +42,11 @@ bevy_egui.workspace = true
 anyhow.workspace = true
 
 [[example]]
-name = "client"
-path = "examples/client.rs"
+name = "echo_client"
+path = "examples/echo_client.rs"
 required-features = ["bevy"]
 
 [[example]]
-name = "server"
-path = "examples/server.rs"
+name = "echo_server"
+path = "examples/echo_server.rs"
 required-features = ["bevy"]

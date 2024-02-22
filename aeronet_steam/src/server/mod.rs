@@ -2,16 +2,17 @@ mod wrapper;
 
 pub use wrapper::*;
 
-use std::{marker::PhantomData, net::SocketAddr, time::Duration};
+use std::{marker::PhantomData, net::SocketAddr};
 
 use aeronet::{
-    ClientKey, ClientState, LaneProtocol, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+    client::{ClientKey, ClientState},
+    LaneConfig, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use ahash::AHashMap;
 use derivative::Derivative;
 use slotmap::SlotMap;
 use steamworks::{
-    networking_sockets::{InvalidHandle, ListenSocket, NetConnection, NetworkingSockets},
+    networking_sockets::ListenSocket,
     networking_types::{
         ConnectedEvent, ConnectionRequest, DisconnectedEvent, ListenSocketEvent, NetConnectionEnd,
     },
@@ -19,22 +20,33 @@ use steamworks::{
 };
 use tracing::warn;
 
-use crate::ConnectionInfo;
+use crate::{shared::ConnectionFrontend, ConnectionInfo};
 
 type SteamTransportError<P> =
     crate::SteamTransportError<<P as TransportProtocol>::S2C, <P as TransportProtocol>::C2S>;
 
-type ServerEvent<P> = aeronet::ServerEvent<P, SteamTransportError<P>>;
+type ServerEvent<P> = aeronet::server::ServerEvent<P, SteamTransportError<P>>;
 
-const RECV_BATCH_SIZE: usize = 32;
+#[derive(Debug)]
+pub struct SteamServerTransportConfig {
+    pub version: ProtocolVersion,
+    pub max_packet_len: usize,
+    pub lanes: Vec<LaneConfig>,
+    pub target: ListenTarget,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ListenTarget {
+    Ip(SocketAddr),
+    Peer { virtual_port: i32 },
+}
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct OpenServer<P, M = ServerManager> {
     #[derivative(Debug = "ignore")]
-    sockets: NetworkingSockets<M>,
-    #[derivative(Debug = "ignore")]
-    socket: ListenSocket<M>,
+    sock: ListenSocket<M>,
+    config: SteamServerTransportConfig,
     clients: SlotMap<ClientKey, Client<M>>,
     id_to_client: AHashMap<SteamId, ClientKey>,
     #[derivative(Debug = "ignore")]
@@ -51,9 +63,7 @@ enum Client<M> {
     },
     Connected {
         steam_id: SteamId,
-        info: ConnectionInfo,
-        #[derivative(Debug = "ignore")]
-        conn: NetConnection<M>,
+        conn: ConnectionFrontend<M>,
     },
 }
 
@@ -70,41 +80,25 @@ pub struct RemoteConnectedInfo {
 
 impl<P, M> OpenServer<P, M>
 where
-    P: LaneProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane<Lane = P::Lane>,
+    P: TransportProtocol,
+    P::C2S: TryAsBytes + TryFromBytes + OnLane,
+    P::S2C: TryAsBytes + TryFromBytes + OnLane,
     M: Manager + Send + Sync + 'static,
 {
-    pub fn open_ip(
+    pub fn open(
         steam: &steamworks::Client<M>,
-        addr: SocketAddr,
+        config: SteamServerTransportConfig,
     ) -> Result<Self, SteamTransportError<P>> {
-        Self::open(
-            steam.networking_sockets(),
-            steam.networking_sockets().create_listen_socket_ip(addr, []),
-        )
-    }
+        let socks = steam.networking_sockets();
+        let sock = match config.target {
+            ListenTarget::Ip(addr) => socks.create_listen_socket_ip(addr, []),
+            ListenTarget::Peer { virtual_port } => socks.create_listen_socket_p2p(virtual_port, []),
+        }
+        .map_err(|_| SteamTransportError::<P>::CreateListenSocket)?;
 
-    pub fn open_p2p(
-        steam: &steamworks::Client<M>,
-        virtual_port: i32,
-    ) -> Result<Self, SteamTransportError<P>> {
-        Self::open(
-            steam.networking_sockets(),
-            steam
-                .networking_sockets()
-                .create_listen_socket_p2p(virtual_port, []),
-        )
-    }
-
-    fn open(
-        sockets: NetworkingSockets<M>,
-        sock: Result<ListenSocket<M>, InvalidHandle>,
-    ) -> Result<Self, SteamTransportError<P>> {
-        let socket = sock.map_err(|_| SteamTransportError::<P>::CreateListenSocket)?;
         Ok(Self {
-            sockets,
-            socket,
+            sock,
+            config,
             clients: SlotMap::default(),
             id_to_client: AHashMap::default(),
             _phantom: PhantomData,
@@ -123,12 +117,12 @@ where
                     steam_id: *steam_id,
                 })
             }
-            Some(Client::Connected {
-                steam_id: id, info, ..
-            }) => ClientState::Connected(RemoteConnectedInfo {
-                steam_id: *id,
-                info: info.clone(),
-            }),
+            Some(Client::Connected { steam_id, conn, .. }) => {
+                ClientState::Connected(RemoteConnectedInfo {
+                    steam_id: *steam_id,
+                    info: conn.info.clone(),
+                })
+            }
         }
     }
 
@@ -166,26 +160,28 @@ where
         }
     }
 
+    pub fn disconnect(&mut self, client: ClientKey) -> Result<(), SteamTransportError<P>> {
+        match self.clients.remove(client) {
+            Some(_) => Ok(()),
+            None => Err(SteamTransportError::<P>::NoClient { client }),
+        }
+    }
+
     pub fn send(
         &mut self,
         client: ClientKey,
         msg: impl Into<P::S2C>,
     ) -> Result<(), SteamTransportError<P>> {
-        let Some(Client::Connected { info, conn, .. }) = self.clients.get(client) else {
-            return Err(SteamTransportError::<P>::NotConnected { client });
+        let Some(Client::Connected { conn, .. }) = self.clients.get_mut(client) else {
+            return Err(SteamTransportError::<P>::NotConnected);
         };
-
-        conn.send_message(data, send_flags)
-    }
-
-    pub fn disconnect(&mut self, client: ClientKey) -> Result<(), SteamTransportError<P>> {
-        todo!()
+        conn.send(msg.into())
     }
 
     pub fn poll(&mut self) -> Vec<ServerEvent<P>> {
         let mut events = Vec::new();
 
-        while let Some(event) = self.socket.try_receive_event() {
+        while let Some(event) = self.sock.try_receive_event() {
             match event {
                 ListenSocketEvent::Connecting(req) => {
                     self.on_connecting(req, &mut events);
@@ -199,8 +195,19 @@ where
             }
         }
 
+        let mut clients_to_remove = Vec::new();
         for (client_key, client) in self.clients.iter_mut() {
-            Self::poll_client(client_key, client, &mut events);
+            if let Err(reason) = Self::poll_client(client_key, client, &mut events) {
+                events.push(ServerEvent::Disconnected {
+                    client: client_key,
+                    reason,
+                });
+                clients_to_remove.push(client_key);
+            }
+        }
+
+        for client_key in clients_to_remove {
+            self.clients.remove(client_key);
         }
 
         events
@@ -240,21 +247,9 @@ where
         let conn = event.take_connection();
         // TODO setup conn - negotiate
 
-        // if let Err(reason) = shared::configure_lanes::<P, P::S2C, P::C2S, M>(&self.socks, &conn) {
-        //     events.push(ServerEvent::Disconnected {
-        //         client: *client_key,
-        //         reason,
-        //     });
-        //     return;
-        // }
-
-        // TODO!!! Use ISteamNetworkingUtils::EstimatePingTimeBetweenTwoLocations
-        // to get an RTT value, and constantly update it
-        let info = ConnectionInfo::new(Duration::ZERO);
         *client = Client::Connected {
             steam_id,
-            info,
-            conn,
+            conn: ConnectionFrontend::new(conn, self.config.max_packet_len, &self.config.lanes),
         };
         events.push(ServerEvent::Connected {
             client: *client_key,
@@ -282,12 +277,18 @@ where
         client_key: ClientKey,
         client: &mut Client<M>,
         events: &mut Vec<ServerEvent<P>>,
-    ) {
+    ) -> Result<(), SteamTransportError<P>> {
         match client {
-            Client::Requesting { .. } => {}
-            Client::Connected { info, conn, .. } => {
-                let packets = conn.receive_messages(RECV_BATCH_SIZE);
-                todo!()
+            Client::Requesting { .. } => Ok(()),
+            Client::Connected { conn, .. } => {
+                for msg in conn.recv() {
+                    let msg = msg?;
+                    events.push(ServerEvent::Recv {
+                        client: client_key,
+                        msg,
+                    });
+                }
+                Ok(())
             }
         }
     }

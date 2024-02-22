@@ -1,16 +1,20 @@
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
-    FromClient, LaneKey, LaneProtocol, Message, OnLane, RemoteConnected, RemoteConnecting,
-    RemoteDisconnected, ServerTransport, ServerTransportPlugin, TransportProtocol, TryAsBytes,
-    TryFromBytes,
+    client::ClientState,
+    server::{
+        FromClient, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
+        ServerTransport, ServerTransportPlugin,
+    },
+    LaneKey, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
 };
+use aeronet_steam::{ListenTarget, SteamServerTransportConfig, MTU};
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use steamworks::ClientManager;
 
 // Protocol
 
-#[derive(Debug, Clone, LaneKey)]
+#[derive(Debug, Clone, Copy, LaneKey)]
 #[lane_kind(ReliableOrdered)]
 struct AppLane;
 
@@ -21,7 +25,6 @@ struct AppMessage(String);
 
 impl TryAsBytes for AppMessage {
     type Output<'a> = &'a [u8];
-
     type Error = Infallible;
 
     fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
@@ -44,13 +47,11 @@ impl TransportProtocol for AppProtocol {
     type S2C = AppMessage;
 }
 
-impl LaneProtocol for AppProtocol {
-    type Lane = AppLane;
-}
+const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(0xdeadbeefbadc0de);
 
 // Use a `ClientManager` here since we use `steamworks::Client`, not
 // `steamworks::Server`
-type SteamServerTransport = aeronet_steam::SteamServerTransport<AppProtocol, ClientManager>;
+type Server = aeronet_steam::SteamServerTransport<AppProtocol, ClientManager>;
 
 // App
 
@@ -59,7 +60,7 @@ fn main() {
         .add_plugins((
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(100))),
             LogPlugin::default(),
-            ServerTransportPlugin::<AppProtocol, SteamServerTransport>::default(),
+            ServerTransportPlugin::<_, Server>::default(),
         ))
         .add_systems(Startup, setup)
         .add_systems(Update, (update_steam, update_server))
@@ -71,7 +72,13 @@ fn setup(world: &mut World) {
     world.insert_non_send_resource(steam_single);
 
     let addr = "0.0.0.0:27015".parse().unwrap();
-    let server = SteamServerTransport::open_new_ip(&steam, addr).unwrap();
+    let config = SteamServerTransportConfig {
+        version: PROTOCOL_VERSION,
+        max_packet_len: MTU,
+        lanes: AppLane::config(),
+        target: ListenTarget::Ip(addr),
+    };
+    let server = Server::open_new(&steam, config).unwrap();
     world.insert_resource(server);
     info!("Started server on {addr}");
 }
@@ -81,25 +88,28 @@ fn update_steam(steam: NonSend<steamworks::SingleClient>) {
 }
 
 fn update_server(
-    mut server: ResMut<SteamServerTransport>,
-    mut connecting: EventReader<RemoteConnecting<AppProtocol, SteamServerTransport>>,
-    mut connected: EventReader<RemoteConnected<AppProtocol, SteamServerTransport>>,
-    mut disconnected: EventReader<RemoteDisconnected<AppProtocol, SteamServerTransport>>,
-    mut recv: EventReader<FromClient<AppProtocol>>,
+    mut server: ResMut<Server>,
+    mut connecting: EventReader<RemoteClientConnecting<AppProtocol, Server>>,
+    mut connected: EventReader<RemoteClientConnected<AppProtocol, Server>>,
+    mut disconnected: EventReader<RemoteClientDisconnected<AppProtocol, Server>>,
+    mut recv: EventReader<FromClient<AppProtocol, Server>>,
 ) {
-    for RemoteConnecting { client, info } in connecting.read() {
+    for RemoteClientConnecting { client, .. } in connecting.read() {
+        let ClientState::Connecting(info) = server.client_state(*client) else {
+            panic!("client should be in connecting state");
+        };
         info!("Client {client} connecting ({:?})", info.steam_id);
-        let _ = server.accept_client(*client);
+        let _ = server.accept_request(*client);
     }
 
-    for RemoteConnected { client, .. } in connected.read() {
+    for RemoteClientConnected { client, .. } in connected.read() {
         info!("Client {client} connected");
     }
 
-    for RemoteDisconnected { client, reason } in disconnected.read() {
+    for RemoteClientDisconnected { client, reason } in disconnected.read() {
         info!(
             "Client {client} disconnected: {:#}",
-            aeronet::util::as_pretty(&reason)
+            aeronet::util::pretty_error(&reason)
         );
     }
 
