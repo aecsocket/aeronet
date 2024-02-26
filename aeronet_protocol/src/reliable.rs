@@ -1,23 +1,30 @@
 use std::time::{Duration, Instant};
 
 use arbitrary::Arbitrary;
-use bitcode::{Decode, Encode};
-use bytes::Bytes;
-use static_assertions::const_assert_eq;
 
 use crate::{FragmentError, FragmentHeader, Fragmentation, ReassembleError, Seq};
 
-#[derive(Debug, Clone, Encode, Decode, Arbitrary)]
+#[derive(Debug, Clone, Arbitrary)]
 pub struct AcknowledgeHeader {
     pub last_ack: Seq,
     pub ack_bits: u32,
 }
 
-const_assert_eq!(AcknowledgeHeader::ENCODE_MIN, AcknowledgeHeader::ENCODE_MAX);
-
 impl AcknowledgeHeader {
-    /// Encoded size of a header in bytes.
-    pub const SIZE: usize = Self::ENCODE_MIN / 8;
+    /// Encoded size of this value in bytes.
+    pub const SIZE: usize = 2 + 4;
+
+    pub fn encode(&self, buf: &mut octets::OctetsMut<'_>) -> octets::Result<()> {
+        self.last_ack.encode(buf)?;
+        buf.put_u32(self.ack_bits);
+        Ok(())
+    }
+
+    pub fn decode(buf: &mut octets::Octets<'_>) -> octets::Result<Self> {
+        let last_ack = Seq::decode(buf)?;
+        let ack_bits = buf.get_u32()?;
+        Ok(Self { last_ack, ack_bits })
+    }
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -30,7 +37,14 @@ pub enum ReliableSendError {
 
 #[derive(Debug)]
 pub struct Reliable {
+    /// How long to wait until resending a fragment which was not acknowledged
+    /// by the peer.
+    ///
+    /// The initial send is always instant.
     pub resend_after: Duration,
+    /// If any message is not fully received by this duration, the lane is
+    /// considered "timed out", and the connection must be terminated.
+    pub ack_timeout: Duration,
     send_buf: Vec<Option<BufferedMessage>>,
     frag: Fragmentation,
 }
@@ -43,7 +57,8 @@ struct BufferedMessage {
 
 #[derive(Debug)]
 struct BufferedFragment {
-    bytes: Bytes,
+    frag_header: FragmentHeader,
+    payload: Box<[u8]>,
     last_sent_at: Option<Instant>,
 }
 
@@ -62,36 +77,33 @@ impl Reliable {
             .frag
             .fragment(msg)
             .map_err(ReliableSendError::Fragment)?
-            .map(|(frag_header, payload)| {
-                let mut bytes = vec![0; FragmentHeader::SIZE + payload.len()].into_boxed_slice();
-                let frag_header = bitcode::encode(&frag_header)
-                    .expect("does not use #[bitcode(with_serde)], so should not fail");
-
-                bytes[..FragmentHeader::SIZE].copy_from_slice(&frag_header);
-                bytes[FragmentHeader::SIZE..].copy_from_slice(payload);
-                BufferedFragment {
-                    bytes: Bytes::from(bytes.into_vec()),
-                    last_sent_at: None,
-                }
+            .map(|(frag_header, payload)| BufferedFragment {
+                frag_header,
+                payload: Box::from(payload),
+                last_sent_at: None,
             })
             .collect();
         *buf_opt = Some(BufferedMessage { seq, frags });
         Ok(())
     }
 
-    pub fn collect_to_send(&mut self, now: Instant, bytes_available: &mut usize) -> Vec<Bytes> {
+    // note: `bytes_available` only counts payload bytes
+    pub fn packets_to_send<'a>(
+        &'a mut self,
+        bytes_available: &mut usize,
+    ) -> Vec<(&'a FragmentHeader, &'a [u8])> {
+        let now = Instant::now();
         // each fragment is its own individual packet
         // there is no packing done, maybe TODO?
         let mut packets = Vec::new();
-        for buf_opt in &mut self.send_buf {
-            let Some(opt) = buf_opt else { continue };
+        for buf in &mut self.send_buf {
+            let Some(opt) = buf else { continue };
             for frag in &mut opt.frags {
-                if *bytes_available < frag.bytes.len() {
-                    break;
+                if *bytes_available < frag.payload.len() {
+                    continue;
                 }
-
                 let due_for_sending = match frag.last_sent_at {
-                    Some(last_sent) => now - last_sent > self.resend_after,
+                    Some(last_sent) => now - last_sent >= self.resend_after,
                     None => true,
                 };
                 if !due_for_sending {
@@ -99,8 +111,8 @@ impl Reliable {
                 }
 
                 frag.last_sent_at = Some(now);
-                packets.push(frag.bytes.clone()); // cheap Bytes clone
-                *bytes_available -= frag.bytes.len();
+                packets.push((&frag.frag_header, &*frag.payload));
+                *bytes_available -= frag.payload.len();
             }
         }
         packets

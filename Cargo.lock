@@ -135,12 +135,11 @@ dependencies = [
  "aeronet",
  "arbitrary",
  "assert_matches",
- "bitcode",
  "bitvec",
  "bytes",
  "const_format",
  "enum_dispatch",
- "integer-encoding",
+ "octets",
  "static_assertions",
  "thiserror",
  "tracing",
@@ -2604,12 +2603,6 @@ checksum = "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "integer-encoding"
-version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "924df4f0e24e2e7f9cdd90babb0b96f93b20f3ecfa949ea9e6613756b8c8e1bf"
 
 [[package]]
 name = "io-kit-sys"

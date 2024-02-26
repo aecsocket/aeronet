@@ -1,10 +1,7 @@
 use std::time::Duration;
 
 use aeronet::{client::ClientKey, ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
-use aeronet_protocol::{
-    LaneRecvError, LaneSendError, NegotiationRequestError, NegotiationResponseError,
-    WrongProtocolVersion,
-};
+use aeronet_protocol::{NegotiationRequestError, NegotiationResponseError, WrongProtocolVersion};
 use derivative::Derivative;
 
 cfg_if::cfg_if! {

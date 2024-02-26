@@ -7,6 +7,8 @@ mod reliable;
 mod negotiate;
 mod seq;
 
+pub mod pack;
+
 pub use {frag::*, /*lanes::*,*/ negotiate::*, reliable::*, seq::*};
 
 /*
@@ -39,4 +41,24 @@ How this relates to frag, acks, un/reliable, un/ordered, etc:
         add it to the Vec of fragments to send
       * repeat this until we've queued up SEND_BYTES_PER_POLL number of bytes
     * we've got a Vec<(FragHeader, Bytes)>
+
+Unreliable packet layout:
+* lane index: varint usize [1..10]
+* messages: [..]
+  * length: varint usize [1..10]
+  * frag header: [2]
+    * frag id: u8 [1]
+    * num frags: u8 [1]
+  * payload [..]
+
+Reliable packet layout:
+* lane index: varint u64 [1..10]
+* ack header: [6]
+  * seq: u16 [2]
+  * ack bits: u32 [4]
+* frag header: [2]
+  * frag id: u8 [1]
+  * num frags: u8 [1]
+* payload [..]
+
 */

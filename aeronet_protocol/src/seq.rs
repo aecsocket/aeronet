@@ -1,7 +1,6 @@
 use std::cmp;
 
 use arbitrary::Arbitrary;
-use bitcode::{Decode, Encode};
 
 /// Sequence number uniquely identifying a message sent across a network.
 ///
@@ -15,10 +14,19 @@ use bitcode::{Decode, Encode};
 /// consideration.
 ///
 /// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Encode, Decode, Arbitrary)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary)]
 pub struct Seq(pub u16);
 
 impl Seq {
+    pub fn encode(&self, buf: &mut octets::OctetsMut<'_>) -> octets::Result<()> {
+        buf.put_u16(self.0)?;
+        Ok(())
+    }
+
+    pub fn decode(buf: &mut octets::Octets<'_>) -> octets::Result<Self> {
+        buf.get_u16().map(Self)
+    }
+
     /// Returns the current sequence value and increments `self`.
     #[must_use]
     pub fn get_and_increment(&mut self) -> Self {
