@@ -13,19 +13,22 @@ a server over any type of connection - in-memory channels, networked, WASM, etc.
 through the traits [`ClientTransport`] and [`ServerTransport`].
 
 The current transport implementations available are:
-* [`aeronet_channel`](https://docs.rs/aeronet_channel) - in-memory MPSC channels, useful for
-  non-networked scenarios such as a local singleplayer server
+
+* [`aeronet_channel`](https://docs.rs/aeronet_channel) - using in-memory MPSC channels
+  * Useful for non-networked scenarios, such as a local singleplayer server
+  * Targets: **Native + WASM**
   * `cargo run --package aeronet_channel --example echo --features "bevy"`
-* [`aeronet_webtransport`](https://docs.rs/aeronet_webtransport) - allows transport using the
-  [WebTransport](https://www.w3.org/TR/webtransport/) protocol, for both native desktop apps as well
-  as WASM using [`xwt`](https://docs.rs/xwt)
+* [`aeronet_webtransport`](https://docs.rs/aeronet_webtransport) - using the
+  [WebTransport](https://www.w3.org/TR/webtransport/) protocol, based on QUIC
+  * Good choice for a general transport implementation
+  * Targets: **Native (client + server) + WASM (client)**
   * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration aeronet/bevy-tokio-rt"`
   * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration" --target wasm32-unknown-unknown`
     * Requires `wasm-server-runner` to be installed
   * `cargo run --package aeronet_webtransport --example echo_server --features "bevy aeronet/bevy-tokio-rt"`
-* [`aeronet_steam`](https://docs.rs/aeronet_steam) - uses Steam's
-  [NetworkingSockets](https://partner.steamgames.com/doc/api/ISteamNetworkingSockets) API to send
-  data over Steam's relay network, using [`steamworks`](https://docs.rs/steamworks) under the hood
+* [`aeronet_steam`](https://docs.rs/aeronet_steam) - using Steam's
+  [NetworkingSockets](https://partner.steamgames.com/doc/api/ISteamNetworkingSockets) API
+  * Targets: **Native**
   * `cargo run --package aeronet_steam --example echo_client --features "bevy"`
   * `cargo run --package aeronet_steam --example echo_server --features "bevy"`
 
@@ -36,10 +39,15 @@ This crate aims to be:
   * You should be able to plug nearly anything in as the underlying transport layer, and have things
     work
   * To achieve this, aeronet provides its own implementation of certain protocol elements such as
-    fragmentation and reliable packets
+    fragmentation and reliable packets - see `aeronet_protocol`
 * Integrated with Bevy
   * Built with apps and games in mind, the abstractions chosen closely suit Bevy's app model, and
     likely other similar frameworks
+* Simple in terms of API
+  * The complexity of the underlying transport is abstracted away, which allows for both flexibility
+    in implementation, and less cognitive load on the API user
+  * Configuration options can still be exposed, however there should always be a set of sane
+    defaults
 
 This crate does not aim to be:
 * A high-level app networking library, featuring replication, rollback, etc.
@@ -87,7 +95,114 @@ implementations, if they do not support certain features already. This makes pro
 transport implementation easy, since you just plug in these features into the underlying byte stream
 or whatever other mechanism your transport uses.
 
+# Getting started
+
+## Using an existing transport
+
+If you want to use one of the transports already supported (which is probably what you want to do),
+add both this crate and the transport implementation crate as dependencies to your project:
+
+```toml
+[dependencies]
+aeronet = "version"
+aeronet_channel = "version"
+```
+
+### Protocol
+
+You will need to define your own type implementing [`TransportProtocol`] which defines what type of
+messages are communicated by your app. The message types must implement [`Message`].
+
+```rs
+#[derive(Debug, Clone, aeronet::Message)]
+pub enum ClientToServer {
+  Shoot,
+  Move { x: f32, y: f32 },
+  UseItem {
+    // NOTE: you shouldn't use `usize`s for transport messages,
+    // since the size of a `usize` is target-dependent!
+    index: u64,
+  },
+  // ...
+}
+
+#[derive(Debug, Clone, aeronet::Message)]
+pub enum ServerToClient {
+  SpawnBullet { color: u32 },
+  SpawnPlayer { x: f32, y: f32 },
+  // ...
+}
+
+#[derive(Debug)]
+pub struct AppProtocol;
+
+impl TransportProtocol for AppProtocol {
+  type C2S: ClientToServer;
+  type S2C: ServerToClient;
+}
+```
+
+Transports which send data over a network will most likely also require your message types to
+implement [`TryAsBytes`] and [`TryFromBytes`], for de/serialization to/from the wire format.
+
+```rs
+#[derive(Debug, Clone, aeronet::Message)]
+pub struct AppMessage(pub String);
+
+impl aeronet::TryAsBytes for AppMessage {
+    type Output<'a> = &'a [u8];
+    type Error = std::convert::Infallible;
+
+    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
+        Ok(self.0.as_bytes())
+    }
+}
+
+impl aeronet::TryFromBytes for AppMessage {
+    type Error = std::str::FromUtf8Error;
+
+    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>
+    where
+        Self: Sized,
+    {
+        String::from_utf8(buf.to_vec()).map(AppMessage)
+    }
+}
+```
+
+Note that if you would like to use raw bytes for transporting messages, you can do this too. The
+crate defines infallible [`TryAsBytes`] and [`TryFromBytes`] implementations for `Vec<u8>` and
+[`bytes::Bytes`].
+
+### Lanes
+
+Transports may also require you to specify along which *lane* your message is *sent* on. Lanes are
+similar to channels or streams in other networking libraries, in that they provide a set of
+guarantees for how messages along that lane will be transported. For example, if you want all
+messages of a certain type to be sent *reliable-ordered* (resent if lost in transit, and always
+received in order), you can define that using lanes.
+
+Typically, a transport implementation will require you to pass a `Vec<LaneConfig>` on creation,
+which defines which lanes are available to the transport, and what their properties are (i.e. is it
+reliable, ordered, etc). Your own message type must then implement [`LaneIndex`] to define on which
+of those [`LaneConfig`]s the message is sent.
+
+See [`LaneKind`] for more details.
+
+### Connection
+
+After seeing your transport implementation's *Getting Started* section in the readme to find out how
+to create a client/server, you can now either start a connection or listen for connections.
+
+This crate abstracts a client's connection into either disconnected, connecting, or connected; and
+servers into closed, opening, or open. See [`ClientState`] and [`ServerState`] for more info.
+
+You can use the traits [`ClientTransport`] and [`ServerTransport`] to control your client or server,
+such as sending and receiving messages.
+
 [`ClientTransport`]: crate::client::ClientTransport
 [`ServerTransport`]: crate::server::ServerTransport
 [`ClientTransportPlugin`]: crate::client::ClientTransportPlugin
 [`ServerTransportPlugin`]: crate::server::ServerTransportPlugin
+[`ClientState`]: crate::client::ClientState
+[`ServerState`]: crate::server::ServerState

@@ -135,6 +135,8 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
 
     type ConnectedInfo = ConnectionInfo;
 
+    type MessageKey = ();
+
     #[must_use]
     fn state(&self) -> ClientState {
         match self {
@@ -143,7 +145,7 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
         }
     }
 
-    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
+    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error> {
         match self {
             Self::Disconnected => Err(ChannelError::Disconnected),
             Self::Connected(client) => client.send(msg),

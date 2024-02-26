@@ -1,7 +1,6 @@
 use aeronet::ProtocolVersion;
 use aeronet_protocol::{
-    Negotiation, NegotiationRequestError, NegotiationResponseError, NEG_REQUEST_LEN,
-    NEG_RESPONSE_LEN,
+    Negotiation, NegotiationRequestError, NegotiationResponseError, NEG_RESPONSE_LEN, REQUEST_LEN,
 };
 use tracing::debug;
 use xwt::current::{Connection, RecvStream, SendStream};
@@ -66,14 +65,14 @@ pub(super) async fn server(
     let negotiation = Negotiation::new(version);
 
     debug!("Accepted managed stream, waiting for negotiation request");
-    let mut req = [0; NEG_REQUEST_LEN];
+    let mut req = [0; REQUEST_LEN];
     #[allow(clippy::useless_conversion)] // multi-target support
     let bytes_read = recv_managed
         .read(&mut req)
         .await
         .map_err(|err| BackendError::RecvManaged(err.into()))?
         .ok_or(BackendError::ManagedStreamClosed)?;
-    if bytes_read != NEG_REQUEST_LEN {
+    if bytes_read != REQUEST_LEN {
         return Err(BackendError::ReadNegotiateRequest(
             NegotiationRequestError::WrongLength { len: bytes_read },
         ));

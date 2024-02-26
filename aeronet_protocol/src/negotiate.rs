@@ -61,7 +61,7 @@ pub struct WrongProtocolVersion {
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum NegotiationRequestError {
     /// Response had an invalid length.
-    #[error("invalid length - expected {NEG_REQUEST_LEN}, got {len}")]
+    #[error("invalid length - expected {REQUEST_LEN} bytes, got {len}")]
     WrongLength { len: usize },
     /// Request had an invalid prefix, indicating it is not using this crate's
     /// protocol.
@@ -83,7 +83,7 @@ pub enum NegotiationRequestError {
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum NegotiationResponseError {
     /// Response had an invalid length.
-    #[error("invalid length - expected {NEG_RESPONSE_LEN}, got {len}")]
+    #[error("invalid length - expected {RESPONSE_LEN} bytes, got {len}")]
     WrongLength { len: usize },
     /// Response had an invalid discriminator, determining if it was an OK
     /// or erroring result.
@@ -99,15 +99,19 @@ pub enum NegotiationResponseError {
 
 const REQUEST_PREFIX: &[u8; 8] = b"aeronet/";
 const VERSION_LEN: usize = 16;
-/// Length in bytes of the negotiation request packet.
-pub const NEG_REQUEST_LEN: usize = REQUEST_PREFIX.len() + VERSION_LEN;
+const REQUEST_LEN: usize = REQUEST_PREFIX.len() + VERSION_LEN;
 
 const OK: u8 = 0x1;
 const ERR: u8 = 0x2;
-/// Length in bytes of the negotiation response packet.
-pub const NEG_RESPONSE_LEN: usize = 9;
+const RESPONSE_LEN: usize = 9;
 
 impl Negotiation {
+    /// Size in bytes of the negotiation request packet.
+    pub const REQUEST_SIZE: usize = REQUEST_PREFIX.len() + VERSION_LEN;
+
+    /// Size in bytes of the negotiation response packet.
+    pub const RESPONSE_SIZE: usize = 9;
+
     /// Creates a negotiation object given a protocol version to use.
     pub fn new(version: ProtocolVersion) -> Self {
         Self { version }
@@ -116,14 +120,14 @@ impl Negotiation {
     /// Creates a client-to-server packet to request negotiation.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
     #[must_use]
-    pub fn request(&self) -> [u8; NEG_REQUEST_LEN] {
+    pub fn request(&self) -> [u8; REQUEST_LEN] {
         let version: [u8; VERSION_LEN] = format!("{:016x}", self.version.0)
             .into_bytes()
             .try_into()
             .expect(formatcp!(
                 "formatted string should be {VERSION_LEN} bytes long"
             ));
-        let mut packet = [0; NEG_REQUEST_LEN];
+        let mut packet = [0; REQUEST_LEN];
         packet[..REQUEST_PREFIX.len()].copy_from_slice(REQUEST_PREFIX);
         packet[REQUEST_PREFIX.len()..].copy_from_slice(&version);
         packet
@@ -150,9 +154,9 @@ impl Negotiation {
         packet: &[u8],
     ) -> (
         Result<(), NegotiationRequestError>,
-        Option<[u8; NEG_RESPONSE_LEN]>,
+        Option<[u8; RESPONSE_LEN]>,
     ) {
-        let packet = match <&[u8; NEG_REQUEST_LEN]>::try_from(packet) {
+        let packet = match <&[u8; REQUEST_LEN]>::try_from(packet) {
             Ok(packet) => packet,
             Err(_) => {
                 return (
@@ -180,10 +184,10 @@ impl Negotiation {
     /// client.
     pub fn recv_request_sized(
         &self,
-        packet: &[u8; NEG_REQUEST_LEN],
+        packet: &[u8; REQUEST_LEN],
     ) -> (
         Result<(), NegotiationRequestError>,
-        Option<[u8; NEG_RESPONSE_LEN]>,
+        Option<[u8; RESPONSE_LEN]>,
     ) {
         let result = (|| {
             if !packet.starts_with(REQUEST_PREFIX) {
@@ -203,7 +207,7 @@ impl Negotiation {
         };
         let ours = self.version;
 
-        let mut resp = [0; NEG_RESPONSE_LEN];
+        let mut resp = [0; RESPONSE_LEN];
         if theirs == ours {
             resp[0] = OK;
             (Ok(()), Some(resp))
@@ -228,7 +232,7 @@ impl Negotiation {
     /// Errors if the response indicates that the connection is unsuccessful,
     /// or if the response is malformed.
     pub fn recv_response(&self, packet: &[u8]) -> Result<(), NegotiationResponseError> {
-        let packet = <&[u8; NEG_RESPONSE_LEN]>::try_from(packet)
+        let packet = <&[u8; RESPONSE_LEN]>::try_from(packet)
             .map_err(|_| NegotiationResponseError::WrongLength { len: packet.len() })?;
         self.recv_response_sized(packet)
     }
@@ -242,7 +246,7 @@ impl Negotiation {
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn recv_response_sized(
         &self,
-        packet: &[u8; NEG_RESPONSE_LEN],
+        packet: &[u8; RESPONSE_LEN],
     ) -> Result<(), NegotiationResponseError> {
         match packet[0] {
             OK => Ok(()),

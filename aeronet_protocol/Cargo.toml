@@ -18,10 +18,14 @@ all-features = true
 
 [dependencies]
 aeronet.workspace = true
+tracing.workspace = true
 thiserror.workspace = true
 bytes.workspace = true
+bitvec.workspace = true
 bitcode.workspace = true
 integer-encoding.workspace = true
+arbitrary.workspace = true
+enum_dispatch.workspace = true
 const_format.workspace = true
 static_assertions.workspace = true
 

@@ -16,7 +16,7 @@ use bevy_ecs::prelude::*;
 ///
 /// ```
 /// use aeronet::TokioRuntime;
-/// use bevy::prelude::*;
+/// use bevy_app::prelude::*;
 ///
 /// App::new().init_resource::<TokioRuntime>();
 /// ```
@@ -24,7 +24,7 @@ use bevy_ecs::prelude::*;
 /// Then add the [`TokioRuntime`] as a [`Res`] system parameter:
 ///
 /// ```
-/// # use bevy::prelude::*;
+/// # use bevy_ecs::prelude::*;
 /// # use aeronet::TokioRuntime;
 /// fn run_something_async(rt: Res<TokioRuntime>) {
 ///     rt.spawn(async move {

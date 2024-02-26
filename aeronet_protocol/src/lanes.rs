@@ -2,9 +2,7 @@ use aeronet::{LaneConfig, LaneKind};
 use bytes::Bytes;
 use integer_encoding::VarInt;
 
-use crate::{
-    Fragmentation, FragmentationError, ReassemblyError, Sequenced, Unsequenced, FRAG_HEADER_LEN,
-};
+use crate::{Fragmentation, ReassembleError, Seq};
 
 #[derive(Debug)]
 pub struct Lanes {
@@ -14,9 +12,17 @@ pub struct Lanes {
 
 #[derive(Debug)]
 enum LaneState {
-    UnreliableUnsequenced { frag: Fragmentation<Unsequenced> },
-    UnreliableSequenced { frag: Fragmentation<Sequenced> },
+    UnreliableUnsequenced {
+        next_send_seq: Seq,
+        frag: Fragmentation,
+    },
+    UnreliableSequenced {
+        next_send_seq: Seq,
+        last_recv_seq: Seq,
+        frag: Fragmentation,
+    },
     ReliableUnordered {},
+    ReliableSequenced {},
     ReliableOrdered {},
 }
 
@@ -33,41 +39,39 @@ pub enum LaneRecvError {
     #[error("received message on invalid lane index {lane_index}")]
     InvalidLane { lane_index: usize },
     #[error("failed to reassemble packet")]
-    Reassemble(#[source] ReassemblyError),
-}
-
-#[derive(Debug)]
-pub struct LanePacket<'a> {
-    pub header: Bytes,
-    pub payload: &'a [u8],
+    Reassemble(#[source] ReassembleError),
 }
 
 impl Lanes {
     // todo docs
     /// # Panics
     ///
-    /// Panics if `max_packet_len` is 0, or if `lanes.len() > u64::MAX`.
+    /// Panics if `max_packet_size` is 0, or if `lanes.len() > u64::MAX`.
     #[must_use]
-    pub fn new(max_packet_len: usize, lanes: &[LaneConfig]) -> Self {
-        assert!(max_packet_len > 0);
+    pub fn new(max_packet_size: usize, lanes: &[LaneConfig]) -> Self {
+        assert!(max_packet_size > 0);
         u64::try_from(lanes.len()).expect("should be less than `u64::MAX` lanes");
 
         let lanes = lanes
             .iter()
             .map(|config| match config.kind {
                 LaneKind::UnreliableUnsequenced => LaneState::UnreliableUnsequenced {
+                    next_send_seq: Seq(0),
                     frag: Fragmentation::unsequenced(),
                 },
                 LaneKind::UnreliableSequenced => LaneState::UnreliableSequenced {
+                    next_send_seq: Seq(0),
+                    last_recv_seq: Seq(0),
                     frag: Fragmentation::sequenced(),
                 },
                 LaneKind::ReliableUnordered => LaneState::ReliableUnordered {},
+                LaneKind::ReliableSequenced => LaneState::ReliableSequenced {},
                 LaneKind::ReliableOrdered => LaneState::ReliableOrdered {},
             })
             .collect();
 
         Self {
-            max_packet_len,
+            max_packet_len: max_packet_size,
             lanes,
         }
     }
@@ -75,9 +79,10 @@ impl Lanes {
     pub fn update(&mut self) {
         for lane in &mut self.lanes {
             match lane {
-                LaneState::UnreliableUnsequenced { frag } => frag.clean_up(),
-                LaneState::UnreliableSequenced { frag } => frag.clean_up(),
+                LaneState::UnreliableUnsequenced { frag, .. } => frag.clean_up(),
+                LaneState::UnreliableSequenced { frag, .. } => frag.clean_up(),
                 LaneState::ReliableUnordered {} => todo!(),
+                LaneState::ReliableSequenced {} => todo!(),
                 LaneState::ReliableOrdered {} => todo!(),
             }
         }
@@ -123,6 +128,7 @@ impl Lanes {
             LaneState::UnreliableSequenced { frag } => {
                 frag.reassemble(packet).map_err(LaneRecvError::Reassemble)
             }
+            LaneState::ReliableSequenced {} => todo!(),
             LaneState::ReliableUnordered {} => todo!(),
             LaneState::ReliableOrdered {} => todo!(),
         }

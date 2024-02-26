@@ -17,22 +17,20 @@ workspace = true
 all-features = true
 
 [features]
-## Enables serialization of certain types with
-## [`serde`](https://docs.rs/serde).
+## Enables serialization of certain types with [`serde`](https://docs.rs/serde).
 serde = ["dep:serde"]
 
-## Enables serialization of certain types with
-## [`bitcode`](https://docs.rs/bitcode).
+## Enables serialization of certain types with [`bitcode`](https://docs.rs/bitcode).
 bitcode = ["dep:bitcode"]
 
-## Enables [`ConditionedClient`] and [`ConditionedServer`].
+## Enables the [`condition`] module.
 condition = ["dep:rand", "dep:rand_distr"]
 
 ## Enables [`bevy`](https://docs.rs/bevy) support.
 bevy = ["dep:bevy_ecs", "dep:bevy_app"]
 
-## Allows storing an async multi-threaded [`tokio`](https://docs.rs/tokio)
-## runtime in a [`bevy`](https://docs.rs/bevy) resource.
+## Allows storing an async multi-threaded [`tokio`](https://docs.rs/tokio) runtime in a
+## [`bevy`](https://docs.rs/bevy) resource.
 bevy-tokio-rt = ["bevy", "dep:tokio"]
 
 [dependencies]

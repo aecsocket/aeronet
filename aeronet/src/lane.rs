@@ -35,6 +35,7 @@ use std::fmt::Debug;
 /// | [`UnreliableUnsequenced`] | ✅            |              |          |
 /// | [`UnreliableSequenced`]   | ✅            |              | (1)      |
 /// | [`ReliableUnordered`]     | ✅            | ✅            |          |
+/// | [`ReliableSequenced`]     | ✅            | ✅            | (1)      |
 /// | [`ReliableOrdered`]       | ✅            | ✅            | (2)      |
 ///
 /// 1. If delivery of a single chunk fails, delivery of the whole packet fails
@@ -51,6 +52,7 @@ use std::fmt::Debug;
 /// [`UnreliableUnsequenced`]: LaneKind::UnreliableUnsequenced
 /// [`UnreliableSequenced`]: LaneKind::UnreliableSequenced
 /// [`ReliableUnordered`]: LaneKind::ReliableUnordered
+/// [`ReliableSequenced`]: LaneKind::ReliableSequenced
 /// [`ReliableOrdered`]: LaneKind::ReliableOrdered
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LaneKind {
@@ -64,8 +66,8 @@ pub enum LaneKind {
     /// require any sort of handshaking to ensure that messages have arrived
     /// from one side to the other.
     UnreliableUnsequenced,
-    /// Messages are *unreliable*, but if they are received, then only the
-    /// latest messages are received.
+    /// Messages are *unreliable* but only messages newer than the last
+    /// message will be received.
     ///
     /// Similar to [`LaneKind::UnreliableUnsequenced`], but any messages which
     /// are received and are older than an already-received message will be
@@ -97,7 +99,11 @@ pub enum LaneKind {
     /// parts of the level are received in, but it is important that they are
     /// all received.
     ReliableUnordered,
-    /// Messages are sent *reliably* and **ordered**.
+    /// Messages are sent *reliably* but only messages newer than the last
+    /// message will be received.
+    // TODO
+    ReliableSequenced,
+    /// Messages are sent *reliably* and *ordered*.
     ///
     /// This is useful for important one-off events where you need a guarantee
     /// that the message will be delivered, and the order in which it's

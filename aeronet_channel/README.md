@@ -18,7 +18,7 @@ handle client connections. Then create and connect a [`ChannelClient`] to this s
 returned [`ClientKey`] to disconnect this client later.
 
 ```rust
-use aeronet::{ClientTransport, ServerTransport, ClientKey};
+use aeronet::{client::{ClientTransport, ClientKey}, server::ServerTransport};
 use aeronet_channel::{ChannelClient, ChannelServer};
 
 # #[derive(aeronet::Message)]

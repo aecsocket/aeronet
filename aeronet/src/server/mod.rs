@@ -14,7 +14,7 @@ use derivative::Derivative;
 
 use crate::{
     client::{ClientKey, ClientState},
-    TransportProtocol,
+    SentMessageState, TransportProtocol,
 };
 
 /// Allows listening to client connections and transporting data between this
@@ -38,6 +38,12 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// Info on clients connected to this server when they are in
     /// [`ClientState::Connected`].
     type ConnectedInfo;
+
+    /// Key used to uniquely identify a sent message.
+    ///
+    /// If an implementation does not support getting info about a sent message,
+    /// this may be `()`. See [`ServerTransport::send`].
+    type MessageKey: Send + Sync;
 
     /// Reads the current state of this server.
     ///
@@ -65,7 +71,23 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// about it.
     fn client_keys(&self) -> impl Iterator<Item = ClientKey> + '_;
 
+    /// Gets the current state of a message which was previously sent using
+    /// [`ServerTransport::send`].
+    ///
+    /// If the implementation does not support getting info about a sent
+    /// message, or if a message with this key was never sent, this will
+    /// return [`None`].
+    fn sent_message_state(
+        &self,
+        client: ClientKey,
+        msg_key: Self::MessageKey,
+    ) -> Option<SentMessageState>;
+
     /// Attempts to send a message to a connected client.
+    ///
+    /// Returns a key which uniquely identifies the sent message. This may be
+    /// used to query information about this message, such as if it was
+    /// acknowledged by the peer, if the transport exposes this information.
     ///
     /// # Errors
     ///
@@ -73,7 +95,11 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// if the server is not open, or if the client is not connected. If a
     /// transmission error occurs later after this function's scope has
     /// finished, then this will still return [`Ok`].
-    fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error>;
+    fn send(
+        &mut self,
+        client: ClientKey,
+        msg: impl Into<P::S2C>,
+    ) -> Result<Self::MessageKey, Self::Error>;
 
     /// Forces a client to disconnect from this server.
     ///
@@ -96,7 +122,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// this function, the transport is guaranteed to be in this new state. Only
     /// up to one state-changing event will be produced by this function per
     /// function call.
-    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>>;
+    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::MessageKey>>;
 }
 
 /// State of a [`ServerTransport`].
@@ -134,10 +160,10 @@ impl<A, B> ServerState<A, B> {
 /// Event emitted by a [`ServerTransport`].
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::C2S: Debug, E: Debug"),
-    Clone(bound = "P::C2S: Clone, E: Clone")
+    Debug(bound = "P::C2S: Debug, E: Debug, M: Debug"),
+    Clone(bound = "P::C2S: Clone, E: Clone, M: Clone")
 )]
-pub enum ServerEvent<P: TransportProtocol, E> {
+pub enum ServerEvent<P: TransportProtocol, E, M> {
     // server state
     /// The server has completed setup and is ready to accept client
     /// connections, changing state to [`ServerState::Open`].
@@ -189,5 +215,20 @@ pub enum ServerEvent<P: TransportProtocol, E> {
         client: ClientKey,
         /// The message received.
         msg: P::C2S,
+    },
+    /// The peer acknowledged that they received a message sent by us.
+    Ack {
+        /// Key of the client which this message was sent to.
+        client: ClientKey,
+        /// Key of the sent message, obtained via [`ServerTransport::send`].
+        msg_key: M,
+    },
+    /// A message that we sent was (most likely) not received by the peer, and
+    /// has been lost.
+    Nack {
+        /// Key of the client which this message was sent to.
+        client: ClientKey,
+        /// Key of the sent message, obtained via [`ServerTransport::send`].
+        msg_key: M,
     },
 }
