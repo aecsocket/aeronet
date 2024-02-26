@@ -66,8 +66,6 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
 
     type ConnectedInfo = ConnectionInfo;
 
-    type MessageKey = ();
-
     fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo> {
         ServerState::Open(())
     }
@@ -86,11 +84,7 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
         self.clients.keys()
     }
 
-    fn send(
-        &mut self,
-        client: ClientKey,
-        msg: impl Into<P::S2C>,
-    ) -> Result<Self::MessageKey, Self::Error> {
+    fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
         let Some(Client::Connected { send_s2c, info, .. }) = self.clients.get_mut(client) else {
             return Err(ChannelError::Disconnected);
         };

@@ -28,7 +28,7 @@ use rand_distr::{Distribution, Normal};
 use crate::{
     client::{ClientEvent, ClientKey, ClientState, ClientTransport},
     server::{ServerEvent, ServerState, ServerTransport},
-    SentMessageState, TransportProtocol,
+    TransportProtocol,
 };
 
 /// Configuration for a [`ConditionedClient`] or [`ConditionedServer`].
@@ -219,21 +219,15 @@ where
 
     type ConnectedInfo = T::ConnectedInfo;
 
-    type MessageKey = T::MessageKey;
-
     fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         self.inner.state()
     }
 
-    fn sent_message_state(&self, msg_key: Self::MessageKey) -> Option<SentMessageState> {
-        self.inner.sent_message_state(msg_key)
-    }
-
-    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error> {
+    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
         self.inner.send(msg)
     }
 
-    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>> {
+    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error>> {
         let mut events = Vec::new();
 
         events.extend(
@@ -340,8 +334,6 @@ where
 
     type ConnectedInfo = T::ConnectedInfo;
 
-    type MessageKey = T::MessageKey;
-
     fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo> {
         self.inner.state()
     }
@@ -357,23 +349,11 @@ where
         self.inner.client_keys()
     }
 
-    fn sent_message_state(
-        &self,
-        client: ClientKey,
-        msg_key: Self::MessageKey,
-    ) -> Option<SentMessageState> {
-        self.inner.sent_message_state(client, msg_key)
-    }
-
-    fn send(
-        &mut self,
-        client: ClientKey,
-        msg: impl Into<P::S2C>,
-    ) -> Result<Self::MessageKey, Self::Error> {
+    fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
         self.inner.send(client, msg)
     }
 
-    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::MessageKey>> {
+    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>> {
         let mut events = Vec::new();
 
         events.extend(self.conditioner.buffered().map(|recv| ServerEvent::Recv {

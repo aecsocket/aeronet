@@ -111,11 +111,3 @@ impl TryFromBytes for Bytes {
         Ok(Bytes::from(buf.to_vec()))
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SentMessageState {
-    Unsent,
-    Sent,
-    Ack,
-    Nack,
-}

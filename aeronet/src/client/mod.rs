@@ -15,7 +15,7 @@ use std::{
 
 use derivative::Derivative;
 
-use crate::{SentMessageState, TransportProtocol};
+use crate::TransportProtocol;
 
 /// Allows connecting to a server and transporting data between this client and
 /// the server.
@@ -31,12 +31,6 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// Info on this client when it is in [`ClientState::Connected`].
     type ConnectedInfo;
 
-    /// Key used to uniquely identify a sent message.
-    ///
-    /// If the implementation does not support getting info about a sent
-    /// message, this may be `()`. See [`ClientTransport::send`].
-    type MessageKey: Send + Sync;
-
     /// Gets the current state of this client.
     ///
     /// This can be used to access statistics on the connection, such as number
@@ -44,19 +38,7 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// it.
     fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
 
-    /// Gets the current state of a message which was previously sent using
-    /// [`ClientTransport::send`].
-    ///
-    /// If the implementation does not support getting info about a sent
-    /// message, or if a message with this key was never sent, this will
-    /// return [`None`].
-    fn sent_message_state(&self, msg_key: Self::MessageKey) -> Option<SentMessageState>;
-
     /// Attempts to send a message to the currently connected server.
-    ///
-    /// Returns a key which uniquely identifies the sent message. This may be
-    /// used to query information about this message, such as if it was
-    /// acknowledged by the peer, if the transport exposes this information.
     ///
     /// # Errors
     ///
@@ -64,7 +46,7 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// if it is not connected to a server. If a transmission error occurs later
     /// after this function's scope has finished, then this will still return
     /// [`Ok`].
-    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error>;
+    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error>;
 
     /// Updates the internal state of this transport, returning an iterator over
     /// the events that it emitted while updating.
@@ -75,7 +57,7 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// this function, the transport is guaranteed to be in this new state. Only
     /// up to one state-changing event will be produced by this function per
     /// function call.
-    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>>;
+    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error>>;
 }
 
 slotmap::new_key_type! {
@@ -138,10 +120,10 @@ impl<A, B> ClientState<A, B> {
 /// Event emitted by a [`ClientTransport`].
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::S2C: Debug, E: Debug, M: Debug"),
-    Clone(bound = "P::S2C: Clone, E: Clone, M: Clone")
+    Debug(bound = "P::S2C: Debug, E: Debug"),
+    Clone(bound = "P::S2C: Clone, E: Clone")
 )]
-pub enum ClientEvent<P: TransportProtocol, E, M> {
+pub enum ClientEvent<P: TransportProtocol, E> {
     // state
     /// The client has fully established a connection to the server.
     ///
@@ -165,16 +147,5 @@ pub enum ClientEvent<P: TransportProtocol, E, M> {
     Recv {
         /// The message received.
         msg: P::S2C,
-    },
-    /// The peer acknowledged that they received a message sent by us.
-    Ack {
-        /// Key of the sent message, obtained via [`ClientTransport::send`].
-        msg_key: M,
-    },
-    /// A message that we sent was (most likely) not received by the peer, and
-    /// has been lost.
-    Nack {
-        /// Key of the sent message, obtained via [`ClientTransport::send`].
-        msg_key: M,
     },
 }

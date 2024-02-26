@@ -21,8 +21,6 @@ where
     app.add_event::<LocalClientConnected<P, T>>()
         .add_event::<LocalClientDisconnected<P, T>>()
         .add_event::<FromServer<P, T>>()
-        .add_event::<AckFromServer<P, T>>()
-        .add_event::<NackFromServer<P, T>>()
         .configure_sets(PreUpdate, ClientTransportSet::Recv)
         .add_systems(PreUpdate, recv::<P, T>.in_set(ClientTransportSet::Recv));
 }
@@ -39,8 +37,6 @@ where
 /// * [`LocalClientConnected`]
 /// * [`LocalClientDisconnected`]
 /// * [`FromServer`]
-/// * [`AckFromServer`]
-/// * [`NackFromServer`]
 ///
 /// These events can be read by your app to respond to incoming events. To send
 /// out messages, or to connect the transport to a remote endpoint, etc., you
@@ -122,48 +118,11 @@ where
     _phantom: PhantomData<T>,
 }
 
-/// The peer acknowledged that they received a message sent by us.
-///
-/// See [`ClientEvent::Ack`].
-#[derive(Derivative, Event)]
-#[derivative(
-    Debug(bound = "T::MessageKey: Debug"),
-    Clone(bound = "T::MessageKey: Clone")
-)]
-pub struct AckFromServer<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
-    /// Key of the sent message, obtained via [`ClientTransport::send`].
-    pub msg_key: T::MessageKey,
-}
-
-/// A message that we sent was (most likely) not received by the peer, and
-/// has been lost.
-///
-/// See [`ClientEvent::Nack`].
-#[derive(Derivative, Event)]
-#[derivative(
-    Debug(bound = "T::MessageKey: Debug"),
-    Clone(bound = "T::MessageKey: Clone")
-)]
-pub struct NackFromServer<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
-    /// Key of the sent message, obtained via [`ClientTransport::send`].
-    pub msg_key: T::MessageKey,
-}
-
 fn recv<P, T>(
     mut client: ResMut<T>,
     mut connected: EventWriter<LocalClientConnected<P, T>>,
     mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
     mut recv: EventWriter<FromServer<P, T>>,
-    mut ack: EventWriter<AckFromServer<P, T>>,
-    mut nack: EventWriter<NackFromServer<P, T>>,
 ) where
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
@@ -183,12 +142,6 @@ fn recv<P, T>(
                     msg,
                     _phantom: PhantomData,
                 });
-            }
-            ClientEvent::Ack { msg_key } => {
-                ack.send(AckFromServer { msg_key });
-            }
-            ClientEvent::Nack { msg_key } => {
-                nack.send(NackFromServer { msg_key });
             }
         }
     }
