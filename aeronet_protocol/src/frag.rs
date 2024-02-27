@@ -19,18 +19,32 @@ pub struct FragmentHeader {
 }
 
 impl FragmentHeader {
-    /// Encoded size of this value in bytes.
+    /// [Encoded](FragmentHeader::encode) size of this value in bytes.
     pub const SIZE: usize = 1 + 1;
 
-    pub fn encode(&self, buf: &mut octets::OctetsMut<'_>) -> octets::Result<&mut [u8]> {
+    /// Encodes this value into a byte buffer.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the buffer is too short to encode this.
+    pub fn encode(&self, buf: &mut octets::OctetsMut<'_>) -> octets::Result<()> {
         buf.put_u8(self.num_frags.get())?;
-        buf.put_u8(self.frag_id)
+        buf.put_u8(self.frag_id)?;
+        Ok(())
     }
 
+    /// Decodes this value from a byte buffer.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the buffer is too short to decode this.
     pub fn decode(buf: &mut octets::Octets<'_>) -> octets::Result<Option<Self>> {
-        let num_frags = buf.get_u8()?;
+        let num_frags = match NonZeroU8::new(buf.get_u8()?) {
+            Some(num_frags) => num_frags,
+            None => return Ok(None),
+        };
         let frag_id = buf.get_u8()?;
-        Ok(Self { num_frags, frag_id })
+        Ok(Some(Self { num_frags, frag_id }))
     }
 }
 

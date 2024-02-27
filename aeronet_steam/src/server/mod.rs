@@ -216,10 +216,7 @@ where
             if let Err(reason) =
                 Self::poll_client(&self.socks, &self.config, client_key, client, &mut events)
             {
-                events.push(ServerEvent::Disconnected {
-                    client: client_key,
-                    reason,
-                });
+                events.push(ServerEvent::Disconnected { client_key, reason });
                 clients_to_remove.push(client_key);
             }
         }
@@ -253,7 +250,7 @@ where
             req: Some(req),
         });
         self.id_to_client.insert(steam_id, client_key);
-        events.push(ServerEvent::Connecting { client: client_key });
+        events.push(ServerEvent::Connecting { client_key });
     }
 
     fn on_connected(&mut self, event: ConnectedEvent<M>, events: &mut Vec<ServerEvent<P>>) {
@@ -277,7 +274,7 @@ where
             //conn: ConnectionFrontend::new(conn, self.config.max_packet_len, &self.config.lanes),
         };
         events.push(ServerEvent::Connected {
-            client: *client_key,
+            client_key: *client_key,
         });
     }
 
@@ -293,7 +290,7 @@ where
         };
 
         events.push(ServerEvent::Disconnected {
-            client,
+            client_key: client,
             reason: SteamTransportError::<P>::Disconnected(event.end_reason()),
         });
     }
@@ -347,10 +344,7 @@ where
                 conn.update(socks);
                 for msg in conn.recv() {
                     let msg = msg?;
-                    events.push(ServerEvent::Recv {
-                        client: client_key,
-                        msg,
-                    });
+                    events.push(ServerEvent::Recv { client_key, msg });
                 }
                 Ok(())
             }

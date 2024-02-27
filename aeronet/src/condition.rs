@@ -28,7 +28,7 @@ use rand_distr::{Distribution, Normal};
 use crate::{
     client::{ClientEvent, ClientKey, ClientState, ClientTransport},
     server::{ServerEvent, ServerState, ServerTransport},
-    TransportProtocol,
+    MessageState, TransportProtocol,
 };
 
 /// Configuration for a [`ConditionedClient`] or [`ConditionedServer`].
@@ -219,15 +219,21 @@ where
 
     type ConnectedInfo = T::ConnectedInfo;
 
+    type MessageKey = T::MessageKey;
+
     fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         self.inner.state()
     }
 
-    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
+    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error> {
         self.inner.send(msg)
     }
 
-    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error>> {
+    fn message_state(&self, msg_key: Self::MessageKey) -> Option<MessageState> {
+        self.inner.message_state(msg_key)
+    }
+
+    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>> {
         let mut events = Vec::new();
 
         events.extend(
@@ -334,6 +340,8 @@ where
 
     type ConnectedInfo = T::ConnectedInfo;
 
+    type MessageKey = T::MessageKey;
+
     fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo> {
         self.inner.state()
     }
@@ -349,24 +357,39 @@ where
         self.inner.client_keys()
     }
 
-    fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
+    fn message_state(&self, msg_key: Self::MessageKey) -> Option<MessageState> {
+        self.inner.message_state(msg_key)
+    }
+
+    fn send(
+        &mut self,
+        client: ClientKey,
+        msg: impl Into<P::S2C>,
+    ) -> Result<Self::MessageKey, Self::Error> {
         self.inner.send(client, msg)
     }
 
-    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error>> {
+    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::MessageKey>> {
         let mut events = Vec::new();
 
         events.extend(self.conditioner.buffered().map(|recv| ServerEvent::Recv {
-            client: recv.client,
+            client_key: recv.client,
             msg: recv.msg,
         }));
 
         for event in self.inner.poll() {
-            if let ServerEvent::Recv { client, msg } = event {
+            if let ServerEvent::Recv {
+                client_key: client,
+                msg,
+            } = event
+            {
                 if let Some(ServerRecv { client, msg }) =
                     self.conditioner.condition(ServerRecv { client, msg })
                 {
-                    events.push(ServerEvent::Recv { client, msg });
+                    events.push(ServerEvent::Recv {
+                        client_key: client,
+                        msg,
+                    });
                 }
             } else {
                 events.push(event);

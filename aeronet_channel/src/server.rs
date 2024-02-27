@@ -131,14 +131,17 @@ impl<P: TransportProtocol> ChannelServer<P> {
                 ..
             } => {
                 if *send_connected {
-                    events.push(ServerEvent::Connecting { client });
-                    events.push(ServerEvent::Connected { client });
+                    events.push(ServerEvent::Connecting { client_key: client });
+                    events.push(ServerEvent::Connected { client_key: client });
                     *send_connected = false;
                 }
 
                 match recv_c2s.try_recv() {
                     Ok(msg) => {
-                        events.push(ServerEvent::Recv { client, msg });
+                        events.push(ServerEvent::Recv {
+                            client_key: client,
+                            msg,
+                        });
                         info.msgs_recv += 1;
                     }
                     Err(TryRecvError::Empty) => {}
@@ -149,7 +152,7 @@ impl<P: TransportProtocol> ChannelServer<P> {
             }
             Client::Disconnected => {
                 events.push(ServerEvent::Disconnected {
-                    client,
+                    client_key: client,
                     reason: ChannelError::Disconnected,
                 });
                 to_remove.push(client);

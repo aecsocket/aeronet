@@ -22,6 +22,7 @@ where
         .add_event::<RemoteClientConnected<P, T>>()
         .add_event::<RemoteClientDisconnected<P, T>>()
         .add_event::<FromClient<P, T>>()
+        .add_event::<AckFromClient<P, T>>()
         .configure_sets(PreUpdate, ServerTransportSet::Recv)
         .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Recv));
 }
@@ -41,6 +42,7 @@ where
 /// * [`RemoteClientConnected`]
 /// * [`RemoteClientDisconnected`]
 /// * [`FromClient`]
+/// * [`AckFromClient`]
 ///
 /// These events can be read by your app to respond to incoming events. To send
 /// out messages, or to disconnect a specific client, etc., you will need to
@@ -122,7 +124,7 @@ where
     T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
-    pub client: ClientKey,
+    pub client_key: ClientKey,
     #[derivative(Debug = "ignore")]
     _phantom: PhantomData<(P, T)>,
 }
@@ -144,7 +146,7 @@ where
     T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
-    pub client: ClientKey,
+    pub client_key: ClientKey,
     #[derivative(Debug = "ignore")]
     _phantom: PhantomData<(P, T)>,
 }
@@ -162,7 +164,7 @@ where
     T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
-    pub client: ClientKey,
+    pub client_key: ClientKey,
     /// Why the client lost connection.
     pub reason: T::Error,
 }
@@ -178,11 +180,29 @@ where
     T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
-    pub client: ClientKey,
+    pub client_key: ClientKey,
     /// The message received.
     pub msg: P::C2S,
     #[derivative(Debug = "ignore")]
     _phantom: PhantomData<T>,
+}
+
+/// A client acknowledged that they have fully received a message sent by
+/// us.
+#[derive(Derivative, Event)]
+#[derivative(
+    Debug(bound = "T::MessageKey: Debug"),
+    Clone(bound = "T::MessageKey: Clone")
+)]
+pub struct AckFromClient<P, T>
+where
+    P: TransportProtocol,
+    T: ServerTransport<P> + Resource,
+{
+    /// Key of the client.
+    pub client_key: ClientKey,
+    /// Key of the sent message, obtained by [`ServerTransport::send`].
+    pub msg_key: T::MessageKey,
 }
 
 fn recv<P, T>(
@@ -193,6 +213,7 @@ fn recv<P, T>(
     mut connected: EventWriter<RemoteClientConnected<P, T>>,
     mut disconnected: EventWriter<RemoteClientDisconnected<P, T>>,
     mut recv: EventWriter<FromClient<P, T>>,
+    mut ack: EventWriter<AckFromClient<P, T>>,
 ) where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
@@ -207,26 +228,35 @@ fn recv<P, T>(
             ServerEvent::Closed { reason } => {
                 closed.send(ServerClosed { reason });
             }
-            ServerEvent::Connecting { client } => {
+            ServerEvent::Connecting { client_key } => {
                 connecting.send(RemoteClientConnecting {
-                    client,
+                    client_key,
                     _phantom: PhantomData,
                 });
             }
-            ServerEvent::Connected { client } => {
+            ServerEvent::Connected { client_key } => {
                 connected.send(RemoteClientConnected {
-                    client,
+                    client_key,
                     _phantom: PhantomData,
                 });
             }
-            ServerEvent::Disconnected { client, reason } => {
-                disconnected.send(RemoteClientDisconnected { client, reason });
+            ServerEvent::Disconnected { client_key, reason } => {
+                disconnected.send(RemoteClientDisconnected { client_key, reason });
             }
-            ServerEvent::Recv { client, msg } => {
+            ServerEvent::Recv { client_key, msg } => {
                 recv.send(FromClient {
-                    client,
+                    client_key,
                     msg,
                     _phantom: PhantomData,
+                });
+            }
+            ServerEvent::Ack {
+                client_key,
+                msg_key,
+            } => {
+                ack.send(AckFromClient {
+                    client_key,
+                    msg_key,
                 });
             }
         }

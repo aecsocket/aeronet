@@ -187,7 +187,10 @@ fn on_incoming(
     mut events: EventReader<RemoteClientConnecting<AppProtocol, Server>>,
     mut server: ResMut<Server>,
 ) {
-    for RemoteClientConnecting { client, .. } in events.read() {
+    for RemoteClientConnecting {
+        client_key: client, ..
+    } in events.read()
+    {
         // Once the server sends out an event saying that a client is connecting
         // (`RemoteConnecting`) you can get its `client_state` and read its
         // connection info, to decide if you want to accept or reject it.
@@ -208,7 +211,10 @@ fn on_connected(
     mut events: EventReader<RemoteClientConnected<AppProtocol, Server>>,
     mut server: ResMut<Server>,
 ) {
-    for RemoteClientConnected { client, .. } in events.read() {
+    for RemoteClientConnected {
+        client_key: client, ..
+    } in events.read()
+    {
         if let ClientState::Connected(info) = server.client_state(*client) {
             info!(
                 "Client {client} connected on {} (RTT: {:?})",
@@ -221,7 +227,11 @@ fn on_connected(
 }
 
 fn on_disconnected(mut events: EventReader<RemoteClientDisconnected<AppProtocol, Server>>) {
-    for RemoteClientDisconnected { client, reason } in events.read() {
+    for RemoteClientDisconnected {
+        client_key: client,
+        reason,
+    } in events.read()
+    {
         info!(
             "Client {client} disconnected: {:#}",
             aeronet::util::pretty_error(reason)
@@ -230,7 +240,12 @@ fn on_disconnected(mut events: EventReader<RemoteClientDisconnected<AppProtocol,
 }
 
 fn on_recv(mut events: EventReader<FromClient<AppProtocol, Server>>, mut server: ResMut<Server>) {
-    for FromClient { client, msg, .. } in events.read() {
+    for FromClient {
+        client_key: client,
+        msg,
+        ..
+    } in events.read()
+    {
         info!("{client} > {}", msg.0);
         let resp = format!("You sent: {}", msg.0);
         info!("{client} < {resp}");

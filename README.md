@@ -108,6 +108,9 @@ aeronet = "version"
 aeronet_channel = "version"
 ```
 
+The version of this crate is synced between all official subcrates of aeronet - use the same version
+that you use for aeronet for your transport, and you're good to go.
+
 ### Protocol
 
 You will need to define your own type implementing [`TransportProtocol`] which defines what type of

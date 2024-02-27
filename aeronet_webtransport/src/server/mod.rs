@@ -224,10 +224,7 @@ where
             if let Err(reason) = Self::poll_client(client_key, client, &mut events) {
                 clients_to_remove.push(client_key);
                 if let Some(reason) = reason {
-                    events.push(ServerEvent::Disconnected {
-                        client: client_key,
-                        reason,
-                    });
+                    events.push(ServerEvent::Disconnected { client_key, reason });
                 }
             }
         }
@@ -253,7 +250,7 @@ where
                         send_resp: Some(requesting.send_resp),
                         recv_conn: requesting.recv_conn,
                     };
-                    events.push(ServerEvent::Connecting { client: client_key });
+                    events.push(ServerEvent::Connecting { client_key });
                     Ok(())
                 }
                 // silently remove, because we haven't actually emitted a
@@ -265,7 +262,7 @@ where
                 Ok(None) => Ok(()),
                 Ok(Some(Ok(conn))) => {
                     *state = Client::Connected { conn };
-                    events.push(ServerEvent::Connected { client: client_key });
+                    events.push(ServerEvent::Connected { client_key });
                     Ok(())
                 }
                 Ok(Some(Err(err))) => Err(Some(err.into())),
@@ -274,10 +271,7 @@ where
             Client::Connected { conn } => {
                 conn.update();
                 while let Some(msg) = conn.recv()? {
-                    events.push(ServerEvent::Recv {
-                        client: client_key,
-                        msg,
-                    });
+                    events.push(ServerEvent::Recv { client_key, msg });
                 }
                 conn.recv_err()
                     .map_err(|err| Some(WebTransportError::<P>::Backend(err)))

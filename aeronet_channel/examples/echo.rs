@@ -143,7 +143,10 @@ fn server_on_connecting(
     mut ui_state: ResMut<ServerUiState>,
     mut events: EventReader<RemoteClientConnecting<AppProtocol, Server>>,
 ) {
-    for RemoteClientConnecting { client, .. } in events.read() {
+    for RemoteClientConnecting {
+        client_key: client, ..
+    } in events.read()
+    {
         ui_state.log.push(format!("Client {client} connecting"));
     }
 }
@@ -152,7 +155,10 @@ fn server_on_connected(
     mut ui_state: ResMut<ServerUiState>,
     mut events: EventReader<RemoteClientConnected<AppProtocol, Server>>,
 ) {
-    for RemoteClientConnected { client, .. } in events.read() {
+    for RemoteClientConnected {
+        client_key: client, ..
+    } in events.read()
+    {
         ui_state.log.push(format!("Client {client} connected"));
     }
 }
@@ -162,7 +168,12 @@ fn server_on_recv(
     mut recv: EventReader<FromClient<AppProtocol, Server>>,
     mut server: ResMut<Server>,
 ) {
-    for FromClient { client, msg, .. } in recv.read() {
+    for FromClient {
+        client_key: client,
+        msg,
+        ..
+    } in recv.read()
+    {
         ui_state.log.push(format!("{client} > {}", msg.0));
 
         let resp = format!("You sent: {}", msg.0);
@@ -175,7 +186,11 @@ fn server_on_disconnected(
     mut ui_state: ResMut<ServerUiState>,
     mut events: EventReader<RemoteClientDisconnected<AppProtocol, Server>>,
 ) {
-    for RemoteClientDisconnected { client, reason } in events.read() {
+    for RemoteClientDisconnected {
+        client_key: client,
+        reason,
+    } in events.read()
+    {
         ui_state
             .log
             .push(format!("Client {client} disconnected: {reason:#}"));

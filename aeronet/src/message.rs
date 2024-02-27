@@ -16,6 +16,14 @@ pub trait Message: Send + Sync + 'static {}
 
 impl Message for () {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MessageState {
+    Unsent,
+    Sent,
+    Ack,
+    Nack,
+}
+
 /// Attempt to convert this type into a slice of bytes.
 ///
 /// Transports may require this as a bound on the outgoing message type, if the

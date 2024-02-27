@@ -59,6 +59,7 @@ struct BufferedMessage {
 struct BufferedFragment {
     frag_header: FragmentHeader,
     payload: Box<[u8]>,
+    last_alive_at: Instant,
     last_sent_at: Option<Instant>,
 }
 
@@ -73,18 +74,33 @@ impl Reliable {
             return Err(ReliableSendError::BufferFull);
         }
 
+        let now = Instant::now();
         let frags = self
             .frag
             .fragment(msg)
             .map_err(ReliableSendError::Fragment)?
-            .map(|(frag_header, payload)| BufferedFragment {
-                frag_header,
-                payload: Box::from(payload),
+            .map(|data| BufferedFragment {
+                frag_header: data.header,
+                payload: Box::from(data.payload),
+                last_alive_at: now,
                 last_sent_at: None,
             })
             .collect();
         *buf_opt = Some(BufferedMessage { seq, frags });
         Ok(())
+    }
+
+    pub fn check_timeout(&self) -> Option<(Seq, u8)> {
+        let now = Instant::now();
+        for buf in &self.send_buf {
+            let Some(buf) = buf else { continue };
+            for frag in &buf.frags {
+                if now - frag.last_alive_at >= self.ack_timeout {
+                    return Some((buf.seq, frag.frag_header.frag_id));
+                }
+            }
+        }
+        None
     }
 
     // note: `bytes_available` only counts payload bytes
@@ -97,8 +113,8 @@ impl Reliable {
         // there is no packing done, maybe TODO?
         let mut packets = Vec::new();
         for buf in &mut self.send_buf {
-            let Some(opt) = buf else { continue };
-            for frag in &mut opt.frags {
+            let Some(buf) = buf else { continue };
+            for frag in &mut buf.frags {
                 if *bytes_available < frag.payload.len() {
                     continue;
                 }
@@ -125,9 +141,9 @@ impl Reliable {
         frag_header: &FragmentHeader,
         payload: &[u8],
     ) -> Result<Option<Vec<u8>>, ReassembleError> {
-        if let Some(msg) = self.frag.reassemble(seq, frag_header, payload)? {
-            todo!()
-        }
+        //if let Some(msg) = self.frag.reassemble(seq,  frag_header, payload)? {
+        //    todo!()
+        //}
         todo!()
     }
 }

@@ -18,11 +18,24 @@ use arbitrary::Arbitrary;
 pub struct Seq(pub u16);
 
 impl Seq {
+    /// [Encoded](Seq::encode) size of this value in bytes.
+    pub const ENCODE_SIZE: usize = 2;
+
+    /// Encodes this value into a byte buffer.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the buffer is too short to encode this.
     pub fn encode(&self, buf: &mut octets::OctetsMut<'_>) -> octets::Result<()> {
         buf.put_u16(self.0)?;
         Ok(())
     }
 
+    /// Decodes this value from a byte buffer.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the buffer is too short to decode this.
     pub fn decode(buf: &mut octets::Octets<'_>) -> octets::Result<Self> {
         buf.get_u16().map(Self)
     }
