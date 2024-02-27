@@ -8,10 +8,7 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use std::{
-    error::Error,
-    fmt::{self, Debug},
-};
+use std::{error::Error, fmt::Debug};
 
 use derivative::Derivative;
 
@@ -37,7 +34,7 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// message, this may be `()`.
     ///
     /// See [`ClientTransport::send`].
-    type MessageKey: Send + Sync;
+    type MessageKey: Send + Sync + Debug + Clone;
 
     /// Gets the current state of this client.
     ///
@@ -76,26 +73,6 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// up to one state-changing event will be produced by this function per
     /// function call.
     fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>>;
-}
-
-slotmap::new_key_type! {
-    /// Key identifying a unique client connected to a server.
-    ///
-    /// This key is unique for each individual session that a server accepts,
-    /// even if a new client takes the slot/allocation of a previous client. To
-    /// enforce this behavior, the key is implemented as a
-    /// [`slotmap::new_key_type`] and intended to be used in a
-    /// [`slotmap::SlotMap`].
-    ///
-    /// New sessions coming from the same physical client (e.g. the same socket
-    /// address) get different keys.
-    pub struct ClientKey;
-}
-
-impl fmt::Display for ClientKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
 }
 
 /// State of a [`ClientTransport`].

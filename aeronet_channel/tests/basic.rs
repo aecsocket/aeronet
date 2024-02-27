@@ -27,8 +27,7 @@ type Client = ChannelClient<AppProtocol>;
 type Server = ChannelServer<AppProtocol>;
 
 #[test]
-fn send_one() {
-    /* TODO get this working
+fn send_recv() {
     const MSG1: &str = "hello 1";
     const MSG2: &str = "hello two";
 
@@ -40,7 +39,12 @@ fn send_one() {
     .add_systems(Startup, setup)
     .add_systems(
         Update,
-        (client_send_msg, server_recv_msg, client_recv_msg).chain(),
+        (
+            client_send_msg,
+            server_recv_msg.run_if(on_event::<FromClient<_, Server>>()),
+            client_recv_msg.run_if(on_event::<FromServer<_, Client>>()),
+        )
+            .chain(),
     );
 
     fn setup(mut commands: Commands) {
@@ -60,7 +64,7 @@ fn send_one() {
     ) {
         let event = events.read().next().unwrap();
         assert_eq!(MSG1, event.msg.0);
-        server.send(event.client, MSG2).unwrap();
+        server.send(event.client_key, MSG2).unwrap();
     }
 
     fn client_recv_msg(mut events: EventReader<FromServer<AppProtocol, Client>>) {
@@ -68,5 +72,5 @@ fn send_one() {
         assert_eq!(MSG2, event.msg.0);
     }
 
-    app.update();*/
+    app.update();
 }

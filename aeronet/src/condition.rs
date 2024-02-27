@@ -18,15 +18,17 @@
 //! incoming messages, without affecting outgoing messages at all.
 
 use std::{
+    fmt::Debug,
     mem, ops,
     time::{Duration, Instant},
 };
 
+use derivative::Derivative;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
 use crate::{
-    client::{ClientEvent, ClientKey, ClientState, ClientTransport},
+    client::{ClientEvent, ClientState, ClientTransport},
     server::{ServerEvent, ServerState, ServerTransport},
     MessageState, TransportProtocol,
 };
@@ -73,15 +75,17 @@ struct ScheduledEvent<E> {
     send_at: Instant,
 }
 
-#[derive(Debug)]
-struct ClientRecv<M> {
-    msg: M,
+#[derive(Derivative)]
+#[derivative(Debug(bound = "P::S2C: Debug"))]
+struct ClientRecv<P: TransportProtocol> {
+    msg: P::S2C,
 }
 
-#[derive(Debug)]
-struct ServerRecv<M> {
-    client: ClientKey,
-    msg: M,
+#[derive(Derivative)]
+#[derivative(Debug(bound = "P::C2S: Debug"))]
+struct ServerRecv<P: TransportProtocol, T: ServerTransport<P>> {
+    client_key: T::ClientKey,
+    msg: P::C2S,
 }
 
 impl<E> Conditioner<E> {
@@ -143,7 +147,8 @@ impl<E> Conditioner<E> {
 /// incoming messages.
 ///
 /// See the [module-level docs](self).
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = "T: Debug, P::S2C: Debug"))]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ConditionedClient<P, T>
 where
@@ -151,7 +156,7 @@ where
     T: ClientTransport<P>,
 {
     inner: T,
-    conditioner: Conditioner<ClientRecv<P::S2C>>,
+    conditioner: Conditioner<ClientRecv<P>>,
 }
 
 impl<P, T> ConditionedClient<P, T>
@@ -260,7 +265,8 @@ where
 /// incoming messages.
 ///
 /// See the [module-level docs](self).
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = "T: Debug, P::C2S: Debug"))]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ConditionedServer<P, T>
 where
@@ -268,7 +274,7 @@ where
     T: ServerTransport<P>,
 {
     inner: T,
-    conditioner: Conditioner<ServerRecv<P::C2S>>,
+    conditioner: Conditioner<ServerRecv<P, T>>,
 }
 
 impl<P, T> ConditionedServer<P, T>
@@ -340,6 +346,8 @@ where
 
     type ConnectedInfo = T::ConnectedInfo;
 
+    type ClientKey = T::ClientKey;
+
     type MessageKey = T::MessageKey;
 
     fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo> {
@@ -348,12 +356,12 @@ where
 
     fn client_state(
         &self,
-        client: ClientKey,
+        client: Self::ClientKey,
     ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         self.inner.client_state(client)
     }
 
-    fn client_keys(&self) -> impl Iterator<Item = ClientKey> {
+    fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> {
         self.inner.client_keys()
     }
 
@@ -363,17 +371,19 @@ where
 
     fn send(
         &mut self,
-        client: ClientKey,
+        client: Self::ClientKey,
         msg: impl Into<P::S2C>,
     ) -> Result<Self::MessageKey, Self::Error> {
         self.inner.send(client, msg)
     }
 
-    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::MessageKey>> {
+    fn poll(
+        &mut self,
+    ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>> {
         let mut events = Vec::new();
 
         events.extend(self.conditioner.buffered().map(|recv| ServerEvent::Recv {
-            client_key: recv.client,
+            client_key: recv.client_key,
             msg: recv.msg,
         }));
 
@@ -383,9 +393,13 @@ where
                 msg,
             } = event
             {
-                if let Some(ServerRecv { client, msg }) =
-                    self.conditioner.condition(ServerRecv { client, msg })
-                {
+                if let Some(ServerRecv {
+                    client_key: client,
+                    msg,
+                }) = self.conditioner.condition(ServerRecv {
+                    client_key: client,
+                    msg,
+                }) {
                     events.push(ServerEvent::Recv {
                         client_key: client,
                         msg,
@@ -399,7 +413,7 @@ where
         events.into_iter()
     }
 
-    fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error> {
+    fn disconnect(&mut self, client: Self::ClientKey) -> Result<(), Self::Error> {
         self.inner.disconnect(client)
     }
 }

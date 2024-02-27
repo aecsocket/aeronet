@@ -22,8 +22,8 @@ where
         .add_event::<LocalClientDisconnected<P, T>>()
         .add_event::<FromServer<P, T>>()
         .add_event::<AckFromServer<P, T>>()
-        .configure_sets(PreUpdate, ClientTransportSet::Recv)
-        .add_systems(PreUpdate, recv::<P, T>.in_set(ClientTransportSet::Recv));
+        .configure_sets(PreUpdate, ClientTransportSet::Poll)
+        .add_systems(PreUpdate, recv::<P, T>.in_set(ClientTransportSet::Poll));
 }
 
 /// Forwards messages and events between the [`App`] and a [`ClientTransport`].
@@ -32,7 +32,7 @@ where
 ///
 /// With this plugin added, the transport `T` will automatically run
 /// [`ClientTransport::poll`] on [`PreUpdate`] in the set
-/// [`ClientTransportSet::Recv`], and send out the appropriate events.
+/// [`ClientTransportSet::Poll`], and send out the appropriate events.
 ///
 /// This plugin sends out the events:
 /// * [`LocalClientConnected`]
@@ -63,8 +63,9 @@ where
 /// Runs the [`ClientTransportPlugin`] systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum ClientTransportSet {
-    /// Handles receiving data from the transport.
-    Recv,
+    /// Handles receiving data from the transport and updating its internal
+    /// state.
+    Poll,
 }
 
 /// The client has fully established a connection to the server.
@@ -125,10 +126,7 @@ where
 ///
 /// See [`ClientEvent::Ack`].
 #[derive(Derivative, Event)]
-#[derivative(
-    Debug(bound = "T::MessageKey: Debug"),
-    Clone(bound = "T::MessageKey: Clone")
-)]
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct AckFromServer<P, T>
 where
     P: TransportProtocol,

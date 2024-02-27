@@ -100,7 +100,6 @@ dependencies = [
  "rand",
  "rand_distr",
  "serde",
- "slotmap",
  "tokio",
 ]
 

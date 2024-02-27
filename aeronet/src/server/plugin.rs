@@ -4,7 +4,7 @@ use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use derivative::Derivative;
 
-use crate::{client::ClientKey, TransportProtocol};
+use crate::TransportProtocol;
 
 use super::{ServerEvent, ServerTransport};
 
@@ -23,8 +23,8 @@ where
         .add_event::<RemoteClientDisconnected<P, T>>()
         .add_event::<FromClient<P, T>>()
         .add_event::<AckFromClient<P, T>>()
-        .configure_sets(PreUpdate, ServerTransportSet::Recv)
-        .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Recv));
+        .configure_sets(PreUpdate, ServerTransportSet::Poll)
+        .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Poll));
 }
 
 /// Forwards messages and events between the [`App`] and a [`ServerTransport`].
@@ -33,7 +33,7 @@ where
 ///
 /// With this plugin added, the transport `T` will automatically run
 /// [`ServerTransport::poll`] on [`PreUpdate`] in the set
-/// [`ServerTransportSet::Recv`], and send out the appropriate events.
+/// [`ServerTransportSet::Poll`], and send out the appropriate events.
 ///
 /// This plugin sends out the events:
 /// * [`ServerOpened`]
@@ -69,8 +69,9 @@ where
 /// Runs the [`ServerTransportPlugin`] systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum ServerTransportSet {
-    /// Handles receiving data from the transport.
-    Recv,
+    /// Handles receiving data from the transport and updating its internal
+    /// state.
+    Poll,
 }
 
 /// The server has completed setup and is ready to accept client
@@ -124,9 +125,7 @@ where
     T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
-    pub client_key: ClientKey,
-    #[derivative(Debug = "ignore")]
-    _phantom: PhantomData<(P, T)>,
+    pub client_key: T::ClientKey,
 }
 
 /// A remote client has fully established a connection to this server.
@@ -146,9 +145,7 @@ where
     T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
-    pub client_key: ClientKey,
-    #[derivative(Debug = "ignore")]
-    _phantom: PhantomData<(P, T)>,
+    pub client_key: T::ClientKey,
 }
 
 /// A remote client has unrecoverably lost connection from this server.
@@ -164,7 +161,7 @@ where
     T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
-    pub client_key: ClientKey,
+    pub client_key: T::ClientKey,
     /// Why the client lost connection.
     pub reason: T::Error,
 }
@@ -180,27 +177,22 @@ where
     T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
-    pub client_key: ClientKey,
+    pub client_key: T::ClientKey,
     /// The message received.
     pub msg: P::C2S,
-    #[derivative(Debug = "ignore")]
-    _phantom: PhantomData<T>,
 }
 
 /// A client acknowledged that they have fully received a message sent by
 /// us.
 #[derive(Derivative, Event)]
-#[derivative(
-    Debug(bound = "T::MessageKey: Debug"),
-    Clone(bound = "T::MessageKey: Clone")
-)]
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct AckFromClient<P, T>
 where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
 {
     /// Key of the client.
-    pub client_key: ClientKey,
+    pub client_key: T::ClientKey,
     /// Key of the sent message, obtained by [`ServerTransport::send`].
     pub msg_key: T::MessageKey,
 }
@@ -229,26 +221,16 @@ fn recv<P, T>(
                 closed.send(ServerClosed { reason });
             }
             ServerEvent::Connecting { client_key } => {
-                connecting.send(RemoteClientConnecting {
-                    client_key,
-                    _phantom: PhantomData,
-                });
+                connecting.send(RemoteClientConnecting { client_key });
             }
             ServerEvent::Connected { client_key } => {
-                connected.send(RemoteClientConnected {
-                    client_key,
-                    _phantom: PhantomData,
-                });
+                connected.send(RemoteClientConnected { client_key });
             }
             ServerEvent::Disconnected { client_key, reason } => {
                 disconnected.send(RemoteClientDisconnected { client_key, reason });
             }
             ServerEvent::Recv { client_key, msg } => {
-                recv.send(FromClient {
-                    client_key,
-                    msg,
-                    _phantom: PhantomData,
-                });
+                recv.send(FromClient { client_key, msg });
             }
             ServerEvent::Ack {
                 client_key,

@@ -36,7 +36,6 @@ bevy-tokio-rt = ["bevy", "dep:tokio"]
 [dependencies]
 aeronet_derive.workspace = true
 derivative.workspace = true
-slotmap.workspace = true
 bytes.workspace = true
 
 serde = { workspace = true, optional = true }

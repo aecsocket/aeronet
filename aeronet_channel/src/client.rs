@@ -1,15 +1,12 @@
-use aeronet::{
-    client::{ClientKey, ClientTransport},
-    TransportProtocol,
-};
+use aeronet::{client::ClientTransport, MessageState, TransportProtocol};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 
-use crate::{ChannelError, ChannelServer, ConnectionInfo};
+use crate::{ChannelError, ChannelServer, ClientKey, ConnectionInfo};
 
 type ClientState = aeronet::client::ClientState<(), ConnectionInfo>;
 
-type ClientEvent<P> = aeronet::client::ClientEvent<P, ChannelError>;
+type ClientEvent<P> = aeronet::client::ClientEvent<P, ChannelError, ()>;
 
 /// Implementation of [`ClientTransport`] using in-memory MPSC channels for
 /// transport.
@@ -135,6 +132,8 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
 
     type ConnectedInfo = ConnectionInfo;
 
+    type MessageKey = ();
+
     #[must_use]
     fn state(&self) -> ClientState {
         match self {
@@ -143,7 +142,11 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
         }
     }
 
-    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
+    fn message_state(&self, _: Self::MessageKey) -> Option<MessageState> {
+        None
+    }
+
+    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error> {
         match self {
             Self::Disconnected => Err(ChannelError::Disconnected),
             Self::Connected(client) => client.send(msg),

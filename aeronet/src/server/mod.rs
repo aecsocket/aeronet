@@ -12,10 +12,7 @@ use std::{error::Error, fmt::Debug};
 
 use derivative::Derivative;
 
-use crate::{
-    client::{ClientKey, ClientState},
-    MessageState, TransportProtocol,
-};
+use crate::{client::ClientState, MessageState, TransportProtocol};
 
 /// Allows listening to client connections and transporting data between this
 /// server and connected clients.
@@ -39,13 +36,19 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// [`ClientState::Connected`].
     type ConnectedInfo;
 
+    /// Key uniquely identifying a client.
+    ///
+    /// If a physical client disconnects and connects, a new key must be used
+    /// to represent the new session.
+    type ClientKey: Send + Sync + Debug + Clone;
+
     /// Key uniquely identifying a sent message.
     ///
     /// If the implementation does not support getting the state of a sent
     /// message, this may be `()`.
     ///
     /// See [`ServerTransport::send`].
-    type MessageKey: Send + Sync;
+    type MessageKey: Send + Sync + Debug + Clone;
 
     /// Reads the current state of this server.
     ///
@@ -62,7 +65,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// If the client does not exist, [`ClientState::Disconnected`] is returned.
     fn client_state(
         &self,
-        client_key: ClientKey,
+        client_key: Self::ClientKey,
     ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
 
     /// Iterator over the keys of all clients currently recognized by this
@@ -71,7 +74,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// There is no guarantee about what state each client in this iterator is
     /// in, it's just guaranteed that the server is tracking some sort of state
     /// about it.
-    fn client_keys(&self) -> impl Iterator<Item = ClientKey> + '_;
+    fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_;
 
     /// Gets the current state of a message sent via [`ServerTransport::send`].
     ///
@@ -93,7 +96,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// finished, then this will still return [`Ok`].
     fn send(
         &mut self,
-        client_key: ClientKey,
+        client_key: Self::ClientKey,
         msg: impl Into<P::S2C>,
     ) -> Result<Self::MessageKey, Self::Error>;
 
@@ -107,7 +110,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     ///
     /// Errors if the transport failed to *attempt to* disconnect the client,
     /// e.g. if the server already knows that the client is disconnected.
-    fn disconnect(&mut self, client_key: ClientKey) -> Result<(), Self::Error>;
+    fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error>;
 
     /// Updates the internal state of this transport, returning an iterator over
     /// the events that it emitted while updating.
@@ -118,7 +121,9 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// this function, the transport is guaranteed to be in this new state. Only
     /// up to one state-changing event will be produced by this function per
     /// function call.
-    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::MessageKey>>;
+    fn poll(
+        &mut self,
+    ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>>;
 }
 
 /// State of a [`ServerTransport`].
@@ -156,10 +161,10 @@ impl<A, B> ServerState<A, B> {
 /// Event emitted by a [`ServerTransport`].
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::C2S: Debug, E: Debug, M: Debug"),
-    Clone(bound = "P::C2S: Clone, E: Clone, M: Clone")
+    Debug(bound = "P::C2S: Debug, E: Debug, C: Debug, M: Debug"),
+    Clone(bound = "P::C2S: Clone, E: Clone, C: Clone, M: Clone")
 )]
-pub enum ServerEvent<P: TransportProtocol, E, M> {
+pub enum ServerEvent<P: TransportProtocol, E, C, M> {
     // server state
     /// The server has completed setup and is ready to accept client
     /// connections, changing state to [`ServerState::Open`].
@@ -181,7 +186,7 @@ pub enum ServerEvent<P: TransportProtocol, E, M> {
     /// [`ServerEvent::Disconnected`].
     Connecting {
         /// Key of the client.
-        client_key: ClientKey,
+        client_key: C,
     },
     /// A remote client has fully established a connection to this server.
     ///
@@ -192,14 +197,14 @@ pub enum ServerEvent<P: TransportProtocol, E, M> {
     /// spawning the player's model in the world.
     Connected {
         /// Key of the client.
-        client_key: ClientKey,
+        client_key: C,
     },
     /// A remote client has unrecoverably lost connection from this server.
     ///
     /// This event is not raised when the server forces a client to disconnect.
     Disconnected {
         /// Key of the client.
-        client_key: ClientKey,
+        client_key: C,
         /// Why the client lost connection.
         reason: E,
     },
@@ -208,7 +213,7 @@ pub enum ServerEvent<P: TransportProtocol, E, M> {
     /// The server received a message from a remote client.
     Recv {
         /// Key of the client.
-        client_key: ClientKey,
+        client_key: C,
         /// The message received.
         msg: P::C2S,
     },
@@ -216,7 +221,7 @@ pub enum ServerEvent<P: TransportProtocol, E, M> {
     /// us.
     Ack {
         /// Key of the client.
-        client_key: ClientKey,
+        client_key: C,
         /// Key of the sent message, obtained by [`ServerTransport::send`].
         msg_key: M,
     },
