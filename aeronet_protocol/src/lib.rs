@@ -2,16 +2,15 @@
 #![doc = include_str!("../README.md")]
 
 mod frag;
-mod lanes;
+// mod lanes;
 mod negotiate;
 mod reliable;
 mod seq;
 
-//pub mod lane;
+pub mod lane;
 pub mod pack;
-pub mod rolling_buf;
 
-pub use {frag::*, lanes::*, negotiate::*, reliable::*, seq::*};
+pub use {frag::*, negotiate::*, reliable::*, seq::*};
 
 /*
 Discussion on how lanes manage messages:

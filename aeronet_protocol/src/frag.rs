@@ -5,7 +5,7 @@ use std::{
 };
 
 use arbitrary::Arbitrary;
-use bitvec::{array::BitArray, bitarr, bitvec, vec::BitVec};
+use bitvec::{array::BitArray, bitarr};
 
 use crate::Seq;
 
@@ -29,9 +29,7 @@ use crate::Seq;
 /// [*Gaffer On Games*]: https://gafferongames.com/post/packet_fragmentation_and_reassembly/#data-structure-on-receiver-side
 #[derive(Debug)]
 pub struct Fragmentation {
-    payload_size: usize,
-    // Gaffer On Games describes using a rolling buffer. We don't do this, since
-    // we want to support an arbitrarily large amount of buffered messages.
+    payload_len: usize,
     messages: BTreeMap<Seq, MessageBuffer>,
 }
 
@@ -39,18 +37,18 @@ impl Fragmentation {
     /// Creates a new fragmentation sender/receiver from the given
     /// configuration.
     ///
-    /// * `payload_size` defines the maximum size, in bytes, that the payload
+    /// * `payload_len` defines the maximum length, in bytes, that the payload
     ///   of a single fragmented packet can be. This must be greater than 0.
     ///
     /// # Panics
     ///
-    /// Panics if `payload_size` is 0.
+    /// Panics if `payload_len` is 0.
     ///
     /// [reassemble]: Fragmentation::reassemble
-    pub fn new(payload_size: usize) -> Self {
-        assert!(payload_size > 0);
+    pub fn new(payload_len: usize) -> Self {
+        assert!(payload_len > 0);
         Self {
-            payload_size,
+            payload_len,
             messages: BTreeMap::new(),
         }
     }
@@ -65,9 +63,9 @@ pub enum FragmentError {
     /// Attempted to fragment a message which was too big.
     #[error("message too big - {len} / {max} bytes")]
     MessageTooBig {
-        /// Size of the message in bytes.
+        /// Length of the message in bytes.
         len: usize,
-        /// Maximum size of the message in bytes.
+        /// Maximum length of the message in bytes.
         max: usize,
     },
 }
@@ -91,14 +89,14 @@ pub enum ReassembleError {
     #[error("already received this fragment")]
     AlreadyReceived,
     /// The fragment is not the last fragment in the message, but its length was
-    /// not equal to [`FragmentationConfig::payload_size`].
+    /// not equal to [`FragmentationConfig::payload_len`].
     ///
     /// This can happen if the packet is extended in transit.
     #[error("invalid payload length - length: {len}, expected: {expect}")]
     InvalidPayloadLength {
-        /// Size of the payload received.
+        /// Length of the payload received.
         len: usize,
-        /// Exact size that the payload was expected to be.
+        /// Exact length that the payload was expected to be.
         expect: usize,
     },
     /// The last fragment for the given message is too large.
@@ -106,9 +104,9 @@ pub enum ReassembleError {
     /// This can happen if the packet is extended in transit.
     #[error("last fragment is too large - length: {len}, max: {max}")]
     LastFragTooLarge {
-        /// Size of the payload received.
+        /// Length of the payload received.
         len: usize,
-        /// Maximum size that the last fragment's payload can be.
+        /// Maximum length that the last fragment's payload can be.
         max: usize,
     },
 }
@@ -164,7 +162,7 @@ struct MessageBuffer {
 }
 
 impl MessageBuffer {
-    fn new(payload_size: usize, header: &FragmentHeader) -> Self {
+    fn new(payload_len: usize, header: &FragmentHeader) -> Self {
         Self {
             // use a NonZeroU8 because:
             // * having `num_frags = 0` is genuinely an invalid case
@@ -173,17 +171,17 @@ impl MessageBuffer {
             //     seem to change the size
             num_frags: header.num_frags,
             num_frags_recv: 0,
-            // use a (BitVec, Vec<u8>) instead of a Vec<Option<u8>>
+            // use a (BitArray, Vec<u8>) instead of a Vec<Option<u8>>
             // for efficiency
-            recv_frags: bitarr![0; 32],
+            recv_frags: bitarr![u8, bitvec::order::Lsb0; 0; 256],
             // initially, we allocate space assuming that each packet received
             // will contain `payload_len` bytes of payload data.
             // in practice, the last payload received will be smaller than
-            // `payload_size` - the receiving code takes care of resizing the
+            // `payload_len` - the receiving code takes care of resizing the
             // byte vec appropriately.
             // we could store this as a `Vec<Vec<u8>>` instead, but nah
             // it would cost more on the final packet reassemble
-            payload: vec![0; usize::from(header.num_frags.get()) * payload_size],
+            payload: vec![0; usize::from(header.num_frags.get()) * payload_len],
             last_recv_at: Instant::now(),
         }
     }
@@ -207,11 +205,11 @@ impl Fragmentation {
         &self,
         msg: &'a [u8],
     ) -> Result<impl Iterator<Item = FragmentData<'a>> + 'a, FragmentError> {
-        let chunks = msg.chunks(self.payload_size);
+        let chunks = msg.chunks(self.payload_len);
         let num_frags = NonZeroU8::new(u8::try_from(chunks.len()).map_err(|_| {
             FragmentError::MessageTooBig {
                 len: msg.len(),
-                max: usize::from(u8::MAX) * self.payload_size,
+                max: usize::from(u8::MAX) * self.payload_len,
             }
         })?)
         .ok_or(FragmentError::EmptyMessage)?;
@@ -259,7 +257,7 @@ impl Fragmentation {
         let buf = self
             .messages
             .entry(seq)
-            .or_insert_with(|| MessageBuffer::new(self.payload_size, header));
+            .or_insert_with(|| MessageBuffer::new(self.payload_len, header));
 
         // mark this fragment as received
         let frag_id = usize::from(header.frag_id);
@@ -280,13 +278,13 @@ impl Fragmentation {
         let is_last_frag = header.frag_id == buf.num_frags.get() - 1;
         let (start, end) = if is_last_frag {
             // resize the buffer down to fit this last payload
-            let len = usize::from(header.num_frags.get() - 1) * self.payload_size + payload.len();
+            let len = usize::from(header.num_frags.get() - 1) * self.payload_len + payload.len();
             if len > buf.payload.len() {
                 // can't shrink the buffer to a larger amount,
                 // that makes no sense
                 return Err(ReassembleError::LastFragTooLarge {
                     len: payload.len(),
-                    max: self.payload_size,
+                    max: self.payload_len,
                 });
             }
             // note: explicitly don't mess with the capacity, to avoid reallocs
@@ -295,22 +293,19 @@ impl Fragmentation {
 
             let frag_id = usize::from(header.frag_id);
             (
-                frag_id * self.payload_size,
-                frag_id * self.payload_size + payload.len(),
+                frag_id * self.payload_len,
+                frag_id * self.payload_len + payload.len(),
             )
         } else {
-            if payload.len() != self.payload_size {
+            if payload.len() != self.payload_len {
                 return Err(ReassembleError::InvalidPayloadLength {
                     len: payload.len(),
-                    expect: self.payload_size,
+                    expect: self.payload_len,
                 });
             }
 
             let frag_id = usize::from(header.frag_id);
-            (
-                frag_id * self.payload_size,
-                (frag_id + 1) * self.payload_size,
-            )
+            (frag_id * self.payload_len, (frag_id + 1) * self.payload_len)
         };
         buf.payload[start..end].copy_from_slice(payload);
 
@@ -337,7 +332,7 @@ impl Fragmentation {
     pub fn clean_up(&mut self, drop_after: Duration) {
         let now = Instant::now();
         self.messages
-            .retain(|buf| now - buf.last_recv_at < drop_after);
+            .retain(|_, buf| now - buf.last_recv_at < drop_after);
     }
 
     /// Drops all currently buffered messages.

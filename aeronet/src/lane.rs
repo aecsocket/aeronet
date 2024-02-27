@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, time::Duration};
 
 /// Kind of lane which can provide guarantees about the manner of message
 /// delivery.
@@ -128,8 +128,24 @@ pub enum LaneKind {
 }
 
 #[derive(Debug, Clone)]
-pub struct LaneConfig {
-    pub kind: LaneKind,
+pub enum LaneConfig {
+    UnreliableUnsequenced { drop_after: Duration },
+    UnreliableSequenced { drop_after: Duration },
+    ReliableUnordered {},
+    ReliableSequenced {},
+    ReliableOrdered {},
+}
+
+impl LaneConfig {
+    pub fn kind(&self) -> LaneKind {
+        match self {
+            Self::UnreliableUnsequenced { .. } => LaneKind::UnreliableUnsequenced,
+            Self::UnreliableSequenced { .. } => LaneKind::UnreliableSequenced,
+            Self::ReliableUnordered { .. } => LaneKind::ReliableUnordered,
+            Self::ReliableSequenced { .. } => LaneKind::ReliableSequenced,
+            Self::ReliableOrdered { .. } => LaneKind::ReliableOrdered,
+        }
+    }
 }
 
 // TODO docs
@@ -167,12 +183,7 @@ pub trait LaneKey: Send + Sync + Debug + Clone + Copy + LaneIndex + 'static {
     const VARIANTS: &'static [Self];
 
     fn config() -> Vec<LaneConfig> {
-        Self::VARIANTS
-            .iter()
-            .map(|variant| LaneConfig {
-                kind: variant.kind(),
-            })
-            .collect()
+        Self::VARIANTS.iter().map(|variant| todo!()).collect()
     }
 
     /// What kind of lane this value represents.

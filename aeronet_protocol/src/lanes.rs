@@ -1,7 +1,9 @@
-use aeronet::{LaneConfig, LaneKind};
+use std::time::Duration;
+
+use aeronet::LaneConfig;
 use bytes::Bytes;
 
-use crate::{FragmentError, Fragmentation, ReassembleError, Seq};
+use crate::{FragmentError, FragmentHeader, Fragmentation, ReassembleError, Seq};
 
 #[derive(Debug)]
 pub struct Lanes {
@@ -12,17 +14,50 @@ pub struct Lanes {
 #[derive(Debug)]
 enum LaneState {
     UnreliableUnsequenced {
-        next_send_seq: Seq,
         frag: Fragmentation,
+        next_send_seq: Seq,
+        clean_up_after: Duration,
     },
     UnreliableSequenced {
+        frag: Fragmentation,
         next_send_seq: Seq,
         last_recv_seq: Seq,
-        frag: Fragmentation,
+        clean_up_after: Duration,
     },
     ReliableUnordered {},
     ReliableSequenced {},
     ReliableOrdered {},
+}
+
+impl LaneState {
+    fn new(max_packet_size: usize, config: &LaneConfig) -> Self {
+        const VARINT_MAX_SIZE: usize = 10;
+
+        match config {
+            LaneConfig::UnreliableUnsequenced { clean_up_after } => {
+                const MIN_PACKET_SIZE: usize = VARINT_MAX_SIZE + FragmentHeader::ENCODE_SIZE;
+                assert!(max_packet_size > MIN_PACKET_SIZE);
+                LaneState::UnreliableUnsequenced {
+                    frag: Fragmentation::new(max_packet_size),
+                    next_send_seq: Seq(0),
+                    clean_up_after,
+                }
+            }
+            LaneConfig::UnreliableSequenced { clean_up_after } => {
+                const MIN_PACKET_SIZE: usize = VARINT_MAX_SIZE + FragmentHeader::ENCODE_SIZE;
+                assert!(max_packet_size > MIN_PACKET_SIZE);
+                LaneState::UnreliableSequenced {
+                    frag: Fragmentation::sequenced(),
+                    next_send_seq: Seq(0),
+                    last_recv_seq: Seq(0),
+                    clean_up_after,
+                }
+            }
+            LaneConfig::ReliableUnordered => LaneState::ReliableUnordered {},
+            LaneConfig::ReliableSequenced => LaneState::ReliableSequenced {},
+            LaneConfig::ReliableOrdered => LaneState::ReliableOrdered {},
+        }
+    }
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -45,30 +80,16 @@ impl Lanes {
     // todo docs
     /// # Panics
     ///
-    /// Panics if `max_packet_size` is 0, or if `lanes.len() > u64::MAX`.
+    /// Panics if `max_packet_size` is too small one of the lanes, or if
+    /// `lanes.len() > u64::MAX`.
     #[must_use]
     pub fn new(max_packet_size: usize, lanes: &[LaneConfig]) -> Self {
         assert!(max_packet_size > 0);
         u64::try_from(lanes.len()).expect("should be less than `u64::MAX` lanes");
-
         let lanes = lanes
             .iter()
-            .map(|config| match config.kind {
-                LaneKind::UnreliableUnsequenced => LaneState::UnreliableUnsequenced {
-                    next_send_seq: Seq(0),
-                    frag: Fragmentation::new(),
-                },
-                LaneKind::UnreliableSequenced => LaneState::UnreliableSequenced {
-                    next_send_seq: Seq(0),
-                    last_recv_seq: Seq(0),
-                    frag: Fragmentation::sequenced(),
-                },
-                LaneKind::ReliableUnordered => LaneState::ReliableUnordered {},
-                LaneKind::ReliableSequenced => LaneState::ReliableSequenced {},
-                LaneKind::ReliableOrdered => LaneState::ReliableOrdered {},
-            })
+            .map(|config| LaneState::new(max_packet_size, config))
             .collect();
-
         Self {
             max_packet_len: max_packet_size,
             lanes,
@@ -78,8 +99,16 @@ impl Lanes {
     pub fn update(&mut self) {
         for lane in &mut self.lanes {
             match lane {
-                LaneState::UnreliableUnsequenced { frag, .. } => frag.clean_up(),
-                LaneState::UnreliableSequenced { frag, .. } => frag.clean_up(),
+                LaneState::UnreliableUnsequenced {
+                    frag,
+                    clean_up_after,
+                    ..
+                } => frag.clean_up(clean_up_after),
+                LaneState::UnreliableSequenced {
+                    frag,
+                    clean_up_after,
+                    ..
+                } => frag.clean_up(clean_up_after),
                 LaneState::ReliableUnordered {} => todo!(),
                 LaneState::ReliableSequenced {} => todo!(),
                 LaneState::ReliableOrdered {} => todo!(),
@@ -94,13 +123,13 @@ impl Lanes {
     /// creation.
     pub fn send<'a>(
         &mut self,
+        lane_index: usize,
         msg: &'a [u8],
-        lane: usize,
     ) -> Result<Vec<LanePacket<'a>>, LaneSendError> {
-        let lane_state = &mut self.lanes[lane];
-        let lane_index = u64::try_from(lane).expect("should be validated on construction");
+        let lane = &mut self.lanes[lane_index];
+        let lane_index = lane_index as u64;
 
-        match lane_state {
+        match lane {
             LaneState::UnreliableUnsequenced { frag } => {
                 send_unreliable(self.max_packet_len, msg, lane_index, frag)
             }
@@ -138,24 +167,24 @@ fn send_unreliable<'a, S>(
     max_packet_len: usize,
     msg: &'a [u8],
     lane_index: u64,
-    frag: &mut Fragmentation<S>,
+    frag: &mut Fragmentation,
 ) -> Result<Vec<LanePacket<'a>>, LaneSendError> {
     let lane_header_len = lane_index.required_space();
     let payload_len = max_packet_len - lane_header_len - FRAG_HEADER_LEN;
 
     Ok(frag
-        .fragment(msg, payload_len)
+        .fragment(msg)
         .map_err(LaneSendError::Fragment)?
-        .map(|frag_packet| {
+        .map(|data| {
             let mut header = vec![0; lane_header_len + FRAG_HEADER_LEN].into_boxed_slice();
 
             let bytes_written = lane_index.encode_var(&mut header[..lane_header_len]);
             debug_assert_eq!(lane_header_len, bytes_written);
-            header[lane_header_len..].copy_from_slice(&frag_packet.header);
+            header[lane_header_len..].copy_from_slice(&data.header);
 
             LanePacket {
                 header: Bytes::from(header),
-                payload: frag_packet.payload,
+                payload: data.payload,
             }
         })
         .collect())
