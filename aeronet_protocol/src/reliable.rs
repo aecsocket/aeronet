@@ -4,19 +4,19 @@ use arbitrary::Arbitrary;
 
 use crate::{FragmentError, FragmentHeader, Fragmentation, ReassembleError, Seq};
 
-#[derive(Debug, Clone, Arbitrary)]
+#[derive(Debug, Clone, PartialEq, Eq, Arbitrary)]
 pub struct AcknowledgeHeader {
     pub last_ack: Seq,
     pub ack_bits: u32,
 }
 
 impl AcknowledgeHeader {
-    /// Encoded size of this value in bytes.
-    pub const SIZE: usize = 2 + 4;
+    /// [Encoded](AcknowledgeHeader::encode) size of this value in bytes.
+    pub const ENCODE_SIZE: usize = Seq::ENCODE_SIZE + 4;
 
     pub fn encode(&self, buf: &mut octets::OctetsMut<'_>) -> octets::Result<()> {
         self.last_ack.encode(buf)?;
-        buf.put_u32(self.ack_bits);
+        buf.put_u32(self.ack_bits)?;
         Ok(())
     }
 
@@ -45,7 +45,9 @@ pub struct Reliable {
     /// If any message is not fully received by this duration, the lane is
     /// considered "timed out", and the connection must be terminated.
     pub ack_timeout: Duration,
+    // stores outgoing fragments
     send_buf: Vec<Option<BufferedMessage>>,
+    // stores incoming fragments
     frag: Fragmentation,
 }
 
@@ -145,5 +147,26 @@ impl Reliable {
         //    todo!()
         //}
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encode_decode_header() {
+        let header = AcknowledgeHeader {
+            last_ack: Seq(12),
+            ack_bits: 34,
+        };
+        let mut buf = [0; AcknowledgeHeader::ENCODE_SIZE];
+
+        let mut oct = octets::OctetsMut::with_slice(&mut buf);
+        header.encode(&mut oct).unwrap();
+        oct.peek_bytes(1).unwrap_err();
+
+        let mut oct = octets::Octets::with_slice(&buf);
+        assert_eq!(header, AcknowledgeHeader::decode(&mut oct).unwrap());
     }
 }

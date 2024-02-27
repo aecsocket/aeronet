@@ -1,8 +1,7 @@
 use aeronet::{LaneConfig, LaneKind};
 use bytes::Bytes;
-use integer_encoding::VarInt;
 
-use crate::{Fragmentation, ReassembleError, Seq};
+use crate::{FragmentError, Fragmentation, ReassembleError, Seq};
 
 #[derive(Debug)]
 pub struct Lanes {
@@ -29,7 +28,7 @@ enum LaneState {
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum LaneSendError {
     #[error("failed to fragment message")]
-    Fragment(#[source] FragmentationError),
+    Fragment(#[source] FragmentError),
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -57,7 +56,7 @@ impl Lanes {
             .map(|config| match config.kind {
                 LaneKind::UnreliableUnsequenced => LaneState::UnreliableUnsequenced {
                     next_send_seq: Seq(0),
-                    frag: Fragmentation::unsequenced(),
+                    frag: Fragmentation::new(),
                 },
                 LaneKind::UnreliableSequenced => LaneState::UnreliableSequenced {
                     next_send_seq: Seq(0),

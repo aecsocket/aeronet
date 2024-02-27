@@ -42,7 +42,7 @@ impl Seq {
 
     /// Returns the current sequence value and increments `self`.
     #[must_use]
-    pub fn get_and_increment(&mut self) -> Self {
+    pub fn get_inc(&mut self) -> Self {
         let cur = *self;
         self.0 = self.0.wrapping_add(1);
         cur
@@ -91,6 +91,19 @@ impl cmp::PartialOrd for Seq {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn encode_decode() {
+        let seq = Seq(1234);
+        let mut buf = [0; Seq::ENCODE_SIZE];
+
+        let mut oct = octets::OctetsMut::with_slice(&mut buf);
+        seq.encode(&mut oct).unwrap();
+        oct.peek_bytes(1).unwrap_err();
+
+        let mut oct = octets::Octets::with_slice(&buf);
+        assert_eq!(seq, Seq::decode(&mut oct).unwrap());
+    }
 
     #[test]
     fn increasing_wraparound() {

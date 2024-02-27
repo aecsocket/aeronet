@@ -6,11 +6,11 @@ use std::{
 use arbitrary::Arbitrary;
 use bitvec::{bitvec, vec::BitVec};
 
-use crate::Seq;
+use crate::{seq_buf::RollingBuf, Seq};
 
 /// Metadata for a packet produced by [`Fragmentation::fragment`] and read by
 /// [`Fragmentation::reassemble`].
-#[derive(Debug, Clone, Arbitrary)]
+#[derive(Debug, Clone, PartialEq, Eq, Arbitrary)]
 pub struct FragmentHeader {
     /// How many fragments this packet's message is split up into.
     pub num_frags: NonZeroU8,
@@ -20,7 +20,7 @@ pub struct FragmentHeader {
 
 impl FragmentHeader {
     /// [Encoded](FragmentHeader::encode) size of this value in bytes.
-    pub const SIZE: usize = 1 + 1;
+    pub const ENCODE_SIZE: usize = 1 + 1;
 
     /// Encodes this value into a byte buffer.
     ///
@@ -39,11 +39,12 @@ impl FragmentHeader {
     ///
     /// Errors if the buffer is too short to decode this.
     pub fn decode(buf: &mut octets::Octets<'_>) -> octets::Result<Option<Self>> {
-        let num_frags = match NonZeroU8::new(buf.get_u8()?) {
+        let num_frags = buf.get_u8()?;
+        let frag_id = buf.get_u8()?;
+        let num_frags = match NonZeroU8::new(num_frags) {
             Some(num_frags) => num_frags,
             None => return Ok(None),
         };
-        let frag_id = buf.get_u8()?;
         Ok(Some(Self { num_frags, frag_id }))
     }
 }
@@ -76,6 +77,9 @@ pub enum ReassembleError {
         /// ID of the fragment.
         frag_id: u8,
     },
+    /// Buffer of reassembled messages has no open entries.
+    #[error("buffer full")]
+    BufferFull,
     /// The stored sequence number in the message's buffer was different to
     /// what the fragment's header reported.
     ///
@@ -136,7 +140,7 @@ pub enum ReassembleError {
 #[derive(Debug)]
 pub struct Fragmentation {
     payload_size: usize,
-    messages: Vec<Option<MessageBuffer>>,
+    messages: RollingBuf<MessageBuffer>,
 }
 
 impl Fragmentation {
@@ -145,25 +149,25 @@ impl Fragmentation {
     ///
     /// * `payload_size` defines the maximum size, in bytes, that the payload
     ///   of a single fragmented packet can be. This must be greater than 0.
-    /// * `msg_buf_size` defines the maximum number of messages which can be
+    /// * `msg_buf_cap` defines the maximum number of messages which can be
     ///   buffered at once. Attempting to [reassemble] any more messages will
     ///   result in [`ReassembleError`]s.
     ///
     /// # Panics
     ///
-    /// Panics if `payload_size` is 0.
+    /// Panics if `payload_size` is 0 or if `msg_buf_cap` is 0.
     ///
     /// [reassemble]: Fragmentation::reassemble
-    pub fn new(payload_size: usize, msg_buf_size: usize) -> Self {
+    pub fn new(payload_size: usize, msg_buf_cap: usize) -> Self {
         assert!(payload_size > 0);
         Self {
             payload_size,
-            messages: (0..msg_buf_size).map(|_| None).collect(),
+            messages: RollingBuf::new(msg_buf_cap),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct MessageBuffer {
     seq: Seq,
     num_frags: NonZeroU8,
@@ -266,8 +270,10 @@ impl Fragmentation {
         }
 
         let buf_index = usize::from(seq.0) % self.messages.len();
-        let buf_opt = &mut self.messages[buf_index];
-        let buf = buf_opt.get_or_insert_with(|| MessageBuffer::new(self.payload_size, seq, header));
+        let buf = self
+            .messages
+            .entry(buf_index)
+            .or_insert_with(|| MessageBuffer::new(self.payload_size, seq, header));
 
         // make sure that `buf` really does point to the same message that we're
         // meant to be reassembling
@@ -345,7 +351,7 @@ impl Fragmentation {
             // we've received all fragments for this message
             // return the fragment to the user
             let msg = std::mem::take(&mut buf.payload);
-            *buf_opt = None;
+            self.messages.remove(buf_index);
             Ok(Some(msg))
         } else {
             // this message isn't complete yet, nothing to return
@@ -358,20 +364,13 @@ impl Fragmentation {
     /// The threshold for "recently" is defined by `drop_after`.
     pub fn clean_up(&mut self, drop_after: Duration) {
         let now = Instant::now();
-        for opt_buf in self.messages.iter_mut() {
-            if let Some(buf) = opt_buf {
-                if now - buf.last_recv_at >= drop_after {
-                    *opt_buf = None;
-                }
-            }
-        }
+        self.messages
+            .retain(|buf| now - buf.last_recv_at < drop_after);
     }
 
     /// Drops all currently buffered messages.
     pub fn clear(&mut self) {
-        for buf in self.messages.iter_mut() {
-            *buf = None;
-        }
+        self.messages.clear();
     }
 }
 
@@ -380,6 +379,22 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
+
+    #[test]
+    fn encode_decode_header() {
+        let header = FragmentHeader {
+            num_frags: NonZeroU8::new(12).unwrap(),
+            frag_id: 34,
+        };
+        let mut buf = [0; FragmentHeader::ENCODE_SIZE];
+
+        let mut oct = octets::OctetsMut::with_slice(&mut buf);
+        header.encode(&mut oct).unwrap();
+        oct.peek_bytes(1).unwrap_err();
+
+        let mut oct = octets::Octets::with_slice(&buf);
+        assert_eq!(header, FragmentHeader::decode(&mut oct).unwrap().unwrap());
+    }
 
     const PAYLOAD_SIZE: usize = 1024;
     const NUM_BUFFERD_MSGS: usize = 8;

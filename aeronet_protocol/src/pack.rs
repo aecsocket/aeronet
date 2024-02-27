@@ -6,7 +6,7 @@ pub fn pack(
     frags: &[FragmentData<'_>],
 ) -> Box<[u8]> {
     let packed_size = octets::varint_len(lane_index)
-        + AcknowledgeHeader::SIZE
+        + AcknowledgeHeader::ENCODE_SIZE
         + frags.iter().map(total_frag_len).sum::<usize>();
     let mut buf = vec![0; packed_size].into_boxed_slice();
     pack_into(
@@ -37,6 +37,6 @@ fn pack_into(
 }
 
 fn total_frag_len(frag: &FragmentData<'_>) -> usize {
-    let frag_len = FragmentHeader::SIZE + frag.payload.len();
+    let frag_len = FragmentHeader::ENCODE_SIZE + frag.payload.len();
     octets::varint_len(frag_len as u64) + frag.payload.len()
 }
