@@ -1,5 +1,6 @@
 mod negotiate;
 
+use aeronet_protocol::lane::Lanes;
 use derivative::Derivative;
 use tracing::debug;
 use xwt::current::{Connection, RecvStream, SendStream};
@@ -8,7 +9,6 @@ use xwt_core::datagram::{Receive, Send};
 use std::time::Duration;
 
 use aeronet::{LaneConfig, LaneIndex, OnLane, ProtocolVersion, TryAsBytes, TryFromBytes};
-use aeronet_protocol::Lanes;
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},

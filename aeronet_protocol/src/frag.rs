@@ -21,10 +21,10 @@ use crate::Seq;
 /// uses a [`BTreeMap`] to store messages. This is able to grow infinitely, or
 /// at least up to how much memory the computer has.
 ///
-/// Due to the fact that old messages will be retained if they have not been
-/// fully reassembled yet, even if they haven't received a new fragment in ages
-/// (and probably never will), users should be careful to clean up fragments
-/// periodically - see [`Fragmentation::clean_up`].
+/// Due to the fact that fragments may be dropped in transport, and that old
+/// messages waiting for more fragments to be received may never get those
+/// fragments, users should be careful to clean up fragments periodically -
+/// see [`Fragmentation::clean_up`].
 ///
 /// [*Gaffer On Games*]: https://gafferongames.com/post/packet_fragmentation_and_reassembly/#data-structure-on-receiver-side
 #[derive(Debug)]
@@ -329,10 +329,14 @@ impl Fragmentation {
     /// Drops any messages which have not recently received any new fragments.
     ///
     /// The threshold for "recently" is defined by `drop_after`.
-    pub fn clean_up(&mut self, drop_after: Duration) {
+    ///
+    /// Returns the amount of messages removed.
+    pub fn clean_up(&mut self, drop_after: Duration) -> usize {
         let now = Instant::now();
+        let len_before = self.messages.len();
         self.messages
             .retain(|_, buf| now - buf.last_recv_at < drop_after);
+        len_before - self.messages.len()
     }
 
     /// Drops all currently buffered messages.

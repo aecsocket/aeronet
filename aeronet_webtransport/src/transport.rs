@@ -1,8 +1,12 @@
 use std::time::Duration;
 
-use aeronet::{client::ClientKey, ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
-use aeronet_protocol::{NegotiationRequestError, NegotiationResponseError, WrongProtocolVersion};
+use aeronet::{ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
+use aeronet_protocol::{
+    NegotiationRequestError, NegotiationResponseError, Seq, WrongProtocolVersion,
+};
 use derivative::Derivative;
+
+use crate::ClientKey;
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
@@ -14,6 +18,12 @@ cfg_if::cfg_if! {
         pub type Connecting = xwt_core::utils::dummy::Connecting<wtransport::Connection>;
         pub type OpeningBiStream = xwt::current::OpeningBiStream;
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MessageKey {
+    lane_index: usize,
+    seq: Seq,
 }
 
 pub const MTU: usize = 1200;

@@ -1,7 +1,7 @@
 use std::{fmt::Debug, future::Future, net::SocketAddr, task::Poll};
 
 use aeronet::{
-    client::{ClientKey, ClientState},
+    client::ClientState,
     server::{ServerState, ServerTransport},
     LocalAddr, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
 };
@@ -9,7 +9,8 @@ use derivative::Derivative;
 use either::Either;
 
 use crate::{
-    ConnectionInfo, OpenServer, OpeningServer, RemoteRequestingInfo, WebTransportServerConfig,
+    ClientKey, ConnectionInfo, MessageKey, OpenServer, OpeningServer, RemoteRequestingInfo,
+    WebTransportServerConfig,
 };
 
 use super::{ServerEvent, WebTransportError};
@@ -109,6 +110,10 @@ where
     type ConnectingInfo = RemoteRequestingInfo;
 
     type ConnectedInfo = ConnectionInfo;
+
+    type ClientKey = ClientKey;
+
+    type MessageKey = MessageKey;
 
     fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo> {
         match self {

@@ -137,6 +137,7 @@ dependencies = [
  "bitvec",
  "bytes",
  "const_format",
+ "derivative",
  "enum_dispatch",
  "octets",
  "static_assertions",

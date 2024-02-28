@@ -19,6 +19,7 @@ all-features = true
 [dependencies]
 aeronet.workspace = true
 tracing.workspace = true
+derivative.workspace = true
 thiserror.workspace = true
 bytes.workspace = true
 bitvec.workspace = true

@@ -7,19 +7,24 @@ pub use wrapper::*;
 use std::{collections::HashMap, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
 
 use aeronet::{
-    client::{ClientKey, ClientState},
-    LaneConfig, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
+    client::ClientState, LaneConfig, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes,
+    TryFromBytes,
 };
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
 
-use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo};
+use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo, MessageKey};
+
+slotmap::new_key_type! {
+    /// Key identifying a unique client connected to a [`WebTransportServer`].
+    pub struct ClientKey;
+}
 
 type WebTransportError<P> =
     crate::WebTransportError<<P as TransportProtocol>::S2C, <P as TransportProtocol>::C2S>;
 
-type ServerEvent<P> = aeronet::server::ServerEvent<P, WebTransportError<P>>;
+type ServerEvent<P> = aeronet::server::ServerEvent<P, WebTransportError<P>, ClientKey, MessageKey>;
 
 pub struct WebTransportServerConfig {
     pub native: wtransport::ServerConfig,
