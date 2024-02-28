@@ -2,12 +2,14 @@ use std::{future::Future, task::Poll};
 
 use aeronet::{
     client::{ClientState, ClientTransport},
-    OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+    MessageState, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 use xwt_core::utils::maybe;
 
-use crate::{ConnectedClient, ConnectingClient, ConnectionInfo, WebTransportClientConfig};
+use crate::{
+    ClientMessageKey, ConnectedClient, ConnectingClient, ConnectionInfo, WebTransportClientConfig,
+};
 
 use super::{ClientEvent, WebTransportError};
 
@@ -73,6 +75,8 @@ where
 
     type ConnectedInfo = ConnectionInfo;
 
+    type MessageKey = ClientMessageKey;
+
     fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         match self {
             Self::Disconnected => ClientState::Disconnected,
@@ -81,7 +85,14 @@ where
         }
     }
 
-    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), Self::Error> {
+    fn message_state(&self, msg_key: Self::MessageKey) -> Option<MessageState> {
+        match self {
+            Self::Disconnected | Self::Connecting(_) => None,
+            Self::Connected(client) => client.message_state(msg_key),
+        }
+    }
+
+    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error> {
         match self {
             Self::Disconnected | Self::Connecting(_) => Err(WebTransportError::<P>::NotConnected),
             Self::Connected(client) => client.send(msg),

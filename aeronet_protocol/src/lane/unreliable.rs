@@ -16,7 +16,10 @@ use super::{
 #[derivative(Debug(bound = ""))]
 pub struct Unreliable<S> {
     frag: Fragmentation,
+    // incrementing counter for the seq of the next buffered message to send
     next_send_seq: Seq,
+    // seq number of the last message identified (not fully received) - at least
+    // 1 frag has been received for this message
     last_recv_seq: Seq,
     drop_after: Duration,
     send_buf: Vec<Box<[u8]>>,

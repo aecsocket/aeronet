@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use aeronet::MessageState;
 use bytes::Bytes;
 use derivative::Derivative;
 

@@ -5,17 +5,24 @@ pub use wrapper::*;
 
 use std::{future::Future, marker::PhantomData, task::Poll};
 
-use aeronet::{LaneConfig, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes};
+use aeronet::{
+    LaneConfig, MessageState, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
+};
 use derivative::Derivative;
 use futures::channel::oneshot;
 use xwt_core::utils::maybe;
 
-use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo};
+use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo, MessageKey};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ClientMessageKey {
+    key: MessageKey,
+}
 
 type WebTransportError<P> =
     crate::WebTransportError<<P as TransportProtocol>::C2S, <P as TransportProtocol>::S2C>;
 
-type ClientEvent<P> = aeronet::client::ClientEvent<P, WebTransportError<P>>;
+type ClientEvent<P> = aeronet::client::ClientEvent<P, WebTransportError<P>, ClientMessageKey>;
 
 pub struct WebTransportClientConfig {
     #[cfg(target_family = "wasm")]
@@ -114,8 +121,18 @@ where
         self.conn.info.clone()
     }
 
-    pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), WebTransportError<P>> {
-        self.conn.send(&msg.into())
+    #[must_use]
+    pub fn message_state(&self, msg_key: ClientMessageKey) -> Option<MessageState> {
+        None
+    }
+
+    pub fn send(
+        &mut self,
+        msg: impl Into<P::C2S>,
+    ) -> Result<ClientMessageKey, WebTransportError<P>> {
+        self.conn
+            .buffer_send(&msg.into())
+            .map(|key| ClientMessageKey { key })
     }
 
     pub fn poll(&mut self) -> (Vec<ClientEvent<P>>, Result<(), WebTransportError<P>>) {

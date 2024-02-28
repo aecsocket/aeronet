@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use aeronet::{ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
 use aeronet_protocol::{
+    lane::{LaneRecvError, LaneSendError},
     NegotiationRequestError, NegotiationResponseError, Seq, WrongProtocolVersion,
 };
 use derivative::Derivative;
@@ -20,7 +21,7 @@ cfg_if::cfg_if! {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MessageKey {
     lane_index: usize,
     seq: Seq,
@@ -168,10 +169,10 @@ pub enum WebTransportError<S: TryAsBytes, R: TryFromBytes> {
     AlreadyClosed,
     #[error("server not open")]
     NotOpen,
-    #[error("no client with key {client}")]
-    NoClient { client: ClientKey },
-    #[error("client {client} is already connected")]
-    ClientAlreadyConnected { client: ClientKey },
+    #[error("no client with key {client_key}")]
+    NoClient { client_key: ClientKey },
+    #[error("client {client_key} is already connected")]
+    ClientAlreadyConnected { client_key: ClientKey },
     #[error("already responded to this session request")]
     AlreadyRespondedToRequest,
 }

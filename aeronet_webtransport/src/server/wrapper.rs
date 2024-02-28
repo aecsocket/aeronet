@@ -3,13 +3,13 @@ use std::{fmt::Debug, future::Future, net::SocketAddr, task::Poll};
 use aeronet::{
     client::ClientState,
     server::{ServerState, ServerTransport},
-    LocalAddr, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+    LocalAddr, MessageState, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 use either::Either;
 
 use crate::{
-    ClientKey, ConnectionInfo, MessageKey, OpenServer, OpeningServer, RemoteRequestingInfo,
+    ClientKey, ConnectionInfo, OpenServer, OpeningServer, RemoteRequestingInfo, ServerMessageKey,
     WebTransportServerConfig,
 };
 
@@ -113,7 +113,7 @@ where
 
     type ClientKey = ClientKey;
 
-    type MessageKey = MessageKey;
+    type MessageKey = ServerMessageKey;
 
     fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo> {
         match self {
@@ -127,7 +127,7 @@ where
 
     fn client_state(
         &self,
-        client: ClientKey,
+        client: Self::ClientKey,
     ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
         match self {
             Self::Closed | Self::Opening(_) => ClientState::Disconnected,
@@ -135,21 +135,32 @@ where
         }
     }
 
-    fn client_keys(&self) -> impl Iterator<Item = ClientKey> + '_ {
+    fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_ {
         match self {
             Self::Closed | Self::Opening(_) => Either::Left(std::iter::empty()),
             Self::Open(server) => Either::Right(server.client_keys()),
         }
     }
 
-    fn send(&mut self, client: ClientKey, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
+    fn message_state(&self, msg_key: Self::MessageKey) -> Option<MessageState> {
+        match self {
+            Self::Closed | Self::Opening(_) => None,
+            Self::Open(server) => server.message_state(msg_key),
+        }
+    }
+
+    fn send(
+        &mut self,
+        client: Self::ClientKey,
+        msg: impl Into<P::S2C>,
+    ) -> Result<Self::MessageKey, Self::Error> {
         match self {
             Self::Closed | Self::Opening(_) => Err(WebTransportError::<P>::NotOpen),
             Self::Open(server) => server.send(client, msg),
         }
     }
 
-    fn disconnect(&mut self, client: ClientKey) -> Result<(), Self::Error> {
+    fn disconnect(&mut self, client: Self::ClientKey) -> Result<(), Self::Error> {
         match self {
             Self::Closed | Self::Opening(_) => Err(WebTransportError::<P>::NotOpen),
             Self::Open(server) => server.disconnect(client),

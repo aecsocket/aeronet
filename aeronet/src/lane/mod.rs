@@ -1,4 +1,6 @@
-use std::{fmt::Debug, time::Duration};
+mod config;
+
+pub use config::*;
 
 /// Kind of lane which can provide guarantees about the manner of message
 /// delivery.
@@ -20,15 +22,15 @@ use std::{fmt::Debug, time::Duration};
 /// * *ordering* - ensuring that messages are received in the same order that
 ///   they are sent
 ///
-/// Although it is not a part of the guarantees laid out by the channel kinds,
+/// Although it is not a part of the guarantees laid out by the lane kinds,
 /// *head-of-line blocking* is also an important factor to consider when
-/// choosing which kind of channel to use. A channel kind with head-of-line
+/// choosing which kind of lane to use. A lane kind with head-of-line
 /// blocking may block when it is awaiting a message sent earlier, in order to
 /// maintain ordering; others may not.
 ///
-/// Note that channel kinds provide a *minimum* guarantee of reliability and
+/// Note that lane kinds provide a *minimum* guarantee of reliability and
 /// ordering - a transport may provide some guarantees even if using a less
-/// reliable channel kind.
+/// reliable lane kind.
 ///
 /// | [`LaneKind`]              | Fragmentation | Reliability | Ordering |
 /// |---------------------------|---------------|-------------|----------|
@@ -101,7 +103,14 @@ pub enum LaneKind {
     ReliableUnordered,
     /// Messages are sent *reliably* but only messages newer than the last
     /// message will be received.
-    // TODO
+    ///
+    /// All messages are guaranteed to go through, but any messages which arrive
+    /// out of order (a message sent earlier arrives at the peer later than
+    /// another message) will be dropped.
+    ///
+    /// This lane kind has the same performance as a reliable unordered lane,
+    /// and avoids head-of-line blocking.
+    // TODO an example here?
     ReliableSequenced,
     /// Messages are sent *reliably* and *ordered*.
     ///
@@ -125,69 +134,6 @@ pub enum LaneKind {
     /// order, it must then tell its clients about the chat messages in that
     /// specific order as well.
     ReliableOrdered,
-}
-
-#[derive(Debug, Clone)]
-pub enum LaneConfig {
-    UnreliableUnsequenced { drop_after: Duration },
-    UnreliableSequenced { drop_after: Duration },
-    ReliableUnordered {},
-    ReliableSequenced {},
-    ReliableOrdered {},
-}
-
-impl LaneConfig {
-    pub fn kind(&self) -> LaneKind {
-        match self {
-            Self::UnreliableUnsequenced { .. } => LaneKind::UnreliableUnsequenced,
-            Self::UnreliableSequenced { .. } => LaneKind::UnreliableSequenced,
-            Self::ReliableUnordered { .. } => LaneKind::ReliableUnordered,
-            Self::ReliableSequenced { .. } => LaneKind::ReliableSequenced,
-            Self::ReliableOrdered { .. } => LaneKind::ReliableOrdered,
-        }
-    }
-}
-
-// TODO docs
-pub trait LaneIndex {
-    /// Index of this lane in the [`LaneConfig`]
-    // TODO
-    ///
-    /// # Panic safety
-    ///
-    /// This must be a valid index in the variants array, meaning:
-    /// * it is not out of the bounds of the array
-    /// * the value in the variants array at this index is identical to `self`
-    fn index(&self) -> usize;
-}
-
-/// App-defined type listing a set of lanes which a transport can use to send
-/// app messages along.
-///
-/// See [`LaneKind`] for an explanation of lanes.
-///
-/// This trait should be derived - see [`aeronet_derive::LaneKey`]. Otherwise,
-/// you will have to make sure to follow the contract regarding panics.
-///
-/// # Panic safety
-///
-/// This trait must be implemented correctly, otherwise transport
-/// implementations may panic.
-pub trait LaneKey: Send + Sync + Debug + Clone + Copy + LaneIndex + 'static {
-    /// All variants of this type that may exist.
-    ///
-    /// # Panic safety
-    ///
-    /// This must contain every possible value that may exist, otherwise
-    /// transport implementations may panic.
-    const VARIANTS: &'static [Self];
-
-    fn config() -> Vec<LaneConfig> {
-        Self::VARIANTS.iter().map(|variant| todo!()).collect()
-    }
-
-    /// What kind of lane this value represents.
-    fn kind(&self) -> LaneKind;
 }
 
 /// Defines what lane a [`Message`] is sent on.

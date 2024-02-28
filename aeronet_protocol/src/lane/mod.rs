@@ -10,6 +10,7 @@ pub use {
     unreliable::*,
 };
 
+use aeronet::MessageState;
 use bytes::Bytes;
 use enum_dispatch::enum_dispatch;
 use octets::Octets;
@@ -18,6 +19,9 @@ use crate::{FragmentError, ReassembleError, Seq};
 
 const VARINT_MAX_SIZE: usize = 10;
 
+// impl details: I considered adding a `message_state` here to get the current
+// state of a message by its Seq, but imo this is too unreliable and we can't
+// provide strong enough guarantees to get the *current* state of a message
 #[enum_dispatch]
 pub trait LaneState {
     fn update(&mut self) -> Result<(), LaneUpdateError>;

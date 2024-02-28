@@ -7,8 +7,8 @@ pub use wrapper::*;
 use std::{collections::HashMap, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
 
 use aeronet::{
-    client::ClientState, LaneConfig, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes,
-    TryFromBytes,
+    client::ClientState, LaneConfig, MessageState, OnLane, ProtocolVersion, TransportProtocol,
+    TryAsBytes, TryFromBytes,
 };
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
@@ -21,10 +21,23 @@ slotmap::new_key_type! {
     pub struct ClientKey;
 }
 
+impl std::fmt::Display for ClientKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ServerMessageKey {
+    client: ClientKey,
+    msg: MessageKey,
+}
+
 type WebTransportError<P> =
     crate::WebTransportError<<P as TransportProtocol>::S2C, <P as TransportProtocol>::C2S>;
 
-type ServerEvent<P> = aeronet::server::ServerEvent<P, WebTransportError<P>, ClientKey, MessageKey>;
+type ServerEvent<P> =
+    aeronet::server::ServerEvent<P, WebTransportError<P>, ClientKey, ServerMessageKey>;
 
 pub struct WebTransportServerConfig {
     pub native: wtransport::ServerConfig,
@@ -150,35 +163,41 @@ where
     #[must_use]
     pub fn client_state(
         &self,
-        client: ClientKey,
+        client_key: ClientKey,
     ) -> ClientState<RemoteRequestingInfo, ConnectionInfo> {
-        match self.clients.get(client) {
+        match self.clients.get(client_key) {
             None | Some(Client::Incoming { .. }) => ClientState::Disconnected,
             Some(Client::Requesting { info, .. }) => ClientState::Connecting(info.clone()),
             Some(Client::Connected { conn, .. }) => ClientState::Connected(conn.info.clone()),
         }
     }
 
+    #[must_use]
     pub fn client_keys(&self) -> impl Iterator<Item = ClientKey> + '_ {
         self.clients.keys()
     }
 
-    pub fn accept_request(&mut self, client: ClientKey) -> Result<(), WebTransportError<P>> {
-        self.respond_to_request(client, ConnectionResponse::Accepted)
+    #[must_use]
+    pub fn message_state(&self, msg_key: ServerMessageKey) -> Option<MessageState> {
+        None
     }
 
-    pub fn reject_request(&mut self, client: ClientKey) -> Result<(), WebTransportError<P>> {
-        self.respond_to_request(client, ConnectionResponse::Rejected)
+    pub fn accept_request(&mut self, client_key: ClientKey) -> Result<(), WebTransportError<P>> {
+        self.respond_to_request(client_key, ConnectionResponse::Accepted)
+    }
+
+    pub fn reject_request(&mut self, client_key: ClientKey) -> Result<(), WebTransportError<P>> {
+        self.respond_to_request(client_key, ConnectionResponse::Rejected)
     }
 
     fn respond_to_request(
         &mut self,
-        client: ClientKey,
+        client_key: ClientKey,
         resp: ConnectionResponse,
     ) -> Result<(), WebTransportError<P>> {
-        match self.clients.get_mut(client) {
+        match self.clients.get_mut(client_key) {
             None | Some(Client::Incoming { .. }) => {
-                Err(WebTransportError::<P>::NoClient { client })
+                Err(WebTransportError::<P>::NoClient { client_key })
             }
             Some(Client::Requesting { send_resp, .. }) => match send_resp.take() {
                 Some(send_resp) => {
@@ -193,20 +212,23 @@ where
 
     pub fn send(
         &mut self,
-        client: ClientKey,
+        client_key: ClientKey,
         msg: impl Into<P::S2C>,
-    ) -> Result<(), WebTransportError<P>> {
-        let Some(Client::Connected { conn }) = self.clients.get_mut(client) else {
-            return Err(WebTransportError::<P>::NoClient { client });
+    ) -> Result<ServerMessageKey, WebTransportError<P>> {
+        let Some(Client::Connected { conn }) = self.clients.get_mut(client_key) else {
+            return Err(WebTransportError::<P>::NoClient { client_key });
         };
 
         let msg = msg.into();
-        conn.send(&msg)
+        conn.buffer_send(&msg).map(|msg| ServerMessageKey {
+            client: client_key,
+            msg,
+        })
     }
 
-    pub fn disconnect(&mut self, client: ClientKey) -> Result<(), WebTransportError<P>> {
-        match self.clients.remove(client) {
-            None => Err(WebTransportError::<P>::NoClient { client }),
+    pub fn disconnect(&mut self, client_key: ClientKey) -> Result<(), WebTransportError<P>> {
+        match self.clients.remove(client_key) {
+            None => Err(WebTransportError::<P>::NoClient { client_key }),
             Some(_) => Ok(()),
         }
     }

@@ -80,6 +80,10 @@ pub trait ServerTransport<P: TransportProtocol> {
     ///
     /// If the transport does not support this, or the message key does not
     /// represent a valid sent message, this returns [`None`].
+    ///
+    /// Even if a transport does not support getting the *current* message
+    /// state, it may still send out [`ServerEvent::Ack`] when the peer
+    /// acknowledges one of our sent messages.
     fn message_state(&self, msg_key: Self::MessageKey) -> Option<MessageState>;
 
     /// Attempts to send a message to a connected client.

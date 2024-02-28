@@ -15,7 +15,7 @@ use futures::{
     FutureExt, SinkExt, StreamExt,
 };
 
-use crate::{BackendError, ConnectionInfo, WebTransportError};
+use crate::{BackendError, ConnectionInfo, MessageKey, WebTransportError};
 
 const MSG_BUF_CAP: usize = 64;
 
@@ -50,19 +50,6 @@ pub async fn connection_channel<const SERVER: bool>(
     max_packet_len: usize,
     lanes: &[LaneConfig],
 ) -> Result<(ConnectionFrontend, ConnectionBackend), BackendError> {
-    #[cfg(target_family = "wasm")]
-    {
-        debug!(
-            "Receive buffer length is {}",
-            conn.datagram_read_buffer
-                .lock()
-                .await
-                .as_ref()
-                .expect("read buffer was just created")
-                .byte_length()
-        );
-    }
-
     let (send_managed, recv_managed) = if SERVER {
         negotiate::server(conn, version).await?
     } else {
@@ -81,8 +68,8 @@ pub async fn connection_channel<const SERVER: bool>(
             recv_s2c,
             recv_rtt,
             recv_err,
-            _send_closed: send_closed,
             lanes: Lanes::new(max_packet_len, lanes),
+            _send_closed: send_closed,
         },
         ConnectionBackend {
             recv_c2s,
@@ -107,12 +94,17 @@ impl ConnectionFrontend {
         }
     }
 
-    pub fn send<S: TryAsBytes + OnLane, R: TryFromBytes>(
+    pub fn buffer_send<S: TryAsBytes + OnLane, R: TryFromBytes>(
         &mut self,
         msg: &S,
-    ) -> Result<(), WebTransportError<S, R>> {
+    ) -> Result<MessageKey, WebTransportError<S, R>> {
         let msg_bytes = msg.try_as_bytes().map_err(WebTransportError::AsBytes)?;
         let msg_bytes = msg_bytes.as_ref();
+
+        let seq = self
+            .lanes
+            .buffer_send(msg.lane().index(), msg_bytes)
+            .map_err(BackendError::LaneSend)?;
 
         for packet in self
             .lanes
