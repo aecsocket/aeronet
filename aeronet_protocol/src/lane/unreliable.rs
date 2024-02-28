@@ -1,5 +1,6 @@
 use std::{marker::PhantomData, time::Duration};
 
+use aeronet::LaneConfig;
 use bytes::Bytes;
 use derivative::Derivative;
 use octets::{Octets, OctetsMut};
@@ -8,21 +9,22 @@ use crate::{FragmentData, FragmentHeader, Fragmentation, Seq};
 
 use super::{
     ord::{Sequencing, SequencingKind},
-    LaneRecvError, LaneSendError, LaneState, LaneUpdateError, Sequenced, Unsequenced,
+    LaneRecv, LaneRecvError, LaneSendError, LaneState, LaneUpdateError, Sequenced, Unsequenced,
     VARINT_MAX_SIZE,
 };
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Unreliable<S> {
+    /// See [`LaneConfig::drop_after`].
+    pub drop_after: Duration,
     frag: Fragmentation,
     // incrementing counter for the seq of the next buffered message to send
     next_send_seq: Seq,
     // seq number of the last message identified (not fully received) - at least
     // 1 frag has been received for this message
     last_recv_seq: Seq,
-    drop_after: Duration,
-    send_buf: Vec<Box<[u8]>>,
+    send_buf: Vec<Bytes>,
     #[derivative(Debug(bound = ""))]
     _phantom: PhantomData<S>,
 }
@@ -33,39 +35,21 @@ const LEN_ENCODE_MAX_SIZE: usize = VARINT_MAX_SIZE;
 const MIN_PACKET_LEN: usize = LEN_ENCODE_MAX_SIZE + Seq::ENCODE_SIZE + FragmentHeader::ENCODE_SIZE;
 
 impl<S: Sequencing> Unreliable<S> {
-    pub fn new(max_packet_len: usize, drop_after: Duration) -> Self {
+    #[must_use]
+    pub fn new(max_packet_len: usize, config: &LaneConfig) -> Self {
         assert!(max_packet_len > MIN_PACKET_LEN);
         let packet_len = max_packet_len - MIN_PACKET_LEN;
         Self {
             frag: Fragmentation::new(packet_len),
             next_send_seq: Seq(0),
             last_recv_seq: Seq(0),
-            drop_after,
+            drop_after: config.drop_after,
             send_buf: Vec::new(),
             _phantom: PhantomData,
         }
     }
-}
 
-impl Unreliable<Unsequenced> {
-    pub fn unsequenced(max_packet_len: usize, drop_after: Duration) -> Self {
-        Self::new(max_packet_len, drop_after)
-    }
-}
-
-impl Unreliable<Sequenced> {
-    pub fn sequenced(max_packet_len: usize, drop_after: Duration) -> Self {
-        Self::new(max_packet_len, drop_after)
-    }
-}
-
-impl<S: Sequencing> LaneState for Unreliable<S> {
-    fn update(&mut self) -> Result<(), LaneUpdateError> {
-        self.frag.clean_up(self.drop_after);
-        Ok(())
-    }
-
-    fn buffer_send(&mut self, msg: &[u8]) -> Result<Seq, LaneSendError> {
+    fn _buffer_send(&mut self, msg: &[u8]) -> Result<Seq, LaneSendError> {
         let seq = self.next_send_seq.get_inc();
         self.send_buf.extend(
             self.frag
@@ -77,62 +61,127 @@ impl<S: Sequencing> LaneState for Unreliable<S> {
                     let mut octs = OctetsMut::with_slice(&mut buf);
                     data.header.encode(&mut octs).unwrap();
                     octs.put_bytes(data.payload).unwrap();
-                    buf
+                    Bytes::from(buf)
                 }),
         );
         Ok(seq)
     }
 
-    fn recv(&mut self, packet: &[u8]) -> (Vec<Bytes>, Result<(), LaneRecvError>) {
-        let mut msgs = Vec::new();
-        let mut packet = Octets::with_slice(packet);
-
-        while let Ok(len) = packet.get_varint() {
-            let len = len as usize;
-            match self.start_decode_frag(len, &mut packet) {
-                Ok(Some(msg)) => msgs.push(msg),
-                Ok(None) => {}
-                Err(err) => return (msgs, Err(err)),
-            }
-        }
-        (msgs, Ok(()))
+    fn _poll(&mut self) -> Result<(), LaneUpdateError> {
+        self.frag.clean_up(self.drop_after);
+        self.send_buf.drain(..);
+        Ok(())
     }
 }
 
-impl<S: Sequencing> Unreliable<S> {
-    fn start_decode_frag(
-        &mut self,
-        len: usize,
-        packet: &mut Octets<'_>,
-    ) -> Result<Option<Bytes>, LaneRecvError> {
-        let frag = packet.slice(len).map_err(|_| LaneRecvError::TooLong {
-            len,
-            cap: packet.cap(),
-        })?;
-        let mut frag = Octets::with_slice(frag);
-        let res = self.decode_frag(&mut frag);
-        // make sure we've consumed the entire fragment
-        let _ = frag.skip(frag.cap());
-        res
+impl Unreliable<Unsequenced> {
+    #[must_use]
+    pub fn unsequenced(max_packet_len: usize, config: &LaneConfig) -> Self {
+        Self::new(max_packet_len, config)
+    }
+}
+
+impl LaneState for Unreliable<Unsequenced> {
+    fn buffer_send(&mut self, msg: &[u8]) -> Result<Seq, LaneSendError> {
+        self._buffer_send(msg)
     }
 
-    fn decode_frag(&mut self, frag: &mut Octets<'_>) -> Result<Option<Bytes>, LaneRecvError> {
+    fn recv<'packet>(&mut self, packet: &'packet [u8]) -> LaneRecv<'_, 'packet> {
+        LaneRecv::UnreliableUnsequenced(Recv {
+            lane: self,
+            packet,
+            off: 0,
+        })
+    }
+
+    fn poll(&mut self) -> Result<(), LaneUpdateError> {
+        self._poll()
+    }
+}
+
+impl Unreliable<Sequenced> {
+    #[must_use]
+    pub fn sequenced(max_packet_len: usize, config: &LaneConfig) -> Self {
+        Self::new(max_packet_len, config)
+    }
+}
+
+impl LaneState for Unreliable<Sequenced> {
+    fn buffer_send(&mut self, msg: &[u8]) -> Result<Seq, LaneSendError> {
+        self._buffer_send(msg)
+    }
+
+    fn recv<'packet>(&mut self, packet: &'packet [u8]) -> LaneRecv<'_, 'packet> {
+        LaneRecv::UnreliableSequenced(Recv {
+            lane: self,
+            packet,
+            off: 0,
+        })
+    }
+
+    fn poll(&mut self) -> Result<(), LaneUpdateError> {
+        self._poll()
+    }
+}
+
+pub struct Recv<'l, 'p, S> {
+    lane: &'l mut Unreliable<S>,
+    packet: &'p [u8],
+    off: usize,
+}
+
+impl<S: Sequencing> Iterator for Recv<'_, '_, S> {
+    type Item = Result<Bytes, LaneRecvError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut packet = Octets::with_slice(self.packet);
+        packet.skip(self.off).unwrap();
+
+        while let Ok(len) = packet.get_varint() {
+            self.off = packet.off();
+            let len = len as usize;
+            let frag = match packet.slice(len).map_err(|_| LaneRecvError::TooLong {
+                len,
+                cap: packet.cap(),
+            }) {
+                Ok(frag) => frag,
+                Err(err) => return Some(Err(err)),
+            };
+
+            let mut frag = Octets::with_slice(frag);
+            let result = self.decode(&mut frag);
+            // make sure we've consumed the entire fragment
+            let _ = frag.skip(frag.cap());
+            self.off = packet.off();
+            match result {
+                Ok(Some(msg)) => return Some(Ok(msg)),
+                Ok(None) => continue,
+                Err(err) => return Some(Err(err)),
+            }
+        }
+        None
+    }
+}
+
+impl<S: Sequencing> Recv<'_, '_, S> {
+    fn decode(&mut self, frag: &mut Octets<'_>) -> Result<Option<Bytes>, LaneRecvError> {
         let seq = Seq::decode(frag).map_err(|_| LaneRecvError::NoSeq)?;
         match S::KIND {
             SequencingKind::Sequenced => {
-                if seq < self.last_recv_seq {
+                if seq < self.lane.last_recv_seq {
                     return Ok(None);
                 }
             }
             SequencingKind::Unsequenced => {}
         }
-        self.last_recv_seq = seq;
+        self.lane.last_recv_seq = seq;
 
         let header = FragmentHeader::decode(frag)
             .map_err(|_| LaneRecvError::NoHeader)?
             .ok_or(LaneRecvError::InvalidHeader)?;
         let payload = frag.as_ref();
         let msg = self
+            .lane
             .frag
             .reassemble(seq, &FragmentData { header, payload })
             .map_err(LaneRecvError::Reassemble)?;

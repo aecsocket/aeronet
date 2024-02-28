@@ -296,7 +296,7 @@ where
                 Err(_) => Err(Some(WebTransportError::<P>::Backend(BackendError::Closed))),
             },
             Client::Connected { conn } => {
-                conn.update();
+                conn.poll();
                 while let Some(msg) = conn.recv()? {
                     events.push(ServerEvent::Recv { client_key, msg });
                 }

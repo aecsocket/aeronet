@@ -142,7 +142,7 @@ where
     }
 
     fn _poll(&mut self, events: &mut Vec<ClientEvent<P>>) -> Result<(), WebTransportError<P>> {
-        self.conn.update();
+        self.conn.poll();
         while let Some(msg) = self.conn.recv()? {
             events.push(ClientEvent::Recv { msg });
         }

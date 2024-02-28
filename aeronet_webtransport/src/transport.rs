@@ -3,7 +3,7 @@ use std::time::Duration;
 use aeronet::{ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
 use aeronet_protocol::{
     lane::{LaneRecvError, LaneSendError},
-    NegotiationRequestError, NegotiationResponseError, Seq, WrongProtocolVersion,
+    NegotiationRequestError, NegotiationResponseError, WrongProtocolVersion,
 };
 use derivative::Derivative;
 
@@ -19,12 +19,6 @@ cfg_if::cfg_if! {
         pub type Connecting = xwt_core::utils::dummy::Connecting<wtransport::Connection>;
         pub type OpeningBiStream = xwt::current::OpeningBiStream;
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MessageKey {
-    lane_index: usize,
-    seq: Seq,
 }
 
 pub const MTU: usize = 1200;

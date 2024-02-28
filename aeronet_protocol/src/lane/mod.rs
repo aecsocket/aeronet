@@ -1,16 +1,12 @@
-mod ord;
-mod reliable;
-mod unreliable;
+pub mod ord;
+pub mod reliable;
+pub mod unreliable;
 
-use self::ord::{Ordered, Unordered};
+pub use ord::{Ordered, Sequenced, Unordered, Unsequenced};
+pub use reliable::Reliable;
+pub use unreliable::Unreliable;
 
-pub use {
-    ord::{Sequenced, Unsequenced},
-    reliable::*,
-    unreliable::*,
-};
-
-use aeronet::MessageState;
+use aeronet::{LaneConfig, LaneKind};
 use bytes::Bytes;
 use enum_dispatch::enum_dispatch;
 use octets::Octets;
@@ -24,11 +20,11 @@ const VARINT_MAX_SIZE: usize = 10;
 // provide strong enough guarantees to get the *current* state of a message
 #[enum_dispatch]
 pub trait LaneState {
-    fn update(&mut self) -> Result<(), LaneUpdateError>;
-
     fn buffer_send(&mut self, msg: &[u8]) -> Result<Seq, LaneSendError>;
 
-    fn recv(&mut self, packet: &[u8]) -> (Vec<Bytes>, Result<(), LaneRecvError>);
+    fn recv<'packet>(&mut self, packet: &'packet [u8]) -> LaneRecv<'_, 'packet>;
+
+    fn poll(&mut self) -> Result<(), LaneUpdateError>;
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -71,6 +67,28 @@ pub enum Lane {
     ReliableOrdered(Reliable<Ordered>),
 }
 
+pub enum LaneRecv<'l, 'p> {
+    UnreliableUnsequenced(unreliable::Recv<'l, 'p, Unsequenced>),
+    UnreliableSequenced(unreliable::Recv<'l, 'p, Sequenced>),
+    ReliableUnordered(reliable::Recv<'l, 'p, Unordered>),
+    ReliableSequenced(reliable::Recv<'l, 'p, Sequenced>),
+    ReliableOrdered(reliable::Recv<'l, 'p, Ordered>),
+}
+
+impl Iterator for LaneRecv<'_, '_> {
+    type Item = Result<Bytes, LaneRecvError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::UnreliableUnsequenced(iter) => iter.next(),
+            Self::UnreliableSequenced(iter) => iter.next(),
+            Self::ReliableUnordered(iter) => iter.next(),
+            Self::ReliableSequenced(iter) => iter.next(),
+            Self::ReliableOrdered(iter) => iter.next(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Lanes {
     lanes: Box<[Lane]>,
@@ -101,31 +119,45 @@ struct Fragment {
  */
 
 impl Lanes {
+    pub fn new(max_packet_len: usize, lanes: &[LaneConfig]) -> Self {
+        let lanes = lanes
+            .iter()
+            .map(|config| match config.kind {
+                LaneKind::UnreliableUnsequenced => {
+                    Unreliable::unsequenced(max_packet_len, config).into()
+                }
+                LaneKind::UnreliableSequenced => {
+                    Unreliable::sequenced(max_packet_len, config).into()
+                }
+                LaneKind::ReliableUnordered => Reliable::unordered(max_packet_len, config).into(),
+                LaneKind::ReliableSequenced => Reliable::sequenced(max_packet_len, config).into(),
+                LaneKind::ReliableOrdered => Reliable::ordered(max_packet_len, config).into(),
+            })
+            .collect();
+        Self { lanes }
+    }
+
     pub fn buffer_send(&mut self, lane_index: usize, msg: &[u8]) -> Result<Seq, LaneSendError> {
         self.lanes[lane_index].buffer_send(msg)
     }
 
-    pub fn update(&mut self) -> Result<(), LaneUpdateError> {
-        for lane in self.lanes.iter_mut() {
-            lane.update()?;
-        }
-        Ok(())
-    }
-
-    pub fn recv(&mut self, packet: &[u8]) -> (Vec<Bytes>, Result<(), LaneRecvError>) {
-        let mut packet = Octets::with_slice(packet);
-        let lane_index = match packet.get_varint().map_err(|_| LaneRecvError::NoLaneIndex) {
-            Ok(lane_index) => lane_index as usize,
-            Err(err) => return (Vec::new(), Err(err)),
-        };
-        let lane = match self
+    pub fn recv<'p>(&mut self, packet: &'p [u8]) -> Result<LaneRecv<'_, 'p>, LaneRecvError> {
+        let mut octs = Octets::with_slice(packet);
+        let lane_index = octs.get_varint().map_err(|_| LaneRecvError::NoLaneIndex)?;
+        let lane_index = lane_index as usize;
+        let lane = self
             .lanes
             .get_mut(lane_index)
-            .ok_or(LaneRecvError::InvalidLane { lane_index })
-        {
-            Ok(lane) => lane,
-            Err(err) => return (Vec::new(), Err(err)),
-        };
-        lane.recv(packet.as_ref())
+            .ok_or(LaneRecvError::InvalidLane { lane_index })?;
+        // manually slice here rather than `octs.as_ref()`
+        // because we need to prove that this is bound by 'p
+        Ok(lane.recv(&packet[octs.off()..]))
+    }
+
+    pub fn poll(&mut self) -> Result<(), LaneUpdateError> {
+        for lane in self.lanes.iter_mut() {
+            lane.poll()?;
+        }
+        Ok(())
     }
 }

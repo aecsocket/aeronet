@@ -136,6 +136,16 @@ pub enum LaneKind {
     ReliableOrdered,
 }
 
+impl LaneKind {
+    /// Gets if this kind of lane is reliable.
+    pub fn is_reliable(&self) -> bool {
+        match self {
+            Self::UnreliableUnsequenced | Self::UnreliableSequenced => false,
+            Self::ReliableUnordered | Self::ReliableSequenced | Self::ReliableOrdered => true,
+        }
+    }
+}
+
 /// Defines what lane a [`Message`] is sent on.
 ///
 /// See [`LaneKind`] for an explanation of lanes.
@@ -148,7 +158,7 @@ pub enum LaneKind {
 /// [`Message`]: crate::Message
 pub trait OnLane {
     /// User-defined type of lane, output by [`OnLane::lane`].
-    type Lane: LaneKey;
+    type Lane: LaneIndex;
 
     /// What lane this value is sent out on.
     fn lane(&self) -> Self::Lane;

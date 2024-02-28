@@ -1,4 +1,4 @@
-use aeronet::LaneKeyOld;
+use aeronet::LaneKey;
 
 #[derive(Debug, Clone, Copy, LaneKey)]
 #[lane_kind(UnreliableUnsequenced)]
@@ -14,7 +14,7 @@ enum MyLaneEnum {
 
 #[test]
 fn test() {
-    fn assert_lane_key<T: LaneKeyOld>() {}
+    fn assert_lane_key<T: LaneKey>() {}
 
     assert_lane_key::<MyLaneStruct>();
     assert_lane_key::<MyLaneEnum>();

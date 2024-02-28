@@ -1,4 +1,4 @@
-use aeronet::{LaneKeyOld, OnLane};
+use aeronet::{LaneKey, OnLane};
 
 #[derive(Debug, Clone, Copy, LaneKey)]
 enum MyLane {

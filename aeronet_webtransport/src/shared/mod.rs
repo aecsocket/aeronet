@@ -1,6 +1,6 @@
 mod negotiate;
 
-use aeronet_protocol::lane::Lanes;
+use aeronet_protocol::{lane::Lanes, Seq};
 use derivative::Derivative;
 use tracing::debug;
 use xwt::current::{Connection, RecvStream, SendStream};
@@ -8,14 +8,20 @@ use xwt_core::datagram::{Receive, Send};
 
 use std::time::Duration;
 
-use aeronet::{LaneConfig, LaneKey, OnLane, ProtocolVersion, TryAsBytes, TryFromBytes};
+use aeronet::{LaneConfig, LaneIndex, OnLane, ProtocolVersion, TryAsBytes, TryFromBytes};
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
     FutureExt, SinkExt, StreamExt,
 };
 
-use crate::{BackendError, ConnectionInfo, MessageKey, WebTransportError};
+use crate::{BackendError, ConnectionInfo, WebTransportError};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MessageKey {
+    lane_index: usize,
+    seq: Seq,
+}
 
 const MSG_BUF_CAP: usize = 64;
 
@@ -88,48 +94,33 @@ pub async fn connection_channel<const SERVER: bool>(
 }
 
 impl ConnectionFrontend {
-    pub fn update(&mut self) {
-        while let Ok(Some(rtt)) = self.recv_rtt.try_next() {
-            self.info.rtt = rtt;
-        }
-    }
-
     pub fn buffer_send<S: TryAsBytes + OnLane, R: TryFromBytes>(
         &mut self,
         msg: &S,
     ) -> Result<MessageKey, WebTransportError<S, R>> {
+        let lane_index = msg.lane().index();
         let msg_bytes = msg.try_as_bytes().map_err(WebTransportError::AsBytes)?;
         let msg_bytes = msg_bytes.as_ref();
 
         let seq = self
             .lanes
-            .buffer_send(msg.lane().index(), msg_bytes)
+            .buffer_send(lane_index, msg_bytes)
             .map_err(BackendError::LaneSend)?;
+        Ok(MessageKey { lane_index, seq })
+    }
 
-        for packet in self
-            .lanes
-            .send(msg_bytes, msg.lane().index())
-            .map_err(BackendError::LaneSend)?
-        {
-            let mut bytes = vec![0; packet.header.len() + packet.payload.len()].into_boxed_slice();
-            bytes[..packet.header.len()].copy_from_slice(&packet.header);
-            bytes[packet.header.len()..].copy_from_slice(packet.payload);
-
-            self.info.total_bytes_sent += bytes.len();
-            self.send_c2s
-                .unbounded_send(Bytes::from(bytes))
-                .map_err(|_| BackendError::Closed)?;
+    pub fn poll(&mut self) {
+        while let Ok(Some(rtt)) = self.recv_rtt.try_next() {
+            self.info.rtt = rtt;
         }
-        self.info.msg_bytes_sent += msg_bytes.len();
-        self.info.msgs_sent += 1;
-        Ok(())
     }
 
     pub fn recv<S: TryAsBytes, R: TryFromBytes>(
         &mut self,
     ) -> Result<Option<R>, WebTransportError<S, R>> {
         while let Ok(Some(packet)) = self.recv_s2c.try_next() {
-            self.info.total_bytes_recv += packet.len();
+            let (msgs, result) = self.lanes.recv(&packet);
+
             if let Some(msg_bytes) = self
                 .lanes
                 .recv(&packet)

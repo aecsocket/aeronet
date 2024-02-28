@@ -31,12 +31,10 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
         }
 
         impl #impl_generics ::aeronet::LaneKey for #name #type_generics #where_clause {
-            const VARIANTS: &'static [Self] = &[
-                Self
-            ];
+            const VARIANTS: &'static [Self] = &[Self];
 
-            fn kind(&self) -> ::aeronet::LaneKind {
-                #kind
+            fn config(&self) -> ::aeronet::LaneConfig {
+                ::aeronet::LaneConfig::with_defaults(#kind)
             }
         }
     })
@@ -86,12 +84,14 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
             quote! { Self::#pattern => #index }
         })
         .collect::<Vec<_>>();
-    let kind_body = variants
+    let config_body = variants
         .iter()
         .map(|variant| {
             let pattern = variant.ident;
             let kind = &variant.kind;
-            quote! { Self::#pattern => #kind }
+            quote! {
+                Self::#pattern => ::aeronet::LaneConfig::with_defaults(#kind)
+            }
         })
         .collect::<Vec<_>>();
 
@@ -109,9 +109,9 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
                 #(#all_variants),*
             ];
 
-            fn kind(&self) -> ::aeronet::LaneKind {
+            fn config(&self) -> ::aeronet::LaneConfig {
                 match *self {
-                    #(#kind_body),*
+                    #(#config_body),*
                 }
             }
         }
@@ -152,6 +152,7 @@ fn parse_lane_kind(attrs: &[Attribute]) -> Result<Option<TokenStream>> {
             "UnreliableUnsequenced" => quote! { ::aeronet::LaneKind::UnreliableUnsequenced },
             "UnreliableSequenced" => quote! { ::aeronet::LaneKind::UnreliableSequenced },
             "ReliableUnordered" => quote! { ::aeronet::LaneKind::ReliableUnordered },
+            "ReliableSequenced" => quote! { ::aeronet::LaneKind::ReliableSequenced },
             "ReliableOrdered" => quote! { ::aeronet::LaneKind::ReliableOrdered },
             kind => {
                 return Err(Error::new_spanned(

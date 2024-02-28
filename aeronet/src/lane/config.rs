@@ -8,30 +8,50 @@ use crate::LaneKind;
 /// here so that users can use these types without having to import the protocol
 /// directly.
 #[derive(Debug, Clone)]
-pub enum LaneConfig {
-    /// See [`LaneKind::UnreliableUnsequenced`].
-    UnreliableUnsequenced {
-        ///
-        drop_after: Duration,
-    },
-    /// See [`LaneKind::UnreliableSequenced`].
-    UnreliableSequenced { drop_after: Duration },
-    /// See [`LaneKind::ReliableUnordered`].
-    ReliableUnordered {},
-    /// See [`LaneKind::ReliableSequenced`].
-    ReliableSequenced {},
-    /// See [`LaneKind::ReliableOrdered`].
-    ReliableOrdered {},
+pub struct LaneConfig {
+    /// Kind of lane that this configuration will create.
+    pub kind: LaneKind,
+    /// For [unreliable] lanes: if a message does not receive a new fragment in
+    /// this duration of time, it will be automatically dropped, and the message
+    /// will be considered lost.
+    ///
+    /// [unreliable](LaneKind::is_reliable)
+    pub drop_after: Duration,
+    /// For [reliable] lanes: how long to wait until resending a fragment which
+    /// was not acknowledged by the peer.
+    ///
+    /// The initial send is always instant.
+    ///
+    /// [reliable](LaneKind::is_reliable)
+    pub resend_after: Duration,
+    /// For [reliable] lanes: if:
+    /// * any incoming message does not receive all its fragments, or
+    /// * any outgoing message does not receive acknowledgements for all its
+    ///   fragments
+    ///
+    /// after the given duration, the lane is considered timed out, and the
+    /// connection must be closed.
+    ///
+    /// [reliable](LaneKind::is_reliable)
+    pub ack_timeout: Duration,
+}
+
+impl Default for LaneConfig {
+    fn default() -> Self {
+        Self {
+            kind: LaneKind::UnreliableUnsequenced,
+            drop_after: Duration::from_secs(3),
+            resend_after: Duration::from_millis(100),
+            ack_timeout: Duration::from_secs(30),
+        }
+    }
 }
 
 impl LaneConfig {
-    pub fn kind(&self) -> LaneKind {
-        match self {
-            Self::UnreliableUnsequenced { .. } => LaneKind::UnreliableUnsequenced,
-            Self::UnreliableSequenced { .. } => LaneKind::UnreliableSequenced,
-            Self::ReliableUnordered { .. } => LaneKind::ReliableUnordered,
-            Self::ReliableSequenced { .. } => LaneKind::ReliableSequenced,
-            Self::ReliableOrdered { .. } => LaneKind::ReliableOrdered,
+    pub fn with_defaults(kind: LaneKind) -> Self {
+        Self {
+            kind,
+            ..Default::default()
         }
     }
 }
@@ -75,6 +95,9 @@ pub trait LaneIndex {
 /// This trait must be implemented correctly, otherwise transport
 /// implementations may panic.
 pub trait LaneKey: Send + Sync + Debug + Clone + Copy + LaneIndex + 'static {
+    /// List of all variants for this type.
+    const VARIANTS: &'static [Self];
+
     /// Gets the configuration for this lane.
     fn config(&self) -> LaneConfig;
 
@@ -82,5 +105,7 @@ pub trait LaneKey: Send + Sync + Debug + Clone + Copy + LaneIndex + 'static {
     ///
     /// This can be passed to transports which accept lanes to configure which
     /// lanes it will use.
-    fn configs() -> Box<[LaneConfig]>;
+    fn configs() -> Box<[LaneConfig]> {
+        Self::VARIANTS.iter().map(Self::config).collect()
+    }
 }
