@@ -148,7 +148,7 @@ pub enum LaneKind {
 /// [`Message`]: crate::Message
 pub trait OnLane {
     /// User-defined type of lane, output by [`OnLane::lane`].
-    type Lane: LaneIndex;
+    type Lane: LaneKey;
 
     /// What lane this value is sent out on.
     fn lane(&self) -> Self::Lane;

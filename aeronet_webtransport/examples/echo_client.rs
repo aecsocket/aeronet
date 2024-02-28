@@ -7,7 +7,7 @@ use aeronet::{
         ClientState, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
         LocalClientDisconnected,
     },
-    LaneKey, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
+    LaneKeyOld, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use aeronet_webtransport::{WebTransportClient, WebTransportClientConfig, MTU};
 use bevy::{log::LogPlugin, prelude::*};

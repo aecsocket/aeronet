@@ -9,10 +9,18 @@ use crate::LaneKind;
 /// directly.
 #[derive(Debug, Clone)]
 pub enum LaneConfig {
-    UnreliableUnsequenced { drop_after: Duration },
+    /// See [`LaneKind::UnreliableUnsequenced`].
+    UnreliableUnsequenced {
+        ///
+        drop_after: Duration,
+    },
+    /// See [`LaneKind::UnreliableSequenced`].
     UnreliableSequenced { drop_after: Duration },
+    /// See [`LaneKind::ReliableUnordered`].
     ReliableUnordered {},
+    /// See [`LaneKind::ReliableSequenced`].
     ReliableSequenced {},
+    /// See [`LaneKind::ReliableOrdered`].
     ReliableOrdered {},
 }
 
@@ -67,18 +75,12 @@ pub trait LaneIndex {
 /// This trait must be implemented correctly, otherwise transport
 /// implementations may panic.
 pub trait LaneKey: Send + Sync + Debug + Clone + Copy + LaneIndex + 'static {
-    /// All variants of this type that may exist.
-    ///
-    /// # Panic safety
-    ///
-    /// This must contain every possible value that may exist, otherwise
-    /// transport implementations may panic.
-    const VARIANTS: &'static [Self];
-
     /// Gets the configuration for this lane.
     fn config(&self) -> LaneConfig;
 
-    fn configs() -> Vec<LaneConfig> {
-        Self::VARIANTS.iter().map(|variant| todo!()).collect()
-    }
+    /// Gets a list of all lane configurations associated with this lane key.
+    ///
+    /// This can be passed to transports which accept lanes to configure which
+    /// lanes it will use.
+    fn configs() -> Box<[LaneConfig]>;
 }

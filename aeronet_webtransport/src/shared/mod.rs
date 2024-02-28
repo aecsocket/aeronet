@@ -8,7 +8,7 @@ use xwt_core::datagram::{Receive, Send};
 
 use std::time::Duration;
 
-use aeronet::{LaneConfig, LaneIndex, OnLane, ProtocolVersion, TryAsBytes, TryFromBytes};
+use aeronet::{LaneConfig, LaneKey, OnLane, ProtocolVersion, TryAsBytes, TryFromBytes};
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
