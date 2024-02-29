@@ -41,7 +41,7 @@ slotmap = "1.0.7"
 bytes = "1.5.0"
 bitvec = "1.0.1"
 octets = "0.3.0"
-ahash = "0.8.7"
+ahash = { version = "0.8.10", default-features = false, features = ["std"] }
 anyhow = "1.0.79"
 rand = "0.8.5"
 rand_distr = "0.4.3"

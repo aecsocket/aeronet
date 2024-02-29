@@ -2,10 +2,10 @@ use std::cmp;
 
 use arbitrary::Arbitrary;
 
-/// Sequence number uniquely identifying a message sent across a network.
+/// Sequence number uniquely identifying an item sent across a network.
 ///
-/// Note that the sequence number identifies a *message*, not anything else like
-/// a packet or fragment.
+/// Note that the sequence number may identify anything - not necessarily a
+/// message.
 ///
 /// The number is stored internally as a [`u16`], which means it will wrap
 /// around fairly quickly as many messages can be sent per second. Users of a

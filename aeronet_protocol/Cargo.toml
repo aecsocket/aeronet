@@ -21,6 +21,7 @@ aeronet.workspace = true
 tracing.workspace = true
 derivative.workspace = true
 thiserror.workspace = true
+ahash.workspace = true
 bytes.workspace = true
 bitvec.workspace = true
 octets.workspace = true

@@ -1,12 +1,13 @@
 use std::{
-    collections::BTreeMap,
     num::NonZeroU8,
     time::{Duration, Instant},
 };
 
+use ahash::AHashMap;
 use arbitrary::Arbitrary;
 use bitvec::{array::BitArray, bitarr};
 use bytes::Bytes;
+use octets::{Octets, OctetsMut};
 
 use crate::{bytes::ByteChunksExt, Seq};
 
@@ -19,8 +20,8 @@ use crate::{bytes::ByteChunksExt, Seq};
 /// structure as proposed by [*Gaffer On Games*], however this is an issue when
 /// we don't know how many fragments and messages we may be receiving, as this
 /// buffer is able to run out of space. This current implementation, instead,
-/// uses a [`BTreeMap`] to store messages. This is able to grow infinitely, or
-/// at least up to how much memory the computer has.
+/// uses a map to store messages. This is able to grow infinitely, or at least
+/// up to how much memory the computer has.
 ///
 /// Due to the fact that fragments may be dropped in transport, and that old
 /// messages waiting for more fragments to be received may never get those
@@ -31,7 +32,7 @@ use crate::{bytes::ByteChunksExt, Seq};
 #[derive(Debug)]
 pub struct Fragmentation {
     payload_len: usize,
-    messages: BTreeMap<Seq, MessageBuffer>,
+    messages: AHashMap<Seq, MessageBuffer>,
 }
 
 impl Fragmentation {
@@ -50,7 +51,7 @@ impl Fragmentation {
         assert!(payload_len > 0);
         Self {
             payload_len,
-            messages: BTreeMap::new(),
+            messages: AHashMap::new(),
         }
     }
 }
@@ -114,6 +115,17 @@ pub enum ReassembleError {
 
 /// Metadata for a packet produced by [`Fragmentation::fragment`] and read by
 /// [`Fragmentation::reassemble`].
+///
+/// # Encoded layout
+///
+/// ```ignore
+/// struct FragmentHeader {
+///     /// How many fragments are sent in total for this message.
+///     num_frags: u8,
+///     /// Which fragment index this fragment carries.
+///     frag_id: u8,
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Arbitrary)]
 pub struct FragmentHeader {
     /// How many fragments this packet's message is split up into.
@@ -138,6 +150,8 @@ impl FragmentHeader {
     }
 
     /// Decodes this value from a byte buffer.
+    ///
+    /// If this returns `Ok(None)`, the buffer contained an invalid header.
     ///
     /// # Errors
     ///
@@ -168,8 +182,8 @@ impl MessageBuffer {
             // use a NonZeroU8 because:
             // * having `num_frags = 0` is genuinely an invalid case
             // * allows niching in Option<MessageBuffer>
-            //   * but I think this is stashed in the padding anyway - doesn't
-            //     seem to change the size
+            //   * but I think this is stashed elsewhere -
+            //     doesn't seem to change the size
             num_frags: header.num_frags,
             num_frags_recv: 0,
             // use a (BitArray, Vec<u8>) instead of a Vec<Option<u8>>
@@ -194,10 +208,54 @@ pub struct FragmentSliceData<'a> {
     pub payload: &'a [u8],
 }
 
-#[derive(Debug)]
-pub struct FragmentBytesData {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fragment {
     pub header: FragmentHeader,
     pub payload: Bytes,
+}
+
+impl Fragment {
+    pub fn encode_len(&self) -> usize {
+        let payload_len = self.payload.len();
+        octets::varint_len(payload_len as u64) + payload_len
+    }
+
+    pub fn encode(&self, buf: &mut OctetsMut<'_>) -> octets::Result<()> {
+        self.header.encode(buf)?;
+        buf.put_varint(self.payload.len() as u64)?;
+        buf.put_bytes(&self.payload)?;
+        Ok(())
+    }
+
+    pub fn decode(buf: Bytes) -> octets::Result<Option<Self>> {
+        let mut octs = Octets::with_slice(&buf);
+        let header = match FragmentHeader::decode(&mut octs)? {
+            Some(header) => header,
+            None => return Ok(None),
+        };
+        let payload_len = octs.get_varint()? as usize;
+        let payload_start = octs.off();
+        // ignore ok - we just want to make sure it's not an error,
+        // otherwise `payload_len` is too big
+        octs.slice(payload_len)?;
+        Ok(Some(Self {
+            header,
+            payload: buf.slice(payload_start..(payload_start + payload_len)),
+        }))
+    }
+}
+
+// ordered by encoded size
+impl std::cmp::Ord for Fragment {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.encode_len().cmp(&other.encode_len())
+    }
+}
+
+impl std::cmp::PartialOrd for Fragment {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Fragmentation {
@@ -214,7 +272,7 @@ impl Fragmentation {
     pub fn fragment_bytes(
         &self,
         msg: Bytes,
-    ) -> Result<impl Iterator<Item = FragmentBytesData> + '_, FragmentError> {
+    ) -> Result<impl Iterator<Item = Fragment> + '_, FragmentError> {
         let msg_len = msg.len();
         let chunks = msg.byte_chunks(self.payload_len);
         let num_frags = NonZeroU8::new(u8::try_from(chunks.len()).map_err(|_| {
@@ -229,7 +287,7 @@ impl Fragmentation {
             let frag_id = u8::try_from(frag_id)
                 .expect("`num_frags` is a u8, so `frag_id` should be convertible");
             let header = FragmentHeader { num_frags, frag_id };
-            FragmentBytesData { header, payload }
+            Fragment { header, payload }
         }))
     }
 
@@ -483,7 +541,8 @@ mod tests {
             .fragment_slice(&msg)
             .unwrap()
             .collect::<Vec<_>>()
-            .as_slice();
+            .try_into()
+            .unwrap();
         assert_matches!(frag.reassemble(Seq(0), &p1.header, &p2.payload), Ok(None));
         assert_eq!(
             msg,
@@ -501,7 +560,8 @@ mod tests {
             .fragment_slice(&msg)
             .unwrap()
             .collect::<Vec<_>>()
-            .as_slice();
+            .try_into()
+            .unwrap();
         assert_matches!(frag.reassemble(Seq(0), &p1.header, &p1.payload), Ok(None));
         assert_matches!(frag.reassemble(Seq(0), &p2.header, &p2.payload), Ok(None));
         assert_eq!(

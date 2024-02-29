@@ -21,6 +21,11 @@ protocol. That is, they just take in and spit out bytes.
 * *payload* - either a part of, or the entirety of, the message that this
   packet wants to transport
 
+[`ClientTransport`]: aeronet::client::ClientTransport
+[`ServerTransport`]: aeronet::server::ServerTransport
+[`TryAsBytes`]: aeronet::TryAsBytes
+[`TryFromBytes`]: aeronet::TryFromBytes
+
 # Features
 
 Which features are provided by this protocol, and which must be implemented
@@ -33,12 +38,12 @@ externally?
 | validation         | the message was not tampered with or corrupted in transit             | -                 |
 | framing            | message boundary is maintained by API (i.e. not just stream of bytes) | -                 |
 | congestion control | controls how fast data is sent, in order to not flood the network     | -                 |
-| buffering          | combines small messages into one big packet (like Nagle)              | -                 |
+| buffering          | combines small messages into one big packet (like Nagle)              | [`Lanes`]         |
 | negotiation        | makes sure that both peers are using the same protocol before talking | [`Negotiation`]   |
 | fragmentation      | large messages are sent using multiple packets                        | [`Fragmentation`] |
 | lane management    | messages can be sent over different lanes ("channels")                | [`Lanes`]         |
-| reliability        | messages sent reliably are guaranteed to be received by the peer      | todo              |
-| ordering           | messages will be received in the same order they were sent            | todo              |
+| reliability        | messages sent reliably are guaranteed to be received by the peer      | [`Lanes`]         |
+| ordering           | messages will be received in the same order they were sent            | [`Lanes`]         |
 
 The client acts as the initiator in all aeronet-provided features.
 
@@ -56,7 +61,4 @@ To fuzz a particular component, run this from the `/aeronet_protocol` directory:
 * [`Lanes`]
   * `cargo +nightly fuzz run lanes`
 
-[`ClientTransport`]: aeronet::client::ClientTransport
-[`ServerTransport`]: aeronet::server::ServerTransport
-[`TryAsBytes`]: aeronet::TryAsBytes
-[`TryFromBytes`]: aeronet::TryFromBytes
+[`Lanes`]: lane::Lanes

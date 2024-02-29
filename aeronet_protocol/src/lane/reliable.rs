@@ -1,3 +1,10 @@
+//! Implementation of a reliable packet sender and receiver, ensuring that
+//! packets are delivered to the peer, resending if necessary.
+//!
+//! # Reliability
+//!
+//!
+
 use std::{
     collections::BTreeMap,
     marker::PhantomData,
@@ -14,7 +21,7 @@ use crate::{FragmentHeader, Fragmentation, Seq};
 
 use super::{
     ord::{Ordered, Ordering, OrderingKind, Unordered},
-    LaneError, LaneRecv, LaneSend, LaneState, Sequenced, VARINT_MAX_SIZE,
+    LaneError, LaneFlush, LanePacket, LaneRecv, LaneState, Sequenced, VARINT_MAX_SIZE,
 };
 
 #[derive(Derivative)]
@@ -93,9 +100,11 @@ impl<O: Ordering> Reliable<O> {
         }
     }
 
-    fn do_buffer_send(&mut self, msg: &[u8]) -> Result<Seq, LaneError> {
+    fn do_buffer_send(&mut self, msg: Bytes) -> Result<Seq, LaneError> {
         let seq = self.next_send_seq.get_inc();
         let now = Instant::now();
+        todo!();
+        /*
         let frags = self
             .frag
             .fragment(msg)
@@ -113,10 +122,10 @@ impl<O: Ordering> Reliable<O> {
                 last_ack_at: now,
             },
         );
-        Ok(seq)
+        Ok(seq)*/
     }
 
-    fn update(&mut self) -> Result<(), LaneError> {
+    fn do_poll(&mut self) -> Result<(), LaneError> {
         if self.frag.clean_up(self.ack_timeout) > 0 {
             // at least one of our buffered receiving messages reached the ack
             // timeout
@@ -152,18 +161,21 @@ impl Reliable<Unordered> {
 }
 
 impl LaneState for Reliable<Unordered> {
-    fn buffer_send(&mut self, msg: &[u8]) -> Result<Seq, LaneError> {
+    fn buffer_send(&mut self, msg: Bytes) -> Result<Seq, LaneError> {
         self.do_buffer_send(msg)
     }
 
     fn recv(&mut self, mut packet: Bytes) -> Result<LaneRecv<'_>, LaneError> {
-        self.decode_ack(&mut packet)?;
+        //self.decode_ack(&mut packet)?;
         Ok(LaneRecv::ReliableUnordered(Recv { lane: self, packet }))
     }
 
-    fn send_buffered(&mut self) -> Result<LaneSend<'_>, LaneError> {
-        self.update()?;
-        Ok(LaneSend::ReliableUnordered(Send { lane: self }))
+    fn poll(&mut self) -> Result<(), LaneError> {
+        self.do_poll()
+    }
+
+    fn flush(&mut self) -> LaneFlush<'_> {
+        LaneFlush::Reliable(Flush {})
     }
 }
 
@@ -174,18 +186,21 @@ impl Reliable<Sequenced> {
 }
 
 impl LaneState for Reliable<Sequenced> {
-    fn buffer_send(&mut self, msg: &[u8]) -> Result<Seq, LaneError> {
+    fn buffer_send(&mut self, msg: Bytes) -> Result<Seq, LaneError> {
         self.do_buffer_send(msg)
     }
 
     fn recv(&mut self, mut packet: Bytes) -> Result<LaneRecv<'_>, LaneError> {
-        self.decode_ack(&mut packet)?;
+        //self.decode_ack(&mut packet)?;
         Ok(LaneRecv::ReliableSequenced(Recv { lane: self, packet }))
     }
 
-    fn send_buffered(&mut self) -> Result<LaneSend<'_>, LaneError> {
-        self.update()?;
-        Ok(LaneSend::ReliableSequenced(Send { lane: self }))
+    fn poll(&mut self) -> Result<(), LaneError> {
+        self.do_poll()
+    }
+
+    fn flush(&mut self) -> LaneFlush<'_> {
+        Ok(LaneFlush::Reliable(Flush { lane: self }))
     }
 }
 
@@ -196,18 +211,22 @@ impl Reliable<Ordered> {
 }
 
 impl LaneState for Reliable<Ordered> {
-    fn buffer_send(&mut self, msg: &[u8]) -> Result<Seq, LaneError> {
+    fn buffer_send(&mut self, msg: Bytes) -> Result<Seq, LaneError> {
         self.do_buffer_send(msg)
     }
 
     fn recv(&mut self, mut packet: Bytes) -> Result<LaneRecv<'_>, LaneError> {
-        self.decode_ack(&mut packet)?;
+        //self.decode_ack(&mut packet)?;
         Ok(LaneRecv::ReliableOrdered(Recv { lane: self, packet }))
     }
 
-    fn send_buffered(&mut self) -> Result<LaneSend<'_>, LaneError> {
-        self.update()?;
-        Ok(LaneSend::ReliableOrdered(Send { lane: self }))
+    fn poll(&mut self) -> Result<(), LaneError> {
+        self.do_poll()
+    }
+
+    fn flush(&mut self) -> LaneFlush<'_> {
+        self.do_poll()?;
+        Ok(LaneFlush::ReliableOrdered(Flush { lane: self }))
     }
 }
 
@@ -221,6 +240,8 @@ impl<O: Ordering> Iterator for Recv<'_, O> {
     type Item = Result<Bytes, LaneError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        todo!();
+        /*
         while let Ok(len) = self.packet.get_varint() {
             let len = len as usize;
             let frag = match self.packet.slice(len).map_err(|_| LaneError::TooLong {
@@ -241,7 +262,7 @@ impl<O: Ordering> Iterator for Recv<'_, O> {
                 Err(err) => return Some(Err(err)),
             }
         }
-        None
+        None*/
     }
 }
 
@@ -268,12 +289,10 @@ impl<O: Ordering> Recv<'_, O> {
 }
 
 #[derive(Debug)]
-pub struct Send<'l, O> {
-    lane: &'l mut Reliable<O>,
-}
+pub struct Flush<'l> {}
 
-impl<O> Iterator for Send<'_, O> {
-    type Item = Bytes;
+impl Iterator for Flush<'_> {
+    type Item = LanePacket;
 
     fn next(&mut self) -> Option<Self::Item> {
         todo!()

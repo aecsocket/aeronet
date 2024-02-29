@@ -52,7 +52,7 @@ pub struct Negotiation {
 pub struct WrongProtocolVersion {
     /// This side's protocol version.
     pub ours: ProtocolVersion,
-    /// The other side's protocol version.
+    /// The other side's reported protocol version.
     pub theirs: ProtocolVersion,
 }
 
@@ -136,14 +136,13 @@ impl Negotiation {
     /// Validates a client-to-server negotiation request packet, to check if
     /// this server should accept the client that sent the packet.
     ///
-    /// This will error if the packet is not of length [`NEG_REQUEST_LEN`].
-    ///
     /// This returns a `(result, response)` pair.
     ///
     /// # Errors
     ///
     /// Errors if the packet contained incorrect data, and this connection
-    /// should not be accepted.
+    /// should not be accepted; or if the packet is not of length
+    /// [`Negotiation::REQUEST_LEN`].
     ///
     /// # Response
     ///
@@ -225,12 +224,11 @@ impl Negotiation {
 
     /// Reads and parses a negotiation response packet.
     ///
-    /// This will error if the packet is not of length [`NEG_RESPONSE_LEN`].
-    ///
     /// # Errors
     ///
     /// Errors if the response indicates that the connection is unsuccessful,
-    /// or if the response is malformed.
+    /// if the response is malformed, or if the packet is not of length
+    /// [`Negotiation::RESPONSE_SIZE`].
     pub fn recv_response(&self, packet: &[u8]) -> Result<(), NegotiationResponseError> {
         let packet = <&[u8; RESPONSE_LEN]>::try_from(packet)
             .map_err(|_| NegotiationResponseError::WrongLength { len: packet.len() })?;

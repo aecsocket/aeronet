@@ -1,15 +1,17 @@
-use std::{marker::PhantomData, time::Duration};
+//! Implementation of an unreliable packet sender and receiver.
+
+use std::{collections::BinaryHeap, marker::PhantomData, time::Duration};
 
 use aeronet::LaneConfig;
 use bytes::Bytes;
 use derivative::Derivative;
 use octets::Octets;
 
-use crate::{FragmentBytesData, FragmentHeader, Fragmentation, Seq};
+use crate::{Fragment, FragmentHeader, Fragmentation, Seq};
 
 use super::{
     ord::{Sequencing, SequencingKind},
-    LaneError, LaneRecv, LaneSend, LaneState, Sequenced, Unordered, VARINT_MAX_SIZE,
+    LaneError, LaneFlush, LanePacket, LaneRecv, LaneState, Sequenced, Unordered, VARINT_MAX_SIZE,
 };
 
 #[derive(Derivative)]
@@ -24,21 +26,15 @@ pub struct Unreliable<O> {
     // seq number of the last message identified (not fully received) - at least
     // 1 frag has been received for this message
     last_recv_seq: Seq,
-    send_buf: Vec<FragmentBytesData>,
+    // we need this to be sorted by fragment size, so that we flush packets
+    // efficiently
+    send_buf: BinaryHeap<Fragment>,
     #[derivative(Debug(bound = ""))]
     _phantom: PhantomData<O>,
 }
 
-#[derive(Debug)]
-pub struct BufferedFragment {
-    frag_header: FragmentHeader,
-    payload: Bytes,
-}
-
-const LEN_ENCODE_MAX_SIZE: usize = VARINT_MAX_SIZE;
-
 // allows encoding at least one fragment in a packet
-const MIN_PACKET_LEN: usize = LEN_ENCODE_MAX_SIZE + Seq::ENCODE_SIZE + FragmentHeader::ENCODE_SIZE;
+const MIN_PACKET_LEN: usize = VARINT_MAX_SIZE + Seq::ENCODE_SIZE + FragmentHeader::ENCODE_SIZE;
 
 impl<O: Sequencing> Unreliable<O> {
     #[must_use]
@@ -50,7 +46,7 @@ impl<O: Sequencing> Unreliable<O> {
             max_packet_len,
             next_send_seq: Seq(0),
             last_recv_seq: Seq(0),
-            send_buf: Vec::new(),
+            send_buf: BinaryHeap::new(),
             _phantom: PhantomData,
         }
     }
@@ -62,8 +58,15 @@ impl<O: Sequencing> Unreliable<O> {
         Ok(seq)
     }
 
-    fn update(&mut self) {
+    fn clean_up(&mut self) {
         self.frag.clean_up(self.drop_after);
+    }
+
+    fn do_flush(&mut self) -> LaneFlush<'_> {
+        LaneFlush::Unreliable(Flush {
+            max_packet_len: self.max_packet_len,
+            send_buf: &mut self.send_buf,
+        })
     }
 }
 
@@ -87,9 +90,13 @@ impl LaneState for Unreliable<Unordered> {
         }))
     }
 
-    fn send_buffered(&mut self) -> Result<LaneSend<'_>, LaneError> {
-        self.update();
-        todo!()
+    fn poll(&mut self) -> Result<(), LaneError> {
+        self.clean_up();
+        Ok(())
+    }
+
+    fn flush(&mut self) -> LaneFlush<'_> {
+        self.do_flush()
     }
 }
 
@@ -113,9 +120,42 @@ impl LaneState for Unreliable<Sequenced> {
         }))
     }
 
-    fn send_buffered(&mut self) -> Result<LaneSend<'_>, LaneError> {
-        self.update();
-        todo!()
+    fn poll(&mut self) -> Result<(), LaneError> {
+        self.clean_up();
+        Ok(())
+    }
+
+    fn flush(&mut self) -> LaneFlush<'_> {
+        self.do_flush()
+    }
+}
+
+#[derive(Debug)]
+pub struct Flush<'l> {
+    max_packet_len: usize,
+    send_buf: &'l mut BinaryHeap<Fragment>,
+}
+
+impl Iterator for Flush<'_> {
+    type Item = LanePacket;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut frags = Vec::new();
+        let mut available_len = self.max_packet_len;
+        loop {
+            let frag = self.send_buf.pop()?;
+            available_len = available_len.saturating_sub(frag.encode_len());
+            frags.push(frag);
+
+            match self.send_buf.peek() {
+                Some(frag) if frag.encode_len() <= available_len => continue,
+                Some(_) | None => break,
+            }
+        }
+        Some(LanePacket {
+            header: Box::new([]),
+            frags,
+        })
     }
 }
 
@@ -130,11 +170,13 @@ impl<O: Sequencing> Iterator for Recv<'_, O> {
     type Item = Result<Bytes, LaneError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        todo!();
+        /*
         let mut packet = Octets::with_slice(&self.packet);
         packet.skip(self.off).unwrap();
         let result = self.do_next(&mut packet);
         self.off = packet.off();
-        result
+        result*/
     }
 }
 
@@ -185,23 +227,5 @@ impl<O: Sequencing> Recv<'_, O> {
             .reassemble(seq, &header, payload)
             .map_err(LaneError::Reassemble)?;
         Ok(msg.map(Bytes::from))
-    }
-}
-
-#[derive(Debug)]
-pub struct Send<'l> {
-    max_packet_len: usize,
-    send_buf: std::iter::Peekable<std::vec::Drain<'l, BufferedFragment>>,
-}
-
-impl Iterator for Send<'_> {
-    type Item = Box<[u8]>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut available_bytes = self.max_packet_len;
-        while available_bytes > 0 {
-            let next_frag = self.send_buf.peek();
-        }
-        todo!()
     }
 }
