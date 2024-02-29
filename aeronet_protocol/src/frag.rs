@@ -6,8 +6,9 @@ use std::{
 
 use arbitrary::Arbitrary;
 use bitvec::{array::BitArray, bitarr};
+use bytes::Bytes;
 
-use crate::Seq;
+use crate::{bytes::ByteChunksExt, Seq};
 
 /// Handles splitting and reassembling a single large message into multiple
 /// smaller packets for sending over a network.
@@ -188,23 +189,64 @@ impl MessageBuffer {
 }
 
 #[derive(Debug)]
-pub struct FragmentData<'a> {
+pub struct FragmentSliceData<'a> {
     pub header: FragmentHeader,
     pub payload: &'a [u8],
+}
+
+#[derive(Debug)]
+pub struct FragmentBytesData {
+    pub header: FragmentHeader,
+    pub payload: Bytes,
 }
 
 impl Fragmentation {
     /// Splits a message up into individual fragmented packets and creates the
     /// appropriate headers for each packet.
     ///
+    /// This version accepts [`Bytes`] and creates cheap clones of the
+    /// underlying bytes object for each fragment.
+    ///
     /// # Errors
     ///
     /// Errors if the message was not a valid message which could be fragmented.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    pub fn fragment<'a>(
+    pub fn fragment_bytes(
+        &self,
+        msg: Bytes,
+    ) -> Result<impl Iterator<Item = FragmentBytesData> + '_, FragmentError> {
+        let msg_len = msg.len();
+        let chunks = msg.byte_chunks(self.payload_len);
+        let num_frags = NonZeroU8::new(u8::try_from(chunks.len()).map_err(|_| {
+            FragmentError::MessageTooBig {
+                len: msg_len,
+                max: usize::from(u8::MAX) * self.payload_len,
+            }
+        })?)
+        .ok_or(FragmentError::EmptyMessage)?;
+
+        Ok(chunks.enumerate().map(move |(frag_id, payload)| {
+            let frag_id = u8::try_from(frag_id)
+                .expect("`num_frags` is a u8, so `frag_id` should be convertible");
+            let header = FragmentHeader { num_frags, frag_id };
+            FragmentBytesData { header, payload }
+        }))
+    }
+
+    /// Splits a message up into individual fragmented packets and creates the
+    /// appropriate headers for each packet.
+    ///
+    /// This version accepts any byte slice and creates fragments whose lifetime
+    /// is tied to the original byte slice.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the message was not a valid message which could be fragmented.
+    #[allow(clippy::missing_panics_doc)] // shouldn't panic
+    pub fn fragment_slice<'a>(
         &self,
         msg: &'a [u8],
-    ) -> Result<impl Iterator<Item = FragmentData<'a>> + 'a, FragmentError> {
+    ) -> Result<impl Iterator<Item = FragmentSliceData<'a>> + 'a, FragmentError> {
         let chunks = msg.chunks(self.payload_len);
         let num_frags = NonZeroU8::new(u8::try_from(chunks.len()).map_err(|_| {
             FragmentError::MessageTooBig {
@@ -218,7 +260,7 @@ impl Fragmentation {
             let frag_id = u8::try_from(frag_id)
                 .expect("`num_frags` is a u8, so `frag_id` should be convertible");
             let header = FragmentHeader { num_frags, frag_id };
-            FragmentData { header, payload }
+            FragmentSliceData { header, payload }
         }))
     }
 
@@ -235,6 +277,10 @@ impl Fragmentation {
     /// capacity - if you want to convert this into e.g. a [`bytes::Bytes`],
     /// there may be a reallocation involved.
     ///
+    /// This function will internally copy the payload byte slice into its own
+    /// storage, so creating an alternate function taking [`Bytes`] will not
+    /// help performance or allocations.
+    ///
     /// # Errors
     ///
     /// Errors if the message could not be reassembled properly.
@@ -245,9 +291,9 @@ impl Fragmentation {
     pub fn reassemble(
         &mut self,
         seq: Seq,
-        packet: &FragmentData<'_>,
+        header: &FragmentHeader,
+        payload: &[u8],
     ) -> Result<Option<Vec<u8>>, ReassembleError> {
-        let FragmentData { header, payload } = packet;
         if header.num_frags.get() == 1 {
             // quick path to avoid writing this into the message buffer then
             // immediately reading it back out
@@ -380,43 +426,89 @@ mod tests {
     #[test]
     fn single_in_order() {
         let mut frag = frag();
-        let p1 = frag.fragment(MSG1).unwrap().next().unwrap();
-        let p2 = frag.fragment(MSG2).unwrap().next().unwrap();
-        let p3 = frag.fragment(MSG3).unwrap().next().unwrap();
-        assert_eq!(MSG1, frag.reassemble(Seq(0), &p1).unwrap().unwrap());
-        assert_eq!(MSG2, frag.reassemble(Seq(1), &p2).unwrap().unwrap());
-        assert_eq!(MSG3, frag.reassemble(Seq(2), &p3).unwrap().unwrap());
+        let p1 = frag.fragment_slice(MSG1).unwrap().next().unwrap();
+        let p2 = frag.fragment_slice(MSG2).unwrap().next().unwrap();
+        let p3 = frag.fragment_slice(MSG3).unwrap().next().unwrap();
+        assert_eq!(
+            MSG1,
+            frag.reassemble(Seq(0), &p1.header, &p1.payload)
+                .unwrap()
+                .unwrap()
+        );
+        assert_eq!(
+            MSG2,
+            frag.reassemble(Seq(1), &p2.header, &p2.payload)
+                .unwrap()
+                .unwrap()
+        );
+        assert_eq!(
+            MSG3,
+            frag.reassemble(Seq(2), &p3.header, &p3.payload)
+                .unwrap()
+                .unwrap()
+        );
     }
 
     #[test]
     fn single_out_of_order() {
         let mut frag = frag();
-        let p1 = frag.fragment(MSG1).unwrap().next().unwrap();
-        let p2 = frag.fragment(MSG2).unwrap().next().unwrap();
-        let p3 = frag.fragment(MSG3).unwrap().next().unwrap();
-        assert_eq!(MSG3, frag.reassemble(Seq(2), &p3).unwrap().unwrap());
-        assert_eq!(MSG1, frag.reassemble(Seq(0), &p1).unwrap().unwrap());
-        assert_eq!(MSG2, frag.reassemble(Seq(1), &p2).unwrap().unwrap());
+        let p1 = frag.fragment_slice(MSG1).unwrap().next().unwrap();
+        let p2 = frag.fragment_slice(MSG2).unwrap().next().unwrap();
+        let p3 = frag.fragment_slice(MSG3).unwrap().next().unwrap();
+        assert_eq!(
+            MSG3,
+            frag.reassemble(Seq(2), &p3.header, &p3.payload)
+                .unwrap()
+                .unwrap()
+        );
+        assert_eq!(
+            MSG1,
+            frag.reassemble(Seq(0), &p1.header, &p3.payload)
+                .unwrap()
+                .unwrap()
+        );
+        assert_eq!(
+            MSG2,
+            frag.reassemble(Seq(1), &p2.header, &p3.payload)
+                .unwrap()
+                .unwrap()
+        );
     }
 
     #[test]
     fn large1() {
         let mut frag = frag();
         let msg = b"x".repeat(PAYLOAD_SIZE + 1);
-        let packets = frag.fragment(&msg).unwrap().collect::<Vec<_>>();
-        assert_eq!(2, packets.len());
-        assert_matches!(frag.reassemble(Seq(0), &packets[0]), Ok(None));
-        assert_eq!(msg, frag.reassemble(Seq(0), &packets[1]).unwrap().unwrap());
+        let [p1, p2] = frag
+            .fragment_slice(&msg)
+            .unwrap()
+            .collect::<Vec<_>>()
+            .as_slice();
+        assert_matches!(frag.reassemble(Seq(0), &p1.header, &p2.payload), Ok(None));
+        assert_eq!(
+            msg,
+            frag.reassemble(Seq(0), &p2.header, &p2.payload)
+                .unwrap()
+                .unwrap()
+        );
     }
 
     #[test]
     fn large2() {
         let mut frag = frag();
         let msg = b"x".repeat(PAYLOAD_SIZE * 2 + 1);
-        let packets = frag.fragment(&msg).unwrap().collect::<Vec<_>>();
-        assert_eq!(3, packets.len());
-        assert_matches!(frag.reassemble(Seq(0), &packets[0]), Ok(None));
-        assert_matches!(frag.reassemble(Seq(0), &packets[1]), Ok(None));
-        assert_eq!(msg, frag.reassemble(Seq(0), &packets[2]).unwrap().unwrap());
+        let [p1, p2, p3] = frag
+            .fragment_slice(&msg)
+            .unwrap()
+            .collect::<Vec<_>>()
+            .as_slice();
+        assert_matches!(frag.reassemble(Seq(0), &p1.header, &p1.payload), Ok(None));
+        assert_matches!(frag.reassemble(Seq(0), &p2.header, &p2.payload), Ok(None));
+        assert_eq!(
+            msg,
+            frag.reassemble(Seq(0), &p3.header, &p3.payload)
+                .unwrap()
+                .unwrap()
+        );
     }
 }

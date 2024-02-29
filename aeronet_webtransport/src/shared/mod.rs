@@ -105,34 +105,37 @@ impl ConnectionFrontend {
         let seq = self
             .lanes
             .buffer_send(lane_index, msg_bytes)
-            .map_err(BackendError::LaneSend)?;
+            .map_err(BackendError::Lane)?;
         Ok(MessageKey { lane_index, seq })
     }
 
-    pub fn poll(&mut self) {
+    pub fn poll(&mut self) -> Result<(), BackendError> {
         while let Ok(Some(rtt)) = self.recv_rtt.try_next() {
             self.info.rtt = rtt;
         }
+        for packet in self.lanes.send_buffered().map_err(BackendError::Lane)? {
+            self.send_c2s
+                .unbounded_send(packet)
+                .map_err(|_| BackendError::Closed)?;
+        }
+        Ok(())
     }
 
     pub fn recv<S: TryAsBytes, R: TryFromBytes>(
         &mut self,
-    ) -> Result<Option<R>, WebTransportError<S, R>> {
-        while let Ok(Some(packet)) = self.recv_s2c.try_next() {
-            let (msgs, result) = self.lanes.recv(&packet);
-
-            if let Some(msg_bytes) = self
-                .lanes
-                .recv(&packet)
-                .map_err(|err| BackendError::LaneRecv(err))?
-            {
-                let msg = R::try_from_bytes(&msg_bytes).map_err(WebTransportError::FromBytes)?;
-                self.info.msg_bytes_recv += msg_bytes.len();
-                self.info.msgs_recv += 1;
-                return Ok(Some(msg));
-            }
+    ) -> impl Iterator<Item = Result<R, WebTransportError<S, R>>> + '_ {
+        Recv {
+            recv_s2c: &mut self.recv_s2c,
         }
-        Ok(None)
+        .flat_map(|packet| self.lanes.recv(&packet).map_err(BackendError::Lane))
+        .flatten()
+        .map(|msg_bytes| {
+            let msg_bytes = msg_bytes.map_err(BackendError::Lane)?;
+            let msg = R::try_from_bytes(&msg_bytes).map_err(WebTransportError::FromBytes)?;
+            self.info.msg_bytes_recv += msg_bytes.len();
+            self.info.msgs_recv += 1;
+            Ok(msg)
+        })
     }
 
     pub fn recv_err(&mut self) -> Result<(), BackendError> {
@@ -141,6 +144,22 @@ impl ConnectionFrontend {
             Ok(Some(err)) => Err(err),
             Err(_) => Err(BackendError::Closed),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct Recv<'c> {
+    recv_s2c: &'c mut mpsc::Receiver<Bytes>,
+}
+
+impl Iterator for Recv<'_> {
+    type Item = Bytes;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Ok(Some(packet)) = self.recv_s2c.try_next() {
+            return Some(packet);
+        }
+        None
     }
 }
 
@@ -167,9 +186,6 @@ impl ConnectionBackend {
             Ok(_) => {
                 #[cfg(target_family = "wasm")]
                 {
-                    let mut close_info = web_sys::WebTransportCloseInfo::new();
-                    close_info.close_code(10);
-                    conn.transport.close_with_close_info(&close_info);
                     // wait for the closing info to be sent
                     // otherwise the peer will just timeout instead of cleanly close
                     // TODO: this doesn't actually work. maybe because xwt manually calls close

@@ -297,7 +297,8 @@ where
             },
             Client::Connected { conn } => {
                 conn.poll();
-                while let Some(msg) = conn.recv()? {
+                for msg in conn.recv() {
+                    let msg = msg?;
                     events.push(ServerEvent::Recv { client_key, msg });
                 }
                 conn.recv_err()

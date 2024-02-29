@@ -2,8 +2,7 @@ use std::time::Duration;
 
 use aeronet::{ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
 use aeronet_protocol::{
-    lane::{LaneRecvError, LaneSendError},
-    NegotiationRequestError, NegotiationResponseError, WrongProtocolVersion,
+    lane::LaneError, NegotiationRequestError, NegotiationResponseError, WrongProtocolVersion,
 };
 use derivative::Derivative;
 
@@ -317,8 +316,6 @@ pub enum BackendError {
     #[error("failed to accept session")]
     AcceptSession(#[source] wtransport::error::ConnectionError),
 
-    #[error("sending on lane")]
-    LaneSend(#[source] LaneSendError),
-    #[error("receiving on lane")]
-    LaneRecv(#[source] LaneRecvError),
+    #[error("on lane")]
+    Lane(#[source] LaneError),
 }
