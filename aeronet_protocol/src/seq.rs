@@ -1,10 +1,8 @@
 use std::cmp::Ordering;
 
 use arbitrary::Arbitrary;
-use bytes::{BufMut, Bytes, BytesMut};
-use safer_bytes::SafeBuf;
 
-use crate::bytes::ReadError;
+use crate::bytes::prelude::*;
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///
@@ -103,13 +101,13 @@ mod tests {
 
     #[test]
     fn encode_decode() {
-        let seq = Seq(1234);
+        let v = Seq(1234);
         let mut buf = BytesMut::with_capacity(Seq::ENCODE_SIZE);
 
-        seq.encode(&mut buf);
+        v.encode(&mut buf);
         assert_eq!(Seq::ENCODE_SIZE, buf.len());
 
-        assert_eq!(seq, Seq::decode(&mut Bytes::from(buf.to_vec())).unwrap());
+        assert_eq!(v, Seq::decode(&mut Bytes::from(buf.to_vec())).unwrap());
     }
 
     #[test]

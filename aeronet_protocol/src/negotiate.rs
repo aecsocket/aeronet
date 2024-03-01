@@ -138,7 +138,7 @@ impl Negotiation {
     ///
     /// Errors if the packet contained incorrect data, and this connection
     /// should not be accepted; or if the packet is not of length
-    /// [`Negotiation::REQUEST_LEN`].
+    /// [`REQUEST_LEN`].
     ///
     /// # Response
     ///
@@ -214,7 +214,7 @@ impl Negotiation {
     ///
     /// Errors if the response indicates that the connection is unsuccessful,
     /// if the response is malformed, or if the packet is not of length
-    /// [`Negotiation::RESPONSE_SIZE`].
+    /// [`RESPONSE_SIZE`].
     pub fn recv_response(&self, packet: &[u8]) -> Result<(), ResponseError> {
         let packet = <&[u8; RESPONSE_LEN]>::try_from(packet)
             .map_err(|_| ResponseError::WrongLength { len: packet.len() })?;

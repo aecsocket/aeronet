@@ -1,10 +1,6 @@
-//! Utilities for [`Bytes`].
-
 use std::iter::FusedIterator;
 
 use bytes::Bytes;
-use bytes_varint::VarIntError;
-use safer_bytes::error::Truncated;
 
 /// Iterator over [`Bytes`] of non-overlapping chunks, with each chunk being of
 /// the same size.
@@ -59,10 +55,35 @@ impl ExactSizeIterator for ByteChunks {}
 
 impl FusedIterator for ByteChunks {}
 
-/// Extension trait on [`Bytes`] to allow using [`ByteChunks`].
+/// Extension trait on [`Bytes`] providing [`ByteChunksExt::byte_chunks`].
 pub trait ByteChunksExt {
     /// Converts this into an iterator over non-overlapping chunks of the
     /// original bytes.
+    ///
+    /// # Examples
+    ///
+    /// With `len` being a multiple of `chunk_size`:
+    ///
+    /// ```
+    /// # use bytes::Bytes;
+    /// # use aeronet_protocol::bytes::ByteChunksExt;
+    /// let mut chunks = Bytes::from_static(&[1, 2, 3, 4]).byte_chunks(2);
+    /// assert_eq!(&[1, 2], &*chunks.next().unwrap());
+    /// assert_eq!(&[3, 4], &*chunks.next().unwrap());
+    /// assert_eq!(None, chunks.next());
+    /// ```
+    ///
+    /// With a remainder:
+    ///
+    /// ```
+    /// # use bytes::Bytes;
+    /// # use aeronet_protocol::bytes::ByteChunksExt;
+    /// let mut chunks = Bytes::from_static(&[1, 2, 3, 4, 5]).byte_chunks(2);
+    /// assert_eq!(&[1, 2], &*chunks.next().unwrap());
+    /// assert_eq!(&[3, 4], &*chunks.next().unwrap());
+    /// assert_eq!(&[5], &*chunks.next().unwrap());
+    /// assert_eq!(None, chunks.next());
+    /// ```
     ///
     /// # Panics
     ///
@@ -77,25 +98,5 @@ impl ByteChunksExt for Bytes {
             v: self,
             chunk_size,
         }
-    }
-}
-
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum ReadError {
-    #[error("buffer too short")]
-    TooShort,
-    #[error("failed to read varint")]
-    ReadVarInt,
-}
-
-impl From<Truncated> for ReadError {
-    fn from(value: Truncated) -> Self {
-        Self::TooShort
-    }
-}
-
-impl From<VarIntError> for ReadError {
-    fn from(value: VarIntError) -> Self {
-        Self::ReadVarInt
     }
 }

@@ -1,6 +1,6 @@
 use arbitrary::Arbitrary;
 use bytes::{BufMut, Bytes, BytesMut};
-use safer_bytes::{error::Truncated, SafeBuf};
+use safer_bytes::SafeBuf;
 
 use crate::{bytes::ReadError, seq::Seq};
 

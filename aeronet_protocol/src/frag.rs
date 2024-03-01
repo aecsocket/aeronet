@@ -10,12 +10,12 @@ use std::{
 use ahash::AHashMap;
 use arbitrary::Arbitrary;
 use bitvec::{array::BitArray, bitarr};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use bytes_varint::{VarIntSupport, VarIntSupportMut};
-use safer_bytes::{error::Truncated, SafeBuf};
+use safer_bytes::SafeBuf;
 
 use crate::{
-    bytes::{ByteChunksExt, ReadError},
+    bytes::{ByteChunksExt, ReadError, TrySliceExt},
     seq::Seq,
 };
 
@@ -160,7 +160,7 @@ impl FragHeader {
     /// Errors if the buffer is shorter than [`ENCODE_SIZE`].
     ///
     /// [`ENCODE_SIZE`]: FragHeader::ENCODE_SIZE
-    pub fn decode(buf: &mut Bytes) -> Result<Self, Truncated> {
+    pub fn decode(buf: &mut Bytes) -> Result<Self, ReadError> {
         let msg_seq = Seq::decode(buf)?;
         let num_frags = buf.try_get_u8()?;
         let frag_id = buf.try_get_u8()?;
@@ -217,23 +217,21 @@ impl Fragment {
     pub fn encode(&self, buf: &mut BytesMut) {
         self.header.encode(buf);
         buf.put_u64_varint(self.payload.len() as u64);
-        buf.put(self.payload);
+        buf.put(&self.payload[..]);
     }
 
     pub fn decode(buf: &mut Bytes) -> Result<Self, ReadError> {
         let header = FragHeader::decode(buf)?;
         let payload_len = buf.get_u64_varint()? as usize;
-        Ok(Self {
-            header,
-            payload: buf.slice(payload_start..(payload_start + payload_len)),
-        })
+        let payload = buf.try_slice(..payload_len)?;
+        Ok(Self { header, payload })
     }
 }
 
-// ordered by encoded size
+// ordered by payload size
 impl Ord for Fragment {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.encode_len().cmp(&other.encode_len())
+        self.payload.len().cmp(&other.payload.len())
     }
 }
 
@@ -419,19 +417,20 @@ mod tests {
 
     #[test]
     fn encode_decode_header() {
-        let header = FragHeader {
+        let v = FragHeader {
             msg_seq: Seq(1),
             num_frags: 12,
             frag_id: 34,
         };
-        let mut buf = [0; FragHeader::ENCODE_SIZE];
+        let mut buf = BytesMut::with_capacity(FragHeader::ENCODE_SIZE);
 
-        let mut oct = octets::OctetsMut::with_slice(&mut buf);
-        header.encode(&mut oct).unwrap();
-        oct.peek_bytes(1).unwrap_err();
+        v.encode(&mut buf);
+        assert_eq!(FragHeader::ENCODE_SIZE, buf.len());
 
-        let mut oct = octets::Octets::with_slice(&buf);
-        assert_eq!(header, FragHeader::decode(&mut oct).unwrap());
+        assert_eq!(
+            v,
+            FragHeader::decode(&mut Bytes::from(buf.to_vec())).unwrap()
+        );
     }
 
     const PAYLOAD_SIZE: usize = 1024;
