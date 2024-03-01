@@ -137,10 +137,11 @@ dependencies = [
  "assert_matches",
  "bitvec",
  "bytes",
+ "bytes-varint",
  "const_format",
  "derivative",
  "enum_dispatch",
- "octets",
+ "safer-bytes",
  "static_assertions",
  "thiserror",
  "tracing",
@@ -1449,6 +1450,15 @@ name = "bytes"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
+
+[[package]]
+name = "bytes-varint"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54c1820c7c366b9d26c47143e1604454105a59969aade54e4f695d96acc8332f"
+dependencies = [
+ "bytes",
+]
 
 [[package]]
 name = "calloop"
@@ -3874,6 +3884,17 @@ name = "ryu"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e86697c916019a8588c99b5fac3cead74ec0b4b819707a682fd4d23fa0ce1ba1"
+
+[[package]]
+name = "safer-bytes"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9814c78d534f27a438fcb57091d6deed0634b60e4e500fee28fe5990adf5ea54"
+dependencies = [
+ "bytes",
+ "paste",
+ "thiserror",
+]
 
 [[package]]
 name = "same-file"

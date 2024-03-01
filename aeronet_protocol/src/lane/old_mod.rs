@@ -46,7 +46,6 @@
 //!   bytes, depending on the value. Smaller values are encoded more
 //!   efficiently.
 //! * [`Seq`](crate::Seq)
-//! * [`FragmentHeader`](crate::frag::FragmentHeader)
 //!
 //! ```ignore
 //! struct Packet {
@@ -80,10 +79,110 @@
 //! }
 //! ```
 
-#[derive(Debug)]
-pub struct Lanes {
-    lanes: Box<[Lane]>,
+mod lanes;
+mod packet;
+
+pub mod frag;
+pub mod order;
+pub mod reliable;
+pub mod unreliable;
+
+pub use {lanes::*, order::*, packet::LanePacket, reliable::Reliable, unreliable::Unreliable};
+
+use bytes::Bytes;
+use enum_dispatch::enum_dispatch;
+
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum LaneError {
+    #[error("failed to receive a message in time")]
+    RecvTimeout,
+    #[error("failed to send a message in time")]
+    SendTimeout,
+
+    #[error("failed to fragment message")]
+    Fragment(#[source] frag::FragmentError),
+
+    #[error("input too short to contain lane index")]
+    NoLaneIndex,
+    #[error("invalid lane index {lane_index}")]
+    InvalidLane { lane_index: usize },
+    #[error("fragment reported {len} bytes, but buffer only had {cap} more")]
+    TooLong { len: usize, cap: usize },
+    #[error("input too short to contain sequence number")]
+    NoSeq,
+    #[error("input too short to contain ack header data")]
+    NoAckHeader,
+    #[error("input too short to contain frag header data")]
+    NoFragHeader,
+    #[error("frag header is invalid")]
+    InvalidFragHeader,
+    #[error("failed to reassemble payload")]
+    Reassemble(#[source] frag::ReassembleError),
 }
 
 #[derive(Debug)]
-enum Lane {}
+pub enum LaneFlush<'l> {
+    Unreliable(unreliable::Flush<'l>),
+    Reliable(reliable::Flush<'l>),
+}
+
+impl Iterator for LaneFlush<'_> {
+    type Item = LanePacket;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Unreliable(iter) => iter.next(),
+            Self::Reliable(iter) => iter.next(),
+        }
+    }
+}
+
+pub enum LaneRecv<'l> {
+    UnreliableUnordered(unreliable::Recv<'l, Unordered>),
+    UnreliableSequenced(unreliable::Recv<'l, Sequenced>),
+    ReliableUnordered(reliable::Recv<'l, Unordered>),
+    ReliableSequenced(reliable::Recv<'l, Sequenced>),
+    ReliableOrdered(reliable::Recv<'l, Ordered>),
+}
+
+impl Iterator for LaneRecv<'_> {
+    type Item = Result<Bytes, LaneError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::UnreliableUnordered(iter) => iter.next(),
+            Self::UnreliableSequenced(iter) => iter.next(),
+            Self::ReliableUnordered(iter) => iter.next(),
+            Self::ReliableSequenced(iter) => iter.next(),
+            Self::ReliableOrdered(iter) => iter.next(),
+        }
+    }
+}
+
+// impl
+
+const VARINT_MAX_SIZE: usize = 10;
+
+// impl details: I considered adding a `message_state` here to get the current
+// state of a message by its Seq, but imo this is too unreliable and we can't
+// provide strong enough guarantees to get the *current* state of a message
+#[enum_dispatch]
+trait LaneState {
+    fn buffer_send(&mut self, msg: Bytes) -> Result<Seq, LaneError>;
+
+    fn recv(&mut self, packet: Bytes) -> Result<LaneRecv<'_>, LaneError>;
+
+    fn poll(&mut self) -> Result<(), LaneError>;
+
+    fn flush(&mut self) -> LaneFlush<'_>;
+}
+
+#[derive(Debug)]
+#[enum_dispatch(LaneState)]
+enum Lane {
+    UnreliableUnordered(Unreliable<Unordered>),
+    UnreliableSequenced(Unreliable<Sequenced>),
+    ReliableUnordered(Reliable<Unordered>),
+    ReliableSequenced(Reliable<Sequenced>),
+    ReliableOrdered(Reliable<Ordered>),
+}

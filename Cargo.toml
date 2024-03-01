@@ -38,9 +38,7 @@ derivative = "2.2.0"
 thiserror = "1.0.56"
 either = "1.9.0"
 slotmap = "1.0.7"
-bytes = "1.5.0"
 bitvec = "1.0.1"
-octets = "0.3.0"
 ahash = { version = "0.8.10", default-features = false, features = ["std"] }
 anyhow = "1.0.79"
 rand = "0.8.5"
@@ -54,6 +52,10 @@ cfg-if = "1.0.0"
 
 bitcode = "0.5.1"
 serde = { version = "1.0.197", features = ["derive"] }
+
+bytes = "1.5.0"
+safer-bytes = "0.2.0"
+bytes-varint = "1.0.3"
 
 proc-macro2 = "1.0.76"
 syn = "2.0.48"

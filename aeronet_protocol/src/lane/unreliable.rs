@@ -10,7 +10,7 @@ use octets::Octets;
 use crate::{Fragment, FragmentHeader, Fragmentation, Seq};
 
 use super::{
-    ord::{Sequencing, SequencingKind},
+    order::{Sequencing, SequencingKind},
     LaneError, LaneFlush, LanePacket, LaneRecv, LaneState, Sequenced, Unordered, VARINT_MAX_SIZE,
 };
 

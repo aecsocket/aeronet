@@ -3,6 +3,8 @@
 use std::iter::FusedIterator;
 
 use bytes::Bytes;
+use bytes_varint::VarIntError;
+use safer_bytes::error::Truncated;
 
 /// Iterator over [`Bytes`] of non-overlapping chunks, with each chunk being of
 /// the same size.
@@ -75,5 +77,25 @@ impl ByteChunksExt for Bytes {
             v: self,
             chunk_size,
         }
+    }
+}
+
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ReadError {
+    #[error("buffer too short")]
+    TooShort,
+    #[error("failed to read varint")]
+    ReadVarInt,
+}
+
+impl From<Truncated> for ReadError {
+    fn from(value: Truncated) -> Self {
+        Self::TooShort
+    }
+}
+
+impl From<VarIntError> for ReadError {
+    fn from(value: VarIntError) -> Self {
+        Self::ReadVarInt
     }
 }

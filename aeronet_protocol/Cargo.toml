@@ -22,13 +22,15 @@ tracing.workspace = true
 derivative.workspace = true
 thiserror.workspace = true
 ahash.workspace = true
-bytes.workspace = true
 bitvec.workspace = true
-octets.workspace = true
 arbitrary.workspace = true
 enum_dispatch.workspace = true
 const_format.workspace = true
 static_assertions.workspace = true
+
+bytes.workspace = true
+safer-bytes.workspace = true
+bytes-varint.workspace = true
 
 [dev-dependencies]
 assert_matches.workspace = true

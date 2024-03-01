@@ -1,6 +1,10 @@
 use std::cmp::Ordering;
 
 use arbitrary::Arbitrary;
+use bytes::{BufMut, Bytes, BytesMut};
+use safer_bytes::SafeBuf;
+
+use crate::bytes::ReadError;
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///
@@ -18,26 +22,31 @@ use arbitrary::Arbitrary;
 pub struct Seq(pub u16);
 
 impl Seq {
-    /// [Encoded](Seq::encode) size of this value in bytes.
+    /// [Encoded] size of this value in bytes.
+    ///
+    /// [Encoded]: Seq::encode
     pub const ENCODE_SIZE: usize = std::mem::size_of::<u16>();
 
     /// Encodes this value into a byte buffer.
     ///
-    /// # Errors
+    /// The buffer should have at least [`ENCODE_SIZE`] bytes of capacity, to
+    /// not have to allocate more space.
     ///
-    /// Errors if the buffer is too short to encode this.
-    pub fn encode(&self, buf: &mut octets::OctetsMut<'_>) -> octets::Result<()> {
-        buf.put_u16(self.0)?;
-        Ok(())
+    /// [`ENCODE_SIZE`]: Seq::ENCODE_SIZE
+    pub fn encode(&self, buf: &mut BytesMut) {
+        buf.put_u16(self.0);
     }
 
     /// Decodes this value from a byte buffer.
     ///
     /// # Errors
     ///
-    /// Errors if the buffer is too short to decode this.
-    pub fn decode(buf: &mut octets::Octets<'_>) -> octets::Result<Self> {
-        buf.get_u16().map(Self)
+    /// Errors if the buffer is shorter than [`ENCODE_SIZE`].
+    ///
+    /// [`ENCODE_SIZE`]: Seq::ENCODE_SIZE
+    pub fn decode(buf: &mut Bytes) -> Result<Self, ReadError> {
+        let seq = buf.try_get_u16()?;
+        Ok(Self(seq))
     }
 
     /// Returns the current sequence value and increments `self`.
@@ -95,14 +104,12 @@ mod tests {
     #[test]
     fn encode_decode() {
         let seq = Seq(1234);
-        let mut buf = [0; Seq::ENCODE_SIZE];
+        let mut buf = BytesMut::with_capacity(Seq::ENCODE_SIZE);
 
-        let mut oct = octets::OctetsMut::with_slice(&mut buf);
-        seq.encode(&mut oct).unwrap();
-        oct.peek_bytes(1).unwrap_err();
+        seq.encode(&mut buf);
+        assert_eq!(Seq::ENCODE_SIZE, buf.len());
 
-        let mut oct = octets::Octets::with_slice(&buf);
-        assert_eq!(seq, Seq::decode(&mut oct).unwrap());
+        assert_eq!(seq, Seq::decode(&mut Bytes::from(buf.to_vec())).unwrap());
     }
 
     #[test]

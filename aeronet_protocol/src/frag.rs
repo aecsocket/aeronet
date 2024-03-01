@@ -1,3 +1,6 @@
+//! Handles fragmenting and reassembling messages so they can be sent over a
+//! connection with an MTU smaller than the message size.
+
 use std::{
     cmp::Ordering,
     num::NonZeroU8,
@@ -7,10 +10,14 @@ use std::{
 use ahash::AHashMap;
 use arbitrary::Arbitrary;
 use bitvec::{array::BitArray, bitarr};
-use bytes::Bytes;
-use octets::{Octets, OctetsMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes_varint::{VarIntSupport, VarIntSupportMut};
+use safer_bytes::{error::Truncated, SafeBuf};
 
-use crate::{bytes::ByteChunksExt, seq::Seq};
+use crate::{
+    bytes::{ByteChunksExt, ReadError},
+    seq::Seq,
+};
 
 /// Handles splitting and reassembling a single large message into multiple
 /// smaller packets for sending over a network.
@@ -30,6 +37,10 @@ use crate::{bytes::ByteChunksExt, seq::Seq};
 /// see [`Fragmentation::clean_up`].
 ///
 /// [*Gaffer On Games*]: https://gafferongames.com/post/packet_fragmentation_and_reassembly/#data-structure-on-receiver-side
+///
+/// # Encoded layout
+///
+/// See [`FragmentHeader`].
 #[derive(Debug)]
 pub struct Fragmentation {
     payload_len: usize,
@@ -113,12 +124,8 @@ pub enum ReassembleError {
 
 /// Metadata for a packet produced by [`Fragmentation::fragment`] and read by
 /// [`Fragmentation::reassemble`].
-///
-/// # Encoded layout
-///
-/// See [`lane`](crate::lane).
 #[derive(Debug, Clone, PartialEq, Eq, Arbitrary)]
-pub struct FragmentHeader {
+pub struct FragHeader {
     /// Sequence number of the message that this fragment is a part of.
     pub msg_seq: Seq,
     /// How many fragments this packet's message is split up into.
@@ -127,32 +134,36 @@ pub struct FragmentHeader {
     pub frag_id: u8,
 }
 
-impl FragmentHeader {
-    /// [Encoded](FragmentHeader::encode) size of this value in bytes.
+impl FragHeader {
+    /// [Encoded] size of this value in bytes.
+    ///
+    /// [Encoded]: FragHeader::encode
     pub const ENCODE_SIZE: usize =
         Seq::ENCODE_SIZE + std::mem::size_of::<u8>() + std::mem::size_of::<u8>();
 
     /// Encodes this value into a byte buffer.
     ///
-    /// # Errors
+    /// The buffer should have at least [`ENCODE_SIZE`] bytes of capacity, to
+    /// not have to allocate more space.
     ///
-    /// Errors if the buffer is too short to encode this.
-    pub fn encode(&self, buf: &mut octets::OctetsMut<'_>) -> octets::Result<()> {
-        self.msg_seq.encode(buf)?;
-        buf.put_u8(self.num_frags)?;
-        buf.put_u8(self.frag_id)?;
-        Ok(())
+    /// [`ENCODE_SIZE`]: FragHeader::ENCODE_SIZE
+    pub fn encode(&self, buf: &mut BytesMut) {
+        self.msg_seq.encode(buf);
+        buf.put_u8(self.num_frags);
+        buf.put_u8(self.frag_id);
     }
 
     /// Decodes this value from a byte buffer.
     ///
     /// # Errors
     ///
-    /// Errors if the buffer is too short to decode this.
-    pub fn decode(buf: &mut octets::Octets<'_>) -> octets::Result<Self> {
+    /// Errors if the buffer is shorter than [`ENCODE_SIZE`].
+    ///
+    /// [`ENCODE_SIZE`]: FragHeader::ENCODE_SIZE
+    pub fn decode(buf: &mut Bytes) -> Result<Self, Truncated> {
         let msg_seq = Seq::decode(buf)?;
-        let num_frags = buf.get_u8()?;
-        let frag_id = buf.get_u8()?;
+        let num_frags = buf.try_get_u8()?;
+        let frag_id = buf.try_get_u8()?;
         Ok(Self {
             msg_seq,
             num_frags,
@@ -171,7 +182,7 @@ struct MessageBuffer {
 }
 
 impl MessageBuffer {
-    fn new(payload_len: usize, header: &FragmentHeader, num_frags: NonZeroU8) -> Self {
+    fn new(payload_len: usize, header: &FragHeader, num_frags: NonZeroU8) -> Self {
         Self {
             // use a NonZeroU8 because:
             // * having `num_frags = 0` is genuinely an invalid case
@@ -198,31 +209,20 @@ impl MessageBuffer {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fragment {
-    pub header: FragmentHeader,
+    pub header: FragHeader,
     pub payload: Bytes,
 }
 
 impl Fragment {
-    pub fn encode_len(&self) -> usize {
-        let payload_len = self.payload.len();
-        octets::varint_len(payload_len as u64) + payload_len
+    pub fn encode(&self, buf: &mut BytesMut) {
+        self.header.encode(buf);
+        buf.put_u64_varint(self.payload.len() as u64);
+        buf.put(self.payload);
     }
 
-    pub fn encode(&self, buf: &mut OctetsMut<'_>) -> octets::Result<()> {
-        self.header.encode(buf)?;
-        buf.put_varint(self.payload.len() as u64)?;
-        buf.put_bytes(&self.payload)?;
-        Ok(())
-    }
-
-    pub fn decode(buf: Bytes) -> octets::Result<Self> {
-        let mut octs = Octets::with_slice(&buf);
-        let header = FragmentHeader::decode(&mut octs)?;
-        let payload_len = octs.get_varint()? as usize;
-        let payload_start = octs.off();
-        // ignore ok - we just want to make sure it's not an error,
-        // otherwise `payload_len` is too big
-        octs.slice(payload_len)?;
+    pub fn decode(buf: &mut Bytes) -> Result<Self, ReadError> {
+        let header = FragHeader::decode(buf)?;
+        let payload_len = buf.get_u64_varint()? as usize;
         Ok(Self {
             header,
             payload: buf.slice(payload_start..(payload_start + payload_len)),
@@ -271,7 +271,7 @@ impl Fragmentation {
         Ok(chunks.enumerate().map(move |(frag_id, payload)| {
             let frag_id = u8::try_from(frag_id)
                 .expect("`num_frags` is a u8, so `frag_id` should be convertible");
-            let header = FragmentHeader {
+            let header = FragHeader {
                 msg_seq,
                 num_frags,
                 frag_id,
@@ -306,7 +306,7 @@ impl Fragmentation {
     /// condition for a connection.
     pub fn reassemble(
         &mut self,
-        header: &FragmentHeader,
+        header: &FragHeader,
         payload: &[u8],
     ) -> Result<Option<Vec<u8>>, ReassembleError> {
         let num_frags = match NonZeroU8::new(header.num_frags) {
@@ -419,19 +419,19 @@ mod tests {
 
     #[test]
     fn encode_decode_header() {
-        let header = FragmentHeader {
+        let header = FragHeader {
             msg_seq: Seq(1),
             num_frags: 12,
             frag_id: 34,
         };
-        let mut buf = [0; FragmentHeader::ENCODE_SIZE];
+        let mut buf = [0; FragHeader::ENCODE_SIZE];
 
         let mut oct = octets::OctetsMut::with_slice(&mut buf);
         header.encode(&mut oct).unwrap();
         oct.peek_bytes(1).unwrap_err();
 
         let mut oct = octets::Octets::with_slice(&buf);
-        assert_eq!(header, FragmentHeader::decode(&mut oct).unwrap());
+        assert_eq!(header, FragHeader::decode(&mut oct).unwrap());
     }
 
     const PAYLOAD_SIZE: usize = 1024;

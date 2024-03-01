@@ -20,7 +20,7 @@ use octets::Octets;
 use crate::{FragmentHeader, Fragmentation, Seq};
 
 use super::{
-    ord::{Ordered, Ordering, OrderingKind, Unordered},
+    order::{Ordered, Ordering, OrderingKind, Unordered},
     LaneError, LaneFlush, LanePacket, LaneRecv, LaneState, Sequenced, VARINT_MAX_SIZE,
 };
 
