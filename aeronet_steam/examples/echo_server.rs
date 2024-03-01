@@ -6,7 +6,7 @@ use aeronet::{
         FromClient, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
         ServerClosed, ServerOpened, ServerTransport, ServerTransportPlugin,
     },
-    LaneKeyOld, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
+    LaneKey, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use aeronet_steam::{ListenTarget, SteamServerTransportConfig, MTU};
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};

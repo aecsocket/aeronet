@@ -16,10 +16,9 @@ protocol. That is, they just take in and spit out bytes.
   represented in its byte form ([`TryAsBytes`] / [`TryFromBytes`]).
 * *packet* - the smallest unit of transmission used by the protocol, which
   holds a packet header and a payload.
-* *packet header* - prefix to a packet which holds metadata about what it's
-  carrying
 * *payload* - either a part of, or the entirety of, the message that this
   packet wants to transport
+* *fragment* - container for either a part of, or the entire, message payload
 
 [`ClientTransport`]: aeronet::client::ClientTransport
 [`ServerTransport`]: aeronet::server::ServerTransport

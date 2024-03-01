@@ -33,7 +33,7 @@ use aeronet::{
         FromClient, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
         ServerClosed, ServerOpened, ServerTransport, ServerTransportPlugin,
     },
-    LaneKeyOld, Message, OnLane, ProtocolVersion, TokioRuntime, TransportProtocol, TryAsBytes,
+    LaneKey, Message, OnLane, ProtocolVersion, TokioRuntime, TransportProtocol, TryAsBytes,
     TryFromBytes,
 };
 use aeronet_webtransport::{WebTransportServer, WebTransportServerConfig, MTU};

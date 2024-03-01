@@ -1,3 +1,9 @@
+//! Defines ordering strategies for incoming messages.
+//!
+//! These map directly to [`LaneKind`] guarantees.
+//!
+//! [`LaneKind`]: aeronet::lane::LaneKind
+
 #[derive(Debug)]
 pub struct Unordered;
 

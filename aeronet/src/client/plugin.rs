@@ -6,7 +6,7 @@ use derivative::Derivative;
 
 use crate::{
     client::{ClientEvent, ClientTransport},
-    TransportProtocol,
+    protocol::TransportProtocol,
 };
 
 /// Forwards messages and events between the [`App`] and a [`ClientTransport`].
@@ -40,6 +40,10 @@ where
 /// * [`FromServer`]
 /// * [`AckFromServer`]
 ///
+/// This plugin provides the run conditions:
+/// * [`client_connected`]
+/// * [`client_disconnected`]
+///
 /// These events can be read by your app to respond to incoming events. To send
 /// out messages, or to connect the transport to a remote endpoint, etc., you
 /// will need to inject the transport as a resource into your system.
@@ -66,6 +70,44 @@ pub enum ClientTransportSet {
     /// Handles receiving data from the transport and updating its internal
     /// state.
     Poll,
+}
+
+/// Generates a [`Condition`]-satisfying closure that returns `true` if the
+/// client `T` exists *and* is in the [`Connected`] state.
+///
+/// [`Condition`]: bevy_ecs::schedule::Condition
+/// [`Connected`]: crate::client::ClientState::Connected
+pub fn client_connected<P, T>() -> impl FnMut(Option<T>) -> bool + Clone
+where
+    P: TransportProtocol,
+    T: ClientTransport<P> + Resource,
+{
+    |client| {
+        if let Some(client) = client {
+            client.state().is_connected()
+        } else {
+            false
+        }
+    }
+}
+
+/// Generates a [`Condition`]-satisfying closure that returns `true` if the
+/// client `T` either does not exist *or* is in the [Disconnected] state.
+///
+/// [`Condition`]: bevy_ecs::schedule::Condition
+/// [Disconnected]: crate::client::ClientState::Disconnected
+pub fn client_disconnected<P, T>() -> impl FnMut(Option<T>) -> bool + Clone
+where
+    P: TransportProtocol,
+    T: ClientTransport<P> + Resource,
+{
+    |client| {
+        if let Some(client) = client {
+            client.state().is_disconnected()
+        } else {
+            true
+        }
+    }
 }
 
 /// The client has fully established a connection to the server.

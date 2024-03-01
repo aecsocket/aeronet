@@ -8,6 +8,6 @@ pub(super) fn derive(input: &DeriveInput) -> TokenStream {
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
     quote! {
-        impl #impl_generics ::aeronet::Message for #name #type_generics #where_clause {}
+        impl #impl_generics ::aeronet::message::Message for #name #type_generics #where_clause {}
     }
 }

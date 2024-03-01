@@ -1,3 +1,5 @@
+pub use aeronet_derive::{LaneKey, OnLane};
+
 mod config;
 
 pub use config::*;
@@ -155,7 +157,7 @@ impl LaneKind {
 /// Note that this only affects what lane an *outgoing* message is *sent out*
 /// on - it has no effect on incoming messages.
 ///
-/// [`Message`]: crate::Message
+/// [`Message`]: crate::message::Message
 pub trait OnLane {
     /// User-defined type of lane, output by [`OnLane::lane`].
     type Lane: LaneIndex;

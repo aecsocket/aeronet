@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::Message;
+use crate::message::Message;
 
 /// Defines what types of messages are transported between the client and the
 /// server.
@@ -9,13 +9,13 @@ use crate::Message;
 /// this trait. Different transports may put their own bounds on the type of
 /// `P` if they need more information on how you use the transport. For example,
 /// if messages in the transport are sent over a network, the transport may
-/// require `P::C2S` or `P::S2C` implement [`TryAsBytes`].
+/// require `P::C2S` or `P::S2C` implement [`TryIntoBytes`].
 ///
 /// To create a protocol, define a unit struct and implement the desired types
 /// on it:
 ///
 /// ```
-/// use aeronet::{Message, TransportProtocol};
+/// use aeronet::{message::Message, protocol::TransportProtocol};
 ///
 /// #[derive(Debug, Message)]
 /// struct MyMessage {/* ... */}
@@ -35,7 +35,7 @@ use crate::Message;
 ///
 /// [`ClientTransport`]: crate::client::ClientTransport
 /// [`ServerTransport`]: crate::server::ServerTransport
-/// [`TryAsBytes`]: crate::TryAsBytes
+/// [`TryIntoBytes`]: crate::message::TryIntoBytes
 pub trait TransportProtocol: Send + Sync + 'static {
     /// Type of message sent from the client to the server.
     type C2S: Message;

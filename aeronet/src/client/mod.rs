@@ -12,7 +12,7 @@ use std::{error::Error, fmt::Debug};
 
 use derivative::Derivative;
 
-use crate::{MessageState, TransportProtocol};
+use crate::protocol::TransportProtocol;
 
 /// Allows connecting to a server and transporting data between this client and
 /// the server.
@@ -39,19 +39,10 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// Gets the current state of this client.
     ///
     /// This can be used to access statistics on the connection, such as number
-    /// of bytes sent or [round-trip time](crate::Rtt), if the transport exposes
-    /// it.
+    /// of bytes sent or [round-trip time], if the transport exposes it.
+    ///
+    /// [round-trip time]: crate::stats::Rtt
     fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
-
-    /// Gets the current state of a message sent via [`ClientTransport::send`].
-    ///
-    /// If the transport does not support this, or the message key does not
-    /// represent a valid sent message, this returns [`None`].
-    ///
-    /// Even if a transport does not support getting the *current* message
-    /// state, it may still send out [`ClientEvent::Ack`] when the peer
-    /// acknowledges one of our sent messages.
-    fn message_state(&self, msg_key: Self::MessageKey) -> Option<MessageState>;
 
     /// Attempts to send a message to the currently connected server.
     ///

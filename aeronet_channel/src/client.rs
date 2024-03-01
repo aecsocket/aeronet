@@ -1,4 +1,4 @@
-use aeronet::{client::ClientTransport, MessageState, TransportProtocol};
+use aeronet::{client::ClientTransport, protocol::TransportProtocol};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 
@@ -140,10 +140,6 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
             Self::Disconnected => ClientState::Disconnected,
             Self::Connected(client) => ClientState::Connected(client.info()),
         }
-    }
-
-    fn message_state(&self, _: Self::MessageKey) -> Option<MessageState> {
-        None
     }
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error> {

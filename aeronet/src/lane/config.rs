@@ -1,6 +1,6 @@
 use std::{fmt::Debug, time::Duration};
 
-use crate::LaneKind;
+use super::LaneKind;
 
 /// Stores configuration options for a lane behaves.
 ///
@@ -15,14 +15,14 @@ pub struct LaneConfig {
     /// this duration of time, it will be automatically dropped, and the message
     /// will be considered lost.
     ///
-    /// [unreliable](LaneKind::is_reliable)
+    /// [unreliable]: LaneKind::is_reliable
     pub drop_after: Duration,
     /// For [reliable] lanes: how long to wait until resending a fragment which
     /// was not acknowledged by the peer.
     ///
     /// The initial send is always instant.
     ///
-    /// [reliable](LaneKind::is_reliable)
+    /// [reliable]: LaneKind::is_reliable
     pub resend_after: Duration,
     /// For [reliable] lanes: if:
     /// * any incoming message does not receive all its fragments, or
@@ -32,7 +32,7 @@ pub struct LaneConfig {
     /// after the given duration, the lane is considered timed out, and the
     /// connection must be closed.
     ///
-    /// [reliable](LaneKind::is_reliable)
+    /// [reliable]: LaneKind::is_reliable
     pub ack_timeout: Duration,
 }
 

@@ -45,55 +45,52 @@
 //! * [`Varint`](octets::varint_len) - a `u64` encoded using between 1 and 10
 //!   bytes, depending on the value. Smaller values are encoded more
 //!   efficiently.
-//! * [`AcknowledgeHeader`](crate::AcknowledgeHeader)
-//! * [`FragmentHeader`](crate::FragmentHeader)
 //! * [`Seq`](crate::Seq)
 //!
 //! ```ignore
 //! struct Packet {
-//!     /// Which lane this packet is sent on, and meant to be received on.
-//!     lane_index: Varint,
-//!     /// Lane-specific payload. How this is deserialized depends on the
-//!     /// `lane_index`.
-//!     payload: Either<UnreliablePayload, ReliablePayload>,
-//! }
-//!
-//! struct UnreliablePayload {
-//!     /// All fragments carried by this packet.
-//!     frags: [Fragment],
-//! }
-//!
-//! struct ReliablePayload {
-//!     /// Acknowledge response data marking which fragments the sender of
-//!     /// *this* packet has received.
-//!     ack_header: AcknowledgeHeader,
-//!     /// All fragments carried by this packet.
+//!     /// Sequence number of this packet.
+//!     packet_seq: Seq,
+//!     /// Acknowledgement response data informing the receiver of this packet
+//!     /// which packets this sender has received.
+//!     ack_header: AckHeader,
+//!     /// Variable-length array of fragments that this packet contains.
 //!     frags: [Fragment],
 //! }
 //!
 //! struct Fragment {
-//!    /// Metadata on what fragment this actually represents.
-//!    frag_header: FragmentHeader
-//!    /// Length of the upcoming payload.
-//!    payload_len: Varint,
-//!    /// User-defined message payload.
-//!    payload: [u8],
+//!     /// Which lane this fragment's message should be received on.
+//!     lane_id: Varint,
+//!     /// Metadata about this fragment.
+//!     frag_header: FragHeader,
+//!     /// Length of the upcoming payload.
+//!     payload_len: Varint,
+//!     /// User-defined message payload.
+//!     payload: [u8],
+//! }
+//!
+//! struct FragHeader {
+//!     /// Sequence number of the message that this fragment belongs to.
+//!     msg_seq: Seq,
+//!     /// Number of fragments that this message was originally split up into.
+//!     num_frags: u8,
+//!     /// Index of this fragment.
+//!     frag_id: u8,
 //! }
 //! ```
 
 mod lanes;
-mod ord;
 mod packet;
 
+pub mod frag;
+pub mod order;
 pub mod reliable;
 pub mod unreliable;
 
-pub use {lanes::*, ord::*, packet::LanePacket, reliable::Reliable, unreliable::Unreliable};
+pub use {lanes::*, order::*, packet::LanePacket, reliable::Reliable, unreliable::Unreliable};
 
 use bytes::Bytes;
 use enum_dispatch::enum_dispatch;
-
-use crate::{FragmentError, ReassembleError, Seq};
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum LaneError {

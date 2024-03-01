@@ -1,11 +1,11 @@
-use std::cmp;
+use std::cmp::Ordering;
 
 use arbitrary::Arbitrary;
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///
-/// Note that the sequence number may identify anything - not necessarily a
-/// message.
+/// Note that the sequence number may identify either a message or a packet
+/// sequence number.
 ///
 /// The number is stored internally as a [`u16`], which means it will wrap
 /// around fairly quickly as many messages can be sent per second. Users of a
@@ -19,7 +19,7 @@ pub struct Seq(pub u16);
 
 impl Seq {
     /// [Encoded](Seq::encode) size of this value in bytes.
-    pub const ENCODE_SIZE: usize = 2;
+    pub const ENCODE_SIZE: usize = std::mem::size_of::<u16>();
 
     /// Encodes this value into a byte buffer.
     ///
@@ -49,7 +49,7 @@ impl Seq {
     }
 }
 
-impl cmp::Ord for Seq {
+impl Ord for Seq {
     /// Logically compares `self` to `other` in a way that respects wrap-around
     /// of sequence numbers, treating e.g. `0 cmp 1` as [`Less`] (as expected),
     /// but `0 cmp 65535` as [`Greater`].
@@ -60,16 +60,16 @@ impl cmp::Ord for Seq {
     /// If the two values compared have a real difference equal to or larger
     /// than `u16::MAX / 2`, no guarantees are upheld.
     ///
-    /// [`Greater`]: cmp::Ordering::Greater
-    /// [`Less`]: cmp::Ordering::Less
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
+    /// [`Greater`]: Ordering::Greater
+    /// [`Less`]: Ordering::Less
+    fn cmp(&self, other: &Self) -> Ordering {
         // The implementation used is a variant of `slotmap`'s generation
         // comparison function:
         // https://github.com/orlp/slotmap/blob/c905b6ced490551476cb7c37778eb8128bdea7ba/src/util.rs#L10
         // It has been adapted to use u16s and Ordering.
         // This is used instead of the Gaffer On Games code because it produces
-        // smaller assembly, but has a tiny difference in behaviour around `u16::MAX /
-        // 2`.
+        // smaller assembly, but has a tiny difference in behaviour around
+        // `u16::MAX / 2`.
 
         let s1 = self.0;
         let s2 = other.0;
@@ -81,9 +81,9 @@ impl cmp::Ord for Seq {
     }
 }
 
-impl cmp::PartialOrd for Seq {
+impl PartialOrd for Seq {
     /// See [`Seq::cmp`].
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }

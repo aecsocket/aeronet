@@ -48,6 +48,9 @@ This crate aims to be:
     in implementation, and less cognitive load on the API user
   * Configuration options can still be exposed, however there should always be a set of sane
     defaults
+* Lightweight and have a small footprint
+  * The crate minimizes the amount of data copied by using [`Bytes`], reducing allocations
+  * Features such as reliability and ordering are implemented with a small memory footprint
 
 This crate does not aim to be:
 * A high-level app networking library, featuring replication, rollback, etc.
@@ -117,7 +120,9 @@ You will need to define your own type implementing [`TransportProtocol`] which d
 messages are communicated by your app. The message types must implement [`Message`].
 
 ```rs
-#[derive(Debug, Clone, aeronet::Message)]
+use aeronet::{message::Message, protocol::TransportProtocol};
+
+#[derive(Debug, Clone, Message)]
 pub enum ClientToServer {
   Shoot,
   Move { x: f32, y: f32 },
@@ -129,7 +134,7 @@ pub enum ClientToServer {
   // ...
 }
 
-#[derive(Debug, Clone, aeronet::Message)]
+#[derive(Debug, Clone, Message)]
 pub enum ServerToClient {
   SpawnBullet { color: u32 },
   SpawnPlayer { x: f32, y: f32 },
@@ -146,35 +151,33 @@ impl TransportProtocol for AppProtocol {
 ```
 
 Transports which send data over a network will most likely also require your message types to
-implement [`TryAsBytes`] and [`TryFromBytes`], for de/serialization to/from the wire format.
+implement [`TryIntoBytes`] and [`TryFromBytes`], for de/serialization to/from the wire format.
 
 ```rs
-#[derive(Debug, Clone, aeronet::Message)]
+use aeronet::{bytes::Bytes, message::{Message, TryIntoBytes, TryFromBytes}};
+
+#[derive(Debug, Clone, Message)]
 pub struct AppMessage(pub String);
 
-impl aeronet::TryAsBytes for AppMessage {
-    type Output<'a> = &'a [u8];
+impl TryIntoBytes for AppMessage {
     type Error = std::convert::Infallible;
 
-    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
-        Ok(self.0.as_bytes())
+    fn try_into_bytes(&self) -> Result<Bytes, Self::Error> {
+        Ok(Bytes::from(self.0.into_vec()))
     }
 }
 
 impl aeronet::TryFromBytes for AppMessage {
     type Error = std::str::FromUtf8Error;
 
-    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-    {
+    fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error> {
         String::from_utf8(buf.to_vec()).map(AppMessage)
     }
 }
 ```
 
 Note that if you would like to use raw bytes for transporting messages, you can do this too. The
-crate defines infallible [`TryAsBytes`] and [`TryFromBytes`] implementations for `Vec<u8>` and
+crate defines infallible [`TryIntoBytes`] and [`TryFromBytes`] implementations for `Vec<u8>` and
 [`bytes::Bytes`].
 
 ### Lanes
@@ -190,7 +193,7 @@ which defines which lanes are available to the transport, and what their propert
 reliable, ordered, etc). Your own message type must then implement [`LaneIndex`] to define on which
 of those [`LaneConfig`]s the message is sent.
 
-See [`LaneKind`] for more details.
+See [`lane`] for more details.
 
 ### Connection
 
@@ -203,9 +206,16 @@ servers into closed, opening, or open. See [`ClientState`] and [`ServerState`] f
 You can use the traits [`ClientTransport`] and [`ServerTransport`] to control your client or server,
 such as sending and receiving messages.
 
-[`ClientTransport`]: crate::client::ClientTransport
-[`ServerTransport`]: crate::server::ServerTransport
-[`ClientTransportPlugin`]: crate::client::ClientTransportPlugin
-[`ServerTransportPlugin`]: crate::server::ServerTransportPlugin
-[`ClientState`]: crate::client::ClientState
-[`ServerState`]: crate::server::ServerState
+[`Message`]: message::Message
+[`TryIntoBytes`]: message::TryIntoBytes
+[`TryFromBytes`]: message::TryFromBytes
+[`TransportProtocol`]: protocol::TransportProtocol
+[`LaneKind`]: lane::LaneKind
+[`LaneIndex`]: lane::LaneIndex
+[`LaneConfig`]: lane::LaneConfig
+[`ClientTransport`]: client::ClientTransport
+[`ServerTransport`]: server::ServerTransport
+[`ClientTransportPlugin`]: client::ClientTransportPlugin
+[`ServerTransportPlugin`]: server::ServerTransportPlugin
+[`ClientState`]: client::ClientState
+[`ServerState`]: server::ServerState

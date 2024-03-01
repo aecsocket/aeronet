@@ -1,3 +1,5 @@
+//! Utilities for error formatting.
+
 use std::{error::Error, fmt};
 
 /// Helper struct to display errors in a pretty-printed style.

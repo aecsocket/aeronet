@@ -1,3 +1,5 @@
+//! Utilities for [`Bytes`].
+
 use std::iter::FusedIterator;
 
 use bytes::Bytes;

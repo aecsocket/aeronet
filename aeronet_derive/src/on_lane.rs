@@ -25,7 +25,7 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
     let on_lane = parse_on_lane(input, &input.attrs)?;
 
     Ok(quote! {
-        impl #impl_generics ::aeronet::OnLane for #name #type_generics #where_clause {
+        impl #impl_generics ::aeronet::lane::OnLane for #name #type_generics #where_clause {
             type Lane = #lane_type;
 
             fn lane(&self) -> Self::Lane {
@@ -74,7 +74,7 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         .collect::<Vec<_>>();
 
     Ok(quote! {
-        impl #impl_generics ::aeronet::OnLane for #name #type_generics #where_clause {
+        impl #impl_generics ::aeronet::lane::OnLane for #name #type_generics #where_clause {
             type Lane = #lane_type;
 
             fn lane(&self) -> Self::Lane {

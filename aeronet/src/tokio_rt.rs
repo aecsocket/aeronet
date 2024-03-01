@@ -15,7 +15,7 @@ use bevy_ecs::prelude::*;
 /// [`App::init_resource`]:
 ///
 /// ```
-/// use aeronet::TokioRuntime;
+/// use aeronet::tokio_rt::TokioRuntime;
 /// use bevy_app::prelude::*;
 ///
 /// App::new().init_resource::<TokioRuntime>();
@@ -25,7 +25,7 @@ use bevy_ecs::prelude::*;
 ///
 /// ```
 /// # use bevy_ecs::prelude::*;
-/// # use aeronet::TokioRuntime;
+/// # use aeronet::tokio_rt::TokioRuntime;
 /// fn run_something_async(rt: Res<TokioRuntime>) {
 ///     rt.spawn(async move {
 ///         do_the_async_thing();

@@ -1,4 +1,4 @@
-use aeronet::MessageStats;
+use aeronet::stats::MessageStats;
 
 /// Statistics on a connection using a channel transport.
 #[derive(Debug, Clone, Default)]

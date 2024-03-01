@@ -1,4 +1,4 @@
-use aeronet::LaneKey;
+use aeronet::lane::LaneKey;
 
 #[derive(Debug, Clone, Copy, LaneKey)]
 #[lane_kind(UnreliableUnsequenced)]

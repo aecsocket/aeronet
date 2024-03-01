@@ -24,17 +24,17 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
     let kind = get_lane_kind(&input.attrs, input)?;
 
     Ok(quote! {
-        impl #impl_generics ::aeronet::LaneIndex for #name #type_generics #where_clause {
+        impl #impl_generics ::aeronet::lane::LaneIndex for #name #type_generics #where_clause {
             fn index(&self) -> usize {
                 0
             }
         }
 
-        impl #impl_generics ::aeronet::LaneKey for #name #type_generics #where_clause {
+        impl #impl_generics ::aeronet::lane::LaneKey for #name #type_generics #where_clause {
             const VARIANTS: &'static [Self] = &[Self];
 
-            fn config(&self) -> ::aeronet::LaneConfig {
-                ::aeronet::LaneConfig::with_defaults(#kind)
+            fn config(&self) -> ::aeronet::lane::LaneConfig {
+                ::aeronet::lane::LaneConfig::with_defaults(#kind)
             }
         }
     })
@@ -90,13 +90,13 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
             let pattern = variant.ident;
             let kind = &variant.kind;
             quote! {
-                Self::#pattern => ::aeronet::LaneConfig::with_defaults(#kind)
+                Self::#pattern => ::aeronet::lane::LaneConfig::with_defaults(#kind)
             }
         })
         .collect::<Vec<_>>();
 
     Ok(quote! {
-        impl #impl_generics ::aeronet::LaneIndex for #name #type_generics #where_clause {
+        impl #impl_generics ::aeronet::lane::LaneIndex for #name #type_generics #where_clause {
             fn index(&self) -> usize {
                 match *self {
                     #(#index_body),*
@@ -104,12 +104,12 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
             }
         }
 
-        impl #impl_generics ::aeronet::LaneKey for #name #type_generics #where_clause {
+        impl #impl_generics ::aeronet::lane::LaneKey for #name #type_generics #where_clause {
             const VARIANTS: &'static [Self] = &[
                 #(#all_variants),*
             ];
 
-            fn config(&self) -> ::aeronet::LaneConfig {
+            fn config(&self) -> ::aeronet::lane::LaneConfig {
                 match *self {
                     #(#config_body),*
                 }
@@ -149,11 +149,11 @@ fn parse_lane_kind(attrs: &[Attribute]) -> Result<Option<TokenStream>> {
         };
 
         lane_kind = Some(match kind_ident.to_string().as_str() {
-            "UnreliableUnsequenced" => quote! { ::aeronet::LaneKind::UnreliableUnsequenced },
-            "UnreliableSequenced" => quote! { ::aeronet::LaneKind::UnreliableSequenced },
-            "ReliableUnordered" => quote! { ::aeronet::LaneKind::ReliableUnordered },
-            "ReliableSequenced" => quote! { ::aeronet::LaneKind::ReliableSequenced },
-            "ReliableOrdered" => quote! { ::aeronet::LaneKind::ReliableOrdered },
+            "UnreliableUnsequenced" => quote! { ::aeronet::lane::LaneKind::UnreliableUnsequenced },
+            "UnreliableSequenced" => quote! { ::aeronet::lane::LaneKind::UnreliableSequenced },
+            "ReliableUnordered" => quote! { ::aeronet::lane::LaneKind::ReliableUnordered },
+            "ReliableSequenced" => quote! { ::aeronet::lane::LaneKind::ReliableSequenced },
+            "ReliableOrdered" => quote! { ::aeronet::lane::LaneKind::ReliableOrdered },
             kind => {
                 return Err(Error::new_spanned(
                     kind_ident,

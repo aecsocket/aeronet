@@ -12,7 +12,7 @@ use std::{error::Error, fmt::Debug};
 
 use derivative::Derivative;
 
-use crate::{client::ClientState, MessageState, TransportProtocol};
+use crate::{client::ClientState, protocol::TransportProtocol};
 
 /// Allows listening to client connections and transporting data between this
 /// server and connected clients.
@@ -52,17 +52,20 @@ pub trait ServerTransport<P: TransportProtocol> {
 
     /// Reads the current state of this server.
     ///
-    /// This can be used to access info such as the server's
-    /// [local address](crate::LocalAddr), if the transport exposes it.
+    /// This can be used to access info such as the server's [local address],
+    /// if the transport exposes it.
+    ///
+    /// [local address]: crate::stats::LocalAddr
     fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo>;
 
     /// Reads the current state of a client.
     ///
     /// This can be used to access statistics on the connection, such as number
-    /// of bytes sent or [round-trip time](crate::Rtt), if the transport exposes
-    /// it.
+    /// of bytes sent or [round-trip time], if the transport exposes it.
     ///
     /// If the client does not exist, [`ClientState::Disconnected`] is returned.
+    ///
+    /// [round-trip time]: crate::stats::Rtt
     fn client_state(
         &self,
         client_key: Self::ClientKey,
@@ -75,16 +78,6 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// in, it's just guaranteed that the server is tracking some sort of state
     /// about it.
     fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_;
-
-    /// Gets the current state of a message sent via [`ServerTransport::send`].
-    ///
-    /// If the transport does not support this, or the message key does not
-    /// represent a valid sent message, this returns [`None`].
-    ///
-    /// Even if a transport does not support getting the *current* message
-    /// state, it may still send out [`ServerEvent::Ack`] when the peer
-    /// acknowledges one of our sent messages.
-    fn message_state(&self, msg_key: Self::MessageKey) -> Option<MessageState>;
 
     /// Attempts to send a message to a connected client.
     ///

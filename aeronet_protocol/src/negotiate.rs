@@ -59,7 +59,7 @@ pub struct WrongProtocolVersion {
 /// Error that occurs when reading a [`Negotiation`] request using
 /// [`Negotiation::recv_request`].
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum NegotiationRequestError {
+pub enum RequestError {
     /// Response had an invalid length.
     #[error("invalid length - expected {REQUEST_LEN} bytes, got {len}")]
     WrongLength { len: usize },
@@ -81,7 +81,7 @@ pub enum NegotiationRequestError {
 /// Error that occurs when reading a [`Negotiation`] response using
 /// [`Negotiation::recv_response`].
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum NegotiationResponseError {
+pub enum ResponseError {
     /// Response had an invalid length.
     #[error("invalid length - expected {RESPONSE_LEN} bytes, got {len}")]
     WrongLength { len: usize },
@@ -99,19 +99,15 @@ pub enum NegotiationResponseError {
 
 const REQUEST_PREFIX: &[u8; 8] = b"aeronet/";
 const VERSION_LEN: usize = 16;
-const REQUEST_LEN: usize = REQUEST_PREFIX.len() + VERSION_LEN;
+/// Size in bytes of the negotiation request packet.
+pub const REQUEST_LEN: usize = REQUEST_PREFIX.len() + VERSION_LEN;
 
 const OK: u8 = 0x1;
 const ERR: u8 = 0x2;
-const RESPONSE_LEN: usize = 9;
+/// Size in bytes of the negotiation response packet.
+pub const RESPONSE_LEN: usize = 9;
 
 impl Negotiation {
-    /// Size in bytes of the negotiation request packet.
-    pub const REQUEST_SIZE: usize = REQUEST_PREFIX.len() + VERSION_LEN;
-
-    /// Size in bytes of the negotiation response packet.
-    pub const RESPONSE_SIZE: usize = 9;
-
     /// Creates a negotiation object given a protocol version to use.
     pub fn new(version: ProtocolVersion) -> Self {
         Self { version }
@@ -151,18 +147,10 @@ impl Negotiation {
     pub fn recv_request(
         &self,
         packet: &[u8],
-    ) -> (
-        Result<(), NegotiationRequestError>,
-        Option<[u8; RESPONSE_LEN]>,
-    ) {
+    ) -> (Result<(), RequestError>, Option<[u8; RESPONSE_LEN]>) {
         let packet = match <&[u8; REQUEST_LEN]>::try_from(packet) {
             Ok(packet) => packet,
-            Err(_) => {
-                return (
-                    Err(NegotiationRequestError::WrongLength { len: packet.len() }),
-                    None,
-                )
-            }
+            Err(_) => return (Err(RequestError::WrongLength { len: packet.len() }), None),
         };
         self.recv_request_sized(packet)
     }
@@ -184,18 +172,15 @@ impl Negotiation {
     pub fn recv_request_sized(
         &self,
         packet: &[u8; REQUEST_LEN],
-    ) -> (
-        Result<(), NegotiationRequestError>,
-        Option<[u8; RESPONSE_LEN]>,
-    ) {
+    ) -> (Result<(), RequestError>, Option<[u8; RESPONSE_LEN]>) {
         let result = (|| {
             if !packet.starts_with(REQUEST_PREFIX) {
-                return Err(NegotiationRequestError::Prefix);
+                return Err(RequestError::Prefix);
             }
             let version_str = String::from_utf8(packet[REQUEST_PREFIX.len()..].to_vec())
-                .map_err(NegotiationRequestError::VersionString)?;
+                .map_err(RequestError::VersionString)?;
             let theirs = u64::from_str_radix(&version_str, 16)
-                .map_err(NegotiationRequestError::VersionParse)
+                .map_err(RequestError::VersionParse)
                 .map(ProtocolVersion)?;
             Ok(theirs)
         })();
@@ -214,9 +199,10 @@ impl Negotiation {
             resp[0] = ERR;
             resp[1..].copy_from_slice(&self.version.0.to_be_bytes());
             (
-                Err(NegotiationRequestError::WrongVersion(
-                    WrongProtocolVersion { ours, theirs },
-                )),
+                Err(RequestError::WrongVersion(WrongProtocolVersion {
+                    ours,
+                    theirs,
+                })),
                 Some(resp),
             )
         }
@@ -229,9 +215,9 @@ impl Negotiation {
     /// Errors if the response indicates that the connection is unsuccessful,
     /// if the response is malformed, or if the packet is not of length
     /// [`Negotiation::RESPONSE_SIZE`].
-    pub fn recv_response(&self, packet: &[u8]) -> Result<(), NegotiationResponseError> {
+    pub fn recv_response(&self, packet: &[u8]) -> Result<(), ResponseError> {
         let packet = <&[u8; RESPONSE_LEN]>::try_from(packet)
-            .map_err(|_| NegotiationResponseError::WrongLength { len: packet.len() })?;
+            .map_err(|_| ResponseError::WrongLength { len: packet.len() })?;
         self.recv_response_sized(packet)
     }
 
@@ -242,10 +228,7 @@ impl Negotiation {
     /// Errors if the response indicates that the connection is unsuccessful,
     /// or if the response is malformed.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    pub fn recv_response_sized(
-        &self,
-        packet: &[u8; RESPONSE_LEN],
-    ) -> Result<(), NegotiationResponseError> {
+    pub fn recv_response_sized(&self, packet: &[u8; RESPONSE_LEN]) -> Result<(), ResponseError> {
         match packet[0] {
             OK => Ok(()),
             ERR => {
@@ -254,11 +237,12 @@ impl Negotiation {
                     .map(ProtocolVersion)
                     .expect("slice of 1..9 should be 8 items long");
                 let ours = self.version;
-                Err(NegotiationResponseError::WrongVersion(
-                    WrongProtocolVersion { ours, theirs },
-                ))
+                Err(ResponseError::WrongVersion(WrongProtocolVersion {
+                    ours,
+                    theirs,
+                }))
             }
-            discrim => Err(NegotiationResponseError::Discriminator { discrim }),
+            discrim => Err(ResponseError::Discriminator { discrim }),
         }
     }
 }
@@ -293,23 +277,19 @@ mod tests {
         let (result, resp) = neg_b.recv_request(&req_a);
         assert_matches!(
             result,
-            Err(NegotiationRequestError::WrongVersion(
-                WrongProtocolVersion {
-                    ours: VERSION_B,
-                    theirs: VERSION_A,
-                }
-            ))
+            Err(RequestError::WrongVersion(WrongProtocolVersion {
+                ours: VERSION_B,
+                theirs: VERSION_A,
+            }))
         );
 
         let resp = resp.unwrap();
         assert_matches!(
             neg_a.recv_response(&resp),
-            Err(NegotiationResponseError::WrongVersion(
-                WrongProtocolVersion {
-                    ours: VERSION_A,
-                    theirs: VERSION_B,
-                }
-            ))
+            Err(ResponseError::WrongVersion(WrongProtocolVersion {
+                ours: VERSION_A,
+                theirs: VERSION_B,
+            }))
         );
     }
 }

@@ -1,3 +1,6 @@
+//! Items for representing statistics of a transport, such as network latency
+//! and packet loss.
+
 use std::{net::SocketAddr, time::Duration};
 
 /// Gets the round-trip time (RTT) of a connection.

@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     num::NonZeroU8,
     time::{Duration, Instant},
 };
@@ -9,7 +10,7 @@ use bitvec::{array::BitArray, bitarr};
 use bytes::Bytes;
 use octets::{Octets, OctetsMut};
 
-use crate::{bytes::ByteChunksExt, Seq};
+use crate::{bytes::ByteChunksExt, seq::Seq};
 
 /// Handles splitting and reassembling a single large message into multiple
 /// smaller packets for sending over a network.
@@ -59,9 +60,6 @@ impl Fragmentation {
 /// Error that occurs when using [`Fragmentation::fragment`].
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum FragmentError {
-    /// Attempted to fragment a message with no bytes.
-    #[error("empty message")]
-    EmptyMessage,
     /// Attempted to fragment a message which was too big.
     #[error("message too big - {len} / {max} bytes")]
     MessageTooBig {
@@ -118,25 +116,21 @@ pub enum ReassembleError {
 ///
 /// # Encoded layout
 ///
-/// ```ignore
-/// struct FragmentHeader {
-///     /// How many fragments are sent in total for this message.
-///     num_frags: u8,
-///     /// Which fragment index this fragment carries.
-///     frag_id: u8,
-/// }
-/// ```
+/// See [`lane`](crate::lane).
 #[derive(Debug, Clone, PartialEq, Eq, Arbitrary)]
 pub struct FragmentHeader {
+    /// Sequence number of the message that this fragment is a part of.
+    pub msg_seq: Seq,
     /// How many fragments this packet's message is split up into.
-    pub num_frags: NonZeroU8,
+    pub num_frags: u8,
     /// Index of this fragment in the total message.
     pub frag_id: u8,
 }
 
 impl FragmentHeader {
     /// [Encoded](FragmentHeader::encode) size of this value in bytes.
-    pub const ENCODE_SIZE: usize = 1 + 1;
+    pub const ENCODE_SIZE: usize =
+        Seq::ENCODE_SIZE + std::mem::size_of::<u8>() + std::mem::size_of::<u8>();
 
     /// Encodes this value into a byte buffer.
     ///
@@ -144,26 +138,26 @@ impl FragmentHeader {
     ///
     /// Errors if the buffer is too short to encode this.
     pub fn encode(&self, buf: &mut octets::OctetsMut<'_>) -> octets::Result<()> {
-        buf.put_u8(self.num_frags.get())?;
+        self.msg_seq.encode(buf)?;
+        buf.put_u8(self.num_frags)?;
         buf.put_u8(self.frag_id)?;
         Ok(())
     }
 
     /// Decodes this value from a byte buffer.
     ///
-    /// If this returns `Ok(None)`, the buffer contained an invalid header.
-    ///
     /// # Errors
     ///
     /// Errors if the buffer is too short to decode this.
-    pub fn decode(buf: &mut octets::Octets<'_>) -> octets::Result<Option<Self>> {
+    pub fn decode(buf: &mut octets::Octets<'_>) -> octets::Result<Self> {
+        let msg_seq = Seq::decode(buf)?;
         let num_frags = buf.get_u8()?;
         let frag_id = buf.get_u8()?;
-        let num_frags = match NonZeroU8::new(num_frags) {
-            Some(num_frags) => num_frags,
-            None => return Ok(None),
-        };
-        Ok(Some(Self { num_frags, frag_id }))
+        Ok(Self {
+            msg_seq,
+            num_frags,
+            frag_id,
+        })
     }
 }
 
@@ -177,14 +171,14 @@ struct MessageBuffer {
 }
 
 impl MessageBuffer {
-    fn new(payload_len: usize, header: &FragmentHeader) -> Self {
+    fn new(payload_len: usize, header: &FragmentHeader, num_frags: NonZeroU8) -> Self {
         Self {
             // use a NonZeroU8 because:
             // * having `num_frags = 0` is genuinely an invalid case
             // * allows niching in Option<MessageBuffer>
             //   * but I think this is stashed elsewhere -
             //     doesn't seem to change the size
-            num_frags: header.num_frags,
+            num_frags,
             num_frags_recv: 0,
             // use a (BitArray, Vec<u8>) instead of a Vec<Option<u8>>
             // for efficiency
@@ -196,16 +190,10 @@ impl MessageBuffer {
             // byte vec appropriately.
             // we could store this as a `Vec<Vec<u8>>` instead, but nah
             // it would cost more on the final packet reassemble
-            payload: vec![0; usize::from(header.num_frags.get()) * payload_len],
+            payload: vec![0; usize::from(header.num_frags) * payload_len],
             last_recv_at: Instant::now(),
         }
     }
-}
-
-#[derive(Debug)]
-pub struct FragmentSliceData<'a> {
-    pub header: FragmentHeader,
-    pub payload: &'a [u8],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,33 +215,30 @@ impl Fragment {
         Ok(())
     }
 
-    pub fn decode(buf: Bytes) -> octets::Result<Option<Self>> {
+    pub fn decode(buf: Bytes) -> octets::Result<Self> {
         let mut octs = Octets::with_slice(&buf);
-        let header = match FragmentHeader::decode(&mut octs)? {
-            Some(header) => header,
-            None => return Ok(None),
-        };
+        let header = FragmentHeader::decode(&mut octs)?;
         let payload_len = octs.get_varint()? as usize;
         let payload_start = octs.off();
         // ignore ok - we just want to make sure it's not an error,
         // otherwise `payload_len` is too big
         octs.slice(payload_len)?;
-        Ok(Some(Self {
+        Ok(Self {
             header,
             payload: buf.slice(payload_start..(payload_start + payload_len)),
-        }))
+        })
     }
 }
 
 // ordered by encoded size
-impl std::cmp::Ord for Fragment {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+impl Ord for Fragment {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.encode_len().cmp(&other.encode_len())
     }
 }
 
-impl std::cmp::PartialOrd for Fragment {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+impl PartialOrd for Fragment {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
@@ -262,82 +247,55 @@ impl Fragmentation {
     /// Splits a message up into individual fragmented packets and creates the
     /// appropriate headers for each packet.
     ///
-    /// This version accepts [`Bytes`] and creates cheap clones of the
-    /// underlying bytes object for each fragment.
+    /// * `msg_seq` represents the sequence of this specific message - note that
+    ///   each fragment may be sent in a different packet with a different
+    ///   packet sequence.
+    /// * If `msg` is empty, this will return an empty iterator.
     ///
     /// # Errors
     ///
     /// Errors if the message was not a valid message which could be fragmented.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    pub fn fragment_bytes(
+    pub fn fragment(
         &self,
+        msg_seq: Seq,
         msg: Bytes,
     ) -> Result<impl Iterator<Item = Fragment> + '_, FragmentError> {
         let msg_len = msg.len();
         let chunks = msg.byte_chunks(self.payload_len);
-        let num_frags = NonZeroU8::new(u8::try_from(chunks.len()).map_err(|_| {
-            FragmentError::MessageTooBig {
-                len: msg_len,
-                max: usize::from(u8::MAX) * self.payload_len,
-            }
-        })?)
-        .ok_or(FragmentError::EmptyMessage)?;
+        let num_frags = u8::try_from(chunks.len()).map_err(|_| FragmentError::MessageTooBig {
+            len: msg_len,
+            max: usize::from(u8::MAX) * self.payload_len,
+        })?;
 
         Ok(chunks.enumerate().map(move |(frag_id, payload)| {
             let frag_id = u8::try_from(frag_id)
                 .expect("`num_frags` is a u8, so `frag_id` should be convertible");
-            let header = FragmentHeader { num_frags, frag_id };
+            let header = FragmentHeader {
+                msg_seq,
+                num_frags,
+                frag_id,
+            };
             Fragment { header, payload }
-        }))
-    }
-
-    /// Splits a message up into individual fragmented packets and creates the
-    /// appropriate headers for each packet.
-    ///
-    /// This version accepts any byte slice and creates fragments whose lifetime
-    /// is tied to the original byte slice.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the message was not a valid message which could be fragmented.
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    pub fn fragment_slice<'a>(
-        &self,
-        msg: &'a [u8],
-    ) -> Result<impl Iterator<Item = FragmentSliceData<'a>> + 'a, FragmentError> {
-        let chunks = msg.chunks(self.payload_len);
-        let num_frags = NonZeroU8::new(u8::try_from(chunks.len()).map_err(|_| {
-            FragmentError::MessageTooBig {
-                len: msg.len(),
-                max: usize::from(u8::MAX) * self.payload_len,
-            }
-        })?)
-        .ok_or(FragmentError::EmptyMessage)?;
-
-        Ok(chunks.enumerate().map(move |(frag_id, payload)| {
-            let frag_id = u8::try_from(frag_id)
-                .expect("`num_frags` is a u8, so `frag_id` should be convertible");
-            let header = FragmentHeader { num_frags, frag_id };
-            FragmentSliceData { header, payload }
         }))
     }
 
     /// Receives a fragmented packet and attempts to reassemble this fragment
     /// into a message.
     ///
-    /// You must parse the sequence number and header of the packet yourself
-    /// and provide them to this function.
+    /// You must parse the fragment header of the packet yourself and provide it
+    /// to this function.
     ///
     /// If this returns `Ok(Some(..))`, the resulting bytes will be the fully
     /// reassembled bytes of the message.
     ///
+    /// This function will internally copy the payload byte slice into its own
+    /// storage, so there is no benefit to creating an alternate function taking
+    /// [`Bytes`].
+    ///
     /// Note that the returned [`Vec`] may not have an equal length and
     /// capacity - if you want to convert this into e.g. a [`bytes::Bytes`],
     /// there may be a reallocation involved.
-    ///
-    /// This function will internally copy the payload byte slice into its own
-    /// storage, so creating an alternate function taking [`Bytes`] will not
-    /// help performance or allocations.
     ///
     /// # Errors
     ///
@@ -348,20 +306,26 @@ impl Fragmentation {
     /// condition for a connection.
     pub fn reassemble(
         &mut self,
-        seq: Seq,
         header: &FragmentHeader,
         payload: &[u8],
     ) -> Result<Option<Vec<u8>>, ReassembleError> {
-        if header.num_frags.get() == 1 {
-            // quick path to avoid writing this into the message buffer then
-            // immediately reading it back out
-            return Ok(Some(payload.to_vec()));
-        }
+        let num_frags = match NonZeroU8::new(header.num_frags) {
+            // fast path since this fragment can't have any message anyway
+            // this theoretically shouldn't happen with the default frag impl,
+            // but a user may pass in `num_frags: 0` anyway
+            None => return Ok(None),
+            Some(num_frags) if num_frags.get() == 1 => {
+                // fast path to avoid writing this into the message buffer then
+                // immediately reading it back out
+                return Ok(Some(payload.to_vec()));
+            }
+            Some(num_frags) => num_frags,
+        };
 
         let buf = self
             .messages
-            .entry(seq)
-            .or_insert_with(|| MessageBuffer::new(self.payload_len, header));
+            .entry(header.msg_seq)
+            .or_insert_with(|| MessageBuffer::new(self.payload_len, header, num_frags));
 
         // mark this fragment as received
         let frag_id = usize::from(header.frag_id);
@@ -375,14 +339,13 @@ impl Fragmentation {
             return Err(ReassembleError::AlreadyReceived);
         }
         *is_received = true;
-        // otherwise `buf` can't be dropped until the end
         drop(is_received);
 
         // and copy it into the payload buffer
         let is_last_frag = header.frag_id == buf.num_frags.get() - 1;
         let (start, end) = if is_last_frag {
             // resize the buffer down to fit this last payload
-            let len = usize::from(header.num_frags.get() - 1) * self.payload_len + payload.len();
+            let len = usize::from(header.num_frags - 1) * self.payload_len + payload.len();
             if len > buf.payload.len() {
                 // can't shrink the buffer to a larger amount,
                 // that makes no sense
@@ -421,9 +384,8 @@ impl Fragmentation {
         if buf.num_frags_recv == buf.num_frags.get() {
             // we've received all fragments for this message
             // return the fragment to the user
-            let msg = std::mem::take(&mut buf.payload);
-            self.messages.remove(&seq);
-            Ok(Some(msg))
+            let buf = self.messages.remove(&header.msg_seq).unwrap();
+            Ok(Some(buf.payload))
         } else {
             // this message isn't complete yet, nothing to return
             Ok(None)
@@ -458,7 +420,8 @@ mod tests {
     #[test]
     fn encode_decode_header() {
         let header = FragmentHeader {
-            num_frags: NonZeroU8::new(12).unwrap(),
+            msg_seq: Seq(1),
+            num_frags: 12,
             frag_id: 34,
         };
         let mut buf = [0; FragmentHeader::ENCODE_SIZE];
@@ -468,14 +431,14 @@ mod tests {
         oct.peek_bytes(1).unwrap_err();
 
         let mut oct = octets::Octets::with_slice(&buf);
-        assert_eq!(header, FragmentHeader::decode(&mut oct).unwrap().unwrap());
+        assert_eq!(header, FragmentHeader::decode(&mut oct).unwrap());
     }
 
     const PAYLOAD_SIZE: usize = 1024;
 
-    const MSG1: &[u8] = b"Message 1";
-    const MSG2: &[u8] = b"Message 2";
-    const MSG3: &[u8] = b"Message 3";
+    const MSG1: Bytes = Bytes::from_static(b"Message 1");
+    const MSG2: Bytes = Bytes::from_static(b"Message 2");
+    const MSG3: Bytes = Bytes::from_static(b"Message 3");
 
     fn frag() -> Fragmentation {
         Fragmentation::new(PAYLOAD_SIZE)
@@ -484,91 +447,75 @@ mod tests {
     #[test]
     fn single_in_order() {
         let mut frag = frag();
-        let p1 = frag.fragment_slice(MSG1).unwrap().next().unwrap();
-        let p2 = frag.fragment_slice(MSG2).unwrap().next().unwrap();
-        let p3 = frag.fragment_slice(MSG3).unwrap().next().unwrap();
+        let p1 = frag.fragment(Seq(0), MSG1).unwrap().next().unwrap();
+        let p2 = frag.fragment(Seq(1), MSG2).unwrap().next().unwrap();
+        let p3 = frag.fragment(Seq(2), MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG1,
-            frag.reassemble(Seq(0), &p1.header, &p1.payload)
-                .unwrap()
-                .unwrap()
+            frag.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG2,
-            frag.reassemble(Seq(1), &p2.header, &p2.payload)
-                .unwrap()
-                .unwrap()
+            frag.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG3,
-            frag.reassemble(Seq(2), &p3.header, &p3.payload)
-                .unwrap()
-                .unwrap()
+            frag.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
         );
     }
 
     #[test]
     fn single_out_of_order() {
         let mut frag = frag();
-        let p1 = frag.fragment_slice(MSG1).unwrap().next().unwrap();
-        let p2 = frag.fragment_slice(MSG2).unwrap().next().unwrap();
-        let p3 = frag.fragment_slice(MSG3).unwrap().next().unwrap();
+        let p1 = frag.fragment(Seq(0), MSG1).unwrap().next().unwrap();
+        let p2 = frag.fragment(Seq(1), MSG2).unwrap().next().unwrap();
+        let p3 = frag.fragment(Seq(2), MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG3,
-            frag.reassemble(Seq(2), &p3.header, &p3.payload)
-                .unwrap()
-                .unwrap()
+            frag.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG1,
-            frag.reassemble(Seq(0), &p1.header, &p3.payload)
-                .unwrap()
-                .unwrap()
+            frag.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG2,
-            frag.reassemble(Seq(1), &p2.header, &p3.payload)
-                .unwrap()
-                .unwrap()
+            frag.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
         );
     }
 
     #[test]
     fn large1() {
         let mut frag = frag();
-        let msg = b"x".repeat(PAYLOAD_SIZE + 1);
+        let msg = Bytes::from(b"x".repeat(PAYLOAD_SIZE + 1));
         let [p1, p2] = frag
-            .fragment_slice(&msg)
+            .fragment(Seq(0), msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(frag.reassemble(Seq(0), &p1.header, &p2.payload), Ok(None));
+        assert_matches!(frag.reassemble(&p1.header, &p1.payload), Ok(None));
         assert_eq!(
             msg,
-            frag.reassemble(Seq(0), &p2.header, &p2.payload)
-                .unwrap()
-                .unwrap()
+            frag.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
         );
     }
 
     #[test]
     fn large2() {
         let mut frag = frag();
-        let msg = b"x".repeat(PAYLOAD_SIZE * 2 + 1);
+        let msg = Bytes::from(b"x".repeat(PAYLOAD_SIZE * 2 + 1));
         let [p1, p2, p3] = frag
-            .fragment_slice(&msg)
+            .fragment(Seq(0), msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(frag.reassemble(Seq(0), &p1.header, &p1.payload), Ok(None));
-        assert_matches!(frag.reassemble(Seq(0), &p2.header, &p2.payload), Ok(None));
+        assert_matches!(frag.reassemble(&p1.header, &p1.payload), Ok(None));
+        assert_matches!(frag.reassemble(&p2.header, &p2.payload), Ok(None));
         assert_eq!(
             msg,
-            frag.reassemble(Seq(0), &p3.header, &p3.payload)
-                .unwrap()
-                .unwrap()
+            frag.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
         );
     }
 }

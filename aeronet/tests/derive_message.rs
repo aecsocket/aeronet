@@ -1,4 +1,4 @@
-use aeronet::Message;
+use aeronet::message::Message;
 
 #[derive(Message)]
 struct MyStructMsg;

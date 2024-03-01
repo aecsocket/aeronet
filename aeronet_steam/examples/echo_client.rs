@@ -5,7 +5,7 @@ use aeronet::{
         ClientState, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
         LocalClientDisconnected,
     },
-    LaneKeyOld, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
+    LaneKey, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
 };
 use aeronet_steam::{ConnectTarget, SteamClientTransport, SteamClientTransportConfig, MTU};
 use bevy::{log::LogPlugin, prelude::*};

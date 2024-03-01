@@ -4,7 +4,7 @@ use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use derivative::Derivative;
 
-use crate::TransportProtocol;
+use crate::protocol::TransportProtocol;
 
 use super::{ServerEvent, ServerTransport};
 
@@ -44,6 +44,10 @@ where
 /// * [`FromClient`]
 /// * [`AckFromClient`]
 ///
+/// This plugin provides the run conditions:
+/// * [`server_open`]
+/// * [`server_closed`]
+///
 /// These events can be read by your app to respond to incoming events. To send
 /// out messages, or to disconnect a specific client, etc., you will need to
 /// inject the transport as a resource into your system.
@@ -72,6 +76,46 @@ pub enum ServerTransportSet {
     /// Handles receiving data from the transport and updating its internal
     /// state.
     Poll,
+}
+
+/// Generates a [`Condition`]-satisfying closure that returns `true` if the
+/// server `T` exists *and* is in the [`Open`] state.
+///
+///
+///
+/// [`Condition`]: bevy_ecs::schedule::Condition
+/// [`Open`]: crate::server::ServerState::Open
+pub fn server_open<P, T>() -> impl FnMut(Option<T>) -> bool + Clone
+where
+    P: TransportProtocol,
+    T: ServerTransport<P> + Resource,
+{
+    |server| {
+        if let Some(server) = server {
+            server.state().is_open()
+        } else {
+            false
+        }
+    }
+}
+
+/// Generates a [`Condition`]-satisfying closure that returns `true` if the
+/// server `T` either does not exist *or* is in the [`Closed`] state.
+///
+/// [`Condition`]: bevy_ecs::schedule::Condition
+/// [`Closed`]: crate::server::ServerState::Closed
+pub fn server_closed<P, T>() -> impl FnMut(Option<T>) -> bool + Clone
+where
+    P: TransportProtocol,
+    T: ServerTransport<P> + Resource,
+{
+    |server| {
+        if let Some(server) = server {
+            server.state().is_closed()
+        } else {
+            true
+        }
+    }
 }
 
 /// The server has completed setup and is ready to accept client

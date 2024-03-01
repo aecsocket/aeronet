@@ -1,7 +1,7 @@
 use aeronet::{
     client::ClientState,
+    protocol::TransportProtocol,
     server::{ServerState, ServerTransport},
-    MessageState, TransportProtocol,
 };
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
@@ -97,10 +97,6 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
 
     fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_ {
         self.clients.keys()
-    }
-
-    fn message_state(&self, _: Self::MessageKey) -> Option<MessageState> {
-        None
     }
 
     fn send(

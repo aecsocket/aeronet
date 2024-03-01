@@ -1,3 +1,5 @@
+pub use aeronet_derive::Message;
+
 use std::{convert::Infallible, error::Error};
 
 use bytes::Bytes;
@@ -9,79 +11,62 @@ use bytes::Bytes;
 /// must implement, however transports are free to add their own bounds onto
 /// what kinds of messages they can send. For example, a networked transport may
 /// require that messages can be serialized to/from a byte form - see
-/// [`TryAsBytes`] and [`TryFromBytes`].
+/// [`TryIntoBytes`] and [`TryFromBytes`].
 ///
 /// This trait can be derived - see [`aeronet_derive::Message`].
 pub trait Message: Send + Sync + 'static {}
 
 impl Message for () {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MessageState {
-    Unsent,
-    Sent,
-    Ack,
-    Nack,
-}
-
-/// Attempt to convert this type into a slice of bytes.
+/// Attempt to convert this type into [`Bytes`].
 ///
 /// Transports may require this as a bound on the outgoing message type, if the
 /// message needs to be serialized into bytes first before being sent over e.g.
 /// a network.
 ///
 /// For the incoming counterpart, see [`TryFromBytes`].
-pub trait TryAsBytes {
-    /// Output type of [`TryAsBytes::try_as_bytes`], which can be dereferenced
-    /// into a `[u8]`.
-    type Output<'a>: AsRef<[u8]> + 'a
-    where
-        Self: 'a;
-
-    /// Error type of [`TryAsBytes::try_as_bytes`].
+pub trait TryIntoBytes {
+    /// Error type of [`TryIntoBytes::try_into_bytes`].
     type Error: Error + Send + Sync + 'static;
 
-    /// Attempts to convert this value into [`TryAsBytes::Output`].
+    /// Attempts to convert this value into [`Bytes`].
     ///
     /// # Errors
     ///
     /// Errors if the conversion fails.
-    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error>;
+    fn try_into_bytes(self) -> Result<Bytes, Self::Error>;
 }
 
-impl TryAsBytes for () {
-    type Output<'a> = &'a [u8; 0];
+impl TryIntoBytes for () {
     type Error = Infallible;
 
-    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
-        Ok(&[])
+    fn try_into_bytes(self) -> Result<Bytes, Self::Error> {
+        Ok(Bytes::new())
     }
 }
 
-impl TryAsBytes for Vec<u8> {
-    type Output<'a> = &'a [u8];
+impl TryIntoBytes for Bytes {
     type Error = Infallible;
 
-    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
-        Ok(self.as_slice())
-    }
-}
-
-impl TryAsBytes for Bytes {
-    type Output<'a> = &'a [u8];
-    type Error = Infallible;
-
-    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
+    fn try_into_bytes(self) -> Result<Bytes, Self::Error> {
         Ok(self)
     }
 }
 
-/// Attempt to convert a sequence of bytes into a value of this type.
+impl TryIntoBytes for Vec<u8> {
+    type Error = Infallible;
+
+    fn try_into_bytes(self) -> Result<Bytes, Self::Error> {
+        Ok(Bytes::from(self))
+    }
+}
+
+/// Attempt to convert [`Bytes`] into a value of this type.
 ///
 /// Transports may require this as a bound on the incoming message type, if the
 /// message needs to be deserialized from a byte sequence after receiving data.
 ///
-/// For the outgoing counterpart, see [`TryAsBytes`].
+/// For the outgoing counterpart, see [`TryIntoBytes`].
 pub trait TryFromBytes {
     /// Error type of [`TryFromBytes::try_from_bytes`].
     type Error: Error + Send + Sync + 'static;
@@ -91,7 +76,7 @@ pub trait TryFromBytes {
     /// # Errors
     ///
     /// Errors if the conversion fails.
-    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>
+    fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error>
     where
         Self: Sized;
 }
@@ -99,23 +84,23 @@ pub trait TryFromBytes {
 impl TryFromBytes for () {
     type Error = Infallible;
 
-    fn try_from_bytes(_: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from_bytes(_: Bytes) -> Result<Self, Self::Error> {
         Ok(())
-    }
-}
-
-impl TryFromBytes for Vec<u8> {
-    type Error = Infallible;
-
-    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
-        Ok(buf.to_vec())
     }
 }
 
 impl TryFromBytes for Bytes {
     type Error = Infallible;
 
-    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Bytes::from(buf.to_vec()))
+    fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error> {
+        Ok(buf)
+    }
+}
+
+impl TryFromBytes for Vec<u8> {
+    type Error = Infallible;
+
+    fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error> {
+        Ok(buf.to_vec())
     }
 }
