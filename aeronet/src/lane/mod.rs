@@ -140,6 +140,7 @@ pub enum LaneKind {
 
 impl LaneKind {
     /// Gets if this kind of lane is reliable.
+    #[must_use]
     pub fn is_reliable(&self) -> bool {
         match self {
             Self::UnreliableUnsequenced | Self::UnreliableSequenced => false,

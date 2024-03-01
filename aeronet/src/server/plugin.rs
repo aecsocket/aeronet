@@ -241,6 +241,7 @@ where
     pub msg_key: T::MessageKey,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn recv<P, T>(
     mut server: ResMut<T>,
     mut opened: EventWriter<ServerOpened<P, T>>,

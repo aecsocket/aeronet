@@ -8,10 +8,8 @@ type ClientState = aeronet::client::ClientState<(), ConnectionInfo>;
 
 type ClientEvent<P> = aeronet::client::ClientEvent<P, ChannelError, ()>;
 
-/// Implementation of [`ClientTransport`] using in-memory MPSC channels for
-/// transport.
-///
-/// See the [crate-level docs](crate).
+/// Variant of [`ChannelClient`] in the
+/// [`Connected`](aeronet::client::ClientState::Connected) state.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct ConnectedClient<P: TransportProtocol> {
@@ -37,19 +35,26 @@ impl<P: TransportProtocol> ConnectedClient<P> {
         }
     }
 
-    /// Key of this client as defined on the server, used for removing this
-    /// client from the server later.
+    /// Gets the key of this client as defined on the server, used for removing
+    /// this client from the server later.
     #[must_use]
     pub fn key(&self) -> ClientKey {
         self.key
     }
 
-    /// Statistics on the connection currently established by this client.
+    /// Gets statistics on the connection currently established by this client.
     #[must_use]
     pub fn info(&self) -> ConnectionInfo {
         self.info.clone()
     }
 
+    /// Attempts to send a message to the currently connected server.
+    ///
+    /// See [`ClientTransport::send`].
+    ///
+    /// # Errors
+    ///
+    /// See [`ClientTransport::send`].
     pub fn send(&mut self, msg: impl Into<P::C2S>) -> Result<(), ChannelError> {
         let msg = msg.into();
         self.send_c2s
@@ -59,6 +64,12 @@ impl<P: TransportProtocol> ConnectedClient<P> {
         Ok(())
     }
 
+    /// Updates the internal state of this transport, returning the events that
+    /// it emitted while updating.
+    ///
+    /// If the [`Result`] is [`Err`], the client must be disconnected.
+    ///
+    /// See [`ClientTransport::poll`].
     pub fn poll(&mut self) -> (Vec<ClientEvent<P>>, Result<(), ChannelError>) {
         let mut events = Vec::new();
 
@@ -82,20 +93,35 @@ impl<P: TransportProtocol> ConnectedClient<P> {
     }
 }
 
+/// Implementation of [`ClientTransport`] using in-memory MPSC channels.
+///
+/// See [`crate`].
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub enum ChannelClient<P: TransportProtocol> {
+    /// See [`Disconnected`](aeronet::client::ClientState::Disconnected).
     #[derivative(Default)]
     Disconnected,
+    /// See [`Connected`](aeronet::client::ClientState::Connected).
     Connected(ConnectedClient<P>),
 }
 
 impl<P: TransportProtocol> ChannelClient<P> {
+    /// Creates and connects a new client to an existing server.
+    ///
+    /// See [`ConnectedClient::connect`].
     pub fn connect_new(server: &mut ChannelServer<P>) -> Self {
         Self::Connected(ConnectedClient::connect(server))
     }
 
+    /// Creates and connects this client to an existing server.
+    ///
+    /// See [`ConnectedClient::connect`].
+    ///
+    /// # Errors
+    ///
+    /// Errors if this is not [`ChannelClient::Disconnected`].
     pub fn connect(&mut self, server: &mut ChannelServer<P>) -> Result<(), ChannelError> {
         match self {
             Self::Disconnected => {
@@ -106,6 +132,11 @@ impl<P: TransportProtocol> ChannelClient<P> {
         }
     }
 
+    /// Disconnects this client from its connected server.
+    ///
+    /// # Errors
+    ///
+    /// Errors if this is not [`ChannelClient::Connected`].
     pub fn disconnect(&mut self) -> Result<(), ChannelError> {
         match self {
             Self::Disconnected => Err(ChannelError::AlreadyDisconnected),
@@ -116,6 +147,10 @@ impl<P: TransportProtocol> ChannelClient<P> {
         }
     }
 
+    /// Gets the key of this client as defined on the server, used for removing
+    /// this client from the server later.
+    ///
+    /// Returns [`None`] if this is not [`ChannelClient::Connected`].
     #[must_use]
     pub fn key(&self) -> Option<ClientKey> {
         match self {

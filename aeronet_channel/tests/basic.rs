@@ -1,7 +1,8 @@
 use aeronet::{
     client::{ClientTransport, ClientTransportPlugin, FromServer},
+    message::Message,
+    protocol::TransportProtocol,
     server::{FromClient, ServerTransport, ServerTransportPlugin},
-    Message, TransportProtocol,
 };
 use aeronet_channel::{ChannelClient, ChannelServer};
 use bevy::prelude::*;

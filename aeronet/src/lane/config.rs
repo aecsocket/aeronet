@@ -48,6 +48,7 @@ impl Default for LaneConfig {
 }
 
 impl LaneConfig {
+    #[must_use]
     pub fn with_defaults(kind: LaneKind) -> Self {
         Self {
             kind,

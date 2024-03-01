@@ -40,4 +40,4 @@ required-features = ["bevy"]
 [[example]]
 name = "echo_conditioned"
 path = "examples/echo_conditioned.rs"
-required-features = ["bevy"]
+required-features = ["bevy", "aeronet/condition"]

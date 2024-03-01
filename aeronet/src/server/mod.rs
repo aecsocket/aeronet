@@ -17,7 +17,7 @@ use crate::{client::ClientState, protocol::TransportProtocol};
 /// Allows listening to client connections and transporting data between this
 /// server and connected clients.
 ///
-/// See the [crate-level docs](crate).
+/// See [`crate`].
 pub trait ServerTransport<P: TransportProtocol> {
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync;
@@ -109,8 +109,8 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// e.g. if the server already knows that the client is disconnected.
     fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error>;
 
-    /// Updates the internal state of this transport, returning an iterator over
-    /// the events that it emitted while updating.
+    /// Updates the internal state of this transport, returning the events that
+    /// it emitted while updating.
     ///
     /// This should be called in your app's main update loop.
     ///

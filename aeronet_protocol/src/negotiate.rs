@@ -1,6 +1,6 @@
 use std::{num::ParseIntError, string::FromUtf8Error};
 
-use aeronet::ProtocolVersion;
+use aeronet::protocol::ProtocolVersion;
 use const_format::formatcp;
 
 /// Allows two peers to confirm that they are using the same version of the same

@@ -22,10 +22,9 @@ impl std::fmt::Display for ClientKey {
 
 type ServerEvent<P> = aeronet::server::ServerEvent<P, ChannelError, ClientKey, ()>;
 
-/// Implementation of [`ServerTransport`] using in-memory MPSC channels for
-/// transport.
+/// Implementation of [`ServerTransport`] using in-memory MPSC channels.
 ///
-/// See the [crate-level docs](crate).
+/// See [`crate`].
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]

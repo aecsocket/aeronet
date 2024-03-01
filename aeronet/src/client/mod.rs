@@ -58,8 +58,8 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// [`Ok`].
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error>;
 
-    /// Updates the internal state of this transport, returning an iterator over
-    /// the events that it emitted while updating.
+    /// Updates the internal state of this transport, returning the events that
+    /// it emitted while updating.
     ///
     /// This should be called in your app's main update loop.
     ///
