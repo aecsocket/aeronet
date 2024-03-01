@@ -1,7 +1,10 @@
 use std::collections::BinaryHeap;
 
+use ahash::AHashMap;
+use bitvec::vec::BitVec;
+
 use crate::{
-    ack::AckHeader,
+    ack::{AckHeader, AckReceiver},
     bytes::prelude::*,
     frag::{Fragment, FragmentError, Fragmentation, ReassembleError},
     seq::Seq,
@@ -10,9 +13,23 @@ use crate::{
 #[derive(Debug)]
 pub struct Connection {
     frag: Fragmentation,
-    next_msg_seq: Seq,
-    next_packet_seq: Seq,
+    next_send_msg_seq: Seq,
+    next_send_packet_seq: Seq,
+    ack_receiver: AckReceiver,
     send_buf: BinaryHeap<Fragment>,
+    sent_msgs: AHashMap<Seq, SentMessage>,
+    sent_packets: AHashMap<Seq, Vec<SentFrag>>,
+}
+
+#[derive(Debug)]
+struct SentMessage {
+    acked_frag_ids: BitVec,
+}
+
+#[derive(Debug)]
+struct SentFrag {
+    msg_seq: Seq,
+    frag_id: u8,
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -29,7 +46,8 @@ pub enum ConnectionError {
 
 impl Connection {
     pub fn buffer_send(&mut self, lane_index: usize, msg: Bytes) -> Result<(), ConnectionError> {
-        let msg_seq = self.next_msg_seq.get_inc();
+        let msg_seq = self.next_send_msg_seq.get_inc();
+        self.sent_msgs.insert(msg_seq, SentMessage {});
         self.send_buf.extend(
             self.frag
                 .fragment(msg_seq, msg)
@@ -38,77 +56,61 @@ impl Connection {
         Ok(())
     }
 
-    pub fn flush(&mut self, available_bytes: usize) -> Flush<'_> {
-        Flush {
-            send_buf: &mut self.send_buf,
-            available_bytes,
-        }
+    pub fn flush(&mut self, available_bytes: &mut usize) -> impl Iterator<Item = Box<[u8]>> {
+        std::iter::from_fn(|| {})
     }
 
-    pub fn recv(&mut self, mut packet: Bytes) -> Result<Recv<'_>, ConnectionError> {
-        let ack_header = AckHeader::decode(&mut packet).map_err(ConnectionError::ReadAckHeader)?;
-        Ok(Recv {
-            frag: &mut self.frag,
-            packet,
-        })
-    }
-}
-
-pub struct Flush<'c> {
-    send_buf: &'c mut BinaryHeap<Fragment>,
-    available_bytes: usize,
-}
-
-impl Iterator for Flush<'_> {
-    type Item = ();
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let frag = self.send_buf.peek()?;
-        if self.available_bytes < frag.payload.len() {
-            return None;
-        }
-        let frag = self.send_buf.pop().unwrap();
-        self.available_bytes -= frag.payload.len();
-        Some(todo!())
-    }
-}
-
-impl Flush<'_> {
-    pub fn available_bytes(&self) -> usize {
-        self.available_bytes
-    }
-}
-
-#[derive(Debug)]
-pub struct Recv<'c> {
-    frag: &'c mut Fragmentation,
-    packet: Bytes,
-}
-
-impl Iterator for Recv<'_> {
-    type Item = Result<Vec<u8>, ConnectionError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.packet.remaining() > 0 {
-            match self.try_next() {
-                Ok(Some(msg)) => return Some(Ok(msg)),
-                Ok(None) => continue,
-                Err(err) => return Some(Err(err)),
+    pub fn recv(
+        &mut self,
+        mut packet: Bytes,
+    ) -> Result<
+        (
+            impl Iterator<Item = Seq>,
+            impl Iterator<Item = Result<Vec<u8>, ConnectionError>>,
+        ),
+        ConnectionError,
+    > {
+        let acks = AckHeader::decode(&mut packet).map_err(ConnectionError::ReadAckHeader)?;
+        self.recv_acks(acks);
+        Ok(std::iter::from_fn(|| {
+            while packet.remaining() > 0 {
+                match self.try_next() {
+                    Ok(Some(msg)) => return Some(Ok(msg)),
+                    Ok(None) => continue,
+                    Err(err) => return Some(Err(err)),
+                }
             }
-        }
-        None
+            None
+        }))
     }
-}
 
-impl Recv<'_> {
-    fn try_next(&mut self) -> Result<Option<Vec<u8>>, ConnectionError> {
-        let lane_index = self
-            .packet
-            .try_get_varint()
-            .map_err(ConnectionError::ReadFrag)? as usize;
-        let frag = Fragment::decode(&mut self.packet).map_err(ConnectionError::ReadFrag)?;
-        self.frag
-            .reassemble(&frag.header, &frag.payload)
-            .map_err(ConnectionError::Reassemble)
+    fn packet_acks_to_msg_acks<'a>(
+        &'a mut self,
+        acks: impl IntoIterator<Item = Seq> + 'a,
+    ) -> impl Iterator<Item = Seq> + 'a {
+        let mut acks = acks.into_iter();
+        std::iter::from_fn(move || {
+            while let Some(acked_packet_seq) = acks.next() {
+                let acked_frags = match self.sent_packets.get(&acked_packet_seq) {
+                    Some(t) => t,
+                    None => continue,
+                };
+                for acked_frag in acked_frags {
+                    let sent_msg = match self.sent_msgs.get_mut(&acked_frag.msg_seq) {
+                        Some(t) => t,
+                        None => continue,
+                    };
+                    sent_msg
+                        .acked_frag_ids
+                        .set(usize::from(acked_frag.frag_id), true);
+                    if sent_msg.acked_frag_ids.all() {
+                        // this message has been fully reassembled
+                        // on the receiver's side
+                        // TODO return this without dropping the acked_frags iterator
+                    }
+                }
+            }
+            None
+        })
     }
 }

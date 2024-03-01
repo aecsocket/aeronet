@@ -95,6 +95,22 @@ impl PartialOrd for Seq {
     }
 }
 
+impl std::ops::Add<Seq> for Seq {
+    type Output = Seq;
+
+    fn add(self, rhs: Seq) -> Self::Output {
+        Seq(self.0.wrapping_add(rhs.0))
+    }
+}
+
+impl std::ops::Sub<Seq> for Seq {
+    type Output = Seq;
+
+    fn sub(self, rhs: Seq) -> Self::Output {
+        Seq(self.0.wrapping_sub(rhs.0))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
