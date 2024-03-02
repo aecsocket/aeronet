@@ -2,9 +2,10 @@
 
 mod chunks;
 mod try_get;
+mod try_put;
 mod try_slice;
 
-pub use {chunks::*, try_get::*, try_slice::*};
+pub use {chunks::*, try_get::*, try_put::*, try_slice::*};
 
 /// Common re-exports for working with bytes.
 pub mod prelude {

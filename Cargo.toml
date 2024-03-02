@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "okbytes",
     "aeronet",
     "aeronet_derive",
     "aeronet_protocol",
@@ -35,7 +36,7 @@ aeronet_derive = { version = "0.5.0", path = "aeronet_derive" }
 aeronet_protocol = { version = "0.5.0", path = "aeronet_protocol" }
 tracing = "0.1.40"
 derivative = "2.2.0"
-thiserror = "1.0.56"
+thiserror = "1.0.57"
 either = "1.9.0"
 slotmap = "1.0.7"
 bitvec = "1.0.1"

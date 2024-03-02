@@ -7,7 +7,7 @@ use safer_bytes::error::Truncated;
 /// Provides a wrapper over [`safer_bytes::error`] and
 /// [`bytes_varint::VarIntError`] error types.
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum ReadError {
+pub enum BytesReadError {
     /// See [`Truncated`].
     #[error("buffer too short")]
     TooShort,
@@ -16,13 +16,13 @@ pub enum ReadError {
     ReadVarInt,
 }
 
-impl From<Truncated> for ReadError {
+impl From<Truncated> for BytesReadError {
     fn from(_: Truncated) -> Self {
         Self::TooShort
     }
 }
 
-impl From<VarIntError> for ReadError {
+impl From<VarIntError> for BytesReadError {
     fn from(_: VarIntError) -> Self {
         Self::ReadVarInt
     }
@@ -35,11 +35,13 @@ pub trait TryGetVarintExt {
     /// # Errors
     ///
     /// See [`VarIntError`].
-    fn try_get_varint(&mut self) -> Result<u64, ReadError>;
+    fn try_get_varint(&mut self) -> Result<u64, BytesReadError>;
 }
 
 impl TryGetVarintExt for Bytes {
-    fn try_get_varint(&mut self) -> Result<u64, ReadError> {
-        self.get_u64_varint().map_err(|_| ReadError::ReadVarInt)
+    #[inline]
+    fn try_get_varint(&mut self) -> Result<u64, BytesReadError> {
+        self.get_u64_varint()
+            .map_err(|_| BytesReadError::ReadVarInt)
     }
 }

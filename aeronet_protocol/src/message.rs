@@ -1,29 +1,27 @@
-use std::collections::BinaryHeap;
-
 use ahash::AHashMap;
-use bitvec::{bitvec, vec::BitVec};
 
 use crate::{
     ack::{AckHeader, Acknowledge},
     bytes::prelude::*,
-    frag::{Fragment, FragmentError, Fragmentation, ReassembleError},
+    frag::{FragHeader, Fragment, FragmentError, Fragmentation, ReassembleError},
     seq::Seq,
 };
 
 #[derive(Debug)]
 pub struct Messages {
     frag: Fragmentation,
+    max_packet_len: usize,
     next_send_msg_seq: Seq,
     next_send_packet_seq: Seq,
     ack: Acknowledge,
-    send_buf: BinaryHeap<Fragment>,
     unacked_msgs: AHashMap<Seq, UnackedMessage>,
     sent_packets: AHashMap<Seq, Vec<SentFrag>>,
 }
 
 #[derive(Debug)]
 struct UnackedMessage {
-    acked_frag_ids: BitVec,
+    frags_remaining: u8,
+    unacked_frags: Box<[Option<Fragment>]>,
 }
 
 #[derive(Debug)]
@@ -38,16 +36,31 @@ pub enum MessageError {
     Fragment(#[source] FragmentError),
 
     #[error("failed to read packet seq")]
-    ReadPacketSeq(#[source] ReadError),
+    ReadPacketSeq(#[source] BytesReadError),
     #[error("failed to read ack header")]
-    ReadAckHeader(#[source] ReadError),
+    ReadAckHeader(#[source] BytesReadError),
     #[error("failed to read fragment")]
-    ReadFragment(#[source] ReadError),
+    ReadFragment(#[source] BytesReadError),
     #[error("failed to reassemble fragment")]
     Reassemble(#[source] ReassembleError),
 }
 
+const PACKET_HEADER_LEN: usize = Seq::ENCODE_SIZE + AckHeader::ENCODE_SIZE;
+
 impl Messages {
+    pub fn new(max_packet_len: usize) -> Self {
+        assert!(max_packet_len > PACKET_HEADER_LEN);
+        Self {
+            frag: Fragmentation::new(max_packet_len - PACKET_HEADER_LEN),
+            max_packet_len,
+            next_send_msg_seq: Seq(0),
+            next_send_packet_seq: Seq(0),
+            ack: Acknowledge::new(),
+            unacked_msgs: AHashMap::new(),
+            sent_packets: AHashMap::new(),
+        }
+    }
+
     pub fn buffer_send(&mut self, lane_index: usize, msg: Bytes) -> Result<Seq, MessageError> {
         let msg_seq = self.next_send_msg_seq.get_inc();
         let frags = self
@@ -57,16 +70,69 @@ impl Messages {
         self.unacked_msgs.insert(
             msg_seq,
             UnackedMessage {
-                acked_frag_ids: bitvec![0; frags.len()],
+                frags_remaining: frags.num_frags(),
+                unacked_frags: frags.map(Some).collect(),
             },
         );
-        self.send_buf.extend(frags);
         Ok(msg_seq)
     }
 
-    pub fn flush(&mut self, available_bytes: &mut usize) -> impl Iterator<Item = Box<[u8]>> {
-        std::iter::from_fn(|| todo!())
+    pub fn flush(&mut self, available_bytes: &mut usize) -> impl Iterator<Item = Bytes> + '_ {
+        let mut frags = self
+            .unacked_msgs
+            .iter()
+            .flat_map(|(_, msg)| msg.unacked_frags.iter().filter_map(Option::as_ref));
     }
+
+    // pub fn flush<'a>(
+    //     &'a mut self,
+    //     available_bytes: &'a mut usize,
+    // ) -> impl Iterator<Item = Bytes> + 'a {
+    //     let mut frags = self
+    //         .unacked_msgs
+    //         .iter()
+    //         .flat_map(|(_, msg)| msg.unacked_frags.iter().filter_map(Option::as_ref));
+    //     // we're fighting with two capacities here, effectively:
+    //     // * `available_bytes`
+    //     // * `packet`, which has `max_packet_len` capacity
+    //     //   * `PACKET_HEADER_LEN` is reserved for packet header info
+    //     //   * some more is reserved for each fragment's header info
+    //     std::iter::from_fn(move || {
+    //         if *available_bytes < PACKET_HEADER_LEN {
+    //             return None;
+    //         }
+    //         let mut packet = BytesMut::with_capacity(self.max_packet_len.min(*available_bytes));
+    //         // PANIC SAFETY: `PACKET_HEADER_LEN` defines how big the encoding of the packer header will be
+    //         // the packet's capacity is `min(max_packet_len, available_bytes)`
+    //         // we just checked that `available_bytes > PACKET_HEADER_LEN`,
+    //         // and in `new` we checked that `max_packet_len > PACKET_HEADER_LEN`
+    //         // therefore these unwraps will never panic
+    //         self.next_send_msg_seq
+    //             .get_inc()
+    //             .encode(&mut packet)
+    //             .unwrap();
+    //         self.ack.create_header().encode(&mut packet).unwrap();
+    //         *available_bytes -= PACKET_HEADER_LEN;
+
+    //         // try to encode as many fragments as we can in the limited buffer space we have
+    //         let mut frags_encoded: u32 = 0;
+    //         while let Some(frag) = frags.next() {
+    //             let frag_encode_len = frag.max_encode_len();
+    //             if frag_encode_len > *available_bytes || frag_encode_len > packet.remaining_mut() {
+    //                 break;
+    //             }
+    //             // PANIC SAFETY: we just checked that the encoded len of the frag
+    //             // won't exceed our current bounds
+    //             *available_bytes -= frag.encode(&mut packet).unwrap();
+    //             frags_encoded += 1;
+    //         }
+    //         if frags_encoded > 0 {
+    //             Some(packet.freeze())
+    //         } else {
+    //             None
+    //         }
+    //     })
+    // }
 
     pub fn read_acks(
         &mut self,
@@ -127,11 +193,16 @@ impl Messages {
             .filter_map(|acked_frag| {
                 let msg_seq = acked_frag.msg_seq;
                 let unacked_msg = unacked_msgs.get_mut(&msg_seq)?;
-                unacked_msg
-                    .acked_frag_ids
-                    .set(usize::from(acked_frag.frag_id), true);
-                if unacked_msg.acked_frag_ids.all() {
-                    // it's no longer unacked,
+                if let Some(frag_slot) = unacked_msg
+                    .unacked_frags
+                    .get_mut(usize::from(acked_frag.frag_id))
+                {
+                    // mark this frag as acked
+                    unacked_msg.frags_remaining -= 1;
+                    *frag_slot = None;
+                }
+                if unacked_msg.frags_remaining == 0 {
+                    // message is no longer unacked,
                     // we've just acked all the fragments
                     unacked_msgs.remove(&msg_seq);
                     // notifying lanes is left as as responsibility
@@ -143,3 +214,5 @@ impl Messages {
             })
     }
 }
+
+pub struct Flush<'c> {}

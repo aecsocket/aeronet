@@ -61,13 +61,15 @@ impl AckHeader {
 
     /// Encodes this value into a byte buffer.
     ///
-    /// The buffer should have at least [`ENCODE_SIZE`] bytes of capacity, to
-    /// not have to allocate more space.
+    /// # Errors
+    ///
+    /// Errors if the buffer has less remaining space than [`ENCODE_SIZE`].
     ///
     /// [`ENCODE_SIZE`]: AckHeader::ENCODE_SIZE
-    pub fn encode(&self, buf: &mut BytesMut) {
-        self.last_recv.encode(buf);
-        buf.put_u32(self.ack_bits);
+    pub fn encode(&self, buf: &mut BytesMut) -> Result<(), BytesWriteError> {
+        self.last_recv.encode(buf)?;
+        buf.try_put_u32(self.ack_bits)?;
+        Ok(())
     }
 
     /// Decodes this value from a byte buffer.
@@ -77,7 +79,7 @@ impl AckHeader {
     /// Errors if the buffer is shorter than [`ENCODE_SIZE`].
     ///
     /// [`ENCODE_SIZE`]: AckHeader::ENCODE_SIZE
-    pub fn decode(buf: &mut Bytes) -> Result<Self, ReadError> {
+    pub fn decode(buf: &mut Bytes) -> Result<Self, BytesReadError> {
         let last_recv = Seq::decode(buf)?;
         let ack_bits = buf.try_get_u32()?;
         Ok(Self {

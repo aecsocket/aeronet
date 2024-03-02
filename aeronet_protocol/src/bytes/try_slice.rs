@@ -2,7 +2,7 @@ use std::ops::{Bound, RangeBounds};
 
 use bytes::Bytes;
 
-use super::ReadError;
+use super::BytesReadError;
 
 /// Extension trait on [`Bytes`].
 pub trait TrySliceExt {
@@ -34,11 +34,11 @@ pub trait TrySliceExt {
     ///
     /// Panics if the end bound of the range is an inclusive bound and its value
     /// is [`usize`], or if `begin > end`.
-    fn try_slice(&self, range: impl RangeBounds<usize>) -> Result<Bytes, ReadError>;
+    fn try_slice(&self, range: impl RangeBounds<usize>) -> Result<Bytes, BytesReadError>;
 }
 
 impl TrySliceExt for Bytes {
-    fn try_slice(&self, range: impl RangeBounds<usize>) -> Result<Bytes, ReadError> {
+    fn try_slice(&self, range: impl RangeBounds<usize>) -> Result<Bytes, BytesReadError> {
         let len = self.len();
         let end = match range.end_bound() {
             Bound::Included(&n) => n.checked_add(1).expect("out of range"),
@@ -46,7 +46,7 @@ impl TrySliceExt for Bytes {
             Bound::Unbounded => len,
         };
         if end > len {
-            return Err(ReadError::TooShort);
+            return Err(BytesReadError::TooShort);
         }
         Ok(self.slice(range))
     }

@@ -27,12 +27,14 @@ impl Seq {
 
     /// Encodes this value into a byte buffer.
     ///
-    /// The buffer should have at least [`ENCODE_SIZE`] bytes of capacity, to
-    /// not have to allocate more space.
+    /// # Errors
+    ///
+    /// Errors if the buffer has less remaining space than [`ENCODE_SIZE`].
     ///
     /// [`ENCODE_SIZE`]: Seq::ENCODE_SIZE
-    pub fn encode(&self, buf: &mut BytesMut) {
-        buf.put_u16(self.0);
+    pub fn encode(&self, buf: &mut BytesMut) -> Result<(), BytesWriteError> {
+        buf.try_put_u16(self.0)?;
+        Ok(())
     }
 
     /// Decodes this value from a byte buffer.
@@ -42,7 +44,7 @@ impl Seq {
     /// Errors if the buffer is shorter than [`ENCODE_SIZE`].
     ///
     /// [`ENCODE_SIZE`]: Seq::ENCODE_SIZE
-    pub fn decode(buf: &mut Bytes) -> Result<Self, ReadError> {
+    pub fn decode(buf: &mut Bytes) -> Result<Self, BytesReadError> {
         let seq = buf.try_get_u16()?;
         Ok(Self(seq))
     }
