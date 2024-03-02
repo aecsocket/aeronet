@@ -3,6 +3,7 @@
 
 use std::{
     cmp::Ordering,
+    iter::FusedIterator,
     num::NonZeroU8,
     time::{Duration, Instant},
 };
@@ -10,14 +11,8 @@ use std::{
 use ahash::AHashMap;
 use arbitrary::Arbitrary;
 use bitvec::{array::BitArray, bitarr};
-use bytes::{BufMut, Bytes, BytesMut};
-use bytes_varint::{VarIntSupport, VarIntSupportMut};
-use safer_bytes::SafeBuf;
 
-use crate::{
-    bytes::{ByteChunksExt, ReadError, TrySliceExt},
-    seq::Seq,
-};
+use crate::{bytes::prelude::*, seq::Seq};
 
 /// Handles splitting and reassembling a single large message into multiple
 /// smaller packets for sending over a network.
@@ -45,27 +40,6 @@ use crate::{
 pub struct Fragmentation {
     payload_len: usize,
     messages: AHashMap<Seq, MessageBuffer>,
-}
-
-impl Fragmentation {
-    /// Creates a new fragmentation sender/receiver from the given
-    /// configuration.
-    ///
-    /// * `payload_len` defines the maximum length, in bytes, that the payload
-    ///   of a single fragmented packet can be. This must be greater than 0.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `payload_len` is 0.
-    ///
-    /// [reassemble]: Fragmentation::reassemble
-    pub fn new(payload_len: usize) -> Self {
-        assert!(payload_len > 0);
-        Self {
-            payload_len,
-            messages: AHashMap::new(),
-        }
-    }
 }
 
 /// Error that occurs when using [`Fragmentation::fragment`].
@@ -242,8 +216,29 @@ impl PartialOrd for Fragment {
 }
 
 impl Fragmentation {
+    /// Creates a new fragmentation sender/receiver from the given
+    /// configuration.
+    ///
+    /// * `payload_len` defines the maximum length, in bytes, that the payload
+    ///   of a single fragmented packet can be. This must be greater than 0.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `payload_len` is 0.
+    ///
+    /// [reassemble]: Fragmentation::reassemble
+    pub fn new(payload_len: usize) -> Self {
+        assert!(payload_len > 0);
+        Self {
+            payload_len,
+            messages: AHashMap::new(),
+        }
+    }
+
     /// Splits a message up into individual fragmented packets and creates the
     /// appropriate headers for each packet.
+    ///
+    /// Returns an iterator over the individual fragments.
     ///
     /// * `msg_seq` represents the sequence of this specific message - note that
     ///   each fragment may be sent in a different packet with a different
@@ -254,11 +249,7 @@ impl Fragmentation {
     ///
     /// Errors if the message was not a valid message which could be fragmented.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    pub fn fragment(
-        &self,
-        msg_seq: Seq,
-        msg: Bytes,
-    ) -> Result<impl Iterator<Item = Fragment> + '_, FragmentError> {
+    pub fn fragment(&self, msg_seq: Seq, msg: Bytes) -> Result<Fragments, FragmentError> {
         let msg_len = msg.len();
         let chunks = msg.byte_chunks(self.payload_len);
         let num_frags = u8::try_from(chunks.len()).map_err(|_| FragmentError::MessageTooBig {
@@ -266,16 +257,11 @@ impl Fragmentation {
             max: usize::from(u8::MAX) * self.payload_len,
         })?;
 
-        Ok(chunks.enumerate().map(move |(frag_id, payload)| {
-            let frag_id = u8::try_from(frag_id)
-                .expect("`num_frags` is a u8, so `frag_id` should be convertible");
-            let header = FragHeader {
-                msg_seq,
-                num_frags,
-                frag_id,
-            };
-            Fragment { header, payload }
-        }))
+        Ok(Fragments {
+            msg_seq,
+            num_frags,
+            iter: chunks.enumerate(),
+        })
     }
 
     /// Receives a fragmented packet and attempts to reassemble this fragment
@@ -408,6 +394,37 @@ impl Fragmentation {
         self.messages.clear();
     }
 }
+
+#[derive(Debug)]
+pub struct Fragments {
+    msg_seq: Seq,
+    num_frags: u8,
+    iter: std::iter::Enumerate<crate::bytes::ByteChunks>,
+}
+
+impl Iterator for Fragments {
+    type Item = Fragment;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (frag_id, payload) = self.iter.next()?;
+        let frag_id =
+            u8::try_from(frag_id).expect("`num_frags` is a u8, so `frag_id` should be convertible");
+        let header = FragHeader {
+            msg_seq: self.msg_seq,
+            num_frags: self.num_frags,
+            frag_id,
+        };
+        Some(Fragment { header, payload })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+impl ExactSizeIterator for Fragments {}
+
+impl FusedIterator for Fragments {}
 
 #[cfg(test)]
 mod tests {

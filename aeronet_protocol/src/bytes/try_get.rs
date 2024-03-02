@@ -8,8 +8,10 @@ use safer_bytes::error::Truncated;
 /// [`bytes_varint::VarIntError`] error types.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ReadError {
+    /// See [`Truncated`].
     #[error("buffer too short")]
     TooShort,
+    /// See [`VarIntError`].
     #[error("failed to read varint")]
     ReadVarInt,
 }
@@ -26,7 +28,13 @@ impl From<VarIntError> for ReadError {
     }
 }
 
+/// Extension trait on [`Bytes`].
 pub trait TryGetVarintExt {
+    /// Attempts to read the next u64 varint, and advances the cursor.
+    ///
+    /// # Errors
+    ///
+    /// See [`VarIntError`].
     fn try_get_varint(&mut self) -> Result<u64, ReadError>;
 }
 

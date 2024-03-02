@@ -3,11 +3,14 @@
 use std::{convert::Infallible, string::FromUtf8Error};
 
 use aeronet::{
+    bytes::Bytes,
     client::{
         ClientState, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
         LocalClientDisconnected,
     },
-    LaneKey, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
+    lane::{LaneKey, OnLane},
+    message::{Message, TryFromBytes, TryIntoBytes},
+    protocol::{ProtocolVersion, TransportProtocol},
 };
 use aeronet_webtransport::{WebTransportClient, WebTransportClientConfig, MTU};
 use bevy::{log::LogPlugin, prelude::*};
@@ -39,23 +42,19 @@ impl<T: Into<String>> From<T> for AppMessage {
 }
 
 // Defines how this message type can be converted to/from a [u8] form.
-impl TryAsBytes for AppMessage {
-    type Output<'a> = &'a [u8];
+impl TryIntoBytes for AppMessage {
     type Error = Infallible;
 
-    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
-        Ok(self.0.as_bytes())
+    fn try_into_bytes(self) -> Result<Bytes, Self::Error> {
+        Ok(Bytes::from(self.0.into_bytes()))
     }
 }
 
 impl TryFromBytes for AppMessage {
     type Error = FromUtf8Error;
 
-    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-    {
-        String::from_utf8(buf.to_vec()).map(AppMessage)
+    fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error> {
+        String::from_utf8(buf.into()).map(AppMessage)
     }
 }
 
@@ -87,7 +86,7 @@ fn main() {
     .add_systems(Update, (on_connected, on_disconnected, on_recv, ui).chain());
 
     #[cfg(not(target_family = "wasm"))]
-    app.init_resource::<aeronet::TokioRuntime>();
+    app.init_resource::<aeronet::runtime::TokioRuntime>();
 
     app.run();
 }
@@ -115,7 +114,7 @@ fn on_disconnected(
     for LocalClientDisconnected { reason } in events.read() {
         ui_state.log.push(format!(
             "Disconnected: {:#}",
-            aeronet::util::pretty_error(&reason)
+            aeronet::error::pretty_error(&reason)
         ));
     }
 }
@@ -130,7 +129,7 @@ fn on_recv(
 }
 
 fn ui(
-    #[cfg(not(target_family = "wasm"))] runtime: Res<aeronet::TokioRuntime>,
+    #[cfg(not(target_family = "wasm"))] runtime: Res<aeronet::runtime::TokioRuntime>,
     mut egui: EguiContexts,
     mut client: ResMut<Client>,
     mut ui_state: ResMut<UiState>,
@@ -225,7 +224,7 @@ fn native_config() -> aeronet_webtransport::wtransport::ClientConfig {
 }
 
 fn connect(
-    #[cfg(not(target_family = "wasm"))] runtime: &aeronet::TokioRuntime,
+    #[cfg(not(target_family = "wasm"))] runtime: &aeronet::runtime::TokioRuntime,
     client: &mut Client,
     url: String,
 ) {

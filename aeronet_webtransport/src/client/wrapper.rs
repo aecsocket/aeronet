@@ -2,7 +2,9 @@ use std::{future::Future, task::Poll};
 
 use aeronet::{
     client::{ClientState, ClientTransport},
-    MessageState, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+    lane::OnLane,
+    message::{TryFromBytes, TryIntoBytes},
+    protocol::TransportProtocol,
 };
 use derivative::Derivative;
 use xwt_core::utils::maybe;
@@ -26,8 +28,8 @@ pub enum WebTransportClient<P> {
 impl<P> WebTransportClient<P>
 where
     P: TransportProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
 {
     pub fn connect_new(
         config: WebTransportClientConfig,
@@ -66,8 +68,8 @@ where
 impl<P> ClientTransport<P> for WebTransportClient<P>
 where
     P: TransportProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
 {
     type Error = WebTransportError<P>;
 
@@ -82,13 +84,6 @@ where
             Self::Disconnected => ClientState::Disconnected,
             Self::Connecting(_) => ClientState::Connecting(()),
             Self::Connected(client) => ClientState::Connected(client.connection_info()),
-        }
-    }
-
-    fn message_state(&self, msg_key: Self::MessageKey) -> Option<MessageState> {
-        match self {
-            Self::Disconnected | Self::Connecting(_) => None,
-            Self::Connected(client) => client.message_state(msg_key),
         }
     }
 

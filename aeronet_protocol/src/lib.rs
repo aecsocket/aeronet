@@ -3,8 +3,8 @@
 
 pub mod ack;
 pub mod bytes;
-pub mod conn;
 pub mod frag;
 pub mod lane;
+pub mod message;
 pub mod negotiate;
 pub mod seq;

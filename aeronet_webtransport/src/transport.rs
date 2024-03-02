@@ -1,9 +1,10 @@
 use std::time::Duration;
 
-use aeronet::{ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
-use aeronet_protocol::{
-    lane::LaneError, NegotiationRequestError, NegotiationResponseError, WrongProtocolVersion,
+use aeronet::{
+    message::{TryFromBytes, TryIntoBytes},
+    stats::{ByteStats, MessageStats, Rtt},
 };
+use aeronet_protocol::{message, negotiate};
 use derivative::Derivative;
 
 use crate::ClientKey;
@@ -92,7 +93,7 @@ cfg_if::cfg_if! {
             }
         }
 
-        impl aeronet::RemoteAddr for ConnectionInfo {
+        impl aeronet::stats::RemoteAddr for ConnectionInfo {
             fn remote_addr(&self) -> std::net::SocketAddr {
                 self.remote_addr
             }
@@ -141,11 +142,11 @@ impl ByteStats for ConnectionInfo {
 /// [`WebTransportServer`]: crate::WebTransportServer
 #[derive(Derivative, thiserror::Error)]
 #[derivative(Debug(bound = ""))]
-pub enum WebTransportError<S: TryAsBytes, R: TryFromBytes> {
+pub enum WebTransportError<S: TryIntoBytes, R: TryFromBytes> {
     #[error("backend error")]
     Backend(#[from] BackendError),
-    #[error("failed to convert message to bytes")]
-    AsBytes(#[source] S::Error),
+    #[error("failed to convert message into bytes")]
+    IntoBytes(#[source] S::Error),
     #[error("failed to convert bytes to message")]
     FromBytes(#[source] R::Error),
 
@@ -303,11 +304,11 @@ pub enum BackendError {
     ),
 
     #[error("failed to read negotiation request")]
-    ReadNegotiateRequest(#[source] NegotiationRequestError),
+    ReadNegotiateRequest(#[source] negotiate::RequestError),
     #[error("failed to read negotiation response")]
-    ReadNegotiateResponse(#[source] NegotiationResponseError),
+    ReadNegotiateResponse(#[source] negotiate::ResponseError),
     #[error("wrong protocol version")]
-    WrongProtocolVersion(#[source] WrongProtocolVersion),
+    WrongProtocolVersion(#[source] negotiate::WrongProtocolVersion),
 
     #[cfg(not(target_family = "wasm"))]
     #[error("failed to accept session request")]
@@ -316,6 +317,6 @@ pub enum BackendError {
     #[error("failed to accept session")]
     AcceptSession(#[source] wtransport::error::ConnectionError),
 
-    #[error("on lane")]
-    Lane(#[source] LaneError),
+    #[error("TODO")]
+    Messages(#[source] message::MessageError),
 }

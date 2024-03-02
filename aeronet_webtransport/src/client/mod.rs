@@ -1,22 +1,25 @@
 mod backend;
 mod wrapper;
 
+use aeronet_protocol::seq::Seq;
 pub use wrapper::*;
 
 use std::{future::Future, marker::PhantomData, task::Poll};
 
 use aeronet::{
-    LaneConfig, MessageState, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
+    lane::{LaneConfig, OnLane},
+    message::{TryFromBytes, TryIntoBytes},
+    protocol::{ProtocolVersion, TransportProtocol},
 };
 use derivative::Derivative;
 use futures::channel::oneshot;
 use xwt_core::utils::maybe;
 
-use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo, MessageKey};
+use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ClientMessageKey {
-    key: MessageKey,
+    msg_seq: Seq,
 }
 
 type WebTransportError<P> =
@@ -53,8 +56,8 @@ struct ConnectedInner {
 impl<P> ConnectingClient<P>
 where
     P: TransportProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
 {
     pub fn connect(
         config: WebTransportClientConfig,
@@ -107,8 +110,8 @@ pub struct ConnectedClient<P> {
 impl<P> ConnectedClient<P>
 where
     P: TransportProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
 {
     #[cfg(not(target_family = "wasm"))]
     #[must_use]
@@ -121,34 +124,35 @@ where
         self.conn.info.clone()
     }
 
-    #[must_use]
-    pub fn message_state(&self, msg_key: ClientMessageKey) -> Option<MessageState> {
-        None
-    }
-
     pub fn send(
         &mut self,
         msg: impl Into<P::C2S>,
     ) -> Result<ClientMessageKey, WebTransportError<P>> {
         self.conn
-            .buffer_send(&msg.into())
-            .map(|key| ClientMessageKey { key })
+            .buffer_send(msg.into())
+            .map(|msg_seq| ClientMessageKey { msg_seq })
     }
 
     pub fn poll(&mut self) -> (Vec<ClientEvent<P>>, Result<(), WebTransportError<P>>) {
         let mut events = Vec::new();
-        let result = self._poll(&mut events);
+        let result = self.do_poll(&mut events);
         (events, result)
     }
 
-    fn _poll(&mut self, events: &mut Vec<ClientEvent<P>>) -> Result<(), WebTransportError<P>> {
-        self.conn.poll();
-        for msg in self.conn.recv() {
-            let msg = msg?;
-            events.push(ClientEvent::Recv { msg });
+    fn do_poll(&mut self, events: &mut Vec<ClientEvent<P>>) -> Result<(), WebTransportError<P>> {
+        self.conn.poll()?;
+        while let Some(mut packet) = self.conn.recv() {
+            for msg_seq in self.conn.read_acks(&mut packet)? {
+                events.push(ClientEvent::Ack {
+                    msg_key: ClientMessageKey { msg_seq },
+                });
+            }
+            for result in self.conn.read_frags(packet) {
+                let msg = result?;
+                events.push(ClientEvent::Recv { msg });
+            }
         }
-        self.conn
-            .recv_err()
-            .map_err(WebTransportError::<P>::Backend)
+        self.conn.recv_err()?;
+        Ok(())
     }
 }

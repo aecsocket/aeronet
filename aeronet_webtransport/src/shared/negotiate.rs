@@ -1,5 +1,7 @@
-use aeronet::ProtocolVersion;
-use aeronet_protocol::{Negotiation, NegotiationRequestError, NegotiationResponseError};
+use aeronet::protocol::ProtocolVersion;
+use aeronet_protocol::negotiate::{
+    Negotiation, RequestError, ResponseError, REQUEST_LEN, RESPONSE_LEN,
+};
 use tracing::debug;
 use xwt::current::{Connection, RecvStream, SendStream};
 use xwt_core::{AcceptBiStream, OpenBiStream, OpeningBiStream, Read, Write};
@@ -28,22 +30,22 @@ pub(super) async fn client(
         .map_err(|err| BackendError::SendManaged(err.into()))?;
 
     debug!("Waiting for response");
-    let mut resp = [0; Negotiation::RESPONSE_SIZE];
+    let mut resp = [0; RESPONSE_LEN];
     #[allow(clippy::useless_conversion)] // multi-target support
     let bytes_read = recv_managed
         .read(&mut resp)
         .await
         .map_err(|err| BackendError::RecvManaged(From::from(err)))?
         .ok_or(BackendError::ManagedStreamClosed)?;
-    if bytes_read != Negotiation::RESPONSE_SIZE {
+    if bytes_read != RESPONSE_LEN {
         return Err(BackendError::ReadNegotiateResponse(
-            NegotiationResponseError::WrongLength { len: bytes_read },
+            ResponseError::WrongLength { len: bytes_read },
         ));
     }
 
     #[allow(clippy::match_wildcard_for_single_variants)] // this is the behavior we want
     negotiation.recv_response(&resp).map_err(|err| match err {
-        NegotiationResponseError::WrongVersion(err) => BackendError::WrongProtocolVersion(err),
+        ResponseError::WrongVersion(err) => BackendError::WrongProtocolVersion(err),
         err => BackendError::ReadNegotiateResponse(err),
     })?;
 
@@ -63,16 +65,16 @@ pub(super) async fn server(
     let negotiation = Negotiation::new(version);
 
     debug!("Accepted managed stream, waiting for negotiation request");
-    let mut req = [0; Negotiation::REQUEST_SIZE];
+    let mut req = [0; REQUEST_LEN];
     #[allow(clippy::useless_conversion)] // multi-target support
     let bytes_read = recv_managed
         .read(&mut req)
         .await
         .map_err(|err| BackendError::RecvManaged(err.into()))?
         .ok_or(BackendError::ManagedStreamClosed)?;
-    if bytes_read != Negotiation::REQUEST_SIZE {
+    if bytes_read != REQUEST_LEN {
         return Err(BackendError::ReadNegotiateRequest(
-            NegotiationRequestError::WrongLength { len: bytes_read },
+            RequestError::WrongLength { len: bytes_read },
         ));
     }
 
@@ -90,7 +92,7 @@ pub(super) async fn server(
         #[cfg(not(target_family = "wasm"))]
         let _ = send_managed.0.finish().await;
         return Err(match err {
-            NegotiationRequestError::WrongVersion(err) => BackendError::WrongProtocolVersion(err),
+            RequestError::WrongVersion(err) => BackendError::WrongProtocolVersion(err),
             err => BackendError::ReadNegotiateRequest(err),
         });
     }

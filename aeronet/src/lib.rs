@@ -15,4 +15,4 @@ pub mod stats;
 pub mod condition;
 
 #[cfg(feature = "bevy-tokio-rt")]
-pub mod tokio_rt;
+pub mod runtime;

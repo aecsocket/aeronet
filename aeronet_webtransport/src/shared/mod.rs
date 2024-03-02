@@ -1,6 +1,11 @@
 mod negotiate;
 
-use aeronet_protocol::{lane::Lanes, Seq};
+use aeronet::{
+    lane::{LaneConfig, LaneIndex, OnLane},
+    message::{TryFromBytes, TryIntoBytes},
+    protocol::ProtocolVersion,
+};
+use aeronet_protocol::{message::Messages, seq::Seq};
 use derivative::Derivative;
 use tracing::debug;
 use xwt::current::{Connection, RecvStream, SendStream};
@@ -8,7 +13,6 @@ use xwt_core::datagram::{Receive, Send};
 
 use std::time::Duration;
 
-use aeronet::{LaneConfig, LaneIndex, OnLane, ProtocolVersion, TryAsBytes, TryFromBytes};
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
@@ -16,12 +20,6 @@ use futures::{
 };
 
 use crate::{BackendError, ConnectionInfo, WebTransportError};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MessageKey {
-    lane_index: usize,
-    seq: Seq,
-}
 
 const MSG_BUF_CAP: usize = 64;
 
@@ -32,7 +30,7 @@ pub struct ConnectionFrontend {
     recv_s2c: mpsc::Receiver<Bytes>,
     recv_rtt: mpsc::Receiver<Duration>,
     recv_err: oneshot::Receiver<BackendError>,
-    lanes: Lanes,
+    msgs: Messages,
     _send_closed: oneshot::Sender<()>,
 }
 
@@ -74,7 +72,7 @@ pub async fn connection_channel<const SERVER: bool>(
             recv_s2c,
             recv_rtt,
             recv_err,
-            lanes: Lanes::new(max_packet_len, lanes),
+            msgs: todo!(),
             _send_closed: send_closed,
         },
         ConnectionBackend {
@@ -94,45 +92,56 @@ pub async fn connection_channel<const SERVER: bool>(
 }
 
 impl ConnectionFrontend {
-    pub fn buffer_send<S: TryAsBytes + OnLane, R: TryFromBytes>(
+    pub fn buffer_send<S: TryIntoBytes + OnLane, R: TryFromBytes>(
         &mut self,
-        msg: &S,
-    ) -> Result<MessageKey, WebTransportError<S, R>> {
+        msg: S,
+    ) -> Result<Seq, WebTransportError<S, R>> {
         let lane_index = msg.lane().index();
-        let msg_bytes = msg.try_as_bytes().map_err(WebTransportError::AsBytes)?;
-        let msg_bytes = msg_bytes.as_ref();
-
-        let seq = self
-            .lanes
+        let msg_bytes = msg.try_into_bytes().map_err(WebTransportError::IntoBytes)?;
+        let msg_seq = self
+            .msgs
             .buffer_send(lane_index, msg_bytes)
-            .map_err(BackendError::Lane)?;
-        Ok(MessageKey { lane_index, seq })
+            .map_err(BackendError::Messages)?;
+        Ok(msg_seq)
     }
 
     pub fn poll(&mut self) -> Result<(), BackendError> {
         while let Ok(Some(rtt)) = self.recv_rtt.try_next() {
             self.info.rtt = rtt;
         }
-        for packet in self.lanes.send_buffered().map_err(BackendError::Lane)? {
+
+        let mut available_bytes = usize::MAX; // TODO
+        for packet in self.msgs.flush(&mut available_bytes) {
             self.send_c2s
-                .unbounded_send(packet)
+                .unbounded_send(Bytes::from(packet))
                 .map_err(|_| BackendError::Closed)?;
         }
         Ok(())
     }
 
-    pub fn recv<S: TryAsBytes, R: TryFromBytes>(
-        &mut self,
-    ) -> impl Iterator<Item = Result<R, WebTransportError<S, R>>> + '_ {
-        Recv {
-            recv_s2c: &mut self.recv_s2c,
+    pub fn recv(&mut self) -> Option<Bytes> {
+        match self.recv_s2c.try_next() {
+            Ok(Some(packet)) => Some(packet),
+            Ok(None) | Err(_) => None,
         }
-        .flat_map(|packet| self.lanes.recv(&packet).map_err(BackendError::Lane))
-        .flatten()
-        .map(|msg_bytes| {
-            let msg_bytes = msg_bytes.map_err(BackendError::Lane)?;
-            let msg = R::try_from_bytes(&msg_bytes).map_err(WebTransportError::FromBytes)?;
-            self.info.msg_bytes_recv += msg_bytes.len();
+    }
+
+    pub fn read_acks(
+        &mut self,
+        packet: &mut Bytes,
+    ) -> Result<impl Iterator<Item = Seq> + '_, BackendError> {
+        self.msgs.read_acks(packet).map_err(BackendError::Messages)
+    }
+
+    pub fn read_frags<S: TryIntoBytes, R: TryFromBytes>(
+        &mut self,
+        packet: Bytes,
+    ) -> impl Iterator<Item = Result<R, WebTransportError<S, R>>> + '_ {
+        self.msgs.read_frags(packet).map(|msg_bytes| {
+            let msg_bytes = msg_bytes.map_err(BackendError::Messages)?;
+            let msg_bytes_len = msg_bytes.len();
+            let msg = R::try_from_bytes(msg_bytes).map_err(WebTransportError::FromBytes)?;
+            self.info.msg_bytes_recv += msg_bytes_len;
             self.info.msgs_recv += 1;
             Ok(msg)
         })
@@ -195,7 +204,7 @@ impl ConnectionBackend {
                 debug!("Closed backend");
             }
             Err(err) => {
-                debug!("Closed backend: {:#}", aeronet::util::pretty_error(&err));
+                debug!("Closed backend: {:#}", aeronet::error::pretty_error(&err));
                 let _ = self.send_err.send(err);
             }
         }

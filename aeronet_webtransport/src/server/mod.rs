@@ -1,20 +1,23 @@
 mod backend;
 mod wrapper;
 
+use aeronet_protocol::seq::Seq;
 use tracing::debug;
 pub use wrapper::*;
 
 use std::{collections::HashMap, future::Future, marker::PhantomData, net::SocketAddr, task::Poll};
 
 use aeronet::{
-    client::ClientState, LaneConfig, MessageState, OnLane, ProtocolVersion, TransportProtocol,
-    TryAsBytes, TryFromBytes,
+    client::ClientState,
+    lane::{LaneConfig, OnLane},
+    message::{TryFromBytes, TryIntoBytes},
+    protocol::{ProtocolVersion, TransportProtocol},
 };
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
 
-use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo, MessageKey};
+use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo};
 
 slotmap::new_key_type! {
     /// Key identifying a unique client connected to a [`WebTransportServer`].
@@ -29,8 +32,8 @@ impl std::fmt::Display for ClientKey {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ServerMessageKey {
-    client: ClientKey,
-    msg: MessageKey,
+    client_key: ClientKey,
+    msg_seq: Seq,
 }
 
 type WebTransportError<P> =
@@ -107,8 +110,8 @@ enum ConnectionResponse {
 impl<P> OpeningServer<P>
 where
     P: TransportProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
 {
     pub fn open(config: WebTransportServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel();
@@ -152,8 +155,8 @@ pub struct OpenServer<P> {
 impl<P> OpenServer<P>
 where
     P: TransportProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
 {
     #[must_use]
     pub fn local_addr(&self) -> SocketAddr {
@@ -175,11 +178,6 @@ where
     #[must_use]
     pub fn client_keys(&self) -> impl Iterator<Item = ClientKey> + '_ {
         self.clients.keys()
-    }
-
-    #[must_use]
-    pub fn message_state(&self, msg_key: ServerMessageKey) -> Option<MessageState> {
-        None
     }
 
     pub fn accept_request(&mut self, client_key: ClientKey) -> Result<(), WebTransportError<P>> {
@@ -219,11 +217,11 @@ where
             return Err(WebTransportError::<P>::NoClient { client_key });
         };
 
-        let msg = msg.into();
-        conn.buffer_send(&msg).map(|msg| ServerMessageKey {
-            client: client_key,
-            msg,
-        })
+        conn.buffer_send(msg.into())
+            .map(|msg_seq| ServerMessageKey {
+                client_key,
+                msg_seq,
+            })
     }
 
     pub fn disconnect(&mut self, client_key: ClientKey) -> Result<(), WebTransportError<P>> {
@@ -296,13 +294,27 @@ where
                 Err(_) => Err(Some(WebTransportError::<P>::Backend(BackendError::Closed))),
             },
             Client::Connected { conn } => {
-                conn.poll();
-                for msg in conn.recv() {
-                    let msg = msg?;
-                    events.push(ServerEvent::Recv { client_key, msg });
+                conn.poll().map_err(|err| Some(err.into()))?;
+                while let Some(mut packet) = conn.recv() {
+                    for msg_seq in conn
+                        .read_acks(&mut packet)
+                        .map_err(|err| Some(err.into()))?
+                    {
+                        events.push(ServerEvent::Ack {
+                            client_key,
+                            msg_key: ServerMessageKey {
+                                client_key,
+                                msg_seq,
+                            },
+                        });
+                    }
+                    for result in conn.read_frags(packet) {
+                        let msg = result?;
+                        events.push(ServerEvent::Recv { client_key, msg });
+                    }
                 }
-                conn.recv_err()
-                    .map_err(|err| Some(WebTransportError::<P>::Backend(err)))
+                conn.recv_err().map_err(|err| Some(err.into()))?;
+                Ok(())
             }
         }
     }

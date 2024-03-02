@@ -17,6 +17,7 @@ use bytes::Bytes;
 /// See [`std::slice::Chunks`].
 ///
 /// [`byte_chunks`]: ByteChunksExt::byte_chunks
+#[derive(Debug)]
 pub struct ByteChunks {
     v: Bytes,
     chunk_size: usize,
@@ -55,7 +56,7 @@ impl ExactSizeIterator for ByteChunks {}
 
 impl FusedIterator for ByteChunks {}
 
-/// Extension trait on [`Bytes`] providing [`ByteChunksExt::byte_chunks`].
+/// Extension trait on [`Bytes`].
 pub trait ByteChunksExt {
     /// Converts this into an iterator over non-overlapping chunks of the
     /// original bytes.

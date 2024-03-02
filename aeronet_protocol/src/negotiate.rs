@@ -1,7 +1,6 @@
 use std::{num::ParseIntError, string::FromUtf8Error};
 
 use aeronet::protocol::ProtocolVersion;
-use const_format::formatcp;
 
 /// Allows two peers to confirm that they are using the same version of the same
 /// protocol.
@@ -30,7 +29,7 @@ use const_format::formatcp;
 ///     communication, but opens a bidirectional managed stream to perform
 ///     negotiation
 /// * Client sends a request with a protocol string including its version number
-///   * Currently this is an ASCII string: `aeronet/xxxxxxxxxxxxxxxx``
+///   * Currently this is an ASCII string: `aeronet/xxxxxxxxxxxxxxxx` (24 bytes)
 ///     where the `xxxxxxxxxxxxxxxx` (16 bytes) is the hex form of the version
 ///     number
 /// * Server compares this request's version against its own
@@ -120,7 +119,7 @@ impl Negotiation {
         let version: [u8; VERSION_LEN] = format!("{:016x}", self.version.0)
             .into_bytes()
             .try_into()
-            .expect(formatcp!(
+            .expect(&format!(
                 "formatted string should be {VERSION_LEN} bytes long"
             ));
         let mut packet = [0; REQUEST_LEN];

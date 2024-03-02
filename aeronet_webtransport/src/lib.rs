@@ -5,7 +5,7 @@ mod client;
 mod shared;
 mod transport;
 
-pub use {client::*, shared::MessageKey, transport::*};
+pub use {client::*, transport::*};
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {

@@ -2,8 +2,11 @@ use std::{fmt::Debug, future::Future, net::SocketAddr, task::Poll};
 
 use aeronet::{
     client::ClientState,
+    lane::OnLane,
+    message::{TryFromBytes, TryIntoBytes},
+    protocol::TransportProtocol,
     server::{ServerState, ServerTransport},
-    LocalAddr, MessageState, OnLane, TransportProtocol, TryAsBytes, TryFromBytes,
+    stats::LocalAddr,
 };
 use derivative::Derivative;
 use either::Either;
@@ -34,8 +37,8 @@ pub enum WebTransportServer<P> {
 impl<P> WebTransportServer<P>
 where
     P: TransportProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
 {
     /// See [`OpeningServer::open`].
     pub fn open_new(config: WebTransportServerConfig) -> (Self, impl Future<Output = ()> + Send) {
@@ -98,8 +101,8 @@ where
 impl<P> ServerTransport<P> for WebTransportServer<P>
 where
     P: TransportProtocol,
-    P::C2S: TryAsBytes + TryFromBytes + OnLane,
-    P::S2C: TryAsBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
 {
     type Error = WebTransportError<P>;
 
@@ -139,13 +142,6 @@ where
         match self {
             Self::Closed | Self::Opening(_) => Either::Left(std::iter::empty()),
             Self::Open(server) => Either::Right(server.client_keys()),
-        }
-    }
-
-    fn message_state(&self, msg_key: Self::MessageKey) -> Option<MessageState> {
-        match self {
-            Self::Closed | Self::Opening(_) => None,
-            Self::Open(server) => server.message_state(msg_key),
         }
     }
 

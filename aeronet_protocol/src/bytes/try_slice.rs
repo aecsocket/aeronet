@@ -4,7 +4,7 @@ use bytes::Bytes;
 
 use super::ReadError;
 
-/// Extension trait on [`Bytes`] providing [`TrySliceExt::try_slice`].
+/// Extension trait on [`Bytes`].
 pub trait TrySliceExt {
     /// Returns a slice of self for the provided range.
     ///

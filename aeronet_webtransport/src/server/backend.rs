@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use aeronet::{LaneConfig, ProtocolVersion};
+use aeronet::{lane::LaneConfig, protocol::ProtocolVersion};
 use futures::{
     channel::{mpsc, oneshot},
     FutureExt, SinkExt,
