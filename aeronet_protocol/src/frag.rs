@@ -11,8 +11,12 @@ use std::{
 use ahash::AHashMap;
 use arbitrary::Arbitrary;
 use bitvec::{array::BitArray, bitarr};
+use bytes::Bytes;
 
-use crate::{bytes::prelude::*, seq::Seq};
+use crate::{
+    bytes::{chunks::ByteChunksExt, varint, BytesError, ReadBytes, WriteBytes},
+    seq::Seq,
+};
 
 /// Handles splitting and reassembling a single large message into multiple
 /// smaller packets for sending over a network.
@@ -115,35 +119,18 @@ impl FragHeader {
     pub const ENCODE_SIZE: usize =
         Seq::ENCODE_SIZE + std::mem::size_of::<u8>() + std::mem::size_of::<u8>();
 
-    /// Encodes this value into a byte buffer.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the buffer has less remaining space than [`ENCODE_SIZE`].
-    ///
-    /// [`ENCODE_SIZE`]: FragHeader::ENCODE_SIZE
-    pub fn encode(&self, buf: &mut BytesMut) -> Result<(), BytesWriteError> {
+    pub fn encode(&self, buf: &mut impl WriteBytes) -> Result<(), BytesError> {
         self.msg_seq.encode(buf)?;
-        buf.try_put_u8(self.num_frags)?;
-        buf.try_put_u8(self.frag_id)?;
+        buf.write_u8(self.num_frags)?;
+        buf.write_u8(self.frag_id)?;
         Ok(())
     }
 
-    /// Decodes this value from a byte buffer.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the buffer is shorter than [`ENCODE_SIZE`].
-    ///
-    /// [`ENCODE_SIZE`]: FragHeader::ENCODE_SIZE
-    pub fn decode(buf: &mut Bytes) -> Result<Self, BytesReadError> {
-        let msg_seq = Seq::decode(buf)?;
-        let num_frags = buf.try_get_u8()?;
-        let frag_id = buf.try_get_u8()?;
+    pub fn decode(buf: &mut impl ReadBytes) -> Result<Self, BytesError> {
         Ok(Self {
-            msg_seq,
-            num_frags,
-            frag_id,
+            msg_seq: Seq::decode(buf)?,
+            num_frags: buf.read_u8()?,
+            frag_id: buf.read_u8()?,
         })
     }
 }
@@ -192,34 +179,31 @@ pub struct Fragment {
 const MAX_VARINT_LEN: usize = 10;
 
 impl Fragment {
-    // problem: we can't actually figure out how big the encoded len is
-    // because we don't have a fn to get the required size of the `len` varint
-    // (jfc byte manipulation crates suck right now)
-    // so we assume the worst, and that's why it's `max_encode_len` not `encode_len`
-    pub fn max_encode_len(&self) -> usize {
-        FragHeader::ENCODE_SIZE + MAX_VARINT_LEN + self.payload.len()
+    pub fn encode_size(&self) -> usize {
+        FragHeader::ENCODE_SIZE + varint::size_of(self.payload.len() as u64) + self.payload.len()
     }
 
-    pub fn encode(&self, buf: &mut BytesMut) -> Result<usize, BytesWriteError> {
-        let rem_start = buf.remaining_mut();
+    pub fn encode(&self, buf: &mut impl WriteBytes) -> Result<(), BytesError> {
         self.header.encode(buf)?;
-        buf.try_put_varint(self.payload.len() as u64)?;
-        buf.try_put_slice(&self.payload)?;
-        Ok(rem_start - buf.remaining_mut())
+        buf.write_varint(self.payload.len() as u64)?;
+        buf.write_slice(&self.payload)?;
+        Ok(())
     }
 
-    pub fn decode(buf: &mut Bytes) -> Result<Self, BytesReadError> {
-        let header = FragHeader::decode(buf)?;
-        let payload_len = buf.get_u64_varint()? as usize;
-        let payload = buf.try_slice(..payload_len)?;
-        Ok(Self { header, payload })
+    pub fn decode(buf: &mut impl ReadBytes) -> Result<Self, BytesError> {
+        Ok(Self {
+            header: FragHeader::decode(buf)?,
+            payload: buf
+                .read_varint()
+                .and_then(|len| buf.read_slice(len as usize))?,
+        })
     }
 }
 
 // ordered by encoded len
 impl Ord for Fragment {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.max_encode_len().cmp(&other.max_encode_len())
+        self.encode_size().cmp(&other.encode_size())
     }
 }
 
@@ -413,7 +397,7 @@ impl Fragmentation {
 pub struct Fragments {
     msg_seq: Seq,
     num_frags: u8,
-    iter: std::iter::Enumerate<crate::bytes::ByteChunks>,
+    iter: std::iter::Enumerate<crate::bytes::chunks::ByteChunks>,
 }
 
 impl Fragments {
@@ -449,6 +433,7 @@ impl FusedIterator for Fragments {}
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
+    use bytes::BytesMut;
 
     use super::*;
 

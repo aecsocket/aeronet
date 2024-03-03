@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use arbitrary::Arbitrary;
 
-use crate::bytes::prelude::*;
+use crate::bytes::{BytesError, ReadBytes, WriteBytes};
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///
@@ -25,28 +25,12 @@ impl Seq {
     /// [Encoded]: Seq::encode
     pub const ENCODE_SIZE: usize = std::mem::size_of::<u16>();
 
-    /// Encodes this value into a byte buffer.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the buffer has less remaining space than [`ENCODE_SIZE`].
-    ///
-    /// [`ENCODE_SIZE`]: Seq::ENCODE_SIZE
-    pub fn encode(&self, buf: &mut BytesMut) -> Result<(), BytesWriteError> {
-        buf.try_put_u16(self.0)?;
-        Ok(())
+    pub fn encode(&self, buf: &mut impl WriteBytes) -> Result<(), BytesError> {
+        buf.write_u16(self.0)
     }
 
-    /// Decodes this value from a byte buffer.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the buffer is shorter than [`ENCODE_SIZE`].
-    ///
-    /// [`ENCODE_SIZE`]: Seq::ENCODE_SIZE
-    pub fn decode(buf: &mut Bytes) -> Result<Self, BytesReadError> {
-        let seq = buf.try_get_u16()?;
-        Ok(Self(seq))
+    pub fn decode(buf: &mut impl ReadBytes) -> Result<Self, BytesError> {
+        buf.read_u16().map(Self)
     }
 
     /// Returns the current sequence value and increments `self`.
@@ -115,6 +99,8 @@ impl std::ops::Sub<Seq> for Seq {
 
 #[cfg(test)]
 mod tests {
+    use bytes::BytesMut;
+
     use super::*;
 
     #[test]
@@ -125,7 +111,7 @@ mod tests {
         v.encode(&mut buf);
         assert_eq!(Seq::ENCODE_SIZE, buf.len());
 
-        assert_eq!(v, Seq::decode(&mut Bytes::from(buf.to_vec())).unwrap());
+        assert_eq!(v, Seq::decode(&mut buf.freeze()).unwrap());
     }
 
     #[test]

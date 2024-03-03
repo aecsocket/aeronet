@@ -1,9 +1,10 @@
 use ahash::AHashMap;
+use bytes::Bytes;
 
 use crate::{
     ack::{AckHeader, Acknowledge},
-    bytes::prelude::*,
-    frag::{FragHeader, Fragment, FragmentError, Fragmentation, ReassembleError},
+    bytes::BytesError,
+    frag::{Fragment, FragmentError, Fragmentation, ReassembleError},
     seq::Seq,
 };
 
@@ -36,11 +37,11 @@ pub enum MessageError {
     Fragment(#[source] FragmentError),
 
     #[error("failed to read packet seq")]
-    ReadPacketSeq(#[source] BytesReadError),
+    ReadPacketSeq(#[source] BytesError),
     #[error("failed to read ack header")]
-    ReadAckHeader(#[source] BytesReadError),
+    ReadAckHeader(#[source] BytesError),
     #[error("failed to read fragment")]
-    ReadFragment(#[source] BytesReadError),
+    ReadFragment(#[source] BytesError),
     #[error("failed to reassemble fragment")]
     Reassemble(#[source] ReassembleError),
 }

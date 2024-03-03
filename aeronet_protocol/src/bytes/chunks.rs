@@ -1,4 +1,4 @@
-use std::iter::FusedIterator;
+use core::iter::FusedIterator;
 
 use bytes::Bytes;
 
@@ -14,9 +14,10 @@ use bytes::Bytes;
 ///
 /// Use [`byte_chunks`] to create.
 ///
-/// See [`std::slice::Chunks`].
+/// See [`Chunks`].
 ///
 /// [`byte_chunks`]: ByteChunksExt::byte_chunks
+/// [`Chunks`]: core::slice::Chunks
 #[derive(Debug)]
 pub struct ByteChunks {
     v: Bytes,

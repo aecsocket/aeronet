@@ -1,6 +1,9 @@
 use arbitrary::Arbitrary;
 
-use crate::{bytes::prelude::*, seq::Seq};
+use crate::{
+    bytes::{BytesError, ReadBytes, WriteBytes},
+    seq::Seq,
+};
 
 #[derive(Debug)]
 pub struct Acknowledge {
@@ -59,35 +62,6 @@ impl AckHeader {
     /// [Encoded]: AckHeader::encode
     pub const ENCODE_SIZE: usize = Seq::ENCODE_SIZE + std::mem::size_of::<u32>();
 
-    /// Encodes this value into a byte buffer.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the buffer has less remaining space than [`ENCODE_SIZE`].
-    ///
-    /// [`ENCODE_SIZE`]: AckHeader::ENCODE_SIZE
-    pub fn encode(&self, buf: &mut BytesMut) -> Result<(), BytesWriteError> {
-        self.last_recv.encode(buf)?;
-        buf.try_put_u32(self.ack_bits)?;
-        Ok(())
-    }
-
-    /// Decodes this value from a byte buffer.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the buffer is shorter than [`ENCODE_SIZE`].
-    ///
-    /// [`ENCODE_SIZE`]: AckHeader::ENCODE_SIZE
-    pub fn decode(buf: &mut Bytes) -> Result<Self, BytesReadError> {
-        let last_recv = Seq::decode(buf)?;
-        let ack_bits = buf.try_get_u32()?;
-        Ok(Self {
-            last_recv,
-            ack_bits,
-        })
-    }
-
     /// Converts this into an iterator over all [`Seq`]s this header contains.
     ///
     /// # Example
@@ -114,6 +88,19 @@ impl AckHeader {
             } else {
                 Some(packet_seq)
             }
+        })
+    }
+
+    pub fn encode(&self, buf: &mut impl WriteBytes) -> Result<(), BytesError> {
+        self.last_recv.encode(buf)?;
+        buf.write_u32(self.ack_bits)?;
+        Ok(())
+    }
+
+    pub fn decode(buf: &mut impl ReadBytes) -> Result<Self, BytesError> {
+        Ok(Self {
+            last_recv: Seq::decode(buf)?,
+            ack_bits: buf.read_u32()?,
         })
     }
 }
