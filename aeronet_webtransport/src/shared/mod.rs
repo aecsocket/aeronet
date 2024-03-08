@@ -96,7 +96,7 @@ impl ConnectionFrontend {
         &mut self,
         msg: S,
     ) -> Result<Seq, WebTransportError<S, R>> {
-        let lane_index = msg.lane().index();
+        let lane_index = msg.lane().lane_index();
         let msg_bytes = msg.try_into_bytes().map_err(WebTransportError::IntoBytes)?;
         let msg_seq = self
             .msgs

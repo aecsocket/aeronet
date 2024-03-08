@@ -80,7 +80,7 @@ pub trait LaneIndex {
     ///
     /// The value returned by this function must be an in-bounds index into the
     /// list of lanes defined on transport creation.
-    fn index(&self) -> usize;
+    fn lane_index(&self) -> usize;
 }
 
 /// App-defined type listing a set of lanes which a transport can use to send

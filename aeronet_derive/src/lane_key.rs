@@ -25,7 +25,7 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
 
     Ok(quote! {
         impl #impl_generics ::aeronet::lane::LaneIndex for #name #type_generics #where_clause {
-            fn index(&self) -> usize {
+            fn lane_index(&self) -> usize {
                 0
             }
         }
@@ -97,7 +97,7 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
 
     Ok(quote! {
         impl #impl_generics ::aeronet::lane::LaneIndex for #name #type_generics #where_clause {
-            fn index(&self) -> usize {
+            fn lane_index(&self) -> usize {
                 match *self {
                     #(#index_body),*
                 }

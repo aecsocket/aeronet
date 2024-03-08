@@ -10,27 +10,6 @@ use super::{ServerEvent, ServerTransport};
 
 /// Forwards messages and events between the [`App`] and a [`ServerTransport`].
 ///
-/// See [`ServerTransportPlugin`].
-pub fn server_transport_plugin<P, T>(app: &mut App)
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
-    app.add_event::<ServerOpened<P, T>>()
-        .add_event::<ServerClosed<P, T>>()
-        .add_event::<RemoteClientConnecting<P, T>>()
-        .add_event::<RemoteClientConnected<P, T>>()
-        .add_event::<RemoteClientDisconnected<P, T>>()
-        .add_event::<FromClient<P, T>>()
-        .add_event::<AckFromClient<P, T>>()
-        .configure_sets(PreUpdate, ServerTransportSet::Recv)
-        .configure_sets(PostUpdate, ServerTransportSet::Send)
-        .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Recv))
-        .add_systems(PostUpdate, send::<P, T>.in_set(ServerTransportSet::Send));
-}
-
-/// Forwards messages and events between the [`App`] and a [`ServerTransport`].
-///
 /// See [`server_transport_plugin`] for a function version of this plugin.
 ///
 /// With this plugin added, the transport `T` will automatically run:
@@ -74,6 +53,27 @@ where
     }
 }
 
+/// Forwards messages and events between the [`App`] and a [`ServerTransport`].
+///
+/// See [`ServerTransportPlugin`].
+pub fn server_transport_plugin<P, T>(app: &mut App)
+where
+    P: TransportProtocol,
+    T: ServerTransport<P> + Resource,
+{
+    app.add_event::<ServerOpened<P, T>>()
+        .add_event::<ServerClosed<P, T>>()
+        .add_event::<RemoteClientConnecting<P, T>>()
+        .add_event::<RemoteClientConnected<P, T>>()
+        .add_event::<RemoteClientDisconnected<P, T>>()
+        .add_event::<FromClient<P, T>>()
+        .add_event::<AckFromClient<P, T>>()
+        .configure_sets(PreUpdate, ServerTransportSet::Recv)
+        .configure_sets(PostUpdate, ServerTransportSet::Send)
+        .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Recv))
+        .add_systems(PostUpdate, send::<P, T>.in_set(ServerTransportSet::Send));
+}
+
 /// Runs the [`ServerTransportPlugin`] systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum ServerTransportSet {
@@ -84,43 +84,77 @@ pub enum ServerTransportSet {
     Send,
 }
 
-/// Generates a [`Condition`]-satisfying closure that returns `true` if the
-/// server `T` exists *and* is in the [`Open`] state.
+/// A [`Condition`]-satisfying system that returns `true` if the client `T`
+/// exists *and* is in the [`Connected`] state.
 ///
+/// # Example
 ///
+/// ```
+/// # use bevy_app::prelude::*;
+/// # use bevy_ecs::prelude::*;
+/// # use aeronet::{protocol::TransportProtocol, server::{ServerTransport, server_open}};
+/// # fn run<P: TransportProtocol, T: ServerTransport<P> + Resource>() {
+/// let mut app = App::new();
+/// app.add_systems(Update, my_system::<P, T>.run_if(server_open::<P, T>));
+///
+/// fn my_system<P, T>(server: Res<T>)
+/// where
+///     P: TransportProtocol,
+///     T: ServerTransport<P> + Resource,
+/// {
+///     // ..
+/// }
+/// # }
+/// ```
 ///
 /// [`Condition`]: bevy_ecs::schedule::Condition
 /// [`Open`]: crate::server::ServerState::Open
-pub fn server_open<P, T>() -> impl FnMut(Option<T>) -> bool + Clone
+pub fn server_open<P, T>(server: Option<Res<T>>) -> bool
 where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
 {
-    |server| {
-        if let Some(server) = server {
-            server.state().is_open()
-        } else {
-            false
-        }
+    if let Some(server) = server {
+        server.state().is_open()
+    } else {
+        false
     }
 }
 
-/// Generates a [`Condition`]-satisfying closure that returns `true` if the
-/// server `T` either does not exist *or* is in the [`Closed`] state.
+/// A [`Condition`]-satisfying system that returns `true` if the client `T`
+/// exists *and* is in the [`Connected`] state.
+///
+/// # Example
+///
+/// ```
+/// # use bevy_app::prelude::*;
+/// # use bevy_ecs::prelude::*;
+/// # use aeronet::{protocol::TransportProtocol, server::{ServerTransport, server_closed}};
+/// # fn run<P: TransportProtocol, T: ServerTransport<P> + Resource>() {
+/// let mut app = App::new();
+/// app.add_systems(Update, my_system::<P, T>.run_if(server_closed::<P, T>));
+///
+/// fn my_system<P, T>(server: Res<T>)
+/// where
+///     P: TransportProtocol,
+///     T: ServerTransport<P> + Resource,
+/// {
+///     // ..
+/// }
+/// # }
+/// ```
 ///
 /// [`Condition`]: bevy_ecs::schedule::Condition
 /// [`Closed`]: crate::server::ServerState::Closed
-pub fn server_closed<P, T>() -> impl FnMut(Option<T>) -> bool + Clone
+pub fn server_closed<P, T>(server: Option<Res<T>>) -> bool
 where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
 {
-    |server| {
-        if let Some(server) = server {
-            server.state().is_closed()
-        } else {
-            true
-        }
+    if let Some(server) = server {
+        server.state().is_closed()
+    } else {
+        true
     }
 }
 
@@ -138,7 +172,8 @@ where
     T: ServerTransport<P> + Resource,
 {
     #[derivative(Debug = "ignore")]
-    _phantom: PhantomData<(P, T)>,
+    #[doc(hidden)]
+    pub _phantom: PhantomData<(P, T)>,
 }
 
 /// The server can no longer handle client connections, changing state to
