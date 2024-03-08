@@ -8,7 +8,7 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use std::{error::Error, fmt::Debug};
+use std::{error::Error, fmt::Debug, hash::Hash};
 
 use derivative::Derivative;
 
@@ -40,7 +40,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     ///
     /// If a physical client disconnects and connects, a new key must be used
     /// to represent the new session.
-    type ClientKey: Send + Sync + Debug + Clone;
+    type ClientKey: Send + Sync + Debug + Clone + Hash;
 
     /// Key uniquely identifying a sent message.
     ///
@@ -48,7 +48,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// message, this may be `()`.
     ///
     /// See [`ServerTransport::send`].
-    type MessageKey: Send + Sync + Debug + Clone;
+    type MessageKey: Send + Sync + Debug + Clone + Hash;
 
     /// Reads the current state of this server.
     ///
@@ -242,3 +242,12 @@ pub enum ServerEvent<P: TransportProtocol, E, C, M> {
         msg_key: M,
     },
 }
+
+/// Type alias for [`ServerEvent`] which takes a [`TransportProtocol`] and a
+/// [`ServerTransport`] accepting that protocol.
+pub type ServerEventFor<P, T> = ServerEvent<
+    P,
+    <T as ServerTransport<P>>::Error,
+    <T as ServerTransport<P>>::ClientKey,
+    <T as ServerTransport<P>>::MessageKey,
+>;

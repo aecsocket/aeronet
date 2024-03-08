@@ -8,7 +8,7 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use std::{error::Error, fmt::Debug};
+use std::{error::Error, fmt::Debug, hash::Hash};
 
 use derivative::Derivative;
 
@@ -34,7 +34,7 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// message, this may be `()`.
     ///
     /// See [`ClientTransport::send`].
-    type MessageKey: Send + Sync + Debug + Clone;
+    type MessageKey: Send + Sync + Debug + Clone + Hash;
 
     /// Gets the current state of this client.
     ///
@@ -165,3 +165,8 @@ pub enum ClientEvent<P: TransportProtocol, E, M> {
         msg_key: M,
     },
 }
+
+/// Type alias for [`ClientEvent`] which takes a [`TransportProtocol`] and a
+/// [`ClientTransport`] accepting that protocol.
+pub type ClientEventFor<P, T> =
+    ClientEvent<P, <T as ClientTransport<P>>::Error, <T as ClientTransport<P>>::MessageKey>;

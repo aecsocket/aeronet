@@ -151,8 +151,8 @@ name = "aeronet_replicon"
 version = "0.5.0"
 dependencies = [
  "aeronet",
- "bevy_app",
- "bevy_ecs",
+ "ahash",
+ "bevy",
  "bevy_replicon",
  "derivative",
  "thiserror",
