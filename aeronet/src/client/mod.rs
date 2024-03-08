@@ -50,16 +50,22 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// used to query the state of the message, such as if it was acknowledged
     /// by the peer, if the implementation supports it.
     ///
+    /// The implementation may choose to buffer the message before sending it
+    /// out - therefore, you should always call [`ClientTransport::flush`] to
+    /// ensure that all buffered messages are sent, e.g. at the end of each app
+    /// tick.
+    ///
     /// # Errors
     ///
     /// Errors if the transport failed to *attempt to* send the message, e.g.
-    /// if it is not connected to a server. If a transmission error occurs later
-    /// after this function's scope has finished, then this will still return
-    /// [`Ok`].
+    /// if it is not connected to a server.
+    ///
+    /// If a transmission error occurs later after this function's scope has
+    /// finished, then this will still return [`Ok`].
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error>;
 
-    /// Updates the internal state of this transport, returning the events that
-    /// it emitted while updating.
+    /// Updates the internal state of this transport by receiving messages from
+    /// peers, returning the events that it emitted while updating.
     ///
     /// This should be called in your app's main update loop.
     ///
@@ -68,6 +74,20 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// up to one state-changing event will be produced by this function per
     /// function call.
     fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>>;
+
+    /// Sends all messages previously buffered by [`ClientTransport::send`] to
+    /// peers.
+    ///
+    /// If this transport is not connected, this will return [`Ok`].
+    ///
+    /// # Errors
+    ///
+    /// Errors if the transport failed to *attempt to* flush messages, e.g. if
+    /// the connection has already been closed.
+    ///
+    /// If a transmission error occurs later after this function's scope has
+    /// finished, then this will still return [`Ok`].
+    fn flush(&mut self) -> Result<(), Self::Error>;
 }
 
 /// State of a [`ClientTransport`].

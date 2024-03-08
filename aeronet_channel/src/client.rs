@@ -197,4 +197,8 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
         }
         .into_iter()
     }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }

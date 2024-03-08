@@ -129,6 +129,10 @@ where
         self.inner.send(client, msg)
     }
 
+    fn disconnect(&mut self, client: Self::ClientKey) -> Result<(), Self::Error> {
+        self.inner.disconnect(client)
+    }
+
     fn poll(
         &mut self,
     ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>> {
@@ -165,7 +169,7 @@ where
         events.into_iter()
     }
 
-    fn disconnect(&mut self, client: Self::ClientKey) -> Result<(), Self::Error> {
-        self.inner.disconnect(client)
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        self.inner.flush()
     }
 }

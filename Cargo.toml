@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "aeronet",
     "aeronet_derive",
+    "aeronet_replicon",
     "aeronet_protocol",
     "aeronet_channel",
     "aeronet_webtransport",
@@ -70,6 +71,7 @@ bevy_ecs = { version = "0.13.0", default-features = false }
 bevy_app = { version = "0.13.0", default-features = false }
 bevy = "0.13.0"
 bevy_egui = "0.25.0"
+bevy_replicon = "0.24.1"
 
 xwt = "0.6.0"
 xwt-core = "0.2.2"

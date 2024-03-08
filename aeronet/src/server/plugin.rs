@@ -23,17 +23,22 @@ where
         .add_event::<RemoteClientDisconnected<P, T>>()
         .add_event::<FromClient<P, T>>()
         .add_event::<AckFromClient<P, T>>()
-        .configure_sets(PreUpdate, ServerTransportSet::Poll)
-        .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Poll));
+        .configure_sets(PreUpdate, ServerTransportSet::Recv)
+        .configure_sets(PostUpdate, ServerTransportSet::Send)
+        .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Recv))
+        .add_systems(PostUpdate, send::<P, T>.in_set(ServerTransportSet::Send));
 }
 
 /// Forwards messages and events between the [`App`] and a [`ServerTransport`].
 ///
 /// See [`server_transport_plugin`] for a function version of this plugin.
 ///
-/// With this plugin added, the transport `T` will automatically run
-/// [`ServerTransport::poll`] on [`PreUpdate`] in the set
-/// [`ServerTransportSet::Poll`], and send out the appropriate events.
+/// With this plugin added, the transport `T` will automatically run:
+/// * [`poll`] in [`PreUpdate`] in [`ServerTransportSet::Recv`]
+/// * [`flush`] in [`PostUpdate`] in [`ServerTransportSet::Send`]
+
+/// [`poll`]: ServerTransport::poll
+/// [`flush`]: ServerTransport::flush
 ///
 /// This plugin sends out the events:
 /// * [`ServerOpened`]
@@ -43,6 +48,7 @@ where
 /// * [`RemoteClientDisconnected`]
 /// * [`FromClient`]
 /// * [`AckFromClient`]
+/// * [`ServerFlushError`]
 ///
 /// This plugin provides the run conditions:
 /// * [`server_open`]
@@ -55,9 +61,7 @@ where
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct ServerTransportPlugin<P, T> {
     #[derivative(Debug = "ignore")]
-    _phantom_p: PhantomData<P>,
-    #[derivative(Debug = "ignore")]
-    _phantom_t: PhantomData<T>,
+    _phantom: PhantomData<(P, T)>,
 }
 
 impl<P, T> Plugin for ServerTransportPlugin<P, T>
@@ -75,7 +79,9 @@ where
 pub enum ServerTransportSet {
     /// Handles receiving data from the transport and updating its internal
     /// state.
-    Poll,
+    Recv,
+    /// Handles flushing buffered messages and sending out buffered data.
+    Send,
 }
 
 /// Generates a [`Condition`]-satisfying closure that returns `true` if the
@@ -241,6 +247,18 @@ where
     pub msg_key: T::MessageKey,
 }
 
+/// [`ServerTransport::flush`] produced an error.
+#[derive(Derivative, Event)]
+#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+pub struct ServerFlushError<P, T>
+where
+    P: TransportProtocol,
+    T: ServerTransport<P> + Resource,
+{
+    /// Error produced by [`ServerTransport::flush`].
+    pub error: T::Error,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn recv<P, T>(
     mut server: ResMut<T>,
@@ -287,5 +305,15 @@ fn recv<P, T>(
                 });
             }
         }
+    }
+}
+
+fn send<P, T>(mut server: ResMut<T>, mut errors: EventWriter<ServerFlushError<P, T>>)
+where
+    P: TransportProtocol,
+    T: ServerTransport<P> + Resource,
+{
+    if let Err(error) = server.flush() {
+        errors.send(ServerFlushError { error });
     }
 }

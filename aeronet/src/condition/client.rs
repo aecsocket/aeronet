@@ -127,4 +127,8 @@ where
 
         events.into_iter()
     }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        self.inner.flush()
+    }
 }

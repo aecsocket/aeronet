@@ -113,6 +113,13 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
         Ok(())
     }
 
+    fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error> {
+        self.clients
+            .remove(client_key)
+            .ok_or(ChannelError::Disconnected)
+            .map(drop)
+    }
+
     fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P>> {
         let mut events = Vec::new();
         let mut to_remove = Vec::new();
@@ -127,11 +134,8 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
         events.into_iter()
     }
 
-    fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error> {
-        self.clients
-            .remove(client_key)
-            .ok_or(ChannelError::Disconnected)
-            .map(drop)
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 

@@ -22,23 +22,30 @@ where
         .add_event::<LocalClientDisconnected<P, T>>()
         .add_event::<FromServer<P, T>>()
         .add_event::<AckFromServer<P, T>>()
-        .configure_sets(PreUpdate, ClientTransportSet::Poll)
-        .add_systems(PreUpdate, recv::<P, T>.in_set(ClientTransportSet::Poll));
+        .add_event::<ClientFlushError<P, T>>()
+        .configure_sets(PreUpdate, ClientTransportSet::Recv)
+        .configure_sets(PostUpdate, ClientTransportSet::Send)
+        .add_systems(PreUpdate, recv::<P, T>.in_set(ClientTransportSet::Recv))
+        .add_systems(PostUpdate, send::<P, T>.in_set(ClientTransportSet::Send));
 }
 
 /// Forwards messages and events between the [`App`] and a [`ClientTransport`].
 ///
 /// See [`client_transport_plugin`] for a function version of this plugin.
 ///
-/// With this plugin added, the transport `T` will automatically run
-/// [`ClientTransport::poll`] on [`PreUpdate`] in the set
-/// [`ClientTransportSet::Poll`], and send out the appropriate events.
+/// With this plugin added, the transport `T` will automatically run:
+/// * [`poll`] in [`PreUpdate`] in [`ClientTransportSet::Recv`]
+/// * [`flush`] in [`PostUpdate`] in [`ClientTransportSet::Send`]
+///
+/// [`poll`]: ClientTransport::poll
+/// [`flush`]: ClientTransport::flush
 ///
 /// This plugin sends out the events:
 /// * [`LocalClientConnected`]
 /// * [`LocalClientDisconnected`]
 /// * [`FromServer`]
 /// * [`AckFromServer`]
+/// * [`ClientFlushError`]
 ///
 /// This plugin provides the run conditions:
 /// * [`client_connected`]
@@ -69,25 +76,39 @@ where
 pub enum ClientTransportSet {
     /// Handles receiving data from the transport and updating its internal
     /// state.
-    Poll,
+    Recv,
+    /// Handles flushing buffered messages and sending out buffered data.
+    Send,
 }
 
-/// Generates a [`Condition`]-satisfying closure that returns `true` if the
-/// client `T` exists *and* is in the [`Connected`] state.
+/// [Run condition] that returns `true` if the client `T` exists *and* is in the
+/// [`Connected`] state.
 ///
-/// [`Condition`]: bevy_ecs::schedule::Condition
+/// # Example
+///
+/// ```
+/// # use bevy_app::prelude::*;
+/// # use bevy_ecs::prelude::*;
+/// # use aeronet::{protocol::TransportProtocol, client::{ClientTransport, client_connected}};
+/// # fn run<P: TransportProtocol, T: ClientTransport<P> + Resource>() {
+/// let mut app = App::new();
+/// app.add_systems(Update, my_system::<P, T>.run_if(client_connected::<P, T>));
+///
+/// fn my_system<P: TransportProtocol, T: ClientTransport<P> + Resource>(client: Res<T>) {}
+/// # }
+/// ```
+///
+/// [Run condition]: bevy_ecs::schedule::Condition
 /// [`Connected`]: crate::client::ClientState::Connected
-pub fn client_connected<P, T>() -> impl FnMut(Option<T>) -> bool + Clone
+pub fn client_connected<P, T>(client: Option<Res<T>>) -> bool
 where
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
 {
-    |client| {
-        if let Some(client) = client {
-            client.state().is_connected()
-        } else {
-            false
-        }
+    if let Some(client) = client {
+        client.state().is_connected()
+    } else {
+        false
     }
 }
 
@@ -178,6 +199,18 @@ where
     pub msg_key: T::MessageKey,
 }
 
+/// [`ClientTransport::flush`] produced an error.
+#[derive(Derivative, Event)]
+#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+pub struct ClientFlushError<P, T>
+where
+    P: TransportProtocol,
+    T: ClientTransport<P> + Resource,
+{
+    /// Error produced by [`ClientTransport::flush`].
+    pub error: T::Error,
+}
+
 fn recv<P, T>(
     mut client: ResMut<T>,
     mut connected: EventWriter<LocalClientConnected<P, T>>,
@@ -208,5 +241,15 @@ fn recv<P, T>(
                 ack.send(AckFromServer { msg_key });
             }
         }
+    }
+}
+
+fn send<P, T>(mut client: ResMut<T>, mut errors: EventWriter<ClientFlushError<P, T>>)
+where
+    P: TransportProtocol,
+    T: ClientTransport<P> + Resource,
+{
+    if let Err(error) = client.flush() {
+        errors.send(ClientFlushError { error });
     }
 }
