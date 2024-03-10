@@ -41,6 +41,7 @@ either = "1.9.0"
 slotmap = "1.0.7"
 bitvec = "1.0.1"
 ahash = { version = "0.8.10", default-features = false, features = ["std"] }
+bimap = "0.6.3"
 anyhow = "1.0.79"
 rand = "0.8.5"
 rand_distr = "0.4.3"

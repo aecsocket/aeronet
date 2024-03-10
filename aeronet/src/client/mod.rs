@@ -34,7 +34,7 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// message, this may be `()`.
     ///
     /// See [`ClientTransport::send`].
-    type MessageKey: Send + Sync + Debug + Clone + Hash;
+    type MessageKey: Send + Sync + Debug + Clone + PartialEq + Eq + Hash;
 
     /// Gets the current state of this client.
     ///

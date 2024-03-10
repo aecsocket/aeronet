@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use aeronet::{
     bytes::Bytes,
     lane::LaneIndex,
-    message::{Message, TryIntoBytes},
+    message::{Message, TryFromBytes, TryIntoBytes},
 };
 
 #[derive(Debug, Clone, Message)]
@@ -18,6 +18,10 @@ impl TryIntoBytes for RepliconMessage {
     fn try_into_bytes(self) -> Result<Bytes, Self::Error> {
         Ok(self.payload)
     }
+}
+
+impl TryFromBytes for RepliconMessage {
+    // TODO!! how?
 }
 
 impl LaneIndex for RepliconMessage {

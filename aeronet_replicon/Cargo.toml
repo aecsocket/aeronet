@@ -22,5 +22,6 @@ tracing.workspace = true
 derivative.workspace = true
 thiserror.workspace = true
 ahash.workspace = true
+bimap.workspace = true
 bevy.workspace = true
 bevy_replicon.workspace = true

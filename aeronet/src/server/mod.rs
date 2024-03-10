@@ -40,7 +40,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     ///
     /// If a physical client disconnects and connects, a new key must be used
     /// to represent the new session.
-    type ClientKey: Send + Sync + Debug + Clone + Hash;
+    type ClientKey: Send + Sync + Debug + Clone + PartialEq + Eq + Hash;
 
     /// Key uniquely identifying a sent message.
     ///
@@ -48,7 +48,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// message, this may be `()`.
     ///
     /// See [`ServerTransport::send`].
-    type MessageKey: Send + Sync + Debug + Clone + Hash;
+    type MessageKey: Send + Sync + Debug + Clone + PartialEq + Eq + Hash;
 
     /// Reads the current state of this server.
     ///

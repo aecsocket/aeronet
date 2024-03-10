@@ -3,16 +3,17 @@ use std::{fmt::Debug, marker::PhantomData};
 use aeronet::{
     protocol::TransportProtocol,
     server::{
-        RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected, ServerClosed,
-        ServerEvent, ServerOpened, ServerState, ServerTransport, ServerTransportSet,
+        server_open, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
+        ServerClosed, ServerEvent, ServerFlushError, ServerOpened, ServerState, ServerTransport,
+        ServerTransportSet,
     },
 };
-use ahash::AHashMap;
 use bevy::prelude::*;
 use bevy_replicon::{
     core::ClientId,
     server::{replicon_server::RepliconServer, ServerSet},
 };
+use bimap::{BiHashMap, Overwritten};
 use derivative::Derivative;
 
 use crate::protocol::RepliconMessage;
@@ -39,14 +40,28 @@ where
     Clone(bound = "T::ClientKey: Clone")
 )]
 pub struct ClientKeys<P: TransportProtocol, T: ServerTransport<P>> {
-    pub to_id: AHashMap<T::ClientKey, ClientId>,
-    pub next_id: ClientId,
+    id_map: BiHashMap<T::ClientKey, ClientId, ahash::RandomState, ahash::RandomState>,
+    next_id: ClientId,
+}
+
+impl<P: TransportProtocol, T: ServerTransport<P>> ClientKeys<P, T> {
+    pub fn id_map(
+        &self,
+    ) -> &BiHashMap<T::ClientKey, ClientId, ahash::RandomState, ahash::RandomState> {
+        &self.id_map
+    }
+
+    fn next_id(&mut self) -> ClientId {
+        let id = self.next_id;
+        self.next_id = ClientId::new(self.next_id.get().wrapping_add(1));
+        id
+    }
 }
 
 impl<P: TransportProtocol, T: ServerTransport<P>> Default for ClientKeys<P, T> {
     fn default() -> Self {
         Self {
-            to_id: AHashMap::new(),
+            id_map: BiHashMap::with_hashers(ahash::RandomState::new(), ahash::RandomState::new()),
             next_id: ClientId::new(0),
         }
     }
@@ -86,7 +101,7 @@ where
             .add_systems(
                 PostUpdate,
                 Self::send
-                    .run_if(client_connected::<P, T>)
+                    .run_if(server_open::<P, T>)
                     .in_set(ServerSet::SendPackets),
             );
     }
@@ -99,20 +114,8 @@ where
     P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
     T: ServerTransport<P> + Resource,
 {
-    fn recv(mut server: ResMut<T>) {}
-
-    fn update_state(server: Res<T>, mut replicon: ResMut<RepliconServer>) {
-        replicon.set_running(match server.state() {
-            ServerState::Closed | ServerState::Opening(_) => false,
-            ServerState::Open(_) => true,
-        });
-    }
-
-    fn on_removed(mut replicon: ResMut<RepliconServer>) {
-        replicon.set_running(false);
-    }
-
-    fn forward_events(
+    #[allow(clippy::too_many_arguments)]
+    fn recv(
         mut server: ResMut<T>,
         mut replicon_server: ResMut<RepliconServer>,
         mut client_keys: ResMut<ClientKeys<P, T>>,
@@ -137,25 +140,86 @@ where
                     connecting.send(RemoteClientConnecting { client_key });
                 }
                 ServerEvent::Connected { client_key } => {
-                    let client_id = client_keys.next_id;
-                    client_keys.next_id = ClientId::new(client_id.get().wrapping_add(1));
-                    client_keys.to_id.insert(client_key, client_id);
+                    connected.send(RemoteClientConnected {
+                        client_key: client_key.clone(),
+                    });
 
-                    connected.send(RemoteClientConnected { client_key });
-                    replicon_events.send(RepliconEvent::ClientConnected { client_id: todo!() });
+                    let client_id = client_keys.next_id();
+                    match client_keys.id_map.insert(client_key, client_id) {
+                        Overwritten::Neither => {}
+                        overwritten => {
+                            warn!("Inserted duplicate client key/ID pair: {overwritten:?}")
+                        }
+                    }
+                    replicon_events.send(RepliconEvent::ClientConnected { client_id });
                 }
                 ServerEvent::Disconnected { client_key, reason } => {
-                    disconnected.send(RemoteClientDisconnected { client_key, reason });
+                    let reason_str = format!("{:#}", aeronet::error::pretty_error(&reason));
+                    disconnected.send(RemoteClientDisconnected {
+                        client_key: client_key.clone(),
+                        reason,
+                    });
+
+                    let Some(client_id) = client_keys.id_map().get_by_left(&client_key) else {
+                        warn!(
+                            "Disconnected client {client_key:?} which does not have a replicon ID"
+                        );
+                        return;
+                    };
                     replicon_events.send(RepliconEvent::ClientDisconnected {
-                        client_id: todo!(),
-                        reason: format!("{:#}", aeronet::error::pretty_error(&reason)),
-                    })
+                        client_id: *client_id,
+                        reason: reason_str,
+                    });
                 }
                 ServerEvent::Recv { client_key, msg } => {
-                    replicon_server.insert_received(todo!(), msg.channel_id, msg.payload);
+                    let Some(client_id) = client_keys.id_map().get_by_left(&client_key) else {
+                        warn!("Received message from client {client_key:?} which does not have a replicon ID");
+                        return;
+                    };
+                    replicon_server.insert_received(*client_id, msg.channel_id, msg.payload);
                 }
                 ServerEvent::Ack { .. } => {}
             }
+        }
+    }
+
+    fn update_state(server: Res<T>, mut replicon: ResMut<RepliconServer>) {
+        replicon.set_running(match server.state() {
+            ServerState::Closed | ServerState::Opening(_) => false,
+            ServerState::Open(_) => true,
+        });
+    }
+
+    fn on_removed(mut replicon: ResMut<RepliconServer>) {
+        replicon.set_running(false);
+    }
+
+    fn send(
+        mut server: ResMut<T>,
+        mut replicon: ResMut<RepliconServer>,
+        client_keys: Res<ClientKeys<P, T>>,
+        mut flush_errors: EventWriter<ServerFlushError<P, T>>,
+    ) {
+        for (client_id, channel_id, payload) in replicon.drain_sent() {
+            let Some(client_key) = client_keys.id_map().get_by_right(&client_id) else {
+                warn!(
+                    "Sending message to client with ID {client_id:?} with no associated client key"
+                );
+                continue;
+            };
+
+            // ignore send failures
+            let _ = server.send(
+                client_key.clone(),
+                RepliconMessage {
+                    channel_id,
+                    payload,
+                },
+            );
+        }
+
+        if let Err(error) = server.flush() {
+            flush_errors.send(ServerFlushError { error });
         }
     }
 }

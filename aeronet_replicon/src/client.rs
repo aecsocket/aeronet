@@ -7,8 +7,7 @@ use aeronet::{
     },
     protocol::TransportProtocol,
 };
-use bevy_app::prelude::*;
-use bevy_ecs::prelude::*;
+use bevy::prelude::*;
 use bevy_replicon::{
     client::{
         replicon_client::{RepliconClient, RepliconClientStatus},
