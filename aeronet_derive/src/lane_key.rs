@@ -1,9 +1,8 @@
-use const_format::formatcp;
-use proc_macro2::{Ident, TokenStream, TokenTree};
+use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens};
-use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Fields, Meta, Result};
+use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Fields, Result};
 
-use crate::LANE_KIND;
+use crate::{util, ACK_TIMEOUT, DROP_AFTER, LANE_KIND, RESEND_AFTER};
 
 pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
     match &input.data {
@@ -21,7 +20,10 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
     let generics = &input.generics;
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
-    let kind = get_lane_kind(&input.attrs, input)?;
+    let kind = parse_lane_kind(input, &input.attrs)?;
+    let drop_after = parse_drop_after(&input.attrs)?;
+    let resend_after = parse_resend_after(&input.attrs)?;
+    let ack_timeout = parse_ack_timeout(&input.attrs)?;
 
     Ok(quote! {
         impl #impl_generics ::aeronet::lane::LaneIndex for #name #type_generics #where_clause {
@@ -34,7 +36,14 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
             const VARIANTS: &'static [Self] = &[Self];
 
             fn config(&self) -> ::aeronet::lane::LaneConfig {
-                ::aeronet::lane::LaneConfig::with_defaults(#kind)
+                use ::aeronet::lane::LaneKind::*;
+
+                ::aeronet::lane::LaneConfig {
+                    kind: #kind,
+                    drop_after: #drop_after,
+                    resend_after: #resend_after,
+                    ack_timeout: #ack_timeout,
+                }
             }
         }
     })
@@ -44,6 +53,9 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
     struct Variant<'a> {
         ident: &'a Ident,
         kind: TokenStream,
+        drop_after: TokenStream,
+        resend_after: TokenStream,
+        ack_timeout: TokenStream,
     }
 
     let name = &input.ident;
@@ -61,10 +73,16 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
                 ));
             };
 
-            let kind = get_lane_kind(&variant.attrs, variant)?;
+            let kind = parse_lane_kind(variant, &variant.attrs)?;
+            let drop_after = parse_drop_after(&variant.attrs)?;
+            let resend_after = parse_resend_after(&variant.attrs)?;
+            let ack_timeout = parse_ack_timeout(&variant.attrs)?;
             Ok(Variant {
                 ident: &variant.ident,
-                kind,
+                kind: kind.clone(),
+                drop_after: drop_after.clone(),
+                resend_after: resend_after.clone(),
+                ack_timeout: ack_timeout.clone(),
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -86,13 +104,24 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         .collect::<Vec<_>>();
     let config_body = variants
         .iter()
-        .map(|variant| {
-            let pattern = variant.ident;
-            let kind = &variant.kind;
-            quote! {
-                Self::#pattern => ::aeronet::lane::LaneConfig::with_defaults(#kind)
-            }
-        })
+        .map(
+            |Variant {
+                 ident,
+                 kind,
+                 drop_after,
+                 resend_after,
+                 ack_timeout,
+             }| {
+                quote! {
+                    Self::#ident => ::aeronet::lane::LaneConfig {
+                        kind: #kind,
+                        drop_after: #drop_after,
+                        resend_after: #resend_after,
+                        ack_timeout: #ack_timeout,
+                    }
+                }
+            },
+        )
         .collect::<Vec<_>>();
 
     Ok(quote! {
@@ -110,6 +139,8 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
             ];
 
             fn config(&self) -> ::aeronet::lane::LaneConfig {
+                use ::aeronet::lane::LaneKind::*;
+
                 match *self {
                     #(#config_body),*
                 }
@@ -120,55 +151,27 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
 
 // attributes
 
-fn parse_lane_kind(attrs: &[Attribute]) -> Result<Option<TokenStream>> {
-    let mut lane_kind = None;
-    for attr in attrs {
-        if !attr.path().is_ident(LANE_KIND) {
-            continue;
-        }
-
-        if lane_kind.is_some() {
-            return Err(Error::new_spanned(
-                attr,
-                formatcp!("duplicate #[{LANE_KIND}] attribute"),
-            ));
-        }
-
-        let Meta::List(list) = &attr.meta else {
-            return Err(Error::new_spanned(
-                attr,
-                formatcp!("missing kind in #[{LANE_KIND}(kind)]"),
-            ));
-        };
-
-        let Some(TokenTree::Ident(kind_ident)) = list.tokens.clone().into_iter().next() else {
-            return Err(Error::new_spanned(
-                attr,
-                formatcp!("missing kind in #[{LANE_KIND}(kind)]"),
-            ));
-        };
-
-        lane_kind = Some(match kind_ident.to_string().as_str() {
-            "UnreliableUnsequenced" => quote! { ::aeronet::lane::LaneKind::UnreliableUnsequenced },
-            "UnreliableSequenced" => quote! { ::aeronet::lane::LaneKind::UnreliableSequenced },
-            "ReliableUnordered" => quote! { ::aeronet::lane::LaneKind::ReliableUnordered },
-            "ReliableSequenced" => quote! { ::aeronet::lane::LaneKind::ReliableSequenced },
-            "ReliableOrdered" => quote! { ::aeronet::lane::LaneKind::ReliableOrdered },
-            kind => {
-                return Err(Error::new_spanned(
-                    kind_ident,
-                    format!("invalid lane kind `{kind}`"),
-                ))
-            }
-        });
-    }
-
-    Ok(lane_kind)
+fn parse_lane_kind(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<&TokenStream> {
+    util::require_attr_with_one_arg(LANE_KIND, tokens, attrs)
 }
 
-fn get_lane_kind(attrs: &[Attribute], tokens: impl ToTokens) -> Result<TokenStream> {
-    parse_lane_kind(attrs)?.ok_or(Error::new_spanned(
-        tokens,
-        formatcp!("missing #[{LANE_KIND}] attribute"),
-    ))
+fn parse_drop_after(attrs: &[Attribute]) -> Result<TokenStream> {
+    let value = util::parse_attr_with_one_arg(DROP_AFTER, attrs)?;
+    Ok(value.cloned().unwrap_or(quote! {
+        ::aeronet::lane::LaneConfig::default().drop_after
+    }))
+}
+
+fn parse_resend_after(attrs: &[Attribute]) -> Result<TokenStream> {
+    let value = util::parse_attr_with_one_arg(RESEND_AFTER, attrs)?;
+    Ok(value.cloned().unwrap_or(quote! {
+        ::aeronet::lane::LaneConfig::default().resend_after
+    }))
+}
+
+fn parse_ack_timeout(attrs: &[Attribute]) -> Result<TokenStream> {
+    let value = util::parse_attr_with_one_arg(ACK_TIMEOUT, attrs)?;
+    Ok(value.cloned().unwrap_or(quote! {
+        ::aeronet::lane::LaneConfig::default().ack_timeout
+    }))
 }

@@ -118,14 +118,17 @@ impl WriteBytes for bytes::BytesMut {
             return Err(BytesError::BufferTooShort);
         }
 
-        let buf = match len {
-            1 => self.write_u8(v as u8)?,
+        match len {
+            1 => self.write_u8(v as u8)
             2 => {
-                let buf = self.write_u16(v as u16)?;
-                buf[0] |= 0x40;
-                buf
+                let mut u = v as u16;
+                u |= 0x40;
+                self.write_u16((v as u16) | 0x40)
             }
             4 => {
+                let mut u = v as u32;
+                u |= 0x80;
+                self.write_u32()
                 let buf = self.write_u32(v as u32)?;
                 buf[0] |= 0x80;
                 buf

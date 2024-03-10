@@ -6,6 +6,7 @@ use syn::{parse_macro_input, DeriveInput};
 mod lane_key;
 mod message;
 mod on_lane;
+mod util;
 
 /// Implements `aeronet::message::Message` for the given type.
 ///
@@ -30,12 +31,16 @@ pub fn message(input: TokenStream) -> TokenStream {
 ///
 /// * `#[lane_kind(kind)]` determines which kind of lane this variant
 ///   represents, where `kind` is a variant of `LaneKind`.
+/// * `#[drop_after(value)]` sets `LaneConfig::drop_after` for this variant.
+/// * `#[resend_after(value)]` sets `LaneConfig::resend_after` for this variant.
+/// * `#[ack_timeout(value)]` sets `LaneConfig::ack_timeout` for this variant.
 ///
 /// # Usage
 ///
 /// ## Struct
 ///
-/// The type requires the attribute `#[lane_kind(..)]`.
+/// The type requires the attribute `#[lane_kind(..)]`. All other attributes are
+/// optional.
 ///
 /// ```ignore
 /// #[derive(LaneKey)]
@@ -45,7 +50,8 @@ pub fn message(input: TokenStream) -> TokenStream {
 ///
 /// ## Enum
 ///
-/// All variants require the attribute `#[lane_kind(..)]`.
+/// All variants require the attribute `#[lane_kind(..)]`. All other attributes
+/// are optional.
 ///
 /// ```ignore
 /// #[derive(LaneKey)]
@@ -56,13 +62,18 @@ pub fn message(input: TokenStream) -> TokenStream {
 ///     HighPriority,
 /// }
 /// ```
-#[proc_macro_derive(LaneKey, attributes(lane_kind))]
+#[proc_macro_derive(LaneKey, attributes(lane_kind, drop_after, resend_after, ack_timeout))]
 pub fn lane_key(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     lane_key::derive(&input)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }
+
+const LANE_KIND: &str = "lane_kind";
+const DROP_AFTER: &str = "drop_after";
+const RESEND_AFTER: &str = "resend_after";
+const ACK_TIMEOUT: &str = "ack_timeout";
 
 /// Defines along what variant of a [`LaneKey`] a message is sent.
 ///
@@ -125,6 +136,5 @@ pub fn on_lane(input: TokenStream) -> TokenStream {
         .into()
 }
 
-const LANE_KIND: &str = "lane_kind";
 const LANE_TYPE: &str = "lane_type";
 const ON_LANE: &str = "on_lane";

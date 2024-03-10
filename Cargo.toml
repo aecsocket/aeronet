@@ -62,7 +62,6 @@ bytes-varint = "1.0.3"
 proc-macro2 = "1.0.76"
 syn = "2.0.48"
 quote = "1.0.35"
-const_format = "0.2.32"
 
 futures = "0.3.30"
 crossbeam-channel = "0.5.11"

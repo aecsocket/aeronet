@@ -188,7 +188,7 @@ guarantees for how messages along that lane will be transported. For example, if
 messages of a certain type to be sent *reliable-ordered* (resent if lost in transit, and always
 received in order), you can define that using lanes.
 
-Typically, a transport implementation will require you to pass a `Vec<LaneConfig>` on creation,
+Typically, a transport implementation will require you to pass a `[LaneConfig]` on creation,
 which defines which lanes are available to the transport, and what their properties are (i.e. is it
 reliable, ordered, etc). Your own message type must then implement [`LaneIndex`] to define on which
 of those [`LaneConfig`]s the message is sent.

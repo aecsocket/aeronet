@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::Display;
 
 use crate::message::Message;
 
@@ -57,8 +57,8 @@ pub trait TransportProtocol: Send + Sync + 'static {
 #[cfg_attr(feature = "bitcode", derive(bitcode::Encode, bitcode::Decode))]
 pub struct ProtocolVersion(pub u64);
 
-impl fmt::Display for ProtocolVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for ProtocolVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:#018x}", self.0)
     }
 }

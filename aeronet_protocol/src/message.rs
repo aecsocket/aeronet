@@ -1,5 +1,5 @@
 use ahash::AHashMap;
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 
 use crate::{
     ack::{AckHeader, Acknowledge},
@@ -79,6 +79,7 @@ impl Messages {
     }
 
     pub fn flush(&mut self, available_bytes: &mut usize) -> impl Iterator<Item = Bytes> + '_ {
+        // TODO
         let mut frags = self
             .unacked_msgs
             .iter()
@@ -152,7 +153,9 @@ impl Messages {
         let iter =
             Self::packet_to_msg_acks(&self.sent_packets, &mut self.unacked_msgs, acks.seqs());
         Ok(iter.map(|msg_seq| {
-            // TODO notify lanes
+            // TODO bookkeeping; notify lanes
+            // also, ask the lane if it even wants to receive this message
+            // maybe it's a sequenced lane and the msg is too old?
             msg_seq
         }))
     }
@@ -215,5 +218,3 @@ impl Messages {
             })
     }
 }
-
-pub struct Flush<'c> {}

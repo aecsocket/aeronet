@@ -1,8 +1,13 @@
+use std::error::Error;
+
 pub use aeronet_derive::{LaneKey, OnLane};
 
 mod config;
 
+use bytes::Bytes;
 pub use config::*;
+
+use crate::message::TryFromBytes;
 
 /// Kind of lane which can provide guarantees about the manner of message
 /// delivery.
@@ -165,4 +170,34 @@ pub trait OnLane {
 
     /// What lane this value is sent out on.
     fn lane(&self) -> Self::Lane;
+}
+
+/// Attempt to convert a message payload and a lane index into a value of this
+/// type.
+///
+/// Transports may require this as a bound on the incoming message type, if the
+/// message needs to be deserialized from a byte sequence after receiving data,
+/// and the transport supports lanes.
+///
+/// This is automatically implemented for all types implementing
+/// [`TryFromBytes`].
+pub trait TryFromBytesAndLane: Sized {
+    /// Error type of [`TryFromBytesAndLane::try_from_bytes_and_lane`].
+    type Error: Error + Send + Sync + 'static;
+
+    /// Attempts to convert a sequence of bytes and a lane index into a value of
+    /// this type.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the conversion fails.
+    fn try_from_bytes_and_lane(buf: Bytes, lane_index: usize) -> Result<Self, Self::Error>;
+}
+
+impl<T: TryFromBytes> TryFromBytesAndLane for T {
+    type Error = <Self as TryFromBytes>::Error;
+
+    fn try_from_bytes_and_lane(buf: Bytes, _: usize) -> Result<Self, Self::Error> {
+        Self::try_from_bytes(buf)
+    }
 }

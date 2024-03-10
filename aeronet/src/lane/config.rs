@@ -48,6 +48,10 @@ impl Default for LaneConfig {
 }
 
 impl LaneConfig {
+    /// Creates a new configuration for the given lane kind using the [default]
+    /// values.
+    ///
+    /// [default]: LaneConfig::default
     #[must_use]
     pub fn with_defaults(kind: LaneKind) -> Self {
         Self {
@@ -90,6 +94,9 @@ pub trait LaneIndex {
 ///
 /// This trait should be derived - see [`aeronet_derive::LaneKey`]. Otherwise,
 /// you will have to make sure to follow the contract regarding panics.
+///
+/// There isn't much point to implementing this yourself - if you need
+/// fine-grained control over lanes, use [`LaneIndex`].
 ///
 /// # Panic safety
 ///

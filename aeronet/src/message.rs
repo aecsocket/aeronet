@@ -67,7 +67,14 @@ impl TryIntoBytes for Vec<u8> {
 /// message needs to be deserialized from a byte sequence after receiving data.
 ///
 /// For the outgoing counterpart, see [`TryIntoBytes`].
-pub trait TryFromBytes {
+///
+/// If you are implementing a transport and wish to use this type for
+/// deserializing message, but you also support lanes, you should use
+/// [`TryFromBytesAndLane`] instead. This provides more flexibility to consumers
+/// of your transport, if they require access to the lane index as well.
+///
+/// [`TryFromBytesAndLane`]: crate::lane::TryFromBytesAndLane
+pub trait TryFromBytes: Sized {
     /// Error type of [`TryFromBytes::try_from_bytes`].
     type Error: Error + Send + Sync + 'static;
 
@@ -76,9 +83,7 @@ pub trait TryFromBytes {
     /// # Errors
     ///
     /// Errors if the conversion fails.
-    fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error>
-    where
-        Self: Sized;
+    fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error>;
 }
 
 impl TryFromBytes for () {

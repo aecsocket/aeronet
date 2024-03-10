@@ -1,9 +1,8 @@
-use const_format::formatcp;
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens};
-use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Fields, Meta, Result};
+use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Fields, Result};
 
-use crate::{LANE_TYPE, ON_LANE};
+use crate::{util, LANE_TYPE, ON_LANE};
 
 pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
     match &input.data {
@@ -89,61 +88,9 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
 // attributes
 
 fn parse_lane_type(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<&TokenStream> {
-    let mut lane_type = None;
-    for attr in attrs {
-        if !attr.path().is_ident(LANE_TYPE) {
-            continue;
-        }
-
-        if lane_type.is_some() {
-            return Err(Error::new_spanned(
-                attr,
-                formatcp!("duplicate #[{LANE_TYPE}] attribute"),
-            ));
-        }
-
-        let Meta::List(list) = &attr.meta else {
-            return Err(Error::new_spanned(
-                attr,
-                formatcp!("missing type in #[{LANE_TYPE}(type)]"),
-            ));
-        };
-
-        lane_type = Some(&list.tokens);
-    }
-
-    lane_type.ok_or(Error::new_spanned(
-        tokens,
-        formatcp!("missing #[{LANE_TYPE}] attribute"),
-    ))
+    util::require_attr_with_one_arg(LANE_TYPE, tokens, attrs)
 }
 
 fn parse_on_lane(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<&TokenStream> {
-    let mut on_lane = None;
-    for attr in attrs {
-        if !attr.path().is_ident(ON_LANE) {
-            continue;
-        }
-
-        if on_lane.is_some() {
-            return Err(Error::new_spanned(
-                attr,
-                formatcp!("duplicate #[{ON_LANE}] attribute"),
-            ));
-        }
-
-        let Meta::List(list) = &attr.meta else {
-            return Err(Error::new_spanned(
-                attr,
-                formatcp!("missing value in #[{ON_LANE}(value)]"),
-            ));
-        };
-
-        on_lane = Some(&list.tokens);
-    }
-
-    on_lane.ok_or(Error::new_spanned(
-        tokens,
-        formatcp!("missing #[{ON_LANE}] attribute"),
-    ))
+    util::require_attr_with_one_arg(ON_LANE, tokens, attrs)
 }
