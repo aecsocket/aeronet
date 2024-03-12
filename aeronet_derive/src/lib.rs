@@ -75,21 +75,18 @@ const DROP_AFTER: &str = "drop_after";
 const RESEND_AFTER: &str = "resend_after";
 const ACK_TIMEOUT: &str = "ack_timeout";
 
-/// Defines along what variant of a [`LaneKey`] a message is sent.
+/// Defines along what lane a message is sent.
 ///
 /// # Attributes
 ///
-/// * `#[lane_type(type)]` determines what `type` implementing [`LaneKey`] this
-///   message is sent along.
-/// * `#[on_lane(lane)]` determines what variant of `lane_type` this variant
-///   maps to.
+/// * `#[on_lane(lane)]` determines what lane this variant maps to.
+///   This can be any expression which can be passed to `LaneIndex::from`.
 ///
 /// # Usage
 ///
 /// ## Struct
 ///
-/// The type requires the attributes `#[lane_type(..)]` and
-/// `#[on_lane(..)]`.
+/// The type requires the attribute `#[on_lane(..)]`.
 ///
 /// ```ignore
 /// #[derive(LaneKey)]
@@ -97,14 +94,11 @@ const ACK_TIMEOUT: &str = "ack_timeout";
 /// struct AppLane;
 ///
 /// #[derive(OnLane)]
-/// #[lane_type(AppLane)]
 /// #[on_lane(AppLane)]
 /// struct AppMessage(pub String);
 /// ```
 ///
 /// ## Enum
-
-/// The type requires the attribute `#[lane_type(..)]`.
 ///
 /// All variants require the attribute `#[on_lane(..)]`.
 ///
@@ -118,7 +112,6 @@ const ACK_TIMEOUT: &str = "ack_timeout";
 /// }
 ///
 /// #[derive(OnLane)]
-/// #[lane_type(AppLane)]
 /// enum AppMessage {
 ///     #[on_lane(AppLane::LowPriority)]
 ///     Move(f32),
@@ -128,7 +121,7 @@ const ACK_TIMEOUT: &str = "ack_timeout";
 ///     Chat { msg: String },
 /// }
 /// ```
-#[proc_macro_derive(OnLane, attributes(lane_type, on_lane))]
+#[proc_macro_derive(OnLane, attributes(on_lane))]
 pub fn on_lane(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     on_lane::derive(&input)
@@ -136,5 +129,4 @@ pub fn on_lane(input: TokenStream) -> TokenStream {
         .into()
 }
 
-const LANE_TYPE: &str = "lane_type";
 const ON_LANE: &str = "on_lane";

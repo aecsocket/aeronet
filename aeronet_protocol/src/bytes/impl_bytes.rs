@@ -1,6 +1,5 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-
-use crate::bytes::varint;
+use integer_encoding::VarInt;
 
 use super::{BytesError, ReadBytes, Result, WriteBytes};
 
@@ -49,17 +48,10 @@ macro_rules! impl_read {
 
         #[inline]
         fn read_varint(&mut self) -> Result<u64> {
-            let mut result: u64 = 0;
-            for times_shift in 0..8 {
-                let byte = self.read_u8()?;
-                let msb_dropped = byte & 0b0111_1111;
-                result |= (msb_dropped as u64) << times_shift * 7;
-
-                if byte & 0b1000_0000 == 0 {
-                    return Ok(result);
-                }
-            }
-            Err(BytesError::BufferTooShort)
+            let (value, bytes_read) =
+                <u64 as VarInt>::decode_var(self.chunk()).ok_or(BytesError::BufferTooShort)?;
+            self.advance(bytes_read);
+            Ok(value)
         }
     };
 }
@@ -90,7 +82,7 @@ impl ReadBytes for BytesMut {
     }
 }
 
-impl WriteBytes for bytes::BytesMut {
+impl WriteBytes for BytesMut {
     #[inline]
     fn write_u8(&mut self, value: u8) -> Result<()> {
         write_u!(self, value, u8, put_u8, 1)
@@ -113,35 +105,12 @@ impl WriteBytes for bytes::BytesMut {
 
     #[inline]
     fn write_varint(&mut self, v: u64) -> Result<()> {
-        let len = varint::size_of(v);
+        let len = VarInt::required_space(v);
         if self.remaining_mut() < len {
             return Err(BytesError::BufferTooShort);
         }
-
-        match len {
-            1 => self.write_u8(v as u8)
-            2 => {
-                let mut u = v as u16;
-                u |= 0x40;
-                self.write_u16((v as u16) | 0x40)
-            }
-            4 => {
-                let mut u = v as u32;
-                u |= 0x80;
-                self.write_u32()
-                let buf = self.write_u32(v as u32)?;
-                buf[0] |= 0x80;
-                buf
-            }
-            8 => {
-                let buf = self.write_u64(v)?;
-                buf[0] |= 0xc0;
-                buf
-            }
-            _ => return Err(BytesError::VarInt),
-        };
-
-        Ok(buf)
+        VarInt::encode_var(v, &mut self[..len]);
+        Ok(())
     }
 
     #[inline]

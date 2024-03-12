@@ -2,7 +2,7 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Fields, Result};
 
-use crate::{util, LANE_TYPE, ON_LANE};
+use crate::{util, ON_LANE};
 
 pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
     match &input.data {
@@ -20,15 +20,12 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
     let generics = &input.generics;
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
-    let lane_type = parse_lane_type(input, &input.attrs)?;
     let on_lane = parse_on_lane(input, &input.attrs)?;
 
     Ok(quote! {
         impl #impl_generics ::aeronet::lane::OnLane for #name #type_generics #where_clause {
-            type Lane = #lane_type;
-
-            fn lane(&self) -> Self::Lane {
-                #on_lane
+            fn lane_index(&self) -> ::aeronet::lane::LaneIndex {
+                ::aeronet::lane::LaneIndex::from(#on_lane)
             }
         }
     })
@@ -45,7 +42,6 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
     let generics = &input.generics;
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
-    let lane_type = parse_lane_type(input, &input.attrs)?;
     let variants = data
         .variants
         .iter()
@@ -58,7 +54,7 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let match_body = variants
+    let lane_index_body = variants
         .iter()
         .map(|variant| {
             let pattern = variant.ident;
@@ -68,17 +64,17 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
                 Fields::Unnamed(_) => quote! { (..) },
             };
             let on_lane = variant.on_lane;
-            quote! { Self::#pattern #destruct => #on_lane }
+            quote! {
+                Self::#pattern #destruct => ::aeronet::lane::LaneIndex::from(#on_lane)
+            }
         })
         .collect::<Vec<_>>();
 
     Ok(quote! {
         impl #impl_generics ::aeronet::lane::OnLane for #name #type_generics #where_clause {
-            type Lane = #lane_type;
-
-            fn lane(&self) -> Self::Lane {
+            fn lane_index(&self) -> ::aeronet::lane::LaneIndex {
                 match *self {
-                    #(#match_body),*
+                    #(#lane_index_body),*
                 }
             }
         }
@@ -86,10 +82,6 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
 }
 
 // attributes
-
-fn parse_lane_type(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<&TokenStream> {
-    util::require_attr_with_one_arg(LANE_TYPE, tokens, attrs)
-}
 
 fn parse_on_lane(tokens: impl ToTokens, attrs: &[Attribute]) -> Result<&TokenStream> {
     util::require_attr_with_one_arg(ON_LANE, tokens, attrs)

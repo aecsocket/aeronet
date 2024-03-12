@@ -1,3 +1,58 @@
+//! Provides guarantees for message delivery and receiving.
+//!
+//! Lanes are analogous to channels or streams in other protocols, which allow
+//! sending messages across different logical lanes with different guarantees,
+//! but over the same connection.
+//! Each lane is independent of any other lane, so e.g. one lane does not block
+//! the head of another lane (head-of-line blocking).
+//!
+//! The name "lanes" was chosen in order to reduce ambiguity:
+//! * *streams* may be confused with TCP or WebTransport streams
+//! * *channels* may be confused with MPSC channels
+//!
+//! # Guarantees
+//!
+//! Lanes mainly offer guarantees about:
+//! * [reliability](LaneReliability) - ensuring that a message reaches the other
+//!   side without being lost; and if it is lost, it is resent
+//! * [ordering](LaneOrdering) - ensuring that messages are received in the same
+//!   order that they are sent
+//!
+//! Although it is not a part of the guarantees laid out by the lane kinds,
+//! *head-of-line blocking* is also an important factor to consider when
+//! choosing which kind of lane to use. A lane kind with head-of-line
+//! blocking may block when it is awaiting a message sent earlier, in order to
+//! maintain ordering; others may not.
+//!
+//! Note that lane kinds provide a *minimum* guarantee of reliability and
+//! ordering - a transport may provide some guarantees even if using a less
+//! reliable lane kind.
+//!
+//! | [`LaneKind`]              | Fragmentation | Reliability | Ordering |
+//! |---------------------------|---------------|-------------|----------|
+//! | [`UnreliableUnsequenced`] | ✅            |              |          |
+//! | [`UnreliableSequenced`]   | ✅            |              | (1)      |
+//! | [`ReliableUnordered`]     | ✅            | ✅            |          |
+//! | [`ReliableSequenced`]     | ✅            | ✅            | (1)      |
+//! | [`ReliableOrdered`]       | ✅            | ✅            | (2)      |
+//!
+//! 1. If delivery of a single chunk fails, delivery of the whole packet fails
+//!    (unreliable). If the message arrives later than a message sent and
+//!    received previously, the message is discarded (sequenced, not ordered).
+//! 2. If delivery of a single chunk fails, delivery of all messages halts until
+//!    that single chunk is received (reliable ordered)..
+//!
+//! [`UnreliableUnsequenced`]: LaneKind::UnreliableUnsequenced
+//! [`UnreliableSequenced`]: LaneKind::UnreliableSequenced
+//! [`ReliableUnordered`]: LaneKind::ReliableUnordered
+//! [`ReliableSequenced`]: LaneKind::ReliableSequenced
+//! [`ReliableOrdered`]: LaneKind::ReliableOrdered
+//!
+//! # Transports
+//!
+//! Not all transport implementations may offer lanes. If they do, they will
+//! usually have an [`OnLane`] bound on the outgoing message type
+
 use std::error::Error;
 
 pub use aeronet_derive::{LaneKey, OnLane};
@@ -12,57 +67,8 @@ use crate::message::TryFromBytes;
 /// Kind of lane which can provide guarantees about the manner of message
 /// delivery.
 ///
-/// This is analogous to channels or streams in other protocols, which allow
-/// sending messages across different logical lanes with different guarantees.
-/// Each lane is independent of any other lane, so e.g. one lane does not block
-/// the head of another lane (head-of-line blocking).
-///
-/// The name "lanes" was chosen in order to reduce ambiguity:
-/// * *streams* may be confused with TCP or WebTransport streams
-/// * *channels* may be confused with MPSC channels
-///
-/// # Guarantees
-///
-/// Lanes mainly offer guarantees about:
-/// * *reliability* - ensuring that a message reaches the other side without
-///   being lost; and if it is lost, it is resent
-/// * *ordering* - ensuring that messages are received in the same order that
-///   they are sent
-///
-/// Although it is not a part of the guarantees laid out by the lane kinds,
-/// *head-of-line blocking* is also an important factor to consider when
-/// choosing which kind of lane to use. A lane kind with head-of-line
-/// blocking may block when it is awaiting a message sent earlier, in order to
-/// maintain ordering; others may not.
-///
-/// Note that lane kinds provide a *minimum* guarantee of reliability and
-/// ordering - a transport may provide some guarantees even if using a less
-/// reliable lane kind.
-///
-/// | [`LaneKind`]              | Fragmentation | Reliability | Ordering |
-/// |---------------------------|---------------|-------------|----------|
-/// | [`UnreliableUnsequenced`] | ✅            |              |          |
-/// | [`UnreliableSequenced`]   | ✅            |              | (1)      |
-/// | [`ReliableUnordered`]     | ✅            | ✅            |          |
-/// | [`ReliableSequenced`]     | ✅            | ✅            | (1)      |
-/// | [`ReliableOrdered`]       | ✅            | ✅            | (2)      |
-///
-/// 1. If delivery of a single chunk fails, delivery of the whole packet fails
-///    (unreliable). If the message arrives later than a message sent and
-///    received previously, the message is discarded (sequenced, not ordered).
-/// 2. If delivery of a single chunk fails, delivery of all messages halts until
-///    that single chunk is received (reliable ordered).
-///
-/// # Transports
-///
-/// Not all transport implementations may offer lanes. If they do, they will
-/// usually have an [`OnLane`] bound on the outgoing message type.
-///
-/// [`UnreliableUnsequenced`]: LaneKind::UnreliableUnsequenced
-/// [`UnreliableSequenced`]: LaneKind::UnreliableSequenced
-/// [`ReliableUnordered`]: LaneKind::ReliableUnordered
-/// [`ReliableSequenced`]: LaneKind::ReliableSequenced
-/// [`ReliableOrdered`]: LaneKind::ReliableOrdered
+/// See [`lane`](crate::lane).
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LaneKind {
     /// No guarantees given on *reliability* or *ordering*.
@@ -74,7 +80,7 @@ pub enum LaneKind {
     /// This lane kind typically has the best performance, as it does not
     /// require any sort of handshaking to ensure that messages have arrived
     /// from one side to the other.
-    UnreliableUnsequenced,
+    UnreliableUnordered,
     /// Messages are *unreliable* but only messages newer than the last
     /// message will be received.
     ///
@@ -143,33 +149,93 @@ pub enum LaneKind {
     ReliableOrdered,
 }
 
+/// Guarantees that a [lane](crate::lane) provides with regards to the delivery
+/// of a message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LaneReliability {
+    /// There is no guarantee that a message will be delivered.
+    Unreliable,
+    /// The message is guaranteed to be delivered to the receiver.
+    Reliable,
+}
+
+/// Guarantees that a [lane](crate::lane) provides with regards to in what order
+/// messages will be received.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LaneOrdering {
+    /// There is no guarantee on the order that messages are received in.
+    Unordered,
+    /// Messages are guaranteed to be received in the order they were sent, but
+    /// a message may be dropped if it arrives later than a message sent later
+    /// but received earlier.
+    ///
+    /// For example, if messages A and B are sent in that order, and the
+    /// receiver receives B then A in that order, it will discard A as it was
+    /// sent earlier but received later than B.
+    Sequenced,
+    /// Messages are guaranteed to be received in the order that they were sent,
+    /// with no dropped messages.
+    Ordered,
+}
+
 impl LaneKind {
-    /// Gets if this kind of lane is reliable.
+    /// Gets the reliability of this lane kind.
     #[must_use]
-    pub fn is_reliable(&self) -> bool {
+    pub fn reliability(&self) -> LaneReliability {
         match self {
-            Self::UnreliableUnsequenced | Self::UnreliableSequenced => false,
-            Self::ReliableUnordered | Self::ReliableSequenced | Self::ReliableOrdered => true,
+            Self::UnreliableUnordered | Self::UnreliableSequenced => LaneReliability::Unreliable,
+            Self::ReliableUnordered | Self::ReliableSequenced | Self::ReliableOrdered => {
+                LaneReliability::Reliable
+            }
+        }
+    }
+
+    /// Gets the ordering of this lane kind.
+    #[must_use]
+    pub fn ordering(&self) -> LaneOrdering {
+        match self {
+            Self::UnreliableUnordered | Self::ReliableUnordered => LaneOrdering::Unordered,
+            Self::UnreliableSequenced | Self::ReliableSequenced => LaneOrdering::Sequenced,
+            Self::ReliableOrdered => LaneOrdering::Ordered,
         }
     }
 }
 
-/// Defines what lane a [`Message`] is sent on.
-///
-/// See [`LaneKind`] for an explanation of lanes.
+/// Index of a lane as specified in a [`LanesConfig`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "bitcode", derive(bitcode::Encode, bitcode::Decode))]
+pub struct LaneIndex(usize);
+
+impl LaneIndex {
+    /// Creates a new lane index from a raw index.
+    ///
+    /// # Panic safety
+    ///
+    /// When creating a transport, you pass a [`LanesConfig`] in to define which
+    /// lanes are available for it to use, stored as a list of [`LaneConfig`]s.
+    /// Functions which accept a [`LaneIndex`] expect to be given a valid index
+    /// into this list. If this index is for a different configuration, then the
+    /// transport will most likely panic.
+    pub fn from_raw(raw: usize) -> Self {
+        Self(raw)
+    }
+
+    /// Gets the raw index of this value.
+    pub fn into_raw(self) -> usize {
+        self.0
+    }
+}
+
+/// Defines what [lane] a [`Message`] is sent on.
 ///
 /// This trait can be derived - see [`aeronet_derive::OnLane`].
 ///
-/// Note that this only affects what lane an *outgoing* message is *sent out*
-/// on - it has no effect on incoming messages.
-///
+/// [lane]: crate::lane
 /// [`Message`]: crate::message::Message
 pub trait OnLane {
-    /// User-defined type of lane, output by [`OnLane::lane`].
-    type Lane: LaneIndex;
-
-    /// What lane this value is sent out on.
-    fn lane(&self) -> Self::Lane;
+    /// Gets the index of the lane that this is sent out on.
+    fn lane_index(&self) -> LaneIndex;
 }
 
 /// Attempt to convert a message payload and a lane index into a value of this
@@ -191,13 +257,13 @@ pub trait TryFromBytesAndLane: Sized {
     /// # Errors
     ///
     /// Errors if the conversion fails.
-    fn try_from_bytes_and_lane(buf: Bytes, lane_index: usize) -> Result<Self, Self::Error>;
+    fn try_from_bytes_and_lane(buf: Bytes, lane_index: LaneIndex) -> Result<Self, Self::Error>;
 }
 
 impl<T: TryFromBytes> TryFromBytesAndLane for T {
     type Error = <Self as TryFromBytes>::Error;
 
-    fn try_from_bytes_and_lane(buf: Bytes, _: usize) -> Result<Self, Self::Error> {
+    fn try_from_bytes_and_lane(buf: Bytes, _: LaneIndex) -> Result<Self, Self::Error> {
         Self::try_from_bytes(buf)
     }
 }

@@ -2,7 +2,6 @@ use bytes::Bytes;
 
 pub mod chunks;
 pub mod impl_bytes;
-pub mod varint;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum BytesError {

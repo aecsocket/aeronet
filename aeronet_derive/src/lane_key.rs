@@ -26,24 +26,38 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
     let ack_timeout = parse_ack_timeout(&input.attrs)?;
 
     Ok(quote! {
-        impl #impl_generics ::aeronet::lane::LaneIndex for #name #type_generics #where_clause {
-            fn lane_index(&self) -> usize {
-                0
-            }
-        }
-
         impl #impl_generics ::aeronet::lane::LaneKey for #name #type_generics #where_clause {
-            const VARIANTS: &'static [Self] = &[Self];
-
-            fn config(&self) -> ::aeronet::lane::LaneConfig {
-                use ::aeronet::lane::LaneKind::*;
-
+            const CONFIGS: &'static [::aeronet::lane::LaneConfig] = &[
                 ::aeronet::lane::LaneConfig {
                     kind: #kind,
-                    drop_after: #drop_after,
-                    resend_after: #resend_after,
-                    ack_timeout: #ack_timeout,
+                    drop_after: {
+                        use ::core::time::Duration;
+                        Duration::from(#drop_after)
+                    },
+                    resend_after: {
+                        use ::core::time::Duration;
+                        Duration::from(#resend_after)
+                    },
+                    ack_timeout: {
+                        use ::core::time::Duration;
+                        Duration::from(#ack_timeout)
+                    },
                 }
+            ];
+
+            fn lane_index(&self) -> ::aeronet::lane::LaneIndex {
+                ::aeronet::lane::LaneIndex::from_raw(0)
+            }
+
+            fn configs(&self) -> &'static [::aeronet::lane::LaneConfig] {
+                use ::core::time::Duration;
+
+                &[::aeronet::lane::LaneConfig {
+                    kind: #kind,
+                    drop_after: Duration::from(#drop_after),
+                    resend_after: Duration::from(#resend_after),
+                    ack_timeout: Duration::from(#ack_timeout),
+                }]
             }
         }
     })
@@ -140,6 +154,7 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
 
             fn config(&self) -> ::aeronet::lane::LaneConfig {
                 use ::aeronet::lane::LaneKind::*;
+                use ::core::time::Duration;
 
                 match *self {
                     #(#config_body),*

@@ -12,9 +12,10 @@ use ahash::AHashMap;
 use arbitrary::Arbitrary;
 use bitvec::{array::BitArray, bitarr};
 use bytes::Bytes;
+use integer_encoding::VarInt;
 
 use crate::{
-    bytes::{chunks::ByteChunksExt, varint, BytesError, ReadBytes, WriteBytes},
+    bytes::{chunks::ByteChunksExt, BytesError, ReadBytes, WriteBytes},
     seq::Seq,
 };
 
@@ -180,7 +181,7 @@ const MAX_VARINT_LEN: usize = 10;
 
 impl Fragment {
     pub fn encode_size(&self) -> usize {
-        FragHeader::ENCODE_SIZE + varint::size_of(self.payload.len() as u64) + self.payload.len()
+        FragHeader::ENCODE_SIZE + VarInt::required_space(self.payload.len()) + self.payload.len()
     }
 
     pub fn encode(&self, buf: &mut impl WriteBytes) -> Result<(), BytesError> {
