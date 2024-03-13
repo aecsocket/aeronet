@@ -34,7 +34,7 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
 fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
     struct Variant<'a> {
         ident: &'a Ident,
-        fields: &'a Fields,
+        destruct: TokenStream,
         on_lane: &'a TokenStream,
     }
 
@@ -46,28 +46,31 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         .variants
         .iter()
         .map(|variant| {
-            parse_on_lane(variant, &variant.attrs).map(|on_lane| Variant {
+            Ok(Variant {
                 ident: &variant.ident,
-                fields: &variant.fields,
-                on_lane,
+                destruct: match variant.fields {
+                    Fields::Unit => quote! {},
+                    Fields::Named(_) => quote! { { .. } },
+                    Fields::Unnamed(_) => quote! { (..) },
+                },
+                on_lane: parse_on_lane(variant, &variant.attrs)?,
             })
         })
         .collect::<Result<Vec<_>>>()?;
 
     let lane_index_body = variants
         .iter()
-        .map(|variant| {
-            let pattern = variant.ident;
-            let destruct = match variant.fields {
-                Fields::Unit => quote! {},
-                Fields::Named(_) => quote! { { .. } },
-                Fields::Unnamed(_) => quote! { (..) },
-            };
-            let on_lane = variant.on_lane;
-            quote! {
-                Self::#pattern #destruct => ::aeronet::lane::LaneIndex::from(#on_lane)
-            }
-        })
+        .map(
+            |Variant {
+                 ident,
+                 destruct,
+                 on_lane,
+             }| {
+                quote! {
+                    Self::#ident #destruct => ::aeronet::lane::LaneIndex::from(#on_lane)
+                }
+            },
+        )
         .collect::<Vec<_>>();
 
     Ok(quote! {

@@ -17,6 +17,9 @@ workspace = true
 all-features = true
 
 [features]
+### Allows creating some types with [`arbitrary`](https://docs.rs/arbitrary).
+arbitrary = ["dep:arbitrary"]
+
 ## Enables serialization of certain types with [`serde`](https://docs.rs/serde).
 serde = ["dep:serde"]
 
@@ -41,6 +44,8 @@ bytes.workspace = true
 serde = { workspace = true, optional = true }
 
 bitcode = { workspace = true, optional = true }
+
+arbitrary = { workspace = true, optional = true }
 
 rand = { workspace = true, optional = true }
 rand_distr = { workspace = true, optional = true }

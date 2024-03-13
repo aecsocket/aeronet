@@ -12,6 +12,12 @@ pub struct RepliconMessage {
     pub payload: Bytes,
 }
 
+impl RepliconMessage {
+    pub fn lane_index(&self) -> LaneIndex {
+        LaneIndex::from_raw(usize::from(self.channel_id))
+    }
+}
+
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum RepliconMessageError {
     #[error("lane index `{lane_index}` too large")]
@@ -26,16 +32,11 @@ impl TryIntoBytes for RepliconMessage {
     }
 }
 
-impl LaneIndex for RepliconMessage {
-    fn lane_index(&self) -> usize {
-        usize::from(self.channel_id)
-    }
-}
-
 impl TryFromBytesAndLane for RepliconMessage {
     type Error = RepliconMessageError;
 
-    fn try_from_bytes_and_lane(payload: Bytes, lane_index: usize) -> Result<Self, Self::Error> {
+    fn try_from_bytes_and_lane(payload: Bytes, lane_index: LaneIndex) -> Result<Self, Self::Error> {
+        let lane_index = lane_index.into_raw();
         let channel_id = u8::try_from(lane_index)
             .map_err(|_| RepliconMessageError::LaneIndexTooLarge { lane_index })?;
         Ok(Self {

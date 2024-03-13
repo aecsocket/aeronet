@@ -181,6 +181,11 @@ where
         }
         .into_iter()
     }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        // we already automatically flush as fast as we can in the backend
+        Ok(())
+    }
 }
 
 /// Info on a [`WebTransportServer`] in the [`ServerState::Open`] state.

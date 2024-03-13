@@ -1,7 +1,7 @@
 mod negotiate;
 
 use aeronet::{
-    lane::{LaneConfig, LaneIndex, OnLane},
+    lane::{LaneConfig, LaneIndex, OnLane, TryFromBytesAndLane},
     message::{TryFromBytes, TryIntoBytes},
     protocol::ProtocolVersion,
 };
@@ -92,11 +92,11 @@ pub async fn connection_channel<const SERVER: bool>(
 }
 
 impl ConnectionFrontend {
-    pub fn buffer_send<S: TryIntoBytes + OnLane, R: TryFromBytes>(
+    pub fn buffer_send<S: TryIntoBytes + OnLane, R: TryFromBytesAndLane>(
         &mut self,
         msg: S,
     ) -> Result<Seq, WebTransportError<S, R>> {
-        let lane_index = msg.lane().lane_index();
+        let lane_index = msg.lane_index();
         let msg_bytes = msg.try_into_bytes().map_err(WebTransportError::IntoBytes)?;
         let msg_seq = self
             .msgs
@@ -133,14 +133,15 @@ impl ConnectionFrontend {
         self.msgs.read_acks(packet).map_err(BackendError::Messages)
     }
 
-    pub fn read_frags<S: TryIntoBytes, R: TryFromBytes>(
+    pub fn read_frags<S: TryIntoBytes, R: TryFromBytesAndLane>(
         &mut self,
         packet: Bytes,
     ) -> impl Iterator<Item = Result<R, WebTransportError<S, R>>> + '_ {
         self.msgs.read_frags(packet).map(|msg_bytes| {
             let msg_bytes = msg_bytes.map_err(BackendError::Messages)?;
             let msg_bytes_len = msg_bytes.len();
-            let msg = R::try_from_bytes(msg_bytes).map_err(WebTransportError::FromBytes)?;
+            let msg =
+                R::try_from_bytes_and_lane(msg_bytes).map_err(WebTransportError::FromBytes)?;
             self.info.msg_bytes_recv += msg_bytes_len;
             self.info.msgs_recv += 1;
             Ok(msg)

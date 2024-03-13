@@ -92,6 +92,7 @@ name = "aeronet"
 version = "0.5.0"
 dependencies = [
  "aeronet_derive",
+ "arbitrary",
  "bevy_app",
  "bevy_ecs",
  "bitcode",

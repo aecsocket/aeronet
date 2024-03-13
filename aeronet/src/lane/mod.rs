@@ -203,6 +203,7 @@ impl LaneKind {
 
 /// Index of a lane as specified in a [`LanesConfig`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bitcode", derive(bitcode::Encode, bitcode::Decode))]
 pub struct LaneIndex(usize);
@@ -217,12 +218,12 @@ impl LaneIndex {
     /// Functions which accept a [`LaneIndex`] expect to be given a valid index
     /// into this list. If this index is for a different configuration, then the
     /// transport will most likely panic.
-    pub fn from_raw(raw: usize) -> Self {
+    pub const fn from_raw(raw: usize) -> Self {
         Self(raw)
     }
 
     /// Gets the raw index of this value.
-    pub fn into_raw(self) -> usize {
+    pub const fn into_raw(self) -> usize {
         self.0
     }
 }

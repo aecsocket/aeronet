@@ -7,7 +7,7 @@ struct MyStructMsg;
 enum MyEnumMsg {}
 
 #[test]
-fn test() {
+fn assert_types() {
     fn assert_message<T: Message>() {}
 
     assert_message::<MyStructMsg>();

@@ -1,3 +1,4 @@
+use aeronet::lane::LaneIndex;
 use ahash::AHashMap;
 use bytes::{Buf, Bytes};
 
@@ -62,11 +63,11 @@ impl Messages {
         }
     }
 
-    pub fn buffer_send(&mut self, lane_index: usize, msg: Bytes) -> Result<Seq, MessageError> {
+    pub fn buffer_send(&mut self, lane_index: LaneIndex, msg: Bytes) -> Result<Seq, MessageError> {
         let msg_seq = self.next_send_msg_seq.get_inc();
         let frags = self
             .frag
-            .fragment(msg_seq, msg)
+            .fragment(msg_seq, lane_index, msg)
             .map_err(MessageError::Fragment)?;
         self.unacked_msgs.insert(
             msg_seq,
@@ -84,6 +85,7 @@ impl Messages {
             .unacked_msgs
             .iter()
             .flat_map(|(_, msg)| msg.unacked_frags.iter().filter_map(Option::as_ref));
+        std::iter::empty()
     }
 
     // pub fn flush<'a>(
@@ -163,7 +165,7 @@ impl Messages {
     pub fn read_frags(
         &mut self,
         mut packet: Bytes,
-    ) -> impl Iterator<Item = Result<Bytes, MessageError>> + '_ {
+    ) -> impl Iterator<Item = Result<(Bytes, LaneIndex), MessageError>> + '_ {
         let frags = &mut self.frag;
         std::iter::from_fn(move || {
             // read in all fragments..
@@ -177,7 +179,7 @@ impl Messages {
                     .reassemble(&frag.header, &frag.payload)
                     .map_err(MessageError::Reassemble)
                 {
-                    Ok(Some(msg)) => return Some(Ok(Bytes::from(msg))),
+                    Ok(Some(msg)) => return Some(Ok((Bytes::from(msg), frag.header.lane_index))),
                     Ok(None) => continue,
                     Err(err) => return Some(Err(err)),
                 }

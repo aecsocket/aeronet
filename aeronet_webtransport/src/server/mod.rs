@@ -9,8 +9,8 @@ use std::{collections::HashMap, future::Future, marker::PhantomData, net::Socket
 
 use aeronet::{
     client::ClientState,
-    lane::{LaneConfig, OnLane},
-    message::{TryFromBytes, TryIntoBytes},
+    lane::{LaneConfig, OnLane, TryFromBytesAndLane},
+    message::TryIntoBytes,
     protocol::{ProtocolVersion, TransportProtocol},
 };
 use derivative::Derivative;
@@ -110,8 +110,8 @@ enum ConnectionResponse {
 impl<P> OpeningServer<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
-    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + TryFromBytesAndLane + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytesAndLane + OnLane,
 {
     pub fn open(config: WebTransportServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel();
@@ -155,8 +155,8 @@ pub struct OpenServer<P> {
 impl<P> OpenServer<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
-    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + TryFromBytesAndLane + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytesAndLane + OnLane,
 {
     #[must_use]
     pub fn local_addr(&self) -> SocketAddr {

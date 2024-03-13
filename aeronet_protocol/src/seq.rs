@@ -108,7 +108,7 @@ mod tests {
         let v = Seq(1234);
         let mut buf = BytesMut::with_capacity(Seq::ENCODE_SIZE);
 
-        v.encode(&mut buf);
+        v.encode(&mut buf).unwrap();
         assert_eq!(Seq::ENCODE_SIZE, buf.len());
 
         assert_eq!(v, Seq::decode(&mut buf.freeze()).unwrap());

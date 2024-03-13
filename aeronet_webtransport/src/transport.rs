@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use aeronet::{
-    message::{TryFromBytes, TryIntoBytes},
+    lane::TryFromBytesAndLane,
+    message::TryIntoBytes,
     stats::{ByteStats, MessageStats, Rtt},
 };
 use aeronet_protocol::{message, negotiate};
@@ -142,7 +143,7 @@ impl ByteStats for ConnectionInfo {
 /// [`WebTransportServer`]: crate::WebTransportServer
 #[derive(Derivative, thiserror::Error)]
 #[derivative(Debug(bound = ""))]
-pub enum WebTransportError<S: TryIntoBytes, R: TryFromBytes> {
+pub enum WebTransportError<S: TryIntoBytes, R: TryFromBytesAndLane> {
     #[error("backend error")]
     Backend(#[from] BackendError),
     #[error("failed to convert message into bytes")]

@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use aeronet::lane::LaneIndex;
 use ahash::AHashMap;
 use arbitrary::Arbitrary;
 use bitvec::{array::BitArray, bitarr};
@@ -42,6 +43,7 @@ use crate::{
 ///
 /// See [`FragmentHeader`].
 #[derive(Debug)]
+
 pub struct Fragmentation {
     payload_len: usize,
     messages: AHashMap<Seq, MessageBuffer>,
@@ -107,6 +109,8 @@ pub enum ReassembleError {
 pub struct FragHeader {
     /// Sequence number of the message that this fragment is a part of.
     pub msg_seq: Seq,
+    /// Index of the lane the message of this payload should be received on.
+    pub lane_index: LaneIndex,
     /// How many fragments this packet's message is split up into.
     pub num_frags: u8,
     /// Index of this fragment in the total message.
@@ -122,6 +126,7 @@ impl FragHeader {
 
     pub fn encode(&self, buf: &mut impl WriteBytes) -> Result<(), BytesError> {
         self.msg_seq.encode(buf)?;
+        buf.write_varint(self.lane_index.into_raw() as u64)?;
         buf.write_u8(self.num_frags)?;
         buf.write_u8(self.frag_id)?;
         Ok(())
@@ -130,6 +135,7 @@ impl FragHeader {
     pub fn decode(buf: &mut impl ReadBytes) -> Result<Self, BytesError> {
         Ok(Self {
             msg_seq: Seq::decode(buf)?,
+            lane_index: LaneIndex::from_raw(buf.read_varint()? as usize),
             num_frags: buf.read_u8()?,
             frag_id: buf.read_u8()?,
         })
@@ -177,8 +183,6 @@ pub struct Fragment {
     pub payload: Bytes,
 }
 
-const MAX_VARINT_LEN: usize = 10;
-
 impl Fragment {
     pub fn encode_size(&self) -> usize {
         FragHeader::ENCODE_SIZE + VarInt::required_space(self.payload.len()) + self.payload.len()
@@ -224,8 +228,6 @@ impl Fragmentation {
     /// # Panics
     ///
     /// Panics if `payload_len` is 0.
-    ///
-    /// [reassemble]: Fragmentation::reassemble
     pub fn new(payload_len: usize) -> Self {
         assert!(payload_len > 0);
         Self {
@@ -242,13 +244,20 @@ impl Fragmentation {
     /// * `msg_seq` represents the sequence of this specific message - note that
     ///   each fragment may be sent in a different packet with a different
     ///   packet sequence.
+    /// * `lane_index` represents which lane the receiver should receive this
+    ///   fragment on.
     /// * If `msg` is empty, this will return an empty iterator.
     ///
     /// # Errors
     ///
     /// Errors if the message was not a valid message which could be fragmented.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    pub fn fragment(&self, msg_seq: Seq, msg: Bytes) -> Result<Fragments, FragmentError> {
+    pub fn fragment(
+        &self,
+        msg_seq: Seq,
+        lane_index: LaneIndex,
+        msg: Bytes,
+    ) -> Result<Fragments, FragmentError> {
         let msg_len = msg.len();
         let chunks = msg.byte_chunks(self.payload_len);
         let num_frags = u8::try_from(chunks.len()).map_err(|_| FragmentError::MessageTooBig {
@@ -258,6 +267,7 @@ impl Fragmentation {
 
         Ok(Fragments {
             msg_seq,
+            lane_index,
             num_frags,
             iter: chunks.enumerate(),
         })
@@ -398,6 +408,7 @@ impl Fragmentation {
 pub struct Fragments {
     msg_seq: Seq,
     num_frags: u8,
+    lane_index: LaneIndex,
     iter: std::iter::Enumerate<crate::bytes::chunks::ByteChunks>,
 }
 
@@ -417,6 +428,7 @@ impl Iterator for Fragments {
         let header = FragHeader {
             msg_seq: self.msg_seq,
             num_frags: self.num_frags,
+            lane_index: self.lane_index,
             frag_id,
         };
         Some(Fragment { header, payload })
@@ -442,12 +454,13 @@ mod tests {
     fn encode_decode_header() {
         let v = FragHeader {
             msg_seq: Seq(1),
+            lane_index: LaneIndex::from_raw(0),
             num_frags: 12,
             frag_id: 34,
         };
         let mut buf = BytesMut::with_capacity(FragHeader::ENCODE_SIZE);
 
-        v.encode(&mut buf);
+        v.encode(&mut buf).unwrap();
         assert_eq!(FragHeader::ENCODE_SIZE, buf.len());
 
         assert_eq!(
@@ -457,6 +470,7 @@ mod tests {
     }
 
     const PAYLOAD_SIZE: usize = 1024;
+    const LANE: LaneIndex = LaneIndex::from_raw(0);
 
     const MSG1: Bytes = Bytes::from_static(b"Message 1");
     const MSG2: Bytes = Bytes::from_static(b"Message 2");
@@ -469,9 +483,9 @@ mod tests {
     #[test]
     fn single_in_order() {
         let mut frag = frag();
-        let p1 = frag.fragment(Seq(0), MSG1).unwrap().next().unwrap();
-        let p2 = frag.fragment(Seq(1), MSG2).unwrap().next().unwrap();
-        let p3 = frag.fragment(Seq(2), MSG3).unwrap().next().unwrap();
+        let p1 = frag.fragment(Seq(0), LANE, MSG1).unwrap().next().unwrap();
+        let p2 = frag.fragment(Seq(1), LANE, MSG2).unwrap().next().unwrap();
+        let p3 = frag.fragment(Seq(2), LANE, MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG1,
             frag.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
@@ -489,9 +503,9 @@ mod tests {
     #[test]
     fn single_out_of_order() {
         let mut frag = frag();
-        let p1 = frag.fragment(Seq(0), MSG1).unwrap().next().unwrap();
-        let p2 = frag.fragment(Seq(1), MSG2).unwrap().next().unwrap();
-        let p3 = frag.fragment(Seq(2), MSG3).unwrap().next().unwrap();
+        let p1 = frag.fragment(Seq(0), LANE, MSG1).unwrap().next().unwrap();
+        let p2 = frag.fragment(Seq(1), LANE, MSG2).unwrap().next().unwrap();
+        let p3 = frag.fragment(Seq(2), LANE, MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG3,
             frag.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
@@ -511,7 +525,7 @@ mod tests {
         let mut frag = frag();
         let msg = Bytes::from(b"x".repeat(PAYLOAD_SIZE + 1));
         let [p1, p2] = frag
-            .fragment(Seq(0), msg.clone())
+            .fragment(Seq(0), LANE, msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()
@@ -528,7 +542,7 @@ mod tests {
         let mut frag = frag();
         let msg = Bytes::from(b"x".repeat(PAYLOAD_SIZE * 2 + 1));
         let [p1, p2, p3] = frag
-            .fragment(Seq(0), msg.clone())
+            .fragment(Seq(0), LANE, msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()

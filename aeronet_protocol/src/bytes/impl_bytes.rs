@@ -109,8 +109,11 @@ impl WriteBytes for BytesMut {
         if self.remaining_mut() < len {
             return Err(BytesError::BufferTooShort);
         }
-        VarInt::encode_var(v, &mut self[..len]);
-        Ok(())
+        // 10 is the max number of bytes a u64 varint can take
+        let mut buf = [0; 10];
+        let written = VarInt::encode_var(v, &mut buf);
+        debug_assert_eq!(written, len);
+        self.write_slice(&buf[..len])
     }
 
     #[inline]
@@ -121,5 +124,43 @@ impl WriteBytes for BytesMut {
         } else {
             Err(BytesError::BufferTooShort)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_write_uint() {
+        let mut buf = BytesMut::with_capacity(128);
+        buf.write_u8(1).unwrap();
+        buf.write_u16(2).unwrap();
+        buf.write_u32(3).unwrap();
+        buf.write_u64(4).unwrap();
+
+        let mut buf = buf.freeze();
+        assert_eq!(1, buf.read_u8().unwrap());
+        assert_eq!(2, buf.read_u16().unwrap());
+        assert_eq!(3, buf.read_u32().unwrap());
+        assert_eq!(4, buf.read_u64().unwrap());
+    }
+
+    #[test]
+    fn read_write_varint() {
+        let mut buf = BytesMut::with_capacity(16);
+        buf.write_varint(1).unwrap();
+        let mut buf = buf.freeze();
+        assert_eq!(1, buf.read_varint().unwrap());
+
+        let mut buf = BytesMut::with_capacity(16);
+        buf.write_varint(u64::MAX / 2).unwrap();
+        let mut buf = buf.freeze();
+        assert_eq!(u64::MAX / 2, buf.read_varint().unwrap());
+
+        let mut buf = BytesMut::with_capacity(16);
+        buf.write_varint(u64::MAX).unwrap();
+        let mut buf = buf.freeze();
+        assert_eq!(u64::MAX, buf.read_varint().unwrap());
     }
 }

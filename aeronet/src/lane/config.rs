@@ -32,6 +32,15 @@ pub struct LaneConfig {
 
 impl Default for LaneConfig {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LaneConfig {
+    /// Creates a new configuration with the default values.
+    ///
+    /// This is equivalent to [`Default`], but is a `const fn`.
+    pub const fn new() -> Self {
         Self {
             kind: LaneKind::UnreliableUnordered,
             drop_after: Duration::from_secs(3),
@@ -55,11 +64,11 @@ impl Default for LaneConfig {
 /// This trait must be implemented correctly, otherwise transport
 /// implementations may panic.
 pub trait LaneKey {
+    /// The configurations used for representing lanes of this type.
+    const CONFIGS: &'static [LaneConfig];
+
     /// Gets which lane index this variant represents.
     fn lane_index(&self) -> LaneIndex;
-
-    /// Gets the configurations used for representing lanes of this type.
-    fn configs() -> &'static [LaneConfig];
 }
 
 impl<T: LaneKey> From<T> for LaneIndex {
