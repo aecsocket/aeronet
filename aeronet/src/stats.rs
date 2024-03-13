@@ -1,4 +1,4 @@
-//! Items for representing statistics of a transport, such as network latency
+//! Types for representing statistics of a transport, such as network latency
 //! and packet loss.
 
 use std::{net::SocketAddr, time::Duration};

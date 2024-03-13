@@ -26,6 +26,7 @@ slotmap::new_key_type! {
 
 impl std::fmt::Display for ClientKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let x = self.0;
         write!(f, "{:?}", self.0)
     }
 }
@@ -110,8 +111,8 @@ enum ConnectionResponse {
 impl<P> OpeningServer<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + TryFromBytesAndLane + OnLane,
-    P::S2C: TryIntoBytes + TryFromBytesAndLane + OnLane,
+    P::C2S: TryIntoBytes + OnLane + TryFromBytesAndLane,
+    P::S2C: TryIntoBytes + OnLane + TryFromBytesAndLane,
 {
     pub fn open(config: WebTransportServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel();
@@ -155,8 +156,8 @@ pub struct OpenServer<P> {
 impl<P> OpenServer<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + TryFromBytesAndLane + OnLane,
-    P::S2C: TryIntoBytes + TryFromBytesAndLane + OnLane,
+    P::C2S: TryIntoBytes + OnLane + TryFromBytesAndLane,
+    P::S2C: TryIntoBytes + OnLane + TryFromBytesAndLane,
 {
     #[must_use]
     pub fn local_addr(&self) -> SocketAddr {

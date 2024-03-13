@@ -1,8 +1,8 @@
 mod negotiate;
 
 use aeronet::{
-    lane::{LaneConfig, LaneIndex, OnLane, TryFromBytesAndLane},
-    message::{TryFromBytes, TryIntoBytes},
+    lane::{LaneConfig, OnLane, TryFromBytesAndLane},
+    message::TryIntoBytes,
     protocol::ProtocolVersion,
 };
 use aeronet_protocol::{message::Messages, seq::Seq};
@@ -72,7 +72,7 @@ pub async fn connection_channel<const SERVER: bool>(
             recv_s2c,
             recv_rtt,
             recv_err,
-            msgs: todo!(),
+            msgs: Messages::new(max_packet_len, lanes.iter()),
             _send_closed: send_closed,
         },
         ConnectionBackend {
@@ -138,10 +138,10 @@ impl ConnectionFrontend {
         packet: Bytes,
     ) -> impl Iterator<Item = Result<R, WebTransportError<S, R>>> + '_ {
         self.msgs.read_frags(packet).map(|msg_bytes| {
-            let msg_bytes = msg_bytes.map_err(BackendError::Messages)?;
+            let (msg_bytes, lane_index) = msg_bytes.map_err(BackendError::Messages)?;
             let msg_bytes_len = msg_bytes.len();
-            let msg =
-                R::try_from_bytes_and_lane(msg_bytes).map_err(WebTransportError::FromBytes)?;
+            let msg = R::try_from_bytes_and_lane(msg_bytes, lane_index)
+                .map_err(WebTransportError::FromBytes)?;
             self.info.msg_bytes_recv += msg_bytes_len;
             self.info.msgs_recv += 1;
             Ok(msg)
@@ -154,22 +154,6 @@ impl ConnectionFrontend {
             Ok(Some(err)) => Err(err),
             Err(_) => Err(BackendError::Closed),
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct Recv<'c> {
-    recv_s2c: &'c mut mpsc::Receiver<Bytes>,
-}
-
-impl Iterator for Recv<'_> {
-    type Item = Bytes;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Ok(Some(packet)) = self.recv_s2c.try_next() {
-            return Some(packet);
-        }
-        None
     }
 }
 

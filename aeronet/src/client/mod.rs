@@ -1,6 +1,6 @@
 //! Client-side traits and items.
 //!
-//! See the [crate-level docs](crate).
+//! See [`crate`](crate).
 
 #[cfg(feature = "bevy")]
 mod plugin;

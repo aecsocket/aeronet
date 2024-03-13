@@ -1,21 +1,22 @@
-use aeronet::lane::LaneIndex;
+use aeronet::lane::{LaneConfig, LaneIndex, LaneKind};
 use ahash::AHashMap;
 use bytes::{Buf, Bytes};
 
 use crate::{
     ack::{AckHeader, Acknowledge},
     bytes::BytesError,
-    frag::{Fragment, FragmentError, Fragmentation, ReassembleError},
+    frag::{FragHeader, Fragment, FragmentError, Fragmentation, ReassembleError},
     seq::Seq,
 };
 
 #[derive(Debug)]
 pub struct Messages {
     frag: Fragmentation,
-    max_packet_len: usize,
-    next_send_msg_seq: Seq,
-    next_send_packet_seq: Seq,
     ack: Acknowledge,
+    lanes: Vec<LaneState>,
+    max_packet_len: usize,
+    next_send_packet_seq: Seq,
+    next_send_msg_seq: Seq,
     unacked_msgs: AHashMap<Seq, UnackedMessage>,
     sent_packets: AHashMap<Seq, Vec<SentFrag>>,
 }
@@ -32,6 +33,46 @@ struct SentFrag {
     frag_id: u8,
 }
 
+#[derive(Debug)]
+enum LaneState {
+    Unordered,
+    Sequenced { last_recv_msg_seq: Seq },
+    Ordered,
+}
+
+impl LaneState {
+    pub fn new(kind: LaneKind) -> Self {
+        match kind {
+            LaneKind::UnreliableUnordered | LaneKind::ReliableUnordered => Self::Unordered,
+            LaneKind::UnreliableSequenced | LaneKind::ReliableSequenced => Self::Sequenced {
+                last_recv_msg_seq: Seq(0),
+            },
+            LaneKind::ReliableOrdered => Self::Ordered,
+        }
+    }
+
+    pub fn on_recv(&mut self, frag: &FragHeader) -> LaneRecvResult {
+        match self {
+            Self::Unordered => LaneRecvResult::Recv,
+            Self::Sequenced { last_recv_msg_seq } => {
+                if frag.msg_seq < *last_recv_msg_seq {
+                    LaneRecvResult::Drop
+                } else {
+                    *last_recv_msg_seq = frag.msg_seq;
+                    LaneRecvResult::Recv
+                }
+            }
+            Self::Ordered => todo!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum LaneRecvResult {
+    Recv,
+    Drop,
+}
+
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum MessageError {
     #[error("failed to fragment message")]
@@ -45,19 +86,25 @@ pub enum MessageError {
     ReadFragment(#[source] BytesError),
     #[error("failed to reassemble fragment")]
     Reassemble(#[source] ReassembleError),
+    #[error("invalid lane index {lane_index:?}")]
+    InvalidLaneIndex { lane_index: LaneIndex },
 }
 
 const PACKET_HEADER_LEN: usize = Seq::ENCODE_SIZE + AckHeader::ENCODE_SIZE;
 
 impl Messages {
-    pub fn new(max_packet_len: usize) -> Self {
+    pub fn new(max_packet_len: usize, lanes: impl IntoIterator<Item = LaneConfig>) -> Self {
         assert!(max_packet_len > PACKET_HEADER_LEN);
         Self {
             frag: Fragmentation::new(max_packet_len - PACKET_HEADER_LEN),
+            ack: Acknowledge::new(),
+            lanes: lanes
+                .into_iter()
+                .map(|config| LaneState::new(config.kind))
+                .collect(),
             max_packet_len,
             next_send_msg_seq: Seq(0),
             next_send_packet_seq: Seq(0),
-            ack: Acknowledge::new(),
             unacked_msgs: AHashMap::new(),
             sent_packets: AHashMap::new(),
         }
@@ -154,12 +201,7 @@ impl Messages {
         let acks = AckHeader::decode(packet).map_err(MessageError::ReadAckHeader)?;
         let iter =
             Self::packet_to_msg_acks(&self.sent_packets, &mut self.unacked_msgs, acks.seqs());
-        Ok(iter.map(|msg_seq| {
-            // TODO bookkeeping; notify lanes
-            // also, ask the lane if it even wants to receive this message
-            // maybe it's a sequenced lane and the msg is too old?
-            msg_seq
-        }))
+        Ok(iter)
     }
 
     pub fn read_frags(
@@ -167,6 +209,7 @@ impl Messages {
         mut packet: Bytes,
     ) -> impl Iterator<Item = Result<(Bytes, LaneIndex), MessageError>> + '_ {
         let frags = &mut self.frag;
+        let lanes = &mut self.lanes;
         std::iter::from_fn(move || {
             // read in all fragments..
             while packet.remaining() > 0 {
@@ -174,12 +217,24 @@ impl Messages {
                     Ok(frag) => frag,
                     Err(err) => return Some(Err(err)),
                 };
+
+                // ..ask the lane if it even wants to receive this fragment..
+                let lane_index = frag.header.lane_index;
+                let lane = match lanes.get_mut(lane_index.into_raw()) {
+                    Some(lane) => lane,
+                    None => return Some(Err(MessageError::InvalidLaneIndex { lane_index })),
+                };
+                match lane.on_recv(&frag.header) {
+                    LaneRecvResult::Recv => {}
+                    LaneRecvResult::Drop => continue,
+                };
+
                 // ..and reassemble from the payloads of the fragments
                 match frags
                     .reassemble(&frag.header, &frag.payload)
                     .map_err(MessageError::Reassemble)
                 {
-                    Ok(Some(msg)) => return Some(Ok((Bytes::from(msg), frag.header.lane_index))),
+                    Ok(Some(msg)) => return Some(Ok((Bytes::from(msg), lane_index))),
                     Ok(None) => continue,
                     Err(err) => return Some(Err(err)),
                 }
@@ -211,8 +266,6 @@ impl Messages {
                     // message is no longer unacked,
                     // we've just acked all the fragments
                     unacked_msgs.remove(&msg_seq);
-                    // notifying lanes is left as as responsibility
-                    // of the caller
                     Some(msg_seq)
                 } else {
                     None

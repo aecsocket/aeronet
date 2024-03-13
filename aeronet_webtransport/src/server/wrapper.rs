@@ -37,8 +37,8 @@ pub enum WebTransportServer<P> {
 impl<P> WebTransportServer<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
-    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + OnLane + TryFromBytes,
+    P::S2C: TryIntoBytes + OnLane + TryFromBytes,
 {
     /// See [`OpeningServer::open`].
     pub fn open_new(config: WebTransportServerConfig) -> (Self, impl Future<Output = ()> + Send) {
@@ -101,8 +101,8 @@ where
 impl<P> ServerTransport<P> for WebTransportServer<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
-    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + OnLane + TryFromBytes,
+    P::S2C: TryIntoBytes + OnLane + TryFromBytes,
 {
     type Error = WebTransportError<P>;
 

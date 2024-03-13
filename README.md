@@ -39,15 +39,14 @@ This crate aims to be:
   * You should be able to plug nearly anything in as the underlying transport layer, and have things
     work
   * To achieve this, aeronet provides its own implementation of certain protocol elements such as
-    fragmentation and reliable packets - see `aeronet_protocol`
+    fragmentation and reliable packets - see [`aeronet_protocol`](https://docs.rs/aeronet_protocol)
 * Integrated with Bevy
   * Built with apps and games in mind, the abstractions chosen closely suit Bevy's app model, and
     likely other similar frameworks
 * Simple in terms of API
   * The complexity of the underlying transport is abstracted away, which allows for both flexibility
     in implementation, and less cognitive load on the API user
-  * Configuration options can still be exposed, however there should always be a set of sane
-    defaults
+  * Configuration options are still exposed, however there are always a set of sane defaults
 * Lightweight and have a small footprint
   * The crate minimizes the amount of data copied by using [`Bytes`], reducing allocations
   * Features such as reliability and ordering are implemented with a small memory footprint
@@ -55,6 +54,7 @@ This crate aims to be:
 This crate does not aim to be:
 * A high-level app networking library, featuring replication, rollback, etc.
   * This crate only concerns the transport of data payloads, not what the payloads actually contain
+* `#![no_std]`
 
 # Overview
 
@@ -66,9 +66,10 @@ server-to-client message types may be different.
 
 ## Lanes
 
-Lanes define the manner in which a message is delivered to the other side, such as unreliable,
-reliable ordered, etc. These are similar to *streams* or *channels* in some protocols, but lanes are
-abstractions over the manner of delivery, rather than the individual stream or channel.
+[Lanes](lane) define the manner in which a message is delivered to the other side, such as
+unreliable, reliable ordered, etc.
+These are similar to *streams* or *channels* in some protocols, but lanes are abstractions over
+the manner of delivery, rather than the individual stream or channel.
 
 Note that not all transports support lanes, however the types that are supported are listed in
 [`LaneKind`].
@@ -97,6 +98,14 @@ This crate provides a reusable set of transport-level abstractions which can be 
 implementations, if they do not support certain features already. This makes providing a new
 transport implementation easy, since you just plug in these features into the underlying byte stream
 or whatever other mechanism your transport uses.
+
+## [`bevy_replicon`](https://docs.rs/bevy_replicon) integration
+
+*Crate: `aeronet_replicon`*
+
+Using this crate, you can plug any aeronet transport into `bevy_replicon` as a backend, giving you
+high-level networking features such as entity replication, while still being free to use any
+transport implementation under the hood.
 
 # Getting started
 
@@ -182,13 +191,13 @@ crate defines infallible [`TryIntoBytes`] and [`TryFromBytes`] implementations f
 
 ### Lanes
 
-Transports may also require you to specify along which *lane* your message is *sent* on. Lanes are
+Transports may also require you to specify along which *lane* your message is sent on. Lanes are
 similar to channels or streams in other networking libraries, in that they provide a set of
 guarantees for how messages along that lane will be transported. For example, if you want all
 messages of a certain type to be sent *reliable-ordered* (resent if lost in transit, and always
 received in order), you can define that using lanes.
 
-Typically, a transport implementation will require you to pass a `[LaneConfig]` on creation,
+Typically, a transport implementation will require you to pass a configuration on creation,
 which defines which lanes are available to the transport, and what their properties are (i.e. is it
 reliable, ordered, etc). Your own message type must then implement [`LaneIndex`] to define on which
 of those [`LaneConfig`]s the message is sent.

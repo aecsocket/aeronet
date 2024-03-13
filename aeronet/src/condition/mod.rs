@@ -101,14 +101,13 @@ impl<E> Conditioner<E> {
         }
 
         // Schedule this to be ready later
-        let delay_sec = self.delay_distr.sample(&mut rand::thread_rng()).max(0.0);
-        let send_at = Instant::now() + Duration::from_secs_f32(delay_sec);
-        if Instant::now() > send_at {
+        let delay_sec = self.delay_distr.sample(&mut rand::thread_rng());
+        if delay_sec <= 0.0 {
             return Some(event);
         }
 
+        let send_at = Instant::now() + Duration::from_secs_f32(delay_sec);
         self.event_buf.push(ScheduledEvent { event, send_at });
-
         None
     }
 

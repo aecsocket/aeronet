@@ -56,8 +56,8 @@ struct ConnectedInner {
 impl<P> ConnectingClient<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + TryFromBytesAndLane + OnLane,
-    P::S2C: TryIntoBytes + TryFromBytesAndLane + OnLane,
+    P::C2S: TryIntoBytes + OnLane + TryFromBytesAndLane,
+    P::S2C: TryIntoBytes + OnLane + TryFromBytesAndLane,
 {
     pub fn connect(
         config: WebTransportClientConfig,
@@ -110,8 +110,8 @@ pub struct ConnectedClient<P> {
 impl<P> ConnectedClient<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + TryFromBytesAndLane + OnLane,
-    P::S2C: TryIntoBytes + TryFromBytesAndLane + OnLane,
+    P::C2S: TryIntoBytes + OnLane + TryFromBytesAndLane,
+    P::S2C: TryIntoBytes + OnLane + TryFromBytesAndLane,
 {
     #[cfg(not(target_family = "wasm"))]
     #[must_use]

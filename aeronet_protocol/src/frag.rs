@@ -385,6 +385,11 @@ impl Fragmentation {
         }
     }
 
+    /// Removes a message with the given sequence, dropping all its fragments.
+    pub fn remove(&mut self, msg_seq: Seq) {
+        self.messages.remove(&msg_seq);
+    }
+
     /// Drops any messages which have not recently received any new fragments.
     ///
     /// The threshold for "recently" is defined by `drop_after`.

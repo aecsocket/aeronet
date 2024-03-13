@@ -28,8 +28,8 @@ pub enum WebTransportClient<P> {
 impl<P> WebTransportClient<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
-    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + OnLane + TryFromBytes,
+    P::S2C: TryIntoBytes + OnLane + TryFromBytes,
 {
     pub fn connect_new(
         config: WebTransportClientConfig,
@@ -68,8 +68,8 @@ where
 impl<P> ClientTransport<P> for WebTransportClient<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
-    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
+    P::C2S: TryIntoBytes + OnLane + TryFromBytes,
+    P::S2C: TryIntoBytes + OnLane + TryFromBytes,
 {
     type Error = WebTransportError<P>;
 

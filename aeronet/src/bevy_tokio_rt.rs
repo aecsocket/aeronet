@@ -1,3 +1,5 @@
+//! Allows storing a [`tokio`] runtime in a Bevy resource.
+
 use std::ops::{Deref, DerefMut};
 
 use bevy_ecs::prelude::*;

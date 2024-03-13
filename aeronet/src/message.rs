@@ -1,3 +1,5 @@
+//! Types of values which can be sent to/from a client/server using a transport.
+
 pub use aeronet_derive::Message;
 
 use std::{convert::Infallible, error::Error};
