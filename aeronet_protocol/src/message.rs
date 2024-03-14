@@ -66,26 +66,23 @@ pub struct Messages {
     // seq number of the next message buffered in `buffer_send`
     next_send_msg_seq: Seq,
     //
-    send_msg_buf: AHashMap<Seq, SendMessage>,
+    sent_msgs: AHashMap<Seq, SentMessage>,
     // tracks which packets have been sent out, and what frags they contained
     // so that when we receive an ack for that packet, we know what frags have
     // been acked, and therefore what messages have been acked
-    sent_packets: AHashMap<Seq, Vec<SentFrag>>,
+    flushed_packets: AHashMap<Seq, Vec<FlushedFrag>>,
 }
 
 #[derive(Debug)]
-struct SendMessage {}
-
-#[derive(Derivative, Debug, Clone)]
-#[derivative(PartialEq, Eq, PartialOrd, Ord)]
-struct SendFrag {
-    frag: Fragment,
-    #[derivative(PartialEq = "ignore", PartialOrd = "ignore", Ord = "ignore")]
-    reliability: LaneReliability,
+struct SentMessage {
+    lane_index: LaneIndex,
+    num_frags: u8,
+    num_unacked: u8,
+    frags: Box<[Option<Bytes>]>,
 }
 
 #[derive(Debug)]
-struct SentFrag {
+struct FlushedFrag {
     msg_seq: Seq,
     frag_id: u8,
 }
@@ -166,6 +163,14 @@ pub enum MessageError {
 
 const PACKET_HEADER_LEN: usize = Seq::ENCODE_SIZE + AckHeader::ENCODE_SIZE;
 
+#[derive(Derivative, Debug)]
+#[derivative(PartialEq, Eq, PartialOrd, Ord)]
+struct FlushingFrag {
+    #[derivative(PartialEq = "ignore", PartialOrd = "ignore", Ord = "ignore")]
+    lane_reliability: LaneReliability,
+    frag: Fragment,
+}
+
 impl Messages {
     pub fn new(max_packet_len: usize, lanes: impl IntoIterator<Item = LaneConfig>) -> Self {
         assert!(max_packet_len > PACKET_HEADER_LEN);
@@ -179,8 +184,8 @@ impl Messages {
             ack: Acknowledge::new(),
             next_send_msg_seq: Seq(0),
             next_send_packet_seq: Seq(0),
-            send_buf: Vec::new(),
-            sent_packets: AHashMap::new(),
+            sent_msgs: AHashMap::new(),
+            flushed_packets: AHashMap::new(),
         }
     }
 
@@ -191,18 +196,15 @@ impl Messages {
             .frag
             .fragment(msg_seq, lane_index, msg)
             .map_err(MessageError::Fragment)?;
-        self.send_buf.extend(frags.map(|frag| SendFrag {
-            frag,
-            reliability: lane.kind().reliability(),
-        }));
-
-        // self.abc_send_buf.insert(
-        //     msg_seq,
-        //     SendMessage {
-        //         frags_remaining: frags.num_frags(),
-        //         unacked_frags: frags.map(Some).collect(),
-        //     },
-        // );
+        self.sent_msgs.insert(
+            msg_seq,
+            SentMessage {
+                lane_index,
+                num_frags: frags.num_frags(),
+                num_unacked: frags.num_frags(),
+                frags: frags.map(|frag| Some(frag.payload)).collect(),
+            },
+        );
         Ok(msg_seq)
     }
 
@@ -210,8 +212,32 @@ impl Messages {
         &'a mut self,
         available_bytes: &'a mut usize,
     ) -> impl Iterator<Item = Bytes> + 'a {
-        // sort `send_buf` from largest to smallest, used by `next_frags_in_packet`
-        self.send_buf.sort_unstable_by(|a, b| b.cmp(a));
+        // collect all frags to be flushed
+        let mut frags_to_send = self
+            .sent_msgs
+            .iter()
+            .flat_map(|(msg_seq, msg)| {
+                let lane = &mut self.lanes[msg.lane_index.into_raw()];
+                let lane_reliability = lane.kind().reliability();
+                msg.frags.iter().filter_map(Option::as_ref).enumerate().map(
+                    move |(frag_id, payload)| FlushingFrag {
+                        lane_reliability,
+                        frag: Fragment {
+                            header: FragHeader {
+                                msg_seq: *msg_seq,
+                                lane_index: msg.lane_index,
+                                num_frags: msg.num_frags,
+                                frag_id: u8::try_from(frag_id).unwrap(),
+                            },
+                            // cheap clone of Bytes
+                            payload: payload.clone(),
+                        },
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        // sort from largest to smallest
+        frags_to_send.sort_unstable_by(|a, b| b.cmp(a));
 
         std::iter::from_fn(move || {
             if *available_bytes < PACKET_HEADER_LEN {
@@ -229,9 +255,11 @@ impl Messages {
             let available_bytes_for_frags = (*available_bytes).min(self.max_packet_len);
             let mut available_bytes_for_frags_after = available_bytes_for_frags;
             let mut sent_frags = Vec::new();
-            for frag in self.next_frags_in_packet(&mut available_bytes_for_frags_after) {
+            for frag in
+                Self::next_frags_in_packet(&mut frags_to_send, &mut available_bytes_for_frags_after)
+            {
                 frag.encode(&mut packet);
-                sent_frags.push(SentFrag {
+                sent_frags.push(FlushedFrag {
                     msg_seq: frag.header.msg_seq,
                     frag_id: frag.header.frag_id,
                 });
@@ -242,30 +270,28 @@ impl Messages {
             // track its packet sequence, and what frags it contained
             // so that when we receive an ack for this packet, we know what frags
             // have been acked, and therefore what messages have been acked
-            self.sent_packets.insert(packet_seq, sent_frags);
+            self.flushed_packets.insert(packet_seq, sent_frags);
 
             Some(packet.freeze())
         })
     }
 
     fn next_frags_in_packet<'a>(
-        &'a mut self,
+        frags_to_send: &'a mut Vec<FlushingFrag>,
         available_bytes: &'a mut usize,
     ) -> impl Iterator<Item = Fragment> + 'a {
-        // this will have been sorted by `flush` beforehand
-        let send_buf = &mut self.send_buf;
         let mut i = 0;
         std::iter::from_fn(move || {
             // TODO `extract_if`
-            while i < send_buf.len() {
-                if send_buf[i].frag.encode_size() < *available_bytes {
+            while i < frags_to_send.len() {
+                if frags_to_send[i].frag.encode_size() < *available_bytes {
                     // skip this fragment, try to find the next smallest frag
                     i += 1;
                     continue;
                 }
 
-                let frag = send_buf.remove(i);
-                match frag.reliability {
+                let frag = frags_to_send.remove(i);
+                match frag.lane_reliability {
                     LaneReliability::Unreliable => {
                         // discard this fragment; we won't ever send it again
                     }
@@ -346,7 +372,7 @@ impl Messages {
         // ..and return those message seqs to the caller
         let acks = AckHeader::decode(packet).map_err(MessageError::ReadAckHeader)?;
         let iter =
-            Self::packet_to_msg_acks(&self.sent_packets, &mut self.abc_send_buf, acks.seqs());
+            Self::packet_to_msg_acks(&self.flushed_packets, &mut self.sent_msgs, acks.seqs());
         Ok(iter)
     }
 
@@ -390,8 +416,8 @@ impl Messages {
     }
 
     fn packet_to_msg_acks<'a>(
-        sent_packets: &'a AHashMap<Seq, Vec<SentFrag>>,
-        unacked_msgs: &'a mut AHashMap<Seq, SendMessage>,
+        sent_packets: &'a AHashMap<Seq, Vec<FlushedFrag>>,
+        sent_msgs: &'a mut AHashMap<Seq, SentMessage>,
         acked_packet_seqs: impl Iterator<Item = Seq> + 'a,
     ) -> impl Iterator<Item = Seq> + 'a {
         acked_packet_seqs
@@ -399,19 +425,17 @@ impl Messages {
             .flatten()
             .filter_map(|acked_frag| {
                 let msg_seq = acked_frag.msg_seq;
-                let unacked_msg = unacked_msgs.get_mut(&msg_seq)?;
-                if let Some(frag_slot) = unacked_msg
-                    .unacked_frags
-                    .get_mut(usize::from(acked_frag.frag_id))
+                let unacked_msg = sent_msgs.get_mut(&msg_seq)?;
+                if let Some(frag_slot) = unacked_msg.frags.get_mut(usize::from(acked_frag.frag_id))
                 {
                     // mark this frag as acked
-                    unacked_msg.frags_remaining -= 1;
+                    unacked_msg.num_unacked -= 1;
                     *frag_slot = None;
                 }
-                if unacked_msg.frags_remaining == 0 {
+                if unacked_msg.num_unacked == 0 {
                     // message is no longer unacked,
                     // we've just acked all the fragments
-                    unacked_msgs.remove(&msg_seq);
+                    sent_msgs.remove(&msg_seq);
                     Some(msg_seq)
                 } else {
                     None
