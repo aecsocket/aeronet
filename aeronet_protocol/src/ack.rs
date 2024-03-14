@@ -42,7 +42,7 @@ impl Acknowledge {
         }
     }
 
-    pub fn create_header(&self) -> AckHeader {
+    pub fn header(&self) -> AckHeader {
         AckHeader {
             last_recv: self.last_recv,
             ack_bits: self.ack_bits,
