@@ -26,9 +26,12 @@ impl Acknowledge {
             self.last_recv = seq;
             //    seq: 8
             //    last_recv: 3
-            // -> delta: 5
+            // -> delta: 8 - 3 = 5
             //    old recv_bits: 0b00..000000001000
-            //                                 ^
+            //                                 ^  ^
+            //                                 |  |
+            //                                 |  +-- this bit indicates seq 3 is not acked
+            //                                 +-- this bit indicates seq 0 is acked
             //                                 |  shifted `delta` (5) places
             //                            v----+
             //    new recv_bits: 0b00..000100000000
@@ -38,6 +41,10 @@ impl Acknowledge {
             // so we set a bit in the recv bitfield
             // `delta = 0` falls under this case as well;
             // we confirm that we've received the last received seq
+            //
+            // if `delta` is more than the size of the bitfield,
+            // then we got a REALLY old ack,
+            // and it probably doesn't matter anyway
             self.ack_bits |= 1 << delta;
         }
     }

@@ -97,7 +97,7 @@ enum LaneState {
 }
 
 impl LaneState {
-    pub fn new(kind: LaneKind) -> Self {
+    fn new(kind: LaneKind) -> Self {
         match kind {
             LaneKind::UnreliableUnordered => Self::UnreliableUnordered,
             LaneKind::UnreliableSequenced => Self::UnreliableSequenced {
@@ -111,7 +111,7 @@ impl LaneState {
         }
     }
 
-    pub fn kind(&self) -> LaneKind {
+    fn kind(&self) -> LaneKind {
         match self {
             Self::UnreliableUnordered => LaneKind::UnreliableUnordered,
             Self::UnreliableSequenced { .. } => LaneKind::UnreliableSequenced,
@@ -121,7 +121,14 @@ impl LaneState {
         }
     }
 
-    pub fn on_recv(&mut self, frag: &FragHeader) -> LaneRecvResult {
+    fn retain_on_flush(&self) -> bool {
+        match self.kind().reliability() {
+            LaneReliability::Unreliable => false,
+            LaneReliability::Reliable => true,
+        }
+    }
+
+    fn on_recv(&mut self, frag: &FragHeader) -> LaneRecvResult {
         match self {
             Self::UnreliableUnordered | Self::ReliableUnordered => LaneRecvResult::Recv,
             Self::UnreliableSequenced { last_recv_msg_seq }
@@ -166,9 +173,11 @@ const PACKET_HEADER_LEN: usize = Seq::ENCODE_SIZE + AckHeader::ENCODE_SIZE;
 #[derive(Derivative, Debug)]
 #[derivative(PartialEq, Eq, PartialOrd, Ord)]
 struct FlushingFrag {
+    encode_len: usize,
     #[derivative(PartialEq = "ignore", PartialOrd = "ignore", Ord = "ignore")]
-    lane_reliability: LaneReliability,
-    frag: Fragment,
+    msg_seq: Seq,
+    #[derivative(PartialEq = "ignore", PartialOrd = "ignore", Ord = "ignore")]
+    frag_id: usize,
 }
 
 impl Messages {
@@ -208,36 +217,89 @@ impl Messages {
         Ok(msg_seq)
     }
 
+    /*
+    frags to send:
+    * AAAA AAAA AAAA
+    * BBBB
+    * CCCC CCCC CC
+    * DD
+    * EEEE EE
+    * FFFF FF
+    packets sent:
+    index  [ .... .... .... .... ]
+       #1  [ AAAA AAAA AAAA BBBB ]
+       #2  [ CCCC CCCC CCDD .... ]
+       #3  [ EEEE EEFF FFFF .... ]
+
+    so basically, pack the biggest fragments we can in first,
+    then try to pack as many small fragments in as we can
+    on the next packet, again try to pack the biggest ones that we can
+
+    general algo overview:
+    * setup
+      * collect all fragments in `sent_msgs`
+      * sort them by their encoded length into a Vec<Option<_>>
+    * iterator
+      * start building a packet
+      * if there are no more fragments to consume, return None
+      * iterate over all the collected fragments
+      * if this fragment can't be put into the packet, skip it
+      * 
+
+     */
     pub fn flush<'a>(
         &'a mut self,
         available_bytes: &'a mut usize,
     ) -> impl Iterator<Item = Bytes> + 'a {
-        // collect all frags to be flushed
-        let mut frags_to_send = self
+        let max_frags_len = self.max_packet_len - PACKET_HEADER_LEN;
+        let mut frags = self
             .sent_msgs
             .iter()
             .flat_map(|(msg_seq, msg)| {
-                let lane = &mut self.lanes[msg.lane_index.into_raw()];
-                let lane_reliability = lane.kind().reliability();
                 msg.frags.iter().filter_map(Option::as_ref).enumerate().map(
-                    move |(frag_id, payload)| FlushingFrag {
-                        lane_reliability,
-                        frag: Fragment {
-                            header: FragHeader {
-                                msg_seq: *msg_seq,
-                                lane_index: msg.lane_index,
-                                num_frags: msg.num_frags,
-                                frag_id: u8::try_from(frag_id).unwrap(),
-                            },
-                            // cheap clone of Bytes
-                            payload: payload.clone(),
-                        },
+                    move |(frag_id, payload)| {
+                        debug_assert!(payload.len() <= max_frags_len);
+                        FlushingFrag {
+                            encode_len: Fragment {
+                                header: FragHeader { msg_seq: *msg_seq, lane_index: (), num_frags: (), frag_id: () }
+                            } payload.len(),
+                            msg_seq: *msg_seq,
+                            frag_id,
+                        }
                     },
                 )
             })
+            .map(Some)
             .collect::<Vec<_>>();
-        // sort from largest to smallest
-        frags_to_send.sort_unstable_by(|a, b| b.cmp(a));
+        // sort by payload length, largest to smallest
+        frags.sort_unstable_by(|a, b| b.cmp(a));
+
+        std::iter::from_fn(move || {
+            if *available_bytes < PACKET_HEADER_LEN {
+                return None;
+            }
+
+            let packet_seq = self.next_send_packet_seq.get_inc();
+            let mut packet = BytesMut::with_capacity(self.max_packet_len);
+            // PANIC SAFETY: `max_packet_len > PACKET_HEADER_LEN` is asserted on construction
+            // and encoding these values takes `PACKET_HEADER_LEN` bytes
+            packet_seq.encode(&mut packet).unwrap();
+            self.ack.header().encode(&mut packet).unwrap();
+            *available_bytes -= PACKET_HEADER_LEN;
+
+            for frag in Self::next_frags_in_packet(frags, &mut usize::MAX) {}
+        })
+
+        /*
+        // collect all frags to be flushed and wrap them in an Option
+        // when we remove frags from this, we just take the Option
+        // don't remove items to retain order; just skip over Nones
+        // when we find which fragments to send
+        let mut frags = Self::frags_to_send(&self.sent_msgs, &self.lanes, max_frags_len)
+            .map(Some)
+            .collect::<Box<_>>();
+        // sort largest to smallest
+        frags.sort_unstable_by(|a, b| b.cmp(a));
 
         std::iter::from_fn(move || {
             if *available_bytes < PACKET_HEADER_LEN {
@@ -255,16 +317,22 @@ impl Messages {
             let available_bytes_for_frags = (*available_bytes).min(self.max_packet_len);
             let mut available_bytes_for_frags_after = available_bytes_for_frags;
             let mut sent_frags = Vec::new();
-            for frag in
-                Self::next_frags_in_packet(&mut frags_to_send, &mut available_bytes_for_frags_after)
+            for frag in Self::next_frags_in_packet(&mut frags, &mut available_bytes_for_frags_after)
             {
-                frag.encode(&mut packet);
+                frag.encode(&mut packet).unwrap();
                 sent_frags.push(FlushedFrag {
                     msg_seq: frag.header.msg_seq,
                     frag_id: frag.header.frag_id,
                 });
             }
             *available_bytes -= available_bytes_for_frags - available_bytes_for_frags_after;
+
+            if sent_frags.is_empty() {
+                // if we can't send any more fragments,
+                // then there must be no more buffered fragments for sending
+                debug_assert!(self.sent_msgs)
+                return None;
+            }
 
             // we've fully built the packet that we're about to send out;
             // track its packet sequence, and what frags it contained
@@ -273,89 +341,66 @@ impl Messages {
             self.flushed_packets.insert(packet_seq, sent_frags);
 
             Some(packet.freeze())
+        })*/
+    }
+
+    fn frags_to_send<'a>(
+        sent_msgs: &'a AHashMap<Seq, SentMessage>,
+        lanes: &'a [LaneState],
+        max_frags_len: usize,
+    ) -> impl Iterator<Item = FlushingFrag> + 'a {
+        sent_msgs.iter().flat_map(move |(msg_seq, msg)| {
+            let lane = &lanes[msg.lane_index.into_raw()];
+            let lane_reliability = lane.kind().reliability();
+            msg.frags.iter().filter_map(Option::as_ref).enumerate().map(
+                move |(frag_id, payload)| {
+                    // should already be true when we `buffer_send`'ed this message
+                    debug_assert!(payload.len() <= max_frags_len);
+
+                    FlushingFrag {
+                        lane_reliability,
+                        frag: Fragment {
+                            header: FragHeader {
+                                msg_seq: *msg_seq,
+                                lane_index: msg.lane_index,
+                                num_frags: msg.num_frags,
+                                frag_id: u8::try_from(frag_id).unwrap(),
+                            },
+                            // cheap clone of Bytes
+                            payload: payload.clone(),
+                        },
+                    }
+                },
+            )
         })
     }
 
     fn next_frags_in_packet<'a>(
-        frags_to_send: &'a mut Vec<FlushingFrag>,
+        frags: &'a mut [Option<FlushingFrag>],
         available_bytes: &'a mut usize,
     ) -> impl Iterator<Item = Fragment> + 'a {
-        let mut i = 0;
-        std::iter::from_fn(move || {
-            // TODO `extract_if`
-            while i < frags_to_send.len() {
-                if frags_to_send[i].frag.encode_size() < *available_bytes {
-                    // skip this fragment, try to find the next smallest frag
-                    i += 1;
-                    continue;
-                }
-
-                let frag = frags_to_send.remove(i);
-                match frag.lane_reliability {
-                    LaneReliability::Unreliable => {
-                        // discard this fragment; we won't ever send it again
-                    }
-                    LaneReliability::Reliable => {
-                        // keep this fragment around, we might need to resend it later
-                        send_buf.push(frag.clone());
-                    }
-                }
-                *available_bytes -= frag.frag.encode_size();
-                return Some(frag.frag);
+        frags.iter_mut().filter_map(|frag_opt| {
+            let frag = frag_opt.take()?;
+            if frag.encode_len < *available_bytes {
+                *frag_opt = Some(frag);
+                return None;
             }
-            None
+            *available_bytes -= frag.frag.encode_size();
+
+            match frag.lane_reliability {
+                LaneReliability::Unreliable => {
+                    // consume this fragment; we won't ever send it again
+                    Some(frag.frag)
+                }
+                LaneReliability::Reliable => {
+                    // keep this fragment around, we might need to resend it later
+                    let frag_clone = frag.frag.clone();
+                    *frag_opt = Some(frag);
+                    Some(frag_clone)
+                }
+            }
         })
     }
-
-    // pub fn flush<'a>(
-    //     &'a mut self,
-    //     available_bytes: &'a mut usize,
-    // ) -> impl Iterator<Item = Bytes> + 'a {
-    //     let mut frags = self
-    //         .unacked_msgs
-    //         .iter()
-    //         .flat_map(|(_, msg)| msg.unacked_frags.iter().filter_map(Option::as_ref));
-    //     // we're fighting with two capacities here, effectively:
-    //     // * `available_bytes`
-    //     // * `packet`, which has `max_packet_len` capacity
-    //     //   * `PACKET_HEADER_LEN` is reserved for packet header info
-    //     //   * some more is reserved for each fragment's header info
-    //     std::iter::from_fn(move || {
-    //         if *available_bytes < PACKET_HEADER_LEN {
-    //             return None;
-    //         }
-    //         let mut packet = BytesMut::with_capacity(self.max_packet_len.min(*available_bytes));
-    //         // PANIC SAFETY: `PACKET_HEADER_LEN` defines how big the encoding of the packer header will be
-    //         // the packet's capacity is `min(max_packet_len, available_bytes)`
-    //         // we just checked that `available_bytes > PACKET_HEADER_LEN`,
-    //         // and in `new` we checked that `max_packet_len > PACKET_HEADER_LEN`
-    //         // therefore these unwraps will never panic
-    //         self.next_send_msg_seq
-    //             .get_inc()
-    //             .encode(&mut packet)
-    //             .unwrap();
-    //         self.ack.create_header().encode(&mut packet).unwrap();
-    //         *available_bytes -= PACKET_HEADER_LEN;
-
-    //         // try to encode as many fragments as we can in the limited buffer space we have
-    //         let mut frags_encoded: u32 = 0;
-    //         while let Some(frag) = frags.next() {
-    //             let frag_encode_len = frag.max_encode_len();
-    //             if frag_encode_len > *available_bytes || frag_encode_len > packet.remaining_mut() {
-    //                 break;
-    //             }
-    //             // PANIC SAFETY: we just checked that the encoded len of the frag
-    //             // won't exceed our current bounds
-    //             *available_bytes -= frag.encode(&mut packet).unwrap();
-    //             frags_encoded += 1;
-    //         }
-    //         if frags_encoded > 0 {
-    //             Some(packet.freeze())
-    //         } else {
-    //             None
-    //         }
-    //     })
-    // }
 
     pub fn read_acks(
         &mut self,

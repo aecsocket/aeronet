@@ -57,7 +57,9 @@ impl ExactSizeIterator for ByteChunks {}
 
 impl FusedIterator for ByteChunks {}
 
-/// Extension trait on [`Bytes`].
+/// Extension trait on [`Bytes`] providing [`byte_chunks`].
+///
+/// [`byte_chunks`]: ByteChunksExt::byte_chunks
 pub trait ByteChunksExt {
     /// Converts this into an iterator over non-overlapping chunks of the
     /// original bytes.
