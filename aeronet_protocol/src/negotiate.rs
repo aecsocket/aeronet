@@ -61,7 +61,10 @@ pub struct WrongProtocolVersion {
 pub enum RequestError {
     /// Response had an invalid length.
     #[error("invalid length - expected {REQUEST_LEN} bytes, got {len}")]
-    WrongLength { len: usize },
+    WrongLength {
+        /// Length of the invalid response.
+        len: usize,
+    },
     /// Request had an invalid prefix, indicating it is not using this crate's
     /// protocol.
     #[error("invalid request prefix")]
@@ -83,7 +86,10 @@ pub enum RequestError {
 pub enum ResponseError {
     /// Response had an invalid length.
     #[error("invalid length - expected {RESPONSE_LEN} bytes, got {len}")]
-    WrongLength { len: usize },
+    WrongLength {
+        /// Length of the invalid response.
+        len: usize,
+    },
     /// Response had an invalid discriminator, determining if it was an OK
     /// or erroring result.
     #[error("invalid discriminator - got {discrim}")]

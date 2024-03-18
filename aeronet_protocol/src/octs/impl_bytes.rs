@@ -1,9 +1,7 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use integer_encoding::VarInt;
 
-use crate::bytes::VARINT_MAX_SIZE;
-
-use super::{BytesError, ReadBytes, Result, WriteBytes};
+use super::{BytesError, ReadBytes, Result, WriteBytes, VARINT_MAX_SIZE};
 
 macro_rules! read_u {
     ($self:expr, $ty:ty, $get:ident, $size:literal) => {

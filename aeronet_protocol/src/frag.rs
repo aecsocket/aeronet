@@ -8,7 +8,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use aeronet::lane::LaneIndex;
 use ahash::AHashMap;
 use arbitrary::Arbitrary;
 use bitvec::{array::BitArray, bitarr};
@@ -16,7 +15,7 @@ use bytes::Bytes;
 use integer_encoding::VarInt;
 
 use crate::{
-    bytes::{chunks::ByteChunksExt, BytesError, ReadBytes, WriteBytes},
+    octs::{self, ByteChunksExt, ConstEncodeSize, EncodeSize},
     seq::Seq,
 };
 
@@ -43,7 +42,6 @@ use crate::{
 ///
 /// See [`FragmentHeader`].
 #[derive(Debug)]
-
 pub struct Fragmentation {
     payload_len: usize,
     messages: AHashMap<Seq, MessageBuffer>,
@@ -109,35 +107,31 @@ pub enum ReassembleError {
 pub struct FragHeader {
     /// Sequence number of the message that this fragment is a part of.
     pub msg_seq: Seq,
-    /// Index of the lane the message of this payload should be received on.
-    pub lane_index: LaneIndex,
     /// How many fragments this packet's message is split up into.
     pub num_frags: u8,
     /// Index of this fragment in the total message.
     pub frag_id: u8,
 }
 
-impl FragHeader {
-    /// [Encoded] size of this value in bytes.
-    ///
-    /// [Encoded]: FragHeader::encode
-    pub const ENCODE_SIZE: usize =
-        Seq::ENCODE_SIZE + std::mem::size_of::<u8>() + std::mem::size_of::<u8>();
+impl octs::ConstEncodeSize for FragHeader {
+    const ENCODE_SIZE: usize = Seq::ENCODE_SIZE + u8::ENCODE_SIZE + u8::ENCODE_SIZE;
+}
 
-    pub fn encode(&self, buf: &mut impl WriteBytes) -> Result<(), BytesError> {
+impl octs::Encode for FragHeader {
+    fn encode(&self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
         self.msg_seq.encode(buf)?;
-        buf.write_varint(self.lane_index.into_raw() as u64)?;
         buf.write_u8(self.num_frags)?;
         buf.write_u8(self.frag_id)?;
         Ok(())
     }
+}
 
-    pub fn decode(buf: &mut impl ReadBytes) -> Result<Self, BytesError> {
+impl octs::Decode for FragHeader {
+    fn decode(buf: &mut impl octs::ReadBytes) -> octs::Result<Self> {
         Ok(Self {
-            msg_seq: Seq::decode(buf)?,
-            lane_index: LaneIndex::from_raw(buf.read_varint()? as usize),
-            num_frags: buf.read_u8()?,
-            frag_id: buf.read_u8()?,
+            msg_seq: buf.read()?,
+            num_frags: buf.read()?,
+            frag_id: buf.read()?,
         })
     }
 }
@@ -183,24 +177,26 @@ pub struct Fragment {
     pub payload: Bytes,
 }
 
-impl Fragment {
-    pub fn encode_size(&self) -> usize {
+// TODO this shouldnt be encoded directly?
+impl octs::EncodeSize for Fragment {
+    fn encode_size(&self) -> usize {
         FragHeader::ENCODE_SIZE + VarInt::required_space(self.payload.len()) + self.payload.len()
     }
+}
 
-    pub fn encode(&self, buf: &mut impl WriteBytes) -> Result<(), BytesError> {
-        self.header.encode(buf)?;
-        buf.write_varint(self.payload.len() as u64)?;
-        buf.write_slice(&self.payload)?;
+impl octs::Encode for Fragment {
+    fn encode(&self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
+        buf.write(&self.header)?;
+        buf.write(&self.payload)?;
         Ok(())
     }
+}
 
-    pub fn decode(buf: &mut impl ReadBytes) -> Result<Self, BytesError> {
+impl octs::Decode for Fragment {
+    fn decode(buf: &mut impl octs::ReadBytes) -> octs::Result<Self> {
         Ok(Self {
-            header: FragHeader::decode(buf)?,
-            payload: buf
-                .read_varint()
-                .and_then(|len| buf.read_slice(len as usize))?,
+            header: buf.read()?,
+            payload: buf.read()?,
         })
     }
 }
@@ -236,6 +232,10 @@ impl Fragmentation {
         }
     }
 
+    pub fn payload_len(&self) -> usize {
+        self.payload_len
+    }
+
     /// Splits a message up into individual fragmented packets and creates the
     /// appropriate headers for each packet.
     ///
@@ -244,20 +244,13 @@ impl Fragmentation {
     /// * `msg_seq` represents the sequence of this specific message - note that
     ///   each fragment may be sent in a different packet with a different
     ///   packet sequence.
-    /// * `lane_index` represents which lane the receiver should receive this
-    ///   fragment on.
     /// * If `msg` is empty, this will return an empty iterator.
     ///
     /// # Errors
     ///
     /// Errors if the message was not a valid message which could be fragmented.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    pub fn fragment(
-        &self,
-        msg_seq: Seq,
-        lane_index: LaneIndex,
-        msg: Bytes,
-    ) -> Result<Fragments, FragmentError> {
+    pub fn fragment(&self, msg_seq: Seq, msg: Bytes) -> Result<Fragments, FragmentError> {
         let msg_len = msg.len();
         let chunks = msg.byte_chunks(self.payload_len);
         let num_frags = u8::try_from(chunks.len()).map_err(|_| FragmentError::MessageTooBig {
@@ -267,7 +260,6 @@ impl Fragmentation {
 
         Ok(Fragments {
             msg_seq,
-            lane_index,
             num_frags,
             iter: chunks.enumerate(),
         })
@@ -413,8 +405,7 @@ impl Fragmentation {
 pub struct Fragments {
     msg_seq: Seq,
     num_frags: u8,
-    lane_index: LaneIndex,
-    iter: std::iter::Enumerate<crate::bytes::chunks::ByteChunks>,
+    iter: std::iter::Enumerate<octs::ByteChunks>,
 }
 
 impl Fragments {
@@ -433,7 +424,6 @@ impl Iterator for Fragments {
         let header = FragHeader {
             msg_seq: self.msg_seq,
             num_frags: self.num_frags,
-            lane_index: self.lane_index,
             frag_id,
         };
         Some(Fragment { header, payload })
@@ -453,29 +443,26 @@ mod tests {
     use assert_matches::assert_matches;
     use bytes::BytesMut;
 
+    use crate::octs::{ReadBytes, WriteBytes};
+
     use super::*;
 
     #[test]
     fn encode_decode_header() {
         let v = FragHeader {
             msg_seq: Seq(1),
-            lane_index: LaneIndex::from_raw(0),
             num_frags: 12,
             frag_id: 34,
         };
         let mut buf = BytesMut::with_capacity(FragHeader::ENCODE_SIZE);
 
-        v.encode(&mut buf).unwrap();
+        buf.write(&v).unwrap();
         assert_eq!(FragHeader::ENCODE_SIZE, buf.len());
 
-        assert_eq!(
-            v,
-            FragHeader::decode(&mut Bytes::from(buf.to_vec())).unwrap()
-        );
+        assert_eq!(v, buf.freeze().read::<FragHeader>().unwrap());
     }
 
     const PAYLOAD_SIZE: usize = 1024;
-    const LANE: LaneIndex = LaneIndex::from_raw(0);
 
     const MSG1: Bytes = Bytes::from_static(b"Message 1");
     const MSG2: Bytes = Bytes::from_static(b"Message 2");
@@ -488,9 +475,9 @@ mod tests {
     #[test]
     fn single_in_order() {
         let mut frag = frag();
-        let p1 = frag.fragment(Seq(0), LANE, MSG1).unwrap().next().unwrap();
-        let p2 = frag.fragment(Seq(1), LANE, MSG2).unwrap().next().unwrap();
-        let p3 = frag.fragment(Seq(2), LANE, MSG3).unwrap().next().unwrap();
+        let p1 = frag.fragment(Seq(0), MSG1).unwrap().next().unwrap();
+        let p2 = frag.fragment(Seq(1), MSG2).unwrap().next().unwrap();
+        let p3 = frag.fragment(Seq(2), MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG1,
             frag.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
@@ -508,9 +495,9 @@ mod tests {
     #[test]
     fn single_out_of_order() {
         let mut frag = frag();
-        let p1 = frag.fragment(Seq(0), LANE, MSG1).unwrap().next().unwrap();
-        let p2 = frag.fragment(Seq(1), LANE, MSG2).unwrap().next().unwrap();
-        let p3 = frag.fragment(Seq(2), LANE, MSG3).unwrap().next().unwrap();
+        let p1 = frag.fragment(Seq(0), MSG1).unwrap().next().unwrap();
+        let p2 = frag.fragment(Seq(1), MSG2).unwrap().next().unwrap();
+        let p3 = frag.fragment(Seq(2), MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG3,
             frag.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
@@ -530,7 +517,7 @@ mod tests {
         let mut frag = frag();
         let msg = Bytes::from(b"x".repeat(PAYLOAD_SIZE + 1));
         let [p1, p2] = frag
-            .fragment(Seq(0), LANE, msg.clone())
+            .fragment(Seq(0), msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()
@@ -547,7 +534,7 @@ mod tests {
         let mut frag = frag();
         let msg = Bytes::from(b"x".repeat(PAYLOAD_SIZE * 2 + 1));
         let [p1, p2, p3] = frag
-            .fragment(Seq(0), LANE, msg.clone())
+            .fragment(Seq(0), msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()

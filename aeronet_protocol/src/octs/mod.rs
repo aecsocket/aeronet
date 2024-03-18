@@ -1,7 +1,14 @@
+//! Utilities for working with [`Bytes`].
+//!
+//! Who decided to make the [`Bytes`] API panic on failure?!?!?!?!
+
 use bytes::Bytes;
 
-pub mod chunks;
-pub mod impl_bytes;
+mod chunks;
+mod enc_dec;
+mod impl_bytes;
+
+pub use chunks::*;
 
 /// Error when reading or writing to/from a byte buffer using [`ReadBytes`] or
 /// [`WriteBytes`].
@@ -18,11 +25,57 @@ pub enum BytesError {
     BufferTooShort,
 }
 
-type Result<T> = std::result::Result<T, BytesError>;
+/// Result type with [`BytesError`] as an error type.
+pub type Result<T> = std::result::Result<T, BytesError>;
 
 /// Maximum number of bytes that a [`u64`] as a
 /// [`VarInt`](integer_encoding::VarInt) can take up when encoded.
 pub const VARINT_MAX_SIZE: usize = 10;
+
+/// Gives information on the [encoded](Encode) size of an instance of this
+/// value.
+pub trait EncodeSize {
+    /// Gets the [encoded](Encode) size of this value in bytes.
+    fn encode_size(&self) -> usize;
+}
+
+/// Type which can be [encoded](Encode) using a constant number of bytes.
+///
+/// [`EncodeSize`] is automatically implemented for all types which implement
+/// this trait.
+pub trait ConstEncodeSize {
+    /// Number of bytes required to encode a value of this type.
+    ///
+    /// All values of this type must take the same number of bytes for encoding.
+    const ENCODE_SIZE: usize;
+}
+
+impl<T: ConstEncodeSize> EncodeSize for T {
+    fn encode_size(&self) -> usize {
+        Self::ENCODE_SIZE
+    }
+}
+
+/// Defines how to encode this value into a [`WriteBytes`].
+pub trait Encode {
+    /// Writes this value into a [`WriteBytes`].
+    ///
+    /// # Errors
+    ///
+    /// Errors if the buffer is not long enough to fit the extra bytes.
+    fn encode(&self, buf: &mut impl WriteBytes) -> Result<()>;
+}
+
+/// Defines how to decode a value of this type from a [`ReadBytes`].
+pub trait Decode: Sized {
+    /// Reads the next value of this type from the buffer, and advances the
+    /// cursor of the buffer.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the buffer does not have enough bytes left to read.
+    fn decode(buf: &mut impl ReadBytes) -> Result<Self>;
+}
 
 /// Provides fallible functions for reading bytes from a [`Bytes`] or
 /// [`BytesMut`](bytes::BytesMut).
@@ -72,6 +125,19 @@ pub trait ReadBytes {
     ///
     /// Errors if the buffer has less than `len` bytes left to read.
     fn read_slice(&mut self, len: usize) -> Result<Bytes>;
+
+    /// Reads the next `T` and advances the cursor of the buffer.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the buffer does not have enough bytes left to read.
+    #[inline]
+    fn read<T: Decode>(&mut self) -> Result<T>
+    where
+        Self: Sized,
+    {
+        T::decode(self)
+    }
 }
 
 /// Provides fallible functions for writing bytes to a
@@ -121,4 +187,17 @@ pub trait WriteBytes {
     ///
     /// Errors if the buffer is not long enough to fit the extra bytes.
     fn write_slice(&mut self, src: &[u8]) -> Result<()>;
+
+    /// Writes a `T` into the buffer and advances the cursor.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the buffer is not long enough to fit the extra bytes.
+    #[inline]
+    fn write<T: Encode>(&mut self, value: &T) -> Result<()>
+    where
+        Self: Sized,
+    {
+        value.encode(self)
+    }
 }

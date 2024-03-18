@@ -1,8 +1,11 @@
+//! Sequence number used for determining the order of an item sent across a
+//! network.
+
 use std::cmp::Ordering;
 
 use arbitrary::Arbitrary;
 
-use crate::bytes::{BytesError, ReadBytes, WriteBytes};
+use crate::octs;
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///
@@ -20,19 +23,6 @@ use crate::bytes::{BytesError, ReadBytes, WriteBytes};
 pub struct Seq(pub u16);
 
 impl Seq {
-    /// [Encoded] size of this value in bytes.
-    ///
-    /// [Encoded]: Seq::encode
-    pub const ENCODE_SIZE: usize = std::mem::size_of::<u16>();
-
-    pub fn encode(&self, buf: &mut impl WriteBytes) -> Result<(), BytesError> {
-        buf.write_u16(self.0)
-    }
-
-    pub fn decode(buf: &mut impl ReadBytes) -> Result<Self, BytesError> {
-        buf.read_u16().map(Self)
-    }
-
     /// Returns the current sequence value and increments `self`.
     #[must_use]
     pub fn get_inc(&mut self) -> Self {
@@ -97,9 +87,28 @@ impl std::ops::Sub<Seq> for Seq {
     }
 }
 
+impl octs::ConstEncodeSize for Seq {
+    const ENCODE_SIZE: usize = u16::ENCODE_SIZE;
+}
+
+impl octs::Encode for Seq {
+    fn encode(&self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
+        buf.write(&self.0)?;
+        Ok(())
+    }
+}
+
+impl octs::Decode for Seq {
+    fn decode(buf: &mut impl octs::ReadBytes) -> octs::Result<Self> {
+        Ok(Self(buf.read()?))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use bytes::BytesMut;
+
+    use crate::octs::{ConstEncodeSize, ReadBytes, WriteBytes};
 
     use super::*;
 
@@ -108,10 +117,10 @@ mod tests {
         let v = Seq(1234);
         let mut buf = BytesMut::with_capacity(Seq::ENCODE_SIZE);
 
-        v.encode(&mut buf).unwrap();
+        buf.write(&v).unwrap();
         assert_eq!(Seq::ENCODE_SIZE, buf.len());
 
-        assert_eq!(v, Seq::decode(&mut buf.freeze()).unwrap());
+        assert_eq!(v, buf.freeze().read::<Seq>().unwrap());
     }
 
     #[test]

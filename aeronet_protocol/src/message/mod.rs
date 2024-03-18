@@ -1,14 +1,31 @@
+mod unreliable;
+mod reliable;
+
 use aeronet::lane::{LaneConfig, LaneIndex, LaneKind, LaneReliability};
 use ahash::AHashMap;
 use bytes::{Buf, Bytes, BytesMut};
 use derivative::Derivative;
 
 use crate::{
-    ack::{AckHeader, Acknowledge},
-    bytes::BytesError,
+    ack::Acknowledge,
     frag::{FragHeader, Fragment, FragmentError, Fragmentation, ReassembleError},
+    octs::{self, ConstEncodeSize, ReadBytes, WriteBytes},
     seq::Seq,
 };
+
+trait Lane {
+
+}
+
+#[derive(Debug)]
+enum Lanes {
+    UnreliableUnordered(unreliable::Unordered),
+    UnreliableSequenced(unreliable::Sequenced),
+    ReliableUnordered(reliable::Unordered),
+    ReliableSequenced(reliable::Sequenced),
+    ReliableOrdered(reliable::Ordered),
+}
+
 
 /*
 
@@ -58,9 +75,9 @@ pub struct Messages {
     max_packet_len: usize,
     // allows breaking a message into fragments, and buffers received fragments
     // to reassemble them into messages
-    frag: Fragmentation,
+    frags: Fragmentation,
     // tracks which packet seqs have been received
-    ack: Acknowledge,
+    acks: Acknowledge,
     // seq number of the next packet sent out in `flush`
     next_send_packet_seq: Seq,
     // seq number of the next message buffered in `buffer_send`
@@ -70,7 +87,7 @@ pub struct Messages {
     // tracks which packets have been sent out, and what frags they contained
     // so that when we receive an ack for that packet, we know what frags have
     // been acked, and therefore what messages have been acked
-    flushed_packets: AHashMap<Seq, Vec<FlushedFrag>>,
+    flushed_packets: AHashMap<Seq, Vec<FragPath>>,
 }
 
 #[derive(Debug)]
@@ -81,8 +98,8 @@ struct SentMessage {
     frags: Box<[Option<Bytes>]>,
 }
 
-#[derive(Debug)]
-struct FlushedFrag {
+#[derive(Debug, Clone)]
+struct FragPath {
     msg_seq: Seq,
     frag_id: u8,
 }
@@ -157,28 +174,28 @@ pub enum MessageError {
     Fragment(#[source] FragmentError),
 
     #[error("failed to read packet seq")]
-    ReadPacketSeq(#[source] BytesError),
+    ReadPacketSeq(#[source] octs::BytesError),
     #[error("failed to read ack header")]
-    ReadAckHeader(#[source] BytesError),
+    ReadAckHeader(#[source] octs::BytesError),
     #[error("failed to read fragment")]
-    ReadFragment(#[source] BytesError),
+    ReadFragment(#[source] octs::BytesError),
     #[error("failed to reassemble fragment")]
     Reassemble(#[source] ReassembleError),
     #[error("invalid lane index {lane_index:?}")]
     InvalidLaneIndex { lane_index: LaneIndex },
 }
 
-const PACKET_HEADER_LEN: usize = Seq::ENCODE_SIZE + AckHeader::ENCODE_SIZE;
-
 #[derive(Derivative, Debug)]
 #[derivative(PartialEq, Eq, PartialOrd, Ord)]
 struct FlushingFrag {
-    encode_len: usize,
+    payload_len: usize,
     #[derivative(PartialEq = "ignore", PartialOrd = "ignore", Ord = "ignore")]
-    msg_seq: Seq,
+    num_frags: u8,
     #[derivative(PartialEq = "ignore", PartialOrd = "ignore", Ord = "ignore")]
-    frag_id: usize,
+    path: FragPath,
 }
+
+const PACKET_HEADER_LEN: usize = Seq::ENCODE_SIZE + Acknowledge::ENCODE_SIZE;
 
 impl Messages {
     pub fn new(max_packet_len: usize, lanes: impl IntoIterator<Item = LaneConfig>) -> Self {
@@ -189,8 +206,8 @@ impl Messages {
                 .map(|config| LaneState::new(config.kind))
                 .collect(),
             max_packet_len,
-            frag: Fragmentation::new(max_packet_len - PACKET_HEADER_LEN),
-            ack: Acknowledge::new(),
+            frags: Fragmentation::new(max_packet_len - PACKET_HEADER_LEN),
+            acks: Acknowledge::new(),
             next_send_msg_seq: Seq(0),
             next_send_packet_seq: Seq(0),
             sent_msgs: AHashMap::new(),
@@ -202,8 +219,8 @@ impl Messages {
         let msg_seq = self.next_send_msg_seq.get_inc();
         let lane = &self.lanes[lane_index.into_raw()];
         let frags = self
-            .frag
-            .fragment(msg_seq, lane_index, msg)
+            .frags
+            .fragment(msg_seq, msg)
             .map_err(MessageError::Fragment)?;
         self.sent_msgs.insert(
             msg_seq,
@@ -240,35 +257,19 @@ impl Messages {
       * collect all fragments in `sent_msgs`
       * sort them by their encoded length into a Vec<Option<_>>
     * iterator
-      * start building a packet
       * if there are no more fragments to consume, return None
+      * start building a packet (headers)
       * iterate over all the collected fragments
       * if this fragment can't be put into the packet, skip it
-      * 
+      *
 
      */
     pub fn flush<'a>(
         &'a mut self,
         available_bytes: &'a mut usize,
     ) -> impl Iterator<Item = Bytes> + 'a {
-        let max_frags_len = self.max_packet_len - PACKET_HEADER_LEN;
-        let mut frags = self
-            .sent_msgs
-            .iter()
-            .flat_map(|(msg_seq, msg)| {
-                msg.frags.iter().filter_map(Option::as_ref).enumerate().map(
-                    move |(frag_id, payload)| {
-                        debug_assert!(payload.len() <= max_frags_len);
-                        FlushingFrag {
-                            encode_len: Fragment {
-                                header: FragHeader { msg_seq: *msg_seq, lane_index: (), num_frags: (), frag_id: () }
-                            } payload.len(),
-                            msg_seq: *msg_seq,
-                            frag_id,
-                        }
-                    },
-                )
-            })
+        // collect all fragments to send
+        let mut frags = Self::frags_to_send(&self.sent_msgs)
             .map(Some)
             .collect::<Vec<_>>();
         // sort by payload length, largest to smallest
@@ -283,11 +284,13 @@ impl Messages {
             let mut packet = BytesMut::with_capacity(self.max_packet_len);
             // PANIC SAFETY: `max_packet_len > PACKET_HEADER_LEN` is asserted on construction
             // and encoding these values takes `PACKET_HEADER_LEN` bytes
-            packet_seq.encode(&mut packet).unwrap();
-            self.ack.header().encode(&mut packet).unwrap();
+            packet.write(&packet_seq).unwrap();
+            packet.write(&self.acks).unwrap();
             *available_bytes -= PACKET_HEADER_LEN;
 
-            for frag in Self::next_frags_in_packet(frags, &mut usize::MAX) {}
+            for frag in Self::next_frags_in_packet(&mut frags, &mut usize::MAX) {}
+
+            Some(packet.freeze())
         })
 
         /*
@@ -346,30 +349,16 @@ impl Messages {
 
     fn frags_to_send<'a>(
         sent_msgs: &'a AHashMap<Seq, SentMessage>,
-        lanes: &'a [LaneState],
-        max_frags_len: usize,
     ) -> impl Iterator<Item = FlushingFrag> + 'a {
-        sent_msgs.iter().flat_map(move |(msg_seq, msg)| {
-            let lane = &lanes[msg.lane_index.into_raw()];
-            let lane_reliability = lane.kind().reliability();
+        sent_msgs.iter().flat_map(|(msg_seq, msg)| {
             msg.frags.iter().filter_map(Option::as_ref).enumerate().map(
-                move |(frag_id, payload)| {
-                    // should already be true when we `buffer_send`'ed this message
-                    debug_assert!(payload.len() <= max_frags_len);
-
-                    FlushingFrag {
-                        lane_reliability,
-                        frag: Fragment {
-                            header: FragHeader {
-                                msg_seq: *msg_seq,
-                                lane_index: msg.lane_index,
-                                num_frags: msg.num_frags,
-                                frag_id: u8::try_from(frag_id).unwrap(),
-                            },
-                            // cheap clone of Bytes
-                            payload: payload.clone(),
-                        },
-                    }
+                move |(frag_id, payload)| FlushingFrag {
+                    payload_len: payload.len(),
+                    num_frags: msg.num_frags,
+                    path: FragPath {
+                        msg_seq: *msg_seq,
+                        frag_id: u8::try_from(frag_id).unwrap(),
+                    },
                 },
             )
         })
@@ -381,11 +370,10 @@ impl Messages {
     ) -> impl Iterator<Item = Fragment> + 'a {
         frags.iter_mut().filter_map(|frag_opt| {
             let frag = frag_opt.take()?;
-            if frag.encode_len < *available_bytes {
+            if frag.payload_len < *available_bytes {
                 *frag_opt = Some(frag);
                 return None;
             }
-            *available_bytes -= frag.frag.encode_size();
 
             match frag.lane_reliability {
                 LaneReliability::Unreliable => {
@@ -408,14 +396,16 @@ impl Messages {
     ) -> Result<impl Iterator<Item = Seq> + '_, MessageError> {
         // mark this packet as acked;
         // this ack will later be sent out to the peer in `flush`
-        let packet_seq = Seq::decode(packet).map_err(MessageError::ReadPacketSeq)?;
-        self.ack.ack(packet_seq);
+        let packet_seq = packet.read::<Seq>().map_err(MessageError::ReadPacketSeq)?;
+        self.acks.ack(packet_seq);
 
         // read packet seqs the peer has reported they've acked..
         // ..turn those into message seqs via our mappings..
         // ..perform our internal bookkeeping..
         // ..and return those message seqs to the caller
-        let acks = AckHeader::decode(packet).map_err(MessageError::ReadAckHeader)?;
+        let acks = packet
+            .read::<Acknowledge>()
+            .map_err(MessageError::ReadAckHeader)?;
         let iter =
             Self::packet_to_msg_acks(&self.flushed_packets, &mut self.sent_msgs, acks.seqs());
         Ok(iter)
@@ -425,15 +415,20 @@ impl Messages {
         &mut self,
         mut packet: Bytes,
     ) -> impl Iterator<Item = Result<(Bytes, LaneIndex), MessageError>> + '_ {
-        let frags = &mut self.frag;
+        let frags = &mut self.frags;
         let lanes = &mut self.lanes;
         std::iter::from_fn(move || {
             // read in all fragments..
             while packet.remaining() > 0 {
-                let frag = match Fragment::decode(&mut packet).map_err(MessageError::ReadFragment) {
+                let frag = match packet
+                    .read::<Fragment>()
+                    .map_err(MessageError::ReadFragment)
+                {
                     Ok(frag) => frag,
                     Err(err) => return Some(Err(err)),
                 };
+
+                frag.payload
 
                 // ..ask the lane if it even wants to receive this fragment..
                 let lane_index = frag.header.lane_index;
@@ -461,7 +456,7 @@ impl Messages {
     }
 
     fn packet_to_msg_acks<'a>(
-        sent_packets: &'a AHashMap<Seq, Vec<FlushedFrag>>,
+        sent_packets: &'a AHashMap<Seq, Vec<FragPath>>,
         sent_msgs: &'a mut AHashMap<Seq, SentMessage>,
         acked_packet_seqs: impl Iterator<Item = Seq> + 'a,
     ) -> impl Iterator<Item = Seq> + 'a {
