@@ -1,31 +1,60 @@
-mod unreliable;
-mod reliable;
+use std::marker::PhantomData;
 
-use aeronet::lane::{LaneConfig, LaneIndex, LaneKind, LaneReliability};
+use aeronet::{
+    lane::{LaneConfig, LaneIndex, LaneKind, LaneOrdering, LaneReliability, OnLane},
+    message::{TryFromBytes, TryIntoBytes},
+};
 use ahash::AHashMap;
 use bytes::{Buf, Bytes, BytesMut};
 use derivative::Derivative;
+use enum_dispatch::enum_dispatch;
 
 use crate::{
     ack::Acknowledge,
-    frag::{FragHeader, Fragment, FragmentError, Fragmentation, ReassembleError},
+    frag::{FragHeader, Fragment, FragmentError, Fragmentation, Fragments, ReassembleError},
     octs::{self, ConstEncodeSize, ReadBytes, WriteBytes},
     seq::Seq,
 };
 
-trait Lane {
+#[derive(Debug)]
+enum OrderingState<R> {
+    Unordered,
+    Sequenced { last_recv_msg_seq: Seq },
+    Ordered { buf: Vec<R> },
+}
 
+impl<R> OrderingState<R> {
+    fn new(ordering: LaneOrdering) -> Self {
+        match ordering {
+            LaneOrdering::Unordered => Self::Unordered,
+            LaneOrdering::Sequenced => Self::Sequenced {
+                last_recv_msg_seq: Seq(u16::MAX),
+            },
+            LaneOrdering::Ordered => Self::Ordered { buf: Vec::new() },
+        }
+    }
+
+    fn recv(&mut self, msg: R, msg_seq: Seq) -> impl Iterator<Item = R> {
+        match self {
+            Self::Unordered => Some(msg),
+            Self::Sequenced { last_recv_msg_seq } => {
+                if msg_seq > *last_recv_msg_seq {
+                    *last_recv_msg_seq = msg_seq;
+                    Some(msg)
+                } else {
+                    None
+                }
+            }
+            Self::Ordered { buf } => todo!(),
+        }
+        .into_iter()
+    }
 }
 
 #[derive(Debug)]
-enum Lanes {
-    UnreliableUnordered(unreliable::Unordered),
-    UnreliableSequenced(unreliable::Sequenced),
-    ReliableUnordered(reliable::Unordered),
-    ReliableSequenced(reliable::Sequenced),
-    ReliableOrdered(reliable::Ordered),
+struct LaneState<R> {
+    ordering: OrderingState<R>,
 }
-
 
 /*
 
@@ -67,14 +96,13 @@ solution 2:
 */
 
 #[derive(Debug)]
-pub struct Messages {
+pub struct Messages<S, R> {
     // stores current state of lanes, allowing them to influence packet sending
     // and receiving
-    lanes: Vec<LaneState>,
+    lanes: Vec<LaneState<R>>,
     // maximum byte length of a single packet produced by `flush`
     max_packet_len: usize,
-    // allows breaking a message into fragments, and buffers received fragments
-    // to reassemble them into messages
+    //
     frags: Fragmentation,
     // tracks which packet seqs have been received
     acks: Acknowledge,
@@ -88,6 +116,7 @@ pub struct Messages {
     // so that when we receive an ack for that packet, we know what frags have
     // been acked, and therefore what messages have been acked
     flushed_packets: AHashMap<Seq, Vec<FragPath>>,
+    _phantom: PhantomData<(S, R)>,
 }
 
 #[derive(Debug)]
@@ -104,72 +133,10 @@ struct FragPath {
     frag_id: u8,
 }
 
-#[derive(Debug)]
-enum LaneState {
-    UnreliableUnordered,
-    UnreliableSequenced { last_recv_msg_seq: Seq },
-    ReliableUnordered,
-    ReliableSequenced { last_recv_msg_seq: Seq },
-    ReliableOrdered,
-}
-
-impl LaneState {
-    fn new(kind: LaneKind) -> Self {
-        match kind {
-            LaneKind::UnreliableUnordered => Self::UnreliableUnordered,
-            LaneKind::UnreliableSequenced => Self::UnreliableSequenced {
-                last_recv_msg_seq: Seq(0),
-            },
-            LaneKind::ReliableUnordered => Self::ReliableUnordered,
-            LaneKind::ReliableSequenced => Self::ReliableSequenced {
-                last_recv_msg_seq: Seq(0),
-            },
-            LaneKind::ReliableOrdered => Self::ReliableOrdered,
-        }
-    }
-
-    fn kind(&self) -> LaneKind {
-        match self {
-            Self::UnreliableUnordered => LaneKind::UnreliableUnordered,
-            Self::UnreliableSequenced { .. } => LaneKind::UnreliableSequenced,
-            Self::ReliableUnordered => LaneKind::ReliableUnordered,
-            Self::ReliableSequenced { .. } => LaneKind::ReliableSequenced,
-            Self::ReliableOrdered => LaneKind::ReliableOrdered,
-        }
-    }
-
-    fn retain_on_flush(&self) -> bool {
-        match self.kind().reliability() {
-            LaneReliability::Unreliable => false,
-            LaneReliability::Reliable => true,
-        }
-    }
-
-    fn on_recv(&mut self, frag: &FragHeader) -> LaneRecvResult {
-        match self {
-            Self::UnreliableUnordered | Self::ReliableUnordered => LaneRecvResult::Recv,
-            Self::UnreliableSequenced { last_recv_msg_seq }
-            | Self::ReliableSequenced { last_recv_msg_seq } => {
-                if frag.msg_seq < *last_recv_msg_seq {
-                    LaneRecvResult::Drop
-                } else {
-                    *last_recv_msg_seq = frag.msg_seq;
-                    LaneRecvResult::Recv
-                }
-            }
-            Self::ReliableOrdered => todo!(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum LaneRecvResult {
-    Recv,
-    Drop,
-}
-
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum MessageError {
+pub enum MessageError<S: TryIntoBytes, R: TryFromBytes> {
+    #[error("failed to convert message to bytes")]
+    IntoBytes(#[source] S::Error),
     #[error("failed to fragment message")]
     Fragment(#[source] FragmentError),
 
@@ -181,6 +148,8 @@ pub enum MessageError {
     ReadFragment(#[source] octs::BytesError),
     #[error("failed to reassemble fragment")]
     Reassemble(#[source] ReassembleError),
+    #[error("failed to create message from bytes")]
+    FromBytes(#[source] R::Error),
     #[error("invalid lane index {lane_index:?}")]
     InvalidLaneIndex { lane_index: LaneIndex },
 }
@@ -195,32 +164,36 @@ struct FlushingFrag {
     path: FragPath,
 }
 
-const PACKET_HEADER_LEN: usize = Seq::ENCODE_SIZE + Acknowledge::ENCODE_SIZE;
+const MIN_PACKET_LEN: usize = Seq::ENCODE_SIZE + Acknowledge::ENCODE_SIZE;
 
-impl Messages {
+impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Messages<S, R> {
     pub fn new(max_packet_len: usize, lanes: impl IntoIterator<Item = LaneConfig>) -> Self {
-        assert!(max_packet_len > PACKET_HEADER_LEN);
+        assert!(max_packet_len > MIN_PACKET_LEN);
         Self {
             lanes: lanes
                 .into_iter()
-                .map(|config| LaneState::new(config.kind))
+                .map(|config| LaneState {
+                    ordering: OrderingState::new(config.kind.ordering()),
+                })
                 .collect(),
             max_packet_len,
-            frags: Fragmentation::new(max_packet_len - PACKET_HEADER_LEN),
+            frags: Fragmentation::new(max_packet_len - MIN_PACKET_LEN),
             acks: Acknowledge::new(),
             next_send_msg_seq: Seq(0),
             next_send_packet_seq: Seq(0),
             sent_msgs: AHashMap::new(),
             flushed_packets: AHashMap::new(),
+            _phantom: PhantomData,
         }
     }
 
-    pub fn buffer_send(&mut self, lane_index: LaneIndex, msg: Bytes) -> Result<Seq, MessageError> {
+    pub fn buffer_send(&mut self, msg: S) -> Result<Seq, MessageError<S, R>> {
+        let lane_index = msg.lane_index();
+        let msg_bytes = msg.try_into_bytes().map_err(MessageError::IntoBytes)?;
         let msg_seq = self.next_send_msg_seq.get_inc();
-        let lane = &self.lanes[lane_index.into_raw()];
         let frags = self
             .frags
-            .fragment(msg_seq, msg)
+            .fragment(msg_seq, msg_bytes)
             .map_err(MessageError::Fragment)?;
         self.sent_msgs.insert(
             msg_seq,
@@ -268,83 +241,84 @@ impl Messages {
         &'a mut self,
         available_bytes: &'a mut usize,
     ) -> impl Iterator<Item = Bytes> + 'a {
-        // collect all fragments to send
-        let mut frags = Self::frags_to_send(&self.sent_msgs)
-            .map(Some)
-            .collect::<Vec<_>>();
-        // sort by payload length, largest to smallest
-        frags.sort_unstable_by(|a, b| b.cmp(a));
+        std::iter::empty()
+        // // collect all fragments to send
+        // let mut frags = Self::frags_to_send(&self.sent_msgs)
+        //     .map(Some)
+        //     .collect::<Vec<_>>();
+        // // sort by payload length, largest to smallest
+        // frags.sort_unstable_by(|a, b| b.cmp(a));
 
-        std::iter::from_fn(move || {
-            if *available_bytes < PACKET_HEADER_LEN {
-                return None;
-            }
+        // std::iter::from_fn(move || {
+        //     if *available_bytes < PACKET_HEADER_LEN {
+        //         return None;
+        //     }
 
-            let packet_seq = self.next_send_packet_seq.get_inc();
-            let mut packet = BytesMut::with_capacity(self.max_packet_len);
-            // PANIC SAFETY: `max_packet_len > PACKET_HEADER_LEN` is asserted on construction
-            // and encoding these values takes `PACKET_HEADER_LEN` bytes
-            packet.write(&packet_seq).unwrap();
-            packet.write(&self.acks).unwrap();
-            *available_bytes -= PACKET_HEADER_LEN;
+        //     let packet_seq = self.next_send_packet_seq.get_inc();
+        //     let mut packet = BytesMut::with_capacity(self.max_packet_len);
+        //     // PANIC SAFETY: `max_packet_len > PACKET_HEADER_LEN` is asserted on construction
+        //     // and encoding these values takes `PACKET_HEADER_LEN` bytes
+        //     packet.write(&packet_seq).unwrap();
+        //     packet.write(&self.acks).unwrap();
+        //     *available_bytes -= PACKET_HEADER_LEN;
 
-            for frag in Self::next_frags_in_packet(&mut frags, &mut usize::MAX) {}
+        //     for frag in Self::next_frags_in_packet(&mut frags, &mut usize::MAX) {}
 
-            Some(packet.freeze())
-        })
+        //     Some(packet.freeze())
+        // })
 
-        /*
-        // collect all frags to be flushed and wrap them in an Option
-        // when we remove frags from this, we just take the Option
-        // don't remove items to retain order; just skip over Nones
-        // when we find which fragments to send
-        let mut frags = Self::frags_to_send(&self.sent_msgs, &self.lanes, max_frags_len)
-            .map(Some)
-            .collect::<Box<_>>();
-        // sort largest to smallest
-        frags.sort_unstable_by(|a, b| b.cmp(a));
+        // /*
+        // // collect all frags to be flushed and wrap them in an Option
+        // // when we remove frags from this, we just take the Option
+        // // don't remove items to retain order; just skip over Nones
+        // // when we find which fragments to send
+        // let mut frags = Self::frags_to_send(&self.sent_msgs, &self.lanes, max_frags_len)
+        //     .map(Some)
+        //     .collect::<Box<_>>();
+        // // sort largest to smallest
+        // frags.sort_unstable_by(|a, b| b.cmp(a));
 
-        std::iter::from_fn(move || {
-            if *available_bytes < PACKET_HEADER_LEN {
-                return None;
-            }
+        // std::iter::from_fn(move || {
+        //     if *available_bytes < PACKET_HEADER_LEN {
+        //         return None;
+        //     }
 
-            let packet_seq = self.next_send_packet_seq.get_inc();
-            let mut packet = BytesMut::with_capacity(self.max_packet_len);
-            // PANIC SAFETY: `max_packet_len > PACKET_HEADER_LEN` is asserted on construction
-            // and encoding these values takes `PACKET_HEADER_LEN` bytes
-            packet_seq.encode(&mut packet).unwrap();
-            self.ack.header().encode(&mut packet).unwrap();
-            *available_bytes -= PACKET_HEADER_LEN;
+        //     let packet_seq = self.next_send_packet_seq.get_inc();
+        //     let mut packet = BytesMut::with_capacity(self.max_packet_len);
+        //     // PANIC SAFETY: `max_packet_len > PACKET_HEADER_LEN` is asserted on construction
+        //     // and encoding these values takes `PACKET_HEADER_LEN` bytes
+        //     packet_seq.encode(&mut packet).unwrap();
+        //     self.ack.header().encode(&mut packet).unwrap();
+        //     *available_bytes -= PACKET_HEADER_LEN;
 
-            let available_bytes_for_frags = (*available_bytes).min(self.max_packet_len);
-            let mut available_bytes_for_frags_after = available_bytes_for_frags;
-            let mut sent_frags = Vec::new();
-            for frag in Self::next_frags_in_packet(&mut frags, &mut available_bytes_for_frags_after)
-            {
-                frag.encode(&mut packet).unwrap();
-                sent_frags.push(FlushedFrag {
-                    msg_seq: frag.header.msg_seq,
-                    frag_id: frag.header.frag_id,
-                });
-            }
-            *available_bytes -= available_bytes_for_frags - available_bytes_for_frags_after;
+        //     let available_bytes_for_frags = (*available_bytes).min(self.max_packet_len);
+        //     let mut available_bytes_for_frags_after = available_bytes_for_frags;
+        //     let mut sent_frags = Vec::new();
+        //     for frag in Self::next_frags_in_packet(&mut frags, &mut available_bytes_for_frags_after)
+        //     {
+        //         frag.encode(&mut packet).unwrap();
+        //         sent_frags.push(FlushedFrag {
+        //             msg_seq: frag.header.msg_seq,
+        //             frag_id: frag.header.frag_id,
+        //         });
+        //     }
+        //     *available_bytes -= available_bytes_for_frags - available_bytes_for_frags_after;
 
-            if sent_frags.is_empty() {
-                // if we can't send any more fragments,
-                // then there must be no more buffered fragments for sending
-                debug_assert!(self.sent_msgs)
-                return None;
-            }
+        //     if sent_frags.is_empty() {
+        //         // if we can't send any more fragments,
+        //         // then there must be no more buffered fragments for sending
+        //         debug_assert!(self.sent_msgs)
+        //         return None;
+        //     }
 
-            // we've fully built the packet that we're about to send out;
-            // track its packet sequence, and what frags it contained
-            // so that when we receive an ack for this packet, we know what frags
-            // have been acked, and therefore what messages have been acked
-            self.flushed_packets.insert(packet_seq, sent_frags);
+        //     // we've fully built the packet that we're about to send out;
+        //     // track its packet sequence, and what frags it contained
+        //     // so that when we receive an ack for this packet, we know what frags
+        //     // have been acked, and therefore what messages have been acked
+        //     self.flushed_packets.insert(packet_seq, sent_frags);
 
-            Some(packet.freeze())
-        })*/
+        //     Some(packet.freeze())
+        // })*/
     }
 
     fn frags_to_send<'a>(
@@ -375,25 +349,26 @@ impl Messages {
                 return None;
             }
 
-            match frag.lane_reliability {
-                LaneReliability::Unreliable => {
-                    // consume this fragment; we won't ever send it again
-                    Some(frag.frag)
-                }
-                LaneReliability::Reliable => {
-                    // keep this fragment around, we might need to resend it later
-                    let frag_clone = frag.frag.clone();
-                    *frag_opt = Some(frag);
-                    Some(frag_clone)
-                }
-            }
+            todo!()
+            // match frag.lane_reliability {
+            //     LaneReliability::Unreliable => {
+            //         // consume this fragment; we won't ever send it again
+            //         Some(frag.frag)
+            //     }
+            //     LaneReliability::Reliable => {
+            //         // keep this fragment around, we might need to resend it later
+            //         let frag_clone = frag.frag.clone();
+            //         *frag_opt = Some(frag);
+            //         Some(frag_clone)
+            //     }
+            // }
         })
     }
 
     pub fn read_acks(
         &mut self,
         packet: &mut Bytes,
-    ) -> Result<impl Iterator<Item = Seq> + '_, MessageError> {
+    ) -> Result<impl Iterator<Item = Seq> + '_, MessageError<S, R>> {
         // mark this packet as acked;
         // this ack will later be sent out to the peer in `flush`
         let packet_seq = packet.read::<Seq>().map_err(MessageError::ReadPacketSeq)?;
@@ -409,50 +384,6 @@ impl Messages {
         let iter =
             Self::packet_to_msg_acks(&self.flushed_packets, &mut self.sent_msgs, acks.seqs());
         Ok(iter)
-    }
-
-    pub fn read_frags(
-        &mut self,
-        mut packet: Bytes,
-    ) -> impl Iterator<Item = Result<(Bytes, LaneIndex), MessageError>> + '_ {
-        let frags = &mut self.frags;
-        let lanes = &mut self.lanes;
-        std::iter::from_fn(move || {
-            // read in all fragments..
-            while packet.remaining() > 0 {
-                let frag = match packet
-                    .read::<Fragment>()
-                    .map_err(MessageError::ReadFragment)
-                {
-                    Ok(frag) => frag,
-                    Err(err) => return Some(Err(err)),
-                };
-
-                frag.payload
-
-                // ..ask the lane if it even wants to receive this fragment..
-                let lane_index = frag.header.lane_index;
-                let lane = match lanes.get_mut(lane_index.into_raw()) {
-                    Some(lane) => lane,
-                    None => return Some(Err(MessageError::InvalidLaneIndex { lane_index })),
-                };
-                match lane.on_recv(&frag.header) {
-                    LaneRecvResult::Recv => {}
-                    LaneRecvResult::Drop => continue,
-                };
-
-                // ..and reassemble from the payloads of the fragments
-                match frags
-                    .reassemble(&frag.header, &frag.payload)
-                    .map_err(MessageError::Reassemble)
-                {
-                    Ok(Some(msg)) => return Some(Ok((Bytes::from(msg), lane_index))),
-                    Ok(None) => continue,
-                    Err(err) => return Some(Err(err)),
-                }
-            }
-            None
-        })
     }
 
     fn packet_to_msg_acks<'a>(
@@ -481,5 +412,76 @@ impl Messages {
                     None
                 }
             })
+    }
+
+    pub fn read_frags(
+        &mut self,
+        mut packet: Bytes,
+    ) -> impl Iterator<Item = Result<R, MessageError<S, R>>> + '_ {
+        enum State<I> {
+            ReadFrags,
+            RecvIter { iter: I },
+        }
+
+        let frags = &mut self.frags;
+        let lanes = &mut self.lanes;
+        let mut state = State::ReadFrags;
+
+        // what the fuck
+        std::iter::from_fn(move || 'iter: loop {
+            match state {
+                State::ReadFrags => {
+                    // read in all remaining fragments in this packet
+                    'frags: while packet.remaining() > 0 {
+                        let frag = match packet
+                            .read::<Fragment>()
+                            .map_err(MessageError::ReadFragment)
+                        {
+                            Ok(frag) => frag,
+                            Err(err) => return Some(Err(err)),
+                        };
+
+                        // reassemble this fragment into a message
+                        let msg_bytes = match frags
+                            .reassemble(&frag.header, &frag.payload)
+                            .map_err(MessageError::Reassemble)
+                        {
+                            Ok(Some(x)) => x,
+                            Ok(None) => continue 'frags,
+                            Err(err) => return Some(Err(err)),
+                        };
+                        let msg = match R::try_from_bytes(Bytes::from(msg_bytes)) {
+                            Ok(x) => x,
+                            Err(err) => return Some(Err(MessageError::FromBytes(err))),
+                        };
+
+                        // get what lane this message is received on
+                        let lane_index = msg.lane_index();
+                        let lane = match lanes.get_mut(lane_index.into_raw()) {
+                            Some(lane) => lane,
+                            None => {
+                                return Some(Err(MessageError::InvalidLaneIndex { lane_index }))
+                            }
+                        };
+
+                        // ask the lane what messages it wants to give us - it could:
+                        // * just give us the same message back
+                        // * give us nothing and drop the message if it's too old (sequenced)
+                        // * give us this message plus a bunch of older buffered ones (ordered)
+                        let iter = lane.ordering.recv(msg, frag.header.msg_seq);
+                        state = State::RecvIter { iter };
+                        // then get the `State::Recv` logic to take over
+                        continue 'iter;
+                    }
+                    return None;
+                }
+                State::RecvIter { ref mut iter } => match iter.next() {
+                    Some(msg) => return Some(Ok(msg)),
+                    None => {
+                        state = State::ReadFrags;
+                    }
+                },
+            }
+        })
     }
 }
