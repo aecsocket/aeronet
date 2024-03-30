@@ -1,9 +1,10 @@
 use std::convert::Infallible;
 
 use aeronet::{
-    bytes::Bytes,
-    lane::{LaneIndex, TryFromBytesAndLane},
-    message::{Message, TryIntoBytes},
+    bytes::{Bytes, BytesMut},
+    lane::LaneIndex,
+    message::{Message, TryFromBytes, TryIntoBytes},
+    octs::{BytesError, ReadBytes, WriteBytes},
 };
 
 #[derive(Debug, Clone, Message)]
@@ -20,6 +21,8 @@ impl RepliconMessage {
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum RepliconMessageError {
+    #[error("failed to read channel id")]
+    ReadChannelId(BytesError),
     #[error("lane index {lane_index:?} too large")]
     LaneIndexTooLarge { lane_index: LaneIndex },
 }
@@ -28,19 +31,24 @@ impl TryIntoBytes for RepliconMessage {
     type Error = Infallible;
 
     fn try_into_bytes(self) -> Result<Bytes, Self::Error> {
-        Ok(self.payload)
+        let mut bytes = BytesMut::with_capacity(self.payload.len() + 1);
+        // PANIC SAFETY: we just allocated enough capacity for all of this
+        bytes.write::<u8>(&self.channel_id).unwrap();
+        bytes.write_slice(&self.payload).unwrap();
+        Ok(bytes.freeze())
     }
 }
 
-impl TryFromBytesAndLane for RepliconMessage {
+impl TryFromBytes for RepliconMessage {
     type Error = RepliconMessageError;
 
-    fn try_from_bytes_and_lane(payload: Bytes, lane_index: LaneIndex) -> Result<Self, Self::Error> {
-        let channel_id = u8::try_from(lane_index.into_raw())
-            .map_err(|_| RepliconMessageError::LaneIndexTooLarge { lane_index })?;
+    fn try_from_bytes(mut buf: Bytes) -> Result<Self, Self::Error> {
+        let channel_id = buf
+            .read::<u8>()
+            .map_err(RepliconMessageError::ReadChannelId)?;
         Ok(Self {
             channel_id,
-            payload,
+            payload: buf,
         })
     }
 }

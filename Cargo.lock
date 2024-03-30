@@ -98,9 +98,11 @@ dependencies = [
  "bitcode",
  "bytes",
  "derivative",
+ "integer-encoding",
  "rand",
  "rand_distr",
  "serde",
+ "thiserror",
  "tokio",
 ]
 
@@ -139,7 +141,6 @@ dependencies = [
  "bytes",
  "derivative",
  "enum_dispatch",
- "integer-encoding",
  "static_assertions",
  "thiserror",
  "tracing",

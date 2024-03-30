@@ -1,3 +1,4 @@
+use aeronet::octs::ReadBytes;
 use aeronet::{
     lane::OnLane,
     message::{TryFromBytes, TryIntoBytes},
@@ -5,7 +6,7 @@ use aeronet::{
 use ahash::AHashMap;
 use bytes::{Buf, Bytes};
 
-use crate::{ack::Acknowledge, frag::Fragment, octs::ReadBytes, seq::Seq};
+use crate::{ack::Acknowledge, frag::Fragment, seq::Seq};
 
 use super::{FragIndex, MessageError, Messages, SentMessage};
 

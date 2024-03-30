@@ -39,7 +39,9 @@ bevy-tokio-rt = ["bevy", "dep:tokio"]
 [dependencies]
 aeronet_derive.workspace = true
 derivative.workspace = true
+thiserror.workspace = true
 bytes.workspace = true
+integer-encoding.workspace = true
 
 serde = { workspace = true, optional = true }
 

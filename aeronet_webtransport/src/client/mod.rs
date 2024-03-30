@@ -7,8 +7,8 @@ pub use wrapper::*;
 use std::{future::Future, marker::PhantomData, task::Poll};
 
 use aeronet::{
-    lane::{LaneConfig, OnLane, TryFromBytesAndLane},
-    message::TryIntoBytes,
+    lane::{LaneConfig, OnLane},
+    message::{TryFromBytes, TryIntoBytes},
     protocol::{ProtocolVersion, TransportProtocol},
 };
 use derivative::Derivative;
@@ -56,8 +56,8 @@ struct ConnectedInner {
 impl<P> ConnectingClient<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + OnLane + TryFromBytesAndLane,
-    P::S2C: TryIntoBytes + OnLane + TryFromBytesAndLane,
+    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
 {
     pub fn connect(
         config: WebTransportClientConfig,
@@ -99,8 +99,8 @@ pub struct ConnectedClient<P> {
 #[cfg(not(target_family = "wasm"))]
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct ConnectedClient<P> {
-    conn: ConnectionFrontend,
+pub struct ConnectedClient<P: TransportProtocol> {
+    conn: ConnectionFrontend<P::C2S, P::S2C>,
     #[cfg(not(target_family = "wasm"))]
     local_addr: std::net::SocketAddr,
     #[derivative(Debug = "ignore")]
@@ -110,8 +110,8 @@ pub struct ConnectedClient<P> {
 impl<P> ConnectedClient<P>
 where
     P: TransportProtocol,
-    P::C2S: TryIntoBytes + OnLane + TryFromBytesAndLane,
-    P::S2C: TryIntoBytes + OnLane + TryFromBytesAndLane,
+    P::C2S: TryIntoBytes + TryFromBytes + OnLane,
+    P::S2C: TryIntoBytes + TryFromBytes + OnLane,
 {
     #[cfg(not(target_family = "wasm"))]
     #[must_use]

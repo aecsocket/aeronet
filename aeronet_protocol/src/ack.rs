@@ -2,7 +2,9 @@
 
 use arbitrary::Arbitrary;
 
-use crate::{octs, seq::Seq};
+use aeronet::octs;
+
+use crate::seq::Seq;
 
 /// Tracks which packets, that we have sent, have been successfully received by
 /// the peer (acknowledgements).
@@ -124,7 +126,7 @@ impl octs::Decode for Acknowledge {
 mod tests {
     use bytes::BytesMut;
 
-    use crate::octs::{ConstEncodeSize, ReadBytes, WriteBytes};
+    use aeronet::octs::{ConstEncodeSize, ReadBytes, WriteBytes};
 
     use super::*;
 

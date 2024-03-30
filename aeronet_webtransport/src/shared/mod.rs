@@ -1,7 +1,7 @@
 mod negotiate;
 
 use aeronet::{
-    lane::{LaneConfig, OnLane, TryFromBytesAndLane},
+    lane::{LaneConfig, OnLane},
     message::TryIntoBytes,
     protocol::ProtocolVersion,
 };
@@ -24,13 +24,13 @@ use crate::{BackendError, ConnectionInfo, WebTransportError};
 const MSG_BUF_CAP: usize = 64;
 
 #[derive(Debug)]
-pub struct ConnectionFrontend {
+pub struct ConnectionFrontend<S, R> {
     pub info: ConnectionInfo,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
     recv_rtt: mpsc::Receiver<Duration>,
     recv_err: oneshot::Receiver<BackendError>,
-    msgs: Messages,
+    msgs: Messages<S, R>,
     _send_closed: oneshot::Sender<()>,
 }
 
@@ -48,12 +48,13 @@ pub struct ConnectionBackend {
     _recv_managed: RecvStream,
 }
 
-pub async fn connection_channel<const SERVER: bool>(
+pub async fn connection_channel<const SERVER: bool, S, R>(
     conn: &mut Connection,
     version: ProtocolVersion,
-    max_packet_len: usize,
+    max_packet_size: usize,
+    default_packet_cap: usize,
     lanes: &[LaneConfig],
-) -> Result<(ConnectionFrontend, ConnectionBackend), BackendError> {
+) -> Result<(ConnectionFrontend<S, R>, ConnectionBackend), BackendError> {
     let (send_managed, recv_managed) = if SERVER {
         negotiate::server(conn, version).await?
     } else {
@@ -72,7 +73,7 @@ pub async fn connection_channel<const SERVER: bool>(
             recv_s2c,
             recv_rtt,
             recv_err,
-            msgs: Messages::new(max_packet_len, lanes.iter()),
+            msgs: Messages::<S, R>::new(max_packet_size, default_packet_cap, lanes.iter()),
             _send_closed: send_closed,
         },
         ConnectionBackend {

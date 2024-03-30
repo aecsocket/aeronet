@@ -6,16 +6,16 @@ use std::{
     time::{Duration, Instant},
 };
 
+use aeronet::{
+    integer_encoding::VarInt,
+    octs::{self, ByteChunksExt, ConstEncodeSize},
+};
 use ahash::AHashMap;
 use arbitrary::Arbitrary;
 use bitvec::{array::BitArray, bitarr};
 use bytes::Bytes;
-use integer_encoding::VarInt;
 
-use crate::{
-    octs::{self, ByteChunksExt, ConstEncodeSize},
-    seq::Seq,
-};
+use crate::seq::Seq;
 
 /// Handles splitting and reassembling a single large message into multiple
 /// smaller packets for sending over a network.
@@ -427,7 +427,7 @@ mod tests {
     use assert_matches::assert_matches;
     use bytes::BytesMut;
 
-    use crate::octs::{ReadBytes, WriteBytes};
+    use aeronet::octs::{ReadBytes, WriteBytes};
 
     use super::*;
 

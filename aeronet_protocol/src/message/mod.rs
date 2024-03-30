@@ -58,6 +58,7 @@ use std::marker::PhantomData;
 use aeronet::{
     lane::{LaneIndex, LaneKind, LaneOrdering, LaneReliability, OnLane},
     message::{TryFromBytes, TryIntoBytes},
+    octs::{BytesError, ConstEncodeSize},
 };
 use ahash::AHashMap;
 use bytes::Bytes;
@@ -65,7 +66,6 @@ use bytes::Bytes;
 use crate::{
     ack::Acknowledge,
     frag::{FragmentError, Fragmentation, ReassembleError},
-    octs::{BytesError, ConstEncodeSize},
     seq::Seq,
 };
 

@@ -5,5 +5,4 @@ pub mod ack;
 pub mod frag;
 pub mod message;
 pub mod negotiate;
-pub mod octs;
 pub mod seq;

@@ -13,9 +13,8 @@
 
 use std::cmp::Ordering;
 
+use aeronet::octs;
 use arbitrary::Arbitrary;
-
-use crate::octs;
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///
@@ -111,7 +110,7 @@ impl octs::Decode for Seq {
 mod tests {
     use bytes::BytesMut;
 
-    use crate::octs::{ConstEncodeSize, ReadBytes, WriteBytes};
+    use aeronet::octs::{ConstEncodeSize, ReadBytes, WriteBytes};
 
     use super::*;
 

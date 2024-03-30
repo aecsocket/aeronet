@@ -1,6 +1,7 @@
 use aeronet::{
     lane::OnLane,
     message::{TryFromBytes, TryIntoBytes},
+    octs::{EncodeSize, WriteBytes},
 };
 use ahash::AHashMap;
 use bytes::{Bytes, BytesMut};
@@ -8,7 +9,6 @@ use bytes::{Bytes, BytesMut};
 use crate::{
     frag::{FragHeader, Fragment},
     message::PACKET_HEADER_SIZE,
-    octs::{EncodeSize, WriteBytes},
     seq::Seq,
 };
 
