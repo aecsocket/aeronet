@@ -24,7 +24,7 @@ type ServerEvent<P> = aeronet::server::ServerEvent<P, ChannelError, ClientKey, (
 
 /// Implementation of [`ServerTransport`] using in-memory MPSC channels.
 ///
-/// See [`crate`].
+/// See the [crate-level documentation](crate).
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]

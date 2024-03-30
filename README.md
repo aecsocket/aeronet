@@ -70,9 +70,10 @@ server-to-client message types may be different.
 unreliable, reliable ordered, etc.
 These are similar to *streams* or *channels* in some protocols, but lanes are abstractions over
 the manner of delivery, rather than the individual stream or channel.
-
-Note that not all transports support lanes, however the types that are supported are listed in
+The types of lanes that are supported, and therefore what guarantees are given, are listed in
 [`LaneKind`].
+
+Note that not all transports support lanes.
 
 ## Bevy plugin
 

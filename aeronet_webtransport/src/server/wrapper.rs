@@ -20,7 +20,7 @@ use super::{ServerEvent, WebTransportError};
 
 /// [`ServerTransport`] implementation using the WebTransport protocol.
 ///
-/// See the [crate-level docs](crate).
+/// See the [crate-level documentation](crate).
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]

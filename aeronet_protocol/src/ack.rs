@@ -1,3 +1,5 @@
+//! See [`Acknowledge`].
+
 use arbitrary::Arbitrary;
 
 use crate::{octs, seq::Seq};

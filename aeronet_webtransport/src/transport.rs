@@ -7,7 +7,6 @@ use aeronet::{
 };
 use aeronet_protocol::{message, negotiate};
 use derivative::Derivative;
-use slotmap::new_key_type;
 
 use crate::ClientKey;
 

@@ -68,6 +68,7 @@ where
         .add_event::<RemoteClientDisconnected<P, T>>()
         .add_event::<FromClient<P, T>>()
         .add_event::<AckFromClient<P, T>>()
+        .add_event::<ServerFlushError<P, T>>()
         .configure_sets(PreUpdate, ServerTransportSet::Recv)
         .configure_sets(PostUpdate, ServerTransportSet::Send)
         .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Recv))

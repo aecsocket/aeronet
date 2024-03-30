@@ -61,8 +61,10 @@ impl ReadBytes for Bytes {
 
     #[inline]
     fn read_slice(&mut self, len: usize) -> Result<Bytes> {
-        if self.remaining() > len {
-            Ok(self.slice(..len))
+        if self.remaining() >= len {
+            let slice = self.slice(..len);
+            self.advance(len);
+            Ok(slice)
         } else {
             Err(BytesError::BufferTooShort)
         }
@@ -74,11 +76,7 @@ impl ReadBytes for BytesMut {
 
     #[inline]
     fn read_slice(&mut self, len: usize) -> Result<Bytes> {
-        if self.remaining() > len {
-            Ok(self.clone().freeze().slice(..len))
-        } else {
-            Err(BytesError::BufferTooShort)
-        }
+        self.clone().freeze().read_slice(len)
     }
 }
 

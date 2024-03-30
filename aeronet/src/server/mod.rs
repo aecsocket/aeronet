@@ -17,7 +17,7 @@ use crate::{client::ClientState, protocol::TransportProtocol};
 /// Allows listening to client connections and transporting data between this
 /// server and connected clients.
 ///
-/// See [`crate`].
+/// See the [crate-level documentation](crate).
 pub trait ServerTransport<P: TransportProtocol> {
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync;

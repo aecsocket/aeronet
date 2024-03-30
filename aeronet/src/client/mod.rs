@@ -17,7 +17,7 @@ use crate::protocol::TransportProtocol;
 /// Allows connecting to a server and transporting data between this client and
 /// the server.
 ///
-/// See [`crate`].
+/// See the [crate-level documentation](crate).
 pub trait ClientTransport<P: TransportProtocol> {
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync;

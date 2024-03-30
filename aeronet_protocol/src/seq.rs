@@ -1,5 +1,15 @@
-//! Sequence number used for determining the order of an item sent across a
-//! network.
+//! Sequence number uniquely identifying an item sent across a network.
+//!
+//! Note that the sequence number may identify either a message or a packet
+//! sequence number.
+//!
+//! The number is stored internally as a [`u16`], which means it will wrap
+//! around fairly quickly as many messages can be sent per second. Users of a
+//! sequence number should take this into account, and use the custom
+//! [`Seq::cmp`] implementation which takes wraparound into
+//! consideration.
+//!
+//! See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
 
 use std::cmp::Ordering;
 
@@ -9,21 +19,14 @@ use crate::octs;
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///
-/// Note that the sequence number may identify either a message or a packet
-/// sequence number.
-///
-/// The number is stored internally as a [`u16`], which means it will wrap
-/// around fairly quickly as many messages can be sent per second. Users of a
-/// sequence number should take this into account, and use the custom
-/// [`Seq::cmp`] implementation which takes wraparound into
-/// consideration.
-///
-/// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
+/// See the [module-level documentation](self).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary)]
 pub struct Seq(pub u16);
 
 impl Seq {
     /// Returns the current sequence value and increments `self`.
+    ///
+    /// This operation will wrap the underlying integer.
     #[must_use]
     pub fn get_inc(&mut self) -> Self {
         let cur = *self;

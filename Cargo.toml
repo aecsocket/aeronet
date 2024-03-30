@@ -51,7 +51,7 @@ static_assertions = "1.1.0"
 assert_matches = "1.5.0"
 cfg-if = "1.0.0"
 
-bitcode = "0.5.1"
+bitcode = "0.6.0"
 serde = { version = "1.0.197", features = ["derive"] }
 
 bytes = "1.5.0"
@@ -65,10 +65,10 @@ futures = "0.3.30"
 crossbeam-channel = "0.5.11"
 tokio = { version = "1.36.0", default-features = false }
 
-bevy_ecs = { version = "0.13.0", default-features = false }
-bevy_app = { version = "0.13.0", default-features = false }
-bevy = "0.13.0"
-bevy_egui = "0.25.0"
+bevy_ecs = { version = "0.13.1", default-features = false }
+bevy_app = { version = "0.13.1", default-features = false }
+bevy = "0.13.1"
+bevy_egui = "0.26.0"
 bevy_replicon = "0.24.1"
 
 xwt = "0.6.0"
@@ -80,7 +80,7 @@ web-sys = "0.3.67"
 wasm-bindgen-futures = "0.4.41"
 
 base64 = "0.22.0"
-rcgen = "0.12.0"
+rcgen = "0.13.0"
 ring = "0.17.7"
 time = "0.3.31"
 

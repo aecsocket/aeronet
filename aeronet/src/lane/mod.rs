@@ -53,16 +53,10 @@
 //! Not all transport implementations may offer lanes. If they do, they will
 //! usually have an [`OnLane`] bound on the outgoing message type
 
-use std::error::Error;
-
 pub use aeronet_derive::{LaneKey, OnLane};
 
 mod config;
-
-use bytes::Bytes;
 pub use config::*;
-
-use crate::message::TryFromBytes;
 
 /// Kind of lane which can provide guarantees about the manner of message
 /// delivery.
@@ -149,11 +143,11 @@ pub enum LaneKind {
     ReliableOrdered,
 }
 
-/// Guarantees that a [lane](crate::lane) provides with regards to the delivery
-/// of a message.
+/// Guarantees that a [lane](crate::lane) provides with regards to delivering a
+/// sent message to the receiver.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LaneReliability {
-    /// There is no guarantee that a message will be delivered.
+    /// There is no guarantee that a message will be delivered to the receiver.
     Unreliable,
     /// The message is guaranteed to be delivered to the receiver.
     Reliable,
@@ -175,6 +169,9 @@ pub enum LaneOrdering {
     Sequenced,
     /// Messages are guaranteed to be received in the order that they were sent,
     /// with no dropped messages.
+    ///
+    /// This only makes sense if reliability is also
+    /// [`LaneReliability::Reliable`].
     Ordered,
 }
 
@@ -237,34 +234,4 @@ impl LaneIndex {
 pub trait OnLane {
     /// Gets the index of the lane that this is sent out on.
     fn lane_index(&self) -> LaneIndex;
-}
-
-/// Attempt to convert a message payload and a lane index into a value of this
-/// type.
-///
-/// Transports may require this as a bound on the incoming message type, if the
-/// message needs to be deserialized from a byte sequence after receiving data,
-/// and the transport supports lanes.
-///
-/// This is automatically implemented for all types implementing
-/// [`TryFromBytes`].
-pub trait TryFromBytesAndLane: Sized {
-    /// Error type of [`TryFromBytesAndLane::try_from_bytes_and_lane`].
-    type Error: Error + Send + Sync + 'static;
-
-    /// Attempts to convert a sequence of bytes and a lane index into a value of
-    /// this type.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the conversion fails.
-    fn try_from_bytes_and_lane(buf: Bytes, lane_index: LaneIndex) -> Result<Self, Self::Error>;
-}
-
-impl<T: TryFromBytes> TryFromBytesAndLane for T {
-    type Error = <Self as TryFromBytes>::Error;
-
-    fn try_from_bytes_and_lane(buf: Bytes, _: LaneIndex) -> Result<Self, Self::Error> {
-        Self::try_from_bytes(buf)
-    }
 }

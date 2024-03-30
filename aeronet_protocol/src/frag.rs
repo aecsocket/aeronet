@@ -1,8 +1,6 @@
-//! Handles fragmenting and reassembling messages so they can be sent over a
-//! connection with an MTU smaller than the message size.
+//! See [`Fragmentation`].
 
 use std::{
-    cmp::Ordering,
     iter::FusedIterator,
     num::NonZeroU8,
     time::{Duration, Instant},
@@ -15,7 +13,7 @@ use bytes::Bytes;
 use integer_encoding::VarInt;
 
 use crate::{
-    octs::{self, ByteChunksExt, ConstEncodeSize, EncodeSize},
+    octs::{self, ByteChunksExt, ConstEncodeSize},
     seq::Seq,
 };
 
@@ -119,9 +117,9 @@ impl octs::ConstEncodeSize for FragHeader {
 
 impl octs::Encode for FragHeader {
     fn encode(&self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
-        self.msg_seq.encode(buf)?;
-        buf.write_u8(self.num_frags)?;
-        buf.write_u8(self.frag_id)?;
+        buf.write(&self.msg_seq)?;
+        buf.write(&self.num_frags)?;
+        buf.write(&self.frag_id)?;
         Ok(())
     }
 }
@@ -177,7 +175,6 @@ pub struct Fragment {
     pub payload: Bytes,
 }
 
-// TODO this shouldnt be encoded directly?
 impl octs::EncodeSize for Fragment {
     fn encode_size(&self) -> usize {
         FragHeader::ENCODE_SIZE + VarInt::required_space(self.payload.len()) + self.payload.len()
@@ -198,19 +195,6 @@ impl octs::Decode for Fragment {
             header: buf.read()?,
             payload: buf.read()?,
         })
-    }
-}
-
-// ordered by encoded len
-impl Ord for Fragment {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.encode_size().cmp(&other.encode_size())
-    }
-}
-
-impl PartialOrd for Fragment {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
     }
 }
 
