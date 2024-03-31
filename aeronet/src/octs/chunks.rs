@@ -1,6 +1,6 @@
 use core::iter::FusedIterator;
 
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 
 /// Extension trait on types implementing [`Buf`] providing [`byte_chunks`].
 ///
@@ -40,7 +40,10 @@ pub trait ByteChunksExt: Sized {
     fn byte_chunks(self, chunk_size: usize) -> ByteChunks<Self>;
 }
 
-impl<T: Buf> ByteChunksExt for T {
+impl<T> ByteChunksExt for T
+where
+    ByteChunks<T>: Iterator,
+{
     fn byte_chunks(self, chunk_size: usize) -> ByteChunks<Self> {
         assert!(chunk_size > 0);
         ByteChunks {
@@ -82,22 +85,18 @@ impl<'a> Iterator for ByteChunks<&'a [u8]> {
         }
 
         // copied from std::slice::Chunks
-        let chunksz = self.buf.len().min(self.chunk_size);
-        let (fst, snd) = self.buf.split_at(chunksz);
+        let mid = self.buf.len().min(self.chunk_size);
+        let (fst, snd) = self.buf.split_at(mid);
         self.buf = snd;
         Some(fst)
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        if self.buf.is_empty() {
-            (0, Some(0))
-        } else {
-            let n = self.buf.len() / self.chunk_size;
-            let rem = self.buf.len() % self.chunk_size;
-            let n = if rem > 0 { n + 1 } else { n };
-            (n, Some(n))
-        }
+        let n = self.buf.len() / self.chunk_size;
+        let rem = self.buf.len() % self.chunk_size;
+        let n = if rem > 0 { n + 1 } else { n };
+        (n, Some(n))
     }
 
     #[inline]
@@ -113,6 +112,7 @@ impl FusedIterator for ByteChunks<&[u8]> {}
 impl Iterator for ByteChunks<Bytes> {
     type Item = Bytes;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.buf.is_empty() {
             return None;
@@ -123,17 +123,15 @@ impl Iterator for ByteChunks<Bytes> {
         Some(next)
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        if self.buf.is_empty() {
-            (0, Some(0))
-        } else {
-            let n = self.buf.len() / self.chunk_size;
-            let rem = self.buf.len() % self.chunk_size;
-            let n = if rem > 0 { n + 1 } else { n };
-            (n, Some(n))
-        }
+        let n = self.buf.len() / self.chunk_size;
+        let rem = self.buf.len() % self.chunk_size;
+        let n = if rem > 0 { n + 1 } else { n };
+        (n, Some(n))
     }
 
+    #[inline]
     fn count(self) -> usize {
         self.len()
     }

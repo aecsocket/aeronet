@@ -140,6 +140,7 @@ dependencies = [
  "bitvec",
  "bytes",
  "derivative",
+ "either",
  "enum_dispatch",
  "static_assertions",
  "thiserror",

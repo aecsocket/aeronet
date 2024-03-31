@@ -9,6 +9,22 @@
 //! [`Seq::cmp`] implementation which takes wraparound into
 //! consideration.
 //!
+//! # Wraparound
+//!
+//! Operations on [`Seq`] must take into account wraparound, as it is inevitable
+//! that it will eventually occur in the program - a [`u16`] is relatively very
+//! small.
+//!
+//! The sequence number can be visualized as an infinite number line, where
+//! [`u16::MAX`] is right before `0`, `0` is before `1`, etc.:
+//!
+//! ```text
+//!     65534  65535    0      1      2
+//! ... --|------|------|------|------|-- ...
+//! ```
+//!
+//! [Addition](std::ops::Add) and [subtraction](std::ops::Sub) will always wrap.
+//!
 //! See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
 
 use std::cmp::Ordering;
@@ -23,14 +39,49 @@ use arbitrary::Arbitrary;
 pub struct Seq(pub u16);
 
 impl Seq {
-    /// Returns the current sequence value and increments `self`.
+    /// Sequence number with value [`u16::MAX`].
+    pub const MAX: Seq = Seq(u16::MAX);
+
+    /// Gets a signed number for the value of packet sequences "elapsed" between
+    /// `rhs` and `self`.
     ///
-    /// This operation will wrap the underlying integer.
+    /// This is effectively `self - rhs`, but taking into account wraparound and
+    /// therefore returning a signed value.
+    ///
+    /// ```text
+    ///     65534  65535    0      1      2
+    /// ... --|------|------|------|------|-- ...
+    ///                     ^^^^^^^^^^^^^^^ delta: 2
+    ///       ^^^^^^^^^^^^^^^^^^^^^^ delta: 3
+    /// ```
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use aeronet_protocol::seq::Seq;
+    /// assert_eq!(Seq(0).delta(Seq(0)), 0);
+    /// assert_eq!(Seq(5).delta(Seq(0)), 5);
+    /// assert_eq!(Seq(5).delta(Seq(3)), 2);
+    ///
+    /// assert_eq!(Seq::MAX.delta(Seq(0)), i32::from(Seq::MAX.0));
+    /// assert_eq!(Seq::MAX.delta(Seq(u16::MAX)), 0);
+    ///
+    /// assert_eq!(Seq(0).delta(Seq::MAX), 1);
+    /// assert_eq!(Seq(0).delta(Seq::MAX - Seq(3)), 4);
+
+    /// assert_eq!(Seq(3).delta(Seq::MAX), 4);
+    /// assert_eq!(Seq(3).delta(Seq::MAX - Seq(3)), 7);
+    /// ```
     #[must_use]
-    pub fn get_inc(&mut self) -> Self {
-        let cur = *self;
-        self.0 = self.0.wrapping_add(1);
-        cur
+    pub fn delta(self, rhs: Self) -> i32 {
+        let diff = (self.0 as i32) - (rhs.0 as i32);
+
+        // Handle wraparound with modular arithmetic
+        if diff < 0 {
+            diff + (u16::MAX as i32) + 1
+        } else {
+            diff
+        }
     }
 }
 
@@ -77,7 +128,13 @@ impl std::ops::Add<Seq> for Seq {
     type Output = Seq;
 
     fn add(self, rhs: Seq) -> Self::Output {
-        Seq(self.0.wrapping_add(rhs.0))
+        Self(self.0.wrapping_add(rhs.0))
+    }
+}
+
+impl std::ops::AddAssign for Seq {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
     }
 }
 
@@ -85,7 +142,13 @@ impl std::ops::Sub<Seq> for Seq {
     type Output = Seq;
 
     fn sub(self, rhs: Seq) -> Self::Output {
-        Seq(self.0.wrapping_sub(rhs.0))
+        Self(self.0.wrapping_sub(rhs.0))
+    }
+}
+
+impl std::ops::SubAssign for Seq {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs;
     }
 }
 

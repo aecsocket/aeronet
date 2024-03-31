@@ -18,7 +18,8 @@ impl<S: TryIntoBytes + OnLane, R: TryFromBytes> Messages<S, R> {
     pub fn buffer_send(&mut self, msg: S) -> Result<Seq, MessageError<S, R>> {
         let lane_index = msg.lane_index();
         let msg_bytes = msg.try_into_bytes().map_err(MessageError::IntoBytes)?;
-        let msg_seq = self.next_send_msg_seq.get_inc();
+        let msg_seq = self.next_send_msg_seq;
+        self.next_send_msg_seq += Seq(1);
         let frags = self
             .frags
             .fragment(msg_seq, msg_bytes)
@@ -61,7 +62,8 @@ impl<S: TryIntoBytes + OnLane, R: TryFromBytes> Messages<S, R> {
             }
             let mut packet_bytes_left = max_packet_bytes;
 
-            let packet_seq = self.next_send_packet_seq.get_inc();
+            let packet_seq = self.next_send_packet_seq;
+            self.next_send_packet_seq += Seq(1);
             // NOTE: don't use `max_packet_size`, because it might be a really big number
             // e.g. Steamworks already fragments messages, so we don't have to fragment ourselves,
             // so `max_packet_size` is massive

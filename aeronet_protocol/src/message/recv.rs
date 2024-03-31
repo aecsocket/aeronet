@@ -43,12 +43,15 @@ impl<S: TryIntoBytes, R: TryFromBytes + OnLane> Messages<S, R> {
             .filter_map(|acked_frag| {
                 let msg_seq = acked_frag.msg_seq;
                 let unacked_msg = sent_msgs.get_mut(&msg_seq)?;
+
+                // do internal bookkeeping
                 if let Some(frag_slot) = unacked_msg.frags.get_mut(usize::from(acked_frag.frag_id))
                 {
                     // mark this frag as acked
                     unacked_msg.num_unacked -= 1;
                     *frag_slot = None;
                 }
+
                 if unacked_msg.num_unacked == 0 {
                     // message is no longer unacked,
                     // we've just acked all the fragments
@@ -60,10 +63,10 @@ impl<S: TryIntoBytes, R: TryFromBytes + OnLane> Messages<S, R> {
             })
     }
 
-    pub fn read_frags(
-        &mut self,
-        mut packet: Bytes,
-    ) -> impl Iterator<Item = Result<R, MessageError<S, R>>> + '_ {
+    pub fn read_frags<'a>(
+        &'a mut self,
+        packet: &'a mut Bytes,
+    ) -> impl Iterator<Item = Result<R, MessageError<S, R>>> + 'a {
         enum State<I> {
             ReadFrags,
             RecvIter { iter: I },
@@ -74,6 +77,7 @@ impl<S: TryIntoBytes, R: TryFromBytes + OnLane> Messages<S, R> {
         let mut state = State::ReadFrags;
 
         // what the fuck
+        // TODO coroutines
         std::iter::from_fn(move || 'iter: loop {
             match state {
                 State::ReadFrags => {
@@ -83,7 +87,7 @@ impl<S: TryIntoBytes, R: TryFromBytes + OnLane> Messages<S, R> {
                             .read::<Fragment<Bytes>>()
                             .map_err(MessageError::ReadFragment)
                         {
-                            Ok(frag) => frag,
+                            Ok(x) => x,
                             Err(err) => return Some(Err(err)),
                         };
 
@@ -104,7 +108,7 @@ impl<S: TryIntoBytes, R: TryFromBytes + OnLane> Messages<S, R> {
                         // get what lane this message is received on
                         let lane_index = msg.lane_index();
                         let lane = match lanes.get_mut(lane_index.into_raw()) {
-                            Some(lane) => lane,
+                            Some(x) => x,
                             None => {
                                 return Some(Err(MessageError::InvalidLaneIndex { lane_index }))
                             }
@@ -116,11 +120,13 @@ impl<S: TryIntoBytes, R: TryFromBytes + OnLane> Messages<S, R> {
                         // * give us this message plus a bunch of older buffered ones (ordered)
                         let iter = lane.recv(msg, frag.header.msg_seq);
                         state = State::RecvIter { iter };
-                        // then get the `State::RecvIter` logic to take over
+                        // then get the `State::RecvIter` logic to take over,
+                        // returning these messages to the iter consumer
                         continue 'iter;
                     }
                     return None;
                 }
+                // consumes all of the `iter` we've set previously
                 State::RecvIter { ref mut iter } => match iter.next() {
                     Some(msg) => return Some(Ok(msg)),
                     None => {

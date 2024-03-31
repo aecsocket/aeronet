@@ -53,7 +53,7 @@
 mod recv;
 mod send;
 
-use std::marker::PhantomData;
+use std::{cmp::Ordering, marker::PhantomData};
 
 use aeronet::{
     lane::{LaneIndex, LaneKind, LaneOrdering, LaneReliability, OnLane},
@@ -62,6 +62,7 @@ use aeronet::{
 };
 use ahash::AHashMap;
 use bytes::Bytes;
+use either::Either;
 
 use crate::{
     ack::Acknowledge,
@@ -69,6 +70,7 @@ use crate::{
     seq::Seq,
 };
 
+// todo docs
 /// See the [module-level documentation](self).
 #[derive(Debug)]
 pub struct Messages<S, R> {
@@ -99,8 +101,13 @@ enum ReliabilityState {
 #[derive(Debug)]
 enum OrderingState<R> {
     Unordered,
-    Sequenced { last_recv_msg_seq: Seq },
-    Ordered { buf: Vec<R> },
+    Sequenced {
+        last_recv_msg_seq: Seq,
+    },
+    Ordered {
+        next_expected_msg_seq: Seq,
+        recv_buf: AHashMap<Seq, R>,
+    },
 }
 
 impl<R> LaneState<R> {
@@ -113,9 +120,12 @@ impl<R> LaneState<R> {
             ordering: match kind.ordering() {
                 LaneOrdering::Unordered => OrderingState::Unordered,
                 LaneOrdering::Sequenced => OrderingState::Sequenced {
-                    last_recv_msg_seq: Seq(0),
+                    last_recv_msg_seq: Seq::MAX,
                 },
-                LaneOrdering::Ordered => OrderingState::Ordered { buf: Vec::new() },
+                LaneOrdering::Ordered => OrderingState::Ordered {
+                    next_expected_msg_seq: Seq(0),
+                    recv_buf: AHashMap::new(),
+                },
             },
         }
     }
@@ -127,18 +137,45 @@ impl<R> LaneState<R> {
         }
     }
 
+    // TODO coroutines
     fn recv(&mut self, msg: R, msg_seq: Seq) -> impl Iterator<Item = R> {
+        // Either::Left: Option::IntoIter
+        // Either::Right: vec::Drop
         match &mut self.ordering {
-            OrderingState::Unordered => Some(msg),
+            OrderingState::Unordered => Either::Left(Some(msg)),
             OrderingState::Sequenced { last_recv_msg_seq } => {
                 if msg_seq > *last_recv_msg_seq {
                     *last_recv_msg_seq = msg_seq;
-                    Some(msg)
+                    Either::Left(Some(msg))
                 } else {
-                    None
+                    Either::Left(None)
                 }
             }
-            OrderingState::Ordered { buf } => todo!(),
+            OrderingState::Ordered {
+                next_expected_msg_seq,
+                recv_buf,
+            } => {
+                match msg_seq.cmp(&next_expected_msg_seq) {
+                    Ordering::Equal => {
+                        // this message is the next one we're expecting,
+                        // so we can now release all the messages we've been storing
+                        // TODO
+                        Either::Right(None)
+                    }
+                    Ordering::Greater => {
+                        // this message is newer than the expected one,
+                        // so just queue it up
+                        // TODO
+                        Either::Right(None)
+                    }
+                    Ordering::Less => {
+                        // this message is older than the expected one
+                        // just ignore it silently, since it could have been a
+                        // malfunctioning or malicious peer
+                        Either::Left(None)
+                    }
+                }
+            }
         }
         .into_iter()
     }
@@ -258,7 +295,7 @@ mod tests {
                 println!("ack: {ack:?}");
             }
             println!("read all acks");
-            for result in msgs.read_frags(packet) {
+            for result in msgs.read_frags(&mut packet) {
                 let msg = result.unwrap();
                 println!("got {msg:?}");
             }
@@ -272,7 +309,7 @@ mod tests {
                 println!("ack: {ack:?}");
             }
             println!("read all acks");
-            for result in msgs.read_frags(packet) {
+            for result in msgs.read_frags(&mut packet) {
                 let msg = result.unwrap();
                 println!("got {msg:?}");
             }
