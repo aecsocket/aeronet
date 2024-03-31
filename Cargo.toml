@@ -21,7 +21,7 @@ categories = ["game-development", "network-programming"]
 license = "MIT OR Apache-2.0"
 
 [workspace.lints.rust]
-missing_docs = "warn"
+# missing_docs = "warn"
 # unused_crate_dependencies = "warn"
 
 [workspace.lints.clippy]

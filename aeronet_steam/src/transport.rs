@@ -1,9 +1,8 @@
 use std::{fmt::Debug, time::Duration};
 
-use aeronet::{client::ClientKey, ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
-use aeronet_proto::{
-    LaneRecvError, LaneSendError, NegotiationRequestError, NegotiationResponseError,
-    WrongProtocolVersion,
+use aeronet::{
+    message::{TryFromBytes, TryIntoBytes},
+    stats::{ByteStats, MessageStats, Rtt},
 };
 use derivative::Derivative;
 use steamworks::{
@@ -11,6 +10,8 @@ use steamworks::{
     networking_types::NetConnectionEnd,
     SteamError,
 };
+
+pub use aeronet_proto::message::MessagesConfig;
 
 pub const MTU: usize = 512 * 1024;
 
@@ -131,7 +132,7 @@ impl ByteStats for ConnectionInfo {
     Debug(bound = "S::Error: Debug, R::Error: Debug"),
     Clone(bound = "S::Error: Clone, R::Error: Clone")
 )]
-pub enum SteamTransportError<S: TryAsBytes, R: TryFromBytes> {
+pub enum SteamTransportError<S: TryIntoBytes, R: TryFromBytes> {
     #[error("internal error")]
     InternalError,
 

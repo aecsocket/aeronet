@@ -1,14 +1,16 @@
 mod wrapper;
 
-use aeronet::{LaneConfig, ProtocolVersion};
-use aeronet_proto::Negotiation;
+use aeronet::{
+    lane::LaneKind,
+    protocol::{ProtocolVersion, TransportProtocol},
+};
+use aeronet_proto::seq::Seq;
 use steamworks::{
     networking_sockets::NetworkingSockets,
     networking_types::{NetConnectionStatusChanged, NetworkingConnectionState, SendFlags},
 };
 pub use wrapper::*;
 
-use aeronet::{OnLane, TransportProtocol, TryAsBytes, TryFromBytes};
 use derivative::Derivative;
 use futures::channel::oneshot;
 use std::{marker::PhantomData, net::SocketAddr, task::Poll};
@@ -19,16 +21,21 @@ use steamworks::{
 
 use crate::{shared::ConnectionFrontend, ConnectionInfo};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ClientMessageKey {
+    msg_seq: Seq,
+}
+
 type SteamTransportError<P> =
     crate::SteamTransportError<<P as TransportProtocol>::C2S, <P as TransportProtocol>::S2C>;
 
-type ClientEvent<P> = aeronet::client::ClientEvent<P, SteamTransportError<P>>;
+type ClientEvent<P> = aeronet::client::ClientEvent<P, SteamTransportError<P>, ClientMessageKey>;
 
 #[derive(Debug)]
 pub struct SteamClientTransportConfig {
     pub version: ProtocolVersion,
     pub max_packet_len: usize,
-    pub lanes: Vec<LaneConfig>,
+    pub lanes: Box<[LaneKind]>,
     pub target: ConnectTarget,
 }
 

@@ -1,23 +1,22 @@
 use aeronet::octs::ReadBytes;
-use aeronet::{
-    lane::OnLane,
-    message::{TryFromBytes, TryIntoBytes},
-};
+use aeronet::{lane::OnLane, message::TryFromBytes};
 use ahash::AHashMap;
 use bytes::{Buf, Bytes};
 
 use crate::{ack::Acknowledge, frag::Fragment, seq::Seq};
 
-use super::{FragIndex, MessageError, Messages, SentMessage};
+use super::{FragIndex, Messages, RecvMessageError, SentMessage};
 
-impl<S: TryIntoBytes, R: TryFromBytes + OnLane> Messages<S, R> {
+impl<S, R: TryFromBytes + OnLane> Messages<S, R> {
     pub fn read_acks(
         &mut self,
         packet: &mut Bytes,
-    ) -> Result<impl Iterator<Item = Seq> + '_, MessageError<S, R>> {
+    ) -> Result<impl Iterator<Item = Seq> + '_, RecvMessageError<R>> {
         // mark this packet as acked;
         // this ack will later be sent out to the peer in `flush`
-        let packet_seq = packet.read::<Seq>().map_err(MessageError::ReadPacketSeq)?;
+        let packet_seq = packet
+            .read::<Seq>()
+            .map_err(RecvMessageError::ReadPacketSeq)?;
         self.acks.ack(packet_seq);
 
         // read packet seqs the peer has reported they've acked..
@@ -26,7 +25,7 @@ impl<S: TryIntoBytes, R: TryFromBytes + OnLane> Messages<S, R> {
         // ..and return those message seqs to the caller
         let acks = packet
             .read::<Acknowledge>()
-            .map_err(MessageError::ReadAcks)?;
+            .map_err(RecvMessageError::ReadAcks)?;
         let iter =
             Self::packet_to_msg_acks(&self.flushed_packets, &mut self.sent_msgs, acks.seqs());
         Ok(iter)
@@ -66,34 +65,33 @@ impl<S: TryIntoBytes, R: TryFromBytes + OnLane> Messages<S, R> {
     pub fn read_next_frag(
         &mut self,
         packet: &mut Bytes,
-    ) -> Result<Option<impl Iterator<Item = R> + '_>, MessageError<S, R>> {
+    ) -> Result<Option<impl Iterator<Item = R> + '_>, RecvMessageError<R>> {
         while packet.has_remaining() {
             let frag = packet
                 .read::<Fragment<Bytes>>()
-                .map_err(MessageError::ReadFragment)?;
+                .map_err(RecvMessageError::ReadFragment)?;
 
             // reassemble this fragment into a message
             let Some(msg_bytes) = self
                 .frags
                 .reassemble(&frag.header, &frag.payload)
-                .map_err(MessageError::Reassemble)?
+                .map_err(RecvMessageError::Reassemble)?
             else {
                 continue;
             };
 
-            let msg = R::try_from_bytes(Bytes::from(msg_bytes)).map_err(MessageError::FromBytes)?;
+            let msg =
+                R::try_from_bytes(Bytes::from(msg_bytes)).map_err(RecvMessageError::FromBytes)?;
 
             // get what lane this message is received on
             let lane_index = msg.lane_index();
             let lane = self
                 .lanes
                 .get_mut(lane_index.into_raw())
-                .ok_or(MessageError::InvalidLaneIndex { lane_index })?;
+                .ok_or(RecvMessageError::InvalidLaneIndex { lane_index })?;
 
-            // ask the lane what messages it wants to give us - it could:
-            // * just give us the same message back
-            // * give us nothing and drop the message if it's too old (sequenced)
-            // * give us this message plus a bunch of older buffered ones (ordered)
+            // ask the lane what messages it wants to give us, in response to
+            // receiving this message
             return Ok(Some(lane.recv(msg, frag.header.msg_seq)));
         }
         Ok(None)

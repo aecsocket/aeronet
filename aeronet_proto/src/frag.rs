@@ -1,4 +1,21 @@
-//! See [`Fragmentation`].
+//! Handles splitting and reassembling a single large message into multiple
+//! smaller packets for sending over a network.
+//!
+//! # Memory management
+//!
+//! The initial implementation used a fixed-size "sequence buffer" data
+//! structure as proposed by [*Gaffer On Games*], however this is an issue when
+//! we don't know how many fragments and messages we may be receiving, as this
+//! buffer is able to run out of space. This current implementation, instead,
+//! uses a map to store messages. This is able to grow infinitely, or at least
+//! up to how much memory the computer has.
+//!
+//! Due to the fact that fragments may be dropped in transport, and that old
+//! messages waiting for more fragments to be received may never get those
+//! fragments, users should be careful to clean up fragments periodically -
+//! see [`Fragmentation::clean_up`].
+//!
+//! [*Gaffer On Games*]: https://gafferongames.com/post/packet_fragmentation_and_reassembly/#data-structure-on-receiver-side
 
 use std::{
     iter::FusedIterator,
@@ -20,25 +37,7 @@ use crate::seq::Seq;
 /// Handles splitting and reassembling a single large message into multiple
 /// smaller packets for sending over a network.
 ///
-/// # Memory management
-///
-/// The initial implementation used a fixed-size "sequence buffer" data
-/// structure as proposed by [*Gaffer On Games*], however this is an issue when
-/// we don't know how many fragments and messages we may be receiving, as this
-/// buffer is able to run out of space. This current implementation, instead,
-/// uses a map to store messages. This is able to grow infinitely, or at least
-/// up to how much memory the computer has.
-///
-/// Due to the fact that fragments may be dropped in transport, and that old
-/// messages waiting for more fragments to be received may never get those
-/// fragments, users should be careful to clean up fragments periodically -
-/// see [`Fragmentation::clean_up`].
-///
-/// [*Gaffer On Games*]: https://gafferongames.com/post/packet_fragmentation_and_reassembly/#data-structure-on-receiver-side
-///
-/// # Encoded layout
-///
-/// See [`FragmentHeader`].
+/// See the [module-level documentation](self).
 #[derive(Debug)]
 pub struct Fragmentation {
     payload_len: usize,
@@ -169,15 +168,28 @@ impl MessageBuffer {
     }
 }
 
+/// Fragment of a message as it is encoded inside a packet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fragment<B> {
+    /// Metadata of this fragment, such as which message this fragment is a part
+    /// of.
     pub header: FragHeader,
+    /// Buffer storing the message payload of this fragment.
     pub payload: B,
 }
 
 impl<B: Buf> Fragment<B> {
-    // can't implement `Encode` because we need to consume the payload
-    // and Encode takes a shared ref
+    /// Writes this value into a [`WriteBytes`].
+    ///
+    /// This is equivalent to [`Encode`], but consumes `self` instead of taking
+    /// a shared reference. This is because we consume the payload when writing
+    /// it into a buffer.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the buffer is not long enough to fit the extra bytes.
+    ///
+    /// [`Encode`]: octs::Encode
     pub fn encode_into(mut self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
         buf.write(&self.header)?;
         // if B is Bytes, this will be nearly free -
@@ -222,6 +234,8 @@ impl Fragmentation {
         }
     }
 
+    /// Gets the maximum length of the payload of a fragment produced by
+    /// [`Fragmentation::fragment`].
     pub fn payload_len(&self) -> usize {
         self.payload_len
     }
@@ -391,6 +405,7 @@ impl Fragmentation {
     }
 }
 
+/// Iterator over fragments created by [`Fragmentation::fragment`].
 #[derive(Debug)]
 pub struct Fragments<T> {
     msg_seq: Seq,
@@ -399,6 +414,7 @@ pub struct Fragments<T> {
 }
 
 impl<T> Fragments<T> {
+    /// Gets the number of fragments that this iterator produces in total.
     pub fn num_frags(&self) -> u8 {
         self.num_frags
     }

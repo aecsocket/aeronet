@@ -110,7 +110,7 @@ use aeronet::{
     message::{TryFromBytes, TryIntoBytes},
     octs::{BytesError, ConstEncodeSize},
 };
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 use bytes::Bytes;
 use derivative::Derivative;
 use either::Either;
@@ -160,12 +160,15 @@ enum ReliabilityState {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 enum OrderingState<R> {
-    Unordered,
+    Unordered {
+        next_pending_msg_seq: Seq,
+        recv_seq_buf: AHashSet<Seq>,
+    },
     Sequenced {
         last_recv_msg_seq: Seq,
     },
     Ordered {
-        next_expected_msg_seq: Seq,
+        next_pending_msg_seq: Seq,
         #[derivative(Debug = "ignore")]
         recv_buf: AHashMap<Seq, R>,
     },
@@ -179,12 +182,15 @@ impl<R> LaneState<R> {
                 LaneReliability::Reliable => ReliabilityState::Reliable,
             },
             ordering: match kind.ordering() {
-                LaneOrdering::Unordered => OrderingState::Unordered,
+                LaneOrdering::Unordered => OrderingState::Unordered {
+                    next_pending_msg_seq: Seq(0),
+                    recv_seq_buf: AHashSet::new(),
+                },
                 LaneOrdering::Sequenced => OrderingState::Sequenced {
                     last_recv_msg_seq: Seq::MAX,
                 },
                 LaneOrdering::Ordered => OrderingState::Ordered {
-                    next_expected_msg_seq: Seq(0),
+                    next_pending_msg_seq: Seq(0),
                     recv_buf: AHashMap::new(),
                 },
             },
@@ -203,7 +209,7 @@ impl<R> LaneState<R> {
         // Either::Left: Option::IntoIter
         // Either::Right: vec::Drop
         match &mut self.ordering {
-            OrderingState::Unordered => Either::Left(Some(msg)),
+            OrderingState::Unordered { .. } => Either::Left(Some(msg)),
             OrderingState::Sequenced { last_recv_msg_seq } => {
                 // purposefully drop message which have the same seq as
                 // `last_recv_msg_seq` - they're probably duplicate packets
@@ -215,13 +221,13 @@ impl<R> LaneState<R> {
                 }
             }
             OrderingState::Ordered {
-                next_expected_msg_seq,
+                next_pending_msg_seq,
                 recv_buf,
             } => {
                 // add the message to the buffer
                 // if the message is older than the next expected one,
                 // then it's probably a duplicate packet - drop the message
-                if msg_seq >= *next_expected_msg_seq {
+                if msg_seq >= *next_pending_msg_seq {
                     recv_buf.insert(msg_seq, msg);
                 }
 
@@ -229,8 +235,8 @@ impl<R> LaneState<R> {
                 // if we get to a message which we don't have, then the iter ends
                 // and we have to wait for it to be received
                 Either::Right(std::iter::from_fn(move || {
-                    let msg = recv_buf.remove(&next_expected_msg_seq)?;
-                    *next_expected_msg_seq += Seq(1);
+                    let msg = recv_buf.remove(&next_pending_msg_seq)?;
+                    *next_pending_msg_seq += Seq(1);
                     Some(msg)
                 }))
             }
@@ -254,12 +260,15 @@ struct FragIndex {
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum MessageError<S: TryIntoBytes, R: TryFromBytes> {
+pub enum SendMessageError<S: TryIntoBytes> {
     #[error("failed to convert message into bytes")]
     IntoBytes(#[source] S::Error),
     #[error("failed to fragment message")]
     Fragment(#[source] FragmentError),
+}
 
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum RecvMessageError<R: TryFromBytes> {
     #[error("failed to read packet sequence")]
     ReadPacketSeq(#[source] BytesError),
     #[error("failed to read acks")]
@@ -310,7 +319,7 @@ mod tests {
     use super::*;
 
     #[derive(Debug, Clone, Copy, LaneKey)]
-    #[lane_kind(ReliableSequenced)]
+    #[lane_kind(ReliableUnordered)]
     struct MyLane;
 
     #[derive(Debug, Clone, Message, OnLane)]

@@ -1,7 +1,7 @@
 #![no_main]
 
 use aeronet::ProtocolVersion;
-use aeronet_proto::Negotiation;
+use aeronet_proto::negotiate::Negotiation;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: [u8; Negotiation::REQUEST_LEN]| {

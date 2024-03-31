@@ -27,8 +27,8 @@ test = false
 doc = false
 
 [[bin]]
-name = "lanes"
-path = "fuzz_targets/lanes.rs"
+name = "messages"
+path = "fuzz_targets/messages.rs"
 test = false
 doc = false
 

@@ -1,34 +1,37 @@
-//! See [`Acknowledge`].
-
-use arbitrary::Arbitrary;
+//! Tracks which packets, that we have sent, have been successfully received by
+//! the peer (acknowledgements).
+//!
+//! This uses a modification of the strategy described in [*Gaffer On Games*],
+//! where we store two pieces of info:
+//! * the last received packet sequence number (`last_recv`)
+//! * a bitfield of which packets before `last_recv` have been acked
+//!   (`ack_bits`)
+//!
+//! If a bit at index `N` is set in `ack_bits`, then the packet with sequence
+//! `last_recv - N` has been acked. For example,
+//! ```text
+//! last_recv: 40
+//!  ack_bits: 0b0000..00001001
+//!                    ^   ^  ^
+//!                    |   |  +- seq 40 (40 - 0) has been acked
+//!                    |   +---- seq 37 (40 - 3) has been acked
+//!                    +-------- seq 33 has NOT been acked
+//! ```
+//!
+//! This info is sent with every packet, and the last 32 packet acknowledgements
+//! are sent, giving a lot of reliability and redundancy for acks.
+//!
+//! [*Gaffer On Games*]: https://gafferongames.com/post/reliable_ordered_messages/#packet-levelacks
 
 use aeronet::octs;
+use arbitrary::Arbitrary;
 
 use crate::seq::Seq;
 
 /// Tracks which packets, that we have sent, have been successfully received by
 /// the peer (acknowledgements).
 ///
-/// This uses a modification of the strategy described in
-/// [*Gaffer On Games*, Packet Level Acks](https://gafferongames.com/post/reliable_ordered_messages/#packet-levelacks),
-/// where we store two pieces of info:
-/// * the last received packet sequence number (`last_recv`)
-/// * a bitfield of which packets before `last_recv` have been acked
-///   (`ack_bits`)
-///
-/// If a bit at index `N` is set in `ack_bits`, then the packet with sequence
-/// `last_recv - N` has been acked. For example,
-/// ```text
-/// last_recv: 40
-///  ack_bits: 0b0000..00001001
-///                    ^   ^  ^
-///                    |   |  +- seq 40 (40 - 0) has been acked
-///                    |   +---- seq 37 (40 - 3) has been acked
-///                    +-------- seq 33 has NOT been acked
-/// ```
-///
-/// This info is sent with every packet, and the last 32 packet acknowledgements
-/// are sent, giving a lot of reliability and redundancy for acks.
+/// See the [module-level documentation](self).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Arbitrary)]
 pub struct Acknowledge {
     /// Last received packet sequence number.
@@ -65,7 +68,7 @@ impl Acknowledge {
             Ok(delta) => {
                 // `seq` is before or equal to `last_recv`,
                 // so we set a bit in the bitfield
-                self.ack_bits |= 1u32.wrapping_shl(delta);
+                self.ack_bits |= shl(1, delta);
             }
             Err(_) => {
                 // `seq` is after `last_recv`,
@@ -80,7 +83,7 @@ impl Acknowledge {
                 //                                 | shifted `shift_by` (5) places
                 //                            v----+
                 //    new recv_bits: 0b00..000100000000
-                self.ack_bits = self.ack_bits.wrapping_shl(shift_by);
+                self.ack_bits = shl(self.ack_bits, shift_by);
             }
         }
     }
@@ -109,7 +112,7 @@ impl Acknowledge {
             Ok(delta) => {
                 // `seq` is before or equal to `last_recv`,
                 // so we check the bitfield
-                self.ack_bits & 1u32.wrapping_shl(delta) != 0
+                self.ack_bits & shl(1, delta) != 0
             }
             Err(_) => {
                 // `seq` is after `last_recv`,
@@ -140,7 +143,7 @@ impl Acknowledge {
         // the last 32 packets, so it'd be invalid to ack the `last_recv`
         (0..32).filter_map(move |bit_index| {
             let packet_seq = self.last_recv - Seq(bit_index);
-            if self.ack_bits & (1 << bit_index) == 0 {
+            if self.ack_bits & shl(1, u32::from(bit_index)) == 0 {
                 None
             } else {
                 Some(packet_seq)
@@ -168,6 +171,13 @@ impl octs::Decode for Acknowledge {
             ack_bits: buf.read()?,
         })
     }
+}
+
+fn shl(a: u32, rhs: u32) -> u32 {
+    // if None, then `rhs >= 32`
+    // so all the bits get moved out anyway
+    // so the result ends up just being 0
+    a.checked_shl(rhs).unwrap_or_default()
 }
 
 #[cfg(test)]

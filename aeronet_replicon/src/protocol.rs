@@ -33,7 +33,7 @@ impl TryIntoBytes for RepliconMessage {
     fn try_into_bytes(self) -> Result<Bytes, Self::Error> {
         let mut bytes = BytesMut::with_capacity(self.payload.len() + 1);
         // PANIC SAFETY: we just allocated enough capacity for all of this
-        bytes.write::<u8>(&self.channel_id).unwrap();
+        bytes.write(&self.channel_id).unwrap();
         bytes.write_slice(&self.payload).unwrap();
         Ok(bytes.freeze())
     }

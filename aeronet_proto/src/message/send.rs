@@ -1,6 +1,6 @@
 use aeronet::{
     lane::OnLane,
-    message::{TryFromBytes, TryIntoBytes},
+    message::TryIntoBytes,
     octs::{EncodeSize, WriteBytes},
 };
 use ahash::AHashMap;
@@ -12,18 +12,18 @@ use crate::{
     seq::Seq,
 };
 
-use super::{FragIndex, LaneState, MessageError, Messages, SentMessage};
+use super::{FragIndex, LaneState, Messages, SendMessageError, SentMessage};
 
-impl<S: TryIntoBytes + OnLane, R: TryFromBytes> Messages<S, R> {
-    pub fn buffer_send(&mut self, msg: S) -> Result<Seq, MessageError<S, R>> {
+impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
+    pub fn buffer_send(&mut self, msg: S) -> Result<Seq, SendMessageError<S>> {
         let lane_index = msg.lane_index();
-        let msg_bytes = msg.try_into_bytes().map_err(MessageError::IntoBytes)?;
+        let msg_bytes = msg.try_into_bytes().map_err(SendMessageError::IntoBytes)?;
         let msg_seq = self.next_send_msg_seq;
         self.next_send_msg_seq += Seq(1);
         let frags = self
             .frags
             .fragment(msg_seq, msg_bytes)
-            .map_err(MessageError::Fragment)?;
+            .map_err(SendMessageError::Fragment)?;
         self.sent_msgs.insert(
             msg_seq,
             SentMessage {

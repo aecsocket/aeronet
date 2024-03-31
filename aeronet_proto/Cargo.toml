@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_proto"
-description = "Protocol feature implementations for aeronet transports"
+description = "Sans-IO protocol implementation for aeronet"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
