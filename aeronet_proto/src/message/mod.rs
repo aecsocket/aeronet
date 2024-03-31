@@ -255,11 +255,12 @@ mod tests {
         msgs.buffer_send(MyMsg::from("1")).unwrap();
         msgs.buffer_send(MyMsg::from("2")).unwrap();
 
-        let mut bytes_left = usize::MAX;
+        let mut bytes_left = 45;
         let packets1 = msgs.flush(&mut bytes_left).collect::<Vec<_>>();
 
         msgs.buffer_send(MyMsg::from("3")).unwrap();
         let packets2 = msgs.flush(&mut bytes_left).collect::<Vec<_>>();
+        dbg!(packets1[0].len(), packets2[0].len(), bytes_left);
 
         let mut read = |packets| {
             for mut packet in packets {

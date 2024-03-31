@@ -19,7 +19,7 @@ use steamworks::{
     ClientManager, Manager, SteamId,
 };
 
-use crate::{shared::ConnectionFrontend, ConnectionInfo};
+use crate::{internal::ConnectionFrontend, ConnectionInfo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ClientMessageKey {

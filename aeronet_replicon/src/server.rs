@@ -116,6 +116,7 @@ where
 {
     #[allow(clippy::too_many_arguments)]
     fn recv(
+        time: Res<Time>,
         mut server: ResMut<T>,
         mut replicon_server: ResMut<RepliconServer>,
         mut client_keys: ResMut<ClientKeys<P, T>>,
@@ -126,7 +127,7 @@ where
         mut connected: EventWriter<RemoteClientConnected<P, T>>,
         mut disconnected: EventWriter<RemoteClientDisconnected<P, T>>,
     ) {
-        for event in server.poll() {
+        for event in server.poll(time.delta()) {
             match event {
                 ServerEvent::Opened => {
                     opened.send(ServerOpened {

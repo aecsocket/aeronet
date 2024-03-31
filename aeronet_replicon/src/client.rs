@@ -80,12 +80,13 @@ where
     T: ClientTransport<P> + Resource,
 {
     fn recv(
+        time: Res<Time>,
         mut client: ResMut<T>,
         mut replicon: ResMut<RepliconClient>,
         mut connected: EventWriter<LocalClientConnected<P, T>>,
         mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
     ) {
-        for event in client.poll() {
+        for event in client.poll(time.delta()) {
             match event {
                 ClientEvent::Connected => {
                     connected.send(LocalClientConnected {

@@ -6,7 +6,7 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use std::{error::Error, fmt::Debug, hash::Hash};
+use std::{error::Error, fmt::Debug, hash::Hash, time::Duration};
 
 use derivative::Derivative;
 
@@ -115,7 +115,8 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// Updates the internal state of this transport by receiving messages from
     /// peers, returning the events that it emitted while updating.
     ///
-    /// This should be called in your app's main update loop.
+    /// This should be called in your app's main update loop, passing in the
+    /// time elapsed since the last `poll` call.
     ///
     /// If this emits an event which changes the transport's state, then after
     /// this function, the transport is guaranteed to be in this new state. Only
@@ -123,6 +124,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// function call.
     fn poll(
         &mut self,
+        dt: Duration,
     ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>>;
 
     /// Sends all messages previously buffered by [`ServerTransport::send`] to

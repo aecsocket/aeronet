@@ -18,7 +18,7 @@ use steamworks::{
 };
 use tracing::{debug, warn};
 
-use crate::{shared::ConnectionFrontend, ConnectionInfo};
+use crate::{internal::ConnectionFrontend, ConnectionInfo};
 
 slotmap::new_key_type! {
     pub struct ClientKey;

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use aeronet::{
     client::ClientState,
     protocol::TransportProtocol,
@@ -120,7 +122,7 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
             .map(drop)
     }
 
-    fn poll(&mut self) -> impl Iterator<Item = ServerEvent<P>> {
+    fn poll(&mut self, _: Duration) -> impl Iterator<Item = ServerEvent<P>> {
         let mut events = Vec::new();
         let mut to_remove = Vec::new();
 

@@ -73,6 +73,7 @@ impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
             packet.write(&packet_seq).unwrap();
             packet.write(&self.acks).unwrap();
             packet_bytes_left -= PACKET_HEADER_LEN;
+            debug_assert_eq!(packet.len(), PACKET_HEADER_LEN);
 
             let mut frags_in_packet = Vec::new();
             for frag in frags.iter_mut().flat_map(|index_opt| {
@@ -87,13 +88,14 @@ impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
                     msg_seq: frag.header.msg_seq,
                     frag_id: frag.header.frag_id,
                 });
+                let orig_len = packet.len();
+                let encode_len = frag.encode_len();
                 frag.encode_into(&mut packet).unwrap();
+                debug_assert_eq!(orig_len + encode_len, packet.len());
             }
-            debug_assert!(packet.len() < max_packet_bytes);
-
             let bytes_used = max_packet_bytes - packet_bytes_left;
-            debug_assert!(*bytes_left > bytes_used);
-            *bytes_left -= bytes_used;
+            debug_assert!(packet.len() <= max_packet_bytes);
+            debug_assert_eq!(packet.len(), bytes_used);
 
             if frags_in_packet.is_empty() {
                 // we couldn't write any fragments - nothing more to send
@@ -101,6 +103,7 @@ impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
             } else {
                 // we wrote at least one fragment - we can send this packet
                 // and track what fragments we're sending in this packet
+                *bytes_left -= bytes_used;
                 self.flushed_packets
                     .insert(packet_seq, frags_in_packet.into_boxed_slice());
                 Some(packet.freeze())

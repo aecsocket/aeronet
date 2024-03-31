@@ -30,7 +30,7 @@ bitcode = ["dep:bitcode"]
 condition = ["dep:rand", "dep:rand_distr"]
 
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = ["dep:bevy_ecs", "dep:bevy_app"]
+bevy = ["dep:bevy_ecs", "dep:bevy_app", "dep:bevy_time"]
 
 ## Allows storing an async multi-threaded [`tokio`](https://docs.rs/tokio) runtime in a
 ## [`bevy`](https://docs.rs/bevy) resource.
@@ -54,5 +54,6 @@ rand_distr = { workspace = true, optional = true }
 
 bevy_ecs = { workspace = true, optional = true }
 bevy_app = { workspace = true, optional = true }
+bevy_time = { workspace = true, optional = true }
 
 tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }

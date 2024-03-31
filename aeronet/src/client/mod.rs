@@ -6,7 +6,7 @@ mod plugin;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
-use std::{error::Error, fmt::Debug, hash::Hash};
+use std::{error::Error, fmt::Debug, hash::Hash, time::Duration};
 
 use derivative::Derivative;
 
@@ -65,13 +65,17 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// Updates the internal state of this transport by receiving messages from
     /// peers, returning the events that it emitted while updating.
     ///
-    /// This should be called in your app's main update loop.
+    /// This should be called in your app's main update loop, passing in the
+    /// time elapsed since the last `poll` call.
     ///
     /// If this emits an event which changes the transport's state, then after
     /// this function, the transport is guaranteed to be in this new state. Only
     /// up to one state-changing event will be produced by this function per
     /// function call.
-    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>>;
+    fn poll(
+        &mut self,
+        delta_time: Duration,
+    ) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>>;
 
     /// Sends all messages previously buffered by [`ClientTransport::send`] to
     /// peers.

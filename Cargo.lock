@@ -95,6 +95,7 @@ dependencies = [
  "arbitrary",
  "bevy_app",
  "bevy_ecs",
+ "bevy_time",
  "bitcode",
  "bytes",
  "derivative",

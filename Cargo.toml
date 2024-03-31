@@ -67,6 +67,7 @@ tokio = { version = "1.36.0", default-features = false }
 
 bevy_ecs = { version = "0.13.1", default-features = false }
 bevy_app = { version = "0.13.1", default-features = false }
+bevy_time = { version = "0.13.1", default-features = false }
 bevy = "0.13.1"
 bevy_egui = "0.26.0"
 bevy_replicon = "0.24.1"

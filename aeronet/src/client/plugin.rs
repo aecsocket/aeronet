@@ -2,6 +2,7 @@ use std::{fmt::Debug, marker::PhantomData};
 
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
+use bevy_time::Time;
 use derivative::Derivative;
 
 use crate::{
@@ -240,6 +241,7 @@ where
 }
 
 fn recv<P, T>(
+    time: Res<Time>,
     mut client: ResMut<T>,
     mut connected: EventWriter<LocalClientConnected<P, T>>,
     mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
@@ -249,7 +251,7 @@ fn recv<P, T>(
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
 {
-    for event in client.poll() {
+    for event in client.poll(time.delta()) {
         match event {
             ClientEvent::Connected => {
                 connected.send(LocalClientConnected {

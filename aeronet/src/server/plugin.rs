@@ -2,6 +2,7 @@ use std::{fmt::Debug, marker::PhantomData};
 
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
+use bevy_time::Time;
 use derivative::Derivative;
 
 use crate::protocol::TransportProtocol;
@@ -299,6 +300,7 @@ where
 
 #[allow(clippy::too_many_arguments)]
 fn recv<P, T>(
+    time: Res<Time>,
     mut server: ResMut<T>,
     mut opened: EventWriter<ServerOpened<P, T>>,
     mut closed: EventWriter<ServerClosed<P, T>>,
@@ -311,7 +313,7 @@ fn recv<P, T>(
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
 {
-    for event in server.poll() {
+    for event in server.poll(time.delta()) {
         match event {
             ServerEvent::Opened => {
                 opened.send(ServerOpened {

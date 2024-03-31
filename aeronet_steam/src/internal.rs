@@ -1,8 +1,11 @@
+use std::time::Duration;
+
 use aeronet::{
     lane::{LaneKind, OnLane},
     message::{TryFromBytes, TryIntoBytes},
 };
 use aeronet_proto::message::{Messages, MessagesConfig};
+use bytes::Bytes;
 use derivative::Derivative;
 use steamworks::{
     networking_sockets::{NetConnection, NetworkingSockets},
@@ -34,6 +37,7 @@ impl<M: 'static, S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> ConnectionF
         }
     }
 
+    // TODO move into poll?
     pub fn update(&mut self, socks: &NetworkingSockets<M>) {
         self.info.update_from_connection(socks, &self.conn);
     }
@@ -47,26 +51,35 @@ impl<M: 'static, S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> ConnectionF
 
     pub fn poll<'a>(
         &'a mut self,
+        delta_time: Duration,
     ) -> impl Iterator<Item = Result<R, SteamTransportError<S, R>>> + 'a {
         const BATCH_SIZE: usize = 64;
 
-        let mut buf = Vec::new();
-        self.conn.receive_messages(BATCH_SIZE);
+        let mut buf = Vec::new().into_iter();
         std::iter::from_fn(|| {
             let mut packet = buf.next();
             if packet.is_none() {
-                buf = match self.conn.receive_messages(64) {
-                    Ok(buf) => buf.into_iter(),
-                    Err(_) => return Some(Err(SteamTransportError::Recv)),
-                };
+                buf = self
+                    .conn
+                    .receive_messages(BATCH_SIZE)
+                    .expect("handle should be valid")
+                    .into_iter();
                 packet = buf.next();
             }
-            let packet = packet?;
+            let mut packet = Bytes::from(packet?.data().to_vec());
+
+            // TODO remove unwraps
+            for ack in self.msgs.read_acks(&mut packet).unwrap() {
+                // todo
+            }
+
+            while let Some(msgs) = self.msgs.read_next_frag(&mut packet).unwrap() {
+                for msg in msgs {}
+            }
 
             let packet = packet.data();
-            self.conn.info.total_bytes_recv += packet.len();
+            self.info.total_bytes_recv += packet.len();
             let msg_bytes = match self
-                .conn
                 .lanes
                 .recv(packet)
                 .map_err(SteamTransportError::LaneRecv)

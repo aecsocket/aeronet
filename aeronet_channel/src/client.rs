@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use aeronet::{client::ClientTransport, protocol::TransportProtocol};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
@@ -184,7 +186,7 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
         }
     }
 
-    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P>> {
+    fn poll(&mut self, _: Duration) -> impl Iterator<Item = ClientEvent<P>> {
         match self {
             Self::Disconnected => vec![],
             Self::Connected(client) => match client.poll() {

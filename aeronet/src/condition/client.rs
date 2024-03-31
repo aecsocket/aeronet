@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, time::Duration};
 
 use derivative::Derivative;
 
@@ -106,7 +106,10 @@ where
         self.inner.send(msg)
     }
 
-    fn poll(&mut self) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>> {
+    fn poll(
+        &mut self,
+        delta_time: Duration,
+    ) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>> {
         let mut events = Vec::new();
 
         events.extend(
@@ -115,7 +118,7 @@ where
                 .map(|recv| ClientEvent::Recv { msg: recv.msg }),
         );
 
-        for event in self.inner.poll() {
+        for event in self.inner.poll(delta_time) {
             if let ClientEvent::Recv { msg } = event {
                 if let Some(ClientRecv { msg }) = self.conditioner.condition(ClientRecv { msg }) {
                     events.push(ClientEvent::Recv { msg });
