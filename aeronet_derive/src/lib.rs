@@ -71,8 +71,8 @@ const LANE_KIND: &str = "lane_kind";
 ///
 /// # Attributes
 ///
-/// * `#[on_lane(lane)]` determines what lane this variant maps to.
-///   This can be any expression which can be passed to `LaneIndex::from`.
+/// * `#[on_lane(lane)]` determines what lane this variant maps to. This can be
+///   any expression which can be passed to `LaneIndex::from`.
 ///
 /// # Usage
 ///

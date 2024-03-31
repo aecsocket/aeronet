@@ -17,8 +17,8 @@
 //! acknowledged, and which fragments are left to send) are then tracked.
 //!
 //! **Allocations:**
-//! * a single [`Box`] to store the slice of fragments,
-//!   deallocated after either:
+//! * a single [`Box`] to store the slice of fragments, deallocated after
+//!   either:
 //!   * the message is on an unreliable lane, and the message has been flushed
 //!   * the message is on a reliable lane, and all fragments of the message have
 //!     been acknowledged
@@ -42,8 +42,8 @@
 //! returns [`None`].
 //!
 //! **Allocations:**
-//! * a [`Box`] of indices to all fragments in all sent messages,
-//!   deallocated after the iterator is dropped.
+//! * a [`Box`] of indices to all fragments in all sent messages, deallocated
+//!   after the iterator is dropped.
 //!
 //! ## Receiving
 //!

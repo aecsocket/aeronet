@@ -19,11 +19,13 @@ impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
         let lane_index = msg.lane_index();
         let msg_bytes = msg.try_into_bytes().map_err(SendMessageError::IntoBytes)?;
         let msg_seq = self.next_send_msg_seq;
-        self.next_send_msg_seq += Seq(1);
         let frags = self
             .frags
             .fragment(msg_seq, msg_bytes)
             .map_err(SendMessageError::Fragment)?;
+        // only increment the seq after successfully fragmenting
+        self.next_send_msg_seq += Seq(1);
+
         self.sent_msgs.insert(
             msg_seq,
             SentMessage {
@@ -65,8 +67,8 @@ impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
             let packet_seq = self.next_send_packet_seq;
             self.next_send_packet_seq += Seq(1);
             // NOTE: don't use `max_packet_size`, because it might be a really big number
-            // e.g. Steamworks already fragments messages, so we don't have to fragment ourselves,
-            // so `max_packet_size` is massive
+            // e.g. Steamworks already fragments messages, so we don't have to fragment
+            // ourselves, so `max_packet_size` is massive
             let mut packet = BytesMut::with_capacity(self.default_packet_cap);
             packet.write(&packet_seq).unwrap();
             packet.write(&self.acks).unwrap();

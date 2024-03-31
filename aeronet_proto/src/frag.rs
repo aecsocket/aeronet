@@ -148,8 +148,7 @@ impl MessageBuffer {
             // use a NonZeroU8 because:
             // * having `num_frags = 0` is genuinely an invalid case
             // * allows niching in Option<MessageBuffer>
-            //   * but I think this is stashed elsewhere -
-            //     doesn't seem to change the size
+            //   * but I think this is stashed elsewhere - doesn't seem to change the size
             num_frags,
             num_frags_recv: 0,
             // use a (BitArray, Vec<u8>) instead of a Vec<Option<u8>>
