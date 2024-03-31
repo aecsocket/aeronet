@@ -55,9 +55,6 @@
 
 pub use aeronet_derive::{LaneKey, OnLane};
 
-mod config;
-pub use config::*;
-
 /// Kind of lane which can provide guarantees about the manner of message
 /// delivery.
 ///
@@ -234,4 +231,38 @@ impl LaneIndex {
 pub trait OnLane {
     /// Gets the index of the lane that this is sent out on.
     fn lane_index(&self) -> LaneIndex;
+}
+
+/// App-defined type listing a set of [lanes](crate::lane) which a transport can
+/// use to send app messages along.
+///
+/// This trait should be derived - see [`aeronet_derive::LaneKey`]. Otherwise,
+/// you will have to make sure to follow the contract regarding panics.
+///
+/// There isn't much point to implementing this yourself - if you need
+/// fine-grained control over lanes, use [`LaneIndex`] manually.
+///
+/// # Panic safety
+///
+/// This trait must be implemented correctly, otherwise transport
+/// implementations may panic.
+pub trait LaneKey {
+    /// Slice of all lane kinds under this key.
+    ///
+    /// Pass this into the constructor for your transport.
+    const KINDS: &'static [LaneKind];
+
+    /// Gets which lane index this variant represents.
+    ///
+    /// # Panic safety
+    ///
+    /// See [`LaneIndex`] for the guarantees you must uphold when implementing
+    /// this.
+    fn lane_index(&self) -> LaneIndex;
+}
+
+impl<T: LaneKey> From<T> for LaneIndex {
+    fn from(value: T) -> Self {
+        value.lane_index()
+    }
 }

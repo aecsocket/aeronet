@@ -63,77 +63,39 @@ impl<S: TryIntoBytes, R: TryFromBytes + OnLane> Messages<S, R> {
             })
     }
 
-    pub fn read_frags<'a>(
-        &'a mut self,
-        packet: &'a mut Bytes,
-    ) -> impl Iterator<Item = Result<R, MessageError<S, R>>> + 'a {
-        enum State<I> {
-            ReadFrags,
-            RecvIter { iter: I },
+    pub fn read_next_frag(
+        &mut self,
+        packet: &mut Bytes,
+    ) -> Result<Option<impl Iterator<Item = R> + '_>, MessageError<S, R>> {
+        while packet.has_remaining() {
+            let frag = packet
+                .read::<Fragment<Bytes>>()
+                .map_err(MessageError::ReadFragment)?;
+
+            // reassemble this fragment into a message
+            let Some(msg_bytes) = self
+                .frags
+                .reassemble(&frag.header, &frag.payload)
+                .map_err(MessageError::Reassemble)?
+            else {
+                continue;
+            };
+
+            let msg = R::try_from_bytes(Bytes::from(msg_bytes)).map_err(MessageError::FromBytes)?;
+
+            // get what lane this message is received on
+            let lane_index = msg.lane_index();
+            let lane = self
+                .lanes
+                .get_mut(lane_index.into_raw())
+                .ok_or(MessageError::InvalidLaneIndex { lane_index })?;
+
+            // ask the lane what messages it wants to give us - it could:
+            // * just give us the same message back
+            // * give us nothing and drop the message if it's too old (sequenced)
+            // * give us this message plus a bunch of older buffered ones (ordered)
+            return Ok(Some(lane.recv(msg, frag.header.msg_seq)));
         }
-
-        let frags = &mut self.frags;
-        let lanes = &mut self.lanes;
-        let mut state = State::ReadFrags;
-
-        // what the fuck
-        // TODO coroutines
-        std::iter::from_fn(move || 'iter: loop {
-            match state {
-                State::ReadFrags => {
-                    // read in all remaining fragments in this packet
-                    'frags: while packet.remaining() > 0 {
-                        let frag = match packet
-                            .read::<Fragment<Bytes>>()
-                            .map_err(MessageError::ReadFragment)
-                        {
-                            Ok(x) => x,
-                            Err(err) => return Some(Err(err)),
-                        };
-
-                        // reassemble this fragment into a message
-                        let msg_bytes = match frags
-                            .reassemble(&frag.header, &frag.payload)
-                            .map_err(MessageError::Reassemble)
-                        {
-                            Ok(Some(x)) => x,
-                            Ok(None) => continue 'frags,
-                            Err(err) => return Some(Err(err)),
-                        };
-                        let msg = match R::try_from_bytes(Bytes::from(msg_bytes)) {
-                            Ok(x) => x,
-                            Err(err) => return Some(Err(MessageError::FromBytes(err))),
-                        };
-
-                        // get what lane this message is received on
-                        let lane_index = msg.lane_index();
-                        let lane = match lanes.get_mut(lane_index.into_raw()) {
-                            Some(x) => x,
-                            None => {
-                                return Some(Err(MessageError::InvalidLaneIndex { lane_index }))
-                            }
-                        };
-
-                        // ask the lane what messages it wants to give us - it could:
-                        // * just give us the same message back
-                        // * give us nothing and drop the message if it's too old (sequenced)
-                        // * give us this message plus a bunch of older buffered ones (ordered)
-                        let iter = lane.recv(msg, frag.header.msg_seq);
-                        state = State::RecvIter { iter };
-                        // then get the `State::RecvIter` logic to take over,
-                        // returning these messages to the iter consumer
-                        continue 'iter;
-                    }
-                    return None;
-                }
-                // consumes all of the `iter` we've set previously
-                State::RecvIter { ref mut iter } => match iter.next() {
-                    Some(msg) => return Some(Ok(msg)),
-                    None => {
-                        state = State::ReadFrags;
-                    }
-                },
-            }
-        })
+        Ok(None)
     }
 }

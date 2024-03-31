@@ -6,7 +6,7 @@ members = [
     "aeronet_replicon",
     "aeronet_protocol",
     "aeronet_channel",
-    "aeronet_webtransport",
+    #"aeronet_webtransport",
     #"aeronet_steam",
 ]
 

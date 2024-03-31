@@ -268,10 +268,6 @@ impl Fragmentation {
     /// If this returns `Ok(Some(..))`, the resulting bytes will be the fully
     /// reassembled bytes of the message.
     ///
-    /// This function will internally copy the payload byte slice into its own
-    /// storage, so there is no benefit to creating an alternate function taking
-    /// [`Bytes`].
-    ///
     /// Note that the returned [`Vec`] may not have an equal length and
     /// capacity - if you want to convert this into e.g. a [`bytes::Bytes`],
     /// there may be a reallocation involved.

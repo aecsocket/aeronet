@@ -2,9 +2,6 @@ use aeronet::lane::{LaneIndex, LaneKey};
 
 #[derive(Debug, Clone, Copy, LaneKey)]
 #[lane_kind(UnreliableUnordered)]
-#[drop_after(Duration::from_secs(3))]
-#[resend_after(Duration::from_millis(100))]
-#[ack_timeout(Duration::from_secs(30))]
 struct MyLaneStruct;
 
 #[derive(Debug, Clone, Copy, LaneKey)]
@@ -12,9 +9,6 @@ enum MyLaneEnum {
     #[lane_kind(UnreliableUnordered)]
     Variant1,
     #[lane_kind(ReliableOrdered)]
-    #[drop_after(Duration::from_secs(3))]
-    #[resend_after(Duration::from_millis(100))]
-    #[ack_timeout(Duration::from_secs(30))]
     Variant2,
 }
 
