@@ -1,9 +1,13 @@
-use std::{fmt::Debug, time::Duration};
+use std::{
+    fmt::{Debug, Display},
+    time::Duration,
+};
 
 use aeronet::{
     message::{TryFromBytes, TryIntoBytes},
     stats::{ByteStats, MessageStats, Rtt},
 };
+use aeronet_proto::{message, negotiate};
 use derivative::Derivative;
 use steamworks::{
     networking_sockets::{NetConnection, NetworkingSockets},
@@ -12,6 +16,8 @@ use steamworks::{
 };
 
 pub use aeronet_proto::message::MessagesConfig;
+
+// use crate::server::ClientKey;
 
 pub const MTU: usize = 512 * 1024;
 
@@ -126,6 +132,16 @@ impl ByteStats for ConnectionInfo {
     }
 }
 
+// TODO
+#[derive(Debug, Clone)]
+struct ClientKey;
+
+impl Display for ClientKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
 /// Error that occurs while processing a Steam networking transport.
 #[derive(Derivative, thiserror::Error)]
 #[derivative(
@@ -185,24 +201,20 @@ pub enum SteamTransportError<S: TryIntoBytes, R: TryFromBytes> {
     #[error("failed to send negotiation request")]
     SendNegotiateRequest(#[source] SteamError),
     #[error("failed to read negotiation request")]
-    NegotiateRequest(#[source] NegotiationRequestError),
+    NegotiateRequest(#[source] negotiate::RequestError),
     #[error("failed to read negotiation response")]
-    NegotiateResponse(#[source] NegotiationResponseError),
+    NegotiateResponse(#[source] negotiate::ResponseError),
     #[error("wrong protocol version")]
-    WrongProtocolVersion(#[source] WrongProtocolVersion),
+    WrongProtocolVersion(#[source] negotiate::WrongProtocolVersion),
 
     // transport
-    #[error("failed to serialize message")]
-    AsBytes(#[source] S::Error),
-    #[error("failed to send on lane")]
-    LaneSend(#[source] LaneSendError),
+    #[error("failed to buffer message for sending")]
+    BufferSend(#[source] message::SendError<S>),
     #[error("failed to send message")]
     Send(#[source] SteamError),
 
-    #[error("failed to deserialize message")]
-    FromBytes(#[source] R::Error),
-    #[error("failed to receive on lane")]
-    LaneRecv(#[source] LaneRecvError),
+    #[error("failed to receive message")]
+    Recv2(#[source] message::RecvError<R>),
     #[error("failed to receive messages")]
     Recv,
 }

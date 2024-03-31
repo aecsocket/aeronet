@@ -1,14 +1,10 @@
 mod wrapper;
 
-use aeronet_proto::{Negotiation, NegotiationRequestError};
+use aeronet::protocol::TransportProtocol;
 pub use wrapper::*;
 
 use std::{marker::PhantomData, net::SocketAddr};
 
-use aeronet::{
-    client::{ClientKey, ClientState},
-    LaneConfig, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
-};
 use ahash::AHashMap;
 use derivative::Derivative;
 use slotmap::SlotMap;
@@ -24,10 +20,14 @@ use tracing::{debug, warn};
 
 use crate::{shared::ConnectionFrontend, ConnectionInfo};
 
+slotmap::new_key_type! {
+    pub struct ClientKey;
+}
+
 type SteamTransportError<P> =
     crate::SteamTransportError<<P as TransportProtocol>::S2C, <P as TransportProtocol>::C2S>;
 
-type ServerEvent<P> = aeronet::server::ServerEvent<P, SteamTransportError<P>>;
+type ServerEvent<P> = aeronet::server::ServerEventFor<P, SteamTransportError<P>>;
 
 #[derive(Debug)]
 pub struct SteamServerTransportConfig {

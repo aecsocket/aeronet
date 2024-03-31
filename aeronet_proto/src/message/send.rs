@@ -12,17 +12,17 @@ use crate::{
     seq::Seq,
 };
 
-use super::{FragIndex, LaneState, Messages, SendMessageError, SentMessage};
+use super::{FragIndex, LaneState, Messages, SendError, SentMessage};
 
 impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
-    pub fn buffer_send(&mut self, msg: S) -> Result<Seq, SendMessageError<S>> {
+    pub fn buffer_send(&mut self, msg: S) -> Result<Seq, SendError<S>> {
         let lane_index = msg.lane_index();
-        let msg_bytes = msg.try_into_bytes().map_err(SendMessageError::IntoBytes)?;
+        let msg_bytes = msg.try_into_bytes().map_err(SendError::IntoBytes)?;
         let msg_seq = self.next_send_msg_seq;
         let frags = self
             .frags
             .fragment(msg_seq, msg_bytes)
-            .map_err(SendMessageError::Fragment)?;
+            .map_err(SendError::Fragment)?;
         // only increment the seq after successfully fragmenting
         self.next_send_msg_seq += Seq(1);
 
@@ -58,7 +58,7 @@ impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
         });
 
         std::iter::from_fn(move || {
-            let max_packet_bytes = (*bytes_left).min(self.max_packet_size);
+            let max_packet_bytes = (*bytes_left).min(self.max_packet_len);
             if max_packet_bytes < PACKET_HEADER_LEN {
                 return None;
             }

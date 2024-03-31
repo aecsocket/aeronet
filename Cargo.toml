@@ -7,7 +7,7 @@ members = [
     "aeronet_proto",
     "aeronet_channel",
     #"aeronet_webtransport",
-    #"aeronet_steam",
+    "aeronet_steam",
 ]
 
 [workspace.package]

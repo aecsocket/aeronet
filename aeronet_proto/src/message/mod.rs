@@ -31,7 +31,7 @@
 //! allocations as possible.
 //!
 //! Firstly, all individual fragments from the sent messages are collected and
-//! sorted based on their payload size, largest to smallest. Then, we try to
+//! sorted based on their payload length, largest to smallest. Then, we try to
 //! pack the largest fragments into a packet first, then fill the space with any
 //! smaller packets which still fit.
 //!
@@ -104,7 +104,7 @@ mod lane;
 mod recv;
 mod send;
 
-use std::{borrow::Borrow, marker::PhantomData};
+use std::{fmt::Debug, marker::PhantomData};
 
 use aeronet::{
     lane::{LaneIndex, LaneKind, OnLane},
@@ -125,7 +125,7 @@ use self::lane::LaneState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessagesConfig {
-    pub max_packet_size: usize,
+    pub max_packet_len: usize,
     pub default_packet_cap: usize,
 }
 
@@ -135,7 +135,7 @@ pub struct MessagesConfig {
 #[derivative(Debug(bound = ""))]
 pub struct Messages<S, R> {
     lanes: Box<[LaneState<R>]>,
-    max_packet_size: usize,
+    max_packet_len: usize,
     default_packet_cap: usize,
     frags: Fragmentation,
     acks: Acknowledge,
@@ -160,16 +160,18 @@ struct FragIndex {
     frag_id: u8,
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum SendMessageError<S: TryIntoBytes> {
+#[derive(Derivative, thiserror::Error)]
+#[derivative(Debug(bound = "S::Error: Debug"), Clone(bound = "S::Error: Clone"))]
+pub enum SendError<S: TryIntoBytes> {
     #[error("failed to convert message into bytes")]
     IntoBytes(#[source] S::Error),
     #[error("failed to fragment message")]
     Fragment(#[source] FragmentError),
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum RecvMessageError<R: TryFromBytes> {
+#[derive(Derivative, thiserror::Error)]
+#[derivative(Debug(bound = "R::Error: Debug"), Clone(bound = "R::Error: Clone"))]
+pub enum RecvError<R: TryFromBytes> {
     #[error("failed to read packet sequence")]
     ReadPacketSeq(#[source] BytesError),
     #[error("failed to read acks")]
@@ -187,20 +189,13 @@ pub enum RecvMessageError<R: TryFromBytes> {
 const PACKET_HEADER_LEN: usize = Seq::ENCODE_LEN + Acknowledge::ENCODE_LEN;
 
 impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Messages<S, R> {
-    pub fn new(
-        max_packet_size: usize,
-        default_packet_cap: usize,
-        lanes: impl IntoIterator<Item = impl Borrow<LaneKind>>,
-    ) -> Self {
-        assert!(max_packet_size > PACKET_HEADER_LEN);
+    pub fn new(config: &MessagesConfig, lanes: &[LaneKind]) -> Self {
+        assert!(config.max_packet_len > PACKET_HEADER_LEN);
         Self {
-            lanes: lanes
-                .into_iter()
-                .map(|kind| LaneState::new(*kind.borrow()))
-                .collect(),
-            max_packet_size,
-            default_packet_cap,
-            frags: Fragmentation::new(max_packet_size - PACKET_HEADER_LEN),
+            lanes: lanes.iter().map(|kind| LaneState::new(*kind)).collect(),
+            max_packet_len: config.max_packet_len,
+            default_packet_cap: config.default_packet_cap,
+            frags: Fragmentation::new(config.max_packet_len - PACKET_HEADER_LEN),
             acks: Acknowledge::new(),
             next_send_msg_seq: Seq(0),
             next_send_packet_seq: Seq(0),
@@ -249,9 +244,14 @@ mod tests {
         }
     }
 
+    const CONFIG: MessagesConfig = MessagesConfig {
+        max_packet_len: 1024,
+        default_packet_cap: 1024,
+    };
+
     #[test]
     fn test() {
-        let mut msgs = Messages::<MyMsg, MyMsg>::new(1024, 1024, MyLane::KINDS);
+        let mut msgs = Messages::<MyMsg, MyMsg>::new(&CONFIG, MyLane::KINDS);
         msgs.buffer_send(MyMsg::from("1")).unwrap();
         msgs.buffer_send(MyMsg::from("2")).unwrap();
 
