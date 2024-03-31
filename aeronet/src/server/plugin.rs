@@ -110,6 +110,7 @@ pub enum ServerTransportSet {
 ///
 /// [`Condition`]: bevy_ecs::schedule::Condition
 /// [`Open`]: crate::server::ServerState::Open
+#[must_use]
 pub fn server_open<P, T>(server: Option<Res<T>>) -> bool
 where
     P: TransportProtocol,
@@ -147,6 +148,7 @@ where
 ///
 /// [`Condition`]: bevy_ecs::schedule::Condition
 /// [`Closed`]: crate::server::ServerState::Closed
+#[must_use]
 pub fn server_closed<P, T>(server: Option<Res<T>>) -> bool
 where
     P: TransportProtocol,

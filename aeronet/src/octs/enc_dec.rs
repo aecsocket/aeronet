@@ -36,7 +36,7 @@ impl EncodeSize for Bytes {
 
 impl Encode for Bytes {
     fn encode(&self, buf: &mut impl WriteBytes) -> Result<()> {
-        buf.write_varint(self.len() as u64)?;
+        buf.write_varint_usize(self.len())?;
         buf.write_slice(self.chunk())?;
         Ok(())
     }
@@ -44,7 +44,7 @@ impl Encode for Bytes {
 
 impl Decode for Bytes {
     fn decode(buf: &mut impl ReadBytes) -> Result<Self> {
-        let len = buf.read_varint()? as usize;
+        let len = buf.read_varint_usize()?;
         buf.read_slice(len)
     }
 }

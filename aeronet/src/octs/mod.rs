@@ -23,6 +23,9 @@ pub enum BytesError {
     ///   of space left for writing
     #[error("buffer too short")]
     BufferTooShort,
+    /// Read a varint as [`u64`], but it was too large for the given operation.
+    #[error("varint too large")]
+    VarintTooLarge,
 }
 
 /// Result type with [`BytesError`] as an error type.
@@ -116,6 +119,18 @@ pub trait ReadBytes {
     /// Errors if the buffer does not have enough bytes left to read.
     fn read_varint(&mut self) -> Result<u64>;
 
+    /// Reads the next [`u64`] as a [`VarInt`](integer_encoding::VarInt) and
+    /// advances the cursor of the buffer, converting the result to a [`usize`].
+    ///
+    /// If the [`u64`] is too large, [`BytesError::VarintTooLarge`] is returned.
+    /// # Errors
+    ///
+    /// Errors if the buffer does not have enough bytes left to read, or if the
+    /// varint value is too large to fit in a [`usize`].
+    fn read_varint_usize(&mut self) -> Result<usize> {
+        usize::try_from(self.read_varint()?).map_err(|_| BytesError::VarintTooLarge)
+    }
+
     /// Reads the next `len` bytes and creates a new [`Bytes`], creating a clone
     /// of the underlying [`Bytes`] object.
     ///
@@ -180,6 +195,20 @@ pub trait WriteBytes {
     ///
     /// Errors if the buffer is not long enough to fit the extra bytes.
     fn write_varint(&mut self, value: u64) -> Result<()>;
+
+    /// Writes a [`usize`] into the buffer as a
+    /// [`VarInt`](integer_encoding::VarInt) and advances the cursor.
+    ///
+    /// This will take up a maximum of [`VARINT_MAX_SIZE`] bytes.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the buffer is not long enough to fit the extra bytes, or if
+    /// the given value is too large to fit in a [`u64`].
+    fn write_varint_usize(&mut self, value: usize) -> Result<()> {
+        let value = u64::try_from(value).map_err(|_| BytesError::VarintTooLarge)?;
+        self.write_varint(value)
+    }
 
     /// Writes a slice of bytes into the buffer and advances the cursor.
     ///

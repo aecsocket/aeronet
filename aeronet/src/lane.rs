@@ -219,11 +219,13 @@ impl LaneIndex {
     /// Functions which accept a [`LaneIndex`] expect to be given a valid index
     /// into this list. If this index is for a different configuration, then the
     /// transport will most likely panic.
+    #[must_use]
     pub const fn from_raw(raw: usize) -> Self {
         Self(raw)
     }
 
     /// Gets the raw index of this value.
+    #[must_use]
     pub const fn into_raw(self) -> usize {
         self.0
     }

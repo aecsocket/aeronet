@@ -106,6 +106,7 @@ pub enum ClientTransportSet {
 ///
 /// [`Condition`]: bevy_ecs::schedule::Condition
 /// [`Connected`]: crate::client::ClientState::Connected
+#[must_use]
 pub fn client_connected<P, T>(client: Option<Res<T>>) -> bool
 where
     P: TransportProtocol,
@@ -143,6 +144,7 @@ where
 ///
 /// [`Condition`]: bevy_ecs::schedule::Condition
 /// [`Disconnected`]: crate::client::ClientState::Disconnected
+#[must_use]
 pub fn client_disconnected<P, T>(client: Option<Res<T>>) -> bool
 where
     P: TransportProtocol,
