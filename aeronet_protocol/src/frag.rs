@@ -8,12 +8,12 @@ use std::{
 
 use aeronet::{
     integer_encoding::VarInt,
-    octs::{self, ByteChunksExt, ConstEncodeSize},
+    octs::{self, ByteChunks, ByteChunksExt, ConstEncodeSize},
 };
 use ahash::AHashMap;
 use arbitrary::Arbitrary;
 use bitvec::{array::BitArray, bitarr};
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 
 use crate::seq::Seq;
 
@@ -170,26 +170,32 @@ impl MessageBuffer {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Fragment {
+pub struct Fragment<B> {
     pub header: FragHeader,
-    pub payload: Bytes,
+    pub payload: B,
 }
 
-impl octs::EncodeSize for Fragment {
-    fn encode_size(&self) -> usize {
-        FragHeader::ENCODE_SIZE + VarInt::required_space(self.payload.len()) + self.payload.len()
-    }
-}
-
-impl octs::Encode for Fragment {
-    fn encode(&self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
+impl<B: Buf> Fragment<B> {
+    // can't implement `Encode` because we need to consume the payload
+    // and Encode takes a shared ref
+    pub fn encode_into(mut self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
         buf.write(&self.header)?;
-        buf.write(&self.payload)?;
+        // if B is Bytes, this will be nearly free -
+        // doesn't even increment the ref count
+        let payload = self.payload.copy_to_bytes(self.payload.remaining());
+        buf.write(&payload)?;
         Ok(())
     }
 }
 
-impl octs::Decode for Fragment {
+impl<B: Buf> octs::EncodeSize for Fragment<B> {
+    fn encode_size(&self) -> usize {
+        let len = self.payload.remaining();
+        FragHeader::ENCODE_SIZE + VarInt::required_space(len) + len
+    }
+}
+
+impl octs::Decode for Fragment<Bytes> {
     fn decode(buf: &mut impl octs::ReadBytes) -> octs::Result<Self> {
         Ok(Self {
             header: buf.read()?,
@@ -234,8 +240,12 @@ impl Fragmentation {
     ///
     /// Errors if the message was not a valid message which could be fragmented.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    pub fn fragment(&self, msg_seq: Seq, msg: Bytes) -> Result<Fragments, FragmentError> {
-        let msg_len = msg.len();
+    pub fn fragment<T>(&self, msg_seq: Seq, msg: T) -> Result<Fragments<T>, FragmentError>
+    where
+        T: Buf + ByteChunksExt,
+        ByteChunks<T>: ExactSizeIterator,
+    {
+        let msg_len = msg.remaining();
         let chunks = msg.byte_chunks(self.payload_len);
         let num_frags = u8::try_from(chunks.len()).map_err(|_| FragmentError::MessageTooBig {
             len: msg_len,
@@ -386,20 +396,23 @@ impl Fragmentation {
 }
 
 #[derive(Debug)]
-pub struct Fragments {
+pub struct Fragments<T> {
     msg_seq: Seq,
     num_frags: u8,
-    iter: std::iter::Enumerate<octs::ByteChunks>,
+    iter: std::iter::Enumerate<octs::ByteChunks<T>>,
 }
 
-impl Fragments {
+impl<T> Fragments<T> {
     pub fn num_frags(&self) -> u8 {
         self.num_frags
     }
 }
 
-impl Iterator for Fragments {
-    type Item = Fragment;
+impl<T, U> Iterator for Fragments<T>
+where
+    ByteChunks<T>: Iterator<Item = U>,
+{
+    type Item = Fragment<U>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let (frag_id, payload) = self.iter.next()?;
@@ -418,9 +431,9 @@ impl Iterator for Fragments {
     }
 }
 
-impl ExactSizeIterator for Fragments {}
+impl<T, U> ExactSizeIterator for Fragments<T> where ByteChunks<T>: ExactSizeIterator<Item = U> {}
 
-impl FusedIterator for Fragments {}
+impl<T, U> FusedIterator for Fragments<T> where ByteChunks<T>: FusedIterator<Item = U> {}
 
 #[cfg(test)]
 mod tests {

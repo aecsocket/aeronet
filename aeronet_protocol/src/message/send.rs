@@ -79,11 +79,11 @@ impl<S: TryIntoBytes + OnLane, R: TryFromBytes> Messages<S, R> {
                     index_opt,
                 )
             }) {
-                packet.write(&frag).unwrap();
                 frags_in_packet.push(FragIndex {
                     msg_seq: frag.header.msg_seq,
                     frag_id: frag.header.frag_id,
                 });
+                frag.encode_into(&mut packet).unwrap();
             }
             debug_assert!(packet.len() < max_packet_bytes);
 
@@ -124,7 +124,7 @@ impl<S: TryIntoBytes + OnLane, R: TryFromBytes> Messages<S, R> {
         lanes: &'a [LaneState<R>],
         packet_bytes_left: &'a mut usize,
         index_opt: &mut Option<FragIndex>,
-    ) -> Option<Fragment> {
+    ) -> Option<Fragment<Bytes>> {
         let index = index_opt.take()?;
         // PANIC SAFETY: `frags` is a slice of *unique* frag indices.
         // If we end up removing a frag from `sent_msgs`, then we will

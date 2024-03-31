@@ -80,7 +80,7 @@ impl<S: TryIntoBytes, R: TryFromBytes + OnLane> Messages<S, R> {
                     // read in all remaining fragments in this packet
                     'frags: while packet.remaining() > 0 {
                         let frag = match packet
-                            .read::<Fragment>()
+                            .read::<Fragment<Bytes>>()
                             .map_err(MessageError::ReadFragment)
                         {
                             Ok(frag) => frag,

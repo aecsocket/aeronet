@@ -1,6 +1,54 @@
 use core::iter::FusedIterator;
 
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
+
+/// Extension trait on types implementing [`Buf`] providing [`byte_chunks`].
+///
+/// [`byte_chunks`]: ByteChunksExt::byte_chunks
+pub trait ByteChunksExt: Sized {
+    /// Converts this into an iterator over non-overlapping chunks of the
+    /// original bytes.
+    ///
+    /// # Examples
+    ///
+    /// With `len` being a multiple of `chunk_size`:
+    ///
+    /// ```
+    /// # use bytes::Bytes;
+    /// # use aeronet::octs::ByteChunksExt;
+    /// let mut chunks = Bytes::from_static(&[1, 2, 3, 4]).byte_chunks(2);
+    /// assert_eq!(&[1, 2], &*chunks.next().unwrap());
+    /// assert_eq!(&[3, 4], &*chunks.next().unwrap());
+    /// assert_eq!(None, chunks.next());
+    /// ```
+    ///
+    /// With a remainder:
+    ///
+    /// ```
+    /// # use bytes::Bytes;
+    /// # use aeronet::octs::ByteChunksExt;
+    /// let mut chunks = Bytes::from_static(&[1, 2, 3, 4, 5]).byte_chunks(2);
+    /// assert_eq!(&[1, 2], &*chunks.next().unwrap());
+    /// assert_eq!(&[3, 4], &*chunks.next().unwrap());
+    /// assert_eq!(&[5], &*chunks.next().unwrap());
+    /// assert_eq!(None, chunks.next());
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `chunk_size` is 0.
+    fn byte_chunks(self, chunk_size: usize) -> ByteChunks<Self>;
+}
+
+impl<T: Buf> ByteChunksExt for T {
+    fn byte_chunks(self, chunk_size: usize) -> ByteChunks<Self> {
+        assert!(chunk_size > 0);
+        ByteChunks {
+            buf: self,
+            chunk_size,
+        }
+    }
+}
 
 /// Iterator over [`Bytes`] of non-overlapping chunks, with each chunk being of
 /// the same size.
@@ -19,30 +67,68 @@ use bytes::Bytes;
 /// [`byte_chunks`]: ByteChunksExt::byte_chunks
 /// [`Chunks`]: core::slice::Chunks
 #[derive(Debug)]
-pub struct ByteChunks {
-    v: Bytes,
+pub struct ByteChunks<T> {
+    buf: T,
     chunk_size: usize,
 }
 
-impl Iterator for ByteChunks {
-    type Item = Bytes;
+impl<'a> Iterator for ByteChunks<&'a [u8]> {
+    type Item = &'a [u8];
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.v.is_empty() {
-            None
+        if self.buf.is_empty() {
+            return None;
+        }
+
+        // copied from std::slice::Chunks
+        let chunksz = self.buf.len().min(self.chunk_size);
+        let (fst, snd) = self.buf.split_at(chunksz);
+        self.buf = snd;
+        Some(fst)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if self.buf.is_empty() {
+            (0, Some(0))
         } else {
-            let mid = self.v.len().min(self.chunk_size);
-            let next = self.v.split_to(mid);
-            Some(next)
+            let n = self.buf.len() / self.chunk_size;
+            let rem = self.buf.len() % self.chunk_size;
+            let n = if rem > 0 { n + 1 } else { n };
+            (n, Some(n))
         }
     }
 
+    #[inline]
+    fn count(self) -> usize {
+        self.len()
+    }
+}
+
+impl ExactSizeIterator for ByteChunks<&[u8]> {}
+
+impl FusedIterator for ByteChunks<&[u8]> {}
+
+impl Iterator for ByteChunks<Bytes> {
+    type Item = Bytes;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.buf.is_empty() {
+            return None;
+        }
+
+        let mid = self.buf.len().min(self.chunk_size);
+        let next = self.buf.split_to(mid);
+        Some(next)
+    }
+
     fn size_hint(&self) -> (usize, Option<usize>) {
-        if self.v.is_empty() {
+        if self.buf.is_empty() {
             (0, Some(0))
         } else {
-            let n = self.v.len() / self.chunk_size;
-            let rem = self.v.len() % self.chunk_size;
+            let n = self.buf.len() / self.chunk_size;
+            let rem = self.buf.len() % self.chunk_size;
             let n = if rem > 0 { n + 1 } else { n };
             (n, Some(n))
         }
@@ -53,54 +139,6 @@ impl Iterator for ByteChunks {
     }
 }
 
-impl ExactSizeIterator for ByteChunks {}
+impl ExactSizeIterator for ByteChunks<Bytes> {}
 
-impl FusedIterator for ByteChunks {}
-
-/// Extension trait on [`Bytes`] providing [`byte_chunks`].
-///
-/// [`byte_chunks`]: ByteChunksExt::byte_chunks
-pub trait ByteChunksExt {
-    /// Converts this into an iterator over non-overlapping chunks of the
-    /// original bytes.
-    ///
-    /// # Examples
-    ///
-    /// With `len` being a multiple of `chunk_size`:
-    ///
-    /// ```
-    /// # use bytes::Bytes;
-    /// # use aeronet_protocol::bytes::ByteChunksExt;
-    /// let mut chunks = Bytes::from_static(&[1, 2, 3, 4]).byte_chunks(2);
-    /// assert_eq!(&[1, 2], &*chunks.next().unwrap());
-    /// assert_eq!(&[3, 4], &*chunks.next().unwrap());
-    /// assert_eq!(None, chunks.next());
-    /// ```
-    ///
-    /// With a remainder:
-    ///
-    /// ```
-    /// # use bytes::Bytes;
-    /// # use aeronet_protocol::bytes::ByteChunksExt;
-    /// let mut chunks = Bytes::from_static(&[1, 2, 3, 4, 5]).byte_chunks(2);
-    /// assert_eq!(&[1, 2], &*chunks.next().unwrap());
-    /// assert_eq!(&[3, 4], &*chunks.next().unwrap());
-    /// assert_eq!(&[5], &*chunks.next().unwrap());
-    /// assert_eq!(None, chunks.next());
-    /// ```
-    ///
-    /// # Panics
-    ///
-    /// Panics if `chunk_size` is 0.
-    fn byte_chunks(self, chunk_size: usize) -> ByteChunks;
-}
-
-impl ByteChunksExt for Bytes {
-    fn byte_chunks(self, chunk_size: usize) -> ByteChunks {
-        assert!(chunk_size > 0);
-        ByteChunks {
-            v: self,
-            chunk_size,
-        }
-    }
-}
+impl FusedIterator for ByteChunks<Bytes> {}
