@@ -119,7 +119,7 @@ where
 }
 
 /// A [`Condition`]-satisfying system that returns `true` if the client `T`
-/// exists *and* is in the [`Connected`] state.
+/// exists *and* is in the [`Disconnected`] state.
 ///
 /// # Example
 ///
@@ -142,7 +142,7 @@ where
 /// ```
 ///
 /// [`Condition`]: bevy_ecs::schedule::Condition
-/// [Disconnected]: crate::client::ClientState::Disconnected
+/// [`Disconnected`]: crate::client::ClientState::Disconnected
 pub fn client_disconnected<P, T>(client: Option<Res<T>>) -> bool
 where
     P: TransportProtocol,

@@ -55,6 +55,9 @@ This crate does not aim to be:
 * A high-level app networking library, featuring replication, rollback, etc.
   * This crate only concerns the transport of data payloads, not what the payloads actually contain
 * `#![no_std]`
+* A non-client-to-server networking library (e.g. peer-to-peer)
+  * A client is expected to only have at most 1 connection to a server - although this server could
+    also be a client who is in the same app
 
 # Overview
 
@@ -200,8 +203,7 @@ received in order), you can define that using lanes.
 
 Typically, a transport implementation will require you to pass a configuration on creation,
 which defines which lanes are available to the transport, and what their properties are (i.e. is it
-reliable, ordered, etc). Your own message type must then implement [`LaneIndex`] to define on which
-of those [`LaneConfig`]s the message is sent.
+reliable, ordered, etc).
 
 See [`lane`] for more details.
 
@@ -216,13 +218,13 @@ servers into closed, opening, or open. See [`ClientState`] and [`ServerState`] f
 You can use the traits [`ClientTransport`] and [`ServerTransport`] to control your client or server,
 such as sending and receiving messages.
 
+[`Bytes`]: bytes::Bytes
 [`Message`]: message::Message
 [`TryIntoBytes`]: message::TryIntoBytes
 [`TryFromBytes`]: message::TryFromBytes
 [`TransportProtocol`]: protocol::TransportProtocol
 [`LaneKind`]: lane::LaneKind
 [`LaneIndex`]: lane::LaneIndex
-[`LaneConfig`]: lane::LaneConfig
 [`ClientTransport`]: client::ClientTransport
 [`ServerTransport`]: server::ServerTransport
 [`ClientTransportPlugin`]: client::ClientTransportPlugin

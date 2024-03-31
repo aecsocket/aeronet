@@ -30,7 +30,7 @@
 //!
 //! | [`LaneKind`]              | Fragmentation | Reliability | Ordering |
 //! |---------------------------|---------------|-------------|----------|
-//! | [`UnreliableUnsequenced`] | ✅            |              |          |
+//! | [`UnreliableUnordered`] | ✅            |              |          |
 //! | [`UnreliableSequenced`]   | ✅            |              | (1)      |
 //! | [`ReliableUnordered`]     | ✅            | ✅            |          |
 //! | [`ReliableSequenced`]     | ✅            | ✅            | (1)      |
@@ -42,7 +42,7 @@
 //! 2. If delivery of a single chunk fails, delivery of all messages halts until
 //!    that single chunk is received (reliable ordered)..
 //!
-//! [`UnreliableUnsequenced`]: LaneKind::UnreliableUnsequenced
+//! [`UnreliableUnordered`]: LaneKind::UnreliableUnordered
 //! [`UnreliableSequenced`]: LaneKind::UnreliableSequenced
 //! [`ReliableUnordered`]: LaneKind::ReliableUnordered
 //! [`ReliableSequenced`]: LaneKind::ReliableSequenced
@@ -71,16 +71,20 @@ pub enum LaneKind {
     /// This lane kind typically has the best performance, as it does not
     /// require any sort of handshaking to ensure that messages have arrived
     /// from one side to the other.
+    ///
+    /// For example, spawning particle effects could be sent as an unreliable
+    /// unordered message, as it is a low-priority message which we don't
+    /// really care much about.
     UnreliableUnordered,
     /// Messages are *unreliable* but only messages newer than the last
     /// message will be received.
     ///
-    /// Similar to [`LaneKind::UnreliableUnsequenced`], but any messages which
+    /// Similar to [`LaneKind::UnreliableUnordered`], but any messages which
     /// are received and are older than an already-received message will be
     /// instantly dropped.
     ///
     /// This lane kind has the same performance as
-    /// [`LaneKind::UnreliableUnsequenced`].
+    /// [`LaneKind::UnreliableUnordered`].
     ///
     /// An example of a message using this lane kind is a player positional
     /// update, sent to the server whenever a client moves in a game world.
@@ -114,7 +118,10 @@ pub enum LaneKind {
     ///
     /// This lane kind has the same performance as a reliable unordered lane,
     /// and avoids head-of-line blocking.
-    // TODO an example here?
+    ///
+    /// Honestly I couldn't come up with an example for this. This is not always
+    /// a useful lane kind, as even though it's a reliable lane, it may also
+    /// drop messages intentionally. This is mostly here for completeness' sake.
     ReliableSequenced,
     /// Messages are sent *reliably* and *ordered*.
     ///
@@ -195,7 +202,7 @@ impl LaneKind {
     }
 }
 
-/// Index of a lane as specified in a [`LanesConfig`].
+/// Index of a lane as specified in a transport constructor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -207,8 +214,8 @@ impl LaneIndex {
     ///
     /// # Panic safety
     ///
-    /// When creating a transport, you pass a [`LanesConfig`] in to define which
-    /// lanes are available for it to use, stored as a list of [`LaneConfig`]s.
+    /// When creating a transport, you pass a set of [`LaneKind`]s in to define
+    /// which lanes are available for it to use.
     /// Functions which accept a [`LaneIndex`] expect to be given a valid index
     /// into this list. If this index is for a different configuration, then the
     /// transport will most likely panic.

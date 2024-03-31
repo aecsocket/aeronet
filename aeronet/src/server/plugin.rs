@@ -15,7 +15,7 @@ use super::{ServerEvent, ServerTransport};
 /// With this plugin added, the transport `T` will automatically run:
 /// * [`poll`] in [`PreUpdate`] in [`ServerTransportSet::Recv`]
 /// * [`flush`] in [`PostUpdate`] in [`ServerTransportSet::Send`]
-
+///
 /// [`poll`]: ServerTransport::poll
 /// [`flush`]: ServerTransport::flush
 ///
@@ -85,8 +85,8 @@ pub enum ServerTransportSet {
     Send,
 }
 
-/// A [`Condition`]-satisfying system that returns `true` if the client `T`
-/// exists *and* is in the [`Connected`] state.
+/// A [`Condition`]-satisfying system that returns `true` if the server `T`
+/// exists *and* is in the [`Open`] state.
 ///
 /// # Example
 ///
@@ -122,8 +122,8 @@ where
     }
 }
 
-/// A [`Condition`]-satisfying system that returns `true` if the client `T`
-/// exists *and* is in the [`Connected`] state.
+/// A [`Condition`]-satisfying system that returns `true` if the server `T`
+/// exists *and* is in the [`Closed`] state.
 ///
 /// # Example
 ///

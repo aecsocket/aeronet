@@ -4,6 +4,7 @@ use bytes::Bytes;
 
 /// Extension trait on types implementing [`Buf`] providing [`byte_chunks`].
 ///
+/// [`Buf`]: bytes::Buf
 /// [`byte_chunks`]: ByteChunksExt::byte_chunks
 pub trait ByteChunksExt: Sized {
     /// Converts this into an iterator over non-overlapping chunks of the
