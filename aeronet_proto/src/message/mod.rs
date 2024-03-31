@@ -100,26 +100,28 @@ TODO:
     * or the fragment times out and the connection dies!
 */
 
+mod lane;
 mod recv;
 mod send;
 
 use std::{borrow::Borrow, marker::PhantomData};
 
 use aeronet::{
-    lane::{LaneIndex, LaneKind, LaneOrdering, LaneReliability, OnLane},
+    lane::{LaneIndex, LaneKind, OnLane},
     message::{TryFromBytes, TryIntoBytes},
     octs::{BytesError, ConstEncodeLen},
 };
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 use bytes::Bytes;
 use derivative::Derivative;
-use either::Either;
 
 use crate::{
     ack::Acknowledge,
     frag::{FragmentError, Fragmentation, ReassembleError},
     seq::Seq,
 };
+
+use self::lane::LaneState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessagesConfig {
@@ -142,107 +144,6 @@ pub struct Messages<S, R> {
     sent_msgs: AHashMap<Seq, SentMessage>,
     flushed_packets: AHashMap<Seq, Box<[FragIndex]>>,
     _phantom: PhantomData<(S, R)>,
-}
-
-#[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
-struct LaneState<R> {
-    reliability: ReliabilityState,
-    ordering: OrderingState<R>,
-}
-
-#[derive(Debug)]
-enum ReliabilityState {
-    Unreliable,
-    Reliable,
-}
-
-#[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
-enum OrderingState<R> {
-    Unordered {
-        next_pending_msg_seq: Seq,
-        recv_seq_buf: AHashSet<Seq>,
-    },
-    Sequenced {
-        last_recv_msg_seq: Seq,
-    },
-    Ordered {
-        next_pending_msg_seq: Seq,
-        #[derivative(Debug = "ignore")]
-        recv_buf: AHashMap<Seq, R>,
-    },
-}
-
-impl<R> LaneState<R> {
-    fn new(kind: LaneKind) -> Self {
-        Self {
-            reliability: match kind.reliability() {
-                LaneReliability::Unreliable => ReliabilityState::Unreliable,
-                LaneReliability::Reliable => ReliabilityState::Reliable,
-            },
-            ordering: match kind.ordering() {
-                LaneOrdering::Unordered => OrderingState::Unordered {
-                    next_pending_msg_seq: Seq(0),
-                    recv_seq_buf: AHashSet::new(),
-                },
-                LaneOrdering::Sequenced => OrderingState::Sequenced {
-                    last_recv_msg_seq: Seq::MAX,
-                },
-                LaneOrdering::Ordered => OrderingState::Ordered {
-                    next_pending_msg_seq: Seq(0),
-                    recv_buf: AHashMap::new(),
-                },
-            },
-        }
-    }
-
-    fn drop_on_flush(&self) -> bool {
-        match self.reliability {
-            ReliabilityState::Unreliable => true,
-            ReliabilityState::Reliable => false,
-        }
-    }
-
-    // TODO coroutines
-    fn recv(&mut self, msg: R, msg_seq: Seq) -> impl Iterator<Item = R> + '_ {
-        // Either::Left: Option::IntoIter
-        // Either::Right: vec::Drop
-        match &mut self.ordering {
-            OrderingState::Unordered { .. } => Either::Left(Some(msg)),
-            OrderingState::Sequenced { last_recv_msg_seq } => {
-                // purposefully drop message which have the same seq as
-                // `last_recv_msg_seq` - they're probably duplicate packets
-                if msg_seq > *last_recv_msg_seq {
-                    *last_recv_msg_seq = msg_seq;
-                    Either::Left(Some(msg))
-                } else {
-                    Either::Left(None)
-                }
-            }
-            OrderingState::Ordered {
-                next_pending_msg_seq,
-                recv_buf,
-            } => {
-                // add the message to the buffer
-                // if the message is older than the next expected one,
-                // then it's probably a duplicate packet - drop the message
-                if msg_seq >= *next_pending_msg_seq {
-                    recv_buf.insert(msg_seq, msg);
-                }
-
-                // return all the messages we've buffered in order
-                // if we get to a message which we don't have, then the iter ends
-                // and we have to wait for it to be received
-                Either::Right(std::iter::from_fn(move || {
-                    let msg = recv_buf.remove(&next_pending_msg_seq)?;
-                    *next_pending_msg_seq += Seq(1);
-                    Some(msg)
-                }))
-            }
-        }
-        .into_iter()
-    }
 }
 
 #[derive(Debug)]

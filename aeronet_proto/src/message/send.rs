@@ -1,7 +1,7 @@
 use aeronet::{
     lane::OnLane,
     message::TryIntoBytes,
-    octs::{EncodeSize, WriteBytes},
+    octs::{EncodeLen, WriteBytes},
 };
 use ahash::AHashMap;
 use bytes::{Bytes, BytesMut};
@@ -169,13 +169,13 @@ impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
         };
 
         // don't add this frag if it's too big for this packet
-        let encode_size = frag.encode_size();
-        if encode_size > *packet_bytes_left {
+        let encode_len = frag.encode_len();
+        if encode_len > *packet_bytes_left {
             *index_opt = Some(index);
             *payload_opt = Some(frag.payload);
             return None;
         }
-        *packet_bytes_left -= encode_size;
+        *packet_bytes_left -= encode_len;
 
         Some(frag)
     }
