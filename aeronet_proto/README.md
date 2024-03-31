@@ -1,7 +1,7 @@
-# `aeronet_protocol`
+# `aeronet_proto`
 
-[![crates.io](https://img.shields.io/crates/v/aeronet_protocol.svg)](https://crates.io/crates/aeronet_protocol)
-[![docs.rs](https://img.shields.io/docsrs/aeronet_protocol)](https://docs.rs/aeronet_protocol)
+[![crates.io](https://img.shields.io/crates/v/aeronet_proto.svg)](https://crates.io/crates/aeronet_proto)
+[![docs.rs](https://img.shields.io/docsrs/aeronet_proto)](https://docs.rs/aeronet_proto)
 
 Provides implementations of protocol-level features for aeronet transports.
 
@@ -51,7 +51,7 @@ The client acts as the initiator in all aeronet-provided features.
 To ensure that protocol code works correctly in all situations, the code
 makes use of both unit testing and fuzzing.
 
-To fuzz a particular component, run this from the `/aeronet_protocol` directory:
+To fuzz a particular component, run this from the `/aeronet_proto` directory:
 * [`Negotiation`]
   * `cargo +nightly fuzz run negotiate_req`
   * `cargo +nightly fuzz run negotiate_resp`

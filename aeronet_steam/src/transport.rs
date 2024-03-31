@@ -1,7 +1,7 @@
 use std::{fmt::Debug, time::Duration};
 
 use aeronet::{client::ClientKey, ByteStats, MessageStats, Rtt, TryAsBytes, TryFromBytes};
-use aeronet_protocol::{
+use aeronet_proto::{
     LaneRecvError, LaneSendError, NegotiationRequestError, NegotiationResponseError,
     WrongProtocolVersion,
 };

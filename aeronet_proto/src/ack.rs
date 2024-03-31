@@ -48,7 +48,7 @@ impl Acknowledge {
     /// # Example
     ///
     /// ```
-    /// # use aeronet_protocol::{ack::Acknowledge, seq::Seq};
+    /// # use aeronet_proto::{ack::Acknowledge, seq::Seq};
     /// let mut acks = Acknowledge::new();
     /// acks.ack(Seq(0));
     /// acks.ack(Seq(1));
@@ -90,7 +90,7 @@ impl Acknowledge {
     /// # Example
     ///
     /// ```
-    /// # use aeronet_protocol::{ack::Acknowledge, seq::Seq};
+    /// # use aeronet_proto::{ack::Acknowledge, seq::Seq};
     /// let mut acks = Acknowledge::new();
     /// acks.ack(Seq(1));
     /// assert!(acks.is_acked(Seq(1)));
@@ -124,7 +124,7 @@ impl Acknowledge {
     /// # Example
     ///
     /// ```
-    /// # use aeronet_protocol::{seq::Seq, ack::Acknowledge};
+    /// # use aeronet_proto::{seq::Seq, ack::Acknowledge};
     /// let acks = Acknowledge {
     ///     last_recv: Seq(50),
     ///     ack_bits: 0b0010010,

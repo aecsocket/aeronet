@@ -22,7 +22,7 @@ bevy = ["dep:bevy", "aeronet/bevy", "aeronet/bevy-tokio-rt"]
 
 [dependencies]
 aeronet.workspace = true
-aeronet_protocol.workspace = true
+aeronet_proto.workspace = true
 derivative.workspace = true
 tracing.workspace = true
 thiserror.workspace = true

@@ -27,7 +27,7 @@ dangerous-configuration = ["wtransport/dangerous-configuration"]
 
 [dependencies]
 aeronet.workspace = true
-aeronet_protocol.workspace = true
+aeronet_proto.workspace = true
 tracing.workspace = true
 derivative.workspace = true
 thiserror.workspace = true

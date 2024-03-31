@@ -1,6 +1,6 @@
 #![no_main]
 
-use aeronet_protocol::frag::{FragmentHeader, Fragmentation};
+use aeronet_proto::frag::{FragmentHeader, Fragmentation};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: (FragmentHeader, &[u8])| {

@@ -1,6 +1,6 @@
 mod wrapper;
 
-use aeronet_protocol::{Negotiation, NegotiationRequestError};
+use aeronet_proto::{Negotiation, NegotiationRequestError};
 pub use wrapper::*;
 
 use std::{marker::PhantomData, net::SocketAddr};

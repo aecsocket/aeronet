@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aeronet_protocol"
+name = "aeronet_proto"
 version = "0.5.0"
 dependencies = [
  "aeronet",
@@ -38,10 +38,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "aeronet_protocol_fuzz"
+name = "aeronet_proto_fuzz"
 version = "0.0.0"
 dependencies = [
- "aeronet_protocol",
+ "aeronet_proto",
  "libfuzzer-sys",
 ]
 

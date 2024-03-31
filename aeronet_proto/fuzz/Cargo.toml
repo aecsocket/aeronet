@@ -1,5 +1,5 @@
 [package]
-name = "aeronet_protocol_fuzz"
+name = "aeronet_proto_fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -10,7 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 
-[dependencies.aeronet_protocol]
+[dependencies.aeronet_proto]
 path = ".."
 
 # Prevent this from interfering with workspaces

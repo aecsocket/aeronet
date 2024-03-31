@@ -1,7 +1,7 @@
 mod backend;
 mod wrapper;
 
-use aeronet_protocol::seq::Seq;
+use aeronet_proto::seq::Seq;
 pub use wrapper::*;
 
 use std::{future::Future, marker::PhantomData, task::Poll};

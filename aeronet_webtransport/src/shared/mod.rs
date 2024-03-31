@@ -5,7 +5,7 @@ use aeronet::{
     message::TryIntoBytes,
     protocol::ProtocolVersion,
 };
-use aeronet_protocol::{message::Messages, seq::Seq};
+use aeronet_proto::{message::Messages, seq::Seq};
 use derivative::Derivative;
 use tracing::debug;
 use xwt::current::{Connection, RecvStream, SendStream};

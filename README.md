@@ -39,7 +39,7 @@ This crate aims to be:
   * You should be able to plug nearly anything in as the underlying transport layer, and have things
     work
   * To achieve this, aeronet provides its own implementation of certain protocol elements such as
-    fragmentation and reliable packets - see [`aeronet_protocol`](https://docs.rs/aeronet_protocol)
+    fragmentation and reliable packets - see [`aeronet_proto`](https://docs.rs/aeronet_proto)
 * Integrated with Bevy
   * Built with apps and games in mind, the abstractions chosen closely suit Bevy's app model, and
     likely other similar frameworks
@@ -96,7 +96,7 @@ module.
 
 ## Protocol
 
-*Crate: `aeronet_protocol`*
+*Crate: `aeronet_proto`*
 
 This crate provides a reusable set of transport-level abstractions which can be used by transport
 implementations, if they do not support certain features already. This makes providing a new

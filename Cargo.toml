@@ -4,9 +4,9 @@ members = [
     "aeronet",
     "aeronet_derive",
     "aeronet_replicon",
-    "aeronet_protocol",
+    "aeronet_proto",
     "aeronet_channel",
-    "aeronet_webtransport",
+    #"aeronet_webtransport",
     #"aeronet_steam",
 ]
 
@@ -33,7 +33,7 @@ similar_names = "allow"
 [workspace.dependencies]
 aeronet = { version = "0.5.0", path = "aeronet" }
 aeronet_derive = { version = "0.5.0", path = "aeronet_derive" }
-aeronet_protocol = { version = "0.5.0", path = "aeronet_protocol" }
+aeronet_proto = { version = "0.5.0", path = "aeronet_proto" }
 tracing = "0.1.40"
 derivative = "2.2.0"
 thiserror = "1.0.57"

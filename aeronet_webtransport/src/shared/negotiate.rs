@@ -1,5 +1,5 @@
 use aeronet::protocol::ProtocolVersion;
-use aeronet_protocol::negotiate::{
+use aeronet_proto::negotiate::{
     Negotiation, RequestError, ResponseError, REQUEST_LEN, RESPONSE_LEN,
 };
 use tracing::debug;

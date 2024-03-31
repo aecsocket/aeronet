@@ -1,6 +1,6 @@
 #![no_main]
 
-use aeronet_protocol::Lanes;
+use aeronet_proto::Lanes;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {

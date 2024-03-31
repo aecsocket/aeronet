@@ -1,7 +1,7 @@
 mod wrapper;
 
 use aeronet::{LaneConfig, ProtocolVersion};
-use aeronet_protocol::Negotiation;
+use aeronet_proto::Negotiation;
 use steamworks::{
     networking_sockets::NetworkingSockets,
     networking_types::{NetConnectionStatusChanged, NetworkingConnectionState, SendFlags},

@@ -1,7 +1,7 @@
 mod backend;
 mod wrapper;
 
-use aeronet_protocol::seq::Seq;
+use aeronet_proto::seq::Seq;
 use tracing::debug;
 pub use wrapper::*;
 

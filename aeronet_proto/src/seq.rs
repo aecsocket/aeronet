@@ -58,7 +58,7 @@ impl Seq {
     /// # Example
     ///
     /// ```
-    /// # use aeronet_protocol::seq::Seq;
+    /// # use aeronet_proto::seq::Seq;
     /// assert_eq!(Seq(0).delta(Seq(0)), 0);
     /// assert_eq!(Seq(5).delta(Seq(0)), 5);
     /// assert_eq!(Seq(5).delta(Seq(3)), 2);

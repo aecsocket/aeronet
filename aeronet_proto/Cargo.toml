@@ -1,5 +1,5 @@
 [package]
-name = "aeronet_protocol"
+name = "aeronet_proto"
 description = "Protocol feature implementations for aeronet transports"
 version.workspace = true
 edition.workspace = true

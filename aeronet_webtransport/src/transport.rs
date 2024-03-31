@@ -4,7 +4,7 @@ use aeronet::{
     message::{TryFromBytes, TryIntoBytes},
     stats::{ByteStats, MessageStats, Rtt},
 };
-use aeronet_protocol::{message, negotiate};
+use aeronet_proto::{message, negotiate};
 use derivative::Derivative;
 
 use crate::ClientKey;

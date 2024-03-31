@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use aeronet::{LaneConfig, LaneIndex, OnLane, TryAsBytes, TryFromBytes};
-use aeronet_protocol::Lanes;
+use aeronet_proto::Lanes;
 use derivative::Derivative;
 use steamworks::{
     networking_sockets::{NetConnection, NetworkingSockets},
