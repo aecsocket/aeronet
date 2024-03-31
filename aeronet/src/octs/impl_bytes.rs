@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use integer_encoding::VarInt;
 
-use super::{BytesError, ReadBytes, Result, WriteBytes, VARINT_MAX_SIZE};
+use super::{BytesError, ReadBytes, Result, WriteBytes, VARINT_MAX_LEN};
 
 macro_rules! read_u {
     ($self:expr, $ty:ty, $get:ident, $size:literal) => {
@@ -107,7 +107,7 @@ impl WriteBytes for BytesMut {
         if self.remaining_mut() < len {
             return Err(BytesError::BufferTooShort);
         }
-        let mut buf = [0; VARINT_MAX_SIZE];
+        let mut buf = [0; VARINT_MAX_LEN];
         let written = VarInt::encode_var(v, &mut buf);
         debug_assert_eq!(written, len);
         self.write_slice(&buf[..len])

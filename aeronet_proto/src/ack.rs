@@ -31,7 +31,7 @@ use crate::seq::Seq;
 /// Tracks which packets, that we have sent, have been successfully received by
 /// the peer (acknowledgements).
 ///
-/// See the [module-level documentation](self).
+/// See the [module-level documentation](crate::ack).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Arbitrary)]
 pub struct Acknowledge {
     /// Last received packet sequence number.
@@ -152,8 +152,8 @@ impl Acknowledge {
     }
 }
 
-impl octs::ConstEncodeSize for Acknowledge {
-    const ENCODE_SIZE: usize = Seq::ENCODE_SIZE + u32::ENCODE_SIZE;
+impl octs::ConstEncodeLen for Acknowledge {
+    const ENCODE_LEN: usize = Seq::ENCODE_LEN + u32::ENCODE_LEN;
 }
 
 impl octs::Encode for Acknowledge {
@@ -184,7 +184,7 @@ fn shl(a: u32, rhs: u32) -> u32 {
 mod tests {
     use bytes::BytesMut;
 
-    use aeronet::octs::{ConstEncodeSize, ReadBytes, WriteBytes};
+    use aeronet::octs::{ConstEncodeLen, ReadBytes, WriteBytes};
 
     use super::*;
 
@@ -194,10 +194,10 @@ mod tests {
             last_recv: Seq(12),
             ack_bits: 0b010101,
         };
-        let mut buf = BytesMut::with_capacity(Acknowledge::ENCODE_SIZE);
+        let mut buf = BytesMut::with_capacity(Acknowledge::ENCODE_LEN);
 
         buf.write(&v).unwrap();
-        assert_eq!(Acknowledge::ENCODE_SIZE, buf.len());
+        assert_eq!(Acknowledge::ENCODE_LEN, buf.len());
 
         assert_eq!(v, buf.freeze().read::<Acknowledge>().unwrap());
     }

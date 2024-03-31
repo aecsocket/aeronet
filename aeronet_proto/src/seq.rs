@@ -34,7 +34,7 @@ use arbitrary::Arbitrary;
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///
-/// See the [module-level documentation](self).
+/// See the [module-level documentation](crate::seq).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary)]
 pub struct Seq(pub u16);
 
@@ -152,8 +152,8 @@ impl std::ops::SubAssign for Seq {
     }
 }
 
-impl octs::ConstEncodeSize for Seq {
-    const ENCODE_SIZE: usize = u16::ENCODE_SIZE;
+impl octs::ConstEncodeLen for Seq {
+    const ENCODE_LEN: usize = u16::ENCODE_LEN;
 }
 
 impl octs::Encode for Seq {
@@ -173,17 +173,17 @@ impl octs::Decode for Seq {
 mod tests {
     use bytes::BytesMut;
 
-    use aeronet::octs::{ConstEncodeSize, ReadBytes, WriteBytes};
+    use aeronet::octs::{ConstEncodeLen, ReadBytes, WriteBytes};
 
     use super::*;
 
     #[test]
     fn encode_decode() {
         let v = Seq(1234);
-        let mut buf = BytesMut::with_capacity(Seq::ENCODE_SIZE);
+        let mut buf = BytesMut::with_capacity(Seq::ENCODE_LEN);
 
         buf.write(&v).unwrap();
-        assert_eq!(Seq::ENCODE_SIZE, buf.len());
+        assert_eq!(Seq::ENCODE_LEN, buf.len());
 
         assert_eq!(v, buf.freeze().read::<Seq>().unwrap());
     }

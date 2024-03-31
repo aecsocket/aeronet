@@ -1,7 +1,7 @@
 use bytes::{Buf, Bytes};
 use integer_encoding::VarInt;
 
-use super::{ConstEncodeSize, Decode, Encode, EncodeSize, ReadBytes, Result, WriteBytes};
+use super::{ConstEncodeLen, Decode, Encode, EncodeLen, ReadBytes, Result, WriteBytes};
 
 macro_rules! impl_uint {
     ($ty:ty, $read:ident, $write:ident, $width:literal) => {
@@ -11,8 +11,8 @@ macro_rules! impl_uint {
             }
         }
 
-        impl ConstEncodeSize for $ty {
-            const ENCODE_SIZE: usize = $width;
+        impl ConstEncodeLen for $ty {
+            const ENCODE_LEN: usize = $width;
         }
 
         impl Decode for $ty {
@@ -28,8 +28,8 @@ impl_uint!(u16, read_u16, write_u16, 2);
 impl_uint!(u32, read_u32, write_u32, 4);
 impl_uint!(u64, read_u64, write_u64, 8);
 
-impl EncodeSize for Bytes {
-    fn encode_size(&self) -> usize {
+impl EncodeLen for Bytes {
+    fn encode_len(&self) -> usize {
         VarInt::required_space(self.len()) + self.len()
     }
 }

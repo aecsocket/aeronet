@@ -33,29 +33,29 @@ pub type Result<T> = std::result::Result<T, BytesError>;
 
 /// Maximum number of bytes that a [`u64`] as a
 /// [`VarInt`](integer_encoding::VarInt) can take up when encoded.
-pub const VARINT_MAX_SIZE: usize = 10;
+pub const VARINT_MAX_LEN: usize = 10;
 
-/// Gives information on the [encoded](Encode) size of an instance of this
+/// Gives information on the [encoded](Encode) length of an instance of this
 /// value.
-pub trait EncodeSize {
-    /// Gets the [encoded](Encode) size of this value in bytes.
-    fn encode_size(&self) -> usize;
+pub trait EncodeLen {
+    /// Gets the [encoded](Encode) length of this value in bytes.
+    fn encode_len(&self) -> usize;
 }
 
 /// Type which can be [encoded](Encode) using a constant number of bytes.
 ///
-/// [`EncodeSize`] is automatically implemented for all types which implement
+/// [`EncodeLen`] is automatically implemented for all types which implement
 /// this trait.
-pub trait ConstEncodeSize {
+pub trait ConstEncodeLen {
     /// Number of bytes required to encode a value of this type.
     ///
     /// All values of this type must take the same number of bytes for encoding.
-    const ENCODE_SIZE: usize;
+    const ENCODE_LEN: usize;
 }
 
-impl<T: ConstEncodeSize> EncodeSize for T {
-    fn encode_size(&self) -> usize {
-        Self::ENCODE_SIZE
+impl<T: ConstEncodeLen> EncodeLen for T {
+    fn encode_len(&self) -> usize {
+        Self::ENCODE_LEN
     }
 }
 

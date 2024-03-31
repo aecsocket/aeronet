@@ -44,7 +44,7 @@ use aeronet::protocol::ProtocolVersion;
 /// Allows two peers to confirm that they are using the same version of the same
 /// protocol.
 ///
-/// See the [module-level documentation](self).
+/// See the [module-level documentation](crate::negotiate).
 #[derive(Debug, Clone)]
 pub struct Negotiation {
     version: ProtocolVersion,
@@ -109,12 +109,12 @@ pub enum ResponseError {
 
 const REQUEST_PREFIX: &[u8; 8] = b"aeronet/";
 const VERSION_LEN: usize = 16;
-/// Size in bytes of the negotiation request packet.
+/// Length in bytes of the negotiation request packet.
 pub const REQUEST_LEN: usize = REQUEST_PREFIX.len() + VERSION_LEN;
 
 const OK: u8 = 0x1;
 const ERR: u8 = 0x2;
-/// Size in bytes of the negotiation response packet.
+/// Length in bytes of the negotiation response packet.
 pub const RESPONSE_LEN: usize = 9;
 
 impl Negotiation {
@@ -224,7 +224,7 @@ impl Negotiation {
     ///
     /// Errors if the response indicates that the connection is unsuccessful,
     /// if the response is malformed, or if the packet is not of length
-    /// [`RESPONSE_SIZE`].
+    /// [`RESPONSE_LEN`].
     pub fn recv_response(&self, packet: &[u8]) -> Result<(), ResponseError> {
         let packet = <&[u8; RESPONSE_LEN]>::try_from(packet)
             .map_err(|_| ResponseError::WrongLength { len: packet.len() })?;

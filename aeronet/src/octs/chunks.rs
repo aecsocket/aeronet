@@ -12,7 +12,7 @@ pub trait ByteChunksExt: Sized {
     ///
     /// # Examples
     ///
-    /// With `len` being a multiple of `chunk_size`:
+    /// With `len` being a multiple of `chunk_len`:
     ///
     /// ```
     /// # use bytes::Bytes;
@@ -37,28 +37,28 @@ pub trait ByteChunksExt: Sized {
     ///
     /// # Panics
     ///
-    /// Panics if `chunk_size` is 0.
-    fn byte_chunks(self, chunk_size: usize) -> ByteChunks<Self>;
+    /// Panics if `chunk_len` is 0.
+    fn byte_chunks(self, chunk_len: usize) -> ByteChunks<Self>;
 }
 
 impl<T> ByteChunksExt for T
 where
     ByteChunks<T>: Iterator,
 {
-    fn byte_chunks(self, chunk_size: usize) -> ByteChunks<Self> {
-        assert!(chunk_size > 0);
+    fn byte_chunks(self, chunk_len: usize) -> ByteChunks<Self> {
+        assert!(chunk_len > 0);
         ByteChunks {
             buf: self,
-            chunk_size,
+            chunk_len,
         }
     }
 }
 
 /// Iterator over [`Bytes`] of non-overlapping chunks, with each chunk being of
-/// the same size.
+/// the same length.
 ///
-/// The last item returned may not be of the same size as other items, as it may
-/// return the remaining items.
+/// The last item returned may not be of the same length as other items, as it
+/// may return the remaining items.
 ///
 /// Each [`Bytes`] returned is owned by the consumer, which is done by creating
 /// a cheap clone of the underlying [`Bytes`], which just increases a reference
@@ -73,7 +73,7 @@ where
 #[derive(Debug)]
 pub struct ByteChunks<T> {
     buf: T,
-    chunk_size: usize,
+    chunk_len: usize,
 }
 
 impl<'a> Iterator for ByteChunks<&'a [u8]> {
@@ -86,7 +86,7 @@ impl<'a> Iterator for ByteChunks<&'a [u8]> {
         }
 
         // copied from std::slice::Chunks
-        let mid = self.buf.len().min(self.chunk_size);
+        let mid = self.buf.len().min(self.chunk_len);
         let (fst, snd) = self.buf.split_at(mid);
         self.buf = snd;
         Some(fst)
@@ -94,8 +94,8 @@ impl<'a> Iterator for ByteChunks<&'a [u8]> {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let n = self.buf.len() / self.chunk_size;
-        let rem = self.buf.len() % self.chunk_size;
+        let n = self.buf.len() / self.chunk_len;
+        let rem = self.buf.len() % self.chunk_len;
         let n = if rem > 0 { n + 1 } else { n };
         (n, Some(n))
     }
@@ -119,15 +119,15 @@ impl Iterator for ByteChunks<Bytes> {
             return None;
         }
 
-        let mid = self.buf.len().min(self.chunk_size);
+        let mid = self.buf.len().min(self.chunk_len);
         let next = self.buf.split_to(mid);
         Some(next)
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let n = self.buf.len() / self.chunk_size;
-        let rem = self.buf.len() % self.chunk_size;
+        let n = self.buf.len() / self.chunk_len;
+        let rem = self.buf.len() % self.chunk_len;
         let n = if rem > 0 { n + 1 } else { n };
         (n, Some(n))
     }

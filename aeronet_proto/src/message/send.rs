@@ -8,7 +8,7 @@ use bytes::{Bytes, BytesMut};
 
 use crate::{
     frag::{FragHeader, Fragment},
-    message::PACKET_HEADER_SIZE,
+    message::PACKET_HEADER_LEN,
     seq::Seq,
 };
 
@@ -59,7 +59,7 @@ impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
 
         std::iter::from_fn(move || {
             let max_packet_bytes = (*bytes_left).min(self.max_packet_size);
-            if max_packet_bytes < PACKET_HEADER_SIZE {
+            if max_packet_bytes < PACKET_HEADER_LEN {
                 return None;
             }
             let mut packet_bytes_left = max_packet_bytes;
@@ -72,7 +72,7 @@ impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
             let mut packet = BytesMut::with_capacity(self.default_packet_cap);
             packet.write(&packet_seq).unwrap();
             packet.write(&self.acks).unwrap();
-            packet_bytes_left -= PACKET_HEADER_SIZE;
+            packet_bytes_left -= PACKET_HEADER_LEN;
 
             let mut frags_in_packet = Vec::new();
             for frag in frags.iter_mut().flat_map(|index_opt| {

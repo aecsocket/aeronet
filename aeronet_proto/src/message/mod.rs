@@ -108,7 +108,7 @@ use std::{borrow::Borrow, marker::PhantomData};
 use aeronet::{
     lane::{LaneIndex, LaneKind, LaneOrdering, LaneReliability, OnLane},
     message::{TryFromBytes, TryIntoBytes},
-    octs::{BytesError, ConstEncodeSize},
+    octs::{BytesError, ConstEncodeLen},
 };
 use ahash::{AHashMap, AHashSet};
 use bytes::Bytes;
@@ -283,7 +283,7 @@ pub enum RecvMessageError<R: TryFromBytes> {
     InvalidLaneIndex { lane_index: LaneIndex },
 }
 
-const PACKET_HEADER_SIZE: usize = Seq::ENCODE_SIZE + Acknowledge::ENCODE_SIZE;
+const PACKET_HEADER_LEN: usize = Seq::ENCODE_LEN + Acknowledge::ENCODE_LEN;
 
 impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Messages<S, R> {
     pub fn new(
@@ -291,7 +291,7 @@ impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Messages<S, R> {
         default_packet_cap: usize,
         lanes: impl IntoIterator<Item = impl Borrow<LaneKind>>,
     ) -> Self {
-        assert!(max_packet_size > PACKET_HEADER_SIZE);
+        assert!(max_packet_size > PACKET_HEADER_LEN);
         Self {
             lanes: lanes
                 .into_iter()
@@ -299,7 +299,7 @@ impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Messages<S, R> {
                 .collect(),
             max_packet_size,
             default_packet_cap,
-            frags: Fragmentation::new(max_packet_size - PACKET_HEADER_SIZE),
+            frags: Fragmentation::new(max_packet_size - PACKET_HEADER_LEN),
             acks: Acknowledge::new(),
             next_send_msg_seq: Seq(0),
             next_send_packet_seq: Seq(0),
