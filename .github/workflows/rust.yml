@@ -29,6 +29,14 @@ jobs:
         with:
           components: clippy
       - run: cargo clippy --workspace --all-features -- -Dwarnings
+  doc:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-Dwarnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - run: cargo doc --workspace --all-features
   test:
     runs-on: ubuntu-latest
     steps:
