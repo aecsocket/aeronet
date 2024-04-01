@@ -10,7 +10,7 @@ use derivative::Derivative;
 use xwt_core::utils::maybe;
 
 use crate::{
-    ClientMessageKey, ConnectedClient, ConnectingClient, ConnectionInfo, WebTransportClientConfig,
+    ClientMessageKey, ConnectedClient, ConnectingClient, ConnectionStats, WebTransportClientConfig,
 };
 
 use super::{ClientEvent, WebTransportError};
@@ -75,7 +75,7 @@ where
 
     type ConnectingInfo = ();
 
-    type ConnectedInfo = ConnectionInfo;
+    type ConnectedInfo = ConnectionStats;
 
     type MessageKey = ClientMessageKey;
 

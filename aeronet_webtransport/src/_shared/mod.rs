@@ -19,13 +19,13 @@ use futures::{
     FutureExt, SinkExt, StreamExt,
 };
 
-use crate::{BackendError, ConnectionInfo, WebTransportError};
+use crate::{BackendError, ConnectionStats, WebTransportError};
 
 const MSG_BUF_CAP: usize = 64;
 
 #[derive(Debug)]
 pub struct ConnectionFrontend<S, R> {
-    pub info: ConnectionInfo,
+    pub info: ConnectionStats,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
     recv_rtt: mpsc::Receiver<Duration>,
@@ -68,7 +68,7 @@ pub async fn connection_channel<const SERVER: bool, S, R>(
     let (send_closed, recv_closed) = oneshot::channel();
     Ok((
         ConnectionFrontend {
-            info: ConnectionInfo::from(&*conn),
+            info: ConnectionStats::from(&*conn),
             send_c2s,
             recv_s2c,
             recv_rtt,

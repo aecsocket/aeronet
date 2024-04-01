@@ -12,7 +12,7 @@ use derivative::Derivative;
 use either::Either;
 
 use crate::{
-    ClientKey, ConnectionInfo, OpenServer, OpeningServer, RemoteRequestingInfo, ServerMessageKey,
+    ClientKey, ConnectionStats, OpenServer, OpeningServer, RemoteRequestingInfo, ServerMessageKey,
     WebTransportServerConfig,
 };
 
@@ -112,7 +112,7 @@ where
 
     type ConnectingInfo = RemoteRequestingInfo;
 
-    type ConnectedInfo = ConnectionInfo;
+    type ConnectedInfo = ConnectionStats;
 
     type ClientKey = ClientKey;
 

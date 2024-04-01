@@ -17,7 +17,7 @@ use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
 
-use crate::{shared::ConnectionFrontend, BackendError, ConnectionInfo};
+use crate::{shared::ConnectionFrontend, BackendError, ConnectionStats};
 
 slotmap::new_key_type! {
     /// Key identifying a unique client connected to a [`WebTransportServer`].
@@ -168,7 +168,7 @@ where
     pub fn client_state(
         &self,
         client_key: ClientKey,
-    ) -> ClientState<RemoteRequestingInfo, ConnectionInfo> {
+    ) -> ClientState<RemoteRequestingInfo, ConnectionStats> {
         match self.clients.get(client_key) {
             None | Some(Client::Incoming { .. }) => ClientState::Disconnected,
             Some(Client::Requesting { info, .. }) => ClientState::Connecting(info.clone()),
