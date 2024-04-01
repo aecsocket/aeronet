@@ -3,8 +3,8 @@
 
 pub use steamworks;
 
-//pub mod client;
+pub mod client;
 //pub mod server;
 pub mod transport;
 
-mod internal;
+//mod internal;

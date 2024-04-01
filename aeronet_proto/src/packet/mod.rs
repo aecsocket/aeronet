@@ -1,4 +1,4 @@
-//! Manages sending and receiving messages on the byte level.
+//! Manages sending and receiving messages as packets composed of bytes.
 //!
 //! This is a high-level utility which most networked aeronet transport
 //! implementations will use - the transport implementation handles sending and
@@ -100,9 +100,12 @@ TODO:
     * or the fragment times out and the connection dies!
 */
 
+mod byte_bucket;
 mod lane;
 mod recv;
 mod send;
+
+pub use byte_bucket::*;
 
 use std::{fmt::Debug, marker::PhantomData};
 
@@ -124,7 +127,7 @@ use crate::{
 use self::lane::LaneState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MessagesConfig {
+pub struct PacketsConfig {
     pub max_packet_len: usize,
     pub default_packet_cap: usize,
 }
@@ -133,7 +136,7 @@ pub struct MessagesConfig {
 /// See the [module-level documentation](self).
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct Messages<S, R> {
+pub struct Packets<S, R> {
     lanes: Box<[LaneState<R>]>,
     max_packet_len: usize,
     default_packet_cap: usize,
@@ -188,8 +191,8 @@ pub enum RecvError<R: TryFromBytes> {
 
 const PACKET_HEADER_LEN: usize = Seq::ENCODE_LEN + Acknowledge::ENCODE_LEN;
 
-impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Messages<S, R> {
-    pub fn new(config: &MessagesConfig, lanes: &[LaneKind]) -> Self {
+impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Packets<S, R> {
+    pub fn new(config: &PacketsConfig, lanes: &[LaneKind]) -> Self {
         assert!(config.max_packet_len > PACKET_HEADER_LEN);
         Self {
             lanes: lanes.iter().map(|kind| LaneState::new(*kind)).collect(),
@@ -244,14 +247,14 @@ mod tests {
         }
     }
 
-    const CONFIG: MessagesConfig = MessagesConfig {
+    const CONFIG: PacketsConfig = PacketsConfig {
         max_packet_len: 1024,
         default_packet_cap: 1024,
     };
 
     #[test]
     fn test() {
-        let mut msgs = Messages::<MyMsg, MyMsg>::new(&CONFIG, MyLane::KINDS);
+        let mut msgs = Packets::<MyMsg, MyMsg>::new(&CONFIG, MyLane::KINDS);
         msgs.buffer_send(MyMsg::from("1")).unwrap();
         msgs.buffer_send(MyMsg::from("2")).unwrap();
 

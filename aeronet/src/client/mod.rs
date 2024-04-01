@@ -62,6 +62,20 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// finished, then this will still return [`Ok`].
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error>;
 
+    /// Sends all messages previously buffered by [`ClientTransport::send`] to
+    /// peers.
+    ///
+    /// If this transport is not connected, this will return [`Ok`].
+    ///
+    /// # Errors
+    ///
+    /// Errors if the transport failed to *attempt to* flush messages, e.g. if
+    /// the connection has already been closed.
+    ///
+    /// If a transmission error occurs later after this function's scope has
+    /// finished, then this will still return [`Ok`].
+    fn flush(&mut self) -> Result<(), Self::Error>;
+
     /// Updates the internal state of this transport by receiving messages from
     /// peers, returning the events that it emitted while updating.
     ///
@@ -76,20 +90,6 @@ pub trait ClientTransport<P: TransportProtocol> {
         &mut self,
         delta_time: Duration,
     ) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>>;
-
-    /// Sends all messages previously buffered by [`ClientTransport::send`] to
-    /// peers.
-    ///
-    /// If this transport is not connected, this will return [`Ok`].
-    ///
-    /// # Errors
-    ///
-    /// Errors if the transport failed to *attempt to* flush messages, e.g. if
-    /// the connection has already been closed.
-    ///
-    /// If a transmission error occurs later after this function's scope has
-    /// finished, then this will still return [`Ok`].
-    fn flush(&mut self) -> Result<(), Self::Error>;
 }
 
 /// State of a [`ClientTransport`].
@@ -128,6 +128,12 @@ impl<A, B> ClientState<A, B> {
         matches!(self, Self::Connected(_))
     }
 }
+
+/// Shorthand for the [`ClientState`] of a given [`ClientTransport`].
+pub type ClientStateFor<P, T> = ClientState<
+    <T as ClientTransport<P>>::ConnectingInfo,
+    <T as ClientTransport<P>>::ConnectedInfo,
+>;
 
 /// Event emitted by a [`ClientTransport`].
 #[derive(Derivative)]
@@ -168,7 +174,6 @@ pub enum ClientEvent<P: TransportProtocol, E, M> {
     },
 }
 
-/// Type alias for [`ClientEvent`] which takes a [`TransportProtocol`] and a
-/// [`ClientTransport`] accepting that protocol.
+/// Shorthand for the [`ClientEvent`] of a given [`ClientTransport`].
 pub type ClientEventFor<P, T> =
     ClientEvent<P, <T as ClientTransport<P>>::Error, <T as ClientTransport<P>>::MessageKey>;

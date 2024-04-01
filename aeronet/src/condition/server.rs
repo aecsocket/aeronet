@@ -129,6 +129,10 @@ where
         self.inner.send(client, msg)
     }
 
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        self.inner.flush()
+    }
+
     fn disconnect(&mut self, client: Self::ClientKey) -> Result<(), Self::Error> {
         self.inner.disconnect(client)
     }
@@ -168,9 +172,5 @@ where
         }
 
         events.into_iter()
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        self.inner.flush()
     }
 }

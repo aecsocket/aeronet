@@ -30,6 +30,7 @@ slotmap.workspace = true
 ahash.workspace = true
 bytes.workspace = true
 futures.workspace = true
+tokio.workspace = true
 either.workspace = true
 wtransport.workspace = true
 steamworks.workspace = true

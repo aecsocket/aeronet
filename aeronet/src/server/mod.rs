@@ -100,6 +100,20 @@ pub trait ServerTransport<P: TransportProtocol> {
         msg: impl Into<P::S2C>,
     ) -> Result<Self::MessageKey, Self::Error>;
 
+    /// Sends all messages previously buffered by [`ServerTransport::send`] to
+    /// peers.
+    ///
+    /// If this transport is not connected, this will return [`Ok`].
+    ///
+    /// # Errors
+    ///
+    /// Errors if the transport failed to *attempt to* flush messages, e.g. if
+    /// the connection has already been closed.
+    ///
+    /// If a transmission error occurs later after this function's scope has
+    /// finished, then this will still return [`Ok`].
+    fn flush(&mut self) -> Result<(), Self::Error>;
+
     /// Forces a client to disconnect from this server.
     ///
     /// This does *not* guarantee any graceful shutdown of the connection. If
@@ -126,20 +140,6 @@ pub trait ServerTransport<P: TransportProtocol> {
         &mut self,
         dt: Duration,
     ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>>;
-
-    /// Sends all messages previously buffered by [`ServerTransport::send`] to
-    /// peers.
-    ///
-    /// If this transport is not connected, this will return [`Ok`].
-    ///
-    /// # Errors
-    ///
-    /// Errors if the transport failed to *attempt to* flush messages, e.g. if
-    /// the connection has already been closed.
-    ///
-    /// If a transmission error occurs later after this function's scope has
-    /// finished, then this will still return [`Ok`].
-    fn flush(&mut self) -> Result<(), Self::Error>;
 }
 
 /// State of a [`ServerTransport`].
@@ -156,6 +156,10 @@ pub enum ServerState<A, B> {
     /// Ready to accept client connections and transport data between clients.
     Open(B),
 }
+
+/// Shorthand for the [`ServerState`] of a given [`ServerTransport`].
+pub type ServerStateFor<P, T> =
+    ServerState<<T as ServerTransport<P>>::OpeningInfo, <T as ServerTransport<P>>::OpenInfo>;
 
 impl<A, B> ServerState<A, B> {
     /// Gets if this is a [`ServerState::Closed`].
@@ -243,8 +247,7 @@ pub enum ServerEvent<P: TransportProtocol, E, C, M> {
     },
 }
 
-/// Type alias for [`ServerEvent`] which takes a [`TransportProtocol`] and a
-/// [`ServerTransport`] accepting that protocol.
+/// Shorthand for the [`ServerEvent`] of a given [`ServerTransport`].
 pub type ServerEventFor<P, T> = ServerEvent<
     P,
     <T as ServerTransport<P>>::Error,

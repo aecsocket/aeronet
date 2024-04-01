@@ -106,6 +106,10 @@ where
         self.inner.send(msg)
     }
 
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        self.inner.flush()
+    }
+
     fn poll(
         &mut self,
         delta_time: Duration,
@@ -129,9 +133,5 @@ where
         }
 
         events.into_iter()
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        self.inner.flush()
     }
 }

@@ -4,7 +4,7 @@ use aeronet::{
     lane::{LaneKind, OnLane},
     message::{TryFromBytes, TryIntoBytes},
 };
-use aeronet_proto::message::{Messages, MessagesConfig};
+use aeronet_proto::packet::{ByteBucket, Packets, PacketsConfig};
 use bytes::Bytes;
 use derivative::Derivative;
 use steamworks::{
@@ -20,20 +20,22 @@ pub struct ConnectionFrontend<M, S, R> {
     pub info: ConnectionInfo,
     #[derivative(Debug = "ignore")]
     conn: NetConnection<M>,
-    msgs: Messages<S, R>,
+    packets: Packets<S, R>,
+    bytes_left: usize,
 }
 
 impl<M: 'static, S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> ConnectionFrontend<M, S, R> {
     pub fn new(
         socks: &NetworkingSockets<M>,
         conn: NetConnection<M>,
-        config: &MessagesConfig,
+        config: &PacketsConfig,
         lanes: &[LaneKind],
     ) -> Self {
         Self {
             info: ConnectionInfo::from_connection(socks, &conn),
             conn,
-            msgs: Messages::new(config, lanes),
+            packets: Packets::new(config, lanes),
+            bytes_left: 28_800_000, /* TODO */
         }
     }
 
@@ -43,7 +45,7 @@ impl<M: 'static, S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> ConnectionF
     }
 
     pub fn send(&mut self, msg: S) -> Result<(), SteamTransportError<S, R>> {
-        self.msgs
+        self.packets
             .buffer_send(msg)
             .map_err(SteamTransportError::BufferSend)?;
         Ok(())
@@ -56,7 +58,7 @@ impl<M: 'static, S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> ConnectionF
         const BATCH_SIZE: usize = 64;
 
         let mut buf = Vec::new().into_iter();
-        std::iter::from_fn(|| {
+        std::iter::from_fn(move || {
             let mut packet = buf.next();
             if packet.is_none() {
                 buf = self
@@ -69,36 +71,20 @@ impl<M: 'static, S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> ConnectionF
             let mut packet = Bytes::from(packet?.data().to_vec());
 
             // TODO remove unwraps
-            for ack in self.msgs.read_acks(&mut packet).unwrap() {
+            for ack in self.packets.read_acks(&mut packet).unwrap() {
                 // todo
             }
 
-            while let Some(msgs) = self.msgs.read_next_frag(&mut packet).unwrap() {
+            while let Some(msgs) = self.packets.read_next_frag(&mut packet).unwrap() {
                 for msg in msgs {}
             }
 
-            let packet = packet.data();
-            self.info.total_bytes_recv += packet.len();
-            let msg_bytes = match self
-                .lanes
-                .recv(packet)
-                .map_err(SteamTransportError::LaneRecv)
-            {
-                Ok(msg_bytes) => msg_bytes,
-                Err(err) => return Some(Err(err.into())),
-            }?;
-            let msg = match R::try_from_bytes(&msg_bytes).map_err(SteamTransportError::FromBytes) {
-                Ok(msg) => msg,
-                Err(err) => return Some(Err(err.into())),
-            };
-            self.conn.info.msg_bytes_recv += msg_bytes.len();
-            self.conn.info.msgs_recv += 1;
-            Some(Ok(msg))
+            None
         })
     }
 
     pub fn flush(&mut self, bytes_left: &mut usize) -> Result<(), SteamTransportError<S, R>> {
-        for packet in self.msgs.flush(bytes_left) {
+        for packet in self.packets.flush(bytes_left) {
             self.conn
                 .send_message(&packet, SendFlags::UNRELIABLE_NO_NAGLE)
                 .map_err(SteamTransportError::Send)?;

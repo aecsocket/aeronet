@@ -5,9 +5,9 @@ use bytes::{Buf, Bytes};
 
 use crate::{ack::Acknowledge, frag::Fragment, seq::Seq};
 
-use super::{FragIndex, Messages, RecvError, SentMessage};
+use super::{FragIndex, Packets, RecvError, SentMessage};
 
-impl<S, R: TryFromBytes + OnLane> Messages<S, R> {
+impl<S, R: TryFromBytes + OnLane> Packets<S, R> {
     pub fn read_acks(
         &mut self,
         packet: &mut Bytes,

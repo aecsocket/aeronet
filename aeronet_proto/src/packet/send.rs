@@ -8,13 +8,13 @@ use bytes::{Bytes, BytesMut};
 
 use crate::{
     frag::{FragHeader, Fragment},
-    message::PACKET_HEADER_LEN,
+    packet::PACKET_HEADER_LEN,
     seq::Seq,
 };
 
-use super::{FragIndex, LaneState, Messages, SendError, SentMessage};
+use super::{FragIndex, LaneState, Packets, SendError, SentMessage};
 
-impl<S: TryIntoBytes + OnLane, R> Messages<S, R> {
+impl<S: TryIntoBytes + OnLane, R> Packets<S, R> {
     pub fn buffer_send(&mut self, msg: S) -> Result<Seq, SendError<S>> {
         let lane_index = msg.lane_index();
         let msg_bytes = msg.try_into_bytes().map_err(SendError::IntoBytes)?;
