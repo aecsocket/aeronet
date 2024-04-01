@@ -55,7 +55,7 @@ pub trait TransportProtocol: Send + Sync + 'static {
 /// This is treated as an opaque value, and is only used for equality
 /// comparison. No ordering guarantees are made (i.e. `20` is not
 /// necessarily a newer version than `10`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bitcode", derive(bitcode::Encode, bitcode::Decode))]

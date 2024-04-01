@@ -139,7 +139,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     fn poll(
         &mut self,
         dt: Duration,
-    ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>>;
+    ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>> + '_;
 }
 
 /// State of a [`ServerTransport`].

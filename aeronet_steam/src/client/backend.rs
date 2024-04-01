@@ -7,58 +7,42 @@ use futures::{
     SinkExt, StreamExt,
 };
 use steamworks::{
-    networking_sockets::{NetConnection, NetworkingSockets},
+    networking_sockets::NetConnection,
     networking_types::{
         NetConnectionStatusChanged, NetworkingConnectionState, NetworkingIdentity, SendFlags,
     },
-    SteamError,
+};
+use tracing::{debug, trace};
+
+use crate::{
+    client::{BackendError, ConnectTarget},
+    transport::ConnectionStats,
 };
 
-use crate::transport::ConnectionStats;
-
-use super::ConnectTarget;
-
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum Error {
-    #[error("invalid handle")]
-    InvalidHandle,
-    #[error("frontend closed")]
-    FrontendClosed,
-
-    #[error("connection rejected by peer")]
-    Rejected,
-    #[error("connection failed")]
-    Failed,
-    #[error("failed to send negotiation request")]
-    SendNegotiate(#[source] SteamError),
-    #[error("failed to negotiate protocol")]
-    Negotiate(#[source] negotiate::ResponseError),
-
-    #[error("failed to send message")]
-    Send(#[source] SteamError),
-}
-
 #[derive(Debug)]
-pub(super) struct Negotiating {
+pub struct Negotiating {
     pub send_poll: mpsc::Sender<()>,
     pub recv_connected: oneshot::Receiver<Connected>,
 }
 
 #[derive(Debug)]
-pub(super) struct Connected {
+pub struct Connected {
     pub stats: ConnectionStats,
     pub recv_stats: mpsc::Receiver<ConnectionStats>,
     pub recv_s2c: mpsc::Receiver<Bytes>,
     pub send_c2s: mpsc::UnboundedSender<Bytes>,
+    pub send_flush: mpsc::Sender<()>,
 }
 
-pub(super) async fn open<M: Send + Sync + 'static>(
+const BUFFER_SIZE: usize = 32;
+
+pub async fn open<M: Send + Sync + 'static>(
     steam: steamworks::Client<M>,
     target: ConnectTarget,
     version: ProtocolVersion,
     recv_batch_size: usize,
     send_negotiating: oneshot::Sender<Negotiating>,
-) -> Result<Never, Error> {
+) -> Result<Never, BackendError> {
     struct Callback<M>(steamworks::CallbackHandle<M>);
 
     impl<M> Drop for Callback<M> {
@@ -67,21 +51,24 @@ pub(super) async fn open<M: Send + Sync + 'static>(
         }
     }
 
+    // connecting
+    debug!("Opening connection to {target:?}");
     let socks = steam.networking_sockets();
     let mut conn = match target {
         ConnectTarget::Ip(addr) => socks.connect_by_ip_address(addr, []),
-        ConnectTarget::Peer { id, virtual_port } => {
-            socks.connect_p2p(NetworkingIdentity::new_steam_id(id), virtual_port, [])
-        }
+        ConnectTarget::Peer {
+            steam_id,
+            virtual_port,
+        } => socks.connect_p2p(NetworkingIdentity::new_steam_id(steam_id), virtual_port, []),
     }
-    .map_err(|_| Error::InvalidHandle)?;
+    .map_err(|_| BackendError::CreateConnection)?;
 
     let (send_connected, recv_connected) = oneshot::channel();
     let _connection_changed_cb =
         Callback(steam.register_callback(connection_changed_cb(send_connected)));
     recv_connected
         .await
-        .map_err(|_| Error::Failed)
+        .map_err(|_| BackendError::Failed)
         .and_then(|r| r)?;
 
     // negotiating
@@ -92,38 +79,68 @@ pub(super) async fn open<M: Send + Sync + 'static>(
             send_poll,
             recv_connected,
         })
-        .map_err(|_| Error::FrontendClosed)?;
+        .map_err(|_| BackendError::FrontendClosed)?;
     assert_send(negotiate(version, &mut conn, &mut recv_poll)).await?;
 
     // connected
     let (mut send_stats, recv_stats) = mpsc::channel::<ConnectionStats>(1);
-    let (mut send_s2c, recv_s2c) = mpsc::channel::<Bytes>(32);
+    let (mut send_s2c, recv_s2c) = mpsc::channel::<Bytes>(BUFFER_SIZE);
     let (send_c2s, mut recv_c2s) = mpsc::unbounded::<Bytes>();
+    let (send_flush, mut recv_flush) = mpsc::channel::<()>(1);
     send_connected
         .send(Connected {
             stats: ConnectionStats::from_connection(&socks, &conn),
             recv_stats,
             recv_s2c,
             send_c2s,
+            send_flush,
         })
-        .map_err(|_| Error::FrontendClosed)?;
+        .map_err(|_| BackendError::FrontendClosed)?;
 
+    debug!("Started connection loop");
+    let mut send_buf = Vec::new();
     loop {
-        assert_send(connection_loop(
-            &socks,
-            &mut conn,
-            recv_batch_size,
-            &mut recv_poll,
-            &mut send_stats,
-            &mut send_s2c,
-            &mut recv_c2s,
-        ))
-        .await?;
+        futures::select! {
+            packet = recv_c2s.next() => {
+                let Some(packet) = packet else {
+                    // frontend closed
+                    return Err(BackendError::FrontendClosed);
+                };
+                trace!("Buffered packet of length {} for sending", packet.len());
+                send_buf.push(packet);
+            }
+            _ = recv_flush.next() => {
+                trace!("Sent {} buffered packets", send_buf.len());
+                for packet in send_buf.drain(..) {
+                    conn.send_message(&packet, SendFlags::UNRELIABLE_NO_NAGLE)
+                        .map_err(BackendError::Send)?;
+                }
+            }
+            _ = recv_poll.next() => {
+                send_stats
+                    .try_send(ConnectionStats::from_connection(&socks, &conn))
+                    .map_err(|_| BackendError::FrontendClosed)?;
+                // can't pass this iterator into `send_all` directly
+                // because steamworks message type is !Send
+                // so we must allocate an intermediate Vec for the output Bytes
+                let packets = conn
+                    .receive_messages(recv_batch_size)
+                    .map_err(|_| BackendError::InvalidHandle)?
+                    .into_iter()
+                    .map(|packet| Bytes::from(packet.data().to_vec()))
+                    .inspect(|packet| trace!("Received packet of length {}", packet.len()))
+                    .map(Ok)
+                    .collect::<Vec<_>>();
+                send_s2c
+                    .send_all(&mut futures::stream::iter(packets)).await
+                    .map_err(|_| BackendError::FrontendClosed)?;
+            }
+        }
     }
 }
 
 fn connection_changed_cb(
-    send_connected: oneshot::Sender<Result<(), Error>>,
+    send_connected: oneshot::Sender<Result<(), BackendError>>,
 ) -> impl FnMut(NetConnectionStatusChanged) {
     let mut send_connected = Some(send_connected);
     move |event| match event
@@ -139,12 +156,12 @@ fn connection_changed_cb(
         }
         NetworkingConnectionState::ClosedByPeer => {
             if let Some(s) = send_connected.take() {
-                let _ = s.send(Err(Error::Rejected));
+                let _ = s.send(Err(BackendError::Rejected));
             }
         }
         NetworkingConnectionState::None | NetworkingConnectionState::ProblemDetectedLocally => {
             if let Some(s) = send_connected.take() {
-                let _ = s.send(Err(Error::Failed));
+                let _ = s.send(Err(BackendError::Failed));
             }
         }
     }
@@ -154,17 +171,17 @@ async fn negotiate<M: Send + Sync + 'static>(
     version: ProtocolVersion,
     conn: &mut NetConnection<M>,
     recv_poll: &mut mpsc::Receiver<()>,
-) -> Result<(), Error> {
+) -> Result<(), BackendError> {
     let negotiate = negotiate::Negotiation::new(version);
     conn.send_message(&negotiate.request(), SendFlags::RELIABLE_NO_NAGLE)
-        .map_err(Error::SendNegotiate)?;
+        .map_err(BackendError::SendNegotiate)?;
 
     let msg = loop {
-        recv_poll.next().await.ok_or(Error::FrontendClosed)?;
+        recv_poll.next().await.ok_or(BackendError::FrontendClosed)?;
 
         if let Some(msg) = conn
             .receive_messages(1)
-            .map_err(|_| Error::InvalidHandle)?
+            .map_err(|_| BackendError::InvalidHandle)?
             .into_iter()
             .next()
         {
@@ -174,41 +191,9 @@ async fn negotiate<M: Send + Sync + 'static>(
 
     negotiate
         .recv_response(msg.data())
-        .map_err(Error::Negotiate)
-}
+        .map_err(BackendError::Negotiate)?;
 
-async fn connection_loop<M: Send + Sync + 'static>(
-    socks: &NetworkingSockets<M>,
-    conn: &mut NetConnection<M>,
-    recv_batch_size: usize,
-    recv_poll: &mut mpsc::Receiver<()>,
-    send_stats: &mut mpsc::Sender<ConnectionStats>,
-    send_s2c: &mut mpsc::Sender<Bytes>,
-    recv_c2s: &mut mpsc::UnboundedReceiver<Bytes>,
-) -> Result<(), Error> {
-    futures::select! {
-        packet = recv_c2s.next() => {
-            let Some(packet) = packet else {
-                // frontend closed
-                return Ok(());
-            };
-            conn.send_message(&packet, SendFlags::UNRELIABLE_NO_NAGLE)
-                .map_err(Error::Send)?;
-        }
-        _ = recv_poll.next() => {
-            let _ = send_stats.try_send(ConnectionStats::from_connection(&socks, &conn));
-            // can't pass this iterator into `send_all` directly
-            // because steamworks message type is !Send
-            // so we must allocate an intermediate Vec for the output Bytes :(
-            let packets = conn
-                .receive_messages(recv_batch_size)
-                .map_err(|_| Error::InvalidHandle)?
-                .into_iter()
-                .map(|packet| Ok(Bytes::from(packet.data().to_vec())))
-                .collect::<Vec<_>>();
-            let _ = send_s2c.send_all(&mut futures::stream::iter(packets)).await;
-        }
-    }
+    debug!("Negotiated connection on version {version}");
     Ok(())
 }
 

@@ -89,7 +89,7 @@ pub trait ClientTransport<P: TransportProtocol> {
     fn poll(
         &mut self,
         delta_time: Duration,
-    ) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>>;
+    ) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>> + '_;
 }
 
 /// State of a [`ClientTransport`].

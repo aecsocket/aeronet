@@ -3,6 +3,21 @@ use std::{fmt::Debug, time::Duration};
 use aeronet::stats::Rtt;
 use steamworks::networking_sockets::{NetConnection, NetworkingSockets};
 
+/// Default maximum transmissible unit of a message sent along the Steam
+/// messaging sockets API.
+///
+/// This value is taken from Steam's [`GameNetworkingSockets`] repository:
+///
+/// ```cpp
+/// //                                                         default   min     max
+/// DEFINE_CONNECTON_DEFAULT_CONFIGVAL( int32, SendBufferSize, 512*1024, 4*1024, 0x10000000 );
+/// ```
+///
+/// (and yes, they misspelled "connection"!)
+///
+/// [`GameNetworkingSockets`]: https://github.com/ValveSoftware/GameNetworkingSockets/blob/de03d74226eb3b9a299e05f5fff93965d3dce2d9/src/steamnetworkingsockets/clientlib/csteamnetworkingsockets.cpp#L1369
+pub const MTU: usize = 512 * 1024;
+
 /// Statistics on a Steamworks client/server connection.
 #[derive(Debug, Clone, Default)]
 pub struct ConnectionStats {

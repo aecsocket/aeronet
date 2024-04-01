@@ -1,14 +1,20 @@
 use std::{convert::Infallible, net::SocketAddr, string::FromUtf8Error};
 
 use aeronet::{
+    bevy_tokio_rt::TokioRuntime,
+    bytes::Bytes,
     client::{
         ClientState, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
         LocalClientDisconnected,
     },
-    LaneKey, Message, OnLane, ProtocolVersion, TransportProtocol, TryAsBytes, TryFromBytes,
+    error::pretty_error,
+    lane::{LaneKey, OnLane},
+    message::{Message, TryFromBytes, TryIntoBytes},
+    protocol::{ProtocolVersion, TransportProtocol},
 };
-use aeronet_steam::{ConnectTarget, SteamClientTransport, SteamClientTransportConfig, MTU};
+use aeronet_steam::client::{ConnectTarget, SteamClientConfig, SteamClientTransport};
 use bevy::{log::LogPlugin, prelude::*};
+use bevy_ecs::system::SystemId;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 // protocol
@@ -26,7 +32,6 @@ struct AppLane;
 // This is up to you, the user, to define. You can have different types
 // for client-to-server and server-to-client transport.
 #[derive(Debug, Clone, Message, OnLane)]
-#[lane_type(AppLane)]
 #[on_lane(AppLane)]
 struct AppMessage(String);
 
@@ -36,27 +41,25 @@ impl<T: Into<String>> From<T> for AppMessage {
     }
 }
 
-// Defines how this message type can be converted to/from a [u8] form.
-impl TryAsBytes for AppMessage {
-    type Output<'a> = &'a [u8];
+// Defines how this message type can be converted to/from a Bytes form.
+impl TryIntoBytes for AppMessage {
     type Error = Infallible;
 
-    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
-        Ok(self.0.as_bytes())
+    fn try_into_bytes(self) -> Result<Bytes, Self::Error> {
+        Ok(Bytes::from(self.0))
     }
 }
 
 impl TryFromBytes for AppMessage {
     type Error = FromUtf8Error;
 
-    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-    {
-        String::from_utf8(buf.to_vec()).map(AppMessage)
+    fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error> {
+        String::from_utf8(Vec::from(buf)).map(AppMessage)
     }
 }
 
+// Combines everything above into a single "protocol" type,
+// used in your transport
 struct AppProtocol;
 
 impl TransportProtocol for AppProtocol {
@@ -71,31 +74,32 @@ type Client = SteamClientTransport<AppProtocol>;
 // logic
 
 fn main() {
-    let mut app = App::new();
-    app.add_plugins((
-        DefaultPlugins.set(LogPlugin {
-            filter: "wgpu=error,naga=warn,aeronet=debug".into(),
-            ..default()
-        }),
-        EguiPlugin,
-        ClientTransportPlugin::<_, Client>::default(),
-    ))
-    .init_resource::<Client>()
-    .init_resource::<UiState>()
-    .add_systems(Startup, setup)
-    .add_systems(
-        Update,
-        (update_steam, on_connected, on_disconnected, on_recv, ui).chain(),
-    );
-
-    #[cfg(not(target_family = "wasm"))]
-    app.init_resource::<aeronet::TokioRuntime>();
-
-    app.run();
+    App::new()
+        .add_plugins((
+            DefaultPlugins.set(LogPlugin {
+                filter: "wgpu=error,naga=warn,aeronet=debug".into(),
+                ..default()
+            }),
+            EguiPlugin,
+            ClientTransportPlugin::<_, Client>::default(),
+        ))
+        .init_resource::<TokioRuntime>()
+        .init_resource::<Client>()
+        .init_resource::<UiState>()
+        .add_systems(Startup, setup)
+        .add_systems(
+            Update,
+            (update_steam, on_connected, on_disconnected, on_recv, ui).chain(),
+        )
+        .run();
 }
 
 #[derive(Clone, Resource, Deref, DerefMut)]
 struct SteamClient(steamworks::Client);
+
+// Register a one-shot system for connecting the client
+#[derive(Debug, Clone, Resource, Deref, DerefMut)]
+struct ConnectSystem(SystemId<SocketAddr>);
 
 fn setup(world: &mut World) {
     let (steam, steam_single) = steamworks::Client::init_app(480).unwrap();
@@ -103,12 +107,37 @@ fn setup(world: &mut World) {
     world.insert_resource(SteamClient(steam));
     world.insert_non_send_resource(steam_single);
 
-    let client = SteamClientTransport::<AppProtocol>::Disconnected;
+    let client = SteamClientTransport::<AppProtocol>::disconnected();
     world.insert_resource(client);
+
+    let connect_system = world.register_system(connect);
+    world.insert_resource(ConnectSystem(connect_system));
 }
 
 fn update_steam(steam: NonSend<steamworks::SingleClient>) {
     steam.run_callbacks();
+}
+
+fn connect(
+    In(target): In<SocketAddr>,
+    steam: Res<SteamClient>,
+    mut client: ResMut<Client>,
+    tokio: Res<TokioRuntime>,
+    mut ui_state: ResMut<UiState>,
+) {
+    match client.connect(
+        (**steam).clone(),
+        ConnectTarget::Ip(target),
+        SteamClientConfig::new(PROTOCOL_VERSION, AppLane::KINDS),
+    ) {
+        Ok(backend) => {
+            tokio.spawn(backend);
+        }
+        Err(err) => ui_state.log.push(format!(
+            "Failed to connect to {target:?}: {:#}",
+            pretty_error(&err)
+        )),
+    }
 }
 
 #[derive(Debug, Default, Resource)]
@@ -132,10 +161,9 @@ fn on_disconnected(
     mut ui_state: ResMut<UiState>,
 ) {
     for LocalClientDisconnected { reason } in events.read() {
-        ui_state.log.push(format!(
-            "Disconnected: {:#}",
-            aeronet::util::pretty_error(&reason)
-        ));
+        ui_state
+            .log
+            .push(format!("Disconnected: {:#}", pretty_error(&reason)));
     }
 }
 
@@ -149,7 +177,8 @@ fn on_recv(
 }
 
 fn ui(
-    steam: Res<SteamClient>,
+    mut commands: Commands,
+    connect_system: Res<ConnectSystem>,
     mut egui: EguiContexts,
     mut client: ResMut<Client>,
     mut ui_state: ResMut<UiState>,
@@ -166,7 +195,7 @@ fn ui(
                 match ip.map(|ip| ip.parse::<SocketAddr>()) {
                     Some(Ok(ip)) => {
                         ui_state.log.push(format!("Connecting to {ip}"));
-                        connect(&steam, client.as_mut(), ip);
+                        commands.run_system_with_input(**connect_system, ip);
                     }
                     Some(Err(err)) => {
                         ui_state.log.push(format!("Failed to parse IP: {err:#}"));
@@ -208,40 +237,26 @@ fn ui(
                 ui.label(format!("{:?}", info.rtt));
                 ui.end_row();
 
-                ui.label("Messages sent/received");
-                ui.label(format!("{} sent / {} recv", info.msgs_sent, info.msgs_recv));
-                ui.end_row();
+                // ui.label("Messages sent/received");
+                // ui.label(format!("{} sent / {} recv", info.msgs_sent, info.msgs_recv));
+                // ui.end_row();
 
-                ui.label("Message bytes sent/received");
-                ui.label(format!(
-                    "{} sent / {} recv",
-                    info.msg_bytes_sent, info.msg_bytes_recv
-                ));
-                ui.end_row();
+                // ui.label("Message bytes sent/received");
+                // ui.label(format!(
+                //     "{} sent / {} recv",
+                //     info.msg_bytes_sent, info.msg_bytes_recv
+                // ));
+                // ui.end_row();
 
-                ui.label("Total bytes sent/received");
-                ui.label(format!(
-                    "{} sent / {} recv",
-                    info.total_bytes_sent, info.total_bytes_recv
-                ));
-                ui.end_row();
+                // ui.label("Total bytes sent/received");
+                // ui.label(format!(
+                //     "{} sent / {} recv",
+                //     info.total_bytes_sent, info.total_bytes_recv
+                // ));
+                // ui.end_row();
             });
         }
     });
-}
-
-fn connect(steam: &steamworks::Client, client: &mut Client, target: SocketAddr) {
-    client
-        .connect(
-            steam.clone(),
-            SteamClientTransportConfig {
-                version: PROTOCOL_VERSION,
-                max_packet_len: MTU,
-                lanes: AppLane::config(),
-                target: ConnectTarget::Ip(target),
-            },
-        )
-        .expect("backend should be disconnected");
 }
 
 pub fn text_input(ui: &mut egui::Ui, text: &mut String) -> Option<String> {
