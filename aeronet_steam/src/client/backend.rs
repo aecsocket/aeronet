@@ -46,6 +46,7 @@ pub(super) struct Negotiating {
 
 #[derive(Debug)]
 pub(super) struct Connected {
+    pub stats: ConnectionStats,
     pub recv_stats: mpsc::Receiver<ConnectionStats>,
     pub recv_s2c: mpsc::Receiver<Bytes>,
     pub send_c2s: mpsc::UnboundedSender<Bytes>,
@@ -100,6 +101,7 @@ pub(super) async fn open<M: Send + Sync + 'static>(
     let (send_c2s, mut recv_c2s) = mpsc::unbounded::<Bytes>();
     send_connected
         .send(Connected {
+            stats: ConnectionStats::from_connection(&socks, &conn),
             recv_stats,
             recv_s2c,
             send_c2s,
@@ -185,12 +187,12 @@ async fn connection_loop<M: Send + Sync + 'static>(
     recv_c2s: &mut mpsc::UnboundedReceiver<Bytes>,
 ) -> Result<(), Error> {
     futures::select! {
-        msg = recv_c2s.next() => {
-            let Some(msg) = msg else {
+        packet = recv_c2s.next() => {
+            let Some(packet) = packet else {
                 // frontend closed
                 return Ok(());
             };
-            conn.send_message(&msg, SendFlags::UNRELIABLE_NO_NAGLE)
+            conn.send_message(&packet, SendFlags::UNRELIABLE_NO_NAGLE)
                 .map_err(Error::Send)?;
         }
         _ = recv_poll.next() => {
@@ -198,13 +200,13 @@ async fn connection_loop<M: Send + Sync + 'static>(
             // can't pass this iterator into `send_all` directly
             // because steamworks message type is !Send
             // so we must allocate an intermediate Vec for the output Bytes :(
-            let msgs = conn
+            let packets = conn
                 .receive_messages(recv_batch_size)
                 .map_err(|_| Error::InvalidHandle)?
                 .into_iter()
                 .map(|packet| Ok(Bytes::from(packet.data().to_vec())))
                 .collect::<Vec<_>>();
-            let _ = send_s2c.send_all(&mut futures::stream::iter(msgs)).await;
+            let _ = send_s2c.send_all(&mut futures::stream::iter(packets)).await;
         }
     }
     Ok(())

@@ -32,7 +32,7 @@ bytes.workspace = true
 futures.workspace = true
 tokio.workspace = true
 either.workspace = true
-wtransport.workspace = true
+take_mut.workspace = true
 steamworks.workspace = true
 
 bevy = { workspace = true, optional = true }

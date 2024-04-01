@@ -126,12 +126,6 @@ use crate::{
 
 use self::lane::LaneState;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PacketsConfig {
-    pub max_packet_len: usize,
-    pub default_packet_cap: usize,
-}
-
 // todo docs
 /// See the [module-level documentation](self).
 #[derive(Derivative)]
@@ -192,13 +186,13 @@ pub enum RecvError<R: TryFromBytes> {
 const PACKET_HEADER_LEN: usize = Seq::ENCODE_LEN + Acknowledge::ENCODE_LEN;
 
 impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Packets<S, R> {
-    pub fn new(config: &PacketsConfig, lanes: &[LaneKind]) -> Self {
-        assert!(config.max_packet_len > PACKET_HEADER_LEN);
+    pub fn new(max_packet_len: usize, default_packet_cap: usize, lanes: &[LaneKind]) -> Self {
+        assert!(max_packet_len > PACKET_HEADER_LEN);
         Self {
             lanes: lanes.iter().map(|kind| LaneState::new(*kind)).collect(),
-            max_packet_len: config.max_packet_len,
-            default_packet_cap: config.default_packet_cap,
-            frags: Fragmentation::new(config.max_packet_len - PACKET_HEADER_LEN),
+            max_packet_len,
+            default_packet_cap,
+            frags: Fragmentation::new(max_packet_len - PACKET_HEADER_LEN),
             acks: Acknowledge::new(),
             next_send_msg_seq: Seq(0),
             next_send_packet_seq: Seq(0),
@@ -247,14 +241,11 @@ mod tests {
         }
     }
 
-    const CONFIG: PacketsConfig = PacketsConfig {
-        max_packet_len: 1024,
-        default_packet_cap: 1024,
-    };
+    const MAX_PACKET_LEN: usize = 1024;
 
     #[test]
     fn test() {
-        let mut msgs = Packets::<MyMsg, MyMsg>::new(&CONFIG, MyLane::KINDS);
+        let mut msgs = Packets::<MyMsg, MyMsg>::new(MAX_PACKET_LEN, MAX_PACKET_LEN, MyLane::KINDS);
         msgs.buffer_send(MyMsg::from("1")).unwrap();
         msgs.buffer_send(MyMsg::from("2")).unwrap();
 
