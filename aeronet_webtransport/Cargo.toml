@@ -32,6 +32,7 @@ tracing.workspace = true
 derivative.workspace = true
 thiserror.workspace = true
 either.workspace = true
+replace_with.workspace = true
 slotmap.workspace = true
 bytes.workspace = true
 cfg-if.workspace = true

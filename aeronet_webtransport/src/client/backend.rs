@@ -19,9 +19,10 @@ const BUFFER_SIZE: usize = 32;
 
 #[derive(Debug)]
 pub struct Connected {
-    pub recv_stats: mpsc::Receiver<ConnectionStats>,
     pub send_c2s: mpsc::UnboundedSender<Bytes>,
     pub recv_s2c: mpsc::Receiver<Bytes>,
+    pub recv_stats: mpsc::Receiver<ConnectionStats>,
+    pub initial_stats: ConnectionStats,
 }
 
 pub async fn open(
@@ -52,19 +53,19 @@ pub async fn open(
     debug!("Managed stream open, negotiating protocol");
     internal::negotiate::client(version, &mut send_managed, &mut recv_managed).await?;
 
-    debug!("Connection established, forwarding channels to frontend");
-    let (send_stats, recv_stats) = mpsc::channel::<ConnectionStats>(1);
+    debug!("Negotiated successfully, starting connection loop");
     let (send_c2s, recv_c2s) = mpsc::unbounded::<Bytes>();
     let (send_s2c, recv_s2c) = mpsc::channel::<Bytes>(BUFFER_SIZE);
+    let (send_stats, recv_stats) = mpsc::channel::<ConnectionStats>(1);
     send_connected
         .send(Connected {
-            recv_stats,
             send_c2s,
             recv_s2c,
+            recv_stats,
+            initial_stats: ConnectionStats::from(&conn),
         })
         .map_err(|_| BackendError::FrontendClosed)?;
 
-    debug!("Starting connection loop");
     let send = send(&conn, recv_c2s);
     let recv = recv(&conn, send_s2c, send_stats);
     futures::select! {
