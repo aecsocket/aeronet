@@ -53,15 +53,16 @@ struct Opening {
 #[derivative(Debug(bound = ""))]
 pub struct Open<P: TransportProtocol> {
     pub local_addr: SocketAddr,
+    pub bandwidth: usize,
+    pub bytes_left: usize,
+    clients: SlotMap<ClientKey, Client<P>>,
     recv_err: oneshot::Receiver<ServerBackendError>,
     recv_connecting: mpsc::Receiver<backend::Connecting>,
-    clients: SlotMap<ClientKey, Client<P>>,
-    total_bandwidth: usize,
-    pub total_bytes_left: usize,
 }
 
 #[derive(Debug)]
 struct Connecting {
+    recv_err: oneshot::Receiver<ServerBackendError>,
     recv_requesting: oneshot::Receiver<backend::Requesting>,
 }
 
@@ -72,15 +73,18 @@ pub struct Requesting {
     pub origin: Option<String>,
     pub user_agent: Option<String>,
     pub headers: HashMap<String, String>,
+    recv_err: oneshot::Receiver<ServerBackendError>,
     recv_connected: oneshot::Receiver<backend::Connected>,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Connected<P: TransportProtocol> {
+    pub stats: ConnectionStats,
+    pub bandwidth: usize,
+    pub bytes_left: usize,
     packets: packet::Packets<P::S2C, P::C2S>,
-    bandwidth: usize,
-    bytes_left: usize,
+    recv_err: oneshot::Receiver<ServerBackendError>,
     recv_c2s: mpsc::Receiver<Bytes>,
     send_s2c: mpsc::UnboundedSender<Bytes>,
     recv_stats: mpsc::Receiver<ConnectionStats>,
@@ -230,13 +234,12 @@ where
             return Err(WebTransportServerError::NotOpen);
         };
 
-        let total_bytes_left = &mut server.total_bytes_left;
         for (_, client) in &mut server.clients {
             let Client::Connected(client) = client else {
                 continue;
             };
 
-            let bytes_start = (*total_bytes_left).min(client.bytes_left);
+            let bytes_start = (server.bytes_left).min(client.bytes_left);
             let mut bytes_left = bytes_start;
             for packet in client.packets.flush(&mut bytes_left) {
                 client
@@ -245,7 +248,7 @@ where
                     .map_err(|_| WebTransportServerError::BackendClosed)?;
             }
             let bytes_used = bytes_start - bytes_left;
-            *total_bytes_left -= bytes_used;
+            server.bytes_left -= bytes_used;
             client.bytes_left -= bytes_used;
         }
         Ok(())
@@ -300,11 +303,11 @@ where
                 Some(ServerEvent::Opened),
                 Inner::Open(Open {
                     local_addr: next.local_addr,
+                    bandwidth: server.total_bandwidth,
+                    bytes_left: server.total_bandwidth,
+                    clients: SlotMap::default(),
                     recv_err: server.recv_err,
                     recv_connecting: next.recv_connecting,
-                    clients: SlotMap::default(),
-                    total_bandwidth: server.total_bandwidth,
-                    total_bytes_left: server.total_bandwidth,
                 }),
             ),
             Err(_) => (
@@ -336,6 +339,7 @@ where
                 .map_err(|_| WebTransportServerError::BackendClosed)?
             {
                 let client_key = server.clients.insert(Client::Connecting(Connecting {
+                    recv_err: connecting.recv_err,
                     recv_requesting: connecting.recv_requesting,
                 }));
                 connecting
@@ -356,9 +360,8 @@ where
         }
 
         // refill bytes token bucket
-        let bytes_restored = ((server.total_bandwidth as f64) * delta_time.as_secs_f64()) as usize;
-        server.total_bytes_left =
-            (server.total_bytes_left + bytes_restored).min(server.total_bandwidth);
+        let bytes_restored = ((server.bandwidth as f64) * delta_time.as_secs_f64()) as usize;
+        server.bytes_left = (server.bytes_left + bytes_restored).min(server.bandwidth);
 
         let mut events = Vec::new();
         let mut clients_to_remove = Vec::new();
@@ -367,9 +370,7 @@ where
                 Client::Connecting(client) => {
                     Self::poll_connecting(&mut events, client_key, client)
                 }
-                Client::Requesting(client) => {
-                    Self::poll_requesting(&mut events, client_key, client)
-                }
+                Client::Requesting(_) => Ok(()),
                 Client::Connected(client) => {
                     Self::poll_connected(&mut events, client_key, client, delta_time)
                 }
@@ -393,14 +394,18 @@ where
         client_key: ClientKey,
         client: &mut Connecting,
     ) -> Result<(), WebTransportServerError<P>> {
-        Ok(())
-    }
+        if let Some(err) = client
+            .recv_err
+            .try_recv()
+            .map_err(|_| WebTransportServerError::ClientBackendClosed)?
+        {
+            return Err(err.into());
+        }
 
-    fn poll_requesting(
-        events: &mut Vec<ServerEventFor<P, Self>>,
-        client_key: ClientKey,
-        client: &mut Requesting,
-    ) -> Result<(), WebTransportServerError<P>> {
+        let x = client
+            .recv_requesting
+            .try_recv()
+            .map_err(|_| WebTransportServerError::ClientBackendClosed)?;
         Ok(())
     }
 
@@ -410,10 +415,14 @@ where
         client: &mut Connected<P>,
         delta_time: Duration,
     ) -> Result<(), WebTransportServerError<P>> {
+        // refill bytes token bucket
+        let bytes_restored = ((client.bandwidth as f64) * delta_time.as_secs_f64()) as usize;
+        client.bytes_left = (client.bytes_left + bytes_restored).min(client.bandwidth);
+
         while let Some(mut packet) = client
             .recv_c2s
             .try_next()
-            .map_err(|_| WebTransportServerError::BackendClosed)?
+            .map_err(|_| WebTransportServerError::ClientBackendClosed)?
         {
             // receive acks
             events.extend(

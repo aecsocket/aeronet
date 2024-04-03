@@ -28,6 +28,7 @@ pub struct Open {
 #[derive(Debug)]
 pub struct Connecting {
     pub send_key: oneshot::Sender<ClientKey>,
+    pub recv_err: oneshot::Receiver<ServerBackendError>,
     pub recv_requesting: oneshot::Receiver<Requesting>,
 }
 
@@ -75,37 +76,47 @@ pub async fn start(
     loop {
         let session = endpoint.accept().await;
         tokio::spawn(start_handle_session(
+            send_connecting.clone(),
             version,
             session,
-            send_connecting.clone(),
         ));
     }
 }
 
 async fn start_handle_session(
+    mut send_connecting: mpsc::Sender<Connecting>,
     version: ProtocolVersion,
     session: IncomingSession,
-    mut send_connecting: mpsc::Sender<Connecting>,
-) -> Result<Never, ServerBackendError> {
+) {
     let (send_key, recv_key) = oneshot::channel::<ClientKey>();
+    let (send_err, recv_err) = oneshot::channel::<ServerBackendError>();
     let (send_requesting, recv_requesting) = oneshot::channel::<Requesting>();
-    send_connecting
-        .send(Connecting {
-            send_key,
-            recv_requesting,
-        })
-        .await
-        .map_err(|_| shared::BackendError::FrontendClosed)?;
-    let client_key = recv_key
-        .await
-        .map_err(|_| shared::BackendError::FrontendClosed)?;
 
-    handle_session(version, session, send_requesting)
-        .instrument(debug_span!(
-            "Session",
-            client = tracing::field::display(client_key)
-        ))
-        .await
+    let Err(err) = (async move {
+        send_connecting
+            .send(Connecting {
+                send_key,
+                recv_err,
+                recv_requesting,
+            })
+            .await
+            .map_err(|_| shared::BackendError::FrontendClosed)?;
+        let client_key = recv_key
+            .await
+            .map_err(|_| shared::BackendError::FrontendClosed)?;
+
+        handle_session(version, session, send_requesting)
+            .instrument(debug_span!(
+                "Session",
+                client = tracing::field::display(client_key)
+            ))
+            .await
+    })
+    .await
+    else {
+        unreachable!()
+    };
+    let _ = send_err.send(err);
 }
 
 async fn handle_session(

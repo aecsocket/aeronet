@@ -48,14 +48,14 @@ struct Connecting {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Connected<P: TransportProtocol> {
+    pub stats: ConnectionStats,
+    pub bandwidth: usize,
+    pub bytes_left: usize,
+    packets: packet::Packets<P::C2S, P::S2C>,
     recv_err: oneshot::Receiver<ClientBackendError>,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
     recv_stats: mpsc::Receiver<ConnectionStats>,
-    pub stats: ConnectionStats,
-    packets: packet::Packets<P::C2S, P::S2C>,
-    bandwidth: usize,
-    pub bytes_left: usize,
 }
 
 impl<P> WebTransportClient<P>
@@ -226,18 +226,18 @@ where
             Ok(Some(next)) => (
                 Some(ClientEvent::Connected),
                 Inner::Connected(Connected {
-                    recv_err: client.recv_err,
-                    send_c2s: next.send_c2s,
-                    recv_s2c: next.recv_s2c,
-                    recv_stats: next.recv_stats,
                     stats: next.initial_stats,
+                    bandwidth: client.bandwidth,
+                    bytes_left: client.bandwidth,
                     packets: packet::Packets::new(
                         client.max_packet_len,
                         client.default_packet_cap,
                         &client.lanes,
                     ),
-                    bandwidth: client.bandwidth,
-                    bytes_left: client.bandwidth,
+                    recv_err: client.recv_err,
+                    send_c2s: next.send_c2s,
+                    recv_s2c: next.recv_s2c,
+                    recv_stats: next.recv_stats,
                 }),
             ),
             Err(_) => (

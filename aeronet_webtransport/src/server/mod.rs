@@ -92,6 +92,8 @@ where
     ClientNotConnected,
     #[error("backend closed")]
     BackendClosed,
+    #[error("client backend closed")]
+    ClientBackendClosed,
 
     #[error(transparent)]
     Backend(#[from] ServerBackendError),
