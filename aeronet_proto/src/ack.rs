@@ -42,6 +42,7 @@ pub struct Acknowledge {
 
 impl Acknowledge {
     /// Creates a new value with no packets acknowledged.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -62,29 +63,27 @@ impl Acknowledge {
     /// acks.ack(Seq(2));
     /// assert_eq!(acks, acks_clone);
     /// ```
+    #[allow(clippy::missing_panics_doc)] // won't panic
     pub fn ack(&mut self, seq: Seq) {
         let delta = self.last_recv.delta(seq);
-        match u32::try_from(delta) {
-            Ok(delta) => {
-                // `seq` is before or equal to `last_recv`,
-                // so we set a bit in the bitfield
-                self.ack_bits |= shl(1, delta);
-            }
-            Err(_) => {
-                // `seq` is after `last_recv`,
-                // make that the new `last_recv`
-                self.last_recv = seq;
-                let shift_by = u32::try_from(-delta).unwrap();
-                //    seq: 8
-                //    last_recv: 3
-                // -> shift_by: 8 - 3 = 5
-                //    old recv_bits: 0b00..000000001000
-                //                                 ^
-                //                                 | shifted `shift_by` (5) places
-                //                            v----+
-                //    new recv_bits: 0b00..000100000000
-                self.ack_bits = shl(self.ack_bits, shift_by);
-            }
+        if let Ok(delta) = u32::try_from(delta) {
+            // `seq` is before or equal to `last_recv`,
+            // so we set a bit in the bitfield
+            self.ack_bits |= shl(1, delta);
+        } else {
+            // `seq` is after `last_recv`,
+            // make that the new `last_recv`
+            self.last_recv = seq;
+            let shift_by = u32::try_from(-delta).unwrap();
+            //    seq: 8
+            //    last_recv: 3
+            // -> shift_by: 8 - 3 = 5
+            //    old recv_bits: 0b00..000000001000
+            //                                 ^
+            //                                 | shifted `shift_by` (5) places
+            //                            v----+
+            //    new recv_bits: 0b00..000100000000
+            self.ack_bits = shl(self.ack_bits, shift_by);
         }
     }
 
@@ -106,6 +105,7 @@ impl Acknowledge {
     /// assert!(acks.is_acked(Seq(50)));
     /// assert!(!acks.is_acked(Seq(10)));
     /// ```
+    #[must_use]
     pub fn is_acked(&self, seq: Seq) -> bool {
         let delta = self.last_recv.delta(seq);
         match u32::try_from(delta) {

@@ -119,6 +119,7 @@ pub const RESPONSE_LEN: usize = 9;
 
 impl Negotiation {
     /// Creates a negotiation object given a protocol version to use.
+    #[must_use]
     pub fn new(version: ProtocolVersion) -> Self {
         Self { version }
     }
@@ -130,9 +131,7 @@ impl Negotiation {
         let version: [u8; VERSION_LEN] = format!("{:016x}", self.version.0)
             .into_bytes()
             .try_into()
-            .expect(&format!(
-                "formatted string should be {VERSION_LEN} bytes long"
-            ));
+            .unwrap_or_else(|_| panic!("formatted string should be {VERSION_LEN} bytes long"));
         let mut packet = [0; REQUEST_LEN];
         packet[..REQUEST_PREFIX.len()].copy_from_slice(REQUEST_PREFIX);
         packet[REQUEST_PREFIX.len()..].copy_from_slice(&version);
@@ -158,9 +157,8 @@ impl Negotiation {
         &self,
         packet: &[u8],
     ) -> (Result<(), RequestError>, Option<[u8; RESPONSE_LEN]>) {
-        let packet = match <&[u8; REQUEST_LEN]>::try_from(packet) {
-            Ok(packet) => packet,
-            Err(_) => return (Err(RequestError::WrongLength { len: packet.len() }), None),
+        let Ok(packet) = <&[u8; REQUEST_LEN]>::try_from(packet) else {
+            return (Err(RequestError::WrongLength { len: packet.len() }), None);
         };
         self.recv_request_sized(packet)
     }

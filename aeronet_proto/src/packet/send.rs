@@ -76,10 +76,10 @@ impl<S: TryIntoBytes + OnLane, R> Packets<S, R> {
             debug_assert_eq!(packet.len(), PACKET_HEADER_LEN);
 
             let mut frags_in_packet = Vec::new();
-            for frag in frags.iter_mut().flat_map(|index_opt| {
+            for frag in frags.iter_mut().filter_map(|index_opt| {
                 Self::next_frag_in_packet(
                     &mut self.sent_msgs,
-                    &mut self.lanes,
+                    &self.lanes,
                     &mut packet_bytes_left,
                     index_opt,
                 )

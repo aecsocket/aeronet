@@ -74,11 +74,11 @@ impl Seq {
     /// ```
     #[must_use]
     pub fn delta(self, rhs: Self) -> i32 {
-        let diff = (self.0 as i32) - (rhs.0 as i32);
+        let diff = i32::from(self.0) - i32::from(rhs.0);
 
         // Handle wraparound with modular arithmetic
         if diff < 0 {
-            diff + (u16::MAX as i32) + 1
+            diff + i32::from(u16::MAX) + 1
         } else {
             diff
         }

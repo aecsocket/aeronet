@@ -66,6 +66,7 @@ fn to_bytes(datagram: ty::Datagram) -> Bytes {
 }
 
 #[cfg(not(target_family = "wasm"))]
+#[allow(clippy::needless_pass_by_value)] // match fn sig above
 fn to_bytes(datagram: ty::Datagram) -> Bytes {
     datagram.0.payload()
 }

@@ -100,12 +100,9 @@ TODO:
     * or the fragment times out and the connection dies!
 */
 
-mod byte_bucket;
 mod lane;
 mod recv;
 mod send;
-
-pub use byte_bucket::*;
 
 use std::{fmt::Debug, marker::PhantomData};
 
@@ -186,6 +183,7 @@ pub enum RecvError<R: TryFromBytes> {
 const PACKET_HEADER_LEN: usize = Seq::ENCODE_LEN + Acknowledge::ENCODE_LEN;
 
 impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Packets<S, R> {
+    #[must_use]
     pub fn new(max_packet_len: usize, default_packet_cap: usize, lanes: &[LaneKind]) -> Self {
         assert!(max_packet_len > PACKET_HEADER_LEN);
         Self {

@@ -99,8 +99,8 @@ impl<R> LaneState<R> {
                     // pending_seq: 40, recv_seq_buf: [45]
                     recv_seq_buf.insert(msg_seq);
                     // pending_seq: 40, recv_seq_buf: [41, 45]
-                    while recv_seq_buf.contains(&pending_seq) {
-                        recv_seq_buf.remove(&pending_seq);
+                    while recv_seq_buf.contains(pending_seq) {
+                        recv_seq_buf.remove(pending_seq);
                         *pending_seq += Seq(1);
                         // pending_seq: 41, recv_seq_buf: [45]
                     }
@@ -119,7 +119,7 @@ impl<R> LaneState<R> {
                     // messages that we remove
                     recv_buf.insert(msg_seq, msg);
                     Either::Right(std::iter::from_fn(move || {
-                        let msg = recv_buf.remove(&pending_seq)?;
+                        let msg = recv_buf.remove(pending_seq)?;
                         *pending_seq += Seq(1);
                         Some(msg)
                     }))

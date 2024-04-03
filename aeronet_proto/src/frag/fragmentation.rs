@@ -37,7 +37,6 @@ impl Fragmentation {
     ///
     /// Errors if the message was not a valid message which could be fragmented.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    #[must_use]
     pub fn fragment<T>(&self, msg_seq: Seq, msg: T) -> Result<Fragments<T>, FragmentError>
     where
         T: bytes::Buf + octs::ByteChunksExt,
