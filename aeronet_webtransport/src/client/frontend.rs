@@ -1,7 +1,7 @@
 use std::{fmt::Debug, future::Future, time::Duration};
 
 use aeronet::{
-    client::{ClientEvent, ClientEventFor, ClientState, ClientTransport},
+    client::{ClientEvent, ClientState, ClientTransport},
     error::pretty_error,
     lane::{LaneKind, OnLane},
     message::{TryFromBytes, TryIntoBytes},
@@ -151,9 +151,9 @@ where
 {
     type Error = WebTransportClientError<P>;
 
-    type Connecting<'this> = ();
+    type Connecting<'t> = ();
 
-    type Connected<'this> = &'this Connected<P>;
+    type Connected<'t> = &'t Connected<P>;
 
     type MessageKey = MessageKey;
 
@@ -189,10 +189,7 @@ where
         Ok(())
     }
 
-    fn poll(
-        &mut self,
-        delta_time: Duration,
-    ) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>> {
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<P, Self>> {
         replace_with::replace_with_or_abort_and_return(&mut self.inner, |inner| match inner {
             Inner::Disconnected => (Either::Left(None), inner),
             Inner::Connecting(client) => {
@@ -214,7 +211,7 @@ where
     P::C2S: TryIntoBytes + OnLane,
     P::S2C: TryFromBytes + OnLane,
 {
-    fn poll_connecting(mut client: Connecting) -> (Option<ClientEventFor<P, Self>>, Inner<P>) {
+    fn poll_connecting(mut client: Connecting) -> (Option<ClientEvent<P, Self>>, Inner<P>) {
         if let Ok(Some(err)) = client.recv_err.try_recv() {
             return (
                 Some(ClientEvent::Disconnected { error: err.into() }),
@@ -252,7 +249,7 @@ where
     fn poll_connected(
         mut client: Connected<P>,
         delta_time: Duration,
-    ) -> (Vec<ClientEventFor<P, Self>>, Inner<P>) {
+    ) -> (Vec<ClientEvent<P, Self>>, Inner<P>) {
         if let Ok(Some(error)) = client.recv_err.try_recv() {
             return (
                 vec![ClientEvent::Disconnected {

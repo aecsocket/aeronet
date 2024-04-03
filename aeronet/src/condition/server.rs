@@ -137,10 +137,7 @@ where
         self.inner.disconnect(client)
     }
 
-    fn poll(
-        &mut self,
-        delta_time: Duration,
-    ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>> {
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<P, Self>> {
         let mut events = Vec::new();
 
         events.extend(self.conditioner.buffered().map(|recv| ServerEvent::Recv {
@@ -149,24 +146,40 @@ where
         }));
 
         for event in self.inner.poll(delta_time) {
-            if let ServerEvent::Recv {
-                client_key: client,
-                msg,
-            } = event
-            {
-                if let Some(ServerRecv {
-                    client_key: client,
-                    msg,
-                }) = self.conditioner.condition(ServerRecv {
-                    client_key: client,
-                    msg,
-                }) {
-                    events.push(ServerEvent::Recv {
-                        client_key: client,
-                        msg,
-                    });
+            let event = match event {
+                ServerEvent::Opened => Some(ServerEvent::Opened),
+                ServerEvent::Closed { error } => Some(ServerEvent::Closed { error }),
+                ServerEvent::Connecting { client_key } => {
+                    Some(ServerEvent::Connecting { client_key })
                 }
-            } else {
+                ServerEvent::Connected { client_key } => {
+                    Some(ServerEvent::Connected { client_key })
+                }
+                ServerEvent::Disconnected { client_key, error } => {
+                    Some(ServerEvent::Disconnected { client_key, error })
+                }
+                ServerEvent::Recv { client_key, msg } => self
+                    .conditioner
+                    .condition(ServerRecv {
+                        client_key: client_key.clone(),
+                        msg,
+                    })
+                    .map(|recv| ServerEvent::Recv {
+                        client_key,
+                        msg: recv.msg,
+                    }),
+                ServerEvent::Ack {
+                    client_key,
+                    msg_key,
+                } => Some(ServerEvent::Ack {
+                    client_key,
+                    msg_key,
+                }),
+                ServerEvent::ConnectionError { client_key, error } => {
+                    Some(ServerEvent::ConnectionError { client_key, error })
+                }
+            };
+            if let Some(event) = event {
                 events.push(event);
             }
         }

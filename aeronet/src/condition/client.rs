@@ -1,4 +1,8 @@
-use std::{fmt::Debug, time::Duration};
+use std::{
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+    time::Duration,
+};
 
 use derivative::Derivative;
 
@@ -63,7 +67,7 @@ where
     }
 }
 
-impl<P, T> std::ops::Deref for ConditionedClient<P, T>
+impl<P, T> Deref for ConditionedClient<P, T>
 where
     P: TransportProtocol,
     T: ClientTransport<P>,
@@ -75,7 +79,7 @@ where
     }
 }
 
-impl<P, T> std::ops::DerefMut for ConditionedClient<P, T>
+impl<P, T> DerefMut for ConditionedClient<P, T>
 where
     P: TransportProtocol,
     T: ClientTransport<P>,
@@ -85,11 +89,7 @@ where
     }
 }
 
-impl<P, T> ClientTransport<P> for ConditionedClient<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P>,
-{
+impl<P: TransportProtocol, T: ClientTransport<P>> ClientTransport<P> for ConditionedClient<P, T> {
     type Error = T::Error;
 
     type Connecting<'this> = T::Connecting<'this> where Self: 'this;
@@ -110,11 +110,8 @@ where
         self.inner.flush()
     }
 
-    fn poll(
-        &mut self,
-        delta_time: Duration,
-    ) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>> {
-        let mut events = Vec::new();
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<P, Self>> {
+        let mut events = Vec::<ClientEvent<P, Self>>::new();
 
         events.extend(
             self.conditioner
@@ -123,11 +120,20 @@ where
         );
 
         for event in self.inner.poll(delta_time) {
-            if let ClientEvent::Recv { msg } = event {
-                if let Some(ClientRecv { msg }) = self.conditioner.condition(ClientRecv { msg }) {
-                    events.push(ClientEvent::Recv { msg });
+            // we have to remap ClientEvent<P, T> to ClientEvent<P, Self>
+            let event = match event {
+                ClientEvent::Connected => Some(ClientEvent::Connected),
+                ClientEvent::Disconnected { error } => Some(ClientEvent::Disconnected { error }),
+                ClientEvent::Recv { msg } => self
+                    .conditioner
+                    .condition(ClientRecv { msg })
+                    .map(|recv| ClientEvent::Recv { msg: recv.msg }),
+                ClientEvent::Ack { msg_key } => Some(ClientEvent::Ack { msg_key }),
+                ClientEvent::ConnectionError { error } => {
+                    Some(ClientEvent::ConnectionError { error })
                 }
-            } else {
+            };
+            if let Some(event) = event {
                 events.push(event);
             }
         }

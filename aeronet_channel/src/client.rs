@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use aeronet::{
-    client::{ClientEvent, ClientEventFor, ClientState, ClientTransport},
+    client::{ClientEvent, ClientState, ClientTransport},
     protocol::TransportProtocol,
 };
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
@@ -55,7 +55,7 @@ impl<P: TransportProtocol> ChannelClient<P> {
     ///
     /// # Errors
     ///
-    /// Errors if this is not [connected](ClientState::Connected).
+    /// Errors if this is not [`ClientState::Connected`].
     pub fn disconnect(&mut self) -> Result<(), ChannelError> {
         if let Inner::Disconnected = self.inner {
             return Err(ChannelError::AlreadyDisconnected);
@@ -86,7 +86,7 @@ impl<P: TransportProtocol> ChannelClient<P> {
     ///
     /// # Errors
     ///
-    /// Errors if this is not [disconnected](ClientState::Disconnected).
+    /// Errors if this is not [`ClientState::Disconnected`].
     pub fn connect(&mut self, server: &mut ChannelServer<P>) -> Result<(), ChannelError> {
         let Inner::Disconnected = self.inner else {
             return Err(ChannelError::AlreadyConnected);
@@ -135,10 +135,7 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
         }
     }
 
-    fn poll(
-        &mut self,
-        _: Duration,
-    ) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>> {
+    fn poll(&mut self, _: Duration) -> impl Iterator<Item = ClientEvent<P, Self>> {
         replace_with::replace_with_or_abort_and_return(&mut self.inner, |inner| match inner {
             Inner::Disconnected => (Either::Left(std::iter::empty()), inner),
             Inner::Connected(client) => {
@@ -151,7 +148,7 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
 }
 
 impl<P: TransportProtocol> ChannelClient<P> {
-    fn poll_connected(mut client: Connected<P>) -> (Vec<ClientEventFor<P, Self>>, Inner<P>) {
+    fn poll_connected(mut client: Connected<P>) -> (Vec<ClientEvent<P, Self>>, Inner<P>) {
         let mut events = Vec::new();
 
         if client.send_connected {

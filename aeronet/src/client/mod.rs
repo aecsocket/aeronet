@@ -16,19 +16,19 @@ use crate::protocol::TransportProtocol;
 /// the server.
 ///
 /// See the [crate-level documentation](crate).
-pub trait ClientTransport<P: TransportProtocol> {
+pub trait ClientTransport<P: TransportProtocol>: Sized {
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync;
 
     /// Client state when it is in [`ClientState::Connecting`].
-    type Connecting<'this>
+    type Connecting<'t>
     where
-        Self: 'this;
+        Self: 't;
 
     /// Client state when it is in [`ClientState::Connected`].
-    type Connected<'this>
+    type Connected<'t>
     where
-        Self: 'this;
+        Self: 't;
 
     /// Key uniquely identifying a sent message.
     ///
@@ -91,10 +91,7 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// this function, the transport is guaranteed to be in this new state. Only
     /// up to one state-changing event will be produced by this function per
     /// function call.
-    fn poll(
-        &mut self,
-        delta_time: Duration,
-    ) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>>;
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<P, Self>>;
 }
 
 /// State of a [`ClientTransport`].
@@ -110,6 +107,11 @@ pub enum ClientState<A, B> {
     /// Ready to transport data to/from a server.
     Connected(B),
 }
+
+pub type ClientStateFor<'t, P, T> = ClientState<
+    <T as ClientTransport<P>>::Connecting<'t>,
+    <T as ClientTransport<P>>::Connected<'t>,
+>;
 
 impl<A, B> ClientState<A, B> {
     /// Gets if this is a [`ClientState::Disconnected`].
@@ -134,19 +136,17 @@ impl<A, B> ClientState<A, B> {
     }
 }
 
-/// Shorthand for the [`ClientState`] of a given [`ClientTransport`].
-pub type ClientStateFor<'this, P, T> = ClientState<
-    <T as ClientTransport<P>>::Connecting<'this>,
-    <T as ClientTransport<P>>::Connected<'this>,
->;
-
 /// Event emitted by a [`ClientTransport`].
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::S2C: Debug, E: Debug, M: Debug"),
-    Clone(bound = "P::S2C: Clone, E: Clone, M: Clone")
+    Debug(bound = "T::Error: Debug, P::S2C: Debug"),
+    Clone(bound = "T::Error: Clone, P::S2C: Clone")
 )]
-pub enum ClientEvent<P: TransportProtocol, E, M> {
+pub enum ClientEvent<P, T>
+where
+    P: TransportProtocol,
+    T: ClientTransport<P>,
+{
     // state
     /// The client has fully established a connection to the server.
     ///
@@ -162,7 +162,7 @@ pub enum ClientEvent<P: TransportProtocol, E, M> {
     /// This event is not raised when the app invokes a disconnect.
     Disconnected {
         /// Why the client lost connection.
-        error: E,
+        error: T::Error,
     },
 
     // info
@@ -175,7 +175,7 @@ pub enum ClientEvent<P: TransportProtocol, E, M> {
     /// us.
     Ack {
         /// Key of the sent message, obtained by [`ClientTransport::send`].
-        msg_key: M,
+        msg_key: T::MessageKey,
     },
     /// The client has experienced a non-fatal connection error.
     ///
@@ -183,10 +183,6 @@ pub enum ClientEvent<P: TransportProtocol, E, M> {
     /// emitted.
     ConnectionError {
         /// Error which occurred.
-        error: E,
+        error: T::Error,
     },
 }
-
-/// Shorthand for the [`ClientEvent`] of a given [`ClientTransport`].
-pub type ClientEventFor<P, T> =
-    ClientEvent<P, <T as ClientTransport<P>>::Error, <T as ClientTransport<P>>::MessageKey>;

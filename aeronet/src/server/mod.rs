@@ -16,29 +16,29 @@ use crate::{client::ClientState, protocol::TransportProtocol};
 /// server and connected clients.
 ///
 /// See the [crate-level documentation](crate).
-pub trait ServerTransport<P: TransportProtocol> {
+pub trait ServerTransport<P: TransportProtocol>: Sized {
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync;
 
     /// Server state when it is in [`ServerState::Opening`].
-    type Opening<'this>
+    type Opening<'t>
     where
-        Self: 'this;
+        Self: 't;
 
     /// Server state when it is in [`ServerState::Open`].
-    type Open<'this>
+    type Open<'t>
     where
-        Self: 'this;
+        Self: 't;
 
     /// Client state when it is in [`ClientState::Connecting`].
-    type Connecting<'this>
+    type Connecting<'t>
     where
-        Self: 'this;
+        Self: 't;
 
     /// Client state when it is in [`ClientState::Connected`].
-    type Connected<'this>
+    type Connected<'t>
     where
-        Self: 'this;
+        Self: 't;
 
     /// Key uniquely identifying a client.
     ///
@@ -143,10 +143,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// this function, the transport is guaranteed to be in this new state. Only
     /// up to one state-changing event will be produced by this function per
     /// function call.
-    fn poll(
-        &mut self,
-        dt: Duration,
-    ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>>;
+    fn poll(&mut self, dt: Duration) -> impl Iterator<Item = ServerEvent<P, Self>>;
 }
 
 /// State of a [`ServerTransport`].
@@ -188,10 +185,14 @@ impl<A, B> ServerState<A, B> {
 /// Event emitted by a [`ServerTransport`].
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "P::C2S: Debug, E: Debug, C: Debug, M: Debug"),
-    Clone(bound = "P::C2S: Clone, E: Clone, C: Clone, M: Clone")
+    Debug(bound = "T::Error: Debug, P::C2S: Debug"),
+    Clone(bound = "T::Error: Clone, P::C2S: Clone")
 )]
-pub enum ServerEvent<P: TransportProtocol, E, C, M> {
+pub enum ServerEvent<P, T>
+where
+    P: TransportProtocol,
+    T: ServerTransport<P>,
+{
     // server state
     /// The server has completed setup and is ready to accept client
     /// connections, changing state to [`ServerState::Open`].
@@ -200,7 +201,7 @@ pub enum ServerEvent<P: TransportProtocol, E, C, M> {
     /// [`ServerState::Closed`].
     Closed {
         /// Why the server closed.
-        error: E,
+        error: T::Error,
     },
 
     // client state
@@ -213,7 +214,7 @@ pub enum ServerEvent<P: TransportProtocol, E, C, M> {
     /// [`ServerEvent::Disconnected`].
     Connecting {
         /// Key of the client.
-        client_key: C,
+        client_key: T::ClientKey,
     },
     /// A remote client has fully established a connection to this server.
     ///
@@ -224,23 +225,23 @@ pub enum ServerEvent<P: TransportProtocol, E, C, M> {
     /// spawning the player's model in the world.
     Connected {
         /// Key of the client.
-        client_key: C,
+        client_key: T::ClientKey,
     },
     /// A remote client has unrecoverably lost connection from this server.
     ///
     /// This event is not raised when the server forces a client to disconnect.
     Disconnected {
         /// Key of the client.
-        client_key: C,
+        client_key: T::ClientKey,
         /// Why the client lost connection.
-        error: E,
+        error: T::Error,
     },
 
     // messages
     /// The server received a message from a remote client.
     Recv {
         /// Key of the client.
-        client_key: C,
+        client_key: T::ClientKey,
         /// The message received.
         msg: P::C2S,
     },
@@ -248,9 +249,9 @@ pub enum ServerEvent<P: TransportProtocol, E, C, M> {
     /// us.
     Ack {
         /// Key of the client.
-        client_key: C,
+        client_key: T::ClientKey,
         /// Key of the sent message, obtained by [`ServerTransport::send`].
-        msg_key: M,
+        msg_key: T::MessageKey,
     },
     /// The server has experienced a non-fatal connection error while processing
     /// a client's connection.
@@ -259,16 +260,8 @@ pub enum ServerEvent<P: TransportProtocol, E, C, M> {
     /// emitted.
     ConnectionError {
         /// Key of the client.
-        client_key: C,
+        client_key: T::ClientKey,
         /// Error which occurred.
-        error: E,
+        error: T::Error,
     },
 }
-
-/// Shorthand for the [`ServerEvent`] of a given [`ServerTransport`].
-pub type ServerEventFor<P, T> = ServerEvent<
-    P,
-    <T as ServerTransport<P>>::Error,
-    <T as ServerTransport<P>>::ClientKey,
-    <T as ServerTransport<P>>::MessageKey,
->;

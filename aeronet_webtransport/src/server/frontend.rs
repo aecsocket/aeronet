@@ -6,7 +6,7 @@ use aeronet::{
     lane::{LaneKind, OnLane},
     message::{TryFromBytes, TryIntoBytes},
     protocol::TransportProtocol,
-    server::{ServerEvent, ServerEventFor, ServerState, ServerTransport},
+    server::{ServerEvent, ServerState, ServerTransport},
 };
 use aeronet_proto::packet;
 use bytes::Bytes;
@@ -93,6 +93,7 @@ pub struct Connected<P: TransportProtocol> {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 enum Client<P: TransportProtocol> {
+    Disconnected,
     Connecting(Connecting),
     Requesting(Requesting),
     Connected(Connected<P>),
@@ -171,13 +172,13 @@ where
 {
     type Error = WebTransportServerError<P>;
 
-    type Opening<'this> = ();
+    type Opening<'t> = ();
 
-    type Open<'this> = &'this Open<P>;
+    type Open<'t> = &'t Open<P>;
 
-    type Connecting<'this> = &'this Requesting;
+    type Connecting<'t> = &'t Requesting;
 
-    type Connected<'this> = &'this Connected<P>;
+    type Connected<'t> = &'t Connected<P>;
 
     type ClientKey = ClientKey;
 
@@ -198,8 +199,11 @@ where
         let Inner::Open(server) = &self.inner else {
             return ClientState::Disconnected;
         };
+
         match server.clients.get(client_key) {
-            Some(Client::Connecting(_)) | None => ClientState::Disconnected,
+            None | Some(Client::Disconnected) | Some(Client::Connecting(_)) => {
+                ClientState::Disconnected
+            }
             Some(Client::Requesting(client)) => ClientState::Connecting(client),
             Some(Client::Connected(client)) => ClientState::Connected(client),
         }
@@ -258,6 +262,7 @@ where
         let Inner::Open(server) = &mut self.inner else {
             return Err(WebTransportServerError::NotOpen);
         };
+
         server
             .clients
             .remove(client_key)
@@ -265,10 +270,7 @@ where
             .ok_or(WebTransportServerError::ClientNotConnected)
     }
 
-    fn poll(
-        &mut self,
-        delta_time: Duration,
-    ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>> {
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<P, Self>> {
         replace_with::replace_with_or_abort_and_return(&mut self.inner, |inner| match inner {
             Inner::Closed => (Either::Left(None), inner),
             Inner::Opening(server) => {
@@ -290,7 +292,7 @@ where
     P::C2S: TryFromBytes + OnLane,
     P::S2C: TryIntoBytes + OnLane,
 {
-    fn poll_opening(mut server: Opening) -> (Option<ServerEventFor<P, Self>>, Inner<P>) {
+    fn poll_opening(mut server: Opening) -> (Option<ServerEvent<P, Self>>, Inner<P>) {
         if let Ok(Some(err)) = server.recv_err.try_recv() {
             return (
                 Some(ServerEvent::Closed { error: err.into() }),
@@ -322,7 +324,7 @@ where
     fn poll_open(
         mut server: Open<P>,
         delta_time: Duration,
-    ) -> (Vec<ServerEventFor<P, Self>>, Inner<P>) {
+    ) -> (Vec<ServerEvent<P, Self>>, Inner<P>) {
         let res = (|| {
             if let Some(err) = server
                 .recv_err
@@ -363,26 +365,32 @@ where
         let bytes_restored = ((server.bandwidth as f64) * delta_time.as_secs_f64()) as usize;
         server.bytes_left = (server.bytes_left + bytes_restored).min(server.bandwidth);
 
+        // process clients
         let mut events = Vec::new();
-        let mut clients_to_remove = Vec::new();
         for (client_key, client) in &mut server.clients {
-            let res = match client {
+            replace_with::replace_with_or_abort(client, |client| match client {
+                Client::Disconnected => Client::Disconnected,
                 Client::Connecting(client) => {
                     Self::poll_connecting(&mut events, client_key, client)
                 }
-                Client::Requesting(_) => Ok(()),
+                Client::Requesting(client) => {
+                    Self::poll_requesting(&mut events, client_key, client)
+                }
                 Client::Connected(client) => {
                     Self::poll_connected(&mut events, client_key, client, delta_time)
                 }
-            };
-            if let Err(error) = res {
-                // disconnect if errors found
-                events.push(ServerEvent::Disconnected { client_key, error });
-                clients_to_remove.push(client_key);
-            }
+            });
         }
 
-        for client_key in clients_to_remove {
+        let removed_clients = server
+            .clients
+            .iter()
+            .filter_map(|(client_key, client)| match client {
+                Client::Disconnected => Some(client_key),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for client_key in removed_clients {
             server.clients.remove(client_key);
         }
 
@@ -390,31 +398,53 @@ where
     }
 
     fn poll_connecting(
-        events: &mut Vec<ServerEventFor<P, Self>>,
+        events: &mut Vec<ServerEvent<P, Self>>,
         client_key: ClientKey,
-        client: &mut Connecting,
-    ) -> Result<(), WebTransportServerError<P>> {
-        if let Some(err) = client
-            .recv_err
-            .try_recv()
-            .map_err(|_| WebTransportServerError::ClientBackendClosed)?
-        {
-            return Err(err.into());
-        }
+        mut client: Connecting,
+    ) -> Client<P> {
+        let res = (|| {
+            if let Some(err) = client
+                .recv_err
+                .try_recv()
+                .map_err(|_| WebTransportServerError::ClientBackendClosed)?
+            {
+                return Err(err.into());
+            }
 
-        let x = client
-            .recv_requesting
-            .try_recv()
-            .map_err(|_| WebTransportServerError::ClientBackendClosed)?;
-        Ok(())
+            if let Some(requesting) = client
+                .recv_requesting
+                .try_recv()
+                .map_err(|_| WebTransportServerError::ClientBackendClosed)?
+            {
+                Ok(Client::Requesting(Requesting {
+                    authority: requesting.authority,
+                    path: requesting.path,
+                    origin: requesting.origin,
+                    user_agent: requesting.user_agent,
+                    headers: requesting.headers,
+                    recv_err: client.recv_err,
+                    recv_connected: requesting.recv_connected,
+                }))
+            } else {
+                Ok(Client::Connecting(client))
+            }
+        })();
+
+        match res {
+            Ok(new) => new,
+            Err(error) => {
+                events.push(ServerEvent::Disconnected { client_key, error });
+                Client::Disconnected
+            }
+        }
     }
 
     fn poll_connected(
-        events: &mut Vec<ServerEventFor<P, Self>>,
+        events: &mut Vec<ServerEvent<P, Self>>,
         client_key: ClientKey,
         client: &mut Connected<P>,
         delta_time: Duration,
-    ) -> Result<(), WebTransportServerError<P>> {
+    ) -> Client<P> {
         // refill bytes token bucket
         let bytes_restored = ((client.bandwidth as f64) * delta_time.as_secs_f64()) as usize;
         client.bytes_left = (client.bytes_left + bytes_restored).min(client.bandwidth);
