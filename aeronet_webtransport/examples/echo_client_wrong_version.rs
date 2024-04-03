@@ -112,7 +112,7 @@ fn on_disconnected(
     mut events: EventReader<LocalClientDisconnected<AppProtocol, Client>>,
     mut ui_state: ResMut<UiState>,
 ) {
-    for LocalClientDisconnected { reason } in events.read() {
+    for LocalClientDisconnected { error: reason } in events.read() {
         ui_state.log.push(format!(
             "Disconnected: {:#}",
             aeronet::util::pretty_error(&reason)

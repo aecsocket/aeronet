@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 
 use aeronet::{
     client::{
-        client_connected, ClientEvent, ClientFlushError, ClientState, ClientTransport,
-        ClientTransportSet, LocalClientConnected, LocalClientDisconnected,
+        client_connected, ClientConnectionError, ClientEvent, ClientFlushError, ClientState,
+        ClientTransport, ClientTransportSet, LocalClientConnected, LocalClientDisconnected,
     },
     protocol::TransportProtocol,
 };
@@ -33,36 +33,40 @@ where
     T: ClientTransport<P> + Resource,
 {
     fn build(&self, app: &mut App) {
-        app.configure_sets(
-            PreUpdate,
-            (
-                ClientTransportSet::Recv,
-                ClientSet::ReceivePackets.after(ClientTransportSet::Recv),
-            ),
-        )
-        .configure_sets(
-            PostUpdate,
-            (
-                ClientTransportSet::Send,
-                ClientSet::SendPackets.before(ClientTransportSet::Send),
-            ),
-        )
-        .add_systems(
-            PreUpdate,
-            (
-                Self::recv.run_if(resource_exists::<T>),
-                Self::update_state.run_if(resource_exists::<T>),
-                Self::on_removed.run_if(resource_removed::<T>()),
+        app.add_event::<LocalClientConnected<P, T>>()
+            .add_event::<LocalClientDisconnected<P, T>>()
+            .add_event::<ClientConnectionError<P, T>>()
+            .add_event::<ClientFlushError<P, T>>()
+            .configure_sets(
+                PreUpdate,
+                (
+                    ClientTransportSet::Recv,
+                    ClientSet::ReceivePackets.after(ClientTransportSet::Recv),
+                ),
             )
-                .chain()
-                .in_set(ServerSet::ReceivePackets),
-        )
-        .add_systems(
-            PostUpdate,
-            Self::send
-                .run_if(client_connected::<P, T>)
-                .in_set(ServerSet::SendPackets),
-        );
+            .configure_sets(
+                PostUpdate,
+                (
+                    ClientSet::SendPackets,
+                    ClientTransportSet::Send.after(ClientSet::SendPackets),
+                ),
+            )
+            .add_systems(
+                PreUpdate,
+                (
+                    Self::recv.run_if(resource_exists::<T>),
+                    Self::update_state.run_if(resource_exists::<T>),
+                    Self::on_removed.run_if(resource_removed::<T>()),
+                )
+                    .chain()
+                    .in_set(ServerSet::ReceivePackets),
+            )
+            .add_systems(
+                PostUpdate,
+                Self::send
+                    .run_if(client_connected::<P, T>)
+                    .in_set(ServerSet::SendPackets),
+            );
     }
 }
 
@@ -85,6 +89,7 @@ where
         mut replicon: ResMut<RepliconClient>,
         mut connected: EventWriter<LocalClientConnected<P, T>>,
         mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
+        mut errors: EventWriter<ClientConnectionError<P, T>>,
     ) {
         for event in client.poll(time.delta()) {
             match event {
@@ -93,13 +98,16 @@ where
                         _phantom: PhantomData,
                     });
                 }
-                ClientEvent::Disconnected { reason } => {
-                    disconnected.send(LocalClientDisconnected { reason });
+                ClientEvent::Disconnected { error: reason } => {
+                    disconnected.send(LocalClientDisconnected { error: reason });
                 }
                 ClientEvent::Recv { msg } => {
                     replicon.insert_received(msg.channel_id, msg.payload);
                 }
                 ClientEvent::Ack { .. } => {}
+                ClientEvent::ConnectionError { error } => {
+                    errors.send(ClientConnectionError { error });
+                }
             }
         }
     }

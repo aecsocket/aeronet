@@ -26,7 +26,8 @@ use crate::{
 /// * [`LocalClientDisconnected`]
 /// * [`FromServer`]
 /// * [`AckFromServer`]
-/// * [`ClientFlushError`]
+/// * [`LocalClientError`]
+/// * [`ClientConnectionError`]
 ///
 /// This plugin provides the run conditions:
 /// * [`client_connected`]
@@ -65,6 +66,7 @@ where
         .add_event::<LocalClientDisconnected<P, T>>()
         .add_event::<FromServer<P, T>>()
         .add_event::<AckFromServer<P, T>>()
+        .add_event::<ClientConnectionError<P, T>>()
         .add_event::<ClientFlushError<P, T>>()
         .configure_sets(PreUpdate, ClientTransportSet::Recv)
         .configure_sets(PostUpdate, ClientTransportSet::Send)
@@ -193,7 +195,7 @@ where
     T: ClientTransport<P> + Resource,
 {
     /// Why the client lost connection.
-    pub reason: T::Error,
+    pub error: T::Error,
 }
 
 /// The client received a message from the server.
@@ -228,6 +230,23 @@ where
     pub msg_key: T::MessageKey,
 }
 
+/// The client has experienced a non-fatal network error.
+///
+/// The connection is still active until [`ClientEvent::Disconnected`] is
+/// emitted.
+///
+/// See [`ClientEvent::ConnectionError`].
+#[derive(Derivative, Event)]
+#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+pub struct ClientConnectionError<P, T>
+where
+    P: TransportProtocol,
+    T: ClientTransport<P> + Resource,
+{
+    /// Error which occurred.
+    pub error: T::Error,
+}
+
 /// [`ClientTransport::flush`] produced an error.
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
@@ -240,6 +259,7 @@ where
     pub error: T::Error,
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn recv<P, T>(
     time: Res<Time>,
     mut client: ResMut<T>,
@@ -247,6 +267,7 @@ fn recv<P, T>(
     mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
     mut recv: EventWriter<FromServer<P, T>>,
     mut ack: EventWriter<AckFromServer<P, T>>,
+    mut errors: EventWriter<ClientConnectionError<P, T>>,
 ) where
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
@@ -258,8 +279,8 @@ fn recv<P, T>(
                     _phantom: PhantomData,
                 });
             }
-            ClientEvent::Disconnected { reason } => {
-                disconnected.send(LocalClientDisconnected { reason });
+            ClientEvent::Disconnected { error } => {
+                disconnected.send(LocalClientDisconnected { error });
             }
             ClientEvent::Recv { msg } => {
                 recv.send(FromServer {
@@ -269,6 +290,9 @@ fn recv<P, T>(
             }
             ClientEvent::Ack { msg_key } => {
                 ack.send(AckFromServer { msg_key });
+            }
+            ClientEvent::ConnectionError { error } => {
+                errors.send(ClientConnectionError { error });
             }
         }
     }

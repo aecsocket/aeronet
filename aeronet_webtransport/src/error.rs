@@ -36,8 +36,6 @@ cfg_if::cfg_if! {
             }
         }
 
-        type EndpointConnectError = JsError;
-        type ConnectingError = JsError;
         type OpenBiStreamError = JsError;
         type OpeningBiStreamError = JsError;
         type AcceptBiStreamError = JsError;
@@ -46,10 +44,8 @@ cfg_if::cfg_if! {
         type SendDatagramError = JsError;
         type RecvDatagramError = JsError;
     } else {
-        use crate::ty::*;
+        use crate::ty;
 
-        type EndpointConnectError = <ty::Endpoint as xwt_core::EndpointConnect>::Error;
-        type ConnectingError = <ty::Connecting as xwt_core::Connecting>::Error;
         type OpenBiStreamError = <ty::OpenBiStream as xwt_core::OpenBiStream>::Error;
         type OpeningBiStreamError = <ty::OpeningBiStream as xwt_core::OpeningBiStream>::Error;
         type AcceptBiStreamError = <ty::AcceptBiStream as xwt_core::AcceptBiStream>::Error;
@@ -60,18 +56,25 @@ cfg_if::cfg_if! {
     }
 }
 
+// backend errors are always fatal
+// "fatal" means:
+// * client: force close the connection
+// * server:
+//   * if it's an opening error: close the server
+//   * if it's an error on a client connection: force dc the client
 #[derive(Debug, thiserror::Error)]
 pub enum BackendError {
+    // generic
     #[error("frontend closed")]
     FrontendClosed,
-
     #[error("failed to create endpoint")]
     CreateEndpoint(#[source] io::Error),
-    #[error("failed to start connecting")]
-    StartConnecting(#[source] EndpointConnectError),
-    #[error("failed to await connection")]
-    AwaitConnection(#[source] ConnectingError),
+    #[error("failed to get local address")]
+    GetLocalAddr(#[source] io::Error),
+    #[error("datagrams are not supported on this peer")]
+    DatagramsNotSupported,
 
+    // client
     #[error("failed to start opening managed stream")]
     StartOpeningManaged(#[source] OpenBiStreamError),
     #[error("failed to await opening managed stream")]

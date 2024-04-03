@@ -28,6 +28,7 @@ use super::{ServerEvent, ServerTransport};
 /// * [`RemoteClientDisconnected`]
 /// * [`FromClient`]
 /// * [`AckFromClient`]
+/// * [`ServerConnectionError`]
 /// * [`ServerFlushError`]
 ///
 /// This plugin provides the run conditions:
@@ -69,6 +70,7 @@ where
         .add_event::<RemoteClientDisconnected<P, T>>()
         .add_event::<FromClient<P, T>>()
         .add_event::<AckFromClient<P, T>>()
+        .add_event::<ServerConnectionError<P, T>>()
         .add_event::<ServerFlushError<P, T>>()
         .configure_sets(PreUpdate, ServerTransportSet::Recv)
         .configure_sets(PostUpdate, ServerTransportSet::Send)
@@ -273,6 +275,8 @@ where
 
 /// A client acknowledged that they have fully received a message sent by
 /// us.
+///
+/// See [`ServerEvent::Ack`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct AckFromClient<P, T>
@@ -284,6 +288,26 @@ where
     pub client_key: T::ClientKey,
     /// Key of the sent message, obtained by [`ServerTransport::send`].
     pub msg_key: T::MessageKey,
+}
+
+/// The server has experienced a non-fatal connection error while processing
+/// a client's connection.
+///
+/// The connection is still active until [`ServerEvent::Disconnected`] is
+/// emitted.
+///
+/// See [`ServerEvent::ConnectionError`].
+#[derive(Derivative, Event)]
+#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+pub struct ServerConnectionError<P, T>
+where
+    P: TransportProtocol,
+    T: ServerTransport<P> + Resource,
+{
+    /// Key of the client.
+    pub client_key: T::ClientKey,
+    /// Error which occurred.
+    pub error: T::Error,
 }
 
 /// [`ServerTransport::flush`] produced an error.
@@ -299,6 +323,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_pass_by_value)]
 fn recv<P, T>(
     time: Res<Time>,
     mut server: ResMut<T>,
@@ -309,6 +334,7 @@ fn recv<P, T>(
     mut disconnected: EventWriter<RemoteClientDisconnected<P, T>>,
     mut recv: EventWriter<FromClient<P, T>>,
     mut ack: EventWriter<AckFromClient<P, T>>,
+    mut errors: EventWriter<ServerConnectionError<P, T>>,
 ) where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,
@@ -343,6 +369,9 @@ fn recv<P, T>(
                     client_key,
                     msg_key,
                 });
+            }
+            ServerEvent::ConnectionError { client_key, error } => {
+                errors.send(ServerConnectionError { client_key, error });
             }
         }
     }

@@ -3,7 +3,7 @@ use aeronet_proto::negotiate;
 use tracing::debug;
 use xwt_core::io::{Read, Write};
 
-use crate::{error::BackendError, ty::*};
+use crate::{error::BackendError, ty};
 
 pub async fn client(
     version: ProtocolVersion,
@@ -43,8 +43,8 @@ pub async fn client(
 #[cfg(not(target_family = "wasm"))]
 pub async fn server(
     version: ProtocolVersion,
-    send_managed: &mut ty::SendStream,
-    recv_managed: &mut ty::RecvStream,
+    send_managed: &mut wtransport::SendStream,
+    recv_managed: &mut wtransport::RecvStream,
 ) -> Result<(), BackendError> {
     let negotiate = negotiate::Negotiation::new(version);
 

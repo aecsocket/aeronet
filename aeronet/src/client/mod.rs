@@ -157,10 +157,10 @@ pub enum ClientEvent<P: TransportProtocol, E, M> {
     /// This event is not raised when the app invokes a disconnect.
     Disconnected {
         /// Why the client lost connection.
-        reason: E,
+        error: E,
     },
 
-    // messages
+    // info
     /// The client received a message from the server.
     Recv {
         /// The message received.
@@ -171,6 +171,14 @@ pub enum ClientEvent<P: TransportProtocol, E, M> {
     Ack {
         /// Key of the sent message, obtained by [`ClientTransport::send`].
         msg_key: M,
+    },
+    /// The client has experienced a non-fatal connection error.
+    ///
+    /// The connection is still active until [`ClientEvent::Disconnected`] is
+    /// emitted.
+    ConnectionError {
+        /// Error which occurred.
+        error: E,
     },
 }
 

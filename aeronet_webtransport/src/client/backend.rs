@@ -3,19 +3,19 @@ use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
     never::Never,
-    FutureExt, SinkExt, StreamExt,
+    FutureExt,
 };
 use tracing::debug;
-use xwt_core::{
-    datagram::{Receive, Send},
-    Connecting, EndpointConnect, OpenBiStream, OpeningBiStream,
+use xwt_core::{Connecting, EndpointConnect, OpenBiStream, OpeningBiStream};
+
+use crate::{
+    error::BackendError,
+    internal::{self, BUFFER_SIZE},
+    transport::ConnectionStats,
+    ty,
 };
 
-use crate::{error::BackendError, internal, transport::ConnectionStats, ty::*};
-
-use super::NativeConfig;
-
-const BUFFER_SIZE: usize = 32;
+use super::{ClientBackendError, NativeConfig};
 
 #[derive(Debug)]
 pub struct Connected {
@@ -25,21 +25,25 @@ pub struct Connected {
     pub initial_stats: ConnectionStats,
 }
 
-pub async fn open(
-    config: NativeConfig,
-    url: String,
+pub async fn start(
+    native_config: NativeConfig,
     version: ProtocolVersion,
+    target: String,
     send_connected: oneshot::Sender<Connected>,
-) -> Result<Never, BackendError> {
-    let endpoint = create_endpoint(config)?;
-    debug!("Connecting to {url:?}");
+) -> Result<Never, ClientBackendError> {
+    let endpoint = create_endpoint(native_config)?;
+    debug!("Connecting to {target:?}");
     let conn = endpoint
-        .connect(&url)
+        .connect(&target)
         .await
-        .map_err(|err| BackendError::StartConnecting(err.into()))?
+        .map_err(|err| ClientBackendError::StartConnecting(err.into()))?
         .wait_connect()
         .await
-        .map_err(|err| BackendError::AwaitConnection(err.into()))?;
+        .map_err(|err| ClientBackendError::AwaitConnection(err.into()))?;
+
+    if !internal::check_datagram_support(&conn) {
+        Err(BackendError::DatagramsNotSupported)?;
+    }
 
     debug!("Connection opened, opening managed stream");
     let (mut send_managed, mut recv_managed) = conn
@@ -53,7 +57,7 @@ pub async fn open(
     debug!("Managed stream open, negotiating protocol");
     internal::negotiate::client(version, &mut send_managed, &mut recv_managed).await?;
 
-    debug!("Negotiated successfully, starting connection loop");
+    debug!("Negotiated successfully, forwarding to frontend");
     let (send_c2s, recv_c2s) = mpsc::unbounded::<Bytes>();
     let (send_s2c, recv_s2c) = mpsc::channel::<Bytes>(BUFFER_SIZE);
     let (send_stats, recv_stats) = mpsc::channel::<ConnectionStats>(1);
@@ -66,73 +70,27 @@ pub async fn open(
         })
         .map_err(|_| BackendError::FrontendClosed)?;
 
-    let send = send(&conn, recv_c2s);
-    let recv = recv(&conn, send_s2c, send_stats);
+    debug!("Starting connection loop");
+    // `receive_datagram` may not be cancel-safe, so we create two futures which
+    // loop infinitely independently, and wait for the first one to fail
+    let send = internal::send(&conn, recv_c2s);
+    let recv = internal::recv(&conn, send_s2c, send_stats);
     futures::select! {
         r = send.fuse() => r,
         r = recv.fuse() => r,
     }
+    .map_err(From::from)
 }
 
 #[cfg(target_family = "wasm")]
-fn create_endpoint(config: web_sys::WebTransportOptions) -> Result<ty::Endpoint, BackendError> {
-    Ok(xwt::current::Endpoint { options: config })
+fn create_endpoint(
+    config: web_sys::WebTransportOptions,
+) -> Result<ty::Endpoint, ClientBackendError> {
+    Ok(ty::Endpoint { options: config })
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn create_endpoint(config: wtransport::ClientConfig) -> Result<ty::Endpoint, BackendError> {
+fn create_endpoint(config: wtransport::ClientConfig) -> Result<ty::Endpoint, ClientBackendError> {
     let endpoint = wtransport::Endpoint::client(config).map_err(BackendError::CreateEndpoint)?;
     Ok(xwt::current::Endpoint(endpoint))
-}
-
-async fn send(
-    conn: &ty::Connection,
-    mut recv_c2s: mpsc::UnboundedReceiver<Bytes>,
-) -> Result<Never, BackendError> {
-    loop {
-        let packet = recv_c2s.next().await.ok_or(BackendError::FrontendClosed)?;
-        conn.send_datagram(packet)
-            .await
-            .map_err(|err| BackendError::SendDatagram(err.into()))?;
-    }
-}
-
-async fn recv(
-    conn: &ty::Connection,
-    mut send_s2c: mpsc::Sender<Bytes>,
-    mut send_stats: mpsc::Sender<ConnectionStats>,
-) -> Result<Never, BackendError> {
-    loop {
-        let stats = ConnectionStats::from(conn);
-        if let Err(err) = send_stats.try_send(stats) {
-            if err.is_disconnected() {
-                return Err(BackendError::FrontendClosed);
-            }
-        }
-
-        let packet = conn
-            .receive_datagram()
-            .await
-            .map_err(|err| BackendError::RecvDatagram(err.into()))?;
-        send_s2c
-            .send(to_bytes(packet))
-            .await
-            .map_err(|_| BackendError::FrontendClosed)?;
-    }
-}
-
-// optimization: avoid as much reallocation as possible
-// * wtransport: use the `wtransport::Datagram::payload() -> Bytes`
-// * web-sys: use the `Vec<u8>` directly
-// TODO upstream this to xwt
-
-#[cfg(target_family = "wasm")]
-fn to_bytes(datagram: ty::Datagram) -> Bytes {
-    debug_assert_eq!(datagram.capacity(), datagram.len());
-    Bytes::from(datagram)
-}
-
-#[cfg(not(target_family = "wasm"))]
-fn to_bytes(datagram: ty::Datagram) -> Bytes {
-    datagram.0.payload()
 }

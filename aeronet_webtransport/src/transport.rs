@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use aeronet::stats::Rtt;
 
-use crate::ty::*;
+use crate::ty;
 
 pub const MTU: usize = 1200;
 
@@ -28,7 +28,14 @@ impl From<&ty::Connection> for ConnectionStats {
 
     #[cfg(not(target_family = "wasm"))]
     fn from(value: &ty::Connection) -> Self {
-        Self::new(value.0.rtt())
+        Self::from(&value.0)
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl From<&wtransport::Connection> for ConnectionStats {
+    fn from(value: &wtransport::Connection) -> Self {
+        Self::new(value.rtt())
     }
 }
 

@@ -3,6 +3,7 @@
 use std::{convert::Infallible, string::FromUtf8Error};
 
 use aeronet::{
+    bevy_tokio_rt::TokioRuntime,
     bytes::Bytes,
     client::{
         ClientState, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
@@ -12,8 +13,9 @@ use aeronet::{
     message::{Message, TryFromBytes, TryIntoBytes},
     protocol::{ProtocolVersion, TransportProtocol},
 };
-use aeronet_webtransport::{WebTransportClient, WebTransportClientConfig, MTU};
+use aeronet_webtransport::client::{WebTransportClient, WebTransportClientConfig};
 use bevy::{log::LogPlugin, prelude::*};
+use bevy_ecs::system::SystemId;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 // protocol
@@ -31,7 +33,6 @@ struct AppLane;
 // This is up to you, the user, to define. You can have different types
 // for client-to-server and server-to-client transport.
 #[derive(Debug, Clone, Message, OnLane)]
-#[lane_type(AppLane)]
 #[on_lane(AppLane)]
 struct AppMessage(String);
 
@@ -69,26 +70,41 @@ const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(0xdeadbeefbadc0de);
 
 type Client = WebTransportClient<AppProtocol>;
 
+#[cfg(target_family = "wasm")]
+fn native_config() -> aeronet_webtransport::web_sys::WebTransportOptions {
+    aeronet_webtransport::web_sys::WebTransportOptions::new()
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn native_config() -> aeronet_webtransport::wtransport::ClientConfig {
+    aeronet_webtransport::wtransport::ClientConfig::builder()
+        .with_bind_default()
+        .with_no_cert_validation()
+        .keep_alive_interval(Some(std::time::Duration::from_secs(5)))
+        .build()
+}
+
+fn client_config() -> WebTransportClientConfig {
+    WebTransportClientConfig::new(native_config(), PROTOCOL_VERSION, AppLane::KINDS)
+}
+
 // logic
 
 fn main() {
-    let mut app = App::new();
-    app.add_plugins((
-        DefaultPlugins.set(LogPlugin {
-            filter: "wgpu=error,naga=warn,aeronet=debug".into(),
-            ..default()
-        }),
-        EguiPlugin,
-        ClientTransportPlugin::<_, Client>::default(),
-    ))
-    .init_resource::<Client>()
-    .init_resource::<UiState>()
-    .add_systems(Update, (on_connected, on_disconnected, on_recv, ui).chain());
-
-    #[cfg(not(target_family = "wasm"))]
-    app.init_resource::<aeronet::runtime::TokioRuntime>();
-
-    app.run();
+    App::new()
+        .add_plugins((
+            DefaultPlugins.set(LogPlugin {
+                filter: "wgpu=error,naga=warn,aeronet=debug".into(),
+                ..default()
+            }),
+            EguiPlugin,
+            ClientTransportPlugin::<_, Client>::default(),
+        ))
+        .init_resource::<Client>()
+        .init_resource::<UiState>()
+        .add_systems(Startup, setup)
+        .add_systems(Update, (on_connected, on_disconnected, on_recv, ui).chain())
+        .run();
 }
 
 #[derive(Debug, Default, Resource)]
@@ -97,6 +113,36 @@ struct UiState {
     log: Vec<String>,
     msg: String,
 }
+
+#[derive(Debug, Resource, Deref, DerefMut)]
+struct ConnectSystem(SystemId<String>);
+
+fn setup(world: &mut World) {
+    #[cfg(not(target_family = "wasm"))]
+    world.init_resource::<TokioRuntime>();
+
+    let connect = world.register_system(connect);
+    world.insert_resource(ConnectSystem(connect));
+}
+
+fn connect(
+    In(target): In<String>,
+    #[cfg(not(target_family = "wasm"))] runtime: Res<TokioRuntime>,
+    mut client: ResMut<Client>,
+    mut ui_state: ResMut<UiState>,
+) {
+    ui_state.log.push(format!("Connecting to {target}"));
+    let Ok(backend) = client.connect(client_config(), target) else {
+        ui_state.log.push(format!("Client is already connected"));
+        return;
+    };
+    #[cfg(target_family = "wasm")]
+    wasm_bindgen_futures::spawn_local(backend);
+    #[cfg(not(target_family = "wasm"))]
+    runtime.spawn(backend);
+}
+
+// update
 
 fn on_connected(
     mut events: EventReader<LocalClientConnected<AppProtocol, Client>>,
@@ -111,7 +157,7 @@ fn on_disconnected(
     mut events: EventReader<LocalClientDisconnected<AppProtocol, Client>>,
     mut ui_state: ResMut<UiState>,
 ) {
-    for LocalClientDisconnected { reason } in events.read() {
+    for LocalClientDisconnected { error: reason } in events.read() {
         ui_state.log.push(format!(
             "Disconnected: {:#}",
             aeronet::error::pretty_error(&reason)
@@ -129,7 +175,8 @@ fn on_recv(
 }
 
 fn ui(
-    #[cfg(not(target_family = "wasm"))] runtime: Res<aeronet::runtime::TokioRuntime>,
+    mut commands: Commands,
+    connect_system: Res<ConnectSystem>,
     mut egui: EguiContexts,
     mut client: ResMut<Client>,
     mut ui_state: ResMut<UiState>,
@@ -144,22 +191,14 @@ fn ui(
                     })
                     .inner;
                 if let Some(url) = url {
-                    ui_state.log.push(format!("Connecting to {url}"));
-                    connect(
-                        #[cfg(not(target_family = "wasm"))]
-                        runtime.as_ref(),
-                        client.as_mut(),
-                        url,
-                    );
+                    commands.run_system_with_input(**connect_system, url);
                 }
             });
 
             ui.add_enabled_ui(!client.state().is_disconnected(), |ui| {
                 if ui.button("Disconnect").clicked() {
                     ui_state.log.push(format!("Disconnected by user"));
-                    client
-                        .disconnect()
-                        .expect("client should not already be disconnected");
+                    let _ = client.disconnect();
                 }
             });
         });
@@ -187,60 +226,26 @@ fn ui(
                 ui.label(format!("{:?}", info.rtt));
                 ui.end_row();
 
-                ui.label("Messages sent/received");
-                ui.label(format!("{} sent / {} recv", info.msgs_sent, info.msgs_recv));
-                ui.end_row();
+                // ui.label("Messages sent/received");
+                // ui.label(format!("{} sent / {} recv", info.msgs_sent, info.msgs_recv));
+                // ui.end_row();
 
-                ui.label("Message bytes sent/received");
-                ui.label(format!(
-                    "{} sent / {} recv",
-                    info.msg_bytes_sent, info.msg_bytes_recv
-                ));
-                ui.end_row();
+                // ui.label("Message bytes sent/received");
+                // ui.label(format!(
+                //     "{} sent / {} recv",
+                //     info.msg_bytes_sent, info.msg_bytes_recv
+                // ));
+                // ui.end_row();
 
-                ui.label("Total bytes sent/received");
-                ui.label(format!(
-                    "{} sent / {} recv",
-                    info.total_bytes_sent, info.total_bytes_recv
-                ));
-                ui.end_row();
+                // ui.label("Total bytes sent/received");
+                // ui.label(format!(
+                //     "{} sent / {} recv",
+                //     info.total_bytes_sent, info.total_bytes_recv
+                // ));
+                // ui.end_row();
             });
         }
     });
-}
-
-#[cfg(target_family = "wasm")]
-fn native_config() -> aeronet_webtransport::web_sys::WebTransportOptions {
-    aeronet_webtransport::web_sys::WebTransportOptions::new()
-}
-
-#[cfg(not(target_family = "wasm"))]
-fn native_config() -> aeronet_webtransport::wtransport::ClientConfig {
-    aeronet_webtransport::wtransport::ClientConfig::builder()
-        .with_bind_default()
-        .with_no_cert_validation()
-        .keep_alive_interval(Some(std::time::Duration::from_secs(5)))
-        .build()
-}
-
-fn connect(
-    #[cfg(not(target_family = "wasm"))] runtime: &aeronet::runtime::TokioRuntime,
-    client: &mut Client,
-    url: String,
-) {
-    let backend = client
-        .connect(WebTransportClientConfig {
-            native: native_config(),
-            version: PROTOCOL_VERSION,
-            max_packet_len: MTU,
-            lanes: AppLane::config(),
-            url,
-        })
-        .expect("backend should be disconnected");
-    #[cfg(target_family = "wasm")]
-    wasm_bindgen_futures::spawn_local(backend);
-    #[cfg(not(target_family = "wasm"))]
-    runtime.spawn(backend);
 }
 
 pub fn text_input(ui: &mut egui::Ui, text: &mut String) -> Option<String> {

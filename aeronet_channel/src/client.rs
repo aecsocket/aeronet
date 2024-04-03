@@ -192,7 +192,7 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
             Self::Connected(client) => match client.poll() {
                 (events, Ok(())) => events,
                 (mut events, Err(reason)) => {
-                    events.push(ClientEvent::Disconnected { reason });
+                    events.push(ClientEvent::Disconnected { error: reason });
                     events
                 }
             },

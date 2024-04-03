@@ -2,8 +2,9 @@
 #![doc = include_str!("../README.md")]
 
 pub mod client;
-//pub mod server;
 pub mod error;
+#[cfg(not(target_family = "wasm"))]
+pub mod server;
 pub mod transport;
 
 mod internal;

@@ -245,6 +245,17 @@ pub enum ServerEvent<P: TransportProtocol, E, C, M> {
         /// Key of the sent message, obtained by [`ServerTransport::send`].
         msg_key: M,
     },
+    /// The server has experienced a non-fatal connection error while processing
+    /// a client's connection.
+    ///
+    /// The connection is still active until [`ServerEvent::Disconnected`] is
+    /// emitted.
+    ConnectionError {
+        /// Key of the client.
+        client_key: C,
+        /// Error which occurred.
+        error: E,
+    },
 }
 
 /// Shorthand for the [`ServerEvent`] of a given [`ServerTransport`].

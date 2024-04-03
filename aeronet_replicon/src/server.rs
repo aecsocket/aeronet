@@ -4,8 +4,8 @@ use aeronet::{
     protocol::TransportProtocol,
     server::{
         server_open, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
-        ServerClosed, ServerEvent, ServerFlushError, ServerOpened, ServerState, ServerTransport,
-        ServerTransportSet,
+        ServerClosed, ServerConnectionError, ServerEvent, ServerFlushError, ServerOpened,
+        ServerState, ServerTransport, ServerTransportSet,
     },
 };
 use bevy::prelude::*;
@@ -73,7 +73,14 @@ where
     T: ServerTransport<P> + Resource,
 {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ClientKeys<P, T>>()
+        app.add_event::<ServerOpened<P, T>>()
+            .add_event::<ServerClosed<P, T>>()
+            .add_event::<RemoteClientConnecting<P, T>>()
+            .add_event::<RemoteClientConnected<P, T>>()
+            .add_event::<RemoteClientDisconnected<P, T>>()
+            .add_event::<ServerConnectionError<P, T>>()
+            .add_event::<ServerFlushError<P, T>>()
+            .init_resource::<ClientKeys<P, T>>()
             .configure_sets(
                 PreUpdate,
                 (
@@ -126,6 +133,7 @@ where
         mut connecting: EventWriter<RemoteClientConnecting<P, T>>,
         mut connected: EventWriter<RemoteClientConnected<P, T>>,
         mut disconnected: EventWriter<RemoteClientDisconnected<P, T>>,
+        mut errors: EventWriter<ServerConnectionError<P, T>>,
     ) {
         for event in server.poll(time.delta()) {
             match event {
@@ -180,6 +188,9 @@ where
                     replicon_server.insert_received(*client_id, msg.channel_id, msg.payload);
                 }
                 ServerEvent::Ack { .. } => {}
+                ServerEvent::ConnectionError { client_key, error } => {
+                    errors.send(ServerConnectionError { client_key, error });
+                }
             }
         }
     }
