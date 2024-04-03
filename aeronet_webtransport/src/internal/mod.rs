@@ -4,7 +4,10 @@ use bytes::Bytes;
 use futures::{channel::mpsc, never::Never, SinkExt, StreamExt};
 use xwt_core::datagram::{Receive, Send};
 
-use crate::{error::BackendError, transport::ConnectionStats, ty};
+use crate::{
+    shared::{self, ConnectionStats},
+    ty,
+};
 
 pub const BUFFER_SIZE: usize = 32;
 
@@ -21,12 +24,15 @@ pub fn check_datagram_support(conn: &ty::Connection) -> bool {
 pub async fn send(
     conn: &ty::Connection,
     mut recv_s: mpsc::UnboundedReceiver<Bytes>,
-) -> Result<Never, BackendError> {
+) -> Result<Never, shared::BackendError> {
     loop {
-        let packet = recv_s.next().await.ok_or(BackendError::FrontendClosed)?;
+        let packet = recv_s
+            .next()
+            .await
+            .ok_or(shared::BackendError::FrontendClosed)?;
         conn.send_datagram(packet)
             .await
-            .map_err(|err| BackendError::SendDatagram(err.into()))?;
+            .map_err(|err| shared::BackendError::SendDatagram(err.into()))?;
     }
 }
 
@@ -34,23 +40,23 @@ pub async fn recv(
     conn: &ty::Connection,
     mut send_r: mpsc::Sender<Bytes>,
     mut send_stats: mpsc::Sender<ConnectionStats>,
-) -> Result<Never, BackendError> {
+) -> Result<Never, shared::BackendError> {
     loop {
         let stats = ConnectionStats::from(conn);
         if let Err(err) = send_stats.try_send(stats) {
             if err.is_disconnected() {
-                Err(BackendError::FrontendClosed)?;
+                Err(shared::BackendError::FrontendClosed)?;
             }
         }
 
         let packet = conn
             .receive_datagram()
             .await
-            .map_err(|err| BackendError::RecvDatagram(err.into()))?;
+            .map_err(|err| shared::BackendError::RecvDatagram(err.into()))?;
         send_r
             .send(to_bytes(packet))
             .await
-            .map_err(|_| BackendError::FrontendClosed)?;
+            .map_err(|_| shared::BackendError::FrontendClosed)?;
     }
 }
 

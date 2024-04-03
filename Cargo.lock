@@ -117,6 +117,8 @@ dependencies = [
  "bevy_egui",
  "crossbeam-channel",
  "derivative",
+ "either",
+ "replace_with",
  "slotmap",
  "thiserror",
 ]

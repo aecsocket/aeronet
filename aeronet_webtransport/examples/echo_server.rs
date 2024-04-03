@@ -28,19 +28,28 @@ TODO: find the right command for Firefox
 use std::{convert::Infallible, string::FromUtf8Error, time::Duration};
 
 use aeronet::{
+    bevy_tokio_rt::TokioRuntime,
     client::ClientState,
+    error::pretty_error,
+    lane::{LaneKey, OnLane},
+    message::{Message, TryFromBytes, TryIntoBytes},
+    protocol::{ProtocolVersion, TransportProtocol},
     server::{
         FromClient, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
         ServerClosed, ServerOpened, ServerTransport, ServerTransportPlugin,
     },
-    LaneKey, Message, OnLane, ProtocolVersion, TokioRuntime, TransportProtocol, TryAsBytes,
-    TryFromBytes,
 };
-use aeronet_webtransport::{WebTransportServer, WebTransportServerConfig, MTU};
+use aeronet_webtransport::{
+    server::{WebTransportServer, WebTransportServerConfig},
+    transport::DEFAULT_MTU,
+};
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
+use bytes::Bytes;
 
+//
 // protocol
+//
 
 // Defines what kind of lanes are available to transport messages over on this
 // app's protocol.
@@ -55,7 +64,6 @@ struct AppLane;
 // This is up to you, the user, to define. You can have different types
 // for client-to-server and server-to-client transport.
 #[derive(Debug, Clone, Message, OnLane)]
-#[lane_type(AppLane)]
 #[on_lane(AppLane)]
 struct AppMessage(String);
 
@@ -66,23 +74,19 @@ impl<T: Into<String>> From<T> for AppMessage {
 }
 
 // Defines how this message type can be converted to/from a [u8] form.
-impl TryAsBytes for AppMessage {
-    type Output<'a> = &'a [u8];
+impl TryIntoBytes for AppMessage {
     type Error = Infallible;
 
-    fn try_as_bytes(&self) -> Result<Self::Output<'_>, Self::Error> {
-        Ok(self.0.as_bytes())
+    fn try_into_bytes(self) -> Result<Bytes, Self::Error> {
+        Ok(Bytes::from(self.0.into_bytes()))
     }
 }
 
 impl TryFromBytes for AppMessage {
     type Error = FromUtf8Error;
 
-    fn try_from_bytes(buf: &[u8]) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-    {
-        String::from_utf8(buf.to_vec()).map(AppMessage)
+    fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error> {
+        String::from_utf8(buf.into()).map(AppMessage)
     }
 }
 
@@ -95,9 +99,15 @@ impl TransportProtocol for AppProtocol {
 
 const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(0xdeadbeefbadc0de);
 
+//
+// config
+//
+
 type Server = WebTransportServer<AppProtocol>;
 
+//
 // logic
+//
 
 fn main() {
     App::new()
@@ -144,14 +154,16 @@ fn create(rt: &TokioRuntime) -> Result<WebTransportServer<AppProtocol>> {
     ))?;
 
     let (server, backend) = WebTransportServer::open_new(WebTransportServerConfig {
-        native: aeronet_webtransport::wtransport::ServerConfig::builder()
-            .with_bind_default(25565)
-            .with_certificate(cert)
-            .keep_alive_interval(Some(Duration::from_secs(5)))
-            .build(),
         version: PROTOCOL_VERSION,
-        max_packet_len: MTU,
-        lanes: AppLane::config(),
+        max_packet_len: DEFAULT_MTU,
+        lanes: AppLane::KINDS.into(),
+        ..WebTransportServerConfig::new(
+            aeronet_webtransport::wtransport::ServerConfig::builder()
+                .with_bind_default(25565)
+                .with_certificate(cert)
+                .keep_alive_interval(Some(Duration::from_secs(5)))
+                .build(),
+        )
     });
     rt.spawn(backend);
 
@@ -178,8 +190,8 @@ fn on_opened(mut events: EventReader<ServerOpened<AppProtocol, Server>>) {
 }
 
 fn on_closed(mut events: EventReader<ServerClosed<AppProtocol, Server>>) {
-    for ServerClosed { reason } in events.read() {
-        info!("Server closed: {:#}", aeronet::util::pretty_error(&reason))
+    for ServerClosed { error: reason } in events.read() {
+        info!("Server closed: {:#}", pretty_error(&reason))
     }
 }
 
@@ -229,13 +241,10 @@ fn on_connected(
 fn on_disconnected(mut events: EventReader<RemoteClientDisconnected<AppProtocol, Server>>) {
     for RemoteClientDisconnected {
         client_key: client,
-        reason,
+        error: reason,
     } in events.read()
     {
-        info!(
-            "Client {client} disconnected: {:#}",
-            aeronet::util::pretty_error(reason)
-        );
+        info!("Client {client} disconnected: {:#}", pretty_error(reason));
     }
 }
 

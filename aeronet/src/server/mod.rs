@@ -20,19 +20,25 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync;
 
-    /// Info on this server when it is in [`ServerState::Opening`].
-    type OpeningInfo;
+    /// Server state when it is in [`ServerState::Opening`].
+    type Opening<'this>
+    where
+        Self: 'this;
 
-    /// Info on this server when it is in [`ServerState::Open`].
-    type OpenInfo;
+    /// Server state when it is in [`ServerState::Open`].
+    type Open<'this>
+    where
+        Self: 'this;
 
-    /// Info on clients connected to this server when they are in
-    /// [`ClientState::Connecting`].
-    type ConnectingInfo;
+    /// Client state when it is in [`ClientState::Connecting`].
+    type Connecting<'this>
+    where
+        Self: 'this;
 
-    /// Info on clients connected to this server when they are in
-    /// [`ClientState::Connected`].
-    type ConnectedInfo;
+    /// Client state when it is in [`ClientState::Connected`].
+    type Connected<'this>
+    where
+        Self: 'this;
 
     /// Key uniquely identifying a client.
     ///
@@ -54,7 +60,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// if the transport exposes it.
     ///
     /// [local address]: crate::stats::LocalAddr
-    fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo>;
+    fn state(&self) -> ServerState<Self::Opening<'_>, Self::Open<'_>>;
 
     /// Reads the current state of a client.
     ///
@@ -67,7 +73,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     fn client_state(
         &self,
         client_key: Self::ClientKey,
-    ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
+    ) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>>;
 
     /// Iterator over the keys of all clients currently recognized by this
     /// server.
@@ -103,12 +109,13 @@ pub trait ServerTransport<P: TransportProtocol> {
     /// Sends all messages previously buffered by [`ServerTransport::send`] to
     /// peers.
     ///
-    /// If this transport is not connected, this will return [`Ok`].
+    /// Note that implementations may choose to send messages immediately
+    /// instead of buffering them. In this case, flushing will be a no-op.
     ///
     /// # Errors
     ///
     /// Errors if the transport failed to *attempt to* flush messages, e.g. if
-    /// the connection has already been closed.
+    /// the transport is closed.
     ///
     /// If a transmission error occurs later after this function's scope has
     /// finished, then this will still return [`Ok`].
@@ -139,7 +146,7 @@ pub trait ServerTransport<P: TransportProtocol> {
     fn poll(
         &mut self,
         dt: Duration,
-    ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>> + '_;
+    ) -> impl Iterator<Item = ServerEvent<P, Self::Error, Self::ClientKey, Self::MessageKey>>;
 }
 
 /// State of a [`ServerTransport`].
@@ -158,8 +165,8 @@ pub enum ServerState<A, B> {
 }
 
 /// Shorthand for the [`ServerState`] of a given [`ServerTransport`].
-pub type ServerStateFor<P, T> =
-    ServerState<<T as ServerTransport<P>>::OpeningInfo, <T as ServerTransport<P>>::OpenInfo>;
+pub type ServerStateFor<'this, P, T> =
+    ServerState<<T as ServerTransport<P>>::Opening<'this>, <T as ServerTransport<P>>::Open<'this>>;
 
 impl<A, B> ServerState<A, B> {
     /// Gets if this is a [`ServerState::Closed`].
@@ -193,7 +200,7 @@ pub enum ServerEvent<P: TransportProtocol, E, C, M> {
     /// [`ServerState::Closed`].
     Closed {
         /// Why the server closed.
-        reason: E,
+        error: E,
     },
 
     // client state
@@ -226,7 +233,7 @@ pub enum ServerEvent<P: TransportProtocol, E, C, M> {
         /// Key of the client.
         client_key: C,
         /// Why the client lost connection.
-        reason: E,
+        error: E,
     },
 
     // messages

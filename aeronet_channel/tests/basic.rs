@@ -4,7 +4,7 @@ use aeronet::{
     protocol::TransportProtocol,
     server::{FromClient, ServerTransport, ServerTransportPlugin},
 };
-use aeronet_channel::{ChannelClient, ChannelServer};
+use aeronet_channel::{client::ChannelClient, server::ChannelServer};
 use bevy::prelude::*;
 
 #[derive(Debug, Clone, Message)]

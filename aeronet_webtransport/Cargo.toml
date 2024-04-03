@@ -44,7 +44,7 @@ bevy_ecs = { workspace = true, optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 js-sys.workspace = true
-web-sys = { workspace = true, features = ["WebTransportCloseInfo"] }
+web-sys.workspace = true
 wasm-bindgen-futures.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]

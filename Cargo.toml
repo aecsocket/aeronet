@@ -76,7 +76,7 @@ bevy_replicon = "0.24.1"
 
 xwt = "0.6.0"
 xwt-core = "0.2.2"
-wtransport = "0.1.10"
+wtransport = "0.1.12"
 
 js-sys = "0.3.67"
 web-sys = "0.3.67"

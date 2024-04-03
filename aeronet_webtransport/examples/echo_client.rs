@@ -18,7 +18,9 @@ use bevy::{log::LogPlugin, prelude::*};
 use bevy_ecs::system::SystemId;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
+//
 // protocol
+//
 
 // Defines what kind of lanes are available to transport messages over on this
 // app's protocol.
@@ -68,6 +70,10 @@ impl TransportProtocol for AppProtocol {
 
 const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(0xdeadbeefbadc0de);
 
+//
+// config
+//
+
 type Client = WebTransportClient<AppProtocol>;
 
 #[cfg(target_family = "wasm")]
@@ -85,10 +91,16 @@ fn native_config() -> aeronet_webtransport::wtransport::ClientConfig {
 }
 
 fn client_config() -> WebTransportClientConfig {
-    WebTransportClientConfig::new(native_config(), PROTOCOL_VERSION, AppLane::KINDS)
+    WebTransportClientConfig {
+        version: PROTOCOL_VERSION,
+        lanes: AppLane::KINDS.into(),
+        ..WebTransportClientConfig::new(native_config())
+    }
 }
 
+//
 // logic
+//
 
 fn main() {
     App::new()
@@ -210,6 +222,8 @@ fn ui(
         });
 
         if let ClientState::Connected(info) = client.state() {
+            let rtt = info.stats.rtt;
+
             let msg = ui
                 .horizontal(|ui| {
                     ui.label("Send");
@@ -223,7 +237,7 @@ fn ui(
 
             egui::Grid::new("stats").show(ui, |ui| {
                 ui.label("RTT");
-                ui.label(format!("{:?}", info.rtt));
+                ui.label(format!("{:?}", rtt));
                 ui.end_row();
 
                 // ui.label("Messages sent/received");

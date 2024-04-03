@@ -91,8 +91,8 @@ where
             .configure_sets(
                 PostUpdate,
                 (
-                    ServerTransportSet::Send,
-                    ServerSet::SendPackets.before(ServerTransportSet::Send),
+                    ServerTransportSet::Flush,
+                    ServerSet::SendPackets.before(ServerTransportSet::Flush),
                 ),
             )
             .add_systems(
@@ -142,8 +142,8 @@ where
                         _phantom: PhantomData,
                     });
                 }
-                ServerEvent::Closed { reason } => {
-                    closed.send(ServerClosed { reason });
+                ServerEvent::Closed { error: reason } => {
+                    closed.send(ServerClosed { error: reason });
                 }
                 ServerEvent::Connecting { client_key } => {
                     connecting.send(RemoteClientConnecting { client_key });
@@ -162,11 +162,14 @@ where
                     }
                     replicon_events.send(RepliconEvent::ClientConnected { client_id });
                 }
-                ServerEvent::Disconnected { client_key, reason } => {
+                ServerEvent::Disconnected {
+                    client_key,
+                    error: reason,
+                } => {
                     let reason_str = format!("{:#}", aeronet::error::pretty_error(&reason));
                     disconnected.send(RemoteClientDisconnected {
                         client_key: client_key.clone(),
-                        reason,
+                        error: reason,
                     });
 
                     let Some(client_id) = client_keys.id_map().get_by_left(&client_key) else {

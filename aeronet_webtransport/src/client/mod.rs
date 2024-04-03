@@ -3,27 +3,22 @@ mod frontend;
 
 pub use frontend::*;
 
-use std::{borrow::Borrow, fmt::Debug};
+use std::fmt::Debug;
 
 use aeronet::{
     lane::LaneKind,
     message::{TryFromBytes, TryIntoBytes},
     protocol::{ProtocolVersion, TransportProtocol},
 };
-use aeronet_proto::{packet, seq::Seq};
+use aeronet_proto::packet;
 use derivative::Derivative;
 
-use crate::{error::BackendError, transport::MTU};
+use crate::shared;
 
 #[cfg(target_family = "wasm")]
-type NativeConfig = web_sys::WebTransportOptions;
+pub type NativeConfig = web_sys::WebTransportOptions;
 #[cfg(not(target_family = "wasm"))]
-type NativeConfig = wtransport::ClientConfig;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ClientMessageKey {
-    msg_seq: Seq,
-}
+pub type NativeConfig = wtransport::ClientConfig;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -32,35 +27,20 @@ pub struct WebTransportClientConfig {
     pub native: NativeConfig,
     pub version: ProtocolVersion,
     pub lanes: Box<[LaneKind]>,
-    pub max_sent_bytes_per_sec: usize,
+    pub bandwidth: usize,
     pub max_packet_len: usize,
     pub default_packet_cap: usize,
 }
 
-impl Default for WebTransportClientConfig {
-    fn default() -> Self {
-        Self {
-            native: NativeConfig::default(),
-            version: ProtocolVersion::default(),
-            lanes: Box::new([]),
-            max_sent_bytes_per_sec: 28_800_000, // TODO document
-            max_packet_len: MTU,
-            default_packet_cap: MTU,
-        }
-    }
-}
-
 impl WebTransportClientConfig {
-    pub fn new(
-        native: impl Into<NativeConfig>,
-        version: ProtocolVersion,
-        lanes: impl IntoIterator<Item = impl Borrow<LaneKind>>,
-    ) -> Self {
+    pub fn new(native: impl Into<NativeConfig>) -> Self {
         Self {
             native: native.into(),
-            version,
-            lanes: lanes.into_iter().map(|kind| *kind.borrow()).collect(),
-            ..Default::default()
+            version: ProtocolVersion::default(),
+            lanes: Box::default(),
+            bandwidth: shared::DEFAULT_BANDWIDTH,
+            max_packet_len: shared::DEFAULT_MTU,
+            default_packet_cap: shared::DEFAULT_MTU,
         }
     }
 }
@@ -86,7 +66,7 @@ pub enum ClientBackendError {
     #[error("failed to await connection")]
     AwaitConnection(#[source] ConnectingError),
     #[error(transparent)]
-    Generic(#[from] BackendError),
+    Generic(#[from] shared::BackendError),
 }
 
 #[derive(Derivative, thiserror::Error)]

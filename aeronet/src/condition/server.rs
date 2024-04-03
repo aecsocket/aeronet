@@ -94,26 +94,26 @@ where
 {
     type Error = T::Error;
 
-    type OpeningInfo = T::OpeningInfo;
+    type Opening<'this> = T::Opening<'this> where Self: 'this;
 
-    type OpenInfo = T::OpenInfo;
+    type Open<'this> = T::Open<'this> where Self: 'this;
 
-    type ConnectingInfo = T::ConnectingInfo;
+    type Connecting<'this> = T::Connecting<'this> where Self: 'this;
 
-    type ConnectedInfo = T::ConnectedInfo;
+    type Connected<'this> = T::Connected<'this> where Self: 'this;
 
     type ClientKey = T::ClientKey;
 
     type MessageKey = T::MessageKey;
 
-    fn state(&self) -> ServerState<Self::OpeningInfo, Self::OpenInfo> {
+    fn state(&self) -> ServerState<Self::Opening<'_>, Self::Open<'_>> {
         self.inner.state()
     }
 
     fn client_state(
         &self,
         client: Self::ClientKey,
-    ) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
+    ) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
         self.inner.client_state(client)
     }
 

@@ -48,7 +48,7 @@ where
                 PostUpdate,
                 (
                     ClientSet::SendPackets,
-                    ClientTransportSet::Send.after(ClientSet::SendPackets),
+                    ClientTransportSet::Flush.after(ClientSet::SendPackets),
                 ),
             )
             .add_systems(

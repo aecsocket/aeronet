@@ -9,9 +9,8 @@ use tracing::debug;
 use xwt_core::{Connecting, EndpointConnect, OpenBiStream, OpeningBiStream};
 
 use crate::{
-    error::BackendError,
-    internal::{self, BUFFER_SIZE},
-    transport::ConnectionStats,
+    internal,
+    shared::{self, ConnectionStats},
     ty,
 };
 
@@ -42,24 +41,24 @@ pub async fn start(
         .map_err(|err| ClientBackendError::AwaitConnection(err.into()))?;
 
     if !internal::check_datagram_support(&conn) {
-        Err(BackendError::DatagramsNotSupported)?;
+        Err(shared::BackendError::DatagramsNotSupported)?;
     }
 
     debug!("Connection opened, opening managed stream");
     let (mut send_managed, mut recv_managed) = conn
         .open_bi()
         .await
-        .map_err(|err| BackendError::StartOpeningManaged(err.into()))?
+        .map_err(|err| shared::BackendError::StartOpeningManaged(err.into()))?
         .wait_bi()
         .await
-        .map_err(|err| BackendError::AwaitOpeningManaged(err.into()))?;
+        .map_err(|err| shared::BackendError::AwaitOpeningManaged(err.into()))?;
 
     debug!("Managed stream open, negotiating protocol");
     internal::negotiate::client(version, &mut send_managed, &mut recv_managed).await?;
 
     debug!("Negotiated successfully, forwarding to frontend");
     let (send_c2s, recv_c2s) = mpsc::unbounded::<Bytes>();
-    let (send_s2c, recv_s2c) = mpsc::channel::<Bytes>(BUFFER_SIZE);
+    let (send_s2c, recv_s2c) = mpsc::channel::<Bytes>(internal::BUFFER_SIZE);
     let (send_stats, recv_stats) = mpsc::channel::<ConnectionStats>(1);
     send_connected
         .send(Connected {
@@ -68,7 +67,7 @@ pub async fn start(
             recv_stats,
             initial_stats: ConnectionStats::from(&conn),
         })
-        .map_err(|_| BackendError::FrontendClosed)?;
+        .map_err(|_| shared::BackendError::FrontendClosed)?;
 
     debug!("Starting connection loop");
     // `receive_datagram` may not be cancel-safe, so we create two futures which
@@ -91,6 +90,7 @@ fn create_endpoint(
 
 #[cfg(not(target_family = "wasm"))]
 fn create_endpoint(config: wtransport::ClientConfig) -> Result<ty::Endpoint, ClientBackendError> {
-    let endpoint = wtransport::Endpoint::client(config).map_err(BackendError::CreateEndpoint)?;
+    let endpoint =
+        wtransport::Endpoint::client(config).map_err(shared::BackendError::CreateEndpoint)?;
     Ok(xwt::current::Endpoint(endpoint))
 }

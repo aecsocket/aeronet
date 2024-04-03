@@ -13,7 +13,7 @@ use derivative::Derivative;
 pub use frontend::*;
 use wtransport::error::ConnectionError;
 
-use crate::error::BackendError;
+use crate::shared;
 
 slotmap::new_key_type! {
     pub struct ClientKey;
@@ -25,16 +25,34 @@ impl Display for ClientKey {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
+pub type NativeConfig = wtransport::ServerConfig;
+
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct WebTransportServerConfig {
     #[derivative(Debug = "ignore")]
-    pub native: wtransport::ServerConfig,
+    pub native: NativeConfig,
     pub version: ProtocolVersion,
     pub lanes: Box<[LaneKind]>,
-    pub max_sent_bytes_per_sec: usize,
+    pub total_bandwidth: usize,
+    pub bandwidth_per_client: usize,
     pub max_packet_len: usize,
     pub default_packet_cap: usize,
+}
+
+impl WebTransportServerConfig {
+    pub fn new(native: impl Into<wtransport::ServerConfig>) -> Self {
+        Self {
+            native: native.into(),
+            version: ProtocolVersion::default(),
+            lanes: Box::default(),
+            total_bandwidth: shared::DEFAULT_BANDWIDTH,
+            bandwidth_per_client: shared::DEFAULT_BANDWIDTH,
+            max_packet_len: shared::DEFAULT_MTU,
+            default_packet_cap: shared::DEFAULT_MTU,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -53,7 +71,7 @@ pub enum ServerBackendError {
     #[error("server forced disconnect")]
     ForceDisconnect,
     #[error(transparent)]
-    Generic(#[from] BackendError),
+    Generic(#[from] shared::BackendError),
 }
 
 #[derive(Derivative, thiserror::Error)]
@@ -68,8 +86,10 @@ where
     AlreadyOpen,
     #[error("already closed")]
     AlreadyClosed,
-    #[error("not connected")]
-    NotConnected,
+    #[error("not open")]
+    NotOpen,
+    #[error("client not connected")]
+    ClientNotConnected,
     #[error("backend closed")]
     BackendClosed,
 

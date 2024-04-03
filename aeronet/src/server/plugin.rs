@@ -73,9 +73,14 @@ where
         .add_event::<ServerConnectionError<P, T>>()
         .add_event::<ServerFlushError<P, T>>()
         .configure_sets(PreUpdate, ServerTransportSet::Recv)
-        .configure_sets(PostUpdate, ServerTransportSet::Send)
+        .configure_sets(PostUpdate, ServerTransportSet::Flush)
         .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Recv))
-        .add_systems(PostUpdate, send::<P, T>.in_set(ServerTransportSet::Send));
+        .add_systems(
+            PostUpdate,
+            flush::<P, T>
+                .run_if(server_open::<P, T>)
+                .in_set(ServerTransportSet::Flush),
+        );
 }
 
 /// Runs the [`ServerTransportPlugin`] systems.
@@ -85,7 +90,7 @@ pub enum ServerTransportSet {
     /// state.
     Recv,
     /// Handles flushing buffered messages and sending out buffered data.
-    Send,
+    Flush,
 }
 
 /// A [`Condition`]-satisfying system that returns `true` if the server `T`
@@ -196,7 +201,7 @@ where
     T: ServerTransport<P> + Resource,
 {
     /// Why the server closed.
-    pub reason: T::Error,
+    pub error: T::Error,
 }
 
 /// A remote client has requested to connect to this server.
@@ -254,7 +259,7 @@ where
     /// Key of the client.
     pub client_key: T::ClientKey,
     /// Why the client lost connection.
-    pub reason: T::Error,
+    pub error: T::Error,
 }
 
 /// The server received a message from a remote client.
@@ -346,8 +351,8 @@ fn recv<P, T>(
                     _phantom: PhantomData,
                 });
             }
-            ServerEvent::Closed { reason } => {
-                closed.send(ServerClosed { reason });
+            ServerEvent::Closed { error } => {
+                closed.send(ServerClosed { error });
             }
             ServerEvent::Connecting { client_key } => {
                 connecting.send(RemoteClientConnecting { client_key });
@@ -355,8 +360,8 @@ fn recv<P, T>(
             ServerEvent::Connected { client_key } => {
                 connected.send(RemoteClientConnected { client_key });
             }
-            ServerEvent::Disconnected { client_key, reason } => {
-                disconnected.send(RemoteClientDisconnected { client_key, reason });
+            ServerEvent::Disconnected { client_key, error } => {
+                disconnected.send(RemoteClientDisconnected { client_key, error });
             }
             ServerEvent::Recv { client_key, msg } => {
                 recv.send(FromClient { client_key, msg });
@@ -377,7 +382,7 @@ fn recv<P, T>(
     }
 }
 
-fn send<P, T>(mut server: ResMut<T>, mut errors: EventWriter<ServerFlushError<P, T>>)
+fn flush<P, T>(mut server: ResMut<T>, mut errors: EventWriter<ServerFlushError<P, T>>)
 where
     P: TransportProtocol,
     T: ServerTransport<P> + Resource,

@@ -3,7 +3,7 @@ use aeronet_proto::negotiate;
 use tracing::debug;
 use xwt_core::io::{Read, Write};
 
-use crate::{error::BackendError, ty};
+use crate::{shared::BackendError, ty};
 
 pub async fn client(
     version: ProtocolVersion,

@@ -92,13 +92,13 @@ where
 {
     type Error = T::Error;
 
-    type ConnectingInfo = T::ConnectingInfo;
+    type Connecting<'this> = T::Connecting<'this> where Self: 'this;
 
-    type ConnectedInfo = T::ConnectedInfo;
+    type Connected<'this> = T::Connected<'this> where Self: 'this;
 
     type MessageKey = T::MessageKey;
 
-    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
+    fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
         self.inner.state()
     }
 

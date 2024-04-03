@@ -11,10 +11,9 @@ use tracing::{debug, debug_span, Instrument};
 use wtransport::endpoint::IncomingSession;
 
 use crate::{
-    error::BackendError,
-    internal::{self, BUFFER_SIZE},
+    internal,
     server::ConnectionResponse,
-    transport::ConnectionStats,
+    shared::{self, ConnectionStats},
     ty,
 };
 
@@ -58,18 +57,20 @@ pub async fn start(
     send_open: oneshot::Sender<Open>,
 ) -> Result<Never, ServerBackendError> {
     debug!("Opening server");
-    let endpoint =
-        wtransport::Endpoint::server(native_config).map_err(BackendError::CreateEndpoint)?;
+    let endpoint = wtransport::Endpoint::server(native_config)
+        .map_err(shared::BackendError::CreateEndpoint)?;
 
     debug!("Opened server, starting connection loop");
-    let local_addr = endpoint.local_addr().map_err(BackendError::GetLocalAddr)?;
-    let (send_connecting, recv_connecting) = mpsc::channel::<Connecting>(BUFFER_SIZE);
+    let local_addr = endpoint
+        .local_addr()
+        .map_err(shared::BackendError::GetLocalAddr)?;
+    let (send_connecting, recv_connecting) = mpsc::channel::<Connecting>(internal::BUFFER_SIZE);
     send_open
         .send(Open {
             local_addr,
             recv_connecting,
         })
-        .map_err(|_| BackendError::FrontendClosed)?;
+        .map_err(|_| shared::BackendError::FrontendClosed)?;
 
     loop {
         let session = endpoint.accept().await;
@@ -94,8 +95,10 @@ async fn start_handle_session(
             recv_requesting,
         })
         .await
-        .map_err(|_| BackendError::FrontendClosed)?;
-    let client_key = recv_key.await.map_err(|_| BackendError::FrontendClosed)?;
+        .map_err(|_| shared::BackendError::FrontendClosed)?;
+    let client_key = recv_key
+        .await
+        .map_err(|_| shared::BackendError::FrontendClosed)?;
 
     handle_session(version, session, send_requesting)
         .instrument(debug_span!(
@@ -128,10 +131,10 @@ async fn handle_session(
             send_conn_resp,
             recv_connected,
         })
-        .map_err(|_| BackendError::FrontendClosed)?;
+        .map_err(|_| shared::BackendError::FrontendClosed)?;
     let conn_resp = recv_conn_resp
         .await
-        .map_err(|_| BackendError::FrontendClosed)?;
+        .map_err(|_| shared::BackendError::FrontendClosed)?;
 
     debug!("Responding to session request with {conn_resp:?}");
     let conn = match conn_resp {
@@ -152,13 +155,13 @@ async fn handle_session(
     let (mut send_managed, mut recv_managed) = conn
         .accept_bi()
         .await
-        .map_err(BackendError::AcceptManaged)?;
+        .map_err(shared::BackendError::AcceptManaged)?;
 
     debug!("Managed stream open, negotiating protocol");
     internal::negotiate::server(version, &mut send_managed, &mut recv_managed).await?;
 
     debug!("Negotiated successfully, forwarding to frontend");
-    let (send_c2s, recv_c2s) = mpsc::channel::<Bytes>(BUFFER_SIZE);
+    let (send_c2s, recv_c2s) = mpsc::channel::<Bytes>(internal::BUFFER_SIZE);
     let (send_s2c, recv_s2c) = mpsc::unbounded::<Bytes>();
     let (send_stats, recv_stats) = mpsc::channel::<ConnectionStats>(1);
     send_connected
@@ -169,7 +172,7 @@ async fn handle_session(
             send_s2c,
             recv_stats,
         })
-        .map_err(|_| BackendError::FrontendClosed)?;
+        .map_err(|_| shared::BackendError::FrontendClosed)?;
 
     debug!("Starting connection loop");
     let conn = ty::Connection(conn);

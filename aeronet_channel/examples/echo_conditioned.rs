@@ -11,7 +11,7 @@ use aeronet::{
         ServerTransport, ServerTransportPlugin,
     },
 };
-use aeronet_channel::{ChannelClient, ChannelServer};
+use aeronet_channel::{client::ChannelClient, server::ChannelServer};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
@@ -196,7 +196,7 @@ fn server_on_disconnected(
 ) {
     for RemoteClientDisconnected {
         client_key: client,
-        reason,
+        error: reason,
     } in events.read()
     {
         ui_state

@@ -69,9 +69,14 @@ where
         .add_event::<ClientConnectionError<P, T>>()
         .add_event::<ClientFlushError<P, T>>()
         .configure_sets(PreUpdate, ClientTransportSet::Recv)
-        .configure_sets(PostUpdate, ClientTransportSet::Send)
+        .configure_sets(PostUpdate, ClientTransportSet::Flush)
         .add_systems(PreUpdate, recv::<P, T>.in_set(ClientTransportSet::Recv))
-        .add_systems(PostUpdate, send::<P, T>.in_set(ClientTransportSet::Send));
+        .add_systems(
+            PostUpdate,
+            flush::<P, T>
+                .run_if(client_connected::<P, T>)
+                .in_set(ClientTransportSet::Flush),
+        );
 }
 
 /// Runs the [`ClientTransportPlugin`] systems.
@@ -81,7 +86,7 @@ pub enum ClientTransportSet {
     /// state.
     Recv,
     /// Handles flushing buffered messages and sending out buffered data.
-    Send,
+    Flush,
 }
 
 /// A [`Condition`]-satisfying system that returns `true` if the client `T`
@@ -298,7 +303,7 @@ fn recv<P, T>(
     }
 }
 
-fn send<P, T>(mut client: ResMut<T>, mut errors: EventWriter<ClientFlushError<P, T>>)
+fn flush<P, T>(mut client: ResMut<T>, mut errors: EventWriter<ClientFlushError<P, T>>)
 where
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,

@@ -20,11 +20,15 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync;
 
-    /// Info on this client when it is in [`ClientState::Connecting`].
-    type ConnectingInfo;
+    /// Client state when it is in [`ClientState::Connecting`].
+    type Connecting<'this>
+    where
+        Self: 'this;
 
-    /// Info on this client when it is in [`ClientState::Connected`].
-    type ConnectedInfo;
+    /// Client state when it is in [`ClientState::Connected`].
+    type Connected<'this>
+    where
+        Self: 'this;
 
     /// Key uniquely identifying a sent message.
     ///
@@ -40,7 +44,7 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// of bytes sent or [round-trip time], if the transport exposes it.
     ///
     /// [round-trip time]: crate::stats::Rtt
-    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo>;
+    fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>>;
 
     /// Attempts to send a message to the currently connected server.
     ///
@@ -65,12 +69,13 @@ pub trait ClientTransport<P: TransportProtocol> {
     /// Sends all messages previously buffered by [`ClientTransport::send`] to
     /// peers.
     ///
-    /// If this transport is not connected, this will return [`Ok`].
+    /// Note that implementations may choose to send messages immediately
+    /// instead of buffering them. In this case, flushing will be a no-op.
     ///
     /// # Errors
     ///
     /// Errors if the transport failed to *attempt to* flush messages, e.g. if
-    /// the connection has already been closed.
+    /// the transport is not connected.
     ///
     /// If a transmission error occurs later after this function's scope has
     /// finished, then this will still return [`Ok`].
@@ -89,7 +94,7 @@ pub trait ClientTransport<P: TransportProtocol> {
     fn poll(
         &mut self,
         delta_time: Duration,
-    ) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>> + '_;
+    ) -> impl Iterator<Item = ClientEvent<P, Self::Error, Self::MessageKey>>;
 }
 
 /// State of a [`ClientTransport`].
@@ -130,9 +135,9 @@ impl<A, B> ClientState<A, B> {
 }
 
 /// Shorthand for the [`ClientState`] of a given [`ClientTransport`].
-pub type ClientStateFor<P, T> = ClientState<
-    <T as ClientTransport<P>>::ConnectingInfo,
-    <T as ClientTransport<P>>::ConnectedInfo,
+pub type ClientStateFor<'this, P, T> = ClientState<
+    <T as ClientTransport<P>>::Connecting<'this>,
+    <T as ClientTransport<P>>::Connected<'this>,
 >;
 
 /// Event emitted by a [`ClientTransport`].

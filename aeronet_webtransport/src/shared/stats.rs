@@ -4,8 +4,6 @@ use aeronet::stats::Rtt;
 
 use crate::ty;
 
-pub const MTU: usize = 1200;
-
 /// Statistics on a WebTransport client/server connection.
 #[derive(Debug, Clone)]
 pub struct ConnectionStats {

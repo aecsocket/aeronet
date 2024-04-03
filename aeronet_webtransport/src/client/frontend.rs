@@ -15,23 +15,9 @@ use futures::channel::{mpsc, oneshot};
 use tracing::debug;
 use xwt_core::utils::maybe;
 
-use crate::{error::BackendError, transport::ConnectionStats};
+use crate::shared::{self, ConnectionStats, MessageKey};
 
-use super::{
-    backend, ClientBackendError, ClientMessageKey, WebTransportClientConfig,
-    WebTransportClientError,
-};
-
-impl<P> From<mpsc::TryRecvError> for WebTransportClientError<P>
-where
-    P: TransportProtocol,
-    P::C2S: TryIntoBytes,
-    P::S2C: TryFromBytes,
-{
-    fn from(_: mpsc::TryRecvError) -> Self {
-        Self::BackendClosed
-    }
-}
+use super::{backend, ClientBackendError, WebTransportClientConfig, WebTransportClientError};
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
@@ -50,31 +36,26 @@ enum Inner<P: TransportProtocol> {
 }
 
 #[derive(Debug)]
-struct FrontendConfig {
+struct Connecting {
     lanes: Box<[LaneKind]>,
-    max_sent_bytes_per_sec: usize,
+    bandwidth: usize,
     max_packet_len: usize,
     default_packet_cap: usize,
-}
-
-#[derive(Debug)]
-struct Connecting {
-    config: FrontendConfig,
     recv_err: oneshot::Receiver<ClientBackendError>,
     recv_connected: oneshot::Receiver<backend::Connected>,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-struct Connected<P: TransportProtocol> {
+pub struct Connected<P: TransportProtocol> {
     recv_err: oneshot::Receiver<ClientBackendError>,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
     recv_stats: mpsc::Receiver<ConnectionStats>,
-    stats: ConnectionStats,
+    pub stats: ConnectionStats,
     packets: packet::Packets<P::C2S, P::S2C>,
-    max_sent_bytes_per_sec: usize,
-    bytes_left: usize,
+    bandwidth: usize,
+    pub bytes_left: usize,
 }
 
 impl<P> WebTransportClient<P>
@@ -108,7 +89,7 @@ where
             native: native_config,
             version,
             lanes,
-            max_sent_bytes_per_sec,
+            bandwidth,
             max_packet_len,
             default_packet_cap,
         } = config;
@@ -122,7 +103,7 @@ where
                 unreachable!()
             };
             match err {
-                ClientBackendError::Generic(BackendError::FrontendClosed) => {
+                ClientBackendError::Generic(shared::BackendError::FrontendClosed) => {
                     debug!("Connection closed");
                 }
                 err => {
@@ -135,12 +116,10 @@ where
         (
             Self {
                 inner: Inner::Connecting(Connecting {
-                    config: FrontendConfig {
-                        lanes,
-                        max_sent_bytes_per_sec,
-                        max_packet_len,
-                        default_packet_cap,
-                    },
+                    lanes,
+                    bandwidth,
+                    max_packet_len,
+                    default_packet_cap,
                     recv_err,
                     recv_connected,
                 }),
@@ -172,17 +151,17 @@ where
 {
     type Error = WebTransportClientError<P>;
 
-    type ConnectingInfo = ();
+    type Connecting<'this> = ();
 
-    type ConnectedInfo = ConnectionStats;
+    type Connected<'this> = &'this Connected<P>;
 
-    type MessageKey = ClientMessageKey;
+    type MessageKey = MessageKey;
 
-    fn state(&self) -> ClientState<Self::ConnectingInfo, Self::ConnectedInfo> {
+    fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
         match &self.inner {
             Inner::Disconnected => ClientState::Disconnected,
             Inner::Connecting { .. } => ClientState::Connecting(()),
-            Inner::Connected(client) => ClientState::Connected(client.stats.clone()),
+            Inner::Connected(client) => ClientState::Connected(client),
         }
     }
 
@@ -193,7 +172,7 @@ where
 
         let msg = msg.into();
         let msg_seq = client.packets.buffer_send(msg)?;
-        Ok(ClientMessageKey { msg_seq })
+        Ok(MessageKey::from_raw(msg_seq))
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -253,12 +232,12 @@ where
                     recv_stats: next.recv_stats,
                     stats: next.initial_stats,
                     packets: packet::Packets::new(
-                        client.config.max_packet_len,
-                        client.config.default_packet_cap,
-                        &client.config.lanes,
+                        client.max_packet_len,
+                        client.default_packet_cap,
+                        &client.lanes,
                     ),
-                    max_sent_bytes_per_sec: client.config.max_sent_bytes_per_sec,
-                    bytes_left: client.config.max_sent_bytes_per_sec,
+                    bandwidth: client.bandwidth,
+                    bytes_left: client.bandwidth,
                 }),
             ),
             Err(_) => (
@@ -283,23 +262,30 @@ where
             );
         }
 
-        // refill bytes token bcucket
-        let bytes_restored =
-            ((client.max_sent_bytes_per_sec as f64) * delta_time.as_secs_f64()) as usize;
-        client.bytes_left = (client.bytes_left + bytes_restored).min(client.max_sent_bytes_per_sec);
+        // refill bytes token bucket
+        let bytes_restored = ((client.bandwidth as f64) * delta_time.as_secs_f64()) as usize;
+        client.bytes_left = (client.bytes_left + bytes_restored).min(client.bandwidth);
 
         let mut events = Vec::new();
         let res = (|| {
             // update connection stats
-            while let Some(stats) = client.recv_stats.try_next()? {
+            while let Some(stats) = client
+                .recv_stats
+                .try_next()
+                .map_err(|_| WebTransportClientError::BackendClosed)?
+            {
                 client.stats = stats;
             }
 
-            while let Some(mut packet) = client.recv_s2c.try_next()? {
+            while let Some(mut packet) = client
+                .recv_s2c
+                .try_next()
+                .map_err(|_| WebTransportClientError::BackendClosed)?
+            {
                 // receive acks
                 events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
                     ClientEvent::Ack {
-                        msg_key: ClientMessageKey { msg_seq },
+                        msg_key: MessageKey::from_raw(msg_seq),
                     }
                 }));
 

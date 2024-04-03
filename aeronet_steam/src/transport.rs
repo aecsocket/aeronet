@@ -6,15 +6,16 @@ use steamworks::networking_sockets::{NetConnection, NetworkingSockets};
 /// Default maximum transmissible unit of a message sent along the Steam
 /// messaging sockets API.
 ///
-/// This value is taken from Steam's [`GameNetworkingSockets`] repository:
+/// This value is taken from the [Steamworks API Reference], in
+/// `steamnetworkingtypes.h`:
 ///
 /// ```cpp
-/// //                                                         default   min     max
-/// DEFINE_CONNECTON_DEFAULT_CONFIGVAL( int32, SendBufferSize, 512*1024, 4*1024, 0x10000000 );
+/// const int k_cbMaxSteamNetworkingSocketsMessageSizeSend = 512 * 1024;
 /// ```
 ///
-/// (and yes, they misspelled "connection"!)
+/// This is also defined in Steam's [`GameNetworkingSockets`] repository.
 ///
+/// [Steamworks API Reference]: https://partner.steamgames.com/doc/api/steamnetworkingtypes
 /// [`GameNetworkingSockets`]: https://github.com/ValveSoftware/GameNetworkingSockets/blob/de03d74226eb3b9a299e05f5fff93965d3dce2d9/src/steamnetworkingsockets/clientlib/csteamnetworkingsockets.cpp#L1369
 pub const MTU: usize = 512 * 1024;
 

@@ -114,10 +114,10 @@ impl Fragmentation {
             Some(num_frags) => num_frags,
         };
 
-        let buf = self
+        let mut buf = self
             .messages
-            .entry(header.msg_seq)
-            .or_insert_with(|| MessageBuffer::new(self.payload_len, header, num_frags));
+            .remove(&header.msg_seq)
+            .unwrap_or_else(|| MessageBuffer::new(self.payload_len, header, num_frags));
 
         // mark this fragment as received
         let frag_id = usize::from(header.frag_id);
@@ -176,10 +176,11 @@ impl Fragmentation {
         if buf.num_frags_recv == buf.num_frags.get() {
             // we've received all fragments for this message
             // return the fragment to the user
-            let buf = self.messages.remove(&header.msg_seq).unwrap();
             Ok(Some(buf.payload))
         } else {
             // this message isn't complete yet, nothing to return
+            // add it (back) to the messages
+            self.messages.insert(header.msg_seq, buf);
             Ok(None)
         }
     }
