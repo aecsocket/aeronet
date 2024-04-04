@@ -104,10 +104,10 @@ where
             };
             match err {
                 ClientBackendError::Generic(shared::BackendError::FrontendClosed) => {
-                    debug!("Connection closed");
+                    debug!("Client closed");
                 }
                 err => {
-                    debug!("Connection closed: {:#}", pretty_error(&err));
+                    debug!("Client closed: {:#}", pretty_error(&err));
                     let _ = send_err.send(err);
                 }
             }
@@ -219,7 +219,7 @@ where
             );
         }
         match client.recv_connected.try_recv() {
-            Ok(None) => (None, Inner::Connecting(client)),
+            Err(_) => (None, Inner::Connecting(client)),
             Ok(Some(next)) => (
                 Some(ClientEvent::Connected),
                 Inner::Connected(Connected {
@@ -237,7 +237,7 @@ where
                     recv_stats: next.recv_stats,
                 }),
             ),
-            Err(_) => (
+            Ok(None) => (
                 Some(ClientEvent::Disconnected {
                     error: WebTransportClientError::BackendClosed,
                 }),
@@ -261,34 +261,39 @@ where
 
         // refill bytes token bucket
         let bytes_restored = ((client.bandwidth as f64) * delta_time.as_secs_f64()) as usize;
-        client.bytes_left = (client.bytes_left + bytes_restored).min(client.bandwidth);
+        client.bytes_left = client
+            .bytes_left
+            .saturating_add(bytes_restored)
+            .min(client.bandwidth);
 
         let mut events = Vec::new();
         let res = (|| {
             // update connection stats
-            while let Some(stats) = client
-                .recv_stats
-                .try_next()
-                .map_err(|_| WebTransportClientError::BackendClosed)?
-            {
-                client.stats = stats;
+            loop {
+                match client.recv_stats.try_next() {
+                    Err(_) => break,
+                    Ok(Some(stats)) => client.stats = stats,
+                    Ok(None) => return Err(WebTransportClientError::BackendClosed),
+                }
             }
 
-            while let Some(mut packet) = client
-                .recv_s2c
-                .try_next()
-                .map_err(|_| WebTransportClientError::BackendClosed)?
-            {
-                // receive acks
-                events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
-                    ClientEvent::Ack {
-                        msg_key: MessageKey::from_raw(msg_seq),
-                    }
-                }));
+            loop {
+                match client.recv_s2c.try_next() {
+                    Err(_) => break,
+                    Ok(Some(mut packet)) => {
+                        // receive acks
+                        events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
+                            ClientEvent::Ack {
+                                msg_key: MessageKey::from_raw(msg_seq),
+                            }
+                        }));
 
-                // receive messages
-                while let Some(msgs) = client.packets.read_next_frag(&mut packet)? {
-                    events.extend(msgs.map(|msg| ClientEvent::Recv { msg }));
+                        // receive messages
+                        while let Some(msgs) = client.packets.read_next_frag(&mut packet)? {
+                            events.extend(msgs.map(|msg| ClientEvent::Recv { msg }));
+                        }
+                    }
+                    Ok(None) => return Err(WebTransportClientError::BackendClosed),
                 }
             }
 

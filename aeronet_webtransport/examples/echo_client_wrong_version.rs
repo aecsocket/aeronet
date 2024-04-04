@@ -9,6 +9,7 @@ use aeronet::{
         ClientState, ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected,
         LocalClientDisconnected,
     },
+    error::pretty_error,
     lane::{LaneKey, OnLane},
     message::{Message, TryFromBytes, TryIntoBytes},
     protocol::{ProtocolVersion, TransportProtocol},
@@ -113,39 +114,42 @@ fn main() {
             ClientTransportPlugin::<_, Client>::default(),
         ))
         .init_resource::<Client>()
-        .init_resource::<UiState>()
+        .init_resource::<Log>()
+        .init_resource::<UrlBuf>()
+        .init_resource::<MsgBuf>()
         .add_systems(Startup, setup)
         .add_systems(Update, (on_connected, on_disconnected, on_recv, ui).chain())
         .run();
 }
-
-#[derive(Debug, Default, Resource)]
-struct UiState {
-    url: String,
-    log: Vec<String>,
-    msg: String,
-}
-
 #[derive(Debug, Resource, Deref, DerefMut)]
-struct ConnectSystem(SystemId<String>);
+struct Connect(SystemId<String>);
+
+#[derive(Debug, Default, Resource, Deref, DerefMut)]
+struct Log(Vec<String>);
+
+#[derive(Debug, Default, Resource, Deref, DerefMut)]
+struct UrlBuf(String);
+
+#[derive(Debug, Default, Resource, Deref, DerefMut)]
+struct MsgBuf(String);
 
 fn setup(world: &mut World) {
     #[cfg(not(target_family = "wasm"))]
     world.init_resource::<TokioRuntime>();
 
-    let connect = world.register_system(connect);
-    world.insert_resource(ConnectSystem(connect));
+    let connect = Connect(world.register_system(connect));
+    world.insert_resource(connect);
 }
 
 fn connect(
     In(target): In<String>,
+    mut log: ResMut<Log>,
     #[cfg(not(target_family = "wasm"))] runtime: Res<TokioRuntime>,
     mut client: ResMut<Client>,
-    mut ui_state: ResMut<UiState>,
 ) {
-    ui_state.log.push(format!("Connecting to {target}"));
+    log.push(format!("Connecting to {target}"));
     let Ok(backend) = client.connect(client_config(), target) else {
-        ui_state.log.push(format!("Client is already connected"));
+        log.push(format!("Client is already connected"));
         return;
     };
     #[cfg(target_family = "wasm")]
@@ -157,41 +161,37 @@ fn connect(
 // update
 
 fn on_connected(
+    mut log: ResMut<Log>,
     mut events: EventReader<LocalClientConnected<AppProtocol, Client>>,
-    mut ui_state: ResMut<UiState>,
 ) {
     for LocalClientConnected { .. } in events.read() {
-        ui_state.log.push(format!("Connected"));
+        log.push(format!("Connected"));
     }
 }
 
 fn on_disconnected(
+    mut log: ResMut<Log>,
     mut events: EventReader<LocalClientDisconnected<AppProtocol, Client>>,
-    mut ui_state: ResMut<UiState>,
 ) {
-    for LocalClientDisconnected { error: reason } in events.read() {
-        ui_state.log.push(format!(
-            "Disconnected: {:#}",
-            aeronet::error::pretty_error(&reason)
-        ));
+    for LocalClientDisconnected { error } in events.read() {
+        log.push(format!("Disconnected: {:#}", pretty_error(&error)));
     }
 }
 
-fn on_recv(
-    mut events: EventReader<FromServer<AppProtocol, Client>>,
-    mut ui_state: ResMut<UiState>,
-) {
+fn on_recv(mut log: ResMut<Log>, mut events: EventReader<FromServer<AppProtocol, Client>>) {
     for FromServer { msg, .. } in events.read() {
-        ui_state.log.push(format!("> {}", msg.0));
+        log.push(format!("> {}", msg.0));
     }
 }
 
 fn ui(
     mut commands: Commands,
-    connect_system: Res<ConnectSystem>,
+    mut log: ResMut<Log>,
     mut egui: EguiContexts,
+    connect: Res<Connect>,
     mut client: ResMut<Client>,
-    mut ui_state: ResMut<UiState>,
+    mut url_buf: ResMut<UrlBuf>,
+    mut msg_buf: ResMut<MsgBuf>,
 ) {
     egui::CentralPanel::default().show(egui.ctx_mut(), |ui| {
         ui.horizontal(|ui| {
@@ -199,43 +199,44 @@ fn ui(
                 let url = ui
                     .horizontal(|ui| {
                         ui.label("URL");
-                        text_input(ui, &mut ui_state.url)
+                        text_input(ui, &mut *url_buf)
                     })
                     .inner;
                 if let Some(url) = url {
-                    commands.run_system_with_input(**connect_system, url);
+                    commands.run_system_with_input(**connect, url);
                 }
             });
 
             ui.add_enabled_ui(!client.state().is_disconnected(), |ui| {
                 if ui.button("Disconnect").clicked() {
-                    ui_state.log.push(format!("Disconnected by user"));
                     let _ = client.disconnect();
                 }
             });
         });
 
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for line in &ui_state.log {
+            for line in log.iter() {
                 ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
             }
         });
 
         if let ClientState::Connected(info) = client.state() {
+            let rtt = info.stats.rtt;
+
             let msg = ui
                 .horizontal(|ui| {
                     ui.label("Send");
-                    text_input(ui, &mut ui_state.msg)
+                    text_input(ui, &mut *msg_buf)
                 })
                 .inner;
             if let Some(msg) = msg {
-                ui_state.log.push(format!("< {msg}"));
-                client.send(msg).expect("should be able to send message");
+                log.push(format!("< {msg}"));
+                let _ = client.send(msg);
             }
 
             egui::Grid::new("stats").show(ui, |ui| {
                 ui.label("RTT");
-                ui.label(format!("{:?}", info.rtt));
+                ui.label(format!("{:?}", rtt));
                 ui.end_row();
 
                 // ui.label("Messages sent/received");

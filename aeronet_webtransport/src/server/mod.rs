@@ -36,7 +36,7 @@ pub struct WebTransportServerConfig {
     pub version: ProtocolVersion,
     pub lanes: Box<[LaneKind]>,
     pub total_bandwidth: usize,
-    pub bandwidth_per_client: usize,
+    pub client_bandwidth: usize,
     pub max_packet_len: usize,
     pub default_packet_cap: usize,
 }
@@ -48,7 +48,7 @@ impl WebTransportServerConfig {
             version: ProtocolVersion::default(),
             lanes: Box::default(),
             total_bandwidth: shared::DEFAULT_BANDWIDTH,
-            bandwidth_per_client: shared::DEFAULT_BANDWIDTH,
+            client_bandwidth: shared::DEFAULT_BANDWIDTH,
             max_packet_len: shared::DEFAULT_MTU,
             default_packet_cap: shared::DEFAULT_MTU,
         }
@@ -88,8 +88,14 @@ where
     AlreadyClosed,
     #[error("not open")]
     NotOpen,
-    #[error("client not connected")]
-    ClientNotConnected,
+    #[error("no client with key {client_key}")]
+    NoClient { client_key: ClientKey },
+    #[error("client {client_key} not requesting connection")]
+    ClientNotRequesting { client_key: ClientKey },
+    #[error("already responded to client {client_key}'s connection request")]
+    AlreadyResponded { client_key: ClientKey },
+    #[error("client {client_key} not connected")]
+    ClientNotConnected { client_key: ClientKey },
     #[error("backend closed")]
     BackendClosed,
     #[error("client backend closed")]

@@ -39,9 +39,8 @@ use aeronet::{
         ServerClosed, ServerOpened, ServerTransport, ServerTransportPlugin,
     },
 };
-use aeronet_webtransport::{
-    server::{WebTransportServer, WebTransportServerConfig},
-    transport::DEFAULT_MTU,
+use aeronet_webtransport::server::{
+    ConnectionResponse, WebTransportServer, WebTransportServerConfig,
 };
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
@@ -137,37 +136,21 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, rt: Res<TokioRuntime>) {
-    match create(rt.as_ref()) {
-        Ok(server) => {
-            info!("Created server");
-            commands.insert_resource(server);
-        }
-        Err(err) => panic!("Failed to create server: {err:#}"),
-    }
-}
-
-fn create(rt: &TokioRuntime) -> Result<WebTransportServer<AppProtocol>> {
-    // must be a Tokio runtime because wtransport isn't runtime agnostic yet
-    let cert = rt.block_on(aeronet_webtransport::wtransport::tls::Certificate::load(
-        "./aeronet_webtransport/examples/cert.pem",
-        "./aeronet_webtransport/examples/key.pem",
-    ))?;
-
-    let (server, backend) = WebTransportServer::open_new(WebTransportServerConfig {
+    let identity = aeronet_webtransport::wtransport::tls::Identity::self_signed(["localhost"]);
+    let (server, backend) = Server::open_new(WebTransportServerConfig {
         version: PROTOCOL_VERSION,
-        max_packet_len: DEFAULT_MTU,
         lanes: AppLane::KINDS.into(),
         ..WebTransportServerConfig::new(
             aeronet_webtransport::wtransport::ServerConfig::builder()
                 .with_bind_default(25565)
-                .with_certificate(cert)
+                .with_identity(&identity)
                 .keep_alive_interval(Some(Duration::from_secs(5)))
                 .build(),
         )
     });
     rt.spawn(backend);
-
-    Ok(server)
+    commands.insert_resource(server);
+    info!("Created server");
 }
 
 // The arguments in these Bevy systems look scary, but don't worry, they're just
@@ -190,8 +173,8 @@ fn on_opened(mut events: EventReader<ServerOpened<AppProtocol, Server>>) {
 }
 
 fn on_closed(mut events: EventReader<ServerClosed<AppProtocol, Server>>) {
-    for ServerClosed { error: reason } in events.read() {
-        info!("Server closed: {:#}", pretty_error(&reason))
+    for ServerClosed { error } in events.read() {
+        info!("Server closed: {:#}", pretty_error(&error))
     }
 }
 
@@ -199,23 +182,20 @@ fn on_incoming(
     mut events: EventReader<RemoteClientConnecting<AppProtocol, Server>>,
     mut server: ResMut<Server>,
 ) {
-    for RemoteClientConnecting {
-        client_key: client, ..
-    } in events.read()
-    {
+    for RemoteClientConnecting { client_key, .. } in events.read() {
         // Once the server sends out an event saying that a client is connecting
         // (`RemoteConnecting`) you can get its `client_state` and read its
         // connection info, to decide if you want to accept or reject it.
-        if let ClientState::Connecting(info) = server.client_state(*client) {
+        if let ClientState::Connecting(info) = server.client_state(*client_key) {
             info!(
-                "Client {client} incoming from {}{} ({:?})",
+                "Client {client_key} incoming from {}{} ({:?})",
                 info.authority, info.path, info.origin,
             );
         }
         // IMPORTANT NOTE: You must either accept or reject the request after
         // receiving it. You don't have to do it immediately, but you do
         // have to do it eventually - the sooner the better.
-        let _ = server.accept_request(*client);
+        let _ = server.respond_to_request(*client_key, ConnectionResponse::Accept);
     }
 }
 
@@ -223,28 +203,27 @@ fn on_connected(
     mut events: EventReader<RemoteClientConnected<AppProtocol, Server>>,
     mut server: ResMut<Server>,
 ) {
-    for RemoteClientConnected {
-        client_key: client, ..
-    } in events.read()
-    {
-        if let ClientState::Connected(info) = server.client_state(*client) {
+    for RemoteClientConnected { client_key, .. } in events.read() {
+        if let ClientState::Connected(info) = server.client_state(*client_key) {
             info!(
-                "Client {client} connected on {} (RTT: {:?})",
-                info.remote_addr, info.rtt
+                "Client {client_key} connected on {} (RTT: {:?})",
+                info.remote_addr, info.stats.rtt
             );
         };
-        let _ = server.send(*client, "Welcome!");
-        let _ = server.send(*client, "Send me some UTF-8 text, and I will send it back");
+        let _ = server.send(*client_key, "Welcome!");
+        let _ = server.send(
+            *client_key,
+            "Send me some UTF-8 text, and I will send it back",
+        );
     }
 }
 
 fn on_disconnected(mut events: EventReader<RemoteClientDisconnected<AppProtocol, Server>>) {
-    for RemoteClientDisconnected {
-        client_key: client,
-        error: reason,
-    } in events.read()
-    {
-        info!("Client {client} disconnected: {:#}", pretty_error(reason));
+    for RemoteClientDisconnected { client_key, error } in events.read() {
+        info!(
+            "Client {client_key} disconnected: {:#}",
+            pretty_error(error)
+        );
     }
 }
 
