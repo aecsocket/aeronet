@@ -67,7 +67,7 @@ pub async fn recv(
         let packet = conn
             .receive_datagram()
             .await
-            .map_err(|err| shared::BackendError::RecvDatagram(err.into()))?;
+            .map_err(|err| shared::BackendError::ConnectionLost(err.into()))?;
         send_r
             .send(to_bytes(packet))
             .await

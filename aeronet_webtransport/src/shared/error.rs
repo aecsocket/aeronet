@@ -96,6 +96,6 @@ pub enum BackendError {
 
     #[error("failed to send datagram")]
     SendDatagram(#[source] SendDatagramError),
-    #[error("failed to receive datagram")]
-    RecvDatagram(#[source] RecvDatagramError),
+    #[error("connection lost")]
+    ConnectionLost(#[source] RecvDatagramError),
 }

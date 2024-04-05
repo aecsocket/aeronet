@@ -46,6 +46,8 @@ pub async fn server(
     send_managed: &mut wtransport::SendStream,
     recv_managed: &mut wtransport::RecvStream,
 ) -> Result<(), BackendError> {
+    use aeronet::error::pretty_error;
+
     let negotiate = negotiate::Negotiation::new(version);
 
     debug!("Waiting for negotiate request");
@@ -61,6 +63,7 @@ pub async fn server(
         ));
     }
 
+    debug!("Sending negotiate response");
     let (res, resp) = negotiate.recv_request_sized(&req);
     if let Some(resp) = resp {
         send_managed
@@ -70,10 +73,21 @@ pub async fn server(
     }
 
     match res {
-        Ok(()) => Ok(()),
-        Err(err) => Err(match err {
-            negotiate::RequestError::WrongVersion(err) => BackendError::WrongProtocolVersion(err),
-            err => BackendError::NegotiateRequest(err),
-        }),
+        Ok(()) => {
+            debug!("Successfully negotiated on version {version}");
+            Ok(())
+        }
+        Err(err) => {
+            debug!(
+                "Failed to negotiate on version {version}: {:#}",
+                pretty_error(&err)
+            );
+            Err(match err {
+                negotiate::RequestError::WrongVersion(err) => {
+                    BackendError::WrongProtocolVersion(err)
+                }
+                err => BackendError::NegotiateRequest(err),
+            })
+        }
     }
 }
