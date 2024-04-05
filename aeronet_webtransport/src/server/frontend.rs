@@ -19,8 +19,8 @@ use tracing::debug;
 use crate::shared::{self, ConnectionStats, MessageKey};
 
 use super::{
-    backend, ClientKey, ConnectionResponse, ServerBackendError, WebTransportServerConfig,
-    WebTransportServerError,
+    backend, ClientKey, ConnectionResponse, ServerBackendError, ServerError,
+    WebTransportServerConfig,
 };
 
 #[derive(Derivative)]
@@ -113,9 +113,9 @@ where
         }
     }
 
-    pub fn close(&mut self) -> Result<(), WebTransportServerError<P>> {
+    pub fn close(&mut self) -> Result<(), ServerError<P>> {
         if let Inner::Closed = self.inner {
-            return Err(WebTransportServerError::AlreadyClosed);
+            return Err(ServerError::AlreadyClosed);
         }
 
         self.inner = Inner::Closed;
@@ -171,23 +171,23 @@ where
         &mut self,
         client_key: ClientKey,
         resp: ConnectionResponse,
-    ) -> Result<(), WebTransportServerError<P>> {
+    ) -> Result<(), ServerError<P>> {
         let Inner::Open(server) = &mut self.inner else {
-            return Err(WebTransportServerError::NotOpen);
+            return Err(ServerError::NotOpen);
         };
         let Some(client) = server.clients.get_mut(client_key) else {
-            return Err(WebTransportServerError::NoClient { client_key });
+            return Err(ServerError::NoClient { client_key });
         };
         let Client::Connecting(client) = client else {
-            return Err(WebTransportServerError::ClientNotRequesting { client_key });
+            return Err(ServerError::ClientNotRequesting { client_key });
         };
         let Some(send_conn_resp) = client.send_conn_resp.take() else {
-            return Err(WebTransportServerError::AlreadyResponded { client_key });
+            return Err(ServerError::AlreadyResponded { client_key });
         };
 
         send_conn_resp
             .send(resp)
-            .map_err(|_| WebTransportServerError::ClientBackendClosed)
+            .map_err(|_| ServerError::ClientBackendClosed)
     }
 }
 
@@ -197,7 +197,7 @@ where
     P::C2S: TryFromBytes + OnLane,
     P::S2C: TryIntoBytes + OnLane,
 {
-    type Error = WebTransportServerError<P>;
+    type Error = ServerError<P>;
 
     type Opening<'t> = ();
 
@@ -247,13 +247,13 @@ where
         msg: impl Into<P::S2C>,
     ) -> Result<Self::MessageKey, Self::Error> {
         let Inner::Open(server) = &mut self.inner else {
-            return Err(WebTransportServerError::NotOpen);
+            return Err(ServerError::NotOpen);
         };
         let Some(client) = server.clients.get_mut(client_key) else {
-            return Err(WebTransportServerError::NoClient { client_key });
+            return Err(ServerError::NoClient { client_key });
         };
         let Client::Connected(client) = client else {
-            return Err(WebTransportServerError::ClientNotConnected { client_key });
+            return Err(ServerError::ClientNotConnected { client_key });
         };
 
         let msg = msg.into();
@@ -263,7 +263,7 @@ where
 
     fn flush(&mut self) -> Result<(), Self::Error> {
         let Inner::Open(server) = &mut self.inner else {
-            return Err(WebTransportServerError::NotOpen);
+            return Err(ServerError::NotOpen);
         };
 
         for (_, client) in &mut server.clients {
@@ -277,7 +277,7 @@ where
                 client
                     .send_s2c
                     .unbounded_send(packet)
-                    .map_err(|_| WebTransportServerError::BackendClosed)?;
+                    .map_err(|_| ServerError::BackendClosed)?;
             }
             let bytes_used = bytes_start - bytes_left;
             server.bytes_left -= bytes_used;
@@ -288,14 +288,14 @@ where
 
     fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error> {
         let Inner::Open(server) = &mut self.inner else {
-            return Err(WebTransportServerError::NotOpen);
+            return Err(ServerError::NotOpen);
         };
 
         server
             .clients
             .remove(client_key)
             .map(|_| ())
-            .ok_or(WebTransportServerError::NoClient { client_key })
+            .ok_or(ServerError::NoClient { client_key })
     }
 
     fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<P, Self>> {
@@ -328,7 +328,7 @@ where
             );
         }
         match server.recv_open.try_recv() {
-            Err(_) => (None, Inner::Opening(server)),
+            Ok(None) => (None, Inner::Opening(server)),
             Ok(Some(next)) => (
                 Some(ServerEvent::Opened),
                 Inner::Open(Open {
@@ -340,9 +340,9 @@ where
                     recv_connecting: next.recv_connecting,
                 }),
             ),
-            Ok(None) => (
+            Err(_) => (
                 Some(ServerEvent::Closed {
-                    error: WebTransportServerError::BackendClosed,
+                    error: ServerError::BackendClosed,
                 }),
                 Inner::Closed,
             ),
@@ -359,7 +359,7 @@ where
             if let Some(err) = server
                 .recv_err
                 .try_recv()
-                .map_err(|_| WebTransportServerError::BackendClosed)?
+                .map_err(|_| ServerError::BackendClosed)?
             {
                 return Err(err.into());
             }
@@ -382,14 +382,14 @@ where
                         connecting
                             .send_key
                             .send(client_key)
-                            .map_err(|_| WebTransportServerError::BackendClosed)?;
+                            .map_err(|_| ServerError::BackendClosed)?;
                         events.push(ServerEvent::Connecting { client_key });
                     }
-                    Ok(None) => return Err(WebTransportServerError::BackendClosed),
+                    Ok(None) => return Err(ServerError::BackendClosed),
                 }
             }
 
-            Ok::<_, WebTransportServerError<P>>(())
+            Ok::<_, ServerError<P>>(())
         })();
 
         // close if there was a server error
@@ -447,7 +447,7 @@ where
             if let Some(err) = client
                 .recv_err
                 .try_recv()
-                .map_err(|_| WebTransportServerError::ClientBackendClosed)?
+                .map_err(|_| ServerError::ClientBackendClosed)?
             {
                 return Err(err.into());
             }
@@ -455,7 +455,7 @@ where
             if let Some(connected) = client
                 .recv_connected
                 .try_recv()
-                .map_err(|_| WebTransportServerError::ClientBackendClosed)?
+                .map_err(|_| ServerError::ClientBackendClosed)?
             {
                 Ok(Client::Connected(Connected {
                     remote_addr: connected.remote_addr,
@@ -500,22 +500,24 @@ where
             .min(client.bandwidth);
 
         let res = (|| {
-            while let Some(mut packet) = client
-                .recv_c2s
-                .try_next()
-                .map_err(|_| WebTransportServerError::ClientBackendClosed)?
-            {
-                // receive acks
-                events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
-                    ServerEvent::Ack {
-                        client_key,
-                        msg_key: MessageKey::from_raw(msg_seq),
-                    }
-                }));
+            loop {
+                match client.recv_c2s.try_next() {
+                    Err(_) => break,
+                    Ok(Some(mut packet)) => {
+                        // receive acks
+                        events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
+                            ServerEvent::Ack {
+                                client_key,
+                                msg_key: MessageKey::from_raw(msg_seq),
+                            }
+                        }));
 
-                // receive messages
-                while let Some(msgs) = client.packets.read_next_frag(&mut packet)? {
-                    events.extend(msgs.map(|msg| ServerEvent::Recv { client_key, msg }));
+                        // receive messages
+                        while let Some(msgs) = client.packets.read_next_frag(&mut packet)? {
+                            events.extend(msgs.map(|msg| ServerEvent::Recv { client_key, msg }));
+                        }
+                    }
+                    Ok(None) => return Err(ServerError::ClientBackendClosed),
                 }
             }
 

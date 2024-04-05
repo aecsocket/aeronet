@@ -1,4 +1,4 @@
-use aeronet::protocol::ProtocolVersion;
+use aeronet::{error::pretty_error, protocol::ProtocolVersion};
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
@@ -25,6 +25,25 @@ pub struct Connected {
 }
 
 pub async fn start(
+    native_config: NativeConfig,
+    version: ProtocolVersion,
+    target: String,
+    send_connected: oneshot::Sender<Connected>,
+) -> BackendError {
+    match do_start(native_config, version, target, send_connected).await {
+        Ok(_) => unreachable!(),
+        Err(err @ BackendError::Generic(shared::BackendError::FrontendClosed)) => {
+            debug!("Client disconnected");
+            err
+        }
+        Err(err) => {
+            debug!("Client disconnected: {:#}", pretty_error(&err));
+            err
+        }
+    }
+}
+
+async fn do_start(
     native_config: NativeConfig,
     version: ProtocolVersion,
     target: String,

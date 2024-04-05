@@ -75,7 +75,7 @@ pub enum ServerBackendError {
 
 #[derive(Derivative, thiserror::Error)]
 #[derivative(Debug(bound = "packet::SendError<P::S2C>: Debug, packet::RecvError<P::C2S>: Debug"))]
-pub enum WebTransportServerError<P>
+pub enum ServerError<P>
 where
     P: TransportProtocol,
     P::C2S: TryFromBytes,

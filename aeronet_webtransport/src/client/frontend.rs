@@ -2,7 +2,6 @@ use std::{fmt::Debug, future::Future, time::Duration};
 
 use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport},
-    error::pretty_error,
     lane::{LaneKind, OnLane},
     message::{TryFromBytes, TryIntoBytes},
     protocol::TransportProtocol,
@@ -12,12 +11,11 @@ use bytes::Bytes;
 use derivative::Derivative;
 use either::Either;
 use futures::channel::{mpsc, oneshot};
-use tracing::debug;
 use xwt_core::utils::maybe;
 
-use crate::shared::{self, ConnectionStats, MessageKey};
+use crate::shared::{ConnectionStats, MessageKey};
 
-use super::{backend, BackendError, ClientConfig, Error};
+use super::{backend, BackendError, ClientConfig, ClientError};
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
@@ -71,9 +69,9 @@ where
         }
     }
 
-    pub fn disconnect(&mut self) -> Result<(), Error<P>> {
+    pub fn disconnect(&mut self) -> Result<(), ClientError<P>> {
         if let Inner::Disconnected = self.inner {
-            return Err(Error::AlreadyDisconnected);
+            return Err(ClientError::AlreadyDisconnected);
         }
 
         self.inner = Inner::Disconnected;
@@ -94,25 +92,12 @@ where
             default_packet_cap,
         } = config;
         let target = target.into();
-
         let (send_err, recv_err) = oneshot::channel::<BackendError>();
         let (send_connected, recv_connected) = oneshot::channel::<backend::Connected>();
         let backend = async move {
-            let Err(err) = backend::start(native_config, version, target, send_connected).await
-            else {
-                unreachable!()
-            };
-            match err {
-                BackendError::Generic(shared::BackendError::FrontendClosed) => {
-                    debug!("Client closed");
-                }
-                err => {
-                    debug!("Client closed: {:#}", pretty_error(&err));
-                    let _ = send_err.send(err);
-                }
-            }
+            let err = backend::start(native_config, version, target, send_connected).await;
+            let _ = send_err.send(err);
         };
-
         (
             Self {
                 inner: Inner::Connecting(Connecting {
@@ -132,9 +117,9 @@ where
         &mut self,
         config: ClientConfig,
         target: impl Into<String>,
-    ) -> Result<impl Future<Output = ()> + maybe::Send, Error<P>> {
+    ) -> Result<impl Future<Output = ()> + maybe::Send, ClientError<P>> {
         let Inner::Disconnected = self.inner else {
-            return Err(Error::AlreadyConnected);
+            return Err(ClientError::AlreadyConnected);
         };
 
         let (this, backend) = Self::connect_new(config, target);
@@ -149,7 +134,7 @@ where
     P::C2S: TryIntoBytes + OnLane,
     P::S2C: TryFromBytes + OnLane,
 {
-    type Error = Error<P>;
+    type Error = ClientError<P>;
 
     type Connecting<'t> = ();
 
@@ -167,7 +152,7 @@ where
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error> {
         let Inner::Connected(client) = &mut self.inner else {
-            return Err(Error::NotConnected);
+            return Err(ClientError::NotConnected);
         };
 
         let msg = msg.into();
@@ -177,14 +162,14 @@ where
 
     fn flush(&mut self) -> Result<(), Self::Error> {
         let Inner::Connected(client) = &mut self.inner else {
-            return Err(Error::NotConnected);
+            return Err(ClientError::NotConnected);
         };
 
         for packet in client.packets.flush(&mut client.bytes_left) {
             client
                 .send_c2s
                 .unbounded_send(packet)
-                .map_err(|_| Error::BackendClosed)?;
+                .map_err(|_| ClientError::BackendClosed)?;
         }
         Ok(())
     }
@@ -219,7 +204,7 @@ where
             );
         }
         match client.recv_connected.try_recv() {
-            Err(_) => (None, Inner::Connecting(client)),
+            Ok(None) => (None, Inner::Connecting(client)),
             Ok(Some(next)) => (
                 Some(ClientEvent::Connected),
                 Inner::Connected(Connected {
@@ -237,9 +222,9 @@ where
                     recv_stats: next.recv_stats,
                 }),
             ),
-            Ok(None) => (
+            Err(_) => (
                 Some(ClientEvent::Disconnected {
-                    error: Error::BackendClosed,
+                    error: ClientError::BackendClosed,
                 }),
                 Inner::Disconnected,
             ),
@@ -273,7 +258,7 @@ where
                 match client.recv_stats.try_next() {
                     Err(_) => break,
                     Ok(Some(stats)) => client.stats = stats,
-                    Ok(None) => return Err(Error::BackendClosed),
+                    Ok(None) => return Err(ClientError::BackendClosed),
                 }
             }
 
@@ -293,7 +278,7 @@ where
                             events.extend(msgs.map(|msg| ClientEvent::Recv { msg }));
                         }
                     }
-                    Ok(None) => return Err(Error::BackendClosed),
+                    Ok(None) => return Err(ClientError::BackendClosed),
                 }
             }
 
