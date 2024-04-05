@@ -6,6 +6,8 @@ use std::{convert::Infallible, error::Error};
 
 use bytes::Bytes;
 
+use crate::protocol::TransportProtocol;
+
 /// Smallest unit of data which can be sent between transports.
 ///
 /// A message is the smallest unit of transmission that transports use, as far
@@ -102,5 +104,34 @@ impl TryFromBytes for Vec<u8> {
 
     fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error> {
         Ok(buf.to_vec())
+    }
+}
+
+pub trait BytesMapperProtocol: TransportProtocol {
+    type C2SBytesMapper: BytesMapper<Self::C2S>;
+
+    type S2CBytesMapper: BytesMapper<Self::S2C>;
+}
+
+pub trait BytesMapper<M> {
+    type IntoError: Error + Send + Sync + 'static;
+
+    type FromError: Error + Send + Sync + 'static;
+
+    fn try_into_bytes(&mut self, msg: M) -> Result<Bytes, Self::IntoError>;
+
+    fn try_from_bytes(&mut self, buf: Bytes) -> Result<M, Self::FromError>;
+}
+
+impl<M: TryIntoBytes + TryFromBytes> BytesMapper<M> for () {
+    type IntoError = <M as TryIntoBytes>::Error;
+    type FromError = <M as TryFromBytes>::Error;
+
+    fn try_into_bytes(&mut self, msg: M) -> Result<Bytes, Self::IntoError> {
+        msg.try_into_bytes()
+    }
+
+    fn try_from_bytes(&mut self, buf: Bytes) -> Result<M, Self::FromError> {
+        M::try_from_bytes(buf)
     }
 }

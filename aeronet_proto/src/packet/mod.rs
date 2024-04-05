@@ -107,8 +107,8 @@ mod send;
 use std::{fmt::Debug, marker::PhantomData};
 
 use aeronet::{
-    lane::{LaneIndex, LaneKind, OnLane},
-    message::{TryFromBytes, TryIntoBytes},
+    lane::{LaneIndex, LaneKind, LaneMapper},
+    message::BytesMapper,
     octs::{BytesError, ConstEncodeLen},
 };
 use ahash::AHashMap;
@@ -126,8 +126,8 @@ use self::lane::LaneState;
 // todo docs
 /// See the [module-level documentation](self).
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
-pub struct Packets<S, R> {
+#[derivative(Debug(bound = "SB: Debug, RB: Debug, SL: Debug, RL: Debug"))]
+pub struct Packets<S, R, SB = (), RB = (), SL = (), RL = ()> {
     lanes: Box<[LaneState<R>]>,
     max_packet_len: usize,
     default_packet_cap: usize,
@@ -137,7 +137,11 @@ pub struct Packets<S, R> {
     next_send_msg_seq: Seq,
     sent_msgs: AHashMap<Seq, SentMessage>,
     flushed_packets: AHashMap<Seq, Box<[FragIndex]>>,
-    _phantom: PhantomData<(S, R)>,
+    send_bytes_mapper: SB,
+    recv_bytes_mapper: RB,
+    send_lane_mapper: SL,
+    recv_lane_mapper: RL,
+    _phantom: PhantomData<S>,
 }
 
 #[derive(Debug)]
@@ -154,18 +158,16 @@ struct FragIndex {
     frag_id: u8,
 }
 
-#[derive(Derivative, thiserror::Error)]
-#[derivative(Debug(bound = "S::Error: Debug"), Clone(bound = "S::Error: Clone"))]
-pub enum SendError<S: TryIntoBytes> {
+#[derive(Debug, thiserror::Error)]
+pub enum SendError<SE> {
     #[error("failed to convert message into bytes")]
-    IntoBytes(#[source] S::Error),
+    IntoBytes(#[source] SE),
     #[error("failed to fragment message")]
     Fragment(#[source] FragmentError),
 }
 
-#[derive(Derivative, thiserror::Error)]
-#[derivative(Debug(bound = "R::Error: Debug"), Clone(bound = "R::Error: Clone"))]
-pub enum RecvError<R: TryFromBytes> {
+#[derive(Debug, thiserror::Error)]
+pub enum RecvError<RE> {
     #[error("failed to read packet sequence")]
     ReadPacketSeq(#[source] BytesError),
     #[error("failed to read acks")]
@@ -175,16 +177,30 @@ pub enum RecvError<R: TryFromBytes> {
     #[error("failed to reassemble message")]
     Reassemble(#[source] ReassembleError),
     #[error("failed to create message from bytes")]
-    FromBytes(#[source] R::Error),
+    FromBytes(#[source] RE),
     #[error("invalid lane index {lane_index:?}")]
     InvalidLaneIndex { lane_index: LaneIndex },
 }
 
 const PACKET_HEADER_LEN: usize = Seq::ENCODE_LEN + Acknowledge::ENCODE_LEN;
 
-impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Packets<S, R> {
+impl<S, R, SB, RB, SL, RL> Packets<S, R, SB, RB, SL, RL>
+where
+    SB: BytesMapper<S>,
+    RB: BytesMapper<R>,
+    SL: LaneMapper<S>,
+    RL: LaneMapper<R>,
+{
     #[must_use]
-    pub fn new(max_packet_len: usize, default_packet_cap: usize, lanes: &[LaneKind]) -> Self {
+    pub fn new(
+        max_packet_len: usize,
+        default_packet_cap: usize,
+        lanes: &[LaneKind],
+        send_bytes_mapper: SB,
+        recv_bytes_mapper: RB,
+        send_lane_mapper: SL,
+        recv_lane_mapper: RL,
+    ) -> Self {
         assert!(max_packet_len > PACKET_HEADER_LEN);
         Self {
             lanes: lanes.iter().map(|kind| LaneState::new(*kind)).collect(),
@@ -196,6 +212,10 @@ impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Packets<S, R> {
             next_send_packet_seq: Seq(0),
             sent_msgs: AHashMap::new(),
             flushed_packets: AHashMap::new(),
+            send_bytes_mapper,
+            recv_bytes_mapper,
+            send_lane_mapper,
+            recv_lane_mapper,
             _phantom: PhantomData,
         }
     }
@@ -205,7 +225,10 @@ impl<S: TryIntoBytes + OnLane, R: TryFromBytes + OnLane> Packets<S, R> {
 mod tests {
     use std::{convert::Infallible, string::FromUtf8Error};
 
-    use aeronet::{lane::LaneKey, message::Message};
+    use aeronet::{
+        lane::{LaneKey, OnLane},
+        message::{Message, TryFromBytes, TryIntoBytes},
+    };
 
     use super::*;
 
@@ -243,7 +266,15 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut msgs = Packets::<MyMsg, MyMsg>::new(MAX_PACKET_LEN, MAX_PACKET_LEN, MyLane::KINDS);
+        let mut msgs = Packets::<MyMsg, MyMsg>::new(
+            MAX_PACKET_LEN,
+            MAX_PACKET_LEN,
+            MyLane::KINDS,
+            (),
+            (),
+            (),
+            (),
+        );
         msgs.buffer_send(MyMsg::from("1")).unwrap();
         msgs.buffer_send(MyMsg::from("2")).unwrap();
 

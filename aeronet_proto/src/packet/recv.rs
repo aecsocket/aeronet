@@ -1,5 +1,5 @@
 use aeronet::octs::ReadBytes;
-use aeronet::{lane::OnLane, message::TryFromBytes};
+use aeronet::{lane::LaneMapper, message::BytesMapper};
 use ahash::AHashMap;
 use bytes::{Buf, Bytes};
 
@@ -7,7 +7,13 @@ use crate::{ack::Acknowledge, frag::Fragment, seq::Seq};
 
 use super::{FragIndex, Packets, RecvError, SentMessage};
 
-impl<S, R: TryFromBytes + OnLane> Packets<S, R> {
+impl<S, R, SB, RB, SL, RL> Packets<S, R, SB, RB, SL, RL>
+where
+    SB: BytesMapper<S>,
+    RB: BytesMapper<R>,
+    SL: LaneMapper<S>,
+    RL: LaneMapper<R>,
+{
     pub fn read_acks(
         &mut self,
         packet: &mut Bytes,
@@ -61,7 +67,7 @@ impl<S, R: TryFromBytes + OnLane> Packets<S, R> {
     pub fn read_next_frag(
         &mut self,
         packet: &mut Bytes,
-    ) -> Result<Option<impl Iterator<Item = R> + '_>, RecvError<R>> {
+    ) -> Result<Option<impl Iterator<Item = R> + '_>, RecvError<RB::FromError>> {
         while packet.has_remaining() {
             let frag = packet
                 .read::<Fragment<Bytes>>()
@@ -76,10 +82,14 @@ impl<S, R: TryFromBytes + OnLane> Packets<S, R> {
                 continue;
             };
 
-            let msg = R::try_from_bytes(Bytes::from(msg_bytes)).map_err(RecvError::FromBytes)?;
+            let msg_bytes = Bytes::from(msg_bytes);
+            let msg = self
+                .recv_bytes_mapper
+                .try_from_bytes(msg_bytes)
+                .map_err(RecvError::FromBytes)?;
 
             // get what lane this message is received on
-            let lane_index = msg.lane_index();
+            let lane_index = self.recv_lane_mapper.lane_index(&msg);
             let lane = self
                 .lanes
                 .get_mut(lane_index.into_raw())

@@ -1,6 +1,6 @@
 use aeronet::{
-    lane::OnLane,
-    message::TryIntoBytes,
+    lane::LaneMapper,
+    message::BytesMapper,
     octs::{EncodeLen, WriteBytes},
 };
 use ahash::AHashMap;
@@ -14,10 +14,19 @@ use crate::{
 
 use super::{FragIndex, LaneState, Packets, SendError, SentMessage};
 
-impl<S: TryIntoBytes + OnLane, R> Packets<S, R> {
-    pub fn buffer_send(&mut self, msg: S) -> Result<Seq, SendError<S>> {
-        let lane_index = msg.lane_index();
-        let msg_bytes = msg.try_into_bytes().map_err(SendError::IntoBytes)?;
+impl<S, R, SB, RB, SL, RL> Packets<S, R, SB, RB, SL, RL>
+where
+    SB: BytesMapper<S>,
+    RB: BytesMapper<R>,
+    SL: LaneMapper<S>,
+    RL: LaneMapper<R>,
+{
+    pub fn buffer_send(&mut self, msg: S) -> Result<Seq, SendError<SB::IntoError>> {
+        let lane_index = self.send_lane_mapper.lane_index(&msg);
+        let msg_bytes = self
+            .send_bytes_mapper
+            .try_into_bytes(msg)
+            .map_err(SendError::IntoBytes)?;
         let msg_seq = self.next_send_msg_seq;
         let frags = self
             .frags

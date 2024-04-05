@@ -55,6 +55,8 @@
 
 pub use aeronet_derive::{LaneKey, OnLane};
 
+use crate::protocol::TransportProtocol;
+
 /// Kind of lane which can provide guarantees about the manner of message
 /// delivery.
 ///
@@ -239,6 +241,22 @@ impl LaneIndex {
 pub trait OnLane {
     /// Gets the index of the lane that this is sent out on.
     fn lane_index(&self) -> LaneIndex;
+}
+
+pub trait LaneMapperProtocol: TransportProtocol {
+    type C2SLaneMapper: LaneMapper<Self::C2S>;
+
+    type S2CLaneMapper: LaneMapper<Self::S2C>;
+}
+
+pub trait LaneMapper<M> {
+    fn lane_index(&self, msg: &M) -> LaneIndex;
+}
+
+impl<M: OnLane> LaneMapper<M> for () {
+    fn lane_index(&self, msg: &M) -> LaneIndex {
+        msg.lane_index()
+    }
 }
 
 /// App-defined type listing a set of [lanes](crate::lane) which a transport can
