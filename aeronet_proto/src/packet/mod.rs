@@ -159,15 +159,15 @@ struct FragIndex {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum SendError<SE> {
+pub enum SendError<E> {
     #[error("failed to convert message into bytes")]
-    IntoBytes(#[source] SE),
+    IntoBytes(#[source] E),
     #[error("failed to fragment message")]
     Fragment(#[source] FragmentError),
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum RecvError<RE> {
+pub enum RecvError<E> {
     #[error("failed to read packet sequence")]
     ReadPacketSeq(#[source] BytesError),
     #[error("failed to read acks")]
@@ -177,7 +177,7 @@ pub enum RecvError<RE> {
     #[error("failed to reassemble message")]
     Reassemble(#[source] ReassembleError),
     #[error("failed to create message from bytes")]
-    FromBytes(#[source] RE),
+    FromBytes(#[source] E),
     #[error("invalid lane index {lane_index:?}")]
     InvalidLaneIndex { lane_index: LaneIndex },
 }

@@ -28,6 +28,11 @@ impl Message for () {}
 /// message needs to be serialized into bytes first before being sent over e.g.
 /// a network.
 ///
+/// Transports may also choose to use [`BytesMapper`] for converting values into
+/// bytes. The implementation of [`BytesMapper`] for `()` will use this trait
+/// for this conversion. If you need extra context for converting a value into
+/// bytes, which can't exist in the value itself, look into [`BytesMapper`].
+///
 /// For the incoming counterpart, see [`TryFromBytes`].
 pub trait TryIntoBytes {
     /// Error type of [`TryIntoBytes::try_into_bytes`].
@@ -70,6 +75,11 @@ impl TryIntoBytes for Vec<u8> {
 /// Transports may require this as a bound on the incoming message type, if the
 /// message needs to be deserialized from a byte sequence after receiving data.
 ///
+/// Transports may also choose to use [`BytesMapper`] for creating values from
+/// bytes. The implementation of [`BytesMapper`] for `()` will use this trait
+/// for this conversion. If you need extra context for creating a value from
+/// bytes, which can't exist in the value itself, look into [`BytesMapper`].
+///
 /// For the outgoing counterpart, see [`TryIntoBytes`].
 pub trait TryFromBytes: Sized {
     /// Error type of [`TryFromBytes::try_from_bytes`].
@@ -107,31 +117,76 @@ impl TryFromBytes for Vec<u8> {
     }
 }
 
+/// Protocol which is able to convert messages into, and create messages from,
+/// bytes.
+///
+/// Transports which convert their messages into bytes may require this as a
+/// bound on the protocol type.
+///
+/// See [`BytesMapper`].
 pub trait BytesMapperProtocol: TransportProtocol {
+    /// Type of mapper used to convert [`TransportProtocol::C2S`] values into,
+    /// or create values from, bytes.
+    ///
+    /// Use `()` as the mapper for [`TryIntoBytes`] and [`TryFromBytes`] types.
     type C2SBytesMapper: BytesMapper<Self::C2S>;
 
+    /// Type of mapper used to convert [`TransportProtocol::S2C`] values into,
+    /// or create values from, bytes.
+    ///
+    /// Use `()` as the mapper for [`TryIntoBytes`] and [`TryFromBytes`] types.
     type S2CBytesMapper: BytesMapper<Self::S2C>;
 }
 
-pub trait BytesMapper<M> {
+/// Allows converting messages into, and creating messages from, bytes.
+///
+/// Transports may include a value implementing this trait as a field, and use
+/// it to map their message types to/from bytes.
+///
+/// # How do I make one?
+///
+/// If your message type already implements [`TryIntoBytes`] and
+/// [`TryFromBytes`], you don't need to make your own. Just use `()` as the
+/// mapper value - it implements this trait.
+///
+/// # Why use this over [`TryIntoBytes`] or [`TryFromBytes`]?
+///
+/// In some cases, you may not have all the context you need in the message
+/// itself in order to be able to convert it into bytes. You can instead store
+/// this state in a type implementing this trait. When the transport attempts to
+/// convert a message to bytes, it will call this value's function, letting you
+/// use your existing context for the conversion.
+pub trait BytesMapper<T> {
+    /// Error type of [`BytesMapper::try_into_bytes`].
     type IntoError: Error + Send + Sync + 'static;
 
+    /// Error type of [`BytesMapper::try_from_bytes`].
     type FromError: Error + Send + Sync + 'static;
 
-    fn try_into_bytes(&mut self, msg: M) -> Result<Bytes, Self::IntoError>;
+    /// Attempts to convert a `T` into [`Bytes`].
+    ///
+    /// # Errors
+    ///
+    /// Errors if the conversion fails.
+    fn try_into_bytes(&mut self, value: T) -> Result<Bytes, Self::IntoError>;
 
-    fn try_from_bytes(&mut self, buf: Bytes) -> Result<M, Self::FromError>;
+    /// Attempts to convert a sequence of bytes into a `T`.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the conversion fails.
+    fn try_from_bytes(&mut self, buf: Bytes) -> Result<T, Self::FromError>;
 }
 
-impl<M: TryIntoBytes + TryFromBytes> BytesMapper<M> for () {
-    type IntoError = <M as TryIntoBytes>::Error;
-    type FromError = <M as TryFromBytes>::Error;
+impl<T: TryIntoBytes + TryFromBytes> BytesMapper<T> for () {
+    type IntoError = <T as TryIntoBytes>::Error;
+    type FromError = <T as TryFromBytes>::Error;
 
-    fn try_into_bytes(&mut self, msg: M) -> Result<Bytes, Self::IntoError> {
-        msg.try_into_bytes()
+    fn try_into_bytes(&mut self, value: T) -> Result<Bytes, Self::IntoError> {
+        value.try_into_bytes()
     }
 
-    fn try_from_bytes(&mut self, buf: Bytes) -> Result<M, Self::FromError> {
-        M::try_from_bytes(buf)
+    fn try_from_bytes(&mut self, buf: Bytes) -> Result<T, Self::FromError> {
+        T::try_from_bytes(buf)
     }
 }
