@@ -39,10 +39,7 @@ use aeronet::{
         ServerClosed, ServerOpened, ServerTransport, ServerTransportPlugin,
     },
 };
-use aeronet_webtransport::server::{
-    ConnectionResponse, WebTransportServer, WebTransportServerConfig,
-};
-use anyhow::Result;
+use aeronet_webtransport::server::{ConnectionResponse, ServerConfig, WebTransportServer};
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use bytes::Bytes;
 
@@ -137,10 +134,10 @@ fn main() {
 
 fn setup(mut commands: Commands, rt: Res<TokioRuntime>) {
     let identity = aeronet_webtransport::wtransport::tls::Identity::self_signed(["localhost"]);
-    let (server, backend) = Server::open_new(WebTransportServerConfig {
+    let (server, backend) = Server::open_new(ServerConfig {
         version: PROTOCOL_VERSION,
         lanes: AppLane::KINDS.into(),
-        ..WebTransportServerConfig::new(
+        ..ServerConfig::new(
             aeronet_webtransport::wtransport::ServerConfig::builder()
                 .with_bind_default(25565)
                 .with_identity(&identity)

@@ -143,8 +143,8 @@ where
                         _phantom: PhantomData,
                     });
                 }
-                ServerEvent::Closed { error: reason } => {
-                    closed.send(ServerClosed { error: reason });
+                ServerEvent::Closed { error } => {
+                    closed.send(ServerClosed { error });
                 }
                 ServerEvent::Connecting { client_key } => {
                     connecting.send(RemoteClientConnecting { client_key });
@@ -155,6 +155,7 @@ where
                     });
 
                     let client_id = client_keys.next_id();
+                    debug!("Associating {client_key:?} with {client_id:?}");
                     match client_keys.id_map.insert(client_key, client_id) {
                         Overwritten::Neither => {}
                         overwritten => {
@@ -163,29 +164,28 @@ where
                     }
                     replicon_events.send(RepliconEvent::ClientConnected { client_id });
                 }
-                ServerEvent::Disconnected {
-                    client_key,
-                    error: reason,
-                } => {
-                    let reason_str = format!("{:#}", aeronet::error::pretty_error(&reason));
+                ServerEvent::Disconnected { client_key, error } => {
+                    let reason_str = format!("{:#}", aeronet::error::pretty_error(&error));
                     disconnected.send(RemoteClientDisconnected {
                         client_key: client_key.clone(),
-                        error: reason,
+                        error,
                     });
 
-                    let Some(client_id) = client_keys.id_map().get_by_left(&client_key) else {
+                    let Some((_, client_id)) = client_keys.id_map.remove_by_left(&client_key)
+                    else {
                         warn!(
                             "Disconnected client {client_key:?} which does not have a replicon ID"
                         );
                         return;
                     };
+                    debug!("Removed {client_key:?} associated with {client_id:?}");
                     replicon_events.send(RepliconEvent::ClientDisconnected {
-                        client_id: *client_id,
+                        client_id,
                         reason: reason_str,
                     });
                 }
                 ServerEvent::Recv { client_key, msg } => {
-                    let Some(client_id) = client_keys.id_map().get_by_left(&client_key) else {
+                    let Some(client_id) = client_keys.id_map.get_by_left(&client_key) else {
                         warn!("Received message from client {client_key:?} which does not have a replicon ID");
                         return;
                     };
@@ -217,7 +217,7 @@ where
         mut flush_errors: EventWriter<ServerFlushError<P, T>>,
     ) {
         for (client_id, channel_id, payload) in replicon.drain_sent() {
-            let Some(client_key) = client_keys.id_map().get_by_right(&client_id) else {
+            let Some(client_key) = client_keys.id_map.get_by_right(&client_id) else {
                 warn!(
                     "Sending message to client with ID {client_id:?} with no associated client key"
                 );

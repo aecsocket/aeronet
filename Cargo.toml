@@ -8,7 +8,6 @@ members = [
     "aeronet_channel",
     "aeronet_webtransport",
     #"aeronet_steam",
-    "examples",
 ]
 
 [workspace.package]
@@ -56,6 +55,7 @@ enum_dispatch = "0.3.12"
 static_assertions = "1.1.0"
 assert_matches = "1.5.0"
 cfg-if = "1.0.0"
+clap = { version = "4.5.4", features = ["derive"] }
 
 bitcode = "0.6.0"
 serde = { version = "1.0.197", features = ["derive"] }

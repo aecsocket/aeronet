@@ -29,7 +29,7 @@ pub type NativeConfig = wtransport::ServerConfig;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub struct WebTransportServerConfig {
+pub struct ServerConfig {
     #[derivative(Debug = "ignore")]
     pub native: NativeConfig,
     pub version: ProtocolVersion,
@@ -40,7 +40,7 @@ pub struct WebTransportServerConfig {
     pub default_packet_cap: usize,
 }
 
-impl WebTransportServerConfig {
+impl ServerConfig {
     pub fn new(native: impl Into<wtransport::ServerConfig>) -> Self {
         Self {
             native: native.into(),

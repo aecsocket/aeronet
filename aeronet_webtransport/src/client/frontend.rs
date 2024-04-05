@@ -13,7 +13,10 @@ use either::Either;
 use futures::channel::{mpsc, oneshot};
 use xwt_core::utils::maybe;
 
-use crate::shared::{ConnectionStats, MessageKey};
+use crate::{
+    internal::TryRecv,
+    shared::{ConnectionStats, MessageKey},
+};
 
 use super::{backend, BackendError, ClientConfig, ClientError};
 
@@ -254,31 +257,29 @@ where
         let mut events = Vec::new();
         let res = (|| {
             // update connection stats
-            loop {
-                match client.recv_stats.try_next() {
-                    Err(_) => break,
-                    Ok(Some(stats)) => client.stats = stats,
-                    Ok(None) => return Err(ClientError::BackendClosed),
-                }
+            while let Some(stats) = client
+                .recv_stats
+                .try_recv()
+                .map_err(|_| ClientError::BackendClosed)?
+            {
+                client.stats = stats;
             }
 
-            loop {
-                match client.recv_s2c.try_next() {
-                    Err(_) => break,
-                    Ok(Some(mut packet)) => {
-                        // receive acks
-                        events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
-                            ClientEvent::Ack {
-                                msg_key: MessageKey::from_raw(msg_seq),
-                            }
-                        }));
-
-                        // receive messages
-                        while let Some(msgs) = client.packets.read_next_frag(&mut packet)? {
-                            events.extend(msgs.map(|msg| ClientEvent::Recv { msg }));
-                        }
+            while let Some(mut packet) = client
+                .recv_s2c
+                .try_recv()
+                .map_err(|_| ClientError::BackendClosed)?
+            {
+                // receive acks
+                events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
+                    ClientEvent::Ack {
+                        msg_key: MessageKey::from_raw(msg_seq),
                     }
-                    Ok(None) => return Err(ClientError::BackendClosed),
+                }));
+
+                // receive messages
+                while let Some(msgs) = client.packets.read_next_frag(&mut packet)? {
+                    events.extend(msgs.map(|msg| ClientEvent::Recv { msg }));
                 }
             }
 

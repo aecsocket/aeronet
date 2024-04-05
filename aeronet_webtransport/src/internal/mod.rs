@@ -21,6 +21,21 @@ pub fn check_datagram_support(conn: &ty::Connection) -> bool {
     conn.0.max_datagram_size().is_some()
 }
 
+// futures_channel's mpsc try_next API fucking sucks. we use this to fix it.
+pub trait TryRecv<T> {
+    fn try_recv(&mut self) -> Result<Option<T>, ()>;
+}
+
+impl<T> TryRecv<T> for mpsc::Receiver<T> {
+    fn try_recv(&mut self) -> Result<Option<T>, ()> {
+        match mpsc::Receiver::<T>::try_next(self) {
+            Err(_) => Ok(None),
+            Ok(None) => Err(()),
+            Ok(Some(t)) => Ok(Some(t)),
+        }
+    }
+}
+
 pub async fn send(
     conn: &ty::Connection,
     mut recv_s: mpsc::UnboundedReceiver<Bytes>,

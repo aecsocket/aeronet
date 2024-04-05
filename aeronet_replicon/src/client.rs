@@ -98,8 +98,8 @@ where
                         _phantom: PhantomData,
                     });
                 }
-                ClientEvent::Disconnected { error: reason } => {
-                    disconnected.send(LocalClientDisconnected { error: reason });
+                ClientEvent::Disconnected { error } => {
+                    disconnected.send(LocalClientDisconnected { error });
                 }
                 ClientEvent::Recv { msg } => {
                     replicon.insert_received(msg.channel_id, msg.payload);

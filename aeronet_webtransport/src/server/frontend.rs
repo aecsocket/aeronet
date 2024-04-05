@@ -16,11 +16,13 @@ use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
 use tracing::debug;
 
-use crate::shared::{self, ConnectionStats, MessageKey};
+use crate::{
+    internal::TryRecv,
+    shared::{self, ConnectionStats, MessageKey},
+};
 
 use super::{
-    backend, ClientKey, ConnectionResponse, ServerBackendError, ServerError,
-    WebTransportServerConfig,
+    backend, ClientKey, ConnectionResponse, ServerBackendError, ServerConfig, ServerError,
 };
 
 #[derive(Derivative)]
@@ -123,8 +125,8 @@ where
     }
 
     #[must_use]
-    pub fn open_new(config: WebTransportServerConfig) -> (Self, impl Future<Output = ()> + Send) {
-        let WebTransportServerConfig {
+    pub fn open_new(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
+        let ServerConfig {
             native: native_config,
             version,
             lanes,
@@ -165,6 +167,19 @@ where
             },
             backend,
         )
+    }
+
+    pub fn open(
+        &mut self,
+        config: ServerConfig,
+    ) -> Result<impl Future<Output = ()> + Send, ServerError<P>> {
+        let Inner::Closed = &mut self.inner else {
+            return Err(ServerError::AlreadyOpen);
+        };
+
+        let (this, backend) = Self::open_new(config);
+        *self = this;
+        Ok(backend)
     }
 
     pub fn respond_to_request(
@@ -365,28 +380,26 @@ where
             }
 
             // track new clients
-            loop {
-                match server.recv_connecting.try_next() {
-                    Err(_) => break,
-                    Ok(Some(connecting)) => {
-                        let client_key = server.clients.insert(Client::Connecting(Connecting {
-                            authority: connecting.authority,
-                            path: connecting.path,
-                            origin: connecting.origin,
-                            user_agent: connecting.user_agent,
-                            headers: connecting.headers,
-                            recv_err: connecting.recv_err,
-                            send_conn_resp: Some(connecting.send_conn_resp),
-                            recv_connected: connecting.recv_connected,
-                        }));
-                        connecting
-                            .send_key
-                            .send(client_key)
-                            .map_err(|_| ServerError::BackendClosed)?;
-                        events.push(ServerEvent::Connecting { client_key });
-                    }
-                    Ok(None) => return Err(ServerError::BackendClosed),
-                }
+            while let Some(connecting) = server
+                .recv_connecting
+                .try_recv()
+                .map_err(|_| ServerError::BackendClosed)?
+            {
+                let client_key = server.clients.insert(Client::Connecting(Connecting {
+                    authority: connecting.authority,
+                    path: connecting.path,
+                    origin: connecting.origin,
+                    user_agent: connecting.user_agent,
+                    headers: connecting.headers,
+                    recv_err: connecting.recv_err,
+                    send_conn_resp: Some(connecting.send_conn_resp),
+                    recv_connected: connecting.recv_connected,
+                }));
+                connecting
+                    .send_key
+                    .send(client_key)
+                    .map_err(|_| ServerError::BackendClosed)?;
+                events.push(ServerEvent::Connecting { client_key });
             }
 
             Ok::<_, ServerError<P>>(())
@@ -457,6 +470,7 @@ where
                 .try_recv()
                 .map_err(|_| ServerError::ClientBackendClosed)?
             {
+                events.push(ServerEvent::Connected { client_key });
                 Ok(Client::Connected(Connected {
                     remote_addr: connected.remote_addr,
                     stats: connected.initial_stats,
@@ -500,24 +514,22 @@ where
             .min(client.bandwidth);
 
         let res = (|| {
-            loop {
-                match client.recv_c2s.try_next() {
-                    Err(_) => break,
-                    Ok(Some(mut packet)) => {
-                        // receive acks
-                        events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
-                            ServerEvent::Ack {
-                                client_key,
-                                msg_key: MessageKey::from_raw(msg_seq),
-                            }
-                        }));
-
-                        // receive messages
-                        while let Some(msgs) = client.packets.read_next_frag(&mut packet)? {
-                            events.extend(msgs.map(|msg| ServerEvent::Recv { client_key, msg }));
-                        }
+            while let Some(mut packet) = client
+                .recv_c2s
+                .try_recv()
+                .map_err(|_| ServerError::ClientBackendClosed)?
+            {
+                // receive acks
+                events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
+                    ServerEvent::Ack {
+                        client_key,
+                        msg_key: MessageKey::from_raw(msg_seq),
                     }
-                    Ok(None) => return Err(ServerError::ClientBackendClosed),
+                }));
+
+                // receive messages
+                while let Some(msgs) = client.packets.read_next_frag(&mut packet)? {
+                    events.extend(msgs.map(|msg| ServerEvent::Recv { client_key, msg }));
                 }
             }
 

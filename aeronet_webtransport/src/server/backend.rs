@@ -68,7 +68,7 @@ pub async fn start(
         })
         .map_err(|_| shared::BackendError::FrontendClosed)?;
 
-    debug!("Starting connection loop");
+    debug!("Awaiting sessions");
     loop {
         let session = endpoint.accept().await;
         tokio::spawn(start_handle_session(

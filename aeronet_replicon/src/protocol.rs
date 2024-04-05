@@ -2,7 +2,7 @@ use std::convert::Infallible;
 
 use aeronet::{
     bytes::{Bytes, BytesMut},
-    lane::LaneIndex,
+    lane::{LaneIndex, OnLane},
     message::{Message, TryFromBytes, TryIntoBytes},
     octs::{BytesError, ReadBytes, WriteBytes},
 };
@@ -13,8 +13,8 @@ pub struct RepliconMessage {
     pub payload: Bytes,
 }
 
-impl RepliconMessage {
-    pub fn lane_index(&self) -> LaneIndex {
+impl OnLane for RepliconMessage {
+    fn lane_index(&self) -> LaneIndex {
         LaneIndex::from_raw(usize::from(self.channel_id))
     }
 }
