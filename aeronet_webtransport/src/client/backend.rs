@@ -14,7 +14,7 @@ use crate::{
     ty,
 };
 
-use super::{ClientBackendError, NativeConfig};
+use super::{BackendError, NativeConfig};
 
 #[derive(Debug)]
 pub struct Connected {
@@ -29,16 +29,16 @@ pub async fn start(
     version: ProtocolVersion,
     target: String,
     send_connected: oneshot::Sender<Connected>,
-) -> Result<Never, ClientBackendError> {
+) -> Result<Never, BackendError> {
     let endpoint = create_endpoint(native_config)?;
     debug!("Connecting to {target:?}");
     let conn = endpoint
         .connect(&target)
         .await
-        .map_err(|err| ClientBackendError::StartConnecting(err.into()))?
+        .map_err(|err| BackendError::StartConnecting(err.into()))?
         .wait_connect()
         .await
-        .map_err(|err| ClientBackendError::AwaitConnection(err.into()))?;
+        .map_err(|err| BackendError::AwaitConnection(err.into()))?;
 
     if !internal::check_datagram_support(&conn) {
         Err(shared::BackendError::DatagramsNotSupported)?;
@@ -82,14 +82,12 @@ pub async fn start(
 }
 
 #[cfg(target_family = "wasm")]
-fn create_endpoint(
-    config: web_sys::WebTransportOptions,
-) -> Result<ty::Endpoint, ClientBackendError> {
+fn create_endpoint(config: web_sys::WebTransportOptions) -> Result<ty::Endpoint, BackendError> {
     Ok(ty::Endpoint { options: config })
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn create_endpoint(config: wtransport::ClientConfig) -> Result<ty::Endpoint, ClientBackendError> {
+fn create_endpoint(config: wtransport::ClientConfig) -> Result<ty::Endpoint, BackendError> {
     let endpoint =
         wtransport::Endpoint::client(config).map_err(shared::BackendError::CreateEndpoint)?;
     Ok(xwt::current::Endpoint(endpoint))

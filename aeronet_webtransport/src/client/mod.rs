@@ -22,7 +22,7 @@ pub type NativeConfig = wtransport::ClientConfig;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub struct WebTransportClientConfig {
+pub struct ClientConfig {
     #[derivative(Debug = "ignore")]
     pub native: NativeConfig,
     pub version: ProtocolVersion,
@@ -32,7 +32,7 @@ pub struct WebTransportClientConfig {
     pub default_packet_cap: usize,
 }
 
-impl WebTransportClientConfig {
+impl ClientConfig {
     pub fn new(native: impl Into<NativeConfig>) -> Self {
         Self {
             native: native.into(),
@@ -60,7 +60,7 @@ cfg_if::cfg_if! {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ClientBackendError {
+pub enum BackendError {
     #[error("failed to start connecting")]
     StartConnecting(#[source] EndpointConnectError),
     #[error("failed to await connection")]
@@ -71,7 +71,7 @@ pub enum ClientBackendError {
 
 #[derive(Derivative, thiserror::Error)]
 #[derivative(Debug(bound = "packet::SendError<P::C2S>: Debug, packet::RecvError<P::S2C>: Debug"))]
-pub enum WebTransportClientError<P>
+pub enum Error<P>
 where
     P: TransportProtocol,
     P::C2S: TryIntoBytes,
@@ -87,7 +87,7 @@ where
     BackendClosed,
 
     #[error(transparent)]
-    Backend(#[from] ClientBackendError),
+    Backend(#[from] BackendError),
     #[error(transparent)]
     Send(#[from] packet::SendError<P::C2S>),
     #[error(transparent)]

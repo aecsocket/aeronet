@@ -21,7 +21,7 @@ use crate::protocol::RepliconMessage;
 // this REPLACES ClientTransportPlugin btw
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
-pub struct RepliconAeronetServerPlugin<P, T> {
+pub struct RepliconServerPlugin<P, T> {
     #[derivative(Debug = "ignore")]
     _phantom: PhantomData<(P, T)>,
 }
@@ -31,7 +31,7 @@ where
     P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
     T: ServerTransport<P> + Resource,
 {
-    RepliconAeronetServerPlugin::<P, T>::default().build(app)
+    RepliconServerPlugin::<P, T>::default().build(app)
 }
 
 #[derive(Derivative, Resource)]
@@ -62,12 +62,13 @@ impl<P: TransportProtocol, T: ServerTransport<P>> Default for ClientKeys<P, T> {
     fn default() -> Self {
         Self {
             id_map: BiHashMap::with_hashers(ahash::RandomState::new(), ahash::RandomState::new()),
-            next_id: ClientId::new(0),
+            // start at 1, because 0 is ClientId::SERVER
+            next_id: ClientId::new(1),
         }
     }
 }
 
-impl<P, T> Plugin for RepliconAeronetServerPlugin<P, T>
+impl<P, T> Plugin for RepliconServerPlugin<P, T>
 where
     P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
     T: ServerTransport<P> + Resource,
@@ -116,7 +117,7 @@ where
 
 type RepliconEvent = bevy_replicon::server::ServerEvent;
 
-impl<P, T> RepliconAeronetServerPlugin<P, T>
+impl<P, T> RepliconServerPlugin<P, T>
 where
     P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
     T: ServerTransport<P> + Resource,

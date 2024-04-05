@@ -17,7 +17,7 @@ use xwt_core::utils::maybe;
 
 use crate::shared::{self, ConnectionStats, MessageKey};
 
-use super::{backend, ClientBackendError, WebTransportClientConfig, WebTransportClientError};
+use super::{backend, BackendError, ClientConfig, Error};
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Default(bound = ""))]
@@ -41,7 +41,7 @@ struct Connecting {
     bandwidth: usize,
     max_packet_len: usize,
     default_packet_cap: usize,
-    recv_err: oneshot::Receiver<ClientBackendError>,
+    recv_err: oneshot::Receiver<BackendError>,
     recv_connected: oneshot::Receiver<backend::Connected>,
 }
 
@@ -52,7 +52,7 @@ pub struct Connected<P: TransportProtocol> {
     pub bandwidth: usize,
     pub bytes_left: usize,
     packets: packet::Packets<P::C2S, P::S2C>,
-    recv_err: oneshot::Receiver<ClientBackendError>,
+    recv_err: oneshot::Receiver<BackendError>,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
     recv_stats: mpsc::Receiver<ConnectionStats>,
@@ -71,9 +71,9 @@ where
         }
     }
 
-    pub fn disconnect(&mut self) -> Result<(), WebTransportClientError<P>> {
+    pub fn disconnect(&mut self) -> Result<(), Error<P>> {
         if let Inner::Disconnected = self.inner {
-            return Err(WebTransportClientError::AlreadyDisconnected);
+            return Err(Error::AlreadyDisconnected);
         }
 
         self.inner = Inner::Disconnected;
@@ -82,10 +82,10 @@ where
 
     #[must_use]
     pub fn connect_new(
-        config: WebTransportClientConfig,
+        config: ClientConfig,
         target: impl Into<String>,
     ) -> (Self, impl Future<Output = ()> + maybe::Send) {
-        let WebTransportClientConfig {
+        let ClientConfig {
             native: native_config,
             version,
             lanes,
@@ -95,7 +95,7 @@ where
         } = config;
         let target = target.into();
 
-        let (send_err, recv_err) = oneshot::channel::<ClientBackendError>();
+        let (send_err, recv_err) = oneshot::channel::<BackendError>();
         let (send_connected, recv_connected) = oneshot::channel::<backend::Connected>();
         let backend = async move {
             let Err(err) = backend::start(native_config, version, target, send_connected).await
@@ -103,7 +103,7 @@ where
                 unreachable!()
             };
             match err {
-                ClientBackendError::Generic(shared::BackendError::FrontendClosed) => {
+                BackendError::Generic(shared::BackendError::FrontendClosed) => {
                     debug!("Client closed");
                 }
                 err => {
@@ -130,11 +130,11 @@ where
 
     pub fn connect(
         &mut self,
-        config: WebTransportClientConfig,
+        config: ClientConfig,
         target: impl Into<String>,
-    ) -> Result<impl Future<Output = ()> + maybe::Send, WebTransportClientError<P>> {
+    ) -> Result<impl Future<Output = ()> + maybe::Send, Error<P>> {
         let Inner::Disconnected = self.inner else {
-            return Err(WebTransportClientError::AlreadyConnected);
+            return Err(Error::AlreadyConnected);
         };
 
         let (this, backend) = Self::connect_new(config, target);
@@ -149,7 +149,7 @@ where
     P::C2S: TryIntoBytes + OnLane,
     P::S2C: TryFromBytes + OnLane,
 {
-    type Error = WebTransportClientError<P>;
+    type Error = Error<P>;
 
     type Connecting<'t> = ();
 
@@ -167,7 +167,7 @@ where
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error> {
         let Inner::Connected(client) = &mut self.inner else {
-            return Err(WebTransportClientError::NotConnected);
+            return Err(Error::NotConnected);
         };
 
         let msg = msg.into();
@@ -177,14 +177,14 @@ where
 
     fn flush(&mut self) -> Result<(), Self::Error> {
         let Inner::Connected(client) = &mut self.inner else {
-            return Err(WebTransportClientError::NotConnected);
+            return Err(Error::NotConnected);
         };
 
         for packet in client.packets.flush(&mut client.bytes_left) {
             client
                 .send_c2s
                 .unbounded_send(packet)
-                .map_err(|_| WebTransportClientError::BackendClosed)?;
+                .map_err(|_| Error::BackendClosed)?;
         }
         Ok(())
     }
@@ -239,7 +239,7 @@ where
             ),
             Ok(None) => (
                 Some(ClientEvent::Disconnected {
-                    error: WebTransportClientError::BackendClosed,
+                    error: Error::BackendClosed,
                 }),
                 Inner::Disconnected,
             ),
@@ -273,7 +273,7 @@ where
                 match client.recv_stats.try_next() {
                     Err(_) => break,
                     Ok(Some(stats)) => client.stats = stats,
-                    Ok(None) => return Err(WebTransportClientError::BackendClosed),
+                    Ok(None) => return Err(Error::BackendClosed),
                 }
             }
 
@@ -293,7 +293,7 @@ where
                             events.extend(msgs.map(|msg| ClientEvent::Recv { msg }));
                         }
                     }
-                    Ok(None) => return Err(WebTransportClientError::BackendClosed),
+                    Ok(None) => return Err(Error::BackendClosed),
                 }
             }
 

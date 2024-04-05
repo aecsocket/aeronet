@@ -22,12 +22,12 @@ use crate::protocol::RepliconMessage;
 // this REPLACES ClientTransportPlugin btw
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
-pub struct RepliconAeronetClientPlugin<P, T> {
+pub struct RepliconClientPlugin<P, T> {
     #[derivative(Debug = "ignore")]
     _phantom: PhantomData<(P, T)>,
 }
 
-impl<P, T> Plugin for RepliconAeronetClientPlugin<P, T>
+impl<P, T> Plugin for RepliconClientPlugin<P, T>
 where
     P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
     T: ClientTransport<P> + Resource,
@@ -75,10 +75,10 @@ where
     P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
     T: ClientTransport<P> + Resource,
 {
-    RepliconAeronetClientPlugin::<P, T>::default().build(app)
+    RepliconClientPlugin::<P, T>::default().build(app)
 }
 
-impl<P, T> RepliconAeronetClientPlugin<P, T>
+impl<P, T> RepliconClientPlugin<P, T>
 where
     P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
     T: ClientTransport<P> + Resource,

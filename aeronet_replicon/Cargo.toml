@@ -17,7 +17,7 @@ workspace = true
 all-features = true
 
 [dependencies]
-aeronet.workspace = true
+aeronet = { workspace = true, features = ["bevy"] }
 tracing.workspace = true
 derivative.workspace = true
 thiserror.workspace = true

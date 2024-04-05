@@ -1,0 +1,28 @@
+[package]
+name = "examples"
+description = "aeronet examples"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+aeronet.workspace = true
+aeronet_replicon.workspace = true
+aeronet_channel = { workspace = true, features = ["bevy"] }
+
+serde.workspace = true
+bevy.workspace = true
+bevy_replicon.workspace = true
+
+[[bin]]
+name = "webtransport_replicon_client"
+path = "./webtransport_replicon_client.rs"

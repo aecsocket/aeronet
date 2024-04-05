@@ -1,6 +1,8 @@
 //! Types defining how messages and data is communicated between two endpoints
 //! sharing the same transport.
 
+pub use aeronet_derive::TransportProtocol;
+
 use std::fmt::Display;
 
 use crate::message::Message;
@@ -58,7 +60,6 @@ pub trait TransportProtocol: Send + Sync + 'static {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "bitcode", derive(bitcode::Encode, bitcode::Decode))]
 pub struct ProtocolVersion(pub u64);
 
 impl Display for ProtocolVersion {

@@ -25,7 +25,6 @@ impl Display for ClientKey {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 pub type NativeConfig = wtransport::ServerConfig;
 
 #[derive(Derivative)]

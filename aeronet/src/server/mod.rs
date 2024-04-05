@@ -143,7 +143,7 @@ pub trait ServerTransport<P: TransportProtocol>: Sized {
     /// this function, the transport is guaranteed to be in this new state. Only
     /// up to one state-changing event will be produced by this function per
     /// function call.
-    fn poll(&mut self, dt: Duration) -> impl Iterator<Item = ServerEvent<P, Self>>;
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<P, Self>>;
 }
 
 /// State of a [`ServerTransport`].

@@ -2126,6 +2126,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "examples"
+version = "0.5.0"
+dependencies = [
+ "aeronet",
+ "aeronet_channel",
+ "aeronet_replicon",
+ "bevy",
+ "bevy_replicon",
+ "serde",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

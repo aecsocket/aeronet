@@ -8,6 +8,7 @@ members = [
     "aeronet_channel",
     "aeronet_webtransport",
     #"aeronet_steam",
+    "examples",
 ]
 
 [workspace.package]
@@ -33,7 +34,10 @@ similar_names = "allow"
 [workspace.dependencies]
 aeronet = { version = "0.5.0", path = "aeronet" }
 aeronet_derive = { version = "0.5.0", path = "aeronet_derive" }
+aeronet_replicon = { version = "0.5.0", path = "aeronet_replicon" }
 aeronet_proto = { version = "0.5.0", path = "aeronet_proto" }
+aeronet_channel = { version = "0.5.0", path = "aeronet_channel" }
+aeronet_webtransport = { version = "0.5.0", path = "aeronet_webtransport" }
 tracing = "0.1.40"
 derivative = "2.2.0"
 thiserror = "1.0.57"

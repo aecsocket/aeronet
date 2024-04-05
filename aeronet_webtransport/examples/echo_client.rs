@@ -14,7 +14,7 @@ use aeronet::{
     message::{Message, TryFromBytes, TryIntoBytes},
     protocol::{ProtocolVersion, TransportProtocol},
 };
-use aeronet_webtransport::client::{WebTransportClient, WebTransportClientConfig};
+use aeronet_webtransport::client::{ClientConfig, WebTransportClient};
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_ecs::system::SystemId;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
@@ -91,11 +91,11 @@ fn native_config() -> aeronet_webtransport::wtransport::ClientConfig {
         .build()
 }
 
-fn client_config() -> WebTransportClientConfig {
-    WebTransportClientConfig {
+fn client_config() -> ClientConfig {
+    ClientConfig {
         version: PROTOCOL_VERSION,
         lanes: AppLane::KINDS.into(),
-        ..WebTransportClientConfig::new(native_config())
+        ..ClientConfig::new(native_config())
     }
 }
 

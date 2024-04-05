@@ -23,9 +23,6 @@ arbitrary = ["dep:arbitrary"]
 ## Enables serialization of certain types with [`serde`](https://docs.rs/serde).
 serde = ["dep:serde"]
 
-## Enables serialization of certain types with [`bitcode`](https://docs.rs/bitcode).
-bitcode = ["dep:bitcode"]
-
 ## Enables the [`condition`] module.
 condition = ["dep:rand", "dep:rand_distr"]
 
