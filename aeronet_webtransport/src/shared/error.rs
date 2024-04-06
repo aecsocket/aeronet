@@ -5,7 +5,7 @@ use aeronet_proto::negotiate;
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         use std::{error::Error, fmt::Display, convert::Infallible};
-        use web_sys::wasm_bindgen::JsValue;
+        use wasm_bindgen::JsValue;
 
         #[derive(Debug, Clone)]
         pub struct JsError(pub String);
@@ -20,7 +20,13 @@ cfg_if::cfg_if! {
 
         impl From<JsValue> for JsError {
             fn from(value: JsValue) -> Self {
-                Self(value.as_string().unwrap_or_else(|| format!("{value:?}")))
+                let message = value.as_string()
+                    .or_else(|| {
+                        let message = js_sys::Reflect::get(&value, &"message".into()).ok()?;
+                        message.as_string()
+                    })
+                    .unwrap_or_else(|| format!("{value:?}"));
+                Self(message)
             }
         }
 

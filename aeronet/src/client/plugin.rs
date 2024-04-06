@@ -128,7 +128,7 @@ where
 }
 
 /// A [`Condition`]-satisfying system that returns `true` if the client `T`
-/// exists *and* is in the [`Disconnected`] state.
+/// does not exist *or* is in the [`Disconnected`] state.
 ///
 /// # Example
 ///

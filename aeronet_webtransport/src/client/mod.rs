@@ -12,7 +12,7 @@ use derivative::Derivative;
 use crate::shared::{self, WebTransportProtocol};
 
 #[cfg(target_family = "wasm")]
-pub type NativeConfig = web_sys::WebTransportOptions;
+pub type NativeConfig = xwt::current::WebTransportOptions;
 #[cfg(not(target_family = "wasm"))]
 pub type NativeConfig = wtransport::ClientConfig;
 

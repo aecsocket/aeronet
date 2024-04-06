@@ -1,7 +1,7 @@
 // https://github.com/projectharmonia/bevy_replicon/blob/master/bevy_replicon_renet/examples/simple_box.rs
 
 use aeronet::{
-    client::LocalClientDisconnected,
+    client::{client_disconnected, ClientTransport},
     protocol::{ProtocolVersion, TransportProtocol},
 };
 use aeronet_replicon::{
@@ -11,9 +11,10 @@ use aeronet_webtransport::{
     client::{ClientConfig, WebTransportClient},
     shared::WebTransportProtocol,
 };
-use bevy::{app::AppExit, log::LogPlugin, prelude::*};
+use bevy::{log::LogPlugin, prelude::*};
+use bevy_ecs::system::SystemId;
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_replicon::prelude::*;
-use clap::Parser;
 use serde::{Deserialize, Serialize};
 
 //
@@ -56,23 +57,7 @@ struct MoveDirection(Vec2);
 // logic
 //
 
-/// WebTransport box demo client.
-#[derive(Debug, Resource, clap::Parser)]
-struct Args {
-    /// URL to connect to, e.g. `https://[::1]:25565`.
-    target: String,
-}
-
-impl Default for Args {
-    fn default() -> Self {
-        Self {
-            target: "https://echo.webtransport.day".into(),
-        }
-    }
-}
-
 fn main() {
-    let args = Args::try_parse().unwrap_or_default();
     App::new()
         .add_plugins((
             DefaultPlugins
@@ -87,49 +72,62 @@ fn main() {
                     }),
                     ..default()
                 }),
+            EguiPlugin,
             RepliconPlugins.build().disable::<ServerPlugin>(),
             RepliconClientPlugin::<_, Client>::default(),
         ))
-        .insert_resource(args)
         .init_resource::<Client>()
         .replicate::<PlayerPosition>()
         .replicate::<PlayerColor>()
         .add_client_event::<MoveDirection>(ChannelKind::Unreliable)
-        .add_systems(Startup, (setup, connect).chain())
+        .add_systems(Startup, setup)
         .add_systems(
             Update,
             (
+                ui,
                 apply_movement.run_if(has_authority),
-                close.run_if(on_event::<LocalClientDisconnected<AppProtocol, Client>>()),
                 draw_boxes,
                 read_input,
+                clean_up.run_if(client_disconnected::<AppProtocol, Client>),
             ),
         )
         .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(world: &mut World) {
     #[cfg(not(target_family = "wasm"))]
-    commands.init_resource::<aeronet::bevy_tokio_rt::TokioRuntime>();
-    commands.spawn(Camera2dBundle::default());
+    world.init_resource::<aeronet::bevy_tokio_rt::TokioRuntime>();
+    world.spawn(Camera2dBundle::default());
+
+    let connect = Connect(world.register_system(connect));
+    world.insert_resource(connect);
 }
 
+#[derive(Debug, Clone, Resource, Deref, DerefMut)]
+struct Connect(SystemId<String>);
+
+// spki x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
+
 #[cfg(target_family = "wasm")]
-fn connect(args: Res<Args>, mut client: ResMut<Client>, channels: Res<RepliconChannels>) {
-    let native_config = aeronet_webtransport::web_sys::WebTransportOptions::new();
+fn connect(In(target): In<String>, mut client: ResMut<Client>, channels: Res<RepliconChannels>) {
+    use xwt::current::WebTransportOptions;
+
+    let native_config = WebTransportOptions::default();
     let config = ClientConfig {
         version: PROTOCOL_VERSION,
         lanes_in: channels.to_server_lanes(),
         lanes_out: channels.to_client_lanes(),
         ..ClientConfig::new(native_config, ())
     };
-    let backend = client.connect(config, args.target.clone()).unwrap();
+    let Ok(backend) = client.connect(config, target) else {
+        return;
+    };
     wasm_bindgen_futures::spawn_local(backend);
 }
 
 #[cfg(not(target_family = "wasm"))]
 fn connect(
-    args: Res<Args>,
+    In(target): In<String>,
     rt: Res<aeronet::bevy_tokio_rt::TokioRuntime>,
     mut client: ResMut<Client>,
     channels: Res<RepliconChannels>,
@@ -145,17 +143,42 @@ fn connect(
         lanes_out: channels.to_client_lanes(),
         ..ClientConfig::new(native_config, ())
     };
-    let backend = client.connect(config, args.target.clone()).unwrap();
+    let Ok(backend) = client.connect(config, target) else {
+        return;
+    };
     rt.spawn(backend);
 }
 
-//
-// replicon
-//
+fn ui(
+    mut commands: Commands,
+    mut egui: EguiContexts,
+    mut url_buf: Local<String>,
+    mut client: ResMut<Client>,
+    connect: Res<Connect>,
+) {
+    egui::Window::new("Connection").show(egui.ctx_mut(), |ui| {
+        ui.add_enabled_ui(client.state().is_disconnected(), |ui| {
+            ui.horizontal(|ui| {
+                ui.label("URL");
+                ui.text_edit_singleline(&mut *url_buf);
+            });
 
-fn close(mut exit: EventWriter<AppExit>) {
-    exit.send(AppExit);
+            if ui.button("Connect").clicked() {
+                commands.run_system_with_input(**connect, std::mem::take(&mut url_buf));
+            }
+        });
+
+        ui.add_enabled_ui(!client.state().is_disconnected(), |ui| {
+            if ui.button("Disconnect").clicked() {
+                let _ = client.disconnect();
+            }
+        })
+    });
 }
+
+//
+// app
+//
 
 fn draw_boxes(mut gizmos: Gizmos, players: Query<(&PlayerPosition, &PlayerColor)>) {
     for (position, color) in &players {
@@ -198,5 +221,11 @@ fn apply_movement(
                 **position += event.0 * time.delta_seconds() * MOVE_SPEED;
             }
         }
+    }
+}
+
+fn clean_up(mut commands: Commands, players: Query<Entity, With<Player>>) {
+    for entity in &players {
+        commands.entity(entity).despawn();
     }
 }

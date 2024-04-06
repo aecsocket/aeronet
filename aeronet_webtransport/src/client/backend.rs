@@ -101,8 +101,12 @@ async fn do_start(
 }
 
 #[cfg(target_family = "wasm")]
-fn create_endpoint(config: web_sys::WebTransportOptions) -> Result<ty::Endpoint, BackendError> {
-    Ok(ty::Endpoint { options: config })
+fn create_endpoint(
+    config: xwt::current::WebTransportOptions,
+) -> Result<ty::Endpoint, BackendError> {
+    Ok(ty::Endpoint {
+        options: config.to_js(),
+    })
 }
 
 #[cfg(not(target_family = "wasm"))]
