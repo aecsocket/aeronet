@@ -1,3 +1,4 @@
 /target
+/wasm_target
 /.direnv
 /.vscode

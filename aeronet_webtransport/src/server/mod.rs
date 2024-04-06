@@ -62,7 +62,7 @@ pub enum ConnectionResponse {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ServerBackendError {
+pub enum BackendError {
     #[error("failed to await session request")]
     AwaitSessionRequest(#[source] ConnectionError),
     #[error("failed to accept session request")]
@@ -98,7 +98,7 @@ pub enum ServerError<P: WebTransportProtocol> {
     ClientBackendClosed,
 
     #[error(transparent)]
-    Backend(#[from] ServerBackendError),
+    Backend(#[from] BackendError),
     #[error(transparent)]
     Send(#[from] packet::SendError<<P::Mapper as BytesMapper<P::S2C>>::IntoError>),
     #[error(transparent)]

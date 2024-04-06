@@ -47,7 +47,7 @@ impl<P: WebTransportProtocol> ClientConfig<P> {
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
-        use crate::error::JsError;
+        use crate::shared::JsError;
 
         type EndpointConnectError = JsError;
         type ConnectingError = JsError;
@@ -61,8 +61,8 @@ cfg_if::cfg_if! {
 
 #[derive(Debug, thiserror::Error)]
 pub enum BackendError {
-    #[error("failed to start connecting")]
-    StartConnecting(#[source] EndpointConnectError),
+    #[error("failed to connect")]
+    Connect(#[source] EndpointConnectError),
     #[error("failed to await connection")]
     AwaitConnection(#[source] ConnectingError),
     #[error(transparent)]

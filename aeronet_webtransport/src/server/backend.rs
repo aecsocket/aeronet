@@ -17,7 +17,7 @@ use crate::{
     ty,
 };
 
-use super::{ClientKey, ServerBackendError};
+use super::{BackendError, ClientKey};
 
 #[derive(Debug)]
 pub struct Open {
@@ -34,7 +34,7 @@ pub struct Connecting {
     pub headers: HashMap<String, String>,
     pub send_key: oneshot::Sender<ClientKey>,
     pub send_conn_resp: oneshot::Sender<ConnectionResponse>,
-    pub recv_err: oneshot::Receiver<ServerBackendError>,
+    pub recv_err: oneshot::Receiver<BackendError>,
     pub recv_connected: oneshot::Receiver<Connected>,
 }
 
@@ -51,7 +51,25 @@ pub async fn start(
     native_config: wtransport::ServerConfig,
     version: ProtocolVersion,
     send_open: oneshot::Sender<Open>,
-) -> Result<Never, ServerBackendError> {
+) -> BackendError {
+    match do_start(native_config, version, send_open).await {
+        Ok(_) => unreachable!(),
+        Err(err @ BackendError::Generic(shared::BackendError::FrontendClosed)) => {
+            debug!("Server closed");
+            err
+        }
+        Err(err) => {
+            debug!("Server closed: {:#}", pretty_error(&err));
+            err
+        }
+    }
+}
+
+async fn do_start(
+    native_config: wtransport::ServerConfig,
+    version: ProtocolVersion,
+    send_open: oneshot::Sender<Open>,
+) -> Result<Never, BackendError> {
     debug!("Opening server");
     let endpoint = wtransport::Endpoint::server(native_config)
         .map_err(shared::BackendError::CreateEndpoint)?;
@@ -83,14 +101,12 @@ async fn start_handle_session(
     mut send_connecting: mpsc::Sender<Connecting>,
     version: ProtocolVersion,
     session: IncomingSession,
-) -> Result<(), ServerBackendError> {
-    let req = session
-        .await
-        .map_err(ServerBackendError::AwaitSessionRequest)?;
+) -> Result<(), BackendError> {
+    let req = session.await.map_err(BackendError::AwaitSessionRequest)?;
 
     let (send_key, recv_key) = oneshot::channel::<ClientKey>();
     let (send_conn_resp, recv_conn_resp) = oneshot::channel::<ConnectionResponse>();
-    let (send_err, recv_err) = oneshot::channel::<ServerBackendError>();
+    let (send_err, recv_err) = oneshot::channel::<BackendError>();
     let (send_connected, recv_connected) = oneshot::channel::<Connected>();
     send_connecting
         .send(Connecting {
@@ -115,7 +131,7 @@ async fn start_handle_session(
             unreachable!()
         };
         match &err {
-            ServerBackendError::Generic(shared::BackendError::FrontendClosed) => {
+            BackendError::Generic(shared::BackendError::FrontendClosed) => {
                 debug!("Session closed");
             }
             err => {
@@ -138,7 +154,7 @@ async fn handle_session(
     req: SessionRequest,
     recv_conn_resp: oneshot::Receiver<ConnectionResponse>,
     send_connected: oneshot::Sender<Connected>,
-) -> Result<Never, ServerBackendError> {
+) -> Result<Never, BackendError> {
     debug!("New session request from {}{}", req.authority(), req.path());
     let conn_resp = recv_conn_resp
         .await
@@ -149,15 +165,15 @@ async fn handle_session(
         ConnectionResponse::Accept => req.accept(),
         ConnectionResponse::Forbidden => {
             req.forbidden().await;
-            return Err(ServerBackendError::ForceDisconnect);
+            return Err(BackendError::ForceDisconnect);
         }
         ConnectionResponse::NotFound => {
             req.not_found().await;
-            return Err(ServerBackendError::ForceDisconnect);
+            return Err(BackendError::ForceDisconnect);
         }
     }
     .await
-    .map_err(ServerBackendError::AcceptSessionRequest)?;
+    .map_err(BackendError::AcceptSessionRequest)?;
 
     debug!("Connection opened, waiting for managed stream");
     let (mut send_managed, mut recv_managed) = conn

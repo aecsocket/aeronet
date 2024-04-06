@@ -59,25 +59,11 @@ aeronet_replicon.workspace = true
 
 clap.workspace = true
 serde.workspace = true
+base64.workspace = true
 
 bevy.workspace = true
 bevy_egui.workspace = true
 bevy_replicon.workspace = true
-
-[[example]]
-name = "echo_client"
-path = "examples/echo_client.rs"
-required-features = ["bevy", "dangerous-configuration"]
-
-[[example]]
-name = "echo_client_wrong_version"
-path = "examples/echo_client_wrong_version.rs"
-required-features = ["bevy", "dangerous-configuration"]
-
-[[example]]
-name = "echo_server"
-path = "examples/echo_server.rs"
-required-features = ["bevy", "aeronet/bevy-tokio-rt"]
 
 [[example]]
 name = "box_demo_client"

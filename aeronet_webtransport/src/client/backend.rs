@@ -54,7 +54,7 @@ async fn do_start(
     let conn = endpoint
         .connect(&target)
         .await
-        .map_err(|err| BackendError::StartConnecting(err.into()))?
+        .map_err(|err| BackendError::Connect(err.into()))?
         .wait_connect()
         .await
         .map_err(|err| BackendError::AwaitConnection(err.into()))?;

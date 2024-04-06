@@ -1,11 +1,12 @@
 // https://github.com/projectharmonia/bevy_replicon/blob/master/bevy_replicon_renet/examples/simple_box.rs
 
 use aeronet::{
-    bevy_tokio_rt::TokioRuntime,
     client::LocalClientDisconnected,
     protocol::{ProtocolVersion, TransportProtocol},
 };
-use aeronet_replicon::{client::RepliconClientPlugin, protocol::RepliconMessage};
+use aeronet_replicon::{
+    channel::RepliconChannelsExt, client::RepliconClientPlugin, protocol::RepliconMessage,
+};
 use aeronet_webtransport::{
     client::{ClientConfig, WebTransportClient},
     shared::WebTransportProtocol,
@@ -36,7 +37,7 @@ type Client = WebTransportClient<AppProtocol>;
 // world config
 //
 
-const MOVE_SPEED: f32 = 300.0;
+const MOVE_SPEED: f32 = 200.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Component)]
 struct Player(ClientId);
@@ -62,8 +63,16 @@ struct Args {
     target: String,
 }
 
+impl Default for Args {
+    fn default() -> Self {
+        Self {
+            target: "https://echo.webtransport.day".into(),
+        }
+    }
+}
+
 fn main() {
-    let args = Args::parse();
+    let args = Args::try_parse().unwrap_or_default();
     App::new()
         .add_plugins((
             DefaultPlugins
@@ -85,7 +94,7 @@ fn main() {
         .init_resource::<Client>()
         .replicate::<PlayerPosition>()
         .replicate::<PlayerColor>()
-        .add_client_event::<MoveDirection>(ChannelKind::Ordered)
+        .add_client_event::<MoveDirection>(ChannelKind::Unreliable)
         .add_systems(Startup, (setup, connect).chain())
         .add_systems(
             Update,
@@ -101,28 +110,30 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     #[cfg(not(target_family = "wasm"))]
-    commands.init_resource::<TokioRuntime>();
+    commands.init_resource::<aeronet::bevy_tokio_rt::TokioRuntime>();
     commands.spawn(Camera2dBundle::default());
 }
 
 #[cfg(target_family = "wasm")]
-fn connect(mut commands: Commands, args: Res<Args>, mut client: ResMut<Client>) {
+fn connect(args: Res<Args>, mut client: ResMut<Client>, channels: Res<RepliconChannels>) {
     let native_config = aeronet_webtransport::web_sys::WebTransportOptions::new();
-    let backend = client
-        .connect(client_config(native_config), &args.target)
-        .unwrap();
+    let config = ClientConfig {
+        version: PROTOCOL_VERSION,
+        lanes_in: channels.to_server_lanes(),
+        lanes_out: channels.to_client_lanes(),
+        ..ClientConfig::new(native_config, ())
+    };
+    let backend = client.connect(config, args.target.clone()).unwrap();
     wasm_bindgen_futures::spawn_local(backend);
 }
 
 #[cfg(not(target_family = "wasm"))]
 fn connect(
     args: Res<Args>,
-    rt: Res<TokioRuntime>,
+    rt: Res<aeronet::bevy_tokio_rt::TokioRuntime>,
     mut client: ResMut<Client>,
     channels: Res<RepliconChannels>,
 ) {
-    use aeronet_replicon::channel::RepliconChannelsExt;
-
     let native_config = aeronet_webtransport::wtransport::ClientConfig::builder()
         .with_bind_default()
         .with_no_cert_validation()
@@ -172,7 +183,6 @@ fn read_input(mut move_events: EventWriter<MoveDirection>, input: Res<ButtonInpu
         direction.y -= 1.0;
     }
     if direction != Vec2::ZERO {
-        info!("Sent input {direction}");
         move_events.send(MoveDirection(direction.normalize_or_zero()));
     }
 }

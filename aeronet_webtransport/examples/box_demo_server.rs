@@ -13,7 +13,9 @@ use aeronet_replicon::{
 use aeronet_webtransport::{
     server::{ConnectionResponse, ServerConfig, WebTransportServer},
     shared::WebTransportProtocol,
+    wtransport,
 };
+use base64::Engine;
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_replicon::prelude::*;
 use clap::Parser;
@@ -40,7 +42,7 @@ type Server = WebTransportServer<AppProtocol>;
 // world config
 //
 
-const MOVE_SPEED: f32 = 300.0;
+const MOVE_SPEED: f32 = 200.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Component)]
 struct Player(ClientId);
@@ -109,7 +111,7 @@ fn main() {
         .init_resource::<Server>()
         .replicate::<PlayerPosition>()
         .replicate::<PlayerColor>()
-        .add_client_event::<MoveDirection>(ChannelKind::Ordered)
+        .add_client_event::<MoveDirection>(ChannelKind::Unreliable)
         .add_systems(Startup, (setup, open).chain())
         .add_systems(
             Update,
@@ -134,8 +136,14 @@ fn open(
     mut server: ResMut<Server>,
     channels: Res<RepliconChannels>,
 ) {
-    let identity = aeronet_webtransport::wtransport::tls::Identity::self_signed(["localhost"]);
-    let native_config = aeronet_webtransport::wtransport::ServerConfig::builder()
+    let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]);
+    let cert_hash = identity.certificate_chain()[0].hash();
+    let cert_spki = base64::engine::general_purpose::STANDARD_NO_PAD.encode(cert_hash.as_ref());
+    info!("*** FOR WASM CLIENT ***");
+    info!("Open a Chromium browser using the flags:");
+    info!("--webtransport-developer-mode --ignore-certificate-errors-spki-list={cert_spki}");
+    info!("***********************");
+    let native_config = wtransport::ServerConfig::builder()
         .with_bind_default(args.port)
         .with_identity(&identity)
         .keep_alive_interval(Some(Duration::from_secs(5)))
@@ -202,7 +210,6 @@ fn apply_movement(
     mut players: Query<(&Player, &mut PlayerPosition)>,
 ) {
     for FromClient { client_id, event } in move_events.read() {
-        info!("Got input {event:?} from {client_id:?}");
         for (player, mut position) in &mut players {
             if *client_id == player.0 {
                 **position += event.0 * time.delta_seconds() * MOVE_SPEED;

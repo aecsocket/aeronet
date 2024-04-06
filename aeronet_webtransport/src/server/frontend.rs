@@ -2,7 +2,6 @@ use std::{collections::HashMap, fmt::Debug, future::Future, net::SocketAddr, tim
 
 use aeronet::{
     client::ClientState,
-    error::pretty_error,
     lane::{LaneKind, OnLane},
     message::{TryFromBytes, TryIntoBytes},
     server::{ServerEvent, ServerState, ServerTransport},
@@ -13,16 +12,13 @@ use derivative::Derivative;
 use either::Either;
 use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
-use tracing::debug;
 
 use crate::{
     internal::TryRecv,
-    shared::{self, ConnectionStats, MessageKey, WebTransportProtocol},
+    shared::{ConnectionStats, MessageKey, WebTransportProtocol},
 };
 
-use super::{
-    backend, ClientKey, ConnectionResponse, ServerBackendError, ServerConfig, ServerError,
-};
+use super::{backend, BackendError, ClientKey, ConnectionResponse, ServerConfig, ServerError};
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = "P::Mapper: Debug"), Default(bound = ""))]
@@ -56,7 +52,7 @@ enum Inner<P: WebTransportProtocol> {
 #[derivative(Debug(bound = "P::Mapper: Debug"))]
 struct Opening<P: WebTransportProtocol> {
     config: InnerConfig<P>,
-    recv_err: oneshot::Receiver<ServerBackendError>,
+    recv_err: oneshot::Receiver<BackendError>,
     recv_open: oneshot::Receiver<backend::Open>,
 }
 
@@ -67,7 +63,7 @@ pub struct Open<P: WebTransportProtocol> {
     pub local_addr: SocketAddr,
     pub bytes_left: usize,
     clients: SlotMap<ClientKey, Client<P>>,
-    recv_err: oneshot::Receiver<ServerBackendError>,
+    recv_err: oneshot::Receiver<BackendError>,
     recv_connecting: mpsc::Receiver<backend::Connecting>,
 }
 
@@ -78,7 +74,7 @@ pub struct Connecting {
     pub origin: Option<String>,
     pub user_agent: Option<String>,
     pub headers: HashMap<String, String>,
-    recv_err: oneshot::Receiver<ServerBackendError>,
+    recv_err: oneshot::Receiver<BackendError>,
     send_conn_resp: Option<oneshot::Sender<ConnectionResponse>>,
     recv_connected: oneshot::Receiver<backend::Connected>,
 }
@@ -91,7 +87,7 @@ pub struct Connected<P: WebTransportProtocol> {
     pub bandwidth: usize,
     pub bytes_left: usize,
     packets: packet::Packets<P::S2C, P::C2S, P::Mapper>,
-    recv_err: oneshot::Receiver<ServerBackendError>,
+    recv_err: oneshot::Receiver<BackendError>,
     recv_c2s: mpsc::Receiver<Bytes>,
     send_s2c: mpsc::UnboundedSender<Bytes>,
     recv_stats: mpsc::Receiver<ConnectionStats>,
@@ -140,21 +136,11 @@ where
             max_packet_len,
             default_packet_cap,
         } = config;
-        let (send_err, recv_err) = oneshot::channel::<ServerBackendError>();
+        let (send_err, recv_err) = oneshot::channel::<BackendError>();
         let (send_open, recv_open) = oneshot::channel::<backend::Open>();
         let backend = async move {
-            let Err(err) = backend::start(native_config, version, send_open).await else {
-                unreachable!()
-            };
-            match err {
-                ServerBackendError::Generic(shared::BackendError::FrontendClosed) => {
-                    debug!("Server closed");
-                }
-                err => {
-                    debug!("Server closed: {:#}", pretty_error(&err));
-                    let _ = send_err.send(err);
-                }
-            }
+            let err = backend::start(native_config, version, send_open).await;
+            let _ = send_err.send(err);
         };
         (
             Self {
