@@ -151,8 +151,8 @@ fn buffer_send<M: Send + Sync + 'static>(
     packet: Bytes,
 ) {
     let mut steam_msg = steam.networking_utils().allocate_message(packet.len());
-    // PANIC SAFETY: This will error if data has already been set,
-    // but we've just allocated this message
+    // CORRECTNESS: This will error if data has already been set,
+    // but we've just allocated this message, so it has no data yet
     steam_msg.set_data(Vec::from(packet)).unwrap();
     steam_msg.set_identity_peer(NetworkingIdentity::new_steam_id(steam_id));
     send_buf.push(steam_msg);

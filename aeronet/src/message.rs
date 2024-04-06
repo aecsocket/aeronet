@@ -6,8 +6,6 @@ use std::{convert::Infallible, error::Error};
 
 use bytes::Bytes;
 
-use crate::protocol::TransportProtocol;
-
 /// Smallest unit of data which can be sent between transports.
 ///
 /// A message is the smallest unit of transmission that transports use, as far
@@ -115,27 +113,6 @@ impl TryFromBytes for Vec<u8> {
     fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error> {
         Ok(buf.to_vec())
     }
-}
-
-/// Protocol which is able to convert messages into, and create messages from,
-/// bytes.
-///
-/// Transports which convert their messages into bytes may require this as a
-/// bound on the protocol type.
-///
-/// See [`BytesMapper`].
-pub trait BytesMapperProtocol: TransportProtocol {
-    /// Type of mapper used to convert [`TransportProtocol::C2S`] values into,
-    /// or create values from, bytes.
-    ///
-    /// Use `()` as the mapper for [`TryIntoBytes`] and [`TryFromBytes`] types.
-    type C2SBytesMapper: BytesMapper<Self::C2S>;
-
-    /// Type of mapper used to convert [`TransportProtocol::S2C`] values into,
-    /// or create values from, bytes.
-    ///
-    /// Use `()` as the mapper for [`TryIntoBytes`] and [`TryFromBytes`] types.
-    type S2CBytesMapper: BytesMapper<Self::S2C>;
 }
 
 /// Allows converting messages into, and creating messages from, bytes.

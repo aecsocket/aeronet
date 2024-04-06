@@ -4,7 +4,6 @@ use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport},
     lane::{LaneKind, OnLane},
     message::{TryFromBytes, TryIntoBytes},
-    protocol::TransportProtocol,
 };
 use aeronet_proto::packet;
 use bytes::Bytes;
@@ -15,30 +14,33 @@ use xwt_core::utils::maybe;
 
 use crate::{
     internal::TryRecv,
-    shared::{ConnectionStats, MessageKey},
+    shared::{ConnectionStats, MessageKey, WebTransportProtocol},
 };
 
 use super::{backend, BackendError, ClientConfig, ClientError};
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""), Default(bound = ""))]
+#[derivative(Debug(bound = "P::Mapper: Debug"), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct WebTransportClient<P: TransportProtocol> {
+pub struct WebTransportClient<P: WebTransportProtocol> {
     inner: Inner<P>,
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""), Default(bound = ""))]
-enum Inner<P: TransportProtocol> {
+#[derivative(Debug(bound = "P::Mapper: Debug"), Default(bound = ""))]
+enum Inner<P: WebTransportProtocol> {
     #[derivative(Default)]
     Disconnected,
-    Connecting(Connecting),
+    Connecting(Connecting<P>),
     Connected(Connected<P>),
 }
 
-#[derive(Debug)]
-struct Connecting {
-    lanes: Box<[LaneKind]>,
+#[derive(Derivative)]
+#[derivative(Debug(bound = "P::Mapper: Debug"))]
+struct Connecting<P: WebTransportProtocol> {
+    lanes_in: Box<[LaneKind]>,
+    lanes_out: Box<[LaneKind]>,
+    mapper: P::Mapper,
     bandwidth: usize,
     max_packet_len: usize,
     default_packet_cap: usize,
@@ -47,12 +49,12 @@ struct Connecting {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
-pub struct Connected<P: TransportProtocol> {
+#[derivative(Debug(bound = "P::Mapper: Debug"))]
+pub struct Connected<P: WebTransportProtocol> {
     pub stats: ConnectionStats,
     pub bandwidth: usize,
     pub bytes_left: usize,
-    packets: packet::Packets<P::C2S, P::S2C>,
+    packets: packet::Packets<P::C2S, P::S2C, P::Mapper>,
     recv_err: oneshot::Receiver<BackendError>,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
@@ -61,7 +63,7 @@ pub struct Connected<P: TransportProtocol> {
 
 impl<P> WebTransportClient<P>
 where
-    P: TransportProtocol,
+    P: WebTransportProtocol,
     P::C2S: TryIntoBytes + OnLane,
     P::S2C: TryFromBytes + OnLane,
 {
@@ -83,13 +85,15 @@ where
 
     #[must_use]
     pub fn connect_new(
-        config: ClientConfig,
+        config: ClientConfig<P>,
         target: impl Into<String>,
     ) -> (Self, impl Future<Output = ()> + maybe::Send) {
         let ClientConfig {
             native: native_config,
             version,
-            lanes,
+            lanes_in,
+            lanes_out,
+            mapper,
             bandwidth,
             max_packet_len,
             default_packet_cap,
@@ -104,7 +108,9 @@ where
         (
             Self {
                 inner: Inner::Connecting(Connecting {
-                    lanes,
+                    lanes_in,
+                    lanes_out,
+                    mapper,
                     bandwidth,
                     max_packet_len,
                     default_packet_cap,
@@ -118,7 +124,7 @@ where
 
     pub fn connect(
         &mut self,
-        config: ClientConfig,
+        config: ClientConfig<P>,
         target: impl Into<String>,
     ) -> Result<impl Future<Output = ()> + maybe::Send, ClientError<P>> {
         let Inner::Disconnected = self.inner else {
@@ -133,7 +139,7 @@ where
 
 impl<P> ClientTransport<P> for WebTransportClient<P>
 where
-    P: TransportProtocol,
+    P: WebTransportProtocol,
     P::C2S: TryIntoBytes + OnLane,
     P::S2C: TryFromBytes + OnLane,
 {
@@ -195,11 +201,11 @@ where
 
 impl<P> WebTransportClient<P>
 where
-    P: TransportProtocol,
+    P: WebTransportProtocol,
     P::C2S: TryIntoBytes + OnLane,
     P::S2C: TryFromBytes + OnLane,
 {
-    fn poll_connecting(mut client: Connecting) -> (Option<ClientEvent<P, Self>>, Inner<P>) {
+    fn poll_connecting(mut client: Connecting<P>) -> (Option<ClientEvent<P, Self>>, Inner<P>) {
         if let Ok(Some(err)) = client.recv_err.try_recv() {
             return (
                 Some(ClientEvent::Disconnected { error: err.into() }),
@@ -217,7 +223,9 @@ where
                     packets: packet::Packets::new(
                         client.max_packet_len,
                         client.default_packet_cap,
-                        &client.lanes,
+                        &client.lanes_in,
+                        &client.lanes_out,
+                        client.mapper,
                     ),
                     recv_err: client.recv_err,
                     send_c2s: next.send_c2s,
@@ -238,15 +246,6 @@ where
         mut client: Connected<P>,
         delta_time: Duration,
     ) -> (Vec<ClientEvent<P, Self>>, Inner<P>) {
-        if let Ok(Some(error)) = client.recv_err.try_recv() {
-            return (
-                vec![ClientEvent::Disconnected {
-                    error: error.into(),
-                }],
-                Inner::Disconnected,
-            );
-        }
-
         // refill bytes token bucket
         let bytes_restored = ((client.bandwidth as f64) * delta_time.as_secs_f64()) as usize;
         client.bytes_left = client
@@ -256,20 +255,20 @@ where
 
         let mut events = Vec::new();
         let res = (|| {
-            // update connection stats
-            while let Some(stats) = client
-                .recv_stats
+            if let Some(error) = client
+                .recv_err
                 .try_recv()
                 .map_err(|_| ClientError::BackendClosed)?
             {
+                return Err(error.into());
+            }
+
+            // update connection stats
+            while let Ok(Some(stats)) = client.recv_stats.try_recv() {
                 client.stats = stats;
             }
 
-            while let Some(mut packet) = client
-                .recv_s2c
-                .try_recv()
-                .map_err(|_| ClientError::BackendClosed)?
-            {
+            while let Ok(Some(mut packet)) = client.recv_s2c.try_recv() {
                 // receive acks
                 events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
                     ClientEvent::Ack {
@@ -283,7 +282,7 @@ where
                 }
             }
 
-            Ok(())
+            Ok::<_, ClientError<P>>(())
         })();
 
         // disconnect if errors found

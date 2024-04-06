@@ -3,17 +3,13 @@ mod frontend;
 
 use std::fmt::{Debug, Display};
 
-use aeronet::{
-    lane::LaneKind,
-    message::{TryFromBytes, TryIntoBytes},
-    protocol::{ProtocolVersion, TransportProtocol},
-};
+use aeronet::{lane::LaneKind, message::BytesMapper, protocol::ProtocolVersion};
 use aeronet_proto::packet;
 use derivative::Derivative;
 pub use frontend::*;
 use wtransport::error::ConnectionError;
 
-use crate::shared;
+use crate::shared::{self, WebTransportProtocol};
 
 slotmap::new_key_type! {
     pub struct ClientKey;
@@ -28,24 +24,28 @@ impl Display for ClientKey {
 pub type NativeConfig = wtransport::ServerConfig;
 
 #[derive(Derivative)]
-#[derivative(Debug)]
-pub struct ServerConfig {
+#[derivative(Debug(bound = "P::Mapper: Debug"))]
+pub struct ServerConfig<P: WebTransportProtocol> {
     #[derivative(Debug = "ignore")]
     pub native: NativeConfig,
     pub version: ProtocolVersion,
-    pub lanes: Box<[LaneKind]>,
+    pub lanes_in: Box<[LaneKind]>,
+    pub lanes_out: Box<[LaneKind]>,
+    pub mapper: P::Mapper,
     pub total_bandwidth: usize,
     pub client_bandwidth: usize,
     pub max_packet_len: usize,
     pub default_packet_cap: usize,
 }
 
-impl ServerConfig {
-    pub fn new(native: impl Into<wtransport::ServerConfig>) -> Self {
+impl<P: WebTransportProtocol> ServerConfig<P> {
+    pub fn new(native: impl Into<wtransport::ServerConfig>, mapper: P::Mapper) -> Self {
         Self {
             native: native.into(),
             version: ProtocolVersion::default(),
-            lanes: Box::default(),
+            lanes_in: Box::default(),
+            lanes_out: Box::default(),
+            mapper,
             total_bandwidth: shared::DEFAULT_BANDWIDTH,
             client_bandwidth: shared::DEFAULT_BANDWIDTH,
             max_packet_len: shared::DEFAULT_MTU,
@@ -74,13 +74,10 @@ pub enum ServerBackendError {
 }
 
 #[derive(Derivative, thiserror::Error)]
-#[derivative(Debug(bound = "packet::SendError<P::S2C>: Debug, packet::RecvError<P::C2S>: Debug"))]
-pub enum ServerError<P>
-where
-    P: TransportProtocol,
-    P::C2S: TryFromBytes,
-    P::S2C: TryIntoBytes,
-{
+#[derivative(Debug(
+    bound = "packet::SendError<<P::Mapper as BytesMapper<P::S2C>>::IntoError>: Debug, packet::RecvError<<P::Mapper as BytesMapper<P::C2S>>::FromError>: Debug"
+))]
+pub enum ServerError<P: WebTransportProtocol> {
     #[error("already open")]
     AlreadyOpen,
     #[error("already closed")]
@@ -103,7 +100,7 @@ where
     #[error(transparent)]
     Backend(#[from] ServerBackendError),
     #[error(transparent)]
-    Send(#[from] packet::SendError<P::S2C>),
+    Send(#[from] packet::SendError<<P::Mapper as BytesMapper<P::S2C>>::IntoError>),
     #[error(transparent)]
-    Recv(#[from] packet::RecvError<P::C2S>),
+    Recv(#[from] packet::RecvError<<P::Mapper as BytesMapper<P::C2S>>::FromError>),
 }

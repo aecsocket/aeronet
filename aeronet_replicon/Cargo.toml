@@ -1,14 +1,15 @@
 [package]
-name = "aeronet_replicon"
 description = "bevy_replicon backend implementation using aeronet"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+name = "aeronet_replicon"
+
 authors.workspace = true
-repository.workspace = true
-keywords.workspace = true
 categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [lints]
 workspace = true
@@ -18,10 +19,12 @@ all-features = true
 
 [dependencies]
 aeronet = { workspace = true, features = ["bevy"] }
-tracing.workspace = true
-derivative.workspace = true
-thiserror.workspace = true
+
 ahash.workspace = true
 bimap.workspace = true
+derivative.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
 bevy.workspace = true
 bevy_replicon.workspace = true

@@ -5,9 +5,39 @@ use either::Either;
 
 use crate::seq::Seq;
 
+#[derive(Debug)]
+pub enum LaneSend {
+    UnreliableUnordered,
+    UnreliableSequenced,
+    ReliableUnordered,
+    ReliableSequenced,
+    ReliableOrdered,
+}
+
+impl LaneSend {
+    pub fn new(kind: LaneKind) -> Self {
+        match kind {
+            LaneKind::UnreliableUnordered => Self::UnreliableUnordered,
+            LaneKind::UnreliableSequenced => Self::UnreliableSequenced,
+            LaneKind::ReliableUnordered => Self::ReliableUnordered,
+            LaneKind::ReliableSequenced => Self::ReliableSequenced,
+            LaneKind::ReliableOrdered => Self::ReliableOrdered,
+        }
+    }
+
+    pub fn drop_on_flush(&self) -> bool {
+        match self {
+            Self::UnreliableUnordered | Self::UnreliableSequenced { .. } => true,
+            Self::ReliableUnordered { .. }
+            | Self::ReliableSequenced { .. }
+            | Self::ReliableOrdered { .. } => false,
+        }
+    }
+}
+
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub enum LaneState<R> {
+pub enum LaneRecv<R> {
     UnreliableUnordered,
     UnreliableSequenced {
         /// Sequence number of the last message received.
@@ -42,7 +72,7 @@ pub enum LaneState<R> {
     },
 }
 
-impl<R> LaneState<R> {
+impl<R> LaneRecv<R> {
     pub fn new(kind: LaneKind) -> Self {
         match kind {
             LaneKind::UnreliableUnordered => Self::UnreliableUnordered,
@@ -63,16 +93,6 @@ impl<R> LaneState<R> {
         }
     }
 
-    pub fn drop_on_flush(&self) -> bool {
-        match self {
-            Self::UnreliableUnordered | Self::UnreliableSequenced { .. } => true,
-            Self::ReliableUnordered { .. }
-            | Self::ReliableSequenced { .. }
-            | Self::ReliableOrdered { .. } => false,
-        }
-    }
-
-    // TODO coroutines
     pub fn recv(&mut self, msg: R, msg_seq: Seq) -> impl Iterator<Item = R> + '_ {
         match self {
             Self::UnreliableUnordered => Either::Left(Some(msg)),

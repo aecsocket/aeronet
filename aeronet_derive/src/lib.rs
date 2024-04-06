@@ -68,7 +68,7 @@ pub fn lane_key(input: TokenStream) -> TokenStream {
 
 const LANE_KIND: &str = "lane_kind";
 
-/// Defines along what lane a message is sent.
+/// Defines along what lane a message is sent or received on.
 ///
 /// # Attributes
 ///

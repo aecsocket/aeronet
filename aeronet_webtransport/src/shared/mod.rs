@@ -1,6 +1,7 @@
 mod error;
 mod stats;
 
+use aeronet::{lane::LaneMapper, message::BytesMapper, protocol::TransportProtocol};
 use aeronet_proto::seq::Seq;
 pub use {error::*, stats::*};
 
@@ -28,4 +29,12 @@ impl MessageKey {
     pub fn into_raw(self) -> Seq {
         self.msg_seq
     }
+}
+
+pub trait WebTransportProtocol: TransportProtocol {
+    type Mapper: Clone
+        + BytesMapper<Self::C2S>
+        + BytesMapper<Self::S2C>
+        + LaneMapper<Self::C2S>
+        + LaneMapper<Self::S2C>;
 }

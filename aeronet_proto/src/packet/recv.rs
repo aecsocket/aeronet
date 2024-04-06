@@ -7,17 +7,20 @@ use crate::{ack::Acknowledge, frag::Fragment, seq::Seq};
 
 use super::{FragIndex, Packets, RecvError, SentMessage};
 
-impl<S, R, SB, RB, SL, RL> Packets<S, R, SB, RB, SL, RL>
+impl<S, R, M> Packets<S, R, M>
 where
-    SB: BytesMapper<S>,
-    RB: BytesMapper<R>,
-    SL: LaneMapper<S>,
-    RL: LaneMapper<R>,
+    M: BytesMapper<S> + BytesMapper<R> + LaneMapper<S> + LaneMapper<R>,
 {
+    /// Reads the [`Acknowledge`] header of a packet, and returns an iterator of
+    /// all acknowledged **mesage** sequence numbers.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the packet did not contain a valid acknowledge header.
     pub fn read_acks(
         &mut self,
         packet: &mut Bytes,
-    ) -> Result<impl Iterator<Item = Seq> + '_, RecvError<R>> {
+    ) -> Result<impl Iterator<Item = Seq> + '_, RecvError<<M as BytesMapper<R>>::FromError>> {
         // mark this packet as acked;
         // this ack will later be sent out to the peer in `flush`
         let packet_seq = packet.read::<Seq>().map_err(RecvError::ReadPacketSeq)?;
@@ -64,10 +67,20 @@ where
             })
     }
 
+    /// Reads the next message fragment present in the given packet, and returns
+    /// the reassembled message(s) that result from reassembling this fragment.
+    ///
+    /// This must be called in a loop on the same packet until this returns
+    /// `Ok(None)` or `Err`.
+    ///
+    /// # Errors
+    ///
+    /// Errors if it could not read the next fragment in the packet.
     pub fn read_next_frag(
         &mut self,
         packet: &mut Bytes,
-    ) -> Result<Option<impl Iterator<Item = R> + '_>, RecvError<RB::FromError>> {
+    ) -> Result<Option<impl Iterator<Item = R> + '_>, RecvError<<M as BytesMapper<R>>::FromError>>
+    {
         while packet.has_remaining() {
             let frag = packet
                 .read::<Fragment<Bytes>>()
@@ -84,14 +97,14 @@ where
 
             let msg_bytes = Bytes::from(msg_bytes);
             let msg = self
-                .recv_bytes_mapper
+                .mapper
                 .try_from_bytes(msg_bytes)
                 .map_err(RecvError::FromBytes)?;
 
             // get what lane this message is received on
-            let lane_index = self.recv_lane_mapper.lane_index(&msg);
+            let lane_index = self.mapper.lane_index(&msg);
             let lane = self
-                .lanes
+                .lanes_in
                 .get_mut(lane_index.into_raw())
                 .ok_or(RecvError::InvalidLaneIndex { lane_index })?;
 

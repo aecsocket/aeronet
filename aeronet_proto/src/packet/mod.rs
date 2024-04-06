@@ -121,14 +121,15 @@ use crate::{
     seq::Seq,
 };
 
-use self::lane::LaneState;
+use self::lane::{LaneRecv, LaneSend};
 
 // todo docs
 /// See the [module-level documentation](self).
 #[derive(Derivative)]
-#[derivative(Debug(bound = "SB: Debug, RB: Debug, SL: Debug, RL: Debug"))]
-pub struct Packets<S, R, SB = (), RB = (), SL = (), RL = ()> {
-    lanes: Box<[LaneState<R>]>,
+#[derivative(Debug(bound = "M: Debug"))]
+pub struct Packets<S, R, M> {
+    lanes_in: Box<[LaneRecv<R>]>,
+    lanes_out: Box<[LaneSend]>,
     max_packet_len: usize,
     default_packet_cap: usize,
     frags: Fragmentation,
@@ -137,10 +138,7 @@ pub struct Packets<S, R, SB = (), RB = (), SL = (), RL = ()> {
     next_send_msg_seq: Seq,
     sent_msgs: AHashMap<Seq, SentMessage>,
     flushed_packets: AHashMap<Seq, Box<[FragIndex]>>,
-    send_bytes_mapper: SB,
-    recv_bytes_mapper: RB,
-    send_lane_mapper: SL,
-    recv_lane_mapper: RL,
+    mapper: M,
     _phantom: PhantomData<S>,
 }
 
@@ -184,26 +182,22 @@ pub enum RecvError<E> {
 
 const PACKET_HEADER_LEN: usize = Seq::ENCODE_LEN + Acknowledge::ENCODE_LEN;
 
-impl<S, R, SB, RB, SL, RL> Packets<S, R, SB, RB, SL, RL>
+impl<S, R, M> Packets<S, R, M>
 where
-    SB: BytesMapper<S>,
-    RB: BytesMapper<R>,
-    SL: LaneMapper<S>,
-    RL: LaneMapper<R>,
+    M: BytesMapper<S> + BytesMapper<R> + LaneMapper<S> + LaneMapper<R>,
 {
     #[must_use]
     pub fn new(
         max_packet_len: usize,
         default_packet_cap: usize,
-        lanes: &[LaneKind],
-        send_bytes_mapper: SB,
-        recv_bytes_mapper: RB,
-        send_lane_mapper: SL,
-        recv_lane_mapper: RL,
+        lanes_in: &[LaneKind],
+        lanes_out: &[LaneKind],
+        mapper: M,
     ) -> Self {
         assert!(max_packet_len > PACKET_HEADER_LEN);
         Self {
-            lanes: lanes.iter().map(|kind| LaneState::new(*kind)).collect(),
+            lanes_in: lanes_in.iter().map(|kind| LaneRecv::new(*kind)).collect(),
+            lanes_out: lanes_out.iter().map(|kind| LaneSend::new(*kind)).collect(),
             max_packet_len,
             default_packet_cap,
             frags: Fragmentation::new(max_packet_len - PACKET_HEADER_LEN),
@@ -212,10 +206,7 @@ where
             next_send_packet_seq: Seq(0),
             sent_msgs: AHashMap::new(),
             flushed_packets: AHashMap::new(),
-            send_bytes_mapper,
-            recv_bytes_mapper,
-            send_lane_mapper,
-            recv_lane_mapper,
+            mapper,
             _phantom: PhantomData,
         }
     }
@@ -266,13 +257,11 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut msgs = Packets::<MyMsg, MyMsg>::new(
+        let mut msgs = Packets::<MyMsg, MyMsg, ()>::new(
             MAX_PACKET_LEN,
             MAX_PACKET_LEN,
             MyLane::KINDS,
-            (),
-            (),
-            (),
+            MyLane::KINDS,
             (),
         );
         msgs.buffer_send(MyMsg::from("1")).unwrap();

@@ -1,14 +1,15 @@
 [package]
-name = "aeronet"
 description = "Lightweight client/server transport abstraction"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+name = "aeronet"
+
 authors.workspace = true
-repository.workspace = true
-keywords.workspace = true
 categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [lints]
 workspace = true
@@ -35,10 +36,11 @@ bevy-tokio-rt = ["bevy", "dep:tokio"]
 
 [dependencies]
 aeronet_derive.workspace = true
-derivative.workspace = true
-thiserror.workspace = true
+
 bytes.workspace = true
+derivative.workspace = true
 integer-encoding.workspace = true
+thiserror.workspace = true
 
 serde = { workspace = true, optional = true }
 
@@ -49,8 +51,8 @@ arbitrary = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 rand_distr = { workspace = true, optional = true }
 
-bevy_ecs = { workspace = true, optional = true }
 bevy_app = { workspace = true, optional = true }
+bevy_ecs = { workspace = true, optional = true }
 bevy_time = { workspace = true, optional = true }
 
 tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }

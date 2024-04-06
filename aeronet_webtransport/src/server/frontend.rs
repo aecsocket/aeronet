@@ -1,11 +1,10 @@
-use std::{collections::HashMap, future::Future, net::SocketAddr, time::Duration};
+use std::{collections::HashMap, fmt::Debug, future::Future, net::SocketAddr, time::Duration};
 
 use aeronet::{
     client::ClientState,
     error::pretty_error,
     lane::{LaneKind, OnLane},
     message::{TryFromBytes, TryIntoBytes},
-    protocol::TransportProtocol,
     server::{ServerEvent, ServerState, ServerTransport},
 };
 use aeronet_proto::packet;
@@ -18,7 +17,7 @@ use tracing::debug;
 
 use crate::{
     internal::TryRecv,
-    shared::{self, ConnectionStats, MessageKey},
+    shared::{self, ConnectionStats, MessageKey, WebTransportProtocol},
 };
 
 use super::{
@@ -26,15 +25,18 @@ use super::{
 };
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""), Default(bound = ""))]
+#[derivative(Debug(bound = "P::Mapper: Debug"), Default(bound = ""))]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct WebTransportServer<P: TransportProtocol> {
+pub struct WebTransportServer<P: WebTransportProtocol> {
     inner: Inner<P>,
 }
 
-#[derive(Debug, Clone)]
-pub struct InnerConfig {
-    pub lanes: Box<[LaneKind]>,
+#[derive(Derivative)]
+#[derivative(Debug(bound = "P::Mapper: Debug"), Clone(bound = ""))]
+pub struct InnerConfig<P: WebTransportProtocol> {
+    pub lanes_in: Box<[LaneKind]>,
+    pub lanes_out: Box<[LaneKind]>,
+    pub mapper: P::Mapper,
     pub total_bandwidth: usize,
     pub client_bandwidth: usize,
     pub max_packet_len: usize,
@@ -42,25 +44,26 @@ pub struct InnerConfig {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""), Default(bound = ""))]
-enum Inner<P: TransportProtocol> {
+#[derivative(Debug(bound = "P::Mapper: Debug"), Default(bound = ""))]
+enum Inner<P: WebTransportProtocol> {
     #[derivative(Default)]
     Closed,
-    Opening(Opening),
+    Opening(Opening<P>),
     Open(Open<P>),
 }
 
-#[derive(Debug)]
-struct Opening {
-    config: InnerConfig,
+#[derive(Derivative)]
+#[derivative(Debug(bound = "P::Mapper: Debug"))]
+struct Opening<P: WebTransportProtocol> {
+    config: InnerConfig<P>,
     recv_err: oneshot::Receiver<ServerBackendError>,
     recv_open: oneshot::Receiver<backend::Open>,
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
-pub struct Open<P: TransportProtocol> {
-    pub config: InnerConfig,
+#[derivative(Debug(bound = "P::Mapper: Debug"))]
+pub struct Open<P: WebTransportProtocol> {
+    pub config: InnerConfig<P>,
     pub local_addr: SocketAddr,
     pub bytes_left: usize,
     clients: SlotMap<ClientKey, Client<P>>,
@@ -81,13 +84,13 @@ pub struct Connecting {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
-pub struct Connected<P: TransportProtocol> {
+#[derivative(Debug(bound = "P::Mapper: Debug"))]
+pub struct Connected<P: WebTransportProtocol> {
     pub remote_addr: SocketAddr,
     pub stats: ConnectionStats,
     pub bandwidth: usize,
     pub bytes_left: usize,
-    packets: packet::Packets<P::S2C, P::C2S>,
+    packets: packet::Packets<P::S2C, P::C2S, P::Mapper>,
     recv_err: oneshot::Receiver<ServerBackendError>,
     recv_c2s: mpsc::Receiver<Bytes>,
     send_s2c: mpsc::UnboundedSender<Bytes>,
@@ -95,8 +98,8 @@ pub struct Connected<P: TransportProtocol> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
-enum Client<P: TransportProtocol> {
+#[derivative(Debug(bound = "P::Mapper: Debug"))]
+enum Client<P: WebTransportProtocol> {
     Disconnected,
     Connecting(Connecting),
     Connected(Connected<P>),
@@ -104,7 +107,7 @@ enum Client<P: TransportProtocol> {
 
 impl<P> WebTransportServer<P>
 where
-    P: TransportProtocol,
+    P: WebTransportProtocol,
     P::C2S: TryFromBytes + OnLane,
     P::S2C: TryIntoBytes + OnLane,
 {
@@ -125,11 +128,13 @@ where
     }
 
     #[must_use]
-    pub fn open_new(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
+    pub fn open_new(config: ServerConfig<P>) -> (Self, impl Future<Output = ()> + Send) {
         let ServerConfig {
             native: native_config,
             version,
-            lanes,
+            lanes_in,
+            lanes_out,
+            mapper,
             total_bandwidth,
             client_bandwidth,
             max_packet_len,
@@ -155,7 +160,9 @@ where
             Self {
                 inner: Inner::Opening(Opening {
                     config: InnerConfig {
-                        lanes,
+                        lanes_in,
+                        lanes_out,
+                        mapper,
                         total_bandwidth,
                         client_bandwidth,
                         max_packet_len,
@@ -171,7 +178,7 @@ where
 
     pub fn open(
         &mut self,
-        config: ServerConfig,
+        config: ServerConfig<P>,
     ) -> Result<impl Future<Output = ()> + Send, ServerError<P>> {
         let Inner::Closed = &mut self.inner else {
             return Err(ServerError::AlreadyOpen);
@@ -208,7 +215,7 @@ where
 
 impl<P> ServerTransport<P> for WebTransportServer<P>
 where
-    P: TransportProtocol,
+    P: WebTransportProtocol,
     P::C2S: TryFromBytes + OnLane,
     P::S2C: TryIntoBytes + OnLane,
 {
@@ -331,11 +338,11 @@ where
 
 impl<P> WebTransportServer<P>
 where
-    P: TransportProtocol,
+    P: WebTransportProtocol,
     P::C2S: TryFromBytes + OnLane,
     P::S2C: TryIntoBytes + OnLane,
 {
-    fn poll_opening(mut server: Opening) -> (Option<ServerEvent<P, Self>>, Inner<P>) {
+    fn poll_opening(mut server: Opening<P>) -> (Option<ServerEvent<P, Self>>, Inner<P>) {
         if let Ok(Some(err)) = server.recv_err.try_recv() {
             return (
                 Some(ServerEvent::Closed { error: err.into() }),
@@ -435,17 +442,10 @@ where
             });
         }
 
-        let removed_clients = server
-            .clients
-            .iter()
-            .filter_map(|(client_key, client)| match client {
-                Client::Disconnected => Some(client_key),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        for client_key in removed_clients {
-            server.clients.remove(client_key);
-        }
+        server.clients.retain(|_, client| match client {
+            Client::Disconnected => false,
+            _ => true,
+        });
 
         (events, Inner::Open(server))
     }
@@ -454,7 +454,7 @@ where
         events: &mut Vec<ServerEvent<P, Self>>,
         client_key: ClientKey,
         mut client: Connecting,
-        config: &InnerConfig,
+        config: &InnerConfig<P>,
     ) -> Client<P> {
         let res = (|| {
             if let Some(err) = client
@@ -465,11 +465,7 @@ where
                 return Err(err.into());
             }
 
-            if let Some(connected) = client
-                .recv_connected
-                .try_recv()
-                .map_err(|_| ServerError::ClientBackendClosed)?
-            {
+            if let Ok(Some(connected)) = client.recv_connected.try_recv() {
                 events.push(ServerEvent::Connected { client_key });
                 Ok(Client::Connected(Connected {
                     remote_addr: connected.remote_addr,
@@ -479,7 +475,9 @@ where
                     packets: packet::Packets::new(
                         config.max_packet_len,
                         config.default_packet_cap,
-                        &config.lanes,
+                        &config.lanes_in,
+                        &config.lanes_out,
+                        config.mapper.clone(),
                     ),
                     recv_err: client.recv_err,
                     recv_c2s: connected.recv_c2s,
@@ -514,11 +512,15 @@ where
             .min(client.bandwidth);
 
         let res = (|| {
-            while let Some(mut packet) = client
-                .recv_c2s
+            if let Some(err) = client
+                .recv_err
                 .try_recv()
                 .map_err(|_| ServerError::ClientBackendClosed)?
             {
+                return Err(err.into());
+            }
+
+            while let Ok(Some(mut packet)) = client.recv_c2s.try_recv() {
                 // receive acks
                 events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
                     ServerEvent::Ack {
@@ -533,7 +535,7 @@ where
                 }
             }
 
-            Ok(())
+            Ok::<_, ServerError<P>>(())
         })();
 
         match res {

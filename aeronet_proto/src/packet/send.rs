@@ -12,19 +12,26 @@ use crate::{
     seq::Seq,
 };
 
-use super::{FragIndex, LaneState, Packets, SendError, SentMessage};
+use super::{lane::LaneSend, FragIndex, Packets, SendError, SentMessage};
 
-impl<S, R, SB, RB, SL, RL> Packets<S, R, SB, RB, SL, RL>
+impl<S, R, M> Packets<S, R, M>
 where
-    SB: BytesMapper<S>,
-    RB: BytesMapper<R>,
-    SL: LaneMapper<S>,
-    RL: LaneMapper<R>,
+    M: BytesMapper<S> + BytesMapper<R> + LaneMapper<S> + LaneMapper<R>,
 {
-    pub fn buffer_send(&mut self, msg: S) -> Result<Seq, SendError<SB::IntoError>> {
-        let lane_index = self.send_lane_mapper.lane_index(&msg);
+    /// Buffers up a message for sending.
+    ///
+    /// This message will be stored until the next [`Packets::flush`] call.
+    ///
+    /// # Errors
+    ///
+    /// Errors if it could not buffer this message for sending.
+    pub fn buffer_send(
+        &mut self,
+        msg: S,
+    ) -> Result<Seq, SendError<<M as BytesMapper<S>>::IntoError>> {
+        let lane_index = self.mapper.lane_index(&msg);
         let msg_bytes = self
-            .send_bytes_mapper
+            .mapper
             .try_into_bytes(msg)
             .map_err(SendError::IntoBytes)?;
         let msg_seq = self.next_send_msg_seq;
@@ -77,7 +84,8 @@ where
             self.next_send_packet_seq += Seq(1);
             // NOTE: don't use `max_packet_size`, because it might be a really big number
             // e.g. Steamworks already fragments messages, so we don't have to fragment
-            // ourselves, so `max_packet_size` is massive
+            // ourselves, so `max_packet_size` is massive,
+            // but we don't want to allocate a 512KiB buffer
             let mut packet = BytesMut::with_capacity(self.default_packet_cap);
             packet.write(&packet_seq).unwrap();
             packet.write(&self.acks).unwrap();
@@ -88,7 +96,7 @@ where
             for frag in frags.iter_mut().filter_map(|index_opt| {
                 Self::next_frag_in_packet(
                     &mut self.sent_msgs,
-                    &self.lanes,
+                    &self.lanes_out,
                     &mut packet_bytes_left,
                     index_opt,
                 )
@@ -137,12 +145,12 @@ where
 
     fn next_frag_in_packet<'a>(
         sent_msgs: &'a mut AHashMap<Seq, SentMessage>,
-        lanes: &'a [LaneState<R>],
+        lanes_out: &'a [LaneSend],
         packet_bytes_left: &'a mut usize,
         index_opt: &mut Option<FragIndex>,
     ) -> Option<Fragment<Bytes>> {
         let index = index_opt.take()?;
-        // PANIC SAFETY: `frags` is a slice of *unique* frag indices.
+        // CORRECTNESS: `frags` is a slice of *unique* frag indices.
         // If we end up removing a frag from `sent_msgs`, then we will
         // also remove the corresponding frag from `frags`.
         // There should be no way for an index in `frags` to point to a
@@ -156,7 +164,7 @@ where
             .expect("frag index should point to a valid fragment in this message");
 
         // how does the outgoing lane want to handle this fragment?
-        let lane = lanes
+        let lane = lanes_out
             .get(msg.lane_index)
             .expect("lane index of message should be in range");
         let payload = if lane.drop_on_flush() {

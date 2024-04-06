@@ -6,7 +6,10 @@ use aeronet::{
     protocol::{ProtocolVersion, TransportProtocol},
 };
 use aeronet_replicon::{client::RepliconClientPlugin, protocol::RepliconMessage};
-use aeronet_webtransport::client::{ClientConfig, WebTransportClient};
+use aeronet_webtransport::{
+    client::{ClientConfig, WebTransportClient},
+    shared::WebTransportProtocol,
+};
 use bevy::{app::AppExit, log::LogPlugin, prelude::*};
 use bevy_replicon::prelude::*;
 use clap::Parser;
@@ -20,6 +23,10 @@ use serde::{Deserialize, Serialize};
 #[c2s(RepliconMessage)]
 #[s2c(RepliconMessage)]
 struct AppProtocol;
+
+impl WebTransportProtocol for AppProtocol {
+    type Mapper = ();
+}
 
 const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(0xbabad0d0bebebaba);
 
@@ -123,8 +130,9 @@ fn connect(
         .build();
     let config = ClientConfig {
         version: PROTOCOL_VERSION,
-        lanes: channels.to_client_lanes(),
-        ..ClientConfig::new(native_config)
+        lanes_in: channels.to_server_lanes(),
+        lanes_out: channels.to_client_lanes(),
+        ..ClientConfig::new(native_config, ())
     };
     let backend = client.connect(config, args.target.clone()).unwrap();
     rt.spawn(backend);
@@ -164,6 +172,7 @@ fn read_input(mut move_events: EventWriter<MoveDirection>, input: Res<ButtonInpu
         direction.y -= 1.0;
     }
     if direction != Vec2::ZERO {
+        info!("Sent input {direction}");
         move_events.send(MoveDirection(direction.normalize_or_zero()));
     }
 }

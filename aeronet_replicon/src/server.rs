@@ -189,6 +189,7 @@ where
                         warn!("Received message from client {client_key:?} which does not have a replicon ID");
                         return;
                     };
+                    info!("Recv from {client_id:?} pkt {}", msg.payload.len());
                     replicon_server.insert_received(*client_id, msg.channel_id, msg.payload);
                 }
                 ServerEvent::Ack { .. } => {}

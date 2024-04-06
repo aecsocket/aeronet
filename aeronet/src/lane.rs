@@ -55,13 +55,10 @@
 
 pub use aeronet_derive::{LaneKey, OnLane};
 
-use crate::protocol::TransportProtocol;
-
 /// Kind of lane which can provide guarantees about the manner of message
 /// delivery.
 ///
 /// See [`lane`](crate::lane).
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LaneKind {
     /// No guarantees given on *reliability* or *ordering*.
@@ -213,7 +210,7 @@ pub struct LaneIndex(usize);
 impl LaneIndex {
     /// Creates a new lane index from a raw index.
     ///
-    /// # Panic safety
+    /// # Correctness
     ///
     /// When creating a transport, you pass a set of [`LaneKind`]s in to define
     /// which lanes are available for it to use.
@@ -232,21 +229,19 @@ impl LaneIndex {
     }
 }
 
-/// Defines what [lane] a [`Message`] is sent on.
+/// Defines what [lane] a [`Message`] is either sent or received on.
 ///
 /// This trait can be derived - see [`aeronet_derive::OnLane`].
+///
+/// If you are unable to implement this trait manually because you lack some
+/// important context for getting the lane of this message, take a look at
+/// [`LaneMapper`].
 ///
 /// [lane]: crate::lane
 /// [`Message`]: crate::message::Message
 pub trait OnLane {
     /// Gets the index of the lane that this is sent out on.
     fn lane_index(&self) -> LaneIndex;
-}
-
-pub trait LaneMapperProtocol: TransportProtocol {
-    type C2SLaneMapper: LaneMapper<Self::C2S>;
-
-    type S2CLaneMapper: LaneMapper<Self::S2C>;
 }
 
 pub trait LaneMapper<M> {
@@ -268,7 +263,7 @@ impl<M: OnLane> LaneMapper<M> for () {
 /// There isn't much point to implementing this yourself - if you need
 /// fine-grained control over lanes, use [`LaneIndex`] manually.
 ///
-/// # Panic safety
+/// # Correctness
 ///
 /// This trait must be implemented correctly, otherwise transport
 /// implementations may panic.
@@ -280,7 +275,7 @@ pub trait LaneKey {
 
     /// Gets which lane index this variant represents.
     ///
-    /// # Panic safety
+    /// # Correctness
     ///
     /// See [`LaneIndex`] for the guarantees you must uphold when implementing
     /// this.

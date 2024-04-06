@@ -10,7 +10,10 @@ use aeronet::{
 use aeronet_replicon::{
     channel::RepliconChannelsExt, protocol::RepliconMessage, server::RepliconServerPlugin,
 };
-use aeronet_webtransport::server::{ConnectionResponse, ServerConfig, WebTransportServer};
+use aeronet_webtransport::{
+    server::{ConnectionResponse, ServerConfig, WebTransportServer},
+    shared::WebTransportProtocol,
+};
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_replicon::prelude::*;
 use clap::Parser;
@@ -24,6 +27,10 @@ use serde::{Deserialize, Serialize};
 #[c2s(RepliconMessage)]
 #[s2c(RepliconMessage)]
 struct AppProtocol;
+
+impl WebTransportProtocol for AppProtocol {
+    type Mapper = ();
+}
 
 const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(0xbabad0d0bebebaba);
 
@@ -135,8 +142,9 @@ fn open(
         .build();
     let config = ServerConfig {
         version: PROTOCOL_VERSION,
-        lanes: channels.to_server_lanes(),
-        ..ServerConfig::new(native_config)
+        lanes_in: channels.to_client_lanes(),
+        lanes_out: channels.to_server_lanes(),
+        ..ServerConfig::new(native_config, ())
     };
     let backend = server.open(config).unwrap();
     rt.spawn(backend);
@@ -194,6 +202,7 @@ fn apply_movement(
     mut players: Query<(&Player, &mut PlayerPosition)>,
 ) {
     for FromClient { client_id, event } in move_events.read() {
+        info!("Got input {event:?} from {client_id:?}");
         for (player, mut position) in &mut players {
             if *client_id == player.0 {
                 **position += event.0 * time.delta_seconds() * MOVE_SPEED;

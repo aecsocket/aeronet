@@ -15,7 +15,7 @@
 //!                    ^   ^  ^
 //!                    |   |  +- seq 40 (40 - 0) has been acked
 //!                    |   +---- seq 37 (40 - 3) has been acked
-//!                    +-------- seq 33 has NOT been acked
+//!                    +-------- seq 33 (40 - 7) has NOT been acked
 //! ```
 //!
 //! This info is sent with every packet, and the last 32 packet acknowledgements

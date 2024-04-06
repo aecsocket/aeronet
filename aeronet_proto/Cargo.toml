@@ -1,14 +1,15 @@
 [package]
-name = "aeronet_proto"
 description = "Sans-IO protocol implementation for aeronet"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+name = "aeronet_proto"
+
 authors.workspace = true
-repository.workspace = true
-keywords.workspace = true
 categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [lints]
 workspace = true
@@ -18,17 +19,17 @@ all-features = true
 
 [dependencies]
 aeronet.workspace = true
-tracing.workspace = true
-derivative.workspace = true
-thiserror.workspace = true
-either.workspace = true
+
 ahash.workspace = true
-bitvec.workspace = true
 arbitrary.workspace = true
+bitvec.workspace = true
+bytes.workspace = true
+derivative.workspace = true
+either.workspace = true
 enum_dispatch.workspace = true
 static_assertions.workspace = true
-
-bytes.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 assert_matches.workspace = true

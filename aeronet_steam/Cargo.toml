@@ -1,14 +1,15 @@
 [package]
-name = "aeronet_steam"
 description = "Steam networking socket implementation for aeronet"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+name = "aeronet_steam"
+
 authors.workspace = true
-repository.workspace = true
-keywords.workspace = true
 categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [lints]
 workspace = true
@@ -23,26 +24,27 @@ bevy = ["dep:bevy_ecs", "aeronet/bevy", "aeronet/bevy-tokio-rt"]
 [dependencies]
 aeronet.workspace = true
 aeronet_proto.workspace = true
-derivative.workspace = true
-tracing.workspace = true
-thiserror.workspace = true
-slotmap.workspace = true
+
 ahash.workspace = true
 bytes.workspace = true
-futures.workspace = true
-either.workspace = true
-replace_with.workspace = true
 dashmap.workspace = true
+derivative.workspace = true
+either.workspace = true
+futures.workspace = true
+replace_with.workspace = true
+slotmap.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 
 steamworks.workspace = true
 
 bevy_ecs = { workspace = true, optional = true }
 
 [dev-dependencies]
+anyhow.workspace = true
 bevy = { workspace = true, default-features = true }
 bevy_egui.workspace = true
-anyhow.workspace = true
 
 [[example]]
 name = "echo_client"

@@ -108,6 +108,8 @@ pub enum ClientState<A, B> {
     Connected(B),
 }
 
+/// Shortcut for getting the [`ClientState`] type used by a [`ClientTransport`]
+/// with the given [`TransportProtocol`].
 pub type ClientStateFor<'t, P, T> = ClientState<
     <T as ClientTransport<P>>::Connecting<'t>,
     <T as ClientTransport<P>>::Connected<'t>,
