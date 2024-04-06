@@ -51,17 +51,16 @@ wasm-bindgen-futures.workspace = true
 wasm-bindgen.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+base64.workspace = true
+spki.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 wtransport.workspace = true
+x509-cert.workspace = true
 
 [dev-dependencies]
 aeronet_replicon.workspace = true
 
-base64.workspace = true
-ring = "0.17.8"
-rustls-pemfile = "2.1.2"
 serde.workspace = true
-x509-parser = "0.16.0"
 
 bevy.workspace = true
 bevy_egui.workspace = true

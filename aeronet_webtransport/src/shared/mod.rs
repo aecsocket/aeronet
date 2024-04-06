@@ -1,9 +1,10 @@
 mod error;
 mod stats;
 
+pub use {error::*, stats::*};
+
 use aeronet::{lane::LaneMapper, message::BytesMapper, protocol::TransportProtocol};
 use aeronet_proto::seq::Seq;
-pub use {error::*, stats::*};
 
 pub const DEFAULT_MTU: usize = 1200;
 

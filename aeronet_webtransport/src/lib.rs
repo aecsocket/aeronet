@@ -4,10 +4,11 @@
 #[cfg(not(target_family = "wasm"))]
 pub use wtransport;
 
+#[cfg(not(target_family = "wasm"))]
+pub mod cert;
 pub mod client;
+mod internal;
 #[cfg(not(target_family = "wasm"))]
 pub mod server;
 pub mod shared;
-
-mod internal;
 mod ty;

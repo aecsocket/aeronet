@@ -15,12 +15,9 @@ use aeronet_webtransport::{
     shared::WebTransportProtocol,
     wtransport,
 };
-use base64::Engine;
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_replicon::prelude::*;
-use ring::digest::SHA256;
 use serde::{Deserialize, Serialize};
-use x509_parser::{certificate::X509Certificate, der_parser::asn1_rs::FromDer};
 
 //
 // transport config
@@ -126,20 +123,18 @@ HOW TO RUN IN BROWSER:
 chromium \
 --user-data-dir=/tmp/chromium \
 --webtransport-developer-mode \
---ignore-certificate-errors-spki-list=[SPKI HASH]
+--ignore-certificate-errors-spki-list=
 
+then add in the SPKI hash
 the `--user-data-dir` is optional tho
 */
 
 fn open(rt: Res<TokioRuntime>, mut server: ResMut<Server>, channels: Res<RepliconChannels>) {
     let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]);
     let cert = &identity.certificate_chain()[0];
-    let (_, x509) = X509Certificate::from_der(cert.der()).unwrap();
-    let public_key = x509.tbs_certificate.subject_pki.raw;
-    let spki_hash = ring::digest::digest(&SHA256, public_key);
-    let spki_hash_b64 = base64::engine::general_purpose::STANDARD.encode(spki_hash.as_ref());
-    info!("*** SPKI HASH ***");
-    info!("{spki_hash_b64}");
+    let spki_fingerprint = aeronet_webtransport::cert::spki_fingerprint_base64(cert).unwrap();
+    info!("*** SPKI FINGERPRINT ***");
+    info!("{spki_fingerprint}");
     info!("*****************");
 
     let native_config = wtransport::ServerConfig::builder()

@@ -43,7 +43,6 @@ ahash = { version = "0.8.10", default-features = false, features = ["std"] }
 anyhow = "1.0.79"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 assert_matches = "1.5.0"
-base64 = "0.22.0"
 bimap = "0.6.3"
 bitcode = "0.6.0"
 bitvec = "1.0.1"
@@ -79,7 +78,10 @@ bevy_egui = "0.26.0"
 bevy_replicon = "0.24.1"
 bevy_time = { version = "0.13.1", default-features = false }
 
-wtransport = "0.1.12"                                                           # TODO fix
+base64 = "0.22.0"
+spki = { version = "0.7.3", features = ["fingerprint"] }
+wtransport = "0.1.12"
+x509-cert = "0.2.5"
 xwt = { git = "https://github.com/aecsocket/xwt", branch = "options-api" }
 xwt-core = { git = "https://github.com/aecsocket/xwt", branch = "options-api" }
 
