@@ -17,7 +17,7 @@ use crate::{
     shared::{ConnectionStats, MessageKey, WebTransportProtocol},
 };
 
-use super::{backend, BackendError, ClientConfig, ClientError};
+use super::{backend, BackendError, ClientConfig, ClientError, NativeConfig};
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = "P::Mapper: Debug"), Default(bound = ""))]
@@ -85,6 +85,7 @@ where
 
     #[must_use]
     pub fn connect_new(
+        native_config: NativeConfig,
         config: ClientConfig<P>,
         target: impl Into<String>,
     ) -> (Self, impl Future<Output = ()> + maybe::Send) {

@@ -5,9 +5,3 @@
 
 A [Steam Networking](https://partner.steamgames.com/doc/features/multiplayer/networking) transport
 implementation of aeronet using the [`steamworks`](https://crates.io/crates/steamworks) crate.
-
-# Future work
-
-* Remove fragmentation from the protocol, and only keep sequencing + reliable
-  * Steam already fragments messages, so we don't need to double fragment it
-* Use poll groups?

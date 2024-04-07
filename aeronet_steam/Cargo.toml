@@ -1,5 +1,5 @@
 [package]
-description = "Steam networking socket implementation for aeronet"
+description = "Steam networking sockets implementation for aeronet"
 name = "aeronet_steam"
 
 authors.workspace = true

@@ -116,8 +116,8 @@ fn connect(In(target): In<String>, mut client: ResMut<Client>, channels: Res<Rep
     let native_config = WebTransportOptions::default();
     let config = ClientConfig {
         version: PROTOCOL_VERSION,
-        lanes_in: channels.to_server_lanes(),
-        lanes_out: channels.to_client_lanes(),
+        lanes_in: channels.to_s2c_lanes(),
+        lanes_out: channels.to_c2s_lanes(),
         ..ClientConfig::new(native_config, ())
     };
     let Ok(backend) = client.connect(config, target) else {

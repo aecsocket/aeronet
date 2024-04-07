@@ -30,22 +30,20 @@
 //!
 //! | [`LaneKind`]              | Fragmentation | Reliability | Ordering |
 //! |---------------------------|---------------|-------------|----------|
-//! | [`UnreliableUnordered`] | ✅            |              |          |
-//! | [`UnreliableSequenced`]   | ✅            |              | (1)      |
+//! | [`UnreliableUnordered`] | ✅            |              | (1)        |
+//! | [`UnreliableSequenced`]   | ✅            |              | (1,2)    |
 //! | [`ReliableUnordered`]     | ✅            | ✅            |          |
-//! | [`ReliableSequenced`]     | ✅            | ✅            | (1)      |
-//! | [`ReliableOrdered`]       | ✅            | ✅            | (2)      |
+//! | [`ReliableOrdered`]       | ✅            | ✅            | (3)      |
 //!
-//! 1. If delivery of a single chunk fails, delivery of the whole packet fails
-//!    (unreliable). If the message arrives later than a message sent and
-//!    received previously, the message is discarded (sequenced, not ordered).
-//! 2. If delivery of a single chunk fails, delivery of all messages halts until
-//!    that single chunk is received (reliable ordered)..
+//! 1. If delivery of a single chunk fails, delivery of the whole packet fails.
+//! 2. If the message arrives later than a message sent and received previously,
+//!    the message is discarded.
+//! 3. If delivery of a single chunk fails, delivery of all messages halts until
+//!    that single chunk is received.
 //!
 //! [`UnreliableUnordered`]: LaneKind::UnreliableUnordered
 //! [`UnreliableSequenced`]: LaneKind::UnreliableSequenced
 //! [`ReliableUnordered`]: LaneKind::ReliableUnordered
-//! [`ReliableSequenced`]: LaneKind::ReliableSequenced
 //! [`ReliableOrdered`]: LaneKind::ReliableOrdered
 //!
 //! # Transports
@@ -110,20 +108,6 @@ pub enum LaneKind {
     /// parts of the level are received in, but it is important that they are
     /// all received.
     ReliableUnordered,
-    /// Messages are sent *reliably* but only messages newer than the last
-    /// message will be received.
-    ///
-    /// All messages are guaranteed to go through, but any messages which arrive
-    /// out of order (a message sent earlier arrives at the peer later than
-    /// another message) will be dropped.
-    ///
-    /// This lane kind has the same performance as a reliable unordered lane,
-    /// and avoids head-of-line blocking.
-    ///
-    /// Honestly I couldn't come up with an example for this. This is not always
-    /// a useful lane kind, as even though it's a reliable lane, it may also
-    /// drop messages intentionally. This is mostly here for completeness' sake.
-    ReliableSequenced,
     /// Messages are sent *reliably* and *ordered*.
     ///
     /// This is useful for important one-off events where you need a guarantee
@@ -186,9 +170,7 @@ impl LaneKind {
     pub fn reliability(&self) -> LaneReliability {
         match self {
             Self::UnreliableUnordered | Self::UnreliableSequenced => LaneReliability::Unreliable,
-            Self::ReliableUnordered | Self::ReliableSequenced | Self::ReliableOrdered => {
-                LaneReliability::Reliable
-            }
+            Self::ReliableUnordered | Self::ReliableOrdered => LaneReliability::Reliable,
         }
     }
 
@@ -197,7 +179,7 @@ impl LaneKind {
     pub fn ordering(&self) -> LaneOrdering {
         match self {
             Self::UnreliableUnordered | Self::ReliableUnordered => LaneOrdering::Unordered,
-            Self::UnreliableSequenced | Self::ReliableSequenced => LaneOrdering::Sequenced,
+            Self::UnreliableSequenced => LaneOrdering::Sequenced,
             Self::ReliableOrdered => LaneOrdering::Ordered,
         }
     }

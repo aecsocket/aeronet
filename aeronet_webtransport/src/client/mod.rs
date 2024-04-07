@@ -16,33 +16,31 @@ pub type NativeConfig = xwt::current::WebTransportOptions;
 #[cfg(not(target_family = "wasm"))]
 pub type NativeConfig = wtransport::ClientConfig;
 
-#[derive(Derivative)]
-#[derivative(Debug(bound = "P::Mapper: Debug"))]
-pub struct ClientConfig<P: WebTransportProtocol> {
-    #[derivative(Debug = "ignore")]
-    pub native: NativeConfig,
+#[derive(Debug)]
+pub struct ClientConfig {
     pub version: ProtocolVersion,
-    pub lanes_in: Box<[LaneKind]>,
-    pub lanes_out: Box<[LaneKind]>,
-    pub mapper: P::Mapper,
+    pub lanes_in: Vec<LaneKind>,
+    pub lanes_out: Vec<LaneKind>,
     pub bandwidth: usize,
     pub max_packet_len: usize,
     pub default_packet_cap: usize,
 }
 
-impl<P: WebTransportProtocol> ClientConfig<P> {
-    pub fn new(native: impl Into<NativeConfig>, mapper: P::Mapper) -> Self {
+impl Default for ClientConfig {
+    fn default() -> Self {
         Self {
-            native: native.into(),
             version: ProtocolVersion::default(),
-            lanes_in: Box::default(),
-            lanes_out: Box::default(),
-            mapper,
+            lanes_in: Vec::new(),
+            lanes_out: Vec::new(),
             bandwidth: shared::DEFAULT_BANDWIDTH,
             max_packet_len: shared::DEFAULT_MTU,
             default_packet_cap: shared::DEFAULT_MTU,
         }
     }
+}
+
+impl ClientConfig {
+    pub fn new(version: ProtocolVersion, lanes_in: impl IntoIterator<Item = LaneKind>)
 }
 
 cfg_if::cfg_if! {
