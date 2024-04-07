@@ -28,18 +28,26 @@
 //! ordering - a transport may provide some guarantees even if using a less
 //! reliable lane kind.
 //!
-//! | [`LaneKind`]              | Fragmentation | Reliability | Ordering |
-//! |---------------------------|---------------|-------------|----------|
-//! | [`UnreliableUnordered`] | ✅            |              | (1)        |
-//! | [`UnreliableSequenced`]   | ✅            |              | (1,2)    |
-//! | [`ReliableUnordered`]     | ✅            | ✅            |          |
-//! | [`ReliableOrdered`]       | ✅            | ✅            | (3)      |
+//! If a transport does not support lanes, then it guarantees that all messages
+//! are sent with the strictest guarantees (reliable-ordered).
+//!
+//! | [`LaneKind`]              | Reliability | Ordering |
+//! |---------------------------|-------------|----------|
+//! | [`UnreliableUnordered`]   |             | (1)      |
+//! | [`UnreliableSequenced`]   |             | (1,2)    |
+//! | [`ReliableUnordered`]     | ✅           |          |
+//! | [`ReliableOrdered`]       | ✅           | (3)      |
 //!
 //! 1. If delivery of a single chunk fails, delivery of the whole packet fails.
 //! 2. If the message arrives later than a message sent and received previously,
 //!    the message is discarded.
 //! 3. If delivery of a single chunk fails, delivery of all messages halts until
 //!    that single chunk is received.
+//!
+//! Note: Although reliable-sequenced is possible in theory, this crate does not
+//! support this kind of lane. "Reliable-sequenced" is not actually reliable, as
+//! messages *may* be dropped if they are older than the last received message.
+//! You should probably use [`UnreliableSequenced`] instead.
 //!
 //! [`UnreliableUnordered`]: LaneKind::UnreliableUnordered
 //! [`UnreliableSequenced`]: LaneKind::UnreliableSequenced
@@ -54,6 +62,10 @@
 //! lane.
 
 pub use aeronet_derive::{LaneKey, OnLane};
+
+mod index;
+
+pub use index::*;
 
 /// Kind of lane which can provide guarantees about the manner of message
 /// delivery.
@@ -167,7 +179,7 @@ pub enum LaneOrdering {
 impl LaneKind {
     /// Gets the reliability of this lane kind.
     #[must_use]
-    pub fn reliability(&self) -> LaneReliability {
+    pub const fn reliability(&self) -> LaneReliability {
         match self {
             Self::UnreliableUnordered | Self::UnreliableSequenced => LaneReliability::Unreliable,
             Self::ReliableUnordered | Self::ReliableOrdered => LaneReliability::Reliable,
@@ -176,83 +188,12 @@ impl LaneKind {
 
     /// Gets the ordering of this lane kind.
     #[must_use]
-    pub fn ordering(&self) -> LaneOrdering {
+    pub const fn ordering(&self) -> LaneOrdering {
         match self {
             Self::UnreliableUnordered | Self::ReliableUnordered => LaneOrdering::Unordered,
             Self::UnreliableSequenced => LaneOrdering::Sequenced,
             Self::ReliableOrdered => LaneOrdering::Ordered,
         }
-    }
-}
-
-/// Index of a lane as specified in a transport constructor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct LaneIndex(usize);
-
-impl LaneIndex {
-    /// Creates a new lane index from a raw index.
-    ///
-    /// # Correctness
-    ///
-    /// When creating a transport, you pass a set of [`LaneKind`]s in to define
-    /// which lanes are available for it to use.
-    /// Functions which accept a [`LaneIndex`] expect to be given a valid index
-    /// into this list. If this index is for a different configuration, then the
-    /// transport will most likely panic.
-    #[must_use]
-    pub const fn from_raw(raw: usize) -> Self {
-        Self(raw)
-    }
-
-    /// Gets the raw index of this value.
-    #[must_use]
-    pub const fn into_raw(self) -> usize {
-        self.0
-    }
-}
-
-/// Defines what [lane] a [`Message`] is either sent or received on.
-///
-/// This trait can be derived - see [`aeronet_derive::OnLane`].
-///
-/// If you are unable to implement this trait manually because you lack some
-/// important context for getting the lane of this message, take a look at
-/// [`LaneMapper`].
-///
-/// [lane]: crate::lane
-/// [`Message`]: crate::message::Message
-pub trait OnLane {
-    /// Gets the index of the lane that this is sent out on.
-    fn lane_index(&self) -> LaneIndex;
-}
-
-/// Allows reading the lane index of a message.
-///
-/// Transports may include a value implementing this trait as a field, and use
-/// it to map their messages to a lane index.
-///
-/// # How do I make one?
-///
-/// If your message type already implements [`OnLane`] you don't need to make
-/// your own. Just use `()` as the mapper value - it implements this trait.
-///
-/// # Why use this over [`OnLane`]?
-///
-/// In some cases, you may not have all the context you need in the message
-/// itself in order to be able to read its lane index. You can instead store
-/// this state in a type implementing this trait. When the transport attempts to
-/// get a message's lane, it will call this value's function, letting you use
-/// your existing context for the conversion.
-pub trait LaneMapper<T> {
-    /// Gets the lane index of the given message.
-    fn lane_index(&mut self, msg: &T) -> LaneIndex;
-}
-
-impl<T: OnLane> LaneMapper<T> for () {
-    fn lane_index(&mut self, msg: &T) -> LaneIndex {
-        msg.lane_index()
     }
 }
 
@@ -271,9 +212,12 @@ impl<T: OnLane> LaneMapper<T> for () {
 /// implementations may panic.
 pub trait LaneKey {
     /// Slice of all lane kinds under this key.
-    ///
-    /// Pass this into the constructor for your transport.
-    const KINDS: &'static [LaneKind];
+    const ALL: &'static [LaneKind];
+
+    /// Iterator of all lane kinds under this key.
+    fn all() -> std::slice::Iter<'static, LaneKind> {
+        Self::ALL.iter()
+    }
 
     /// Gets which lane index this variant represents.
     ///
@@ -281,11 +225,14 @@ pub trait LaneKey {
     ///
     /// See [`LaneIndex`] for the guarantees you must uphold when implementing
     /// this.
-    fn lane_index(&self) -> LaneIndex;
+    fn index(&self) -> LaneIndex;
+
+    /// Gets the kind of lane this variant is.
+    fn kind(&self) -> LaneKind;
 }
 
 impl<T: LaneKey> From<T> for LaneIndex {
     fn from(value: T) -> Self {
-        value.lane_index()
+        value.index()
     }
 }

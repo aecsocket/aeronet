@@ -5,62 +5,34 @@ use either::Either;
 
 use crate::seq::Seq;
 
-#[derive(Debug)]
-pub enum LaneSend {
-    UnreliableUnordered,
-    UnreliableSequenced,
-    ReliableUnordered,
-    ReliableSequenced,
-    ReliableOrdered,
-}
-
-impl LaneSend {
-    pub fn new(kind: LaneKind) -> Self {
-        match kind {
-            LaneKind::UnreliableUnordered => Self::UnreliableUnordered,
-            LaneKind::UnreliableSequenced => Self::UnreliableSequenced,
-            LaneKind::ReliableUnordered => Self::ReliableUnordered,
-            LaneKind::ReliableSequenced => Self::ReliableSequenced,
-            LaneKind::ReliableOrdered => Self::ReliableOrdered,
-        }
-    }
-
-    pub fn drop_on_flush(&self) -> bool {
-        match self {
-            Self::UnreliableUnordered | Self::UnreliableSequenced { .. } => true,
-            Self::ReliableUnordered { .. }
-            | Self::ReliableSequenced { .. }
-            | Self::ReliableOrdered { .. } => false,
-        }
-    }
-}
-
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub enum LaneRecv<R> {
+pub enum LaneReceiver<R> {
     UnreliableUnordered,
     UnreliableSequenced {
         /// Sequence number of the last message received.
         last_recv_seq: Seq,
     },
     ReliableUnordered {
-        /// All seqs under this value are considered guaranteed to already be
-        /// received.
+        /// Next message sequence that we expect to receive, if transmission was
+        /// guaranteed to be in order.
+        ///
+        /// All message sequences below this value are guaranteed to already
+        /// have been received.
         pending_seq: Seq,
-        /// Tracks message seqs **after `pending_seq`** which have already been
+        /// Tracks message sequences **after `pending_seq`** which have already been
         /// received.
         ///
         /// Once `pending_seq` increases, all entries in this buffer older than
         /// `pending_seq` are removed.
         recv_seq_buf: AHashSet<Seq>,
     },
-    ReliableSequenced {
-        /// Sequence number of the last message received.
-        last_recv_seq: Seq,
-    },
     ReliableOrdered {
-        /// All seqs under this value are considered guaranteed to already be
-        /// received.
+        /// Next message sequence that we expect to receive, if transmission was
+        /// guaranteed to be in order.
+        ///
+        /// All message sequences below this value are guaranteed to already
+        /// have been received.
         pending_seq: Seq,
         /// Tracks messages **after `pending_seq`** which have already been
         /// received.
@@ -72,7 +44,7 @@ pub enum LaneRecv<R> {
     },
 }
 
-impl<R> LaneRecv<R> {
+impl<R> LaneReceiver<R> {
     pub fn new(kind: LaneKind) -> Self {
         match kind {
             LaneKind::UnreliableUnordered => Self::UnreliableUnordered,
@@ -82,9 +54,6 @@ impl<R> LaneRecv<R> {
             LaneKind::ReliableUnordered => Self::ReliableUnordered {
                 pending_seq: Seq(0),
                 recv_seq_buf: AHashSet::new(),
-            },
-            LaneKind::ReliableSequenced => Self::ReliableSequenced {
-                last_recv_seq: Seq::MAX,
             },
             LaneKind::ReliableOrdered => Self::ReliableOrdered {
                 pending_seq: Seq(0),
@@ -96,33 +65,34 @@ impl<R> LaneRecv<R> {
     pub fn recv(&mut self, msg: R, msg_seq: Seq) -> impl Iterator<Item = R> + '_ {
         match self {
             Self::UnreliableUnordered => Either::Left(Some(msg)),
-            Self::UnreliableSequenced { last_recv_seq }
-            | Self::ReliableSequenced { last_recv_seq } => Either::Left({
-                // if msg is older than the last received msg, just drop it
+            Self::UnreliableSequenced { last_recv_seq } => {
                 if msg_seq > *last_recv_seq {
+                    // msg is new, return it
                     *last_recv_seq = msg_seq;
-                    Some(msg)
+                    Either::Left(Some(msg))
                 } else {
-                    None
+                    // msg is old, drop it
+                    Either::Left(None)
                 }
-            }),
+            }
             Self::ReliableUnordered {
                 pending_seq,
                 recv_seq_buf,
             } => {
                 if msg_seq < *pending_seq {
-                    // msg is guaranteed to already be received
+                    // msg is guaranteed to already be received, drop it
                     Either::Left(None)
                 } else {
                     // here's an example to visualize what this does:
-                    // msg_seq: 41
-                    // pending_seq: 40, recv_seq_buf: [45]
-                    recv_seq_buf.insert(msg_seq);
+                    // msg_seq: 40
                     // pending_seq: 40, recv_seq_buf: [41, 45]
+                    recv_seq_buf.insert(msg_seq);
+                    // pending_seq: 40, recv_seq_buf: [40, 41, 45]
                     while recv_seq_buf.contains(pending_seq) {
                         recv_seq_buf.remove(pending_seq);
                         *pending_seq += Seq(1);
-                        // pending_seq: 41, recv_seq_buf: [45]
+                        // iter 1: pending_seq: 41, recv_seq_buf: [41, 45]
+                        // iter 2: pending_seq: 42, recv_seq_buf: [45]
                     }
                     Either::Left(Some(msg))
                 }
@@ -132,7 +102,7 @@ impl<R> LaneRecv<R> {
                 recv_buf,
             } => {
                 if msg_seq < *pending_seq {
-                    // msg is guaranteed to already be received
+                    // msg is guaranteed to already be received, drop it
                     Either::Left(None)
                 } else {
                     // almost identical to above, but we also return the

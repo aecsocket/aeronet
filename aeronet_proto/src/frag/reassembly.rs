@@ -128,6 +128,8 @@ impl Fragmentation {
                     frag_id: header.frag_id,
                 })?;
         if *is_received {
+            drop(is_received);
+            self.messages.insert(header.msg_seq, buf);
             return Err(ReassembleError::AlreadyReceived);
         }
         *is_received = true;
@@ -141,6 +143,7 @@ impl Fragmentation {
             if len > buf.payload.len() {
                 // can't shrink the buffer to a larger amount,
                 // that makes no sense
+                self.messages.insert(header.msg_seq, buf);
                 return Err(ReassembleError::LastFragTooLarge {
                     len: payload.len(),
                     max: self.payload_len,
@@ -157,6 +160,7 @@ impl Fragmentation {
             )
         } else {
             if payload.len() != self.payload_len {
+                self.messages.insert(header.msg_seq, buf);
                 return Err(ReassembleError::InvalidPayloadLength {
                     len: payload.len(),
                     expected: self.payload_len,

@@ -128,7 +128,7 @@ fn connect(
     match client.connect(
         (**steam).clone(),
         ConnectTarget::Ip(target),
-        SteamClientConfig::new(PROTOCOL_VERSION, AppLane::KINDS),
+        SteamClientConfig::new(PROTOCOL_VERSION, AppLane::ALL),
     ) {
         Ok(backend) => {
             tokio.spawn(backend);

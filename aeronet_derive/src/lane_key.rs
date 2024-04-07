@@ -24,14 +24,18 @@ fn on_struct(input: &DeriveInput) -> Result<TokenStream> {
 
     Ok(quote! {
         impl #impl_generics ::aeronet::lane::LaneKey for #name #type_generics #where_clause {
-            const KINDS: &'static [::aeronet::lane::LaneKind] = {
+            const ALL: &'static [::aeronet::lane::LaneKind] = {
                 use ::aeronet::lane::LaneKind::*;
-
                 &[#kind]
             };
 
-            fn lane_index(&self) -> ::aeronet::lane::LaneIndex {
+            fn index(&self) -> ::aeronet::lane::LaneIndex {
                 ::aeronet::lane::LaneIndex::from_raw(0)
+            }
+
+            fn kind(&self) -> ::aeronet::lane::LaneKind {
+                use ::aeronet::lane::LaneKind::*;
+                #kind
             }
         }
     })
@@ -64,7 +68,13 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let lane_index_body = variants
+    let all_body = variants
+        .iter()
+        .map(|Variant { kind, .. }| {
+            quote! { #kind }
+        })
+        .collect::<Vec<_>>();
+    let index_body = variants
         .iter()
         .enumerate()
         .map(|(index, Variant { ident, .. })| {
@@ -73,24 +83,30 @@ fn on_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream> {
             }
         })
         .collect::<Vec<_>>();
-    let kinds_body = variants
+    let kind_body = variants
         .iter()
-        .map(|Variant { kind, .. }| {
-            quote! { #kind }
+        .map(|Variant { ident, kind, .. }| {
+            quote! { Self::#ident => #kind }
         })
         .collect::<Vec<_>>();
 
     Ok(quote! {
         impl #impl_generics ::aeronet::lane::LaneKey for #name #type_generics #where_clause {
-            const KINDS: &'static [::aeronet::lane::LaneKind] = {
+            const ALL: &'static [::aeronet::lane::LaneKind] = {
                 use ::aeronet::lane::LaneKind::*;
-
-                &[#(#kinds_body),*]
+                &[#(#all_body),*]
             };
 
-            fn lane_index(&self) -> ::aeronet::lane::LaneIndex {
+            fn index(&self) -> ::aeronet::lane::LaneIndex {
                 match *self {
-                    #(#lane_index_body),*
+                    #(#index_body),*
+                }
+            }
+
+            fn kind(&self) -> ::aeronet::lane::LaneKind {
+                use ::aeronet::lane::LaneKind::*;
+                match *self {
+                    #(#kind_body),*
                 }
             }
         }

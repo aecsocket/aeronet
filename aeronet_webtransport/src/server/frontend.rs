@@ -6,7 +6,7 @@ use aeronet::{
     message::{TryFromBytes, TryIntoBytes},
     server::{ServerEvent, ServerState, ServerTransport},
 };
-use aeronet_proto::packet;
+use aeronet_proto::{lane::LaneConfig, packet};
 use bytes::Bytes;
 use derivative::Derivative;
 use either::Either;
@@ -18,7 +18,9 @@ use crate::{
     shared::{ConnectionStats, MessageKey, WebTransportProtocol},
 };
 
-use super::{backend, BackendError, ClientKey, ConnectionResponse, ServerConfig, ServerError};
+use super::{
+    backend, BackendError, ClientKey, ConnectionResponse, NativeConfig, ServerConfig, ServerError,
+};
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = "P::Mapper: Debug"), Default(bound = ""))]
@@ -31,7 +33,7 @@ pub struct WebTransportServer<P: WebTransportProtocol> {
 #[derivative(Debug(bound = "P::Mapper: Debug"), Clone(bound = ""))]
 pub struct InnerConfig<P: WebTransportProtocol> {
     pub lanes_in: Box<[LaneKind]>,
-    pub lanes_out: Box<[LaneKind]>,
+    pub lanes_out: Box<[LaneConfig]>,
     pub mapper: P::Mapper,
     pub total_bandwidth: usize,
     pub client_bandwidth: usize,
@@ -124,13 +126,15 @@ where
     }
 
     #[must_use]
-    pub fn open_new(config: ServerConfig<P>) -> (Self, impl Future<Output = ()> + Send) {
+    pub fn open_new(
+        native_config: NativeConfig,
+        config: ServerConfig,
+        mapper: P::Mapper,
+    ) -> (Self, impl Future<Output = ()> + Send) {
         let ServerConfig {
-            native: native_config,
             version,
             lanes_in,
             lanes_out,
-            mapper,
             total_bandwidth,
             client_bandwidth,
             max_packet_len,
@@ -146,8 +150,8 @@ where
             Self {
                 inner: Inner::Opening(Opening {
                     config: InnerConfig {
-                        lanes_in,
-                        lanes_out,
+                        lanes_in: lanes_in.into_boxed_slice(),
+                        lanes_out: lanes_out.into_boxed_slice(),
                         mapper,
                         total_bandwidth,
                         client_bandwidth,
@@ -164,13 +168,15 @@ where
 
     pub fn open(
         &mut self,
-        config: ServerConfig<P>,
+        native_config: NativeConfig,
+        config: ServerConfig,
+        mapper: P::Mapper,
     ) -> Result<impl Future<Output = ()> + Send, ServerError<P>> {
         let Inner::Closed = &mut self.inner else {
             return Err(ServerError::AlreadyOpen);
         };
 
-        let (this, backend) = Self::open_new(config);
+        let (this, backend) = Self::open_new(native_config, config, mapper);
         *self = this;
         Ok(backend)
     }
@@ -461,8 +467,8 @@ where
                     packets: packet::Packets::new(
                         config.max_packet_len,
                         config.default_packet_cap,
-                        &config.lanes_in,
-                        &config.lanes_out,
+                        config.lanes_in.iter(),
+                        config.lanes_out.iter(),
                         config.mapper.clone(),
                     ),
                     recv_err: client.recv_err,

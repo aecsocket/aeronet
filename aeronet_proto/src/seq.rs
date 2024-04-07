@@ -1,31 +1,4 @@
-//! Sequence number uniquely identifying an item sent across a network.
-//!
-//! Note that the sequence number may identify either a message or a packet
-//! sequence number.
-//!
-//! The number is stored internally as a [`u16`], which means it will wrap
-//! around fairly quickly as many messages can be sent per second. Users of a
-//! sequence number should take this into account, and use the custom
-//! [`Seq::cmp`] implementation which takes wraparound into
-//! consideration.
-//!
-//! # Wraparound
-//!
-//! Operations on [`Seq`] must take into account wraparound, as it is inevitable
-//! that it will eventually occur in the program - a [`u16`] is relatively very
-//! small.
-//!
-//! The sequence number can be visualized as an infinite number line, where
-//! [`u16::MAX`] is right before `0`, `0` is before `1`, etc.:
-//!
-//! ```text
-//!     65534  65535    0      1      2
-//! ... --|------|------|------|------|-- ...
-//! ```
-//!
-//! [Addition](std::ops::Add) and [subtraction](std::ops::Sub) will always wrap.
-//!
-//! See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
+//! See [`Seq`].
 
 use std::cmp::Ordering;
 
@@ -34,7 +7,32 @@ use arbitrary::Arbitrary;
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///
-/// See the [module-level documentation](crate::seq).
+/// Note that the sequence number may identify either a message or a packet
+/// sequence number.
+///
+/// The number is stored internally as a [`u16`], which means it will wrap
+/// around fairly quickly as many messages can be sent per second. Users of a
+/// sequence number should take this into account, and use the custom
+/// [`Seq::cmp`] implementation which takes wraparound into
+/// consideration.
+///
+/// # Wraparound
+///
+/// Operations on [`Seq`] must take into account wraparound, as it is inevitable
+/// that it will eventually occur in the program - a [`u16`] is relatively very
+/// small.
+///
+/// The sequence number can be visualized as an infinite number line, where
+/// [`u16::MAX`] is right before `0`, `0` is before `1`, etc.:
+///
+/// ```text
+///     65534  65535    0      1      2
+/// ... --|------|------|------|------|-- ...
+/// ```
+///
+/// [Addition](std::ops::Add) and [subtraction](std::ops::Sub) will always wrap.
+///
+/// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary)]
 pub struct Seq(pub u16);
 

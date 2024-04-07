@@ -12,9 +12,12 @@
 //! Negotiation should be done after communication between two endpoints is
 //! possible reliably, and if successful, the connection can then be finalized.
 //!
+//! The client is always the initiator, sending the first request.
+//!
 //! * On the client, use [`Negotiation::request`] then
 //!   [`Negotiation::recv_response`].
-//! * On the server, use [`Negotiation::recv_request`].
+//! * On the server, use [`Negotiation::recv_request`], and if applicable, send
+//!   the response back to the client.
 //!
 //! # Process
 //!
@@ -120,7 +123,7 @@ pub const RESPONSE_LEN: usize = 9;
 impl Negotiation {
     /// Creates a negotiation object given a protocol version to use.
     #[must_use]
-    pub fn new(version: ProtocolVersion) -> Self {
+    pub const fn new(version: ProtocolVersion) -> Self {
         Self { version }
     }
 

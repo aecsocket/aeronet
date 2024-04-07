@@ -7,8 +7,9 @@ use aeronet::{
     protocol::{ProtocolVersion, TransportProtocol},
     server::RemoteClientConnecting,
 };
+use aeronet_proto::lane::LaneConfig;
 use aeronet_replicon::{
-    channel::RepliconChannelsExt, protocol::RepliconMessage, server::RepliconServerPlugin,
+    channel::IntoLaneKind, protocol::RepliconMessage, server::RepliconServerPlugin,
 };
 use aeronet_webtransport::{
     server::{ConnectionResponse, ServerConfig, WebTransportServer},
@@ -145,13 +146,18 @@ fn open(rt: Res<TokioRuntime>, mut server: ResMut<Server>, channels: Res<Replico
         .with_identity(&identity)
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
-    let config = ServerConfig {
-        version: PROTOCOL_VERSION,
-        lanes_in: channels.to_c2s_lanes(),
-        lanes_out: channels.to_s2c_lanes(),
-        ..ServerConfig::new(native_config, ())
-    };
-    let backend = server.open(config).unwrap();
+    let config = ServerConfig::new(
+        PROTOCOL_VERSION,
+        channels
+            .client_channels()
+            .iter()
+            .map(|channel| channel.kind.into_lane_kind()),
+        channels
+            .server_channels()
+            .iter()
+            .map(|channel| LaneConfig::new(channel.kind.into_lane_kind())),
+    );
+    let backend = server.open(native_config, config, ()).unwrap();
     rt.spawn(backend);
 }
 

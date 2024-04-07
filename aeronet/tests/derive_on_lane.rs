@@ -26,6 +26,6 @@ fn assert_types() {
 
 #[test]
 fn lane_index() {
-    assert_eq!(MyLane::A.lane_index(), MyMsg::Variant1.lane_index());
-    assert_eq!(MyLane::B.lane_index(), MyMsg::Variant2.lane_index());
+    assert_eq!(MyLane::A.index(), MyMsg::Variant1.lane_index());
+    assert_eq!(MyLane::B.index(), MyMsg::Variant2.lane_index());
 }

@@ -5,7 +5,7 @@ use aeronet::{
     lane::{LaneKind, OnLane},
     message::{TryFromBytes, TryIntoBytes},
 };
-use aeronet_proto::packet;
+use aeronet_proto::{lane::LaneConfig, packet};
 use bytes::Bytes;
 use derivative::Derivative;
 use either::Either;
@@ -39,7 +39,7 @@ enum Inner<P: WebTransportProtocol> {
 #[derivative(Debug(bound = "P::Mapper: Debug"))]
 struct Connecting<P: WebTransportProtocol> {
     lanes_in: Box<[LaneKind]>,
-    lanes_out: Box<[LaneKind]>,
+    lanes_out: Box<[LaneConfig]>,
     mapper: P::Mapper,
     bandwidth: usize,
     max_packet_len: usize,
@@ -86,15 +86,14 @@ where
     #[must_use]
     pub fn connect_new(
         native_config: NativeConfig,
-        config: ClientConfig<P>,
+        config: ClientConfig,
+        mapper: P::Mapper,
         target: impl Into<String>,
     ) -> (Self, impl Future<Output = ()> + maybe::Send) {
         let ClientConfig {
-            native: native_config,
             version,
             lanes_in,
             lanes_out,
-            mapper,
             bandwidth,
             max_packet_len,
             default_packet_cap,
@@ -109,8 +108,8 @@ where
         (
             Self {
                 inner: Inner::Connecting(Connecting {
-                    lanes_in,
-                    lanes_out,
+                    lanes_in: lanes_in.into_boxed_slice(),
+                    lanes_out: lanes_out.into_boxed_slice(),
                     mapper,
                     bandwidth,
                     max_packet_len,
@@ -125,14 +124,16 @@ where
 
     pub fn connect(
         &mut self,
-        config: ClientConfig<P>,
+        native_config: NativeConfig,
+        config: ClientConfig,
+        mapper: P::Mapper,
         target: impl Into<String>,
     ) -> Result<impl Future<Output = ()> + maybe::Send, ClientError<P>> {
         let Inner::Disconnected = self.inner else {
             return Err(ClientError::AlreadyConnected);
         };
 
-        let (this, backend) = Self::connect_new(config, target);
+        let (this, backend) = Self::connect_new(native_config, config, mapper, target);
         *self = this;
         Ok(backend)
     }
@@ -224,8 +225,8 @@ where
                     packets: packet::Packets::new(
                         client.max_packet_len,
                         client.default_packet_cap,
-                        &client.lanes_in,
-                        &client.lanes_out,
+                        client.lanes_in.iter(),
+                        client.lanes_out.iter(),
                         client.mapper,
                     ),
                     recv_err: client.recv_err,

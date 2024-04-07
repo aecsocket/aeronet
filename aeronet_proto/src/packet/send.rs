@@ -8,11 +8,12 @@ use bytes::{Bytes, BytesMut};
 
 use crate::{
     frag::{FragHeader, Fragment},
+    lane::{LaneSender, OnSend},
     packet::PACKET_HEADER_LEN,
     seq::Seq,
 };
 
-use super::{lane::LaneSend, FragIndex, Packets, SendError, SentMessage};
+use super::{FragIndex, Packets, SendError, SentMessage};
 
 impl<S, R, M> Packets<S, R, M>
 where
@@ -145,7 +146,7 @@ where
 
     fn next_frag_in_packet<'a>(
         sent_msgs: &'a mut AHashMap<Seq, SentMessage>,
-        lanes_out: &'a [LaneSend],
+        lanes_out: &'a [LaneSender],
         packet_bytes_left: &'a mut usize,
         index_opt: &mut Option<FragIndex>,
     ) -> Option<Fragment<Bytes>> {
@@ -167,15 +168,14 @@ where
         let lane = lanes_out
             .get(msg.lane_index)
             .expect("lane index of message should be in range");
-        let payload = if lane.drop_on_flush() {
-            payload_opt
-                .take()
-                .expect("frag index should point to a non-dropped fragment in this message")
-        } else {
-            payload_opt
+        let payload = match lane.on_send() {
+            OnSend::RetainMessage => payload_opt
                 .as_ref()
                 .cloned()
-                .expect("frag index should point to a non-dropped fragment in this message")
+                .expect("frag index should point to a non-dropped fragment in this message"),
+            OnSend::DropMessage => payload_opt
+                .take()
+                .expect("frag index should point to a non-dropped fragment in this message"),
         };
 
         // compose the fragment

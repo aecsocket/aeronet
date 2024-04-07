@@ -6,7 +6,7 @@ pub use frontend::*;
 use std::fmt::Debug;
 
 use aeronet::{lane::LaneKind, message::BytesMapper, protocol::ProtocolVersion};
-use aeronet_proto::packet;
+use aeronet_proto::{lane::LaneConfig, packet};
 use derivative::Derivative;
 
 use crate::shared::{self, WebTransportProtocol};
@@ -16,11 +16,11 @@ pub type NativeConfig = xwt::current::WebTransportOptions;
 #[cfg(not(target_family = "wasm"))]
 pub type NativeConfig = wtransport::ClientConfig;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ClientConfig {
     pub version: ProtocolVersion,
     pub lanes_in: Vec<LaneKind>,
-    pub lanes_out: Vec<LaneKind>,
+    pub lanes_out: Vec<LaneConfig>,
     pub bandwidth: usize,
     pub max_packet_len: usize,
     pub default_packet_cap: usize,
@@ -40,7 +40,18 @@ impl Default for ClientConfig {
 }
 
 impl ClientConfig {
-    pub fn new(version: ProtocolVersion, lanes_in: impl IntoIterator<Item = LaneKind>)
+    pub fn new(
+        version: ProtocolVersion,
+        lanes_in: impl IntoIterator<Item = impl Into<LaneKind>>,
+        lanes_out: impl IntoIterator<Item = impl Into<LaneConfig>>,
+    ) -> Self {
+        Self {
+            version,
+            lanes_in: lanes_in.into_iter().map(Into::into).collect(),
+            lanes_out: lanes_out.into_iter().map(Into::into).collect(),
+            ..Default::default()
+        }
+    }
 }
 
 cfg_if::cfg_if! {

@@ -4,8 +4,9 @@ use aeronet::{
     client::{client_disconnected, ClientTransport},
     protocol::{ProtocolVersion, TransportProtocol},
 };
+use aeronet_proto::lane::LaneConfig;
 use aeronet_replicon::{
-    channel::RepliconChannelsExt, client::RepliconClientPlugin, protocol::RepliconMessage,
+    channel::IntoLaneKind, client::RepliconClientPlugin, protocol::RepliconMessage,
 };
 use aeronet_webtransport::{
     client::{ClientConfig, WebTransportClient},
@@ -109,18 +110,27 @@ fn setup(world: &mut World) {
 #[derive(Debug, Clone, Resource, Deref, DerefMut)]
 struct Connect(SystemId<String>);
 
+fn client_config(channels: &RepliconChannels) -> ClientConfig {
+    ClientConfig::new(
+        PROTOCOL_VERSION,
+        channels
+            .server_channels()
+            .iter()
+            .map(|channel| channel.kind.into_lane_kind()),
+        channels
+            .client_channels()
+            .iter()
+            .map(|channel| LaneConfig::new(channel.kind.into_lane_kind())),
+    )
+}
+
 #[cfg(target_family = "wasm")]
 fn connect(In(target): In<String>, mut client: ResMut<Client>, channels: Res<RepliconChannels>) {
     use xwt::current::WebTransportOptions;
 
     let native_config = WebTransportOptions::default();
-    let config = ClientConfig {
-        version: PROTOCOL_VERSION,
-        lanes_in: channels.to_s2c_lanes(),
-        lanes_out: channels.to_c2s_lanes(),
-        ..ClientConfig::new(native_config, ())
-    };
-    let Ok(backend) = client.connect(config, target) else {
+    let config = client_config(&channels);
+    let Ok(backend) = client.connect(native_config, config, (), target) else {
         return;
     };
     wasm_bindgen_futures::spawn_local(backend);
@@ -138,13 +148,8 @@ fn connect(
         .with_no_cert_validation()
         .keep_alive_interval(Some(std::time::Duration::from_secs(5)))
         .build();
-    let config = ClientConfig {
-        version: PROTOCOL_VERSION,
-        lanes_in: channels.to_s2c_lanes(),
-        lanes_out: channels.to_c2s_lanes(),
-        ..ClientConfig::new(native_config, ())
-    };
-    let Ok(backend) = client.connect(config, target) else {
+    let config = client_config(&channels);
+    let Ok(backend) = client.connect(native_config, config, (), target) else {
         return;
     };
     rt.spawn(backend);

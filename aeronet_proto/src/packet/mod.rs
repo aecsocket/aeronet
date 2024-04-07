@@ -100,11 +100,10 @@ TODO:
     * or the fragment times out and the connection dies!
 */
 
-mod lane;
 mod recv;
 mod send;
 
-use std::{fmt::Debug, marker::PhantomData};
+use std::{borrow::Borrow, fmt::Debug, marker::PhantomData};
 
 use aeronet::{
     lane::{LaneIndex, LaneKind, LaneMapper},
@@ -118,18 +117,17 @@ use derivative::Derivative;
 use crate::{
     ack::Acknowledge,
     frag::{FragmentError, Fragmentation, ReassembleError},
+    lane::{LaneConfig, LaneReceiver, LaneSender},
     seq::Seq,
 };
-
-use self::lane::{LaneRecv, LaneSend};
 
 // todo docs
 /// See the [module-level documentation](self).
 #[derive(Derivative)]
 #[derivative(Debug(bound = "M: Debug"))]
 pub struct Packets<S, R, M> {
-    lanes_in: Box<[LaneRecv<R>]>,
-    lanes_out: Box<[LaneSend]>,
+    lanes_in: Box<[LaneReceiver<R>]>,
+    lanes_out: Box<[LaneSender]>,
     max_packet_len: usize,
     default_packet_cap: usize,
     frags: Fragmentation,
@@ -190,14 +188,20 @@ where
     pub fn new(
         max_packet_len: usize,
         default_packet_cap: usize,
-        lanes_in: &[LaneKind],
-        lanes_out: &[LaneKind],
+        lanes_in: impl IntoIterator<Item = impl Borrow<LaneKind>>,
+        lanes_out: impl IntoIterator<Item = impl Borrow<LaneConfig>>,
         mapper: M,
     ) -> Self {
         assert!(max_packet_len > PACKET_HEADER_LEN);
         Self {
-            lanes_in: lanes_in.iter().map(|kind| LaneRecv::new(*kind)).collect(),
-            lanes_out: lanes_out.iter().map(|kind| LaneSend::new(*kind)).collect(),
+            lanes_in: lanes_in
+                .into_iter()
+                .map(|kind| LaneReceiver::new(*kind.borrow()))
+                .collect(),
+            lanes_out: lanes_out
+                .into_iter()
+                .map(|config| LaneSender::new(config.borrow()))
+                .collect(),
             max_packet_len,
             default_packet_cap,
             frags: Fragmentation::new(max_packet_len - PACKET_HEADER_LEN),
@@ -260,8 +264,8 @@ mod tests {
         let mut msgs = Packets::<MyMsg, MyMsg, ()>::new(
             MAX_PACKET_LEN,
             MAX_PACKET_LEN,
-            MyLane::KINDS,
-            MyLane::KINDS,
+            MyLane::all(),
+            MyLane::all().map(|kind| LaneConfig::new(*kind)),
             (),
         );
         msgs.buffer_send(MyMsg::from("1")).unwrap();
