@@ -144,8 +144,8 @@ fn open(rt: Res<TokioRuntime>, mut server: ResMut<Server>, channels: Res<Replico
         .build();
     let config = ServerConfig {
         version: PROTOCOL_VERSION,
-        lanes_in: channels.to_client_lanes(),
-        lanes_out: channels.to_server_lanes(),
+        lanes_in: channels.to_c2s_lanes(),
+        lanes_out: channels.to_s2c_lanes(),
         ..ServerConfig::new(native_config, ())
     };
     let backend = server.open(config).unwrap();

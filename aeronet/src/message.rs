@@ -118,7 +118,7 @@ impl TryFromBytes for Vec<u8> {
 /// Allows converting messages into, and creating messages from, bytes.
 ///
 /// Transports may include a value implementing this trait as a field, and use
-/// it to map their message types to/from bytes.
+/// it to map their messages to/from bytes.
 ///
 /// # How do I make one?
 ///

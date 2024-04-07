@@ -160,4 +160,12 @@ mod tests {
         let mut buf = buf.freeze();
         assert_eq!(u64::MAX, buf.read_varint().unwrap());
     }
+
+    #[test]
+    fn read_write_slice() {
+        let mut buf = BytesMut::with_capacity(16);
+        buf.write_slice(&[1, 2, 3, 4]).unwrap();
+        let mut buf = buf.freeze();
+        assert_eq!(&[1, 2, 3, 4][..], buf.read_slice(4).unwrap());
+    }
 }

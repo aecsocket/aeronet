@@ -14,25 +14,40 @@ without caring about if the server you're connected to is remote or local.
 # Getting started
 
 See [`aeronet`] for getting started with any transport. Create a [`ChannelServer`], which will
-handle client connections. Then create and connect a [`ChannelClient`] to this server. Use the
-returned [`ClientKey`] to disconnect this client later.
+handle client connections. Then create and connect a [`ChannelClient`] to this server. You can
+access the client's key via its state, to disconnect it from the server later.
 
 ```rust
-use aeronet::{client::ClientTransport, server::ServerTransport};
-use aeronet_channel::{ClientKey, ChannelClient, ChannelServer};
+use aeronet::{
+    client::{ClientTransport, ClientState},
+    server::ServerTransport,
+    message::Message,
+    protocol::TransportProtocol,
+};
+use aeronet_channel::{
+    client::ChannelClient,
+    server::{ClientKey, ChannelServer},
+};
 
-# #[derive(aeronet::Message)]
-# struct AppMessage(&'static str);
-# 
-# struct AppProtocol;
-# impl aeronet::TransportProtocol for AppProtocol {
-#     type C2S = AppMessage;
-#     type S2C = AppMessage;
-# }
+#[derive(Message)]
+struct AppMessage(String);
+
+struct AppProtocol;
+
+impl TransportProtocol for AppProtocol {
+    type C2S = AppMessage;
+    type S2C = AppMessage;
+}
+
 let mut server = ChannelServer::<AppProtocol>::open();
 let mut client = ChannelClient::connect_new(&mut server);
 
-client.send(AppMessage("hi!")).unwrap();
+client.send(AppMessage("hi!".into())).unwrap();
 
-server.disconnect(client.key().unwrap());
+let ClientState::Connected(client_state) = client.state() else {
+    unreachable!();
+};
+let client_key = client_state.key;
+
+server.disconnect(client_key);
 ```

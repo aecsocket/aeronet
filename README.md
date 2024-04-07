@@ -47,6 +47,8 @@ This crate aims to be:
   * The complexity of the underlying transport is abstracted away, which allows for both flexibility
     in implementation, and less cognitive load on the API user
   * Configuration options are still exposed, however there are always a set of sane defaults
+* Comfortable for non-async code
+  * This crate abstracts away transport-related async code, and exposes a simpler sync API.
 * Lightweight and have a small footprint
   * The crate minimizes the amount of data copied by using [`Bytes`], reducing allocations
   * Features such as reliability and ordering are implemented with a small memory footprint
@@ -54,6 +56,7 @@ This crate aims to be:
 This crate does not aim to be:
 * A high-level app networking library, featuring replication, rollback, etc.
   * This crate only concerns the transport of data payloads, not what the payloads actually contain
+* An async library
 * `#![no_std]`
 * A non-client-to-server networking library (e.g. peer-to-peer)
   * A client is expected to only have at most 1 connection to a server - although this server could
@@ -76,7 +79,8 @@ the manner of delivery, rather than the individual stream or channel.
 The types of lanes that are supported, and therefore what guarantees are given, are listed in
 [`LaneKind`].
 
-Note that not all transports support lanes.
+Note that if a transport does not support lanes, then it inherently guarantees the strongest
+guarantees provided by lanes - that is, communication is always reliable-ordered.
 
 ## Bevy plugin
 
@@ -103,11 +107,11 @@ implementations, if they do not support certain features already. This makes pro
 transport implementation easy, since you just plug in these features into the underlying byte stream
 or whatever other mechanism your transport uses.
 
-## [`bevy_replicon`](https://docs.rs/bevy_replicon) integration
+## [`bevy_replicon`] integration
 
 *Crate: `aeronet_replicon`*
 
-Using this crate, you can plug any aeronet transport into `bevy_replicon` as a backend, giving you
+Using this crate, you can plug any aeronet transport into [`bevy_replicon`] as a backend, giving you
 high-level networking features such as entity replication, while still being free to use any
 transport implementation under the hood.
 
@@ -175,12 +179,12 @@ pub struct AppMessage(pub String);
 impl TryIntoBytes for AppMessage {
     type Error = std::convert::Infallible;
 
-    fn try_into_bytes(&self) -> Result<Bytes, Self::Error> {
+    fn try_into_bytes(self) -> Result<Bytes, Self::Error> {
         Ok(Bytes::from(self.0.into_vec()))
     }
 }
 
-impl aeronet::TryFromBytes for AppMessage {
+impl TryFromBytes for AppMessage {
     type Error = std::str::FromUtf8Error;
 
     fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error> {
@@ -192,6 +196,9 @@ impl aeronet::TryFromBytes for AppMessage {
 Note that if you would like to use raw bytes for transporting messages, you can do this too. The
 crate defines infallible [`TryIntoBytes`] and [`TryFromBytes`] implementations for `Vec<u8>` and
 [`bytes::Bytes`].
+
+**If using `aeronet_replicon`:** You **must** use the `RepliconMessage` type as both your
+client-to-server and server-to-client message types.
 
 ### Lanes
 
@@ -231,3 +238,4 @@ such as sending and receiving messages.
 [`ServerTransportPlugin`]: server::ServerTransportPlugin
 [`ClientState`]: client::ClientState
 [`ServerState`]: server::ServerState
+[`bevy_replicon`]: https://docs.rs/bevy_replicon

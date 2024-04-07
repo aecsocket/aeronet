@@ -1,3 +1,5 @@
+//! Server-side items.
+
 use std::{fmt::Display, time::Duration};
 
 use aeronet::{
@@ -9,10 +11,13 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;
 
-use crate::shared::{ChannelError, ConnectionStats};
+use crate::shared::ConnectionStats;
 
 slotmap::new_key_type! {
     /// Key identifying a unique client connected to a [`ChannelServer`].
+    ///
+    /// If a client is connected, disconnected, and reconnected to the same
+    /// server, it will have a different client key.
     pub struct ClientKey;
 }
 
@@ -32,9 +37,11 @@ pub struct ChannelServer<P: TransportProtocol> {
     clients: SlotMap<ClientKey, Client<P>>,
 }
 
+/// State of a [`ChannelServer`]'s client when it is [`ClientState::Connected`].
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Connected<P: TransportProtocol> {
+    /// Statistics of this connection.
     pub stats: ConnectionStats,
     recv_c2s: Receiver<P::C2S>,
     send_s2c: Sender<P::S2C>,
@@ -46,6 +53,17 @@ pub struct Connected<P: TransportProtocol> {
 enum Client<P: TransportProtocol> {
     Disconnected,
     Connected(Connected<P>),
+}
+
+/// Error type for operations on a [`ChannelServer`].
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ServerError {
+    /// No client exists for the given key.
+    #[error("no client with this key")]
+    NoClient,
+    /// Client was unexpectedly disconnected.
+    #[error("client disconnected")]
+    Disconnected,
 }
 
 impl<P: TransportProtocol> ChannelServer<P> {
@@ -70,15 +88,15 @@ impl<P: TransportProtocol> ChannelServer<P> {
 }
 
 impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
-    type Error = ChannelError;
+    type Error = ServerError;
 
-    type Opening<'this> = ();
+    type Opening<'t> = ();
 
-    type Open<'this> = ();
+    type Open<'t> = ();
 
-    type Connecting<'this> = ();
+    type Connecting<'t> = ();
 
-    type Connected<'this> = &'this Connected<P>;
+    type Connected<'t> = &'t Connected<P>;
 
     type ClientKey = ClientKey;
 
@@ -108,13 +126,13 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
         msg: impl Into<P::S2C>,
     ) -> Result<Self::MessageKey, Self::Error> {
         let Some(Client::Connected(client)) = self.clients.get_mut(client_key) else {
-            return Err(ChannelError::NotConnected);
+            return Err(ServerError::NoClient);
         };
         let msg = msg.into();
         client
             .send_s2c
             .send(msg)
-            .map_err(|_| ChannelError::Disconnected)?;
+            .map_err(|_| ServerError::Disconnected)?;
         client.stats.msgs_sent += 1;
         Ok(())
     }
@@ -122,7 +140,7 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
     fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error> {
         self.clients
             .remove(client_key)
-            .ok_or(ChannelError::Disconnected)
+            .ok_or(ServerError::NoClient)
             .map(drop)
     }
 
@@ -177,7 +195,7 @@ impl<P: TransportProtocol> ChannelServer<P> {
                 Err(TryRecvError::Disconnected) => {
                     events.push(ServerEvent::Disconnected {
                         client_key,
-                        error: ChannelError::Disconnected,
+                        error: ServerError::Disconnected,
                     });
                     return Client::Disconnected;
                 }

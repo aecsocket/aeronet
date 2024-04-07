@@ -1,3 +1,5 @@
+//! Client-side items.
+
 use std::time::Duration;
 
 use aeronet::{
@@ -10,7 +12,7 @@ use either::Either;
 
 use crate::{
     server::{ChannelServer, ClientKey},
-    shared::{ChannelError, ConnectionStats},
+    shared::ConnectionStats,
 };
 
 /// Implementation of [`ClientTransport`] using in-memory MPSC channels.
@@ -31,15 +33,38 @@ enum Inner<P: TransportProtocol> {
     Connected(Connected<P>),
 }
 
+/// State of a [`ChannelClient`] when it is [`ClientState::Connected`].
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Connected<P: TransportProtocol> {
+    /// Key of this client as recognized by the [`ChannelServer`].
+    ///
+    /// Use this key to disconnect this client from the server side.
+    pub key: ClientKey,
+    /// Statistics of this connection.
+    pub stats: ConnectionStats,
     send_c2s: Sender<P::C2S>,
     recv_s2c: Receiver<P::S2C>,
-    pub key: ClientKey,
-    pub stats: ConnectionStats,
     #[allow(clippy::struct_field_names)]
     send_connected: bool,
+}
+
+/// Error type for operations on a [`ChannelClient`].
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ClientError {
+    /// Attempted to connect a client which was already connected.
+    #[error("already connected")]
+    AlreadyConnected,
+    /// Attempted to disconnect a client which was already disconnected.
+    #[error("already disconnected")]
+    AlreadyDisconnected,
+    /// Attempted to perform an operation on a client which was not connected.
+    #[error("not connected")]
+    NotConnected,
+    /// Attempted to perform an operation, but the channel to the peer was
+    /// unexpectedly closed.
+    #[error("disconnected")]
+    Disconnected,
 }
 
 impl<P: TransportProtocol> ChannelClient<P> {
@@ -56,9 +81,9 @@ impl<P: TransportProtocol> ChannelClient<P> {
     /// # Errors
     ///
     /// Errors if this is not [`ClientState::Connected`].
-    pub fn disconnect(&mut self) -> Result<(), ChannelError> {
+    pub fn disconnect(&mut self) -> Result<(), ClientError> {
         if let Inner::Disconnected = self.inner {
-            return Err(ChannelError::AlreadyDisconnected);
+            return Err(ClientError::AlreadyDisconnected);
         }
 
         self.inner = Inner::Disconnected;
@@ -73,10 +98,10 @@ impl<P: TransportProtocol> ChannelClient<P> {
         let key = server.insert_client(recv_c2s, send_s2c);
         Self {
             inner: Inner::Connected(Connected {
-                send_c2s,
-                recv_s2c,
                 key,
                 stats: ConnectionStats::default(),
+                send_c2s,
+                recv_s2c,
                 send_connected: true,
             }),
         }
@@ -87,9 +112,9 @@ impl<P: TransportProtocol> ChannelClient<P> {
     /// # Errors
     ///
     /// Errors if this is not [`ClientState::Disconnected`].
-    pub fn connect(&mut self, server: &mut ChannelServer<P>) -> Result<(), ChannelError> {
+    pub fn connect(&mut self, server: &mut ChannelServer<P>) -> Result<(), ClientError> {
         let Inner::Disconnected = self.inner else {
-            return Err(ChannelError::AlreadyConnected);
+            return Err(ClientError::AlreadyConnected);
         };
 
         *self = Self::connect_new(server);
@@ -98,11 +123,11 @@ impl<P: TransportProtocol> ChannelClient<P> {
 }
 
 impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
-    type Error = ChannelError;
+    type Error = ClientError;
 
-    type Connecting<'this> = ();
+    type Connecting<'t> = ();
 
-    type Connected<'this> = &'this Connected<P>;
+    type Connected<'t> = &'t Connected<P>;
 
     type MessageKey = ();
 
@@ -116,21 +141,21 @@ impl<P: TransportProtocol> ClientTransport<P> for ChannelClient<P> {
 
     fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error> {
         let Inner::Connected(client) = &mut self.inner else {
-            return Err(ChannelError::NotConnected);
+            return Err(ClientError::NotConnected);
         };
 
         let msg = msg.into();
         client
             .send_c2s
             .send(msg)
-            .map_err(|_| ChannelError::Disconnected)?;
+            .map_err(|_| ClientError::Disconnected)?;
         client.stats.msgs_sent += 1;
         Ok(())
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
         match self.inner {
-            Inner::Disconnected => Err(ChannelError::NotConnected),
+            Inner::Disconnected => Err(ClientError::NotConnected),
             Inner::Connected(_) => Ok(()),
         }
     }
@@ -163,7 +188,7 @@ impl<P: TransportProtocol> ChannelClient<P> {
                     client.stats.msgs_recv += 1;
                 }
                 Err(TryRecvError::Empty) => return Ok(()),
-                Err(TryRecvError::Disconnected) => return Err(ChannelError::Disconnected),
+                Err(TryRecvError::Disconnected) => return Err(ClientError::Disconnected),
             }
         })();
 

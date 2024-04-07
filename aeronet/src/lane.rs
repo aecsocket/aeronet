@@ -51,7 +51,9 @@
 //! # Transports
 //!
 //! Not all transport implementations may offer lanes. If they do, they will
-//! usually have an [`OnLane`] bound on the outgoing message type
+//! usually have an [`OnLane`] bound on the outgoing message type, or require
+//! the user to provide a [`LaneMapper`] which can map their message type to a
+//! lane.
 
 pub use aeronet_derive::{LaneKey, OnLane};
 
@@ -244,12 +246,30 @@ pub trait OnLane {
     fn lane_index(&self) -> LaneIndex;
 }
 
-pub trait LaneMapper<M> {
-    fn lane_index(&self, msg: &M) -> LaneIndex;
+/// Allows reading the lane index of a message.
+///
+/// Transports may include a value implementing this trait as a field, and use
+/// it to map their messages to a lane index.
+///
+/// # How do I make one?
+///
+/// If your message type already implements [`OnLane`] you don't need to make
+/// your own. Just use `()` as the mapper value - it implements this trait.
+///
+/// # Why use this over [`OnLane`]?
+///
+/// In some cases, you may not have all the context you need in the message
+/// itself in order to be able to read its lane index. You can instead store
+/// this state in a type implementing this trait. When the transport attempts to
+/// get a message's lane, it will call this value's function, letting you use
+/// your existing context for the conversion.
+pub trait LaneMapper<T> {
+    /// Gets the lane index of the given message.
+    fn lane_index(&mut self, msg: &T) -> LaneIndex;
 }
 
-impl<M: OnLane> LaneMapper<M> for () {
-    fn lane_index(&self, msg: &M) -> LaneIndex {
+impl<T: OnLane> LaneMapper<T> for () {
+    fn lane_index(&mut self, msg: &T) -> LaneIndex {
         msg.lane_index()
     }
 }
