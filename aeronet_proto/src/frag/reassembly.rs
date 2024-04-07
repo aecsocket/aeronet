@@ -3,11 +3,27 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bitvec::bitarr;
+use ahash::AHashMap;
+use bitvec::{array::BitArray, bitarr};
 
-use crate::{frag::MessageBuffer, seq::Seq};
+use crate::seq::Seq;
 
-use super::{FragHeader, Fragmentation};
+use super::FragmentHeader;
+
+#[derive(Debug, Clone)]
+pub struct Reassembly {
+    payload_len: usize,
+    messages: AHashMap<Seq, MessageBuffer>,
+}
+
+#[derive(Debug, Clone)]
+struct MessageBuffer {
+    num_frags: NonZeroU8,
+    num_frags_recv: u8,
+    recv_frags: BitArray<[u8; 32]>,
+    payload: Vec<u8>,
+    last_recv_at: Instant,
+}
 
 /// Error that occurs when using [`Fragmentation::reassemble`].
 #[derive(Debug, Clone, thiserror::Error)]
@@ -51,7 +67,7 @@ pub enum ReassembleError {
 }
 
 impl MessageBuffer {
-    fn new(payload_len: usize, header: &FragHeader, num_frags: NonZeroU8) -> Self {
+    fn new(payload_len: usize, header: &FragmentHeader, num_frags: NonZeroU8) -> Self {
         Self {
             // use a NonZeroU8 because:
             // * having `num_frags = 0` is genuinely an invalid case
@@ -75,7 +91,22 @@ impl MessageBuffer {
     }
 }
 
-impl Fragmentation {
+impl Reassembly {
+    /// Creates a new [`Reassembly`].
+    ///
+    /// * `payload_len` defines the maximum length, in bytes, that the payload
+    ///   of a single fragmented packet can be. This must be greater than 0.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `payload_len` is 0.
+    pub fn new(payload_len: usize) -> Self {
+        Self {
+            payload_len,
+            messages: AHashMap::new(),
+        }
+    }
+
     /// Receives a fragmented packet and attempts to reassemble this fragment
     /// into a message.
     ///
@@ -98,7 +129,7 @@ impl Fragmentation {
     /// condition for a connection.
     pub fn reassemble(
         &mut self,
-        header: &FragHeader,
+        header: &FragmentHeader,
         payload: &[u8],
     ) -> Result<Option<Vec<u8>>, ReassembleError> {
         let num_frags = match NonZeroU8::new(header.num_frags) {
@@ -210,5 +241,41 @@ impl Fragmentation {
     /// Drops all currently buffered messages.
     pub fn clear(&mut self) {
         self.messages.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use assert_matches::assert_matches;
+
+    use super::*;
+
+    #[test]
+    fn invalid_header() {
+        let mut asm = Reassembly::new(1024);
+        assert_eq!(
+            None,
+            asm.reassemble(
+                &FragmentHeader {
+                    msg_seq: Seq(0),
+                    num_frags: 0,
+                    frag_id: 0,
+                },
+                &[],
+            )
+            .unwrap()
+        );
+        assert_matches!(
+            asm.reassemble(
+                &FragmentHeader {
+                    msg_seq: Seq(0),
+                    num_frags: 10,
+                    frag_id: 10,
+                },
+                &[]
+            )
+            .unwrap_err(),
+            ReassembleError::InvalidFragId { frag_id: 1 }
+        );
     }
 }
