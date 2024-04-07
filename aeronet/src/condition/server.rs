@@ -94,13 +94,13 @@ where
 {
     type Error = T::Error;
 
-    type Opening<'this> = T::Opening<'this> where Self: 'this;
+    type Opening<'t> = T::Opening<'t> where Self: 't;
 
-    type Open<'this> = T::Open<'this> where Self: 'this;
+    type Open<'t> = T::Open<'t> where Self: 't;
 
-    type Connecting<'this> = T::Connecting<'this> where Self: 'this;
+    type Connecting<'t> = T::Connecting<'t> where Self: 't;
 
-    type Connected<'this> = T::Connected<'this> where Self: 'this;
+    type Connected<'t> = T::Connected<'t> where Self: 't;
 
     type ClientKey = T::ClientKey;
 

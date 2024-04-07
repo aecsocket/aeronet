@@ -92,9 +92,9 @@ where
 impl<P: TransportProtocol, T: ClientTransport<P>> ClientTransport<P> for ConditionedClient<P, T> {
     type Error = T::Error;
 
-    type Connecting<'this> = T::Connecting<'this> where Self: 'this;
+    type Connecting<'t> = T::Connecting<'t> where Self: 't;
 
-    type Connected<'this> = T::Connected<'this> where Self: 'this;
+    type Connected<'t> = T::Connected<'t> where Self: 't;
 
     type MessageKey = T::MessageKey;
 

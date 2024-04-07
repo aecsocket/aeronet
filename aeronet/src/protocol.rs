@@ -1,8 +1,6 @@
 //! Types defining how messages and data is communicated between two endpoints
 //! sharing the same transport.
 
-pub use aeronet_derive::TransportProtocol;
-
 use std::fmt::Display;
 
 use crate::message::Message;

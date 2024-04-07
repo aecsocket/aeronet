@@ -21,10 +21,13 @@ use serde::{Deserialize, Serialize};
 // transport config
 //
 
-#[derive(Debug, Clone, Copy, TransportProtocol)]
-#[c2s(RepliconMessage)]
-#[s2c(RepliconMessage)]
+#[derive(Debug, Clone, Copy)]
 struct AppProtocol;
+
+impl TransportProtocol for AppProtocol {
+    type C2S = RepliconMessage;
+    type S2C = RepliconMessage;
+}
 
 impl WebTransportProtocol for AppProtocol {
     type Mapper = ();
@@ -105,8 +108,6 @@ fn setup(world: &mut World) {
 
 #[derive(Debug, Clone, Resource, Deref, DerefMut)]
 struct Connect(SystemId<String>);
-
-// spki x3S9HPqXZTYoR2tOQMmVG2GiZDPyyksnWdF9I9Ko/xY=
 
 #[cfg(target_family = "wasm")]
 fn connect(In(target): In<String>, mut client: ResMut<Client>, channels: Res<RepliconChannels>) {

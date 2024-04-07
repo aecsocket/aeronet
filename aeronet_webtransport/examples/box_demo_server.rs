@@ -23,10 +23,13 @@ use serde::{Deserialize, Serialize};
 // transport config
 //
 
-#[derive(Debug, Clone, Copy, TransportProtocol)]
-#[c2s(RepliconMessage)]
-#[s2c(RepliconMessage)]
+#[derive(Debug, Clone, Copy)]
 struct AppProtocol;
+
+impl TransportProtocol for AppProtocol {
+    type C2S = RepliconMessage;
+    type S2C = RepliconMessage;
+}
 
 impl WebTransportProtocol for AppProtocol {
     type Mapper = ();
@@ -125,7 +128,7 @@ chromium \
 --webtransport-developer-mode \
 --ignore-certificate-errors-spki-list=
 
-then add in the SPKI hash
+then add in the SPKI fingerprint
 the `--user-data-dir` is optional tho
 */
 

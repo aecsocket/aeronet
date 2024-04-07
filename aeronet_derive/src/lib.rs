@@ -6,7 +6,6 @@ use syn::{parse_macro_input, DeriveInput};
 mod lane_key;
 mod message;
 mod on_lane;
-mod transport_protocol;
 mod util;
 
 /// Implements `aeronet::message::Message` for the given type.
@@ -123,36 +122,3 @@ pub fn on_lane(input: TokenStream) -> TokenStream {
 }
 
 const ON_LANE: &str = "on_lane";
-
-/// Defines what types of messages are transported between the client and the
-/// server.
-///
-/// # Attributes
-///
-/// * `#[c2s(type)]` determines the client-to-server message type.
-/// * `#[s2c(type)]` determines the server-to-client message type.
-///
-/// # Usage
-///
-/// ```ignore
-/// #[derive(Debug, Clone, Message)]
-/// enum ClientToServer { /* .. */ }
-///
-/// #[derive(Debug, Clone, Message)]
-/// enum ServerToClient { /* .. */ }
-///
-/// #[derive(Debug, TransportProtocol)]
-/// #[c2s(ClientToServer)]
-/// #[s2c(ServerToClient)]
-/// struct AppProtocol;
-/// ```
-#[proc_macro_derive(TransportProtocol, attributes(c2s, s2c))]
-pub fn transport_protocol(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    transport_protocol::derive(&input)
-        .unwrap_or_else(|err| err.to_compile_error())
-        .into()
-}
-
-const C2S: &str = "c2s";
-const S2C: &str = "s2c";
