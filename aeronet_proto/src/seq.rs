@@ -77,31 +77,8 @@ impl Seq {
     /// assert_eq!((Seq::MAX - Seq(3)).dist_to(Seq(3)), 7);
     /// ```
     #[must_use]
-    pub fn dist_to(self, rhs: Self) -> i16 {
-        let lhs = self.0;
-        let rhs = rhs.0;
-        let a = lhs.max(rhs);
-        let b = lhs.min(rhs);
-
-        let d = a - b;
-
-        if d > u16::MAX / 2 {
-            let x = (u16::MAX - d + 1) as i16;
-
-            if lhs < rhs {
-                -x
-            } else {
-                x
-            }
-        } else {
-            let x = d as i16;
-
-            if lhs < rhs {
-                x
-            } else {
-                -x
-            }
-        }
+    pub const fn dist_to(self, rhs: Self) -> i16 {
+        rhs.0.wrapping_sub(self.0) as i16
     }
 }
 

@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, fmt::Debug, marker::PhantomData, time::Instant};
+use std::{fmt::Debug, time::Instant};
 
 use aeronet::{
     lane::LaneMapper,
@@ -7,12 +7,10 @@ use aeronet::{
 };
 use ahash::AHashMap;
 use bytes::{Bytes, BytesMut};
-use derivative::Derivative;
 
 use crate::{
-    ack::Acknowledge,
-    byte_bucket::ByteBucket,
-    frag::{Fragment, FragmentError, FragmentHeader, FragmentSender},
+    byte_count::ByteLimit,
+    frag::{Fragment, FragmentError, FragmentHeader},
     packet::PACKET_HEADER_LEN,
     seq::Seq,
 };
@@ -74,26 +72,25 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
         }
     }
 
-    pub fn flush<'a: 'm>(
-        &'a mut self,
-        acks: &'a mut Acknowledge,
-        sent_msgs: &'a mut AHashMap<Seq, SentMessage>,
-        flushed_packets: &'a mut AHashMap<Seq, Box<[FragmentKey]>>,
-        now: Instant,
-    ) -> impl Iterator<Item = Bytes> + '_ {
+    pub fn flush<'a: 'm>(&'a mut self, now: Instant) -> impl Iterator<Item = Bytes> + '_ {
         // collect all fragments to send
-        let mut frags = Self::frags_to_send(sent_msgs).map(Some).collect::<Box<_>>();
+        let mut frags = Self::frags_to_send(&self.sent_msgs)
+            .map(Some)
+            .collect::<Box<_>>();
         // sort by payload length, largest to smallest
         frags.sort_unstable_by(|a, b| {
-            self.sent_frag(sent_msgs, *b)
+            self.sent_frag(&self.sent_msgs, *b)
                 .map(|frag| frag.payload.len())
-                .cmp(&self.sent_frag(sent_msgs, *a).map(|frag| frag.payload.len()))
+                .cmp(
+                    &self
+                        .sent_frag(&self.sent_msgs, *a)
+                        .map(|frag| frag.payload.len()),
+                )
         });
 
         std::iter::from_fn(move || {
             // this iteration, we want to build up one full packet
-            let max_packet_bytes = self.bytes_left.get().min(self.frag_send.max_payload_len());
-            let mut packet_bytes_left = ByteBucket::new(max_packet_bytes);
+            let mut bytes_left = (&mut self.bytes_left).min_of(self.frag_send.max_payload_len());
 
             let packet_seq = self.next_send_packet_seq;
             // don't increase the packet seq just yet!
@@ -102,7 +99,7 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
 
             // try to write the packet header
             // if we don't have enough bytes, bail
-            packet_bytes_left.consume(PACKET_HEADER_LEN).ok()?;
+            bytes_left.consume(PACKET_HEADER_LEN).ok()?;
 
             // NOTE: don't use `max_packet_len`, because it might be a really big number
             // e.g. Steamworks already fragments messages, so we don't have to fragment
@@ -110,15 +107,15 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
             // but we don't want to allocate a 512KiB buffer
             let mut packet = BytesMut::with_capacity(self.default_packet_cap);
             packet.write(&packet_seq).unwrap();
-            packet.write(acks).unwrap();
+            packet.write(&self.acks).unwrap();
             debug_assert_eq!(packet.len(), PACKET_HEADER_LEN);
 
             let mut frags_in_packet = Vec::new();
             let frags = frags.iter_mut().filter_map(|frag_key_opt| {
                 Self::try_flush_frag(
-                    sent_msgs,
+                    &mut self.sent_msgs,
                     &mut self.lanes_send,
-                    &mut packet_bytes_left,
+                    &mut bytes_left,
                     now,
                     frag_key_opt,
                 )
@@ -133,9 +130,6 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
                 frag.encode_into(&mut packet).unwrap();
                 debug_assert_eq!(orig_len + encode_len, packet.len());
             }
-            let bytes_used = max_packet_bytes - packet_bytes_left.get();
-            debug_assert!(packet.len() <= max_packet_bytes);
-            debug_assert_eq!(packet.len(), bytes_used);
 
             if frags_in_packet.is_empty() {
                 // we couldn't write any fragments - nothing more to send
@@ -144,8 +138,8 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
                 // we wrote at least one fragment - we can send this packet
                 // and track what fragments we're sending in this packet
                 self.next_send_packet_seq += Seq(1);
-                self.bytes_left.consume(bytes_used).unwrap();
-                flushed_packets.insert(packet_seq, frags_in_packet.into_boxed_slice());
+                self.flushed_packets
+                    .insert(packet_seq, frags_in_packet.into_boxed_slice());
                 Some(packet.freeze())
             }
         })
@@ -177,13 +171,16 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
         })
     }
 
-    fn try_flush_frag(
+    fn try_flush_frag<'b, B>(
         sent_msgs: &mut AHashMap<Seq, SentMessage>,
         lanes: &mut [LaneSender],
-        packet_bytes_left: &mut ByteBucket,
+        bytes_left: &'b mut B,
         now: Instant,
         frag_key_opt: &mut Option<FragmentKey>,
-    ) -> Option<Fragment<Bytes>> {
+    ) -> Option<Fragment<Bytes>>
+    where
+        B: ByteLimit,
+    {
         let frag_key = frag_key_opt.take()?;
         // CORRECTNESS: `frags` is a slice of *unique* frag indices.
         // If we end up removing a frag from `sent_msgs`, then we will
@@ -193,10 +190,11 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
         let msg = sent_msgs
             .get_mut(&frag_key.msg_seq)
             .expect("frag key should point to a valid sent message");
-        let sent_frag = msg
+        let sent_frag_opt = msg
             .frags
             .get_mut(usize::from(frag_key.frag_index))
-            .expect("frag index should be in bounds")
+            .expect("frag index should be in bounds");
+        let sent_frag = sent_frag_opt
             .as_mut()
             .expect("frag key should point to some fragment in this message");
         // compose the fragment, at least to measure it
@@ -213,38 +211,23 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
         let lane = lanes
             .get_mut(msg.lane_index)
             .expect("lane index of message should be in range");
-        let frag_len = frag.encode_len();
         match lane {
-            LaneSender::Unreliable { bytes_left } => {
-                // drop the fragment regardless
-                bytes_left.consume(frag_len).ok()?;
-            }
-        }
-        let mut sent_frag = match lane.flush(&sent_frag.payload) {
-            OnFlush::SendAndRetain => {
-                *sent_frag_opt = Some(sent_frag.clone());
-                sent_frag
-            }
-            OnFlush::SendAndDrop => sent_frag,
-            OnFlush::DontSend => {
-                *sent_frag_opt = Some(sent_frag);
-                return None;
-            }
-        };
-
-        // don't add this frag if it's too big for this packet
-        match packet_bytes_left.consume(frag.encode_len()) {
-            Ok(()) => {
-                sent_frag.next_send_at = now + lane.resend_after();
+            LaneSender::Unreliable {
+                bytes_left: lane_bytes_left,
+            } => {
+                let mut bytes_left = bytes_left.min_of(lane_bytes_left);
+                bytes_left.consume(frag.encode_len()).ok()?;
+                *sent_frag_opt = None;
                 Some(frag)
             }
-            Err(_) => {
-                *frag_key_opt = Some(frag_key);
-                *sent_frag_opt = Some(SentFragment {
-                    payload: frag.payload,
-                    next_send_at: sent_frag.next_send_at,
-                });
-                None
+            LaneSender::Reliable {
+                bytes_left: lane_bytes_left,
+                resend_after,
+            } => {
+                let mut bytes_left = bytes_left.min_of(lane_bytes_left);
+                bytes_left.consume(frag.encode_len()).ok()?;
+                sent_frag.next_send_at = now + *resend_after;
+                Some(frag)
             }
         }
     }

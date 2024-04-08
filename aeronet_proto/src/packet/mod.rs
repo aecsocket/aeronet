@@ -1,9 +1,8 @@
 mod lane;
 mod recv;
-// mod send;
+mod send;
 
-pub use recv::*;
-// pub use {recv::*, send::*};
+pub use {recv::*, send::*};
 
 use std::{
     borrow::Borrow,

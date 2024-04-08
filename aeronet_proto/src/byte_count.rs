@@ -53,6 +53,25 @@ pub trait ByteLimit {
     {
         MinOf { a: self, b: other }
     }
+
+    fn min_of_mut<'a, 'b, B>(&'a mut self, other: &'b mut B) -> MinOf<&'a mut Self, &'b mut B>
+    where
+        Self: Sized,
+        &'a mut Self: ByteLimit,
+        &'b mut B: ByteLimit,
+    {
+        MinOf { a: self, b: other }
+    }
+}
+
+impl<T: ByteLimit> ByteLimit for &mut T {
+    fn has(&self, n: usize) -> bool {
+        T::has(self, n)
+    }
+
+    fn consume(&mut self, n: usize) -> Result<(), NotEnoughBytes> {
+        T::consume(self, n)
+    }
 }
 
 /// There were not enough bytes available to consume bytes from a [`ByteLimit`].
@@ -146,6 +165,22 @@ impl ByteLimit for ByteBucket {
     }
 }
 
+impl ByteLimit for usize {
+    fn has(&self, n: usize) -> bool {
+        *self >= n
+    }
+
+    fn consume(&mut self, n: usize) -> Result<(), NotEnoughBytes> {
+        match self.checked_sub(n) {
+            Some(new_rem) => {
+                *self = new_rem;
+                Ok(())
+            }
+            None => Err(NotEnoughBytes),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MinOf<A, B> {
     a: A,
@@ -171,6 +206,8 @@ impl<A, B> MinOf<A, B> {
         (self.a, self.b)
     }
 }
+
+// todo deduplicate
 
 impl<A: ByteLimit, B: ByteLimit> ByteLimit for MinOf<A, B> {
     fn has(&self, n: usize) -> bool {
