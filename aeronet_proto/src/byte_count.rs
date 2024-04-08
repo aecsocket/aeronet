@@ -207,8 +207,6 @@ impl<A, B> MinOf<A, B> {
     }
 }
 
-// todo deduplicate
-
 impl<A: ByteLimit, B: ByteLimit> ByteLimit for MinOf<A, B> {
     fn has(&self, n: usize) -> bool {
         self.a.has(n) && self.b.has(n)
