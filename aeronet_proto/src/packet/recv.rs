@@ -1,26 +1,46 @@
-use aeronet::octs::ReadBytes;
-use aeronet::{lane::LaneMapper, message::BytesMapper};
+use aeronet::{
+    lane::{LaneIndex, LaneMapper},
+    message::BytesMapper,
+    octs::{BytesError, ReadBytes},
+};
 use ahash::AHashMap;
 use bytes::{Buf, Bytes};
 
-use crate::{ack::Acknowledge, frag::Fragment, seq::Seq};
+use crate::{
+    ack::Acknowledge,
+    frag::{Fragment, ReassembleError},
+    seq::Seq,
+};
 
-use super::{FragIndex, Packets, RecvError, SentMessage};
+use super::{FragmentKey, PacketManager, SentMessage};
 
-impl<S, R, M> Packets<S, R, M>
-where
-    M: BytesMapper<S> + BytesMapper<R> + LaneMapper<S> + LaneMapper<R>,
-{
+#[derive(Debug, thiserror::Error)]
+pub enum RecvError<E> {
+    #[error("failed to read packet sequence")]
+    ReadPacketSeq(#[source] BytesError),
+    #[error("failed to read acks")]
+    ReadAcks(#[source] BytesError),
+    #[error("failed to read fragment")]
+    ReadFragment(#[source] BytesError),
+    #[error("failed to reassemble message")]
+    Reassemble(#[source] ReassembleError),
+    #[error("failed to create message from bytes")]
+    FromBytes(#[source] E),
+    #[error("invalid lane index {lane_index:?}")]
+    InvalidLaneIndex { lane_index: LaneIndex },
+}
+
+impl<'m, S, R, M: BytesMapper<R> + LaneMapper<R>> PacketManager<'m, S, R, M> {
     /// Reads the [`Acknowledge`] header of a packet, and returns an iterator of
     /// all acknowledged **mesage** sequence numbers.
     ///
     /// # Errors
     ///
     /// Errors if the packet did not contain a valid acknowledge header.
-    pub fn read_acks(
-        &mut self,
-        packet: &mut Bytes,
-    ) -> Result<impl Iterator<Item = Seq> + '_, RecvError<<M as BytesMapper<R>>::FromError>> {
+    pub fn read_acks<'a>(
+        &'a mut self,
+        packet: &'a mut Bytes,
+    ) -> Result<impl Iterator<Item = Seq> + 'a, RecvError<<M as BytesMapper<R>>::FromError>> {
         // mark this packet as acked;
         // this ack will later be sent out to the peer in `flush`
         let packet_seq = packet.read::<Seq>().map_err(RecvError::ReadPacketSeq)?;
@@ -37,7 +57,7 @@ where
     }
 
     fn packet_to_msg_acks<'a>(
-        flushed_packets: &'a AHashMap<Seq, Box<[FragIndex]>>,
+        flushed_packets: &'a AHashMap<Seq, Box<[FragmentKey]>>,
         sent_msgs: &'a mut AHashMap<Seq, SentMessage>,
         acked_packet_seqs: impl Iterator<Item = Seq> + 'a,
     ) -> impl Iterator<Item = Seq> + 'a {
@@ -49,7 +69,9 @@ where
                 let unacked_msg = sent_msgs.get_mut(&msg_seq)?;
 
                 // do internal bookkeeping
-                if let Some(frag_slot) = unacked_msg.frags.get_mut(usize::from(acked_frag.frag_id))
+                if let Some(frag_slot) = unacked_msg
+                    .frags
+                    .get_mut(usize::from(acked_frag.frag_index))
                 {
                     // mark this frag as acked
                     unacked_msg.num_unacked -= 1;
@@ -88,7 +110,7 @@ where
 
             // reassemble this fragment into a message
             let Some(msg_bytes) = self
-                .frags
+                .frag_recv
                 .reassemble(&frag.header, &frag.payload)
                 .map_err(RecvError::Reassemble)?
             else {
@@ -104,13 +126,13 @@ where
             // get what lane this message is received on
             let lane_index = self.mapper.lane_index(&msg);
             let lane = self
-                .lanes_in
+                .lanes_recv
                 .get_mut(lane_index.into_raw())
                 .ok_or(RecvError::InvalidLaneIndex { lane_index })?;
 
             // ask the lane what messages it wants to give us, in response to
             // receiving this message
-            return Ok(Some(lane.recv(msg, frag.header.msg_seq)));
+            return Ok(Some(lane.recv(frag.header.msg_seq, msg)));
         }
         Ok(None)
     }

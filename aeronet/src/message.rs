@@ -145,25 +145,25 @@ pub trait BytesMapper<T> {
     /// # Errors
     ///
     /// Errors if the conversion fails.
-    fn try_into_bytes(&mut self, value: T) -> Result<Bytes, Self::IntoError>;
+    fn try_into_bytes(&self, value: T) -> Result<Bytes, Self::IntoError>;
 
     /// Attempts to convert a sequence of bytes into a `T`.
     ///
     /// # Errors
     ///
     /// Errors if the conversion fails.
-    fn try_from_bytes(&mut self, buf: Bytes) -> Result<T, Self::FromError>;
+    fn try_from_bytes(&self, buf: Bytes) -> Result<T, Self::FromError>;
 }
 
 impl<T: TryIntoBytes + TryFromBytes> BytesMapper<T> for () {
     type IntoError = <T as TryIntoBytes>::Error;
     type FromError = <T as TryFromBytes>::Error;
 
-    fn try_into_bytes(&mut self, value: T) -> Result<Bytes, Self::IntoError> {
+    fn try_into_bytes(&self, value: T) -> Result<Bytes, Self::IntoError> {
         value.try_into_bytes()
     }
 
-    fn try_from_bytes(&mut self, buf: Bytes) -> Result<T, Self::FromError> {
+    fn try_from_bytes(&self, buf: Bytes) -> Result<T, Self::FromError> {
         T::try_from_bytes(buf)
     }
 }

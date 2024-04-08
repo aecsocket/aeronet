@@ -1,11 +1,49 @@
+use std::time::Duration;
+
 use aeronet::lane::LaneKind;
 use ahash::{AHashMap, AHashSet};
 use derivative::Derivative;
 use either::Either;
 
-use crate::seq::Seq;
+use crate::{byte_count::ByteBucket, seq::Seq};
 
-#[derive(Derivative)]
+use super::LaneConfig;
+
+#[derive(Debug, Clone)]
+pub enum LaneSender {
+    Unreliable {
+        bytes_left: ByteBucket,
+    },
+    Reliable {
+        bytes_left: ByteBucket,
+        resend_after: Duration,
+    },
+}
+
+impl LaneSender {
+    pub fn new(config: &LaneConfig) -> Self {
+        let bytes_left = ByteBucket::new(config.bandwidth);
+        let resend_after = config.resend_after;
+        match config.kind {
+            LaneKind::UnreliableUnordered | LaneKind::UnreliableSequenced => {
+                Self::Unreliable { bytes_left }
+            }
+            LaneKind::ReliableUnordered | LaneKind::ReliableOrdered => Self::Reliable {
+                bytes_left,
+                resend_after,
+            },
+        }
+    }
+
+    pub fn refill_bytes(&mut self, portion: f32) {
+        match self {
+            Self::Unreliable { bytes_left } => bytes_left.refill(portion),
+            Self::Reliable { bytes_left, .. } => bytes_left.refill(portion),
+        }
+    }
+}
+
+#[derive(Derivative, Clone)]
 #[derivative(Debug(bound = ""))]
 pub enum LaneReceiver<R> {
     UnreliableUnordered,
@@ -62,26 +100,30 @@ impl<R> LaneReceiver<R> {
         }
     }
 
-    pub fn recv(&mut self, msg: R, msg_seq: Seq) -> impl Iterator<Item = R> + '_ {
+    pub fn recv(&mut self, msg_seq: Seq, msg: R) -> impl Iterator<Item = R> + '_ {
+        // for the message we've just received...
         match self {
-            Self::UnreliableUnordered => Either::Left(Some(msg)),
-            Self::UnreliableSequenced { last_recv_seq } => {
+            Self::UnreliableUnordered => {
+                // always just return it
+                Either::Left(Some(msg))
+            }
+            Self::UnreliableSequenced { last_recv_seq } => Either::Left({
                 if msg_seq > *last_recv_seq {
                     // msg is new, return it
                     *last_recv_seq = msg_seq;
-                    Either::Left(Some(msg))
+                    Some(msg)
                 } else {
                     // msg is old, drop it
-                    Either::Left(None)
+                    None
                 }
-            }
+            }),
             Self::ReliableUnordered {
                 pending_seq,
                 recv_seq_buf,
-            } => {
+            } => Either::Left({
                 if msg_seq < *pending_seq {
                     // msg is guaranteed to already be received, drop it
-                    Either::Left(None)
+                    None
                 } else {
                     // here's an example to visualize what this does:
                     // msg_seq: 40
@@ -94,9 +136,9 @@ impl<R> LaneReceiver<R> {
                         // iter 1: pending_seq: 41, recv_seq_buf: [41, 45]
                         // iter 2: pending_seq: 42, recv_seq_buf: [45]
                     }
-                    Either::Left(Some(msg))
+                    Some(msg)
                 }
-            }
+            }),
             Self::ReliableOrdered {
                 pending_seq,
                 recv_buf,

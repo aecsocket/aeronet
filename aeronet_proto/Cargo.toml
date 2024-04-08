@@ -26,7 +26,6 @@ bitvec.workspace = true
 bytes.workspace = true
 derivative.workspace = true
 either.workspace = true
-enum_dispatch.workspace = true
 static_assertions.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

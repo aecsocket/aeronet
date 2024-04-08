@@ -60,11 +60,11 @@ pub trait OnLane {
 /// your existing context for the conversion.
 pub trait LaneMapper<T> {
     /// Gets the lane index of the given message.
-    fn lane_index(&mut self, msg: &T) -> LaneIndex;
+    fn lane_index(&self, msg: &T) -> LaneIndex;
 }
 
 impl<T: OnLane> LaneMapper<T> for () {
-    fn lane_index(&mut self, msg: &T) -> LaneIndex {
+    fn lane_index(&self, msg: &T) -> LaneIndex {
         msg.lane_index()
     }
 }

@@ -43,45 +43,64 @@ impl Seq {
     /// Gets a signed number for the value of packet sequences "elapsed" between
     /// `rhs` and `self`.
     ///
-    /// This is effectively `self - rhs`, but taking into account wraparound and
-    /// therefore returning a signed value.
+    /// This is effectively `rhs - self`, but taking into account wraparound and
+    /// therefore returning a signed value. This will always return the smallest
+    /// path around this "circle".
     ///
     /// ```text
     ///     65534  65535    0      1      2
     /// ... --|------|------|------|------|-- ...
     ///       ^             ^      ^      ^
-    ///       |             +------+------+ 2.delta(0) = 2
-    ///       |                    |        0.delta(2) = -2
-    ///       +--------------------+ 1.delta(65534) = 3
-    ///                              65534.delta(1) = -3
+    ///       |             +------+------+ 0.dist_to(2) = 2
+    ///       |                    |        2.dist_to(0) = -2
+    ///       +--------------------+ 65534.dist_to(1) = 3
+    ///                              1.dist_to(65534) = -3
     /// ```
     ///
     /// # Example
     ///
     /// ```
     /// # use aeronet_proto::seq::Seq;
-    /// assert_eq!(Seq(0).delta(Seq(0)), 0);
-    /// assert_eq!(Seq(5).delta(Seq(0)), 5);
-    /// assert_eq!(Seq(5).delta(Seq(3)), 2);
+    /// assert_eq!(Seq(0).dist_to(Seq(0)), 0);
+    /// assert_eq!(Seq(0).dist_to(Seq(5)), 5);
+    /// assert_eq!(Seq(3).dist_to(Seq(5)), 2);
+    /// assert_eq!(Seq(1).dist_to(Seq(0)), -1);
+    /// assert_eq!(Seq(2).dist_to(Seq(0)), -2);
     ///
-    /// assert_eq!(Seq::MAX.delta(Seq(0)), i32::from(Seq::MAX.0));
-    /// assert_eq!(Seq::MAX.delta(Seq(u16::MAX)), 0);
+    /// assert_eq!(Seq(0).dist_to(Seq::MAX), -1);
+    /// assert_eq!(Seq::MAX.dist_to(Seq::MAX), 0);
     ///
-    /// assert_eq!(Seq(0).delta(Seq::MAX), 1);
-    /// assert_eq!(Seq(0).delta(Seq::MAX - Seq(3)), 4);
-
-    /// assert_eq!(Seq(3).delta(Seq::MAX), 4);
-    /// assert_eq!(Seq(3).delta(Seq::MAX - Seq(3)), 7);
+    /// assert_eq!(Seq::MAX.dist_to(Seq(0)), 1);
+    /// assert_eq!((Seq::MAX - Seq(3)).dist_to(Seq(0)), 4);
+    ///
+    /// assert_eq!(Seq::MAX.dist_to(Seq(3)), 4);
+    /// assert_eq!((Seq::MAX - Seq(3)).dist_to(Seq(3)), 7);
     /// ```
     #[must_use]
-    pub fn delta(self, rhs: Self) -> i32 {
-        let diff = i32::from(self.0) - i32::from(rhs.0);
+    pub fn dist_to(self, rhs: Self) -> i16 {
+        let lhs = self.0;
+        let rhs = rhs.0;
+        let a = lhs.max(rhs);
+        let b = lhs.min(rhs);
 
-        // Handle wraparound with modular arithmetic
-        if diff < 0 {
-            diff + i32::from(u16::MAX) + 1
+        let d = a - b;
+
+        if d > u16::MAX / 2 {
+            let x = (u16::MAX - d + 1) as i16;
+
+            if lhs < rhs {
+                -x
+            } else {
+                x
+            }
         } else {
-            diff
+            let x = d as i16;
+
+            if lhs < rhs {
+                x
+            } else {
+                -x
+            }
         }
     }
 }

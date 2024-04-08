@@ -162,22 +162,6 @@ pub enum SendError<E> {
     Fragment(#[source] FragmentError),
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum RecvError<E> {
-    #[error("failed to read packet sequence")]
-    ReadPacketSeq(#[source] BytesError),
-    #[error("failed to read acks")]
-    ReadAcks(#[source] BytesError),
-    #[error("failed to read fragment")]
-    ReadFragment(#[source] BytesError),
-    #[error("failed to reassemble message")]
-    Reassemble(#[source] ReassembleError),
-    #[error("failed to create message from bytes")]
-    FromBytes(#[source] E),
-    #[error("invalid lane index {lane_index:?}")]
-    InvalidLaneIndex { lane_index: LaneIndex },
-}
-
 const PACKET_HEADER_LEN: usize = Seq::ENCODE_LEN + Acknowledge::ENCODE_LEN;
 
 impl<S, R, M> Packets<S, R, M>

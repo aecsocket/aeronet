@@ -52,8 +52,20 @@ impl Acknowledge {
     /// # use aeronet_proto::{ack::Acknowledge, seq::Seq};
     /// let mut acks = Acknowledge::new();
     /// acks.ack(Seq(0));
+    /// assert!(acks.is_acked(Seq(0)));
+    /// assert!(!acks.is_acked(Seq(1)));
+    ///
     /// acks.ack(Seq(1));
+    /// assert!(acks.is_acked(Seq(1)));
+    ///
     /// acks.ack(Seq(2));
+    /// assert!(acks.is_acked(Seq(2)));
+    ///
+    /// acks.ack(Seq(5));
+    /// assert!(acks.is_acked(Seq(0)));
+    /// assert!(acks.is_acked(Seq(1)));
+    /// assert!(acks.is_acked(Seq(2)));
+    /// assert!(acks.is_acked(Seq(5)));
     ///
     /// // acknowledgement is an idempotent operation
     /// let acks_clone = acks.clone();
@@ -62,25 +74,31 @@ impl Acknowledge {
     /// ```
     #[allow(clippy::missing_panics_doc)] // won't panic
     pub fn ack(&mut self, seq: Seq) {
-        let delta = self.last_recv.delta(seq);
-        if let Ok(delta) = u32::try_from(delta) {
+        let dist = seq.dist_to(self.last_recv);
+        if let Ok(dist) = u32::try_from(dist) {
             // `seq` is before or equal to `last_recv`,
-            // so we set a bit in the bitfield
-            self.ack_bits |= shl(1, delta);
+            // so we only set a bit in the bitfield
+            self.ack_bits |= shl(1, dist);
         } else {
             // `seq` is after `last_recv`,
             // make that the new `last_recv`
             self.last_recv = seq;
-            let shift_by = u32::try_from(-delta).unwrap();
+            let shift_by = u32::try_from(-dist).expect(
+                "`dist` should be negative, so `-dist` should be positive and within range",
+            );
             //    seq: 8
             //    last_recv: 3
             // -> shift_by: 8 - 3 = 5
             //    old recv_bits: 0b00..000000001000
-            //                                 ^
+            //                                 ^  ^ seq: 3
+            //                                 | seq: 0
             //                                 | shifted `shift_by` (5) places
             //                            v----+
             //    new recv_bits: 0b00..000100000000
+            //                            ^
             self.ack_bits = shl(self.ack_bits, shift_by);
+            // then also set the `last_recv` in the bitfield
+            self.ack_bits |= 1;
         }
     }
 
@@ -93,6 +111,7 @@ impl Acknowledge {
     /// let mut acks = Acknowledge::new();
     /// acks.ack(Seq(1));
     /// assert!(acks.is_acked(Seq(1)));
+    ///
     /// acks.ack(Seq(2));
     /// assert!(acks.is_acked(Seq(1)));
     /// assert!(acks.is_acked(Seq(2)));
@@ -104,8 +123,8 @@ impl Acknowledge {
     /// ```
     #[must_use]
     pub fn is_acked(&self, seq: Seq) -> bool {
-        let delta = self.last_recv.delta(seq);
-        match u32::try_from(delta) {
+        let dist = seq.dist_to(self.last_recv);
+        match u32::try_from(dist) {
             Ok(delta) => {
                 // `seq` is before or equal to `last_recv`,
                 // so we check the bitfield

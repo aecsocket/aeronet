@@ -25,13 +25,13 @@ use arbitrary::Arbitrary;
 
 use crate::seq::Seq;
 
-mod fragmentation;
-mod reassembly;
+mod recv;
+mod send;
 
-pub use {fragmentation::*, reassembly::*};
+pub use {recv::*, send::*};
 
-/// Metadata for a packet produced by [`Fragmentation::fragment`] and read by
-/// [`Fragmentation::reassemble`].
+/// Metadata for a packet produced by [`FragmentSender::fragment`] and read by
+/// [`FragmentReceiver::reassemble`].
 #[derive(Debug, Clone, PartialEq, Eq, Arbitrary)]
 pub struct FragmentHeader {
     /// Sequence number of the message that this fragment is a part of.
@@ -39,7 +39,7 @@ pub struct FragmentHeader {
     /// How many fragments this packet's message is split up into.
     pub num_frags: u8,
     /// Index of this fragment in the total message.
-    pub frag_id: u8,
+    pub frag_index: u8,
 }
 
 impl octs::ConstEncodeLen for FragmentHeader {
@@ -50,7 +50,7 @@ impl octs::Encode for FragmentHeader {
     fn encode(&self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
         buf.write(&self.msg_seq)?;
         buf.write(&self.num_frags)?;
-        buf.write(&self.frag_id)?;
+        buf.write(&self.frag_index)?;
         Ok(())
     }
 }
@@ -60,7 +60,7 @@ impl octs::Decode for FragmentHeader {
         Ok(Self {
             msg_seq: buf.read()?,
             num_frags: buf.read()?,
-            frag_id: buf.read()?,
+            frag_index: buf.read()?,
         })
     }
 }
@@ -127,7 +127,7 @@ mod tests {
         let v = FragmentHeader {
             msg_seq: Seq(1),
             num_frags: 12,
-            frag_id: 34,
+            frag_index: 34,
         };
         let mut buf = BytesMut::with_capacity(FragmentHeader::ENCODE_LEN);
 
@@ -143,85 +143,85 @@ mod tests {
     const MSG2: Bytes = Bytes::from_static(b"Message 2");
     const MSG3: Bytes = Bytes::from_static(b"Message 3");
 
-    fn frag() -> (Fragmentation, Reassembly) {
+    fn frag() -> (FragmentSender, FragmentReceiver) {
         (
-            Fragmentation::new(PAYLOAD_LEN),
-            Reassembly::new(PAYLOAD_LEN),
+            FragmentSender::new(PAYLOAD_LEN),
+            FragmentReceiver::new(PAYLOAD_LEN),
         )
     }
 
     #[test]
     fn single_in_order() {
-        let (frag, mut asm) = frag();
-        let p1 = frag.fragment(Seq(0), MSG1).unwrap().next().unwrap();
-        let p2 = frag.fragment(Seq(1), MSG2).unwrap().next().unwrap();
-        let p3 = frag.fragment(Seq(2), MSG3).unwrap().next().unwrap();
+        let (send, mut recv) = frag();
+        let p1 = send.fragment(Seq(0), MSG1).unwrap().next().unwrap();
+        let p2 = send.fragment(Seq(1), MSG2).unwrap().next().unwrap();
+        let p3 = send.fragment(Seq(2), MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG1,
-            asm.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
+            recv.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG2,
-            asm.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
+            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG3,
-            asm.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
+            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
         );
     }
 
     #[test]
     fn single_out_of_order() {
-        let (frag, mut asm) = frag();
-        let p1 = frag.fragment(Seq(0), MSG1).unwrap().next().unwrap();
-        let p2 = frag.fragment(Seq(1), MSG2).unwrap().next().unwrap();
-        let p3 = frag.fragment(Seq(2), MSG3).unwrap().next().unwrap();
+        let (send, mut recv) = frag();
+        let p1 = send.fragment(Seq(0), MSG1).unwrap().next().unwrap();
+        let p2 = send.fragment(Seq(1), MSG2).unwrap().next().unwrap();
+        let p3 = send.fragment(Seq(2), MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG3,
-            asm.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
+            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG1,
-            asm.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
+            recv.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG2,
-            asm.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
+            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
         );
     }
 
     #[test]
     fn large1() {
-        let (frag, mut asm) = frag();
+        let (send, mut recv) = frag();
         let msg = Bytes::from(b"x".repeat(PAYLOAD_LEN + 1));
-        let [p1, p2] = frag
+        let [p1, p2] = send
             .fragment(Seq(0), msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(asm.reassemble(&p1.header, &p1.payload), Ok(None));
+        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(None));
         assert_eq!(
             msg,
-            asm.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
+            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
         );
     }
 
     #[test]
     fn large2() {
-        let (frag, mut asm) = frag();
+        let (send, mut recv) = frag();
         let msg = Bytes::from(b"x".repeat(PAYLOAD_LEN * 2 + 1));
-        let [p1, p2, p3] = frag
+        let [p1, p2, p3] = send
             .fragment(Seq(0), msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(asm.reassemble(&p1.header, &p1.payload), Ok(None));
-        assert_matches!(asm.reassemble(&p2.header, &p2.payload), Ok(None));
+        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(None));
+        assert_matches!(recv.reassemble(&p2.header, &p2.payload), Ok(None));
         assert_eq!(
             msg,
-            asm.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
+            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
         );
     }
 }

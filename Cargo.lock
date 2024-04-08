@@ -144,7 +144,6 @@ dependencies = [
  "bytes",
  "derivative",
  "either",
- "enum_dispatch",
  "static_assertions",
  "thiserror",
  "tracing",
@@ -228,6 +227,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e89da841a80418a9b391ebaea17f5c112ffaaa96f621d2c285b5174da76b9011"
 dependencies = [
  "cfg-if",
+ "const-random",
  "getrandom",
  "once_cell",
  "version_check",
@@ -2145,18 +2145,6 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92959a9e8d13eaa13b8ae8c7b583c3bf1669ca7a8e7708a088d12587ba86effc"
 dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.58",
-]
-
-[[package]]
-name = "enum_dispatch"
-version = "0.3.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa18ce2bc66555b3218614519ac839ddb759a7d6720732f979ef8d13be147ecd"
-dependencies = [
- "once_cell",
  "proc-macro2",
  "quote",
  "syn 2.0.58",
