@@ -34,6 +34,7 @@ fn send_recv() {
 
     let mut app = App::new();
     app.add_plugins((
+        MinimalPlugins,
         ClientTransportPlugin::<_, Client>::default(),
         ServerTransportPlugin::<_, Server>::default(),
     ))

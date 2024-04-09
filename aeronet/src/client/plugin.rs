@@ -12,8 +12,6 @@ use crate::{
 
 /// Forwards messages and events between the [`App`] and a [`ClientTransport`].
 ///
-/// See [`client_transport_plugin`] for a function version of this plugin.
-///
 /// With this plugin added, the transport `T` will automatically run:
 /// * [`poll`] in [`PreUpdate`] in [`ClientTransportSet::Recv`]
 /// * [`flush`] in [`PostUpdate`] in [`ClientTransportSet::Flush`]
@@ -49,34 +47,22 @@ where
     T: ClientTransport<P> + Resource,
 {
     fn build(&self, app: &mut App) {
-        client_transport_plugin::<P, T>(app);
+        app.add_event::<LocalClientConnected<P, T>>()
+            .add_event::<LocalClientDisconnected<P, T>>()
+            .add_event::<FromServer<P, T>>()
+            .add_event::<AckFromServer<P, T>>()
+            .add_event::<ClientConnectionError<P, T>>()
+            .add_event::<ClientFlushError<P, T>>()
+            .configure_sets(PreUpdate, ClientTransportSet::Recv)
+            .configure_sets(PostUpdate, ClientTransportSet::Flush)
+            .add_systems(PreUpdate, Self::recv.in_set(ClientTransportSet::Recv))
+            .add_systems(
+                PostUpdate,
+                Self::flush
+                    .run_if(client_connected::<P, T>)
+                    .in_set(ClientTransportSet::Flush),
+            );
     }
-}
-
-/// Forwards messages and events between the [`App`] and a [`ClientTransport`].
-///
-/// See [`ClientTransportPlugin`].
-pub fn client_transport_plugin<P, T>(app: &mut App)
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-    T::Error: Send + Sync,
-{
-    app.add_event::<LocalClientConnected<P, T>>()
-        .add_event::<LocalClientDisconnected<P, T>>()
-        .add_event::<FromServer<P, T>>()
-        .add_event::<AckFromServer<P, T>>()
-        .add_event::<ClientConnectionError<P, T>>()
-        .add_event::<ClientFlushError<P, T>>()
-        .configure_sets(PreUpdate, ClientTransportSet::Recv)
-        .configure_sets(PostUpdate, ClientTransportSet::Flush)
-        .add_systems(PreUpdate, recv::<P, T>.in_set(ClientTransportSet::Recv))
-        .add_systems(
-            PostUpdate,
-            flush::<P, T>
-                .run_if(client_connected::<P, T>)
-                .in_set(ClientTransportSet::Flush),
-        );
 }
 
 /// Runs the [`ClientTransportPlugin`] systems.
@@ -264,51 +250,49 @@ where
     pub error: T::Error,
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn recv<P, T>(
-    time: Res<Time>,
-    mut client: ResMut<T>,
-    mut connected: EventWriter<LocalClientConnected<P, T>>,
-    mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
-    mut recv: EventWriter<FromServer<P, T>>,
-    mut ack: EventWriter<AckFromServer<P, T>>,
-    mut errors: EventWriter<ClientConnectionError<P, T>>,
-) where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
-    for event in client.poll(time.delta()) {
-        match event {
-            ClientEvent::Connected => {
-                connected.send(LocalClientConnected {
-                    _phantom: PhantomData,
-                });
-            }
-            ClientEvent::Disconnected { error } => {
-                disconnected.send(LocalClientDisconnected { error });
-            }
-            ClientEvent::Recv { msg } => {
-                recv.send(FromServer {
-                    msg,
-                    _phantom: PhantomData,
-                });
-            }
-            ClientEvent::Ack { msg_key } => {
-                ack.send(AckFromServer { msg_key });
-            }
-            ClientEvent::ConnectionError { error } => {
-                errors.send(ClientConnectionError { error });
-            }
-        }
-    }
-}
-
-fn flush<P, T>(mut client: ResMut<T>, mut errors: EventWriter<ClientFlushError<P, T>>)
+impl<P, T> ClientTransportPlugin<P, T>
 where
     P: TransportProtocol,
     T: ClientTransport<P> + Resource,
 {
-    if let Err(error) = client.flush() {
-        errors.send(ClientFlushError { error });
+    fn recv(
+        time: Res<Time>,
+        mut client: ResMut<T>,
+        mut connected: EventWriter<LocalClientConnected<P, T>>,
+        mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
+        mut recv: EventWriter<FromServer<P, T>>,
+        mut ack: EventWriter<AckFromServer<P, T>>,
+        mut errors: EventWriter<ClientConnectionError<P, T>>,
+    ) {
+        for event in client.poll(time.delta()) {
+            match event {
+                ClientEvent::Connected => {
+                    connected.send(LocalClientConnected {
+                        _phantom: PhantomData,
+                    });
+                }
+                ClientEvent::Disconnected { error } => {
+                    disconnected.send(LocalClientDisconnected { error });
+                }
+                ClientEvent::Recv { msg } => {
+                    recv.send(FromServer {
+                        msg,
+                        _phantom: PhantomData,
+                    });
+                }
+                ClientEvent::Ack { msg_key } => {
+                    ack.send(AckFromServer { msg_key });
+                }
+                ClientEvent::ConnectionError { error } => {
+                    errors.send(ClientConnectionError { error });
+                }
+            }
+        }
+    }
+
+    fn flush(mut client: ResMut<T>, mut errors: EventWriter<ClientFlushError<P, T>>) {
+        if let Err(error) = client.flush() {
+            errors.send(ClientFlushError { error });
+        }
     }
 }

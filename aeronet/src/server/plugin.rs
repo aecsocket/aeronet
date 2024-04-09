@@ -11,8 +11,6 @@ use super::{ServerEvent, ServerTransport};
 
 /// Forwards messages and events between the [`App`] and a [`ServerTransport`].
 ///
-/// See [`server_transport_plugin`] for a function version of this plugin.
-///
 /// With this plugin added, the transport `T` will automatically run:
 /// * [`poll`] in [`PreUpdate`] in [`ServerTransportSet::Recv`]
 /// * [`flush`] in [`PostUpdate`] in [`ServerTransportSet::Flush`]
@@ -51,36 +49,25 @@ where
     T: ServerTransport<P> + Resource,
 {
     fn build(&self, app: &mut App) {
-        server_transport_plugin::<P, T>(app);
+        app.add_event::<ServerOpened<P, T>>()
+            .add_event::<ServerClosed<P, T>>()
+            .add_event::<RemoteClientConnecting<P, T>>()
+            .add_event::<RemoteClientConnected<P, T>>()
+            .add_event::<RemoteClientDisconnected<P, T>>()
+            .add_event::<FromClient<P, T>>()
+            .add_event::<AckFromClient<P, T>>()
+            .add_event::<ServerConnectionError<P, T>>()
+            .add_event::<ServerFlushError<P, T>>()
+            .configure_sets(PreUpdate, ServerTransportSet::Recv)
+            .configure_sets(PostUpdate, ServerTransportSet::Flush)
+            .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Recv))
+            .add_systems(
+                PostUpdate,
+                flush::<P, T>
+                    .run_if(server_open::<P, T>)
+                    .in_set(ServerTransportSet::Flush),
+            );
     }
-}
-
-/// Forwards messages and events between the [`App`] and a [`ServerTransport`].
-///
-/// See [`ServerTransportPlugin`].
-pub fn server_transport_plugin<P, T>(app: &mut App)
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
-    app.add_event::<ServerOpened<P, T>>()
-        .add_event::<ServerClosed<P, T>>()
-        .add_event::<RemoteClientConnecting<P, T>>()
-        .add_event::<RemoteClientConnected<P, T>>()
-        .add_event::<RemoteClientDisconnected<P, T>>()
-        .add_event::<FromClient<P, T>>()
-        .add_event::<AckFromClient<P, T>>()
-        .add_event::<ServerConnectionError<P, T>>()
-        .add_event::<ServerFlushError<P, T>>()
-        .configure_sets(PreUpdate, ServerTransportSet::Recv)
-        .configure_sets(PostUpdate, ServerTransportSet::Flush)
-        .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Recv))
-        .add_systems(
-            PostUpdate,
-            flush::<P, T>
-                .run_if(server_open::<P, T>)
-                .in_set(ServerTransportSet::Flush),
-        );
 }
 
 /// Runs the [`ServerTransportPlugin`] systems.
@@ -327,8 +314,6 @@ where
     pub error: T::Error,
 }
 
-#[allow(clippy::too_many_arguments)]
-#[allow(clippy::needless_pass_by_value)]
 fn recv<P, T>(
     time: Res<Time>,
     mut server: ResMut<T>,

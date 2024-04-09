@@ -23,8 +23,6 @@ use crate::protocol::RepliconMessage;
 ///
 /// **Do not use both this plugin and [`ServerTransportPlugin`] together!**
 ///
-/// See [`replicon_server_plugin`] for a function version of this plugin.
-///
 /// This behaves similarly to [`ServerTransportPlugin`], but does not send out
 /// [`FromClient`] and [`AckFromClient`], which are managed by Replicon.
 ///
@@ -85,18 +83,6 @@ where
     }
 }
 
-/// Provides a [`bevy_replicon`] server backend using the given [`aeronet`]
-/// transport.
-///
-/// See [`RepliconServerPlugin`].
-pub fn replicon_server_plugin<P, T>(app: &mut App)
-where
-    P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
-    T: ServerTransport<P> + Resource,
-{
-    RepliconServerPlugin::<P, T>::default().build(app)
-}
-
 /// Stores mappings between [`ClientId`]s and `T::ClientKey`s as a bidirectional
 /// map.
 ///
@@ -112,6 +98,7 @@ pub struct ClientKeys<P: TransportProtocol, T: ServerTransport<P>> {
 }
 
 impl<P: TransportProtocol, T: ServerTransport<P>> ClientKeys<P, T> {
+    #[must_use]
     pub fn id_map(
         &self,
     ) -> &BiHashMap<T::ClientKey, ClientId, ahash::RandomState, ahash::RandomState> {
@@ -142,7 +129,6 @@ where
     P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
     T: ServerTransport<P> + Resource,
 {
-    #[allow(clippy::too_many_arguments)]
     fn recv(
         time: Res<Time>,
         mut server: ResMut<T>,
@@ -179,7 +165,7 @@ where
                     match client_keys.id_map.insert(client_key, client_id) {
                         Overwritten::Neither => {}
                         overwritten => {
-                            warn!("Inserted duplicate client key/ID pair: {overwritten:?}")
+                            warn!("Inserted duplicate client key/ID pair: {overwritten:?}");
                         }
                     }
                     replicon_events.send(RepliconEvent::ClientConnected { client_id });

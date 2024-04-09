@@ -24,8 +24,6 @@ use crate::protocol::RepliconMessage;
 ///
 /// **Do not use both this plugin and [`ClientTransportPlugin`] together!**
 ///
-/// See [`replicon_client_plugin`] for a function version of this plugin.
-///
 /// This behaves similarly to [`ClientTransportPlugin`], but does not send out
 /// [`FromServer`] and [`AckFromServer`], which are managed by Replicon.
 ///
@@ -80,18 +78,6 @@ where
                     .in_set(ServerSet::SendPackets),
             );
     }
-}
-
-/// Provides a [`bevy_replicon`] client backend using the given [`aeronet`]
-/// transport.
-///
-/// See [`RepliconClientPlugin`].
-pub fn replicon_client_plugin<P, T>(app: &mut App)
-where
-    P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
-    T: ClientTransport<P> + Resource,
-{
-    RepliconClientPlugin::<P, T>::default().build(app)
 }
 
 impl<P, T> RepliconClientPlugin<P, T>
