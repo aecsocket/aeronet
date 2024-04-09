@@ -65,6 +65,7 @@ slotmap = "1.0.7"
 static_assertions = "1.1.0"
 thiserror = "1.0.57"
 tracing = "0.1.40"
+web-time = "1.1.0"
 
 proc-macro2 = "1.0.76"
 quote = "1.0.35"

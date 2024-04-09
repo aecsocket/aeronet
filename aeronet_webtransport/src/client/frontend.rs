@@ -5,11 +5,12 @@ use aeronet::{
     lane::{LaneKind, OnLane},
     message::{TryFromBytes, TryIntoBytes},
 };
-use aeronet_proto::{lane::LaneConfig, packet};
+use aeronet_proto::packet::{self, LaneConfig};
 use bytes::Bytes;
 use derivative::Derivative;
 use either::Either;
 use futures::channel::{mpsc, oneshot};
+use web_time::Instant;
 use xwt_core::utils::maybe;
 
 use crate::{
@@ -38,8 +39,8 @@ enum Inner<P: WebTransportProtocol> {
 #[derive(Derivative)]
 #[derivative(Debug(bound = "P::Mapper: Debug"))]
 struct Connecting<P: WebTransportProtocol> {
-    lanes_in: Box<[LaneKind]>,
-    lanes_out: Box<[LaneConfig]>,
+    lanes_send: Box<[LaneConfig]>,
+    lanes_recv: Box<[LaneKind]>,
     mapper: P::Mapper,
     bandwidth: usize,
     max_packet_len: usize,
@@ -52,9 +53,7 @@ struct Connecting<P: WebTransportProtocol> {
 #[derivative(Debug(bound = "P::Mapper: Debug"))]
 pub struct Connected<P: WebTransportProtocol> {
     pub stats: ConnectionStats,
-    pub bandwidth: usize,
-    pub bytes_left: usize,
-    packets: packet::Packets<P::C2S, P::S2C, P::Mapper>,
+    pub packets: packet::PacketManager<P::C2S, P::S2C, P::Mapper>,
     recv_err: oneshot::Receiver<BackendError>,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
@@ -92,8 +91,8 @@ where
     ) -> (Self, impl Future<Output = ()> + maybe::Send) {
         let ClientConfig {
             version,
-            lanes_in,
-            lanes_out,
+            lanes_recv,
+            lanes_send,
             bandwidth,
             max_packet_len,
             default_packet_cap,
@@ -108,8 +107,8 @@ where
         (
             Self {
                 inner: Inner::Connecting(Connecting {
-                    lanes_in: lanes_in.into_boxed_slice(),
-                    lanes_out: lanes_out.into_boxed_slice(),
+                    lanes_send: lanes_send.into_boxed_slice(),
+                    lanes_recv: lanes_recv.into_boxed_slice(),
                     mapper,
                     bandwidth,
                     max_packet_len,
@@ -167,7 +166,7 @@ where
         };
 
         let msg = msg.into();
-        let msg_seq = client.packets.buffer_send(msg)?;
+        let msg_seq = client.packets.buffer_send(msg, Instant::now())?;
         Ok(MessageKey::from_raw(msg_seq))
     }
 
@@ -176,7 +175,7 @@ where
             return Err(ClientError::NotConnected);
         };
 
-        for packet in client.packets.flush(&mut client.bytes_left) {
+        for packet in client.packets.flush(Instant::now()) {
             client
                 .send_c2s
                 .unbounded_send(packet)
@@ -220,13 +219,12 @@ where
                 Some(ClientEvent::Connected),
                 Inner::Connected(Connected {
                     stats: next.initial_stats,
-                    bandwidth: client.bandwidth,
-                    bytes_left: client.bandwidth,
-                    packets: packet::Packets::new(
+                    packets: packet::PacketManager::new(
                         client.max_packet_len,
                         client.default_packet_cap,
-                        client.lanes_in.iter(),
-                        client.lanes_out.iter(),
+                        client.bandwidth,
+                        client.lanes_send.iter(),
+                        client.lanes_recv.iter(),
                         client.mapper,
                     ),
                     recv_err: client.recv_err,
@@ -248,12 +246,7 @@ where
         mut client: Connected<P>,
         delta_time: Duration,
     ) -> (Vec<ClientEvent<P, Self>>, Inner<P>) {
-        // refill bytes token bucket
-        let bytes_restored = ((client.bandwidth as f64) * delta_time.as_secs_f64()) as usize;
-        client.bytes_left = client
-            .bytes_left
-            .saturating_add(bytes_restored)
-            .min(client.bandwidth);
+        client.packets.refill_bytes(delta_time.as_secs_f32());
 
         let mut events = Vec::new();
         let res = (|| {
@@ -270,16 +263,17 @@ where
                 client.stats = stats;
             }
 
-            while let Ok(Some(mut packet)) = client.recv_s2c.try_recv() {
+            while let Ok(Some(packet)) = client.recv_s2c.try_recv() {
+                let recv = client.packets.recv(packet);
+
                 // receive acks
-                events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
-                    ClientEvent::Ack {
-                        msg_key: MessageKey::from_raw(msg_seq),
-                    }
+                let (acks, mut recv) = recv.read_acks()?;
+                events.extend(acks.map(|msg_seq| ClientEvent::Ack {
+                    msg_key: MessageKey::from_raw(msg_seq),
                 }));
 
                 // receive messages
-                while let Some(msgs) = client.packets.read_next_frag(&mut packet)? {
+                while let Some(msgs) = recv.read_next_frag()? {
                     events.extend(msgs.map(|msg| ClientEvent::Recv { msg }));
                 }
             }

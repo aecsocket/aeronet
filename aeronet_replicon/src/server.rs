@@ -18,54 +18,24 @@ use derivative::Derivative;
 
 use crate::protocol::RepliconMessage;
 
-// this REPLACES ClientTransportPlugin btw
+/// Provides a [`bevy_replicon`] server backend using the given [`aeronet`]
+/// transport.
+///
+/// **Do not use both this plugin and [`ServerTransportPlugin`] together!**
+///
+/// See [`replicon_server_plugin`] for a function version of this plugin.
+///
+/// This behaves similarly to [`ServerTransportPlugin`], but does not send out
+/// [`FromClient`] and [`AckFromClient`], which are managed by Replicon.
+///
+/// [`ServerTransportPlugin`]: aeronet::server::ServerTransportPlugin
+/// [`FromClient`]: aeronet::server::FromClient
+/// [`AckFromClient`]: aeronet::server::AckFromClient
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct RepliconServerPlugin<P, T> {
     #[derivative(Debug = "ignore")]
     _phantom: PhantomData<(P, T)>,
-}
-
-pub fn replicon_aeronet_server_plugin<P, T>(app: &mut App)
-where
-    P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
-    T: ServerTransport<P> + Resource,
-{
-    RepliconServerPlugin::<P, T>::default().build(app)
-}
-
-#[derive(Derivative, Resource)]
-#[derivative(
-    Debug(bound = "T::ClientKey: Debug"),
-    Clone(bound = "T::ClientKey: Clone")
-)]
-pub struct ClientKeys<P: TransportProtocol, T: ServerTransport<P>> {
-    id_map: BiHashMap<T::ClientKey, ClientId, ahash::RandomState, ahash::RandomState>,
-    next_id: ClientId,
-}
-
-impl<P: TransportProtocol, T: ServerTransport<P>> ClientKeys<P, T> {
-    pub fn id_map(
-        &self,
-    ) -> &BiHashMap<T::ClientKey, ClientId, ahash::RandomState, ahash::RandomState> {
-        &self.id_map
-    }
-
-    fn next_id(&mut self) -> ClientId {
-        let id = self.next_id;
-        self.next_id = ClientId::new(self.next_id.get().wrapping_add(1));
-        id
-    }
-}
-
-impl<P: TransportProtocol, T: ServerTransport<P>> Default for ClientKeys<P, T> {
-    fn default() -> Self {
-        Self {
-            id_map: BiHashMap::with_hashers(ahash::RandomState::new(), ahash::RandomState::new()),
-            // start at 1, because 0 is ClientId::SERVER
-            next_id: ClientId::new(1),
-        }
-    }
 }
 
 impl<P, T> Plugin for RepliconServerPlugin<P, T>
@@ -112,6 +82,56 @@ where
                     .run_if(server_open::<P, T>)
                     .in_set(ServerSet::SendPackets),
             );
+    }
+}
+
+/// Provides a [`bevy_replicon`] server backend using the given [`aeronet`]
+/// transport.
+///
+/// See [`RepliconServerPlugin`].
+pub fn replicon_server_plugin<P, T>(app: &mut App)
+where
+    P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
+    T: ServerTransport<P> + Resource,
+{
+    RepliconServerPlugin::<P, T>::default().build(app)
+}
+
+/// Stores mappings between [`ClientId`]s and `T::ClientKey`s as a bidirectional
+/// map.
+///
+/// Client IDs start at 1, because ID 0 is reserved for [`ClientId::SERVER`].
+#[derive(Derivative, Resource)]
+#[derivative(
+    Debug(bound = "T::ClientKey: Debug"),
+    Clone(bound = "T::ClientKey: Clone")
+)]
+pub struct ClientKeys<P: TransportProtocol, T: ServerTransport<P>> {
+    id_map: BiHashMap<T::ClientKey, ClientId, ahash::RandomState, ahash::RandomState>,
+    next_id: ClientId,
+}
+
+impl<P: TransportProtocol, T: ServerTransport<P>> ClientKeys<P, T> {
+    pub fn id_map(
+        &self,
+    ) -> &BiHashMap<T::ClientKey, ClientId, ahash::RandomState, ahash::RandomState> {
+        &self.id_map
+    }
+
+    fn next_id(&mut self) -> ClientId {
+        let id = self.next_id;
+        self.next_id = ClientId::new(self.next_id.get().wrapping_add(1));
+        id
+    }
+}
+
+impl<P: TransportProtocol, T: ServerTransport<P>> Default for ClientKeys<P, T> {
+    fn default() -> Self {
+        Self {
+            id_map: BiHashMap::with_hashers(ahash::RandomState::new(), ahash::RandomState::new()),
+            // start at 1, because 0 is ClientId::SERVER
+            next_id: ClientId::new(1),
+        }
     }
 }
 
@@ -173,9 +193,7 @@ where
 
                     let Some((_, client_id)) = client_keys.id_map.remove_by_left(&client_key)
                     else {
-                        warn!(
-                            "Disconnected client {client_key:?} which does not have a replicon ID"
-                        );
+                        warn!("Disconnected client {client_key:?} which does not have a client ID");
                         return;
                     };
                     debug!("Removed {client_key:?} associated with {client_id:?}");
@@ -186,7 +204,7 @@ where
                 }
                 ServerEvent::Recv { client_key, msg } => {
                     let Some(client_id) = client_keys.id_map.get_by_left(&client_key) else {
-                        warn!("Received message from client {client_key:?} which does not have a replicon ID");
+                        warn!("Received message from client {client_key:?} which does not have a client ID");
                         return;
                     };
                     replicon_server.insert_received(*client_id, msg.channel_id, msg.payload);

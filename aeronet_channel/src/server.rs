@@ -157,8 +157,8 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
             .clients
             .iter()
             .filter_map(|(client_key, client)| match client {
+                Client::Connected(_) => None,
                 Client::Disconnected => Some(client_key),
-                _ => None,
             })
             .collect::<Vec<_>>();
         for client_key in removed_clients {

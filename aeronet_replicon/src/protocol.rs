@@ -7,9 +7,16 @@ use aeronet::{
     octs::{BytesError, ReadBytes, WriteBytes},
 };
 
+/// Message type used by [`bevy_replicon`]-compatible [`TransportProtocol`]s.
+///
+/// [`TransportProtocol`]: aeronet::protocol::TransportProtocol
 #[derive(Debug, Clone, Message)]
 pub struct RepliconMessage {
+    /// Replicon channel ID.
+    ///
+    /// This maps one-to-one to a [`LaneIndex`].
     pub channel_id: u8,
+    /// Message payload.
     pub payload: Bytes,
 }
 
@@ -19,12 +26,12 @@ impl OnLane for RepliconMessage {
     }
 }
 
+/// Error when reading a [`RepliconMessage`] from bytes.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum RepliconMessageError {
+    /// Failed to read the channel ID.
     #[error("failed to read channel id")]
     ReadChannelId(BytesError),
-    #[error("lane index {lane_index:?} too large")]
-    LaneIndexTooLarge { lane_index: LaneIndex },
 }
 
 impl TryIntoBytes for RepliconMessage {

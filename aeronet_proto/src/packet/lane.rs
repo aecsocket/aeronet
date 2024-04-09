@@ -5,40 +5,34 @@ use ahash::{AHashMap, AHashSet};
 use derivative::Derivative;
 use either::Either;
 
-use crate::{byte_count::ByteBucket, seq::Seq};
-
-use super::LaneConfig;
+use crate::{byte_count::ByteBucket, lane::LaneConfig, seq::Seq};
 
 #[derive(Debug, Clone)]
-pub enum LaneSender {
-    Unreliable {
-        bytes_left: ByteBucket,
-    },
-    Reliable {
-        bytes_left: ByteBucket,
-        resend_after: Duration,
-    },
+pub struct LaneSender {
+    pub bytes_left: ByteBucket,
+    pub kind: LaneSenderKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum LaneSenderKind {
+    Unreliable,
+    Reliable { resend_after: Duration },
 }
 
 impl LaneSender {
     pub fn new(config: &LaneConfig) -> Self {
-        let bytes_left = ByteBucket::new(config.bandwidth);
-        let resend_after = config.resend_after;
-        match config.kind {
-            LaneKind::UnreliableUnordered | LaneKind::UnreliableSequenced => {
-                Self::Unreliable { bytes_left }
-            }
-            LaneKind::ReliableUnordered | LaneKind::ReliableOrdered => Self::Reliable {
-                bytes_left,
-                resend_after,
+        Self {
+            bytes_left: ByteBucket::new(config.bandwidth),
+            kind: match config.kind {
+                LaneKind::UnreliableUnordered | LaneKind::UnreliableSequenced => {
+                    LaneSenderKind::Unreliable
+                }
+                LaneKind::ReliableUnordered | LaneKind::ReliableOrdered => {
+                    LaneSenderKind::Reliable {
+                        resend_after: config.resend_after,
+                    }
+                }
             },
-        }
-    }
-
-    pub fn refill_bytes(&mut self, portion: f32) {
-        match self {
-            Self::Unreliable { bytes_left } => bytes_left.refill(portion),
-            Self::Reliable { bytes_left, .. } => bytes_left.refill(portion),
         }
     }
 }

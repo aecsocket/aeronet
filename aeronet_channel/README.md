@@ -51,3 +51,6 @@ let client_key = client_state.key;
 
 server.disconnect(client_key);
 ```
+
+[`ChannelClient`]: client::ChannelClient
+[`ChannelServer`]: server::ChannelServer

@@ -113,7 +113,7 @@ impl FragmentReceiver {
         header: &FragmentHeader,
         payload: &[u8],
     ) -> Result<Option<Bytes>, ReassembleError> {
-        // explicitly don't destructure to copy the values
+        // explicitly don't destructure, so that we copy the values
         let msg_seq = header.msg_seq;
         let num_frags = header.num_frags;
         let frag_index = header.frag_index;
@@ -198,6 +198,8 @@ impl FragmentReceiver {
                 .messages
                 .remove(&msg_seq)
                 .expect("we just inserted a value into this map with this key");
+            // this will reallocate, but consumers will always want it in Bytes
+            // so it's fine
             Ok(Some(Bytes::from(buf.payload)))
         } else {
             // this message isn't complete yet, nothing to return

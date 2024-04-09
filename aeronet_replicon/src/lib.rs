@@ -3,7 +3,6 @@
 
 pub use bimap;
 
-pub mod channel;
 pub mod client;
 pub mod protocol;
 pub mod server;

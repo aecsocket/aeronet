@@ -189,7 +189,7 @@ pub trait WriteBytes {
     /// Writes a [`u64`] into the buffer as a
     /// [`VarInt`](integer_encoding::VarInt) and advances the cursor.
     ///
-    /// This will take up a maximum of [`VARINT_MAX_SIZE`] bytes.
+    /// This will take up a maximum of [`VARINT_MAX_LEN`] bytes.
     ///
     /// # Errors
     ///
@@ -199,7 +199,7 @@ pub trait WriteBytes {
     /// Writes a [`usize`] into the buffer as a
     /// [`VarInt`](integer_encoding::VarInt) and advances the cursor.
     ///
-    /// This will take up a maximum of [`VARINT_MAX_SIZE`] bytes.
+    /// This will take up a maximum of [`VARINT_MAX_LEN`] bytes.
     ///
     /// # Errors
     ///

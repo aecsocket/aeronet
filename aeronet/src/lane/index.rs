@@ -14,6 +14,8 @@ impl LaneIndex {
     /// Functions which accept a [`LaneIndex`] expect to be given a valid index
     /// into this list. If this index is for a different configuration, then the
     /// transport will most likely panic.
+    ///
+    /// [`LaneKind`]: crate::lane::LaneKind
     #[must_use]
     pub const fn from_raw(raw: usize) -> Self {
         Self(raw)

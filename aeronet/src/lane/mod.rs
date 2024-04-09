@@ -197,6 +197,19 @@ impl LaneKind {
     }
 }
 
+#[cfg(feature = "replicon")]
+impl From<bevy_replicon::core::replicon_channels::ChannelKind> for LaneKind {
+    fn from(value: bevy_replicon::core::replicon_channels::ChannelKind) -> Self {
+        use bevy_replicon::core::replicon_channels::ChannelKind;
+
+        match value {
+            ChannelKind::Unreliable => Self::UnreliableUnordered,
+            ChannelKind::Unordered => Self::ReliableUnordered,
+            ChannelKind::Ordered => Self::ReliableOrdered,
+        }
+    }
+}
+
 /// App-defined type listing a set of [lanes](crate::lane) which a transport can
 /// use to send app messages along.
 ///

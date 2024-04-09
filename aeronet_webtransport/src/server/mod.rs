@@ -4,7 +4,7 @@ mod frontend;
 use std::fmt::{Debug, Display};
 
 use aeronet::{lane::LaneKind, message::BytesMapper, protocol::ProtocolVersion};
-use aeronet_proto::{lane::LaneConfig, packet};
+use aeronet_proto::packet::{self, LaneConfig};
 use derivative::Derivative;
 pub use frontend::*;
 use wtransport::error::ConnectionError;
@@ -26,8 +26,8 @@ pub type NativeConfig = wtransport::ServerConfig;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ServerConfig {
     pub version: ProtocolVersion,
-    pub lanes_in: Vec<LaneKind>,
-    pub lanes_out: Vec<LaneConfig>,
+    pub lanes_recv: Vec<LaneKind>,
+    pub lanes_send: Vec<LaneConfig>,
     pub total_bandwidth: usize,
     pub client_bandwidth: usize,
     pub max_packet_len: usize,
@@ -38,27 +38,12 @@ impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             version: ProtocolVersion::default(),
-            lanes_in: Vec::new(),
-            lanes_out: Vec::new(),
+            lanes_recv: Vec::new(),
+            lanes_send: Vec::new(),
             total_bandwidth: shared::DEFAULT_BANDWIDTH,
             client_bandwidth: shared::DEFAULT_BANDWIDTH,
             max_packet_len: shared::DEFAULT_MTU,
             default_packet_cap: shared::DEFAULT_MTU,
-        }
-    }
-}
-
-impl ServerConfig {
-    pub fn new(
-        version: ProtocolVersion,
-        lanes_in: impl IntoIterator<Item = impl Into<LaneKind>>,
-        lanes_out: impl IntoIterator<Item = impl Into<LaneConfig>>,
-    ) -> Self {
-        Self {
-            version,
-            lanes_in: lanes_in.into_iter().map(Into::into).collect(),
-            lanes_out: lanes_out.into_iter().map(Into::into).collect(),
-            ..Default::default()
         }
     }
 }

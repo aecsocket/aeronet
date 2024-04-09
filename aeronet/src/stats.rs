@@ -21,59 +21,53 @@ pub trait Rtt {
     fn rtt(&self) -> Duration;
 }
 
-/// Holds statistics on the messages sent across a transport.
+/// Holds statistics on the number of messages sent across a transport.
 ///
-/// In this context, "successful" means that the message was sent out along the
-/// underlying transport mechanism, and the receiver should have been able to
-/// receive the message, if there were no undetectable transport errors. If a
-/// message was sent but not acknowledged, it still counts as a successful send.
+/// Implementors must ensure that, when increasing these counters, saturating
+/// addition is used in order to avoid panics or overflows - see
+/// [`usize::saturating_add`].
+///
+/// Note that a counter increasing does not necessarily mean that a message was
+/// *successfully* sent or received - just that it was recognized.
 pub trait MessageStats {
-    /// Number of messages successfully sent.
+    /// Number of messages sent.
+    ///
+    /// For each unit in this value, a single `send` call was issued on the
+    /// transport.
     fn msgs_sent(&self) -> usize;
 
-    /// Number of messages successfully received.
+    /// Number of messages received.
+    ///
+    /// For each unit in this value, a single `Recv` event was emitted by the
+    /// transport during polling.
     fn msgs_recv(&self) -> usize;
 }
 
-/// Holds statistics on the bytes sent across a transport.
+/// Holds statistics on the number of message bytes sent across a transport.
 ///
-/// This is used by transports which convert messages into a byte form.
+/// This is used by transports which convert messages into a byte form, and
+/// counts how many of these bytes have been sent or received. This specifically
+/// excludes bytes used for frames or headers.
 ///
-/// In this context, "successful" means that the message was sent out along the
-/// underlying transport mechanism, and the receiver should have been able to
-/// receive the message, if there were no undetectable transport errors. If a
-/// message was sent but not acknowledged, it still counts as a successful send.
-pub trait ByteStats {
+/// Note that a counter increasing does not necessarily mean that a message was
+/// *successfully* sent or received - just that it was recognized.
+///
+/// Implementors must ensure that, when increasing these counters, saturating
+/// addition is used in order to avoid panics or overflows - see
+/// [`usize::saturating_add`].
+pub trait MessageByteStats {
     /// Number of message bytes successfully sent.
-    ///
-    /// This only counts the bytes which make up a message payload, and excludes
-    /// any metadata e.g. packet frames and headers.
     fn msg_bytes_sent(&self) -> usize;
 
     /// Number of message bytes successfully received.
-    ///
-    /// This only counts the bytes which make up a message payload, and excludes
-    /// any metadata e.g. packet frames and headers.
     fn msg_bytes_recv(&self) -> usize;
-
-    /// Number of total bytes successfully sent.
-    ///
-    /// This counts all bytes sent along the transport (or at least as many as
-    /// can be tracked), including packet frames and headers.
-    fn total_bytes_sent(&self) -> usize;
-
-    /// Number of total bytes successfully received.
-    ///
-    /// This counts all bytes sent along the transport (or at least as many as
-    /// can be tracked), including packet frames and headers.
-    fn total_bytes_recv(&self) -> usize;
 }
 
 /// Allows access to the local socket address of a connection.
 ///
 /// Networked transports will use an operating system socket for network
-/// communication, which has a specific address. This trait exposes this info
-/// to users.
+/// communication, which has a specific address. This trait exposes this
+/// socket's address.
 ///
 /// To access the remote address of a connection, see [`RemoteAddr`].
 pub trait LocalAddr {

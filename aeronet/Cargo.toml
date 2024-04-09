@@ -30,6 +30,9 @@ condition = ["dep:rand", "dep:rand_distr"]
 ## Enables [`bevy`](https://docs.rs/bevy) support.
 bevy = ["dep:bevy_ecs", "dep:bevy_app", "dep:bevy_time"]
 
+## Enables [`bevy_replicon`](https://docs.rs/bevy) support.
+replicon = ["bevy", "dep:bevy_replicon"]
+
 ## Allows storing an async multi-threaded [`tokio`](https://docs.rs/tokio) runtime in a
 ## [`bevy`](https://docs.rs/bevy) resource.
 bevy-tokio-rt = ["bevy", "dep:tokio"]
@@ -56,3 +59,5 @@ bevy_ecs = { workspace = true, optional = true }
 bevy_time = { workspace = true, optional = true }
 
 tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }
+
+bevy_replicon = { workspace = true, optional = true }

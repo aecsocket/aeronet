@@ -7,13 +7,12 @@ use aeronet::{
     protocol::{ProtocolVersion, TransportProtocol},
     server::RemoteClientConnecting,
 };
-use aeronet_proto::lane::LaneConfig;
 use aeronet_replicon::{
     channel::IntoLaneKind, protocol::RepliconMessage, server::RepliconServerPlugin,
 };
 use aeronet_webtransport::{
     server::{ConnectionResponse, ServerConfig, WebTransportServer},
-    shared::WebTransportProtocol,
+    shared::{LaneConfig, WebTransportProtocol},
     wtransport,
 };
 use bevy::{log::LogPlugin, prelude::*};
@@ -44,7 +43,7 @@ type Server = WebTransportServer<AppProtocol>;
 // world config
 //
 
-const MOVE_SPEED: f32 = 200.0;
+const MOVE_SPEED: f32 = 100.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Component)]
 struct Player(ClientId);
@@ -139,24 +138,32 @@ fn open(rt: Res<TokioRuntime>, mut server: ResMut<Server>, channels: Res<Replico
     let spki_fingerprint = aeronet_webtransport::cert::spki_fingerprint_base64(cert).unwrap();
     info!("*** SPKI FINGERPRINT ***");
     info!("{spki_fingerprint}");
-    info!("*****************");
+    info!("************************");
 
     let native_config = wtransport::ServerConfig::builder()
         .with_bind_default(25565)
         .with_identity(&identity)
         .keep_alive_interval(Some(Duration::from_secs(5)))
         .build();
-    let config = ServerConfig::new(
-        PROTOCOL_VERSION,
-        channels
+    let config = ServerConfig {
+        version: PROTOCOL_VERSION,
+        lanes_recv: channels
             .client_channels()
             .iter()
-            .map(|channel| channel.kind.into_lane_kind()),
-        channels
+            .map(|channel| channel.kind.into_lane_kind())
+            .collect(),
+        lanes_send: channels
             .server_channels()
             .iter()
-            .map(|channel| LaneConfig::new(channel.kind.into_lane_kind())),
-    );
+            .map(|channel| LaneConfig {
+                kind: channel.kind.into_lane_kind(),
+                bandwidth: 60_000,
+                ..Default::default()
+            })
+            .collect(),
+        client_bandwidth: 60_000,
+        ..Default::default()
+    };
     let backend = server.open(native_config, config, ()).unwrap();
     rt.spawn(backend);
 }

@@ -15,7 +15,7 @@ use super::{ServerEvent, ServerTransport};
 ///
 /// With this plugin added, the transport `T` will automatically run:
 /// * [`poll`] in [`PreUpdate`] in [`ServerTransportSet::Recv`]
-/// * [`flush`] in [`PostUpdate`] in [`ServerTransportSet::Send`]
+/// * [`flush`] in [`PostUpdate`] in [`ServerTransportSet::Flush`]
 ///
 /// [`poll`]: ServerTransport::poll
 /// [`flush`]: ServerTransport::flush

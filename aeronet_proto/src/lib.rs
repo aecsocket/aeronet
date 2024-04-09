@@ -4,6 +4,7 @@
 pub mod ack;
 pub mod byte_count;
 pub mod frag;
+pub mod lane;
 pub mod negotiate;
 pub mod packet;
 pub mod seq;

@@ -6,12 +6,16 @@ use aeronet::{
     message::{TryFromBytes, TryIntoBytes},
     server::{ServerEvent, ServerState, ServerTransport},
 };
-use aeronet_proto::{lane::LaneConfig, packet};
+use aeronet_proto::{
+    byte_count::ByteBucket,
+    packet::{self, LaneConfig},
+};
 use bytes::Bytes;
 use derivative::Derivative;
 use either::Either;
 use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
+use web_time::Instant;
 
 use crate::{
     internal::TryRecv,
@@ -32,8 +36,8 @@ pub struct WebTransportServer<P: WebTransportProtocol> {
 #[derive(Derivative)]
 #[derivative(Debug(bound = "P::Mapper: Debug"), Clone(bound = ""))]
 pub struct InnerConfig<P: WebTransportProtocol> {
-    pub lanes_in: Box<[LaneKind]>,
-    pub lanes_out: Box<[LaneConfig]>,
+    pub lanes_send: Box<[LaneConfig]>,
+    pub lanes_recv: Box<[LaneKind]>,
     pub mapper: P::Mapper,
     pub total_bandwidth: usize,
     pub client_bandwidth: usize,
@@ -63,7 +67,7 @@ struct Opening<P: WebTransportProtocol> {
 pub struct Open<P: WebTransportProtocol> {
     pub config: InnerConfig<P>,
     pub local_addr: SocketAddr,
-    pub bytes_left: usize,
+    pub bytes_left: ByteBucket,
     clients: SlotMap<ClientKey, Client<P>>,
     recv_err: oneshot::Receiver<BackendError>,
     recv_connecting: mpsc::Receiver<backend::Connecting>,
@@ -86,9 +90,7 @@ pub struct Connecting {
 pub struct Connected<P: WebTransportProtocol> {
     pub remote_addr: SocketAddr,
     pub stats: ConnectionStats,
-    pub bandwidth: usize,
-    pub bytes_left: usize,
-    packets: packet::Packets<P::S2C, P::C2S, P::Mapper>,
+    pub packets: packet::PacketManager<P::S2C, P::C2S, P::Mapper>,
     recv_err: oneshot::Receiver<BackendError>,
     recv_c2s: mpsc::Receiver<Bytes>,
     send_s2c: mpsc::UnboundedSender<Bytes>,
@@ -133,8 +135,8 @@ where
     ) -> (Self, impl Future<Output = ()> + Send) {
         let ServerConfig {
             version,
-            lanes_in,
-            lanes_out,
+            lanes_recv: lanes_in,
+            lanes_send: lanes_out,
             total_bandwidth,
             client_bandwidth,
             max_packet_len,
@@ -150,8 +152,8 @@ where
             Self {
                 inner: Inner::Opening(Opening {
                     config: InnerConfig {
-                        lanes_in: lanes_in.into_boxed_slice(),
-                        lanes_out: lanes_out.into_boxed_slice(),
+                        lanes_recv: lanes_in.into_boxed_slice(),
+                        lanes_send: lanes_out.into_boxed_slice(),
                         mapper,
                         total_bandwidth,
                         client_bandwidth,
@@ -271,7 +273,7 @@ where
         };
 
         let msg = msg.into();
-        let msg_seq = client.packets.buffer_send(msg)?;
+        let msg_seq = client.packets.buffer_send(msg, Instant::now())?;
         Ok(MessageKey::from_raw(msg_seq))
     }
 
@@ -280,22 +282,19 @@ where
             return Err(ServerError::NotOpen);
         };
 
+        let now = Instant::now();
         for (_, client) in &mut server.clients {
             let Client::Connected(client) = client else {
                 continue;
             };
 
-            let bytes_start = (server.bytes_left).min(client.bytes_left);
-            let mut bytes_left = bytes_start;
-            for packet in client.packets.flush(&mut bytes_left) {
+            // TODO use self bytes_left
+            for packet in client.packets.flush(now) {
                 client
                     .send_s2c
                     .unbounded_send(packet)
                     .map_err(|_| ServerError::BackendClosed)?;
             }
-            let bytes_used = bytes_start - bytes_left;
-            server.bytes_left -= bytes_used;
-            client.bytes_left -= bytes_used;
         }
         Ok(())
     }
@@ -346,7 +345,7 @@ where
             Ok(Some(next)) => (
                 Some(ServerEvent::Opened),
                 Inner::Open(Open {
-                    bytes_left: server.config.total_bandwidth,
+                    bytes_left: ByteBucket::new(server.config.total_bandwidth),
                     config: server.config,
                     local_addr: next.local_addr,
                     clients: SlotMap::default(),
@@ -413,12 +412,8 @@ where
         }
 
         // refill bytes token bucket
-        let server_bandwidth = server.config.total_bandwidth;
-        let bytes_restored = ((server_bandwidth as f64) * delta_time.as_secs_f64()) as usize;
-        server.bytes_left = server
-            .bytes_left
-            .saturating_add(bytes_restored)
-            .min(server_bandwidth);
+        let refill_portion = delta_time.as_secs_f32();
+        server.bytes_left.refill(refill_portion);
 
         // process clients
         let config = server.config.clone();
@@ -429,7 +424,7 @@ where
                     Self::poll_connecting(&mut events, client_key, client, &config)
                 }
                 Client::Connected(client) => {
-                    Self::poll_connected(&mut events, client_key, client, delta_time)
+                    Self::poll_connected(&mut events, client_key, client, refill_portion)
                 }
             });
         }
@@ -462,13 +457,12 @@ where
                 Ok(Client::Connected(Connected {
                     remote_addr: connected.remote_addr,
                     stats: connected.initial_stats,
-                    bandwidth: config.client_bandwidth,
-                    bytes_left: config.client_bandwidth,
-                    packets: packet::Packets::new(
+                    packets: packet::PacketManager::new(
                         config.max_packet_len,
                         config.default_packet_cap,
-                        config.lanes_in.iter(),
-                        config.lanes_out.iter(),
+                        config.client_bandwidth,
+                        config.lanes_send.iter(),
+                        config.lanes_recv.iter(),
                         config.mapper.clone(),
                     ),
                     recv_err: client.recv_err,
@@ -494,14 +488,9 @@ where
         events: &mut Vec<ServerEvent<P, Self>>,
         client_key: ClientKey,
         mut client: Connected<P>,
-        delta_time: Duration,
+        refill_portion: f32,
     ) -> Client<P> {
-        // refill bytes token bucket
-        let bytes_restored = ((client.bandwidth as f64) * delta_time.as_secs_f64()) as usize;
-        client.bytes_left = client
-            .bytes_left
-            .saturating_add(bytes_restored)
-            .min(client.bandwidth);
+        client.packets.refill_bytes(refill_portion);
 
         let res = (|| {
             if let Some(err) = client
@@ -512,17 +501,18 @@ where
                 return Err(err.into());
             }
 
-            while let Ok(Some(mut packet)) = client.recv_c2s.try_recv() {
+            while let Ok(Some(packet)) = client.recv_c2s.try_recv() {
+                let recv = client.packets.recv(packet);
+                let (acks, mut recv) = recv.read_acks()?;
+
                 // receive acks
-                events.extend(client.packets.read_acks(&mut packet)?.map(|msg_seq| {
-                    ServerEvent::Ack {
-                        client_key,
-                        msg_key: MessageKey::from_raw(msg_seq),
-                    }
+                events.extend(acks.map(|msg_seq| ServerEvent::Ack {
+                    client_key,
+                    msg_key: MessageKey::from_raw(msg_seq),
                 }));
 
                 // receive messages
-                while let Some(msgs) = client.packets.read_next_frag(&mut packet)? {
+                while let Some(msgs) = recv.read_next_frag()? {
                     events.extend(msgs.map(|msg| ServerEvent::Recv { client_key, msg }));
                 }
             }

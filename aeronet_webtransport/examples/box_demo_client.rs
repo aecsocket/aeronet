@@ -1,16 +1,16 @@
 // https://github.com/projectharmonia/bevy_replicon/blob/master/bevy_replicon_renet/examples/simple_box.rs
 
 use aeronet::{
-    client::{client_disconnected, ClientTransport},
+    client::{client_disconnected, ClientState, ClientTransport},
     protocol::{ProtocolVersion, TransportProtocol},
+    stats::{MessageByteStats, MessageStats},
 };
-use aeronet_proto::lane::LaneConfig;
 use aeronet_replicon::{
     channel::IntoLaneKind, client::RepliconClientPlugin, protocol::RepliconMessage,
 };
 use aeronet_webtransport::{
     client::{ClientConfig, WebTransportClient},
-    shared::WebTransportProtocol,
+    shared::{LaneConfig, WebTransportProtocol},
 };
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_ecs::system::SystemId;
@@ -42,7 +42,8 @@ type Client = WebTransportClient<AppProtocol>;
 // world config
 //
 
-const MOVE_SPEED: f32 = 200.0;
+const MOVE_SPEED: f32 = 100.0;
+const BANDWIDTH: usize = 10_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Component)]
 struct Player(ClientId);
@@ -111,17 +112,25 @@ fn setup(world: &mut World) {
 struct Connect(SystemId<String>);
 
 fn client_config(channels: &RepliconChannels) -> ClientConfig {
-    ClientConfig::new(
-        PROTOCOL_VERSION,
-        channels
-            .server_channels()
-            .iter()
-            .map(|channel| channel.kind.into_lane_kind()),
-        channels
+    ClientConfig {
+        version: PROTOCOL_VERSION,
+        lanes_send: channels
             .client_channels()
             .iter()
-            .map(|channel| LaneConfig::new(channel.kind.into_lane_kind())),
-    )
+            .map(|channel| LaneConfig {
+                kind: channel.kind.into_lane_kind(),
+                bandwidth: BANDWIDTH,
+                ..Default::default()
+            })
+            .collect(),
+        lanes_recv: channels
+            .server_channels()
+            .iter()
+            .map(|channel| channel.kind.into_lane_kind())
+            .collect(),
+        bandwidth: BANDWIDTH,
+        ..Default::default()
+    }
 }
 
 #[cfg(target_family = "wasm")]
@@ -178,7 +187,59 @@ fn ui(
             if ui.button("Disconnect").clicked() {
                 let _ = client.disconnect();
             }
-        })
+        });
+
+        if let ClientState::Connected(client) = client.state() {
+            egui::Grid::new("stats").show(ui, |ui| {
+                ui.label("RTT");
+                ui.label(format!("{:?}", client.stats.rtt));
+                ui.end_row();
+
+                ui.label("Bytes used:");
+                ui.end_row();
+
+                ui.label(" · Total");
+                ui.label(format!(
+                    "{} / {}",
+                    client.packets.bytes_left().get(),
+                    client.packets.bytes_left().cap()
+                ));
+                ui.end_row();
+
+                for (i, lane) in client.packets.send_lanes().iter().enumerate() {
+                    ui.label(format!(" · Lane {i}"));
+                    ui.label(format!(
+                        "{} / {}",
+                        lane.bytes_left().get(),
+                        lane.bytes_left().cap()
+                    ));
+                    ui.end_row();
+                }
+
+                ui.label("Messages sent/recv");
+                ui.label(format!(
+                    "{} / {}",
+                    client.packets.msgs_sent(),
+                    client.packets.msgs_recv()
+                ));
+                ui.end_row();
+
+                ui.label("Message bytes sent/recv");
+                ui.label(format!(
+                    "{} / {}",
+                    client.packets.msg_bytes_sent(),
+                    client.packets.msg_bytes_recv()
+                ));
+                ui.end_row();
+
+                ui.label("Total bytes sent/recv");
+                ui.label(format!(
+                    "{} / {}",
+                    client.packets.total_bytes_sent(),
+                    client.packets.total_bytes_recv()
+                ));
+            });
+        }
     });
 }
 

@@ -19,7 +19,19 @@ use derivative::Derivative;
 
 use crate::protocol::RepliconMessage;
 
-// this REPLACES ClientTransportPlugin btw
+/// Provides a [`bevy_replicon`] client backend using the given [`aeronet`]
+/// transport.
+///
+/// **Do not use both this plugin and [`ClientTransportPlugin`] together!**
+///
+/// See [`replicon_client_plugin`] for a function version of this plugin.
+///
+/// This behaves similarly to [`ClientTransportPlugin`], but does not send out
+/// [`FromServer`] and [`AckFromServer`], which are managed by Replicon.
+///
+/// [`ClientTransportPlugin`]: aeronet::client::ClientTransportPlugin
+/// [`FromServer`]: aeronet::client::FromServer
+/// [`AckFromServer`]: aeronet::client::AckFromServer
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct RepliconClientPlugin<P, T> {
@@ -70,7 +82,11 @@ where
     }
 }
 
-pub fn replicon_aeronet_client_plugin<P, T>(app: &mut App)
+/// Provides a [`bevy_replicon`] client backend using the given [`aeronet`]
+/// transport.
+///
+/// See [`RepliconClientPlugin`].
+pub fn replicon_client_plugin<P, T>(app: &mut App)
 where
     P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
     T: ClientTransport<P> + Resource,

@@ -1,4 +1,4 @@
-use std::{fmt::Debug, time::Instant};
+use std::{fmt::Debug, marker::PhantomData};
 
 use aeronet::{
     lane::LaneMapper,
@@ -7,15 +7,20 @@ use aeronet::{
 };
 use ahash::AHashMap;
 use bytes::{Bytes, BytesMut};
+use derivative::Derivative;
+use web_time::Instant;
 
 use crate::{
-    byte_count::ByteLimit,
-    frag::{Fragment, FragmentError, FragmentHeader},
-    packet::PACKET_HEADER_LEN,
+    byte_count::{ByteBucket, ByteLimit},
+    frag::{Fragment, FragmentError, FragmentHeader, FragmentSender},
+    packet::{FlushedPacket, PACKET_HEADER_LEN},
     seq::Seq,
 };
 
-use super::{lane::LaneSender, FragmentKey, PacketManager, SentFragment, SentMessage};
+use super::{
+    lane::{LaneSender, LaneSenderKind},
+    FragmentKey, PacketManager, SentFragment, SentMessage,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SendError<E> {
@@ -25,10 +30,42 @@ pub enum SendError<E> {
     Fragment(#[source] FragmentError),
 }
 
-impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+pub struct PacketSender<S, M> {
+    lanes: Box<[LaneSender]>,
+    frags: FragmentSender,
+    max_packet_len: usize,
+    default_packet_cap: usize,
+    next_packet_seq: Seq,
+    next_msg_seq: Seq,
+    bytes_left: ByteBucket,
+    _phantom: PhantomData<(S, M)>,
+}
+
+impl<S, M: BytesMapper<S> + LaneMapper<S>> PacketSender<S, M> {
+    pub fn lanes(&self) -> &[LaneSender] {
+        &self.lanes
+    }
+
+    pub fn bytes_left(&self) -> &ByteBucket {
+        &self.bytes_left
+    }
+
+    pub fn refill_bytes(&mut self, portion: f32) {
+        self.bytes_left.refill(portion);
+        for lane in self.lanes.iter_mut() {
+            lane.bytes_left.refill(portion);
+        }
+    }
+
     /// Buffers up a message for sending.
     ///
     /// This message will be stored until the next [`PacketManager::flush`] call.
+    ///
+    /// The value given for `now` determines when the fragments produced by this
+    /// function will next be sent. Usually, you'd want them to be sent as soon
+    /// as possible, so setting this to [`Instant::now`] is the best choice.
     ///
     /// # Errors
     ///
@@ -41,11 +78,12 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
             .map_err(SendError::IntoBytes)?;
         let msg_seq = self.next_send_msg_seq;
         let frags = self
-            .frag_send
+            .send_frags
             .fragment(msg_seq, msg_bytes)
             .map_err(SendError::Fragment)?;
         // only increment the seq after successfully fragmenting
         self.next_send_msg_seq += Seq(1);
+        self.msgs_sent = self.msgs_sent.saturating_add(1);
 
         self.sent_msgs.insert(
             msg_seq,
@@ -66,15 +104,9 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
         Ok(msg_seq)
     }
 
-    pub fn refill_bytes(&mut self, portion: f32) {
-        for lane in self.lanes_send.iter_mut() {
-            lane.refill_bytes(portion);
-        }
-    }
-
-    pub fn flush<'a: 'm>(&'a mut self, now: Instant) -> impl Iterator<Item = Bytes> + '_ {
+    pub fn flush<'a>(&'a mut self, now: Instant) -> impl Iterator<Item = Bytes> + '_ {
         // collect all fragments to send
-        let mut frags = Self::frags_to_send(&self.sent_msgs)
+        let mut frags = Self::frags_to_send(&self.sent_msgs, now)
             .map(Some)
             .collect::<Box<_>>();
         // sort by payload length, largest to smallest
@@ -90,7 +122,7 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
 
         std::iter::from_fn(move || {
             // this iteration, we want to build up one full packet
-            let mut bytes_left = (&mut self.bytes_left).min_of(self.frag_send.max_payload_len());
+            let mut bytes_left = (&mut self.bytes_left).min_of(self.max_packet_len);
 
             let packet_seq = self.next_send_packet_seq;
             // don't increase the packet seq just yet!
@@ -114,13 +146,14 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
             let frags = frags.iter_mut().filter_map(|frag_key_opt| {
                 Self::try_flush_frag(
                     &mut self.sent_msgs,
-                    &mut self.lanes_send,
+                    &mut self.send_lanes,
                     &mut bytes_left,
                     now,
                     frag_key_opt,
                 )
             });
             for frag in frags {
+                self.msg_bytes_sent = self.msg_bytes_sent.saturating_add(frag.payload.len());
                 frags_in_packet.push(FragmentKey {
                     msg_seq: frag.header.msg_seq,
                     frag_index: frag.header.frag_index,
@@ -138,8 +171,14 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
                 // we wrote at least one fragment - we can send this packet
                 // and track what fragments we're sending in this packet
                 self.next_send_packet_seq += Seq(1);
-                self.flushed_packets
-                    .insert(packet_seq, frags_in_packet.into_boxed_slice());
+                self.flushed_packets.insert(
+                    packet_seq,
+                    FlushedPacket {
+                        num_unacked: frags_in_packet.len(),
+                        frags: frags_in_packet.into_boxed_slice(),
+                    },
+                );
+                self.total_bytes_sent = self.total_bytes_sent.saturating_add(packet.len());
                 Some(packet.freeze())
             }
         })
@@ -158,11 +197,13 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
 
     fn frags_to_send(
         sent_msgs: &AHashMap<Seq, SentMessage>,
+        now: Instant,
     ) -> impl Iterator<Item = FragmentKey> + '_ {
-        sent_msgs.iter().flat_map(|(msg_seq, msg)| {
+        sent_msgs.iter().flat_map(move |(msg_seq, msg)| {
             msg.frags
                 .iter()
                 .filter_map(Option::as_ref)
+                .filter(move |frag| now >= frag.next_send_at)
                 .enumerate()
                 .map(move |(frag_id, _)| FragmentKey {
                     msg_seq: *msg_seq,
@@ -171,16 +212,13 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
         })
     }
 
-    fn try_flush_frag<'b, B>(
+    fn try_flush_frag(
         sent_msgs: &mut AHashMap<Seq, SentMessage>,
-        lanes: &mut [LaneSender],
-        bytes_left: &'b mut B,
+        lanes: &mut [LaneSenderKind],
+        bytes_left: &mut impl ByteLimit,
         now: Instant,
         frag_key_opt: &mut Option<FragmentKey>,
-    ) -> Option<Fragment<Bytes>>
-    where
-        B: ByteLimit,
-    {
+    ) -> Option<Fragment<Bytes>> {
         let frag_key = frag_key_opt.take()?;
         // CORRECTNESS: `frags` is a slice of *unique* frag indices.
         // If we end up removing a frag from `sent_msgs`, then we will
@@ -212,7 +250,7 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
             .get_mut(msg.lane_index)
             .expect("lane index of message should be in range");
         match lane {
-            LaneSender::Unreliable {
+            LaneSenderKind::Unreliable {
                 bytes_left: lane_bytes_left,
             } => {
                 let mut bytes_left = bytes_left.min_of(lane_bytes_left);
@@ -220,7 +258,7 @@ impl<'m, S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<'m, S, R, M> {
                 *sent_frag_opt = None;
                 Some(frag)
             }
-            LaneSender::Reliable {
+            LaneSenderKind::Reliable {
                 bytes_left: lane_bytes_left,
                 resend_after,
             } => {

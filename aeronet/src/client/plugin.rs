@@ -16,7 +16,7 @@ use crate::{
 ///
 /// With this plugin added, the transport `T` will automatically run:
 /// * [`poll`] in [`PreUpdate`] in [`ClientTransportSet::Recv`]
-/// * [`flush`] in [`PostUpdate`] in [`ClientTransportSet::Send`]
+/// * [`flush`] in [`PostUpdate`] in [`ClientTransportSet::Flush`]
 ///
 /// [`poll`]: ClientTransport::poll
 /// [`flush`]: ClientTransport::flush
@@ -26,8 +26,8 @@ use crate::{
 /// * [`LocalClientDisconnected`]
 /// * [`FromServer`]
 /// * [`AckFromServer`]
-/// * [`LocalClientError`]
 /// * [`ClientConnectionError`]
+/// * [`ClientFlushError`]
 ///
 /// This plugin provides the run conditions:
 /// * [`client_connected`]

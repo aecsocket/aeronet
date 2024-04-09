@@ -4,6 +4,8 @@
 #[cfg(not(target_family = "wasm"))]
 pub use wtransport;
 
+pub use aeronet_proto::lane;
+
 #[cfg(not(target_family = "wasm"))]
 pub mod cert;
 pub mod client;

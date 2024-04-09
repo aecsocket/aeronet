@@ -36,6 +36,9 @@ pub trait ByteLimit {
     /// Creates a new [`ByteLimit`] which takes the smallest amount of bytes
     /// from between `self` and `other`.
     ///
+    /// When consuming `n` bytes, if one of them has less than `n` bytes left,
+    /// then bytes will be consumed from neither of them.
+    ///
     /// # Example
     ///
     /// ```
@@ -50,15 +53,6 @@ pub trait ByteLimit {
     fn min_of<B>(self, other: B) -> MinOf<Self, B>
     where
         Self: Sized,
-    {
-        MinOf { a: self, b: other }
-    }
-
-    fn min_of_mut<'a, 'b, B>(&'a mut self, other: &'b mut B) -> MinOf<&'a mut Self, &'b mut B>
-    where
-        Self: Sized,
-        &'a mut Self: ByteLimit,
-        &'b mut B: ByteLimit,
     {
         MinOf { a: self, b: other }
     }
@@ -181,6 +175,9 @@ impl ByteLimit for usize {
     }
 }
 
+/// [`ByteLimit`] which attempts to consume from both `A` and `B`.
+///
+/// Use [`ByteLimit::min_of`] to create one.
 #[derive(Debug, Clone)]
 pub struct MinOf<A, B> {
     a: A,
@@ -216,10 +213,10 @@ impl<A: ByteLimit, B: ByteLimit> ByteLimit for MinOf<A, B> {
         if self.has(n) {
             self.a
                 .consume(n)
-                .expect("when peeking there were enough bytes available");
+                .expect("when checking there were enough bytes available");
             self.b
                 .consume(n)
-                .expect("when peeking there were enough bytes available");
+                .expect("when checking there were enough bytes available");
             Ok(())
         } else {
             Err(NotEnoughBytes)
@@ -234,7 +231,9 @@ mod tests {
     #[test]
     fn refill_usize_max() {
         let mut bytes = ByteBucket::new(usize::MAX);
-        bytes.refill(1.0);
+        bytes.refill(0.2);
+        assert_eq!(usize::MAX, bytes.get());
+        bytes.refill(0.6);
         assert_eq!(usize::MAX, bytes.get());
     }
 }
