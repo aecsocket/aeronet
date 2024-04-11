@@ -254,7 +254,7 @@ impl<S, M: BytesMapper<S> + LaneMapper<S>> PacketSender<S, M> {
                 bytes_left: lane_bytes_left,
             } => {
                 let mut bytes_left = bytes_left.min_of(lane_bytes_left);
-                bytes_left.consume(frag.encode_len()).ok()?;
+                bytes_left.try_consume(frag.encode_len()).ok()?;
                 *sent_frag_opt = None;
                 Some(frag)
             }
@@ -263,7 +263,7 @@ impl<S, M: BytesMapper<S> + LaneMapper<S>> PacketSender<S, M> {
                 resend_after,
             } => {
                 let mut bytes_left = bytes_left.min_of(lane_bytes_left);
-                bytes_left.consume(frag.encode_len()).ok()?;
+                bytes_left.try_consume(frag.encode_len()).ok()?;
                 sent_frag.next_send_at = now + *resend_after;
                 Some(frag)
             }

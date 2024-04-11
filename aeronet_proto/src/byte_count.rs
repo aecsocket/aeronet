@@ -1,21 +1,30 @@
 //! Utilities for counting how many bytes have been used up for sending,
 //! allowing a sender to limit how many bytes they send out per second.
 
+/// Stores a counter of how many bytes it has remaining, and allows consuming a
+/// number of bytes from this counter.
 pub trait ByteLimit {
-    /// Gets if this has at least `n` bytes available for consumption.
-    ///
-    /// If this returns `true`, then the next [`ByteLimit::consume`] call must
-    /// succeed.
-    fn has(&self, n: usize) -> bool;
+    /// Value returned by [`ByteLimit::Try_consume`].
+    type Consume<'a>: ConsumeBytes
+    where
+        Self: 'a;
 
-    /// Attempts to consume `n` bytes from this.
+    /// Checks if this value has at least `n` bytes remaining, and if so,
+    /// provides a value which can be used to consume those bytes.
     ///
-    /// If this returns [`Ok`], then a previous [`ByteLimit::has`] call must
-    /// succeed.
+    /// For regular usage, you should prefer [`ByteLimit::consume`]. See
+    /// [`ConsumeBytes`] on an explanation of why this is a separate function.
     ///
     /// # Errors
     ///
-    /// Errors if there are less than `n` bytes left in this.
+    /// Errors if there are less than `n` bytes left in this value.
+    fn try_consume(&mut self, n: usize) -> Result<Self::Consume<'_>, NotEnoughBytes>;
+
+    /// Attempts to consume `n` bytes from this.
+    ///
+    /// # Errors
+    ///
+    /// Errors if there are less than `n` bytes left in this value.
     ///
     /// # Example
     ///
@@ -31,7 +40,9 @@ pub trait ByteLimit {
     ///
     /// bytes.consume(900).unwrap_err();
     /// ```
-    fn consume(&mut self, n: usize) -> Result<(), NotEnoughBytes>;
+    fn consume(&mut self, n: usize) -> Result<(), NotEnoughBytes> {
+        self.try_consume(n).map(ConsumeBytes::consume)
+    }
 
     /// Creates a new [`ByteLimit`] which takes the smallest amount of bytes
     /// from between `self` and `other`.
@@ -58,13 +69,37 @@ pub trait ByteLimit {
     }
 }
 
-impl<T: ByteLimit> ByteLimit for &mut T {
-    fn has(&self, n: usize) -> bool {
-        T::has(self, n)
-    }
+/// Allows consuming bytes from a [`ByteLimit`].
+///
+/// This exists as a type-level assertion that a [`ByteLimit`] has been checked
+/// to have at least `n` bytes ready for consumption, but that the bytes have
+/// *not* been consumed yet. This is useful for [`MinOf`], whose `try_consume`
+/// is implemented as:
+///
+/// ```ignore
+/// let consume_a = self.a.try_consume(n)?;
+/// let consume_b = self.b.try_consume(n)?;
+/// Ok(ConsumeMinOf {
+///     consume_a,
+///     consume_b,
+/// })
+/// ```
+///
+/// If either `a` or `b` do not have enough bytes to consume, then `?` will
+/// propagate that error upwards, and no bytes will be consumed. However, if
+/// both have enough bytes, now the type system encodes this information in the
+/// types of `consume_a` and `consume_b`. From these two values, bytes can be
+/// consumed from both at once via [`ConsumeMinOf::consume`].
+pub trait ConsumeBytes {
+    /// Consumes bytes from the underlying [`ByteLimit`].
+    fn consume(self);
+}
 
-    fn consume(&mut self, n: usize) -> Result<(), NotEnoughBytes> {
-        T::consume(self, n)
+impl<T: ByteLimit> ByteLimit for &mut T {
+    type Consume<'s> = T::Consume<'s> where Self: 's;
+
+    fn try_consume(&mut self, n: usize) -> Result<Self::Consume<'_>, NotEnoughBytes> {
+        T::try_consume(self, n)
     }
 }
 
@@ -144,34 +179,33 @@ impl ByteBucket {
 }
 
 impl ByteLimit for ByteBucket {
-    fn has(&self, n: usize) -> bool {
-        self.rem >= n
+    type Consume<'a> = ConsumeByteBucket<'a>;
+
+    fn try_consume(&mut self, n: usize) -> Result<Self::Consume<'_>, NotEnoughBytes> {
+        if self.rem >= n {
+            Ok(ConsumeByteBucket {
+                rem: &mut self.rem,
+                n,
+            })
+        } else {
+            Err(NotEnoughBytes)
+        }
     }
 
     fn consume(&mut self, n: usize) -> Result<(), NotEnoughBytes> {
-        match self.rem.checked_sub(n) {
-            Some(new_rem) => {
-                self.rem = new_rem;
-                Ok(())
-            }
-            None => Err(NotEnoughBytes),
-        }
+        self.rem = self.rem.checked_sub(n).ok_or(NotEnoughBytes)?;
+        Ok(())
     }
 }
 
-impl ByteLimit for usize {
-    fn has(&self, n: usize) -> bool {
-        *self >= n
-    }
+pub struct ConsumeByteBucket<'a> {
+    rem: &'a mut usize,
+    n: usize,
+}
 
-    fn consume(&mut self, n: usize) -> Result<(), NotEnoughBytes> {
-        match self.checked_sub(n) {
-            Some(new_rem) => {
-                *self = new_rem;
-                Ok(())
-            }
-            None => Err(NotEnoughBytes),
-        }
+impl ConsumeBytes for ConsumeByteBucket<'_> {
+    fn consume(mut self) {
+        self.rem -= self.n;
     }
 }
 
@@ -205,22 +239,27 @@ impl<A, B> MinOf<A, B> {
 }
 
 impl<A: ByteLimit, B: ByteLimit> ByteLimit for MinOf<A, B> {
-    fn has(&self, n: usize) -> bool {
-        self.a.has(n) && self.b.has(n)
-    }
+    type Consume<'s> = ConsumeMinOf<'s, A::Consume<'s>, B::Consume<'s>> where Self: 's;
 
-    fn consume(&mut self, n: usize) -> Result<(), NotEnoughBytes> {
-        if self.has(n) {
-            self.a
-                .consume(n)
-                .expect("when checking there were enough bytes available");
-            self.b
-                .consume(n)
-                .expect("when checking there were enough bytes available");
-            Ok(())
-        } else {
-            Err(NotEnoughBytes)
-        }
+    fn try_consume(&mut self, n: usize) -> Result<Self::Consume<'_>, NotEnoughBytes> {
+        let consume_a = self.a.try_consume(n)?;
+        let consume_b = self.b.try_consume(n)?;
+        Ok(ConsumeMinOf {
+            consume_a,
+            consume_b,
+        })
+    }
+}
+
+pub struct ConsumeMinOf<'m, A, B> {
+    consume_a: &'m mut A,
+    consume_b: &'m mut B,
+}
+
+impl<A: ConsumeBytes, B: ConsumeBytes> ConsumeBytes for ConsumeMinOf<'_, A, B> {
+    fn consume(self) {
+        self.consume_a.consume();
+        self.consume_b.consume();
     }
 }
 

@@ -29,6 +29,7 @@ struct MessageBuffer {
 /// Error that occurs when using [`FragmentReceiver::reassemble`].
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ReassembleError {
+    /// Fragment header states that this message has 0 fragments, which is invalid.
     #[error("number of fragments is 0")]
     NoFrags,
     /// Fragment index was not valid for the current message being processed.

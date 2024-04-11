@@ -80,12 +80,11 @@ impl Acknowledge {
             // so we only set a bit in the bitfield
             self.ack_bits |= shl(1, dist);
         } else {
+            // `dist` is negative
             // `seq` is after `last_recv`,
             // make that the new `last_recv`
             self.last_recv = seq;
-            let shift_by = u32::try_from(-dist).expect(
-                "`dist` should be negative, so `-dist` should be positive and within range",
-            );
+            let shift_by = u32::from(dist.unsigned_abs());
             //    seq: 8
             //    last_recv: 3
             // -> shift_by: 8 - 3 = 5
