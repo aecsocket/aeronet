@@ -1,29 +1,42 @@
 use std::{fmt::Debug, marker::PhantomData};
 
 use aeronet::{
-    lane::LaneMapper,
+    lane::{LaneKind, LaneMapper},
     message::BytesMapper,
     octs::{EncodeLen, WriteBytes},
 };
 use ahash::AHashMap;
 use bytes::{Bytes, BytesMut};
 use derivative::Derivative;
-use web_time::Instant;
+use web_time::{Duration, Instant};
 
 use crate::{
     byte_count::{ByteBucket, ByteLimit},
     frag::{Fragment, FragmentError, FragmentHeader, FragmentSender},
+    lane::LaneConfig,
     packet::{FlushedPacket, PACKET_HEADER_LEN},
     seq::Seq,
 };
 
-use super::{
-    lane::{LaneSender, LaneSenderKind},
-    FragmentKey, PacketManager, SentFragment, SentMessage,
-};
+use super::{FragmentKey, PacketManager, SentFragment, SentMessage};
 
+/// Error that ocurrs when attempting to buffer a message for sending using
+/// [`PacketManager::buffer_send`].
+///
+/// This is a [fatal connection error](crate::packet).
 #[derive(Debug, thiserror::Error)]
 pub enum SendError<E> {
+    /// Failed to convert a user-supplied message into bytes.
+    ///
+    /// [`aeronet::message::TryIntoBytes::try_into_bytes`] is a fallible
+    /// operation. The reason that it is fallible is that, although a correct
+    /// message implementation should never error when converting itself into
+    /// bytes, it is still better to isolate any potential error to this single
+    /// function (and therefore [`SendError`]), rather than having a message
+    /// implementation panic on error. This way, if the error occurs, only the
+    /// connection is torn down, rather than the entire app due to a panic.
+    ///
+    /// The same logic applies to [`BytesMapper::try_into_bytes`].
     #[error("failed to convert message into bytes")]
     IntoBytes(#[source] E),
     #[error("failed to fragment message")]
@@ -31,7 +44,7 @@ pub enum SendError<E> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct PacketSender<S, M> {
     lanes: Box<[LaneSender]>,
     frags: FragmentSender,
@@ -43,19 +56,67 @@ pub struct PacketSender<S, M> {
     _phantom: PhantomData<(S, M)>,
 }
 
-impl<S, M: BytesMapper<S> + LaneMapper<S>> PacketSender<S, M> {
-    pub fn lanes(&self) -> &[LaneSender] {
-        &self.lanes
+#[derive(Debug, Clone)]
+pub struct LaneSender {
+    bytes_left: ByteBucket,
+    kind: LaneSenderKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum LaneSenderKind {
+    Unreliable,
+    Reliable { resend_after: Duration },
+}
+
+impl<S, M> PacketSender<S, M> {
+    pub(super) fn new(
+        max_packet_len: usize,
+        max_payload_len: usize,
+        default_packet_cap: usize,
+        bandwidth: usize,
+        lanes: &[LaneConfig],
+    ) -> Self {
+        Self {
+            lanes: lanes
+                .iter()
+                .map(|config| LaneSender {
+                    bytes_left: ByteBucket::new(config.bandwidth),
+                    kind: match config.kind {
+                        LaneKind::UnreliableUnordered | LaneKind::UnreliableSequenced => {
+                            LaneSenderKind::Unreliable
+                        }
+                        LaneKind::ReliableUnordered | LaneKind::ReliableOrdered => {
+                            LaneSenderKind::Reliable {
+                                resend_after: config.resend_after,
+                            }
+                        }
+                    },
+                })
+                .collect(),
+            frags: FragmentSender::new(max_payload_len),
+            max_packet_len,
+            default_packet_cap,
+            next_packet_seq: Seq(0),
+            next_msg_seq: Seq(0),
+            bytes_left: ByteBucket::new(bandwidth),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<S, R, M> {
+    pub fn send_lanes(&self) -> &[LaneSender] {
+        &self.send.lanes
     }
 
     pub fn bytes_left(&self) -> &ByteBucket {
-        &self.bytes_left
+        &self.send.bytes_left
     }
 
     pub fn refill_bytes(&mut self, portion: f32) {
-        self.bytes_left.refill(portion);
-        for lane in self.lanes.iter_mut() {
-            lane.bytes_left.refill(portion);
+        self.send.bytes_left.refill_portion(portion);
+        for lane in self.send.lanes.iter_mut() {
+            lane.bytes_left.refill_portion(portion);
         }
     }
 
@@ -76,14 +137,15 @@ impl<S, M: BytesMapper<S> + LaneMapper<S>> PacketSender<S, M> {
             .mapper
             .try_into_bytes(msg)
             .map_err(SendError::IntoBytes)?;
-        let msg_seq = self.next_send_msg_seq;
+        let msg_seq = self.send.next_msg_seq;
         let frags = self
-            .send_frags
+            .send
+            .frags
             .fragment(msg_seq, msg_bytes)
             .map_err(SendError::Fragment)?;
         // only increment the seq after successfully fragmenting
-        self.next_send_msg_seq += Seq(1);
-        self.msgs_sent = self.msgs_sent.saturating_add(1);
+        self.send.next_msg_seq += Seq(1);
+        self.stats.msgs_sent = self.stats.msgs_sent.saturating_add(1);
 
         self.sent_msgs.insert(
             msg_seq,

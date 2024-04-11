@@ -135,7 +135,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn panic_if_zero_payload_len() {
-        FragmentSender::new(0);
+        let _ = FragmentSender::new(0);
     }
 
     #[test]

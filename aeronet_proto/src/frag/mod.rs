@@ -76,7 +76,7 @@ pub struct Fragment<B> {
 }
 
 impl<B: bytes::Buf> Fragment<B> {
-    /// Writes this value into a [`WriteBytes`].
+    /// Writes this value into a [`octs::WriteBytes`].
     ///
     /// This is equivalent to [`Encode`], but consumes `self` instead of taking
     /// a shared reference. This is because we consume the payload when writing
@@ -146,7 +146,7 @@ mod tests {
     fn frag() -> (FragmentSender, FragmentReceiver) {
         (
             FragmentSender::new(PAYLOAD_LEN),
-            FragmentReceiver::new(PAYLOAD_LEN),
+            FragmentReceiver::new(PAYLOAD_LEN, usize::MAX),
         )
     }
 
@@ -158,15 +158,24 @@ mod tests {
         let p3 = send.fragment(Seq(2), MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG1,
-            recv.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
+            recv.reassemble(&p1.header, &p1.payload)
+                .unwrap()
+                .unwrap()
+                .unwrap()
         );
         assert_eq!(
             MSG2,
-            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
+            recv.reassemble(&p2.header, &p2.payload)
+                .unwrap()
+                .unwrap()
+                .unwrap()
         );
         assert_eq!(
             MSG3,
-            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
+            recv.reassemble(&p3.header, &p3.payload)
+                .unwrap()
+                .unwrap()
+                .unwrap()
         );
     }
 
@@ -178,15 +187,24 @@ mod tests {
         let p3 = send.fragment(Seq(2), MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG3,
-            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
+            recv.reassemble(&p3.header, &p3.payload)
+                .unwrap()
+                .unwrap()
+                .unwrap()
         );
         assert_eq!(
             MSG1,
-            recv.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
+            recv.reassemble(&p1.header, &p1.payload)
+                .unwrap()
+                .unwrap()
+                .unwrap()
         );
         assert_eq!(
             MSG2,
-            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
+            recv.reassemble(&p2.header, &p2.payload)
+                .unwrap()
+                .unwrap()
+                .unwrap()
         );
     }
 
@@ -200,10 +218,13 @@ mod tests {
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(None));
+        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(Ok(None)));
         assert_eq!(
             msg,
-            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
+            recv.reassemble(&p2.header, &p2.payload)
+                .unwrap()
+                .unwrap()
+                .unwrap()
         );
     }
 
@@ -217,11 +238,14 @@ mod tests {
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(None));
-        assert_matches!(recv.reassemble(&p2.header, &p2.payload), Ok(None));
+        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(Ok(None)));
+        assert_matches!(recv.reassemble(&p2.header, &p2.payload), Ok(Ok(None)));
         assert_eq!(
             msg,
-            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
+            recv.reassemble(&p3.header, &p3.payload)
+                .unwrap()
+                .unwrap()
+                .unwrap()
         );
     }
 }

@@ -7,13 +7,13 @@ Provides implementations of protocol-level features for aeronet transports.
 
 Since not all underlying transports will offer the same guarantees of what features they provide,
 this crate offers its own implementation of certain features which are agnostic to the underlying
-protocol. That is, they just take in and spit out bytes.
+protocol, sans-IO.
 
 # Terminology
 
 * *message* - the smallest unit of transmission used by the standard
   transport API, i.e. [`ClientTransport`] and [`ServerTransport`], but
-  represented in its byte form ([`TryAsBytes`] / [`TryFromBytes`]).
+  represented in its byte form ([`TryIntoBytes`] / [`TryFromBytes`]).
 * *packet* - the smallest unit of transmission used by the protocol, which
   holds a packet header and a payload.
 * *payload* - either a part of, or the entirety of, the message that this
@@ -22,8 +22,8 @@ protocol. That is, they just take in and spit out bytes.
 
 [`ClientTransport`]: aeronet::client::ClientTransport
 [`ServerTransport`]: aeronet::server::ServerTransport
-[`TryAsBytes`]: aeronet::TryAsBytes
-[`TryFromBytes`]: aeronet::TryFromBytes
+[`TryAsBytes`]: aeronet::message::TryIntoBytes
+[`TryFromBytes`]: aeronet::message::TryFromBytes
 
 # Features
 

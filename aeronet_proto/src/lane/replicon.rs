@@ -4,49 +4,55 @@ use bevy_replicon::prelude::*;
 use super::LaneConfig;
 
 impl LaneConfig {
-    pub fn from_channel(channel: &RepliconChannel, default_bandwidth: usize) -> Self {
+    /// Creates a [`LaneConfig`] from a [`RepliconChannel`].
+    pub fn from_channel(channel: &RepliconChannel) -> Self {
         Self {
             kind: LaneKind::from(channel.kind),
-            bandwidth: channel.max_bytes.unwrap_or(default_bandwidth),
             resend_after: channel.resend_time,
         }
     }
 }
 
+/// Extension trait for converting [`RepliconChannels`] into [`LaneConfig`]
+/// values.
 pub trait RepliconChannelsExt {
-    fn client_lanes(&self) -> Vec<LaneConfig>;
+    /// Converts [`RepliconChannels::client_channels`] into [`LaneConfig`]s.
+    fn client_lanes(&self) -> impl Iterator<Item = LaneConfig>;
 
-    fn server_lanes(&self) -> Vec<LaneConfig>;
+    /// Converts [`RepliconChannels::server_channels`] into [`LaneConfig`]s.
+    fn server_lanes(&self) -> impl Iterator<Item = LaneConfig>;
 
-    fn client_send_lanes(&self) -> Vec<LaneConfig> {
+    /// Converts these channels into the **client-side outgoing lane**
+    /// configurations.
+    fn client_send_lanes(&self) -> impl Iterator<Item = LaneConfig> {
         self.client_lanes()
     }
 
-    fn client_recv_lanes(&self) -> Vec<LaneConfig> {
+    /// Converts these channels into the **client-side incoming lane**
+    /// configurations.
+    fn client_recv_lanes(&self) -> impl Iterator<Item = LaneConfig> {
         self.server_lanes()
     }
 
-    fn server_send_lanes(&self) -> Vec<LaneConfig> {
+    /// Converts these channels into the **server-side outgoing lane**
+    /// configurations.
+    fn server_send_lanes(&self) -> impl Iterator<Item = LaneConfig> {
         self.server_lanes()
     }
 
-    fn server_recv_lanes(&self) -> Vec<LaneConfig> {
+    /// Converts these channels into the **server-side incoming lane**
+    /// configurations.
+    fn server_recv_lanes(&self) -> impl Iterator<Item = LaneConfig> {
         self.client_lanes()
     }
 }
 
 impl RepliconChannelsExt for RepliconChannels {
-    fn client_lanes(&self) -> Vec<LaneConfig> {
-        self.client_channels()
-            .iter()
-            .map(|channel| LaneConfig::from_channel(channel, self.default_max_bytes))
-            .collect()
+    fn client_lanes(&self) -> impl Iterator<Item = LaneConfig> {
+        self.client_channels().iter().map(LaneConfig::from_channel)
     }
 
-    fn server_lanes(&self) -> Vec<LaneConfig> {
-        self.server_channels()
-            .iter()
-            .map(|channel| LaneConfig::from_channel(channel, self.default_max_bytes))
-            .collect()
+    fn server_lanes(&self) -> impl Iterator<Item = LaneConfig> {
+        self.server_channels().iter().map(LaneConfig::from_channel)
     }
 }

@@ -1,21 +1,22 @@
 use std::marker::PhantomData;
 
 use aeronet::{
-    lane::{LaneIndex, LaneMapper},
+    lane::{LaneIndex, LaneKind, LaneMapper},
     message::BytesMapper,
     octs::{BytesError, ReadBytes},
 };
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 use bytes::{Buf, Bytes};
 use derivative::Derivative;
 
 use crate::{
     ack::Acknowledge,
     frag::{Fragment, FragmentReceiver, ReassembleError},
+    lane::LaneConfig,
     seq::Seq,
 };
 
-use super::{lane::LaneReceiver, FlushedPacket, PacketManager, SentMessage};
+use super::{FlushedPacket, PacketManager, SentMessage};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RecvError<E> {
@@ -34,13 +35,82 @@ pub enum RecvError<E> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
+#[derivative(Debug(bound = ""), Clone(bound = "R: Clone"))]
 pub struct PacketReceiver<R, M> {
-    recv_lanes: Box<[LaneReceiver<R>]>,
+    lanes: Box<[LaneReceiver<R>]>,
     // insertion policy: on recv
     // removal policy: oh shit TODO
-    recv_frags: FragmentReceiver,
+    frags: FragmentReceiver,
     _phantom: PhantomData<M>,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""), Clone(bound = "R: Clone"))]
+pub enum LaneReceiver<R> {
+    /// See [`LaneKind::UnreliableUnordered`].
+    UnreliableUnordered,
+    /// See [`LaneKind::UnreliableSequenced`].
+    UnreliableSequenced {
+        /// Sequence number of the last message received.
+        last_recv_seq: Seq,
+    },
+    /// See [`LaneKind::ReliableUnordered`].
+    ReliableUnordered {
+        /// Next message sequence that we expect to receive, if transmission was
+        /// guaranteed to be in order.
+        ///
+        /// All message sequences below this value are guaranteed to already
+        /// have been received.
+        pending_seq: Seq,
+        /// Tracks message sequences **after `pending_seq`** which have already been
+        /// received.
+        ///
+        /// Once `pending_seq` increases, all entries in this buffer older than
+        /// `pending_seq` are removed.
+        recv_seq_buf: AHashSet<Seq>,
+    },
+    /// See [`LaneKind::ReliableOrdered`].
+    ReliableOrdered {
+        /// Next message sequence that we expect to receive, if transmission was
+        /// guaranteed to be in order.
+        ///
+        /// All message sequences below this value are guaranteed to already
+        /// have been received.
+        pending_seq: Seq,
+        /// Tracks messages **after `pending_seq`** which have already been
+        /// received.
+        ///
+        /// Once `pending_seq` increases, all entries in this buffer older than
+        /// `pending_seq` are removed.
+        #[derivative(Debug = "ignore")]
+        recv_buf: AHashMap<Seq, R>,
+    },
+}
+
+impl<R, M> PacketReceiver<R, M> {
+    pub(super) fn new(max_packet_len: usize, max_payload_len: usize, lanes: &[LaneConfig]) -> Self {
+        Self {
+            lanes: lanes
+                .iter()
+                .map(|config| match config.kind {
+                    LaneKind::UnreliableUnordered => LaneReceiver::UnreliableUnordered,
+                    LaneKind::UnreliableSequenced => LaneReceiver::UnreliableSequenced {
+                        last_recv_seq: Seq::MAX,
+                    },
+                    LaneKind::ReliableUnordered => LaneReceiver::ReliableUnordered {
+                        pending_seq: Seq(0),
+                        recv_seq_buf: AHashSet::new(),
+                    },
+                    LaneKind::ReliableOrdered => LaneReceiver::ReliableOrdered {
+                        pending_seq: Seq(0),
+                        recv_buf: AHashMap::new(),
+                    },
+                })
+                .collect(),
+            frags: FragmentReceiver::new(max_payload_len),
+            _phantom: PhantomData,
+        }
+    }
 }
 
 impl<S, R, M: BytesMapper<R> + LaneMapper<R>> PacketManager<S, R, M> {

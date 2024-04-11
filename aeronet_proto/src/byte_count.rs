@@ -1,10 +1,14 @@
-//! Utilities for counting how many bytes have been used up for sending,
-//! allowing a sender to limit how many bytes they send out per second.
+//! Generic counter for number of bytes consumed and added in.
+//!
+//! This may be used for:
+//! * limiting how many bytes are sent out per second
+//! * limiting how much memory is allowed to be used for storing received
+//!   fragments of messages
 
-/// Stores a counter of how many bytes it has remaining, and allows consuming a
+/// Counter of how many bytes this value has remaining, and allows consuming a
 /// number of bytes from this counter.
 pub trait ByteLimit {
-    /// Value returned by [`ByteLimit::Try_consume`].
+    /// Value returned by [`ByteLimit::try_consume`].
     type Consume<'a>: ConsumeBytes
     where
         Self: 'a;
@@ -69,6 +73,11 @@ pub trait ByteLimit {
     }
 }
 
+/// There were not enough bytes available to consume bytes from a [`ByteLimit`].
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("not enough bytes")]
+pub struct NotEnoughBytes;
+
 /// Allows consuming bytes from a [`ByteLimit`].
 ///
 /// This exists as a type-level assertion that a [`ByteLimit`] has been checked
@@ -103,12 +112,7 @@ impl<T: ByteLimit> ByteLimit for &mut T {
     }
 }
 
-/// There were not enough bytes available to consume bytes from a [`ByteLimit`].
-#[derive(Debug, Clone, thiserror::Error)]
-#[error("not enough bytes")]
-pub struct NotEnoughBytes;
-
-/// Tracks how many bytes have been consumed for sending, in a [token bucket]
+/// Tracks how many bytes have been consumed by the user, in a [token bucket]
 /// style (that's where the name comes from).
 ///
 /// An item (transport, lane, etc.) may want to limit how many bytes it sends
@@ -120,11 +124,11 @@ pub struct NotEnoughBytes;
 ///
 /// Instead, this type allows [consuming] a number of bytes when you need to
 /// write some data out, then [refilling] the bucket on each update. The amount
-/// refilled is proportional to the time elapsed since the last refill.
+/// refilled may be proportional to the time elapsed since the last refill.
 ///
 /// [token bucket]: https://en.wikipedia.org/wiki/Token_bucket
 /// [consuming]: ByteLimit::consume
-/// [refilling]: ByteBucket::refill
+/// [refilling]: ByteBucket::refill_portion
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ByteBucket {
     cap: usize,
@@ -150,6 +154,73 @@ impl ByteBucket {
         self.rem
     }
 
+    /// Gets the amount of bytes used.
+    ///
+    /// This is equivalent to `cap - rem`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use aeronet_proto::byte_count::{ByteLimit, ByteBucket};
+    /// let mut bytes = ByteBucket::new(1000);
+    ///
+    /// bytes.consume(100).unwrap();
+    /// assert_eq!(900, bytes.get());
+    /// assert_eq!(100, bytes.used());
+    ///
+    /// bytes.consume(250).unwrap();
+    /// assert_eq!(650, bytes.get());
+    /// assert_eq!(350, bytes.used());
+    /// ```
+    #[must_use]
+    pub const fn used(&self) -> usize {
+        self.cap - self.rem
+    }
+
+    /// Refills this bucket to its maximum capacity.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use aeronet_proto::byte_count::{ByteLimit, ByteBucket};
+    /// let mut bytes = ByteBucket::new(1000);
+    ///
+    /// bytes.consume(250).unwrap();
+    /// assert_eq!(750, bytes.get());
+    /// assert_eq!(250, bytes.used());
+    ///
+    /// bytes.refill();
+    /// assert_eq!(1000, bytes.get());
+    /// assert_eq!(0, bytes.used());
+    /// ```
+    pub fn refill(&mut self) {
+        self.rem = self.cap;
+    }
+
+    /// Refills this bucket with an exact amount of bytes.
+    ///
+    /// If the bucket is already full, this will not add any more bytes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use aeronet_proto::byte_count::{ByteLimit, ByteBucket};
+    /// let mut bytes = ByteBucket::new(1000);
+    ///
+    /// bytes.consume(500).unwrap();
+    /// assert_eq!(500, bytes.get());
+    ///
+    /// bytes.refill_exact(100);
+    /// assert_eq!(600, bytes.get());
+    ///
+    /// // refilling over the capacity will cap it at the capacity
+    /// bytes.refill_exact(1000);
+    /// assert_eq!(1000, bytes.get());
+    /// ```
+    pub fn refill_exact(&mut self, n: usize) {
+        self.rem = self.cap.min(self.rem.saturating_add(n));
+    }
+
     /// Refills this bucket with an amount of bytes proportional to its capacity
     /// and the portion provided.
     ///
@@ -165,27 +236,27 @@ impl ByteBucket {
     /// assert_eq!(500, bytes.get());
     ///
     /// // amount refilled is proportional to capacity
-    /// bytes.refill(0.25);
+    /// bytes.refill_portion(0.25);
     /// assert_eq!(750, bytes.get());
     ///
-    /// bytes.refill(0.1);
+    /// bytes.refill_portion(0.1);
     /// assert_eq!(850, bytes.get());
     ///
     /// // refilling over the capacity will cap it at the capacity
-    /// bytes.refill(0.5);
+    /// bytes.refill_portion(0.5);
     /// assert_eq!(1000, bytes.get());
     /// ```
     ///
     /// # Panics
     ///
-    /// Panics if `portion` is less than `0.0`.
-    pub fn refill(&mut self, portion: f32) {
-        assert!(portion >= 0.0, "portion = {portion}");
+    /// Panics if `f` is less than `0.0`.
+    pub fn refill_portion(&mut self, f: f32) {
+        assert!(f >= 0.0, "portion = {f}");
         #[allow(clippy::cast_sign_loss)] // we check that `portion >= 0.0`
         #[allow(clippy::cast_possible_truncation)]
         #[allow(clippy::cast_precision_loss)]
-        let restored = ((self.cap as f32) * portion) as usize;
-        self.rem = self.cap.min(self.rem.saturating_add(restored));
+        let n = ((self.cap as f32) * f) as usize;
+        self.refill_exact(n)
     }
 }
 
@@ -209,6 +280,8 @@ impl ByteLimit for ByteBucket {
     }
 }
 
+/// Output of [`ByteBucket::try_consume`].
+#[derive(Debug)]
 pub struct ConsumeByteBucket<'a> {
     rem: &'a mut usize,
     n: usize,
@@ -262,6 +335,8 @@ impl<A: ByteLimit, B: ByteLimit> ByteLimit for MinOf<A, B> {
     }
 }
 
+/// Output of [`MinOf::try_consume`].
+#[derive(Debug)]
 pub struct ConsumeMinOf<A, B> {
     consume_a: A,
     consume_b: B,
@@ -281,9 +356,9 @@ mod tests {
     #[test]
     fn refill_usize_max() {
         let mut bytes = ByteBucket::new(usize::MAX);
-        bytes.refill(0.2);
+        bytes.refill_exact(1);
         assert_eq!(usize::MAX, bytes.get());
-        bytes.refill(0.6);
+        bytes.refill_exact(usize::MAX);
         assert_eq!(usize::MAX, bytes.get());
     }
 }

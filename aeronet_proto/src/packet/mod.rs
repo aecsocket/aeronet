@@ -1,13 +1,38 @@
-mod lane;
+//! TODO docs
+//!
+//! # Process
+//!
+//! ## Sending
+//!
+//! * Create your message and pass it to [`PacketManager::buffer_send`]
+//!   * On [`Err`], close the connection immediately
+//!   * On [`Ok`], store the resulting [`Seq`] so that you know when this
+//!     message gets acknowledged by the peer
+//! * At the end of the app update loop, call [`PacketManager::flush`] and send
+//!   all resulting [`Bytes`] packets to the peer
+//!
+//! # Connection errors
+//!
+//! Connection errors can be split into two kinds: fatal and non-fatal. Fatal
+//! errors force the implementation to close the connection, as there is some
+//! fundamental issue in the connection, and we cannot safely continue.
+//! Non-fatal errors are abnormalities, but the connection can still continue
+//! safely.
+//!
+//! ## Fatal connection errors
+//!
+//! If a function returns an [`Err`] variant of a type which is a fatal error,
+//! then you must immediately close the connection.
+
 mod recv;
 mod send;
 
-pub use {lane::*, recv::*, send::*};
+pub use {recv::*, send::*};
 
-use std::{borrow::Borrow, fmt::Debug, marker::PhantomData, time::Duration};
+use std::fmt::Debug;
 
 use aeronet::{
-    lane::{LaneKind, LaneMapper},
+    lane::LaneMapper,
     message::BytesMapper,
     octs::ConstEncodeLen,
     stats::{MessageByteStats, MessageStats},
@@ -17,13 +42,7 @@ use bytes::Bytes;
 use derivative::Derivative;
 use web_time::Instant;
 
-use self::lane::{LaneReceiver, LaneSenderKind};
-use crate::{
-    ack::Acknowledge,
-    byte_count::ByteBucket,
-    frag::{FragmentReceiver, FragmentSender},
-    seq::Seq,
-};
+use crate::{ack::Acknowledge, lane::LaneConfig, seq::Seq};
 
 const PACKET_HEADER_LEN: usize = Seq::ENCODE_LEN + Acknowledge::ENCODE_LEN;
 
@@ -60,22 +79,22 @@ impl MessageByteStats for PacketStats {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = "M: Debug"))]
+#[derivative(Debug(bound = "M: Debug"), Clone(bound = "R: Clone, M: Clone"))]
 pub struct PacketManager<S, R, M> {
-    pub stats: PacketStats,
+    stats: PacketStats,
     mapper: M,
     acks: Acknowledge,
     // insertion policy: on buffer send
     // removal policy: on read acks, after all frags of the message are acked
     sent_msgs: AHashMap<Seq, SentMessage>,
     // insertion policy: on flush
-    // removal policy: on read acks, after all fragments in a packet are acked TODO
+    // removal policy: on read acks, after all fragments in a packet are acked
     flushed_packets: AHashMap<Seq, FlushedPacket>,
-    send: PacketSender<S, M>,
-    recv: PacketReceiver<R, M>,
+    send: send::PacketSender<S, M>,
+    recv: recv::PacketReceiver<R, M>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct SentMessage {
     lane_index: usize,
     num_frags: u8,
@@ -110,37 +129,31 @@ where
         max_packet_len: usize,
         default_packet_cap: usize,
         bandwidth: usize,
-        lanes_send: impl IntoIterator<Item = impl Borrow<LaneConfig>>,
-        lanes_recv: impl IntoIterator<Item = impl Borrow<LaneKind>>,
+        lanes_send: &[LaneConfig],
+        lanes_recv: &[LaneConfig],
         mapper: M,
     ) -> Self {
-        assert!(max_packet_len > PACKET_HEADER_LEN);
-        let max_payload_len = max_packet_len - PACKET_HEADER_LEN;
+        let max_payload_len = max_packet_len
+            .checked_sub(PACKET_HEADER_LEN)
+            .unwrap_or_else(|| panic!("max_packet_len must be less than PACKET_HEADER_LEN"));
         Self {
             stats: PacketStats::default(),
-            // send
-            send_lanes: lanes_send
-                .into_iter()
-                .map(|config| LaneSenderKind::new(config.borrow()))
-                .collect(),
-            send_frags: FragmentSender::new(max_payload_len),
-            max_packet_len,
-            default_packet_cap,
-            next_send_packet_seq: Seq(0),
-            next_send_msg_seq: Seq(0),
-            bytes_left: ByteBucket::new(bandwidth),
-            // recv
-            recv_lanes: lanes_recv
-                .into_iter()
-                .map(|kind| LaneReceiver::new(*kind.borrow()))
-                .collect(),
-            recv_frags: FragmentReceiver::new(max_payload_len),
-            // general
             mapper,
             acks: Acknowledge::new(),
             sent_msgs: AHashMap::new(),
             flushed_packets: AHashMap::new(),
-            _phantom: PhantomData,
+            send: send::PacketSender::new(
+                max_packet_len,
+                max_payload_len,
+                default_packet_cap,
+                bandwidth,
+                lanes_send,
+            ),
+            recv: recv::PacketReceiver::new(max_packet_len, max_payload_len, lanes_recv),
         }
+    }
+
+    fn stats(&self) -> &PacketStats {
+        &self.stats
     }
 }
