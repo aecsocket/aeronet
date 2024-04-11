@@ -1,3 +1,5 @@
+//! Server-side traits and items.
+
 use std::{fmt::Debug, marker::PhantomData};
 
 use aeronet::{
@@ -83,7 +85,7 @@ where
     }
 }
 
-/// Stores mappings between [`ClientId`]s and `T::ClientKey`s as a bidirectional
+/// Stores mappings between `T::ClientKey`s and [`ClientId`]s as a bidirectional
 /// map.
 ///
 /// Client IDs start at 1, because ID 0 is reserved for [`ClientId::SERVER`].
@@ -98,6 +100,8 @@ pub struct ClientKeys<P: TransportProtocol, T: ServerTransport<P>> {
 }
 
 impl<P: TransportProtocol, T: ServerTransport<P>> ClientKeys<P, T> {
+    /// Gets the mappings between `T::ClientKey`s and [`ClientId`]s as a
+    /// bidirectional map.
     #[must_use]
     pub fn id_map(
         &self,

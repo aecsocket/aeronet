@@ -1,3 +1,6 @@
+//! Items for defining an [`aeronet::protocol::TransportProtocol`] for
+//! integration with [`bevy_replicon`].
+
 use std::convert::Infallible;
 
 use aeronet::{

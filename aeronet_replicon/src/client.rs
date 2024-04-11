@@ -1,3 +1,5 @@
+//! Client-side traits and items.
+
 use std::marker::PhantomData;
 
 use aeronet::{
