@@ -86,6 +86,7 @@ impl FragmentReceiver {
     /// # Panics
     ///
     /// Panics if `max_payload_len` is 0.
+    #[must_use]
     pub fn new(max_payload_len: usize) -> Self {
         Self {
             max_payload_len,
@@ -109,6 +110,7 @@ impl FragmentReceiver {
     /// It is perfectly safe to ignore these errors - they are provided more
     /// for clarity on why reassembly failed, rather than a fatal error
     /// condition for a connection.
+    #[allow(clippy::missing_panics_doc)] // we don't expect to panic
     pub fn reassemble(
         &mut self,
         header: &FragmentHeader,

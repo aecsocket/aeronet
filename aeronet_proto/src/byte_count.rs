@@ -133,16 +133,19 @@ pub struct ByteBucket {
 
 impl ByteBucket {
     /// Creates a new byte bucket with the given constant capacity.
+    #[must_use]
     pub const fn new(cap: usize) -> Self {
         Self { cap, rem: cap }
     }
 
     /// Gets the maximum number of bytes in this bucket.
+    #[must_use]
     pub const fn cap(&self) -> usize {
         self.cap
     }
 
     /// Gets the amount of bytes remaining.
+    #[must_use]
     pub const fn get(&self) -> usize {
         self.rem
     }
@@ -172,7 +175,15 @@ impl ByteBucket {
     /// bytes.refill(0.5);
     /// assert_eq!(1000, bytes.get());
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `portion` is less than `0.0`.
     pub fn refill(&mut self, portion: f32) {
+        assert!(portion >= 0.0, "portion = {portion}");
+        #[allow(clippy::cast_sign_loss)] // we check that `portion >= 0.0`
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_precision_loss)]
         let restored = ((self.cap as f32) * portion) as usize;
         self.rem = self.cap.min(self.rem.saturating_add(restored));
     }
@@ -204,8 +215,8 @@ pub struct ConsumeByteBucket<'a> {
 }
 
 impl ConsumeBytes for ConsumeByteBucket<'_> {
-    fn consume(mut self) {
-        self.rem -= self.n;
+    fn consume(self) {
+        *self.rem -= self.n;
     }
 }
 
@@ -239,7 +250,7 @@ impl<A, B> MinOf<A, B> {
 }
 
 impl<A: ByteLimit, B: ByteLimit> ByteLimit for MinOf<A, B> {
-    type Consume<'s> = ConsumeMinOf<'s, A::Consume<'s>, B::Consume<'s>> where Self: 's;
+    type Consume<'s> = ConsumeMinOf<A::Consume<'s>, B::Consume<'s>> where Self: 's;
 
     fn try_consume(&mut self, n: usize) -> Result<Self::Consume<'_>, NotEnoughBytes> {
         let consume_a = self.a.try_consume(n)?;
@@ -251,12 +262,12 @@ impl<A: ByteLimit, B: ByteLimit> ByteLimit for MinOf<A, B> {
     }
 }
 
-pub struct ConsumeMinOf<'m, A, B> {
-    consume_a: &'m mut A,
-    consume_b: &'m mut B,
+pub struct ConsumeMinOf<A, B> {
+    consume_a: A,
+    consume_b: B,
 }
 
-impl<A: ConsumeBytes, B: ConsumeBytes> ConsumeBytes for ConsumeMinOf<'_, A, B> {
+impl<A: ConsumeBytes, B: ConsumeBytes> ConsumeBytes for ConsumeMinOf<A, B> {
     fn consume(self) {
         self.consume_a.consume();
         self.consume_b.consume();

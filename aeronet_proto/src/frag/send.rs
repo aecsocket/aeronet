@@ -37,12 +37,14 @@ impl FragmentSender {
     /// # Panics
     ///
     /// Panics if `max_payload_len` is 0.
+    #[must_use]
     pub fn new(max_payload_len: usize) -> Self {
         assert!(max_payload_len > 0);
         Self { max_payload_len }
     }
 
     /// Gets the maximum payload length as defined on construction.
+    #[must_use]
     pub fn max_payload_len(&self) -> usize {
         self.max_payload_len
     }

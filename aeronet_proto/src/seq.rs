@@ -78,7 +78,8 @@ impl Seq {
     /// ```
     #[must_use]
     pub const fn dist_to(self, rhs: Self) -> i16 {
-        rhs.0.wrapping_sub(self.0) as i16
+        #[allow(clippy::cast_possible_wrap)] // that's exactly what we want
+        (rhs.0.wrapping_sub(self.0) as i16)
     }
 }
 
@@ -98,7 +99,7 @@ impl Ord for Seq {
     fn cmp(&self, other: &Self) -> Ordering {
         // The implementation used is a variant of `slotmap`'s generation
         // comparison function:
-        // https://github.com/orlp/slotmap/blob/c905b6ced490551476cb7c37778eb8128bdea7ba/src/util.rs#L10
+        // https://github.com/orlp/slotmap/blob/c905b6c/src/util.rs#L10
         // It has been adapted to use u16s and Ordering.
         // This is used instead of the Gaffer On Games code because it produces
         // smaller assembly, but has a tiny difference in behaviour around
