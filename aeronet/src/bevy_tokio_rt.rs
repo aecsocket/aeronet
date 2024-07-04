@@ -13,7 +13,7 @@ use bevy_ecs::prelude::*;
 ///
 /// # Usage
 ///
-/// To insert into a [`World`], initialize the resource using
+/// To insert this into a [`World`], initialize the resource using
 /// [`App::init_resource`]:
 ///
 /// ```

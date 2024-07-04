@@ -61,14 +61,14 @@ pub struct ConditionerConfig {
     pub delay_std_dev: f32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Conditioner<E> {
     loss_rate: f32,
     delay_distr: Normal<f32>,
     event_buf: Vec<ScheduledEvent<E>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ScheduledEvent<E> {
     event: E,
     send_at: Instant,

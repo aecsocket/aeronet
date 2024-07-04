@@ -1,5 +1,15 @@
 //! Types for representing statistics of a transport, such as network latency
 //! and packet loss.
+//!
+//! Traits under this module may be implemented by your transport's
+//! [`ClientTransport::Connected`] or [`ServerTransport::Connected`] types, in
+//! which case you can use [`ClientTransport::state`] or
+//! [`ServerTransport::client_state`] respectively to access it.
+//!
+//! [`ClientTransport::Connected`]: crate::client::ClientTransport::Connected
+//! [`ServerTransport::Connected`]: crate::server::ServerTransport::Connected
+//! [`ClientTransport::state`]: crate::client::ClientTransport::state
+//! [`ServerTransport::client_state`]: crate::server::ServerTransport::client_state
 
 use std::{net::SocketAddr, time::Duration};
 
@@ -14,75 +24,63 @@ use std::{net::SocketAddr, time::Duration};
 /// This will never give the exact RTT value, as it is constantly in flux as
 /// network conditions change. However, it aims to be a good-enough estimate for
 /// use in e.g. lag compensation estimates, or displaying to other clients.
+///
+/// See the [module-level documentation](self) on how to get access to this
+/// info.
 #[doc(alias = "latency")]
 #[doc(alias = "ping")]
 pub trait Rtt {
-    /// The round-trip time.
+    /// Gets the round-trip time.
     fn rtt(&self) -> Duration;
 }
 
-/// Holds statistics on the number of messages sent across a transport.
+/// Holds statistics on the number of bytes sent across a transport.
+///
+/// Note that a counter increasing does not necessarily mean that a message was
+/// *successfully* sent or received:
+/// - for sending, it indicates how many bytes we attempted to send
+/// - for receiving, it indicates how many bytes we received and acknowledged
+///
+/// See the [module-level documentation](self) on how to get access to this
+/// info.
 ///
 /// Implementors must ensure that, when increasing these counters, saturating
 /// addition is used in order to avoid panics or overflows - see
 /// [`usize::saturating_add`].
-///
-/// Note that a counter increasing does not necessarily mean that a message was
-/// *successfully* sent or received - just that it was recognized.
 pub trait MessageStats {
-    /// Number of messages sent.
-    ///
-    /// For each unit in this value, a single `send` call was issued on the
-    /// transport.
-    fn msgs_sent(&self) -> usize;
+    /// Gets the number of message bytes successfully sent.
+    fn bytes_sent(&self) -> usize;
 
-    /// Number of messages received.
-    ///
-    /// For each unit in this value, a single `Recv` event was emitted by the
-    /// transport during polling.
-    fn msgs_recv(&self) -> usize;
-}
-
-/// Holds statistics on the number of message bytes sent across a transport.
-///
-/// This is used by transports which convert messages into a byte form, and
-/// counts how many of these bytes have been sent or received. This specifically
-/// excludes bytes used for frames or headers.
-///
-/// Note that a counter increasing does not necessarily mean that a message was
-/// *successfully* sent or received - just that it was recognized.
-///
-/// Implementors must ensure that, when increasing these counters, saturating
-/// addition is used in order to avoid panics or overflows - see
-/// [`usize::saturating_add`].
-pub trait MessageByteStats {
-    /// Number of message bytes successfully sent.
-    fn msg_bytes_sent(&self) -> usize;
-
-    /// Number of message bytes successfully received.
-    fn msg_bytes_recv(&self) -> usize;
+    /// Gets the number of message bytes successfully received.
+    fn bytes_recv(&self) -> usize;
 }
 
 /// Allows access to the local socket address of a connection.
 ///
 /// Networked transports will use an operating system socket for network
-/// communication, which has a specific address. This trait exposes this
-/// socket's address.
+/// communication, which has a specific address. This trait exposes the address
+/// of our side's socket.
+///
+/// See the [module-level documentation](self) on how to get access to this
+/// info.
 ///
 /// To access the remote address of a connection, see [`RemoteAddr`].
 pub trait LocalAddr {
-    /// The local socket address of a connection.
+    /// Gets the local socket address of a connection.
     fn local_addr(&self) -> SocketAddr;
 }
 
 /// Allows access to the remote socket address of a connection.
 ///
 /// Networked transports will use an operating system socket for network
-/// communication, which has a specific address. This trait exposes the socket
-/// address of the side which this app's transport is connected to.
+/// communication, which has a specific address. This trait exposes the address
+/// of the other side of the socket.
+///
+/// See the [module-level documentation](self) on how to get access to this
+/// info.
 ///
 /// To access the local address of a connection, see [`LocalAddr`].
 pub trait RemoteAddr {
-    /// The remote socket address of a connection.
+    /// Gets the remote socket address of a connection.
     fn remote_addr(&self) -> SocketAddr;
 }

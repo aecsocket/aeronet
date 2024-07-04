@@ -38,12 +38,10 @@ replicon = ["bevy", "dep:bevy_replicon"]
 bevy-tokio-rt = ["bevy", "dep:tokio"]
 
 [dependencies]
-aeronet_derive.workspace = true
+aeronet_derive = { workspace = true }
 
-bytes.workspace = true
-derivative.workspace = true
-integer-encoding.workspace = true
-thiserror.workspace = true
+derivative = { workspace = true }
+octs = { workspace = true }
 
 serde = { workspace = true, optional = true }
 

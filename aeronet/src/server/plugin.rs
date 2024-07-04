@@ -4,8 +4,7 @@ use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_time::Time;
 use derivative::Derivative;
-
-use crate::protocol::TransportProtocol;
+use octs::Bytes;
 
 use super::{ServerEvent, ServerTransport};
 
@@ -26,7 +25,7 @@ use super::{ServerEvent, ServerTransport};
 /// * [`RemoteClientDisconnected`]
 /// * [`FromClient`]
 /// * [`AckFromClient`]
-/// * [`ServerConnectionError`]
+/// * [`NackFromClient`]
 /// * [`ServerFlushError`]
 ///
 /// This plugin provides the run conditions:
@@ -38,33 +37,28 @@ use super::{ServerEvent, ServerTransport};
 /// inject the transport as a resource into your system.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
-pub struct ServerTransportPlugin<P, T> {
+pub struct ServerTransportPlugin<T: ServerTransport> {
     #[derivative(Debug = "ignore")]
-    _phantom: PhantomData<(P, T)>,
+    _phantom: PhantomData<T>,
 }
 
-impl<P, T> Plugin for ServerTransportPlugin<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
+impl<T: ServerTransport + Resource> Plugin for ServerTransportPlugin<T> {
     fn build(&self, app: &mut App) {
-        app.add_event::<ServerOpened<P, T>>()
-            .add_event::<ServerClosed<P, T>>()
-            .add_event::<RemoteClientConnecting<P, T>>()
-            .add_event::<RemoteClientConnected<P, T>>()
-            .add_event::<RemoteClientDisconnected<P, T>>()
-            .add_event::<FromClient<P, T>>()
-            .add_event::<AckFromClient<P, T>>()
-            .add_event::<ServerConnectionError<P, T>>()
-            .add_event::<ServerFlushError<P, T>>()
+        app.add_event::<ServerOpened<T>>()
+            .add_event::<ServerClosed<T>>()
+            .add_event::<RemoteClientConnecting<T>>()
+            .add_event::<RemoteClientConnected<T>>()
+            .add_event::<RemoteClientDisconnected<T>>()
+            .add_event::<FromClient<T>>()
+            .add_event::<AckFromClient<T>>()
+            .add_event::<ServerFlushError<T>>()
             .configure_sets(PreUpdate, ServerTransportSet::Recv)
             .configure_sets(PostUpdate, ServerTransportSet::Flush)
-            .add_systems(PreUpdate, recv::<P, T>.in_set(ServerTransportSet::Recv))
+            .add_systems(PreUpdate, Self::recv.in_set(ServerTransportSet::Recv))
             .add_systems(
                 PostUpdate,
-                flush::<P, T>
-                    .run_if(server_open::<P, T>)
+                Self::flush
+                    .run_if(server_open::<T>)
                     .in_set(ServerTransportSet::Flush),
             );
     }
@@ -88,16 +82,12 @@ pub enum ServerTransportSet {
 /// ```
 /// # use bevy_app::prelude::*;
 /// # use bevy_ecs::prelude::*;
-/// # use aeronet::{protocol::TransportProtocol, server::{ServerTransport, server_open}};
-/// # fn run<P: TransportProtocol, T: ServerTransport<P> + Resource>() {
+/// # use aeronet::server::{ServerTransport, server_open};
+/// # fn run<T: ServerTransport + Resource>() {
 /// let mut app = App::new();
-/// app.add_systems(Update, my_system::<P, T>.run_if(server_open::<P, T>));
+/// app.add_systems(Update, my_system::<T>.run_if(server_open::<T>));
 ///
-/// fn my_system<P, T>(server: Res<T>)
-/// where
-///     P: TransportProtocol,
-///     T: ServerTransport<P> + Resource,
-/// {
+/// fn my_system<T: ServerTransport + Resource>(server: Res<T>) {
 ///     // ..
 /// }
 /// # }
@@ -106,16 +96,10 @@ pub enum ServerTransportSet {
 /// [`Condition`]: bevy_ecs::schedule::Condition
 /// [`Open`]: crate::server::ServerState::Open
 #[must_use]
-pub fn server_open<P, T>(server: Option<Res<T>>) -> bool
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
-    if let Some(server) = server {
-        server.state().is_open()
-    } else {
-        false
-    }
+pub fn server_open<T: ServerTransport + Resource>(server: Option<Res<T>>) -> bool {
+    server
+        .map(|server| server.state().is_open())
+        .unwrap_or(false)
 }
 
 /// A [`Condition`]-satisfying system that returns `true` if the server `T`
@@ -126,16 +110,12 @@ where
 /// ```
 /// # use bevy_app::prelude::*;
 /// # use bevy_ecs::prelude::*;
-/// # use aeronet::{protocol::TransportProtocol, server::{ServerTransport, server_closed}};
-/// # fn run<P: TransportProtocol, T: ServerTransport<P> + Resource>() {
+/// # use aeronet::server::{ServerTransport, server_closed};
+/// # fn run<T: ServerTransport + Resource>() {
 /// let mut app = App::new();
-/// app.add_systems(Update, my_system::<P, T>.run_if(server_closed::<P, T>));
+/// app.add_systems(Update, my_system::<T>.run_if(server_closed::<T>));
 ///
-/// fn my_system<P, T>(server: Res<T>)
-/// where
-///     P: TransportProtocol,
-///     T: ServerTransport<P> + Resource,
-/// {
+/// fn my_system<T: ServerTransport + Resource>(server: Res<T>) {
 ///     // ..
 /// }
 /// # }
@@ -144,16 +124,10 @@ where
 /// [`Condition`]: bevy_ecs::schedule::Condition
 /// [`Closed`]: crate::server::ServerState::Closed
 #[must_use]
-pub fn server_closed<P, T>(server: Option<Res<T>>) -> bool
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
-    if let Some(server) = server {
-        server.state().is_closed()
-    } else {
-        true
-    }
+pub fn server_closed<T: ServerTransport + Resource>(server: Option<Res<T>>) -> bool {
+    server
+        .map(|server| server.state().is_closed())
+        .unwrap_or(true)
 }
 
 /// The server has completed setup and is ready to accept client
@@ -164,14 +138,10 @@ where
 /// [`ServerState::Open`]: crate::server::ServerState::Open
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
-pub struct ServerOpened<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
+pub struct ServerOpened<T: ServerTransport> {
     #[derivative(Debug = "ignore")]
     #[doc(hidden)]
-    pub _phantom: PhantomData<(P, T)>,
+    pub _phantom: PhantomData<T>,
 }
 
 /// The server can no longer handle client connections, changing state to
@@ -182,11 +152,7 @@ where
 /// [`ServerState::Closed`]: crate::server::ServerState::Closed
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
-pub struct ServerClosed<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
+pub struct ServerClosed<T: ServerTransport> {
     /// Why the server closed.
     pub error: T::Error,
 }
@@ -202,11 +168,7 @@ where
 /// See [`ServerEvent::Connecting`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
-pub struct RemoteClientConnecting<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
+pub struct RemoteClientConnecting<T: ServerTransport> {
     /// Key of the client.
     pub client_key: T::ClientKey,
 }
@@ -222,11 +184,7 @@ where
 /// See [`ServerEvent::Connected`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
-pub struct RemoteClientConnected<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
+pub struct RemoteClientConnected<T: ServerTransport> {
     /// Key of the client.
     pub client_key: T::ClientKey,
 }
@@ -238,11 +196,7 @@ where
 /// See [`ServerEvent::Disconnected`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
-pub struct RemoteClientDisconnected<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
+pub struct RemoteClientDisconnected<T: ServerTransport> {
     /// Key of the client.
     pub client_key: T::ClientKey,
     /// Why the client lost connection.
@@ -253,16 +207,12 @@ where
 ///
 /// See [`ServerEvent::Recv`].
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "P::C2S: Debug"), Clone(bound = "P::C2S: Clone"))]
-pub struct FromClient<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct FromClient<T: ServerTransport> {
     /// Key of the client.
     pub client_key: T::ClientKey,
     /// The message received.
-    pub msg: P::C2S,
+    pub msg: Bytes,
 }
 
 /// A client acknowledged that they have fully received a message sent by
@@ -271,108 +221,96 @@ where
 /// See [`ServerEvent::Ack`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
-pub struct AckFromClient<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
+pub struct AckFromClient<T: ServerTransport> {
     /// Key of the client.
     pub client_key: T::ClientKey,
     /// Key of the sent message, obtained by [`ServerTransport::send`].
     pub msg_key: T::MessageKey,
 }
 
-/// The server has experienced a non-fatal connection error while processing
-/// a client's connection.
+/// Our server believes that an unreliable message sent to a client has probably
+/// been lost in transit.
 ///
-/// The connection is still active until [`ServerEvent::Disconnected`] is
-/// emitted.
+/// An implementation is allowed to not emit this event if it is not able to.
 ///
-/// See [`ServerEvent::ConnectionError`].
+/// See [`ServerEvent::Nack`].
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
-pub struct ServerConnectionError<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct NackFromClient<T: ServerTransport> {
     /// Key of the client.
     pub client_key: T::ClientKey,
-    /// Error which occurred.
-    pub error: T::Error,
+    /// Key of the sent message, obtained by [`ServerTransport::send`].
+    pub msg_key: T::MessageKey,
 }
 
 /// [`ServerTransport::flush`] produced an error.
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
-pub struct ServerFlushError<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
+pub struct ServerFlushError<T: ServerTransport> {
     /// Error produced by [`ServerTransport::flush`].
     pub error: T::Error,
 }
 
-fn recv<P, T>(
-    time: Res<Time>,
-    mut server: ResMut<T>,
-    mut opened: EventWriter<ServerOpened<P, T>>,
-    mut closed: EventWriter<ServerClosed<P, T>>,
-    mut connecting: EventWriter<RemoteClientConnecting<P, T>>,
-    mut connected: EventWriter<RemoteClientConnected<P, T>>,
-    mut disconnected: EventWriter<RemoteClientDisconnected<P, T>>,
-    mut recv: EventWriter<FromClient<P, T>>,
-    mut ack: EventWriter<AckFromClient<P, T>>,
-    mut errors: EventWriter<ServerConnectionError<P, T>>,
-) where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
-    for event in server.poll(time.delta()) {
-        match event {
-            ServerEvent::Opened => {
-                opened.send(ServerOpened {
-                    _phantom: PhantomData,
-                });
-            }
-            ServerEvent::Closed { error } => {
-                closed.send(ServerClosed { error });
-            }
-            ServerEvent::Connecting { client_key } => {
-                connecting.send(RemoteClientConnecting { client_key });
-            }
-            ServerEvent::Connected { client_key } => {
-                connected.send(RemoteClientConnected { client_key });
-            }
-            ServerEvent::Disconnected { client_key, error } => {
-                disconnected.send(RemoteClientDisconnected { client_key, error });
-            }
-            ServerEvent::Recv { client_key, msg } => {
-                recv.send(FromClient { client_key, msg });
-            }
-            ServerEvent::Ack {
-                client_key,
-                msg_key,
-            } => {
-                ack.send(AckFromClient {
+impl<T: ServerTransport + Resource> ServerTransportPlugin<T> {
+    fn recv(
+        time: Res<Time>,
+        mut server: ResMut<T>,
+        mut opened: EventWriter<ServerOpened<T>>,
+        mut closed: EventWriter<ServerClosed<T>>,
+        mut connecting: EventWriter<RemoteClientConnecting<T>>,
+        mut connected: EventWriter<RemoteClientConnected<T>>,
+        mut disconnected: EventWriter<RemoteClientDisconnected<T>>,
+        mut recv: EventWriter<FromClient<T>>,
+        mut ack: EventWriter<AckFromClient<T>>,
+        mut nack: EventWriter<NackFromClient<T>>,
+    ) {
+        for event in server.poll(time.delta()) {
+            match event {
+                ServerEvent::Opened => {
+                    opened.send(ServerOpened {
+                        _phantom: PhantomData,
+                    });
+                }
+                ServerEvent::Closed { error } => {
+                    closed.send(ServerClosed { error });
+                }
+                ServerEvent::Connecting { client_key } => {
+                    connecting.send(RemoteClientConnecting { client_key });
+                }
+                ServerEvent::Connected { client_key } => {
+                    connected.send(RemoteClientConnected { client_key });
+                }
+                ServerEvent::Disconnected { client_key, error } => {
+                    disconnected.send(RemoteClientDisconnected { client_key, error });
+                }
+                ServerEvent::Recv { client_key, msg } => {
+                    recv.send(FromClient { client_key, msg });
+                }
+                ServerEvent::Ack {
                     client_key,
                     msg_key,
-                });
-            }
-            ServerEvent::ConnectionError { client_key, error } => {
-                errors.send(ServerConnectionError { client_key, error });
+                } => {
+                    ack.send(AckFromClient {
+                        client_key,
+                        msg_key,
+                    });
+                }
+                ServerEvent::Nack {
+                    client_key,
+                    msg_key,
+                } => {
+                    nack.send(NackFromClient {
+                        client_key,
+                        msg_key,
+                    });
+                }
             }
         }
     }
-}
 
-fn flush<P, T>(mut server: ResMut<T>, mut errors: EventWriter<ServerFlushError<P, T>>)
-where
-    P: TransportProtocol,
-    T: ServerTransport<P> + Resource,
-{
-    if let Err(error) = server.flush() {
-        errors.send(ServerFlushError { error });
+    fn flush(mut server: ResMut<T>, mut errors: EventWriter<ServerFlushError<T>>) {
+        if let Err(error) = server.flush() {
+            errors.send(ServerFlushError { error });
+        }
     }
 }

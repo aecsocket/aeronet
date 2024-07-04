@@ -1,10 +1,15 @@
-use std::{fmt::Debug, time::Duration};
+use std::{
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+    time::Duration,
+};
 
 use derivative::Derivative;
+use octs::Bytes;
 
 use crate::{
     client::ClientState,
-    protocol::TransportProtocol,
+    lane::LaneIndex,
     server::{ServerEvent, ServerState, ServerTransport},
 };
 
@@ -14,35 +19,26 @@ use super::{Conditioner, ConditionerConfig};
 /// incoming messages.
 ///
 /// See [`condition`](super).
-#[derive(Derivative)]
-#[derivative(Debug(bound = "T: Debug, P::C2S: Debug"))]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct ConditionedServer<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P>,
-{
+pub struct ConditionedServer<T: ServerTransport> {
     inner: T,
-    conditioner: Conditioner<ServerRecv<P, T>>,
+    conditioner: Conditioner<ServerRecv<T>>,
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = "P::C2S: Debug"))]
-struct ServerRecv<P: TransportProtocol, T: ServerTransport<P>> {
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+struct ServerRecv<T: ServerTransport> {
     client_key: T::ClientKey,
-    msg: P::C2S,
+    msg: Bytes,
 }
 
-impl<P, T> ConditionedServer<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P>,
-{
+impl<T: ServerTransport> ConditionedServer<T> {
     /// Wraps an existing transport in a conditioner.
     ///
     /// # Panics
     ///
-    /// Paniics if the configuration provided is invalid.
+    /// Panics if the configuration provided is invalid.
     pub fn new(inner: T, config: &ConditionerConfig) -> Self {
         let conditioner = Conditioner::new(config);
         Self { inner, conditioner }
@@ -65,11 +61,7 @@ where
     }
 }
 
-impl<P, T> std::ops::Deref for ConditionedServer<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P>,
-{
+impl<T: ServerTransport> Deref for ConditionedServer<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -77,30 +69,22 @@ where
     }
 }
 
-impl<P, T> std::ops::DerefMut for ConditionedServer<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P>,
-{
+impl<T: ServerTransport> DerefMut for ConditionedServer<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
 
-impl<P, T> ServerTransport<P> for ConditionedServer<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P>,
-{
+impl<T: ServerTransport> ServerTransport for ConditionedServer<T> {
     type Error = T::Error;
 
-    type Opening<'t> = T::Opening<'t> where Self: 't;
+    type Opening<'this> = T::Opening<'this> where Self: 'this;
 
-    type Open<'t> = T::Open<'t> where Self: 't;
+    type Open<'this> = T::Open<'this> where Self: 'this;
 
-    type Connecting<'t> = T::Connecting<'t> where Self: 't;
+    type Connecting<'this> = T::Connecting<'this> where Self: 'this;
 
-    type Connected<'t> = T::Connected<'t> where Self: 't;
+    type Connected<'this> = T::Connected<'this> where Self: 'this;
 
     type ClientKey = T::ClientKey;
 
@@ -124,9 +108,10 @@ where
     fn send(
         &mut self,
         client: Self::ClientKey,
-        msg: impl Into<P::S2C>,
+        msg: Bytes,
+        lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::Error> {
-        self.inner.send(client, msg)
+        self.inner.send(client, msg, lane)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -137,7 +122,7 @@ where
         self.inner.disconnect(client)
     }
 
-    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<P, Self>> {
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<Self>> {
         let mut events = Vec::new();
 
         events.extend(self.conditioner.buffered().map(|recv| ServerEvent::Recv {
@@ -175,9 +160,13 @@ where
                     client_key,
                     msg_key,
                 }),
-                ServerEvent::ConnectionError { client_key, error } => {
-                    Some(ServerEvent::ConnectionError { client_key, error })
-                }
+                ServerEvent::Nack {
+                    client_key,
+                    msg_key,
+                } => Some(ServerEvent::Nack {
+                    client_key,
+                    msg_key,
+                }),
             };
             if let Some(event) = event {
                 events.push(event);

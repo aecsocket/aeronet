@@ -20,7 +20,7 @@ use crate::{
 
 use super::{FragmentKey, PacketManager, SentFragment, SentMessage};
 
-/// Error that ocurrs when attempting to buffer a message for sending using
+/// Error that occurs when attempting to buffer a message for sending using
 /// [`PacketManager::buffer_send`].
 ///
 /// This is a [fatal connection error](crate::packet).
@@ -122,7 +122,8 @@ impl<S, R, M: BytesMapper<S> + LaneMapper<S>> PacketManager<S, R, M> {
 
     /// Buffers up a message for sending.
     ///
-    /// This message will be stored until the next [`PacketManager::flush`] call.
+    /// This message will be stored until the next [`PacketManager::flush`]
+    /// call.
     ///
     /// The value given for `now` determines when the fragments produced by this
     /// function will next be sent. Usually, you'd want them to be sent as soon

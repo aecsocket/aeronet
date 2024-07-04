@@ -60,11 +60,13 @@ This crate does not aim to be:
 * `#![no_std]`
 * A non-client-to-server networking library (e.g. peer-to-peer)
   * A client is expected to only have at most 1 connection to a server - although this server could
-    also be a client who is in the same app
+    also be a client who is running the same app
 
 # Overview
 
 ## Messages
+
+TODO this is wrong
 
 The smallest unit of transmission that the API exposes is a [`Message`]. This is a user-defined type
 which contains the data that your app wants to send out and receive. The client-to-server and
@@ -125,13 +127,15 @@ add both this crate and the transport implementation crate as dependencies to yo
 ```toml
 [dependencies]
 aeronet = "version"
-aeronet_channel = "version"
+aeronet_whatever_transport_impl = "version"
 ```
 
 The version of this crate is synced between all official subcrates of aeronet - use the same version
 that you use for aeronet for your transport, and you're good to go.
 
 ### Protocol
+
+TODO this is wrong
 
 You will need to define your own type implementing [`TransportProtocol`] which defines what type of
 messages are communicated by your app. The message types must implement [`Message`].

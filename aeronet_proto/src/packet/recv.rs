@@ -62,8 +62,8 @@ pub enum LaneReceiver<R> {
         /// All message sequences below this value are guaranteed to already
         /// have been received.
         pending_seq: Seq,
-        /// Tracks message sequences **after `pending_seq`** which have already been
-        /// received.
+        /// Tracks message sequences **after `pending_seq`** which have already
+        /// been received.
         ///
         /// Once `pending_seq` increases, all entries in this buffer older than
         /// `pending_seq` are removed.
@@ -146,7 +146,7 @@ pub struct ReadAcks<'a, R, M> {
 
 impl<'a, R, M: BytesMapper<R>> ReadAcks<'a, R, M> {
     /// Reads the [`Acknowledge`] header of a packet, and returns an iterator of
-    /// all acknowledged **mesage** sequence numbers.
+    /// all acknowledged **message** sequence numbers.
     ///
     /// # Errors
     ///

@@ -9,26 +9,27 @@ pub use plugin::*;
 use std::{error::Error, fmt::Debug, hash::Hash, time::Duration};
 
 use derivative::Derivative;
+use octs::Bytes;
 
-use crate::protocol::TransportProtocol;
+use crate::lane::LaneIndex;
 
 /// Allows connecting to a server and transporting data between this client and
 /// the server.
 ///
 /// See the [crate-level documentation](crate).
-pub trait ClientTransport<P: TransportProtocol>: Sized {
-    /// Error type of operations performed on this transport.
+pub trait ClientTransport {
+    /// Error type for operations performed on this transport.
     type Error: Error + Send + Sync;
 
     /// Client state when it is in [`ClientState::Connecting`].
-    type Connecting<'t>
+    type Connecting<'this>
     where
-        Self: 't;
+        Self: 'this;
 
     /// Client state when it is in [`ClientState::Connected`].
-    type Connected<'t>
+    type Connected<'this>
     where
-        Self: 't;
+        Self: 'this;
 
     /// Key uniquely identifying a sent message.
     ///
@@ -40,22 +41,20 @@ pub trait ClientTransport<P: TransportProtocol>: Sized {
 
     /// Gets the current state of this client.
     ///
-    /// This can be used to access statistics on the connection, such as number
-    /// of bytes sent or [round-trip time], if the transport exposes it.
-    ///
-    /// [round-trip time]: crate::stats::Rtt
+    /// See [`ClientState`].
     fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>>;
 
-    /// Attempts to send a message to the currently connected server.
+    /// Attempts to send a message along a specific lane to the currently
+    /// connected server.
     ///
     /// This returns a key uniquely identifying the sent message. This can be
     /// used to query the state of the message, such as if it was acknowledged
     /// by the peer, if the implementation supports it.
     ///
     /// The implementation may choose to buffer the message before sending it
-    /// out - therefore, you should always call [`ClientTransport::flush`] to
-    /// ensure that all buffered messages are sent, e.g. at the end of each app
-    /// tick.
+    /// out - therefore, you should call [`ClientTransport::flush`] after you
+    /// have sent all of the messages you wish to send. You can run this at the
+    /// end of each app tick.
     ///
     /// # Errors
     ///
@@ -64,7 +63,11 @@ pub trait ClientTransport<P: TransportProtocol>: Sized {
     ///
     /// If a transmission error occurs later after this function's scope has
     /// finished, then this will still return [`Ok`].
-    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error>;
+    fn send(
+        &mut self,
+        msg: Bytes,
+        lane: impl Into<LaneIndex>,
+    ) -> Result<Self::MessageKey, Self::Error>;
 
     /// Sends all messages previously buffered by [`ClientTransport::send`] to
     /// peers.
@@ -88,15 +91,17 @@ pub trait ClientTransport<P: TransportProtocol>: Sized {
     /// time elapsed since the last `poll` call.
     ///
     /// If this emits an event which changes the transport's state, then after
-    /// this function, the transport is guaranteed to be in this new state. Only
-    /// up to one state-changing event will be produced by this function per
-    /// function call.
-    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<P, Self>>;
+    /// this function, the transport is guaranteed to be in this new state. The
+    /// transport may emit an arbitrary number of state-changing events.
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>>;
 }
 
-/// State of a [`ClientTransport`].
+/// Implementation-specific state details of a [`ClientTransport`].
 ///
-/// See [`ClientTransport::state`].
+/// This can be used to access statistics on the connection, such as number
+/// of bytes sent or [round-trip time], if the transport exposes it.
+///
+/// [round-trip time]: crate::stats::Rtt
 #[derive(Debug, Clone)]
 pub enum ClientState<A, B> {
     /// Not connected to a server, and making no attempts to connect to one.
@@ -108,12 +113,9 @@ pub enum ClientState<A, B> {
     Connected(B),
 }
 
-/// Shortcut for getting the [`ClientState`] type used by a [`ClientTransport`]
-/// with the given [`TransportProtocol`].
-pub type ClientStateFor<'t, P, T> = ClientState<
-    <T as ClientTransport<P>>::Connecting<'t>,
-    <T as ClientTransport<P>>::Connected<'t>,
->;
+/// Shortcut for getting the [`ClientState`] type used by a [`ClientTransport`].
+pub type ClientStateFor<'t, T> =
+    ClientState<<T as ClientTransport>::Connecting<'t>, <T as ClientTransport>::Connected<'t>>;
 
 impl<A, B> ClientState<A, B> {
     /// Gets if this is a [`ClientState::Disconnected`].
@@ -140,38 +142,28 @@ impl<A, B> ClientState<A, B> {
 
 /// Event emitted by a [`ClientTransport`].
 #[derive(Derivative)]
-#[derivative(
-    Debug(bound = "T::Error: Debug, P::S2C: Debug"),
-    Clone(bound = "T::Error: Clone, P::S2C: Clone")
-)]
-pub enum ClientEvent<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P>,
-{
+#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+pub enum ClientEvent<T: ClientTransport + ?Sized> {
     // state
-    /// The client has fully established a connection to the server.
-    ///
-    /// This event can be followed by [`ClientEvent::Recv`] or
-    /// [`ClientEvent::Disconnected`].
+    /// The client has fully established a connection to the server,
+    /// changing state to [`ClientState::Connected`].
     ///
     /// After this event, you can run your game initialization logic such as
     /// receiving the initial world state and e.g. showing a spawn screen.
     Connected,
     /// The client has unrecoverably lost connection from its previously
-    /// connected server.
+    /// connected server, changing state to [`ClientState::Disconnected`].
     ///
-    /// This event is not raised when the app invokes a disconnect.
+    /// This event is not raised when the client side forces a disconnect.
     Disconnected {
         /// Why the client lost connection.
         error: T::Error,
     },
 
-    // info
     /// The client received a message from the server.
     Recv {
         /// The message received.
-        msg: P::S2C,
+        msg: Bytes,
     },
     /// The peer acknowledged that they have fully received a message sent by
     /// us.
@@ -179,12 +171,13 @@ where
         /// Key of the sent message, obtained by [`ClientTransport::send`].
         msg_key: T::MessageKey,
     },
-    /// The client has experienced a non-fatal connection error.
+    /// Our client believes that an unreliable message has probably been lost
+    /// in transit.
     ///
-    /// The connection is still active until [`ClientEvent::Disconnected`] is
-    /// emitted.
-    ConnectionError {
-        /// Error which occurred.
-        error: T::Error,
+    /// An implementation is allowed to not emit this event if it is not able
+    /// to.
+    Nack {
+        /// Key of the sent message, obtained by [`ClientTransport::send`].
+        msg_key: T::MessageKey,
     },
 }

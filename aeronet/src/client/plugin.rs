@@ -4,11 +4,9 @@ use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_time::Time;
 use derivative::Derivative;
+use octs::Bytes;
 
-use crate::{
-    client::{ClientEvent, ClientTransport},
-    protocol::TransportProtocol,
-};
+use crate::client::{ClientEvent, ClientTransport};
 
 /// Forwards messages and events between the [`App`] and a [`ClientTransport`].
 ///
@@ -24,7 +22,7 @@ use crate::{
 /// * [`LocalClientDisconnected`]
 /// * [`FromServer`]
 /// * [`AckFromServer`]
-/// * [`ClientConnectionError`]
+/// * [`NackFromServer`]
 /// * [`ClientFlushError`]
 ///
 /// This plugin provides the run conditions:
@@ -36,30 +34,26 @@ use crate::{
 /// will need to inject the transport as a resource into your system.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
-pub struct ClientTransportPlugin<P, T> {
+pub struct ClientTransportPlugin<T> {
     #[derivative(Debug = "ignore")]
-    _phantom: PhantomData<(P, T)>,
+    _phantom: PhantomData<T>,
 }
 
-impl<P, T> Plugin for ClientTransportPlugin<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
+impl<T: ClientTransport + Resource> Plugin for ClientTransportPlugin<T> {
     fn build(&self, app: &mut App) {
-        app.add_event::<LocalClientConnected<P, T>>()
-            .add_event::<LocalClientDisconnected<P, T>>()
-            .add_event::<FromServer<P, T>>()
-            .add_event::<AckFromServer<P, T>>()
-            .add_event::<ClientConnectionError<P, T>>()
-            .add_event::<ClientFlushError<P, T>>()
+        app.add_event::<LocalClientConnected<T>>()
+            .add_event::<LocalClientDisconnected<T>>()
+            .add_event::<FromServer<T>>()
+            .add_event::<AckFromServer<T>>()
+            .add_event::<NackFromServer<T>>()
+            .add_event::<ClientFlushError<T>>()
             .configure_sets(PreUpdate, ClientTransportSet::Recv)
             .configure_sets(PostUpdate, ClientTransportSet::Flush)
             .add_systems(PreUpdate, Self::recv.in_set(ClientTransportSet::Recv))
             .add_systems(
                 PostUpdate,
                 Self::flush
-                    .run_if(client_connected::<P, T>)
+                    .run_if(client_connected::<T>)
                     .in_set(ClientTransportSet::Flush),
             );
     }
@@ -83,16 +77,12 @@ pub enum ClientTransportSet {
 /// ```
 /// # use bevy_app::prelude::*;
 /// # use bevy_ecs::prelude::*;
-/// # use aeronet::{protocol::TransportProtocol, client::{ClientTransport, client_connected}};
-/// # fn run<P: TransportProtocol, T: ClientTransport<P> + Resource>() {
+/// # use aeronet::client::{ClientTransport, client_connected};
+/// # fn run<T: ClientTransport + Resource>() {
 /// let mut app = App::new();
-/// app.add_systems(Update, my_system::<P, T>.run_if(client_connected::<P, T>));
+/// app.add_systems(Update, my_system::<T>.run_if(client_connected::<T>));
 ///
-/// fn my_system<P, T>(client: Res<T>)
-/// where
-///     P: TransportProtocol,
-///     T: ClientTransport<P> + Resource,
-/// {
+/// fn my_system<T: ClientTransport + Resource>(client: Res<T>) {
 ///     // ..
 /// }
 /// # }
@@ -101,36 +91,26 @@ pub enum ClientTransportSet {
 /// [`Condition`]: bevy_ecs::schedule::Condition
 /// [`Connected`]: crate::client::ClientState::Connected
 #[must_use]
-pub fn client_connected<P, T>(client: Option<Res<T>>) -> bool
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
-    if let Some(client) = client {
-        client.state().is_connected()
-    } else {
-        false
-    }
+pub fn client_connected<T: ClientTransport + Resource>(client: Option<Res<T>>) -> bool {
+    client
+        .map(|client| client.state().is_connected())
+        .unwrap_or(false)
 }
 
-/// A [`Condition`]-satisfying system that returns `true` if the client `T`
-/// does not exist *or* is in the [`Disconnected`] state.
+/// A [`Condition`]-satisfying system that returns `true` if the client `T` does
+/// not exist *or* is in the [`Disconnected`] state.
 ///
 /// # Example
 ///
 /// ```
 /// # use bevy_app::prelude::*;
 /// # use bevy_ecs::prelude::*;
-/// # use aeronet::{protocol::TransportProtocol, client::{ClientTransport, client_disconnected}};
-/// # fn run<P: TransportProtocol, T: ClientTransport<P> + Resource>() {
+/// # use aeronet::client::{ClientTransport, client_disconnected};
+/// # fn run<T: ClientTransport + Resource>() {
 /// let mut app = App::new();
-/// app.add_systems(Update, my_system::<P, T>.run_if(client_disconnected::<P, T>));
+/// app.add_systems(Update, my_system::<T>.run_if(client_disconnected::<T>));
 ///
-/// fn my_system<P, T>(client: Res<T>)
-/// where
-///     P: TransportProtocol,
-///     T: ClientTransport<P> + Resource,
-/// {
+/// fn my_system<T: ClientTransport + Resource>(client: Res<T>) {
 ///     // ..
 /// }
 /// # }
@@ -139,16 +119,10 @@ where
 /// [`Condition`]: bevy_ecs::schedule::Condition
 /// [`Disconnected`]: crate::client::ClientState::Disconnected
 #[must_use]
-pub fn client_disconnected<P, T>(client: Option<Res<T>>) -> bool
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
-    if let Some(client) = client {
-        client.state().is_disconnected()
-    } else {
-        true
-    }
+pub fn client_disconnected<T: ClientTransport + Resource>(client: Option<Res<T>>) -> bool {
+    client
+        .map(|client| client.state().is_disconnected())
+        .unwrap_or(true)
 }
 
 /// The client has fully established a connection to the server.
@@ -162,14 +136,10 @@ where
 /// See [`ClientEvent::Connected`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
-pub struct LocalClientConnected<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
+pub struct LocalClientConnected<T: ClientTransport> {
     #[derivative(Debug = "ignore")]
     #[doc(hidden)]
-    pub _phantom: PhantomData<(P, T)>,
+    pub _phantom: PhantomData<T>,
 }
 
 /// The client has unrecoverably lost connection from its previously
@@ -180,11 +150,7 @@ where
 /// See [`ClientEvent::Disconnected`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
-pub struct LocalClientDisconnected<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
+pub struct LocalClientDisconnected<T: ClientTransport> {
     /// Why the client lost connection.
     pub error: T::Error,
 }
@@ -193,14 +159,10 @@ where
 ///
 /// See [`ClientEvent::Recv`].
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "P::S2C: Debug"), Clone(bound = "P::S2C: Clone"))]
-pub struct FromServer<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct FromServer<T: ClientTransport> {
     /// The message received.
-    pub msg: P::S2C,
+    pub msg: Bytes,
     #[derivative(Debug = "ignore")]
     #[doc(hidden)]
     pub _phantom: PhantomData<T>,
@@ -212,57 +174,41 @@ where
 /// See [`ClientEvent::Ack`].
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
-pub struct AckFromServer<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
+pub struct AckFromServer<T: ClientTransport> {
     /// Key of the sent message, obtained by [`ClientTransport::send`].
     pub msg_key: T::MessageKey,
 }
 
-/// The client has experienced a non-fatal network error.
+/// Our client believes that an unreliable message has probably been lost in
+/// transit.
 ///
-/// The connection is still active until [`ClientEvent::Disconnected`] is
-/// emitted.
+/// An implementation is allowed to not emit this event if it is not able to.
 ///
-/// See [`ClientEvent::ConnectionError`].
+/// See [`ClientEvent::Nack`].
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
-pub struct ClientConnectionError<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
-    /// Error which occurred.
-    pub error: T::Error,
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct NackFromServer<T: ClientTransport> {
+    /// Key of the sent message, obtained by [`ClientTransport::send`].
+    pub msg_key: T::MessageKey,
 }
 
 /// [`ClientTransport::flush`] produced an error.
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
-pub struct ClientFlushError<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
+pub struct ClientFlushError<T: ClientTransport> {
     /// Error produced by [`ClientTransport::flush`].
     pub error: T::Error,
 }
 
-impl<P, T> ClientTransportPlugin<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P> + Resource,
-{
+impl<T: ClientTransport + Resource> ClientTransportPlugin<T> {
     fn recv(
         time: Res<Time>,
         mut client: ResMut<T>,
-        mut connected: EventWriter<LocalClientConnected<P, T>>,
-        mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
-        mut recv: EventWriter<FromServer<P, T>>,
-        mut ack: EventWriter<AckFromServer<P, T>>,
-        mut errors: EventWriter<ClientConnectionError<P, T>>,
+        mut connected: EventWriter<LocalClientConnected<T>>,
+        mut disconnected: EventWriter<LocalClientDisconnected<T>>,
+        mut recv: EventWriter<FromServer<T>>,
+        mut ack: EventWriter<AckFromServer<T>>,
+        mut nack: EventWriter<NackFromServer<T>>,
     ) {
         for event in client.poll(time.delta()) {
             match event {
@@ -283,14 +229,14 @@ where
                 ClientEvent::Ack { msg_key } => {
                     ack.send(AckFromServer { msg_key });
                 }
-                ClientEvent::ConnectionError { error } => {
-                    errors.send(ClientConnectionError { error });
+                ClientEvent::Nack { msg_key } => {
+                    nack.send(NackFromServer { msg_key });
                 }
             }
         }
     }
 
-    fn flush(mut client: ResMut<T>, mut errors: EventWriter<ClientFlushError<P, T>>) {
+    fn flush(mut client: ResMut<T>, mut errors: EventWriter<ClientFlushError<T>>) {
         if let Err(error) = client.flush() {
             errors.send(ClientFlushError { error });
         }

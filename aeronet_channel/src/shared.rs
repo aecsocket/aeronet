@@ -12,11 +12,11 @@ pub struct ConnectionStats {
 }
 
 impl MessageStats for ConnectionStats {
-    fn msgs_sent(&self) -> usize {
+    fn bytes_sent(&self) -> usize {
         self.msgs_sent
     }
 
-    fn msgs_recv(&self) -> usize {
+    fn bytes_recv(&self) -> usize {
         self.msgs_recv
     }
 }

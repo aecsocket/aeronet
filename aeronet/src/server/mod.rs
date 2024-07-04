@@ -3,6 +3,7 @@
 #[cfg(feature = "bevy")]
 mod plugin;
 
+use octs::Bytes;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
@@ -10,40 +11,41 @@ use std::{error::Error, fmt::Debug, hash::Hash, time::Duration};
 
 use derivative::Derivative;
 
-use crate::{client::ClientState, protocol::TransportProtocol};
+use crate::{client::ClientState, lane::LaneIndex};
 
 /// Allows listening to client connections and transporting data between this
 /// server and connected clients.
 ///
 /// See the [crate-level documentation](crate).
-pub trait ServerTransport<P: TransportProtocol>: Sized {
+pub trait ServerTransport {
     /// Error type of operations performed on this transport.
     type Error: Error + Send + Sync;
 
     /// Server state when it is in [`ServerState::Opening`].
-    type Opening<'t>
+    type Opening<'this>
     where
-        Self: 't;
+        Self: 'this;
 
     /// Server state when it is in [`ServerState::Open`].
-    type Open<'t>
+    type Open<'this>
     where
-        Self: 't;
+        Self: 'this;
 
-    /// Client state when it is in [`ClientState::Connecting`].
-    type Connecting<'t>
+    /// A client's state when it is in [`ClientState::Connecting`].
+    type Connecting<'this>
     where
-        Self: 't;
+        Self: 'this;
 
-    /// Client state when it is in [`ClientState::Connected`].
-    type Connected<'t>
+    /// A client's state when it is in [`ClientState::Connected`].
+    type Connected<'this>
     where
-        Self: 't;
+        Self: 'this;
 
     /// Key uniquely identifying a client.
     ///
-    /// If a physical client disconnects and connects, a new key must be used
-    /// to represent the new session.
+    /// If the same physical client (i.e. the same user ID or network socket)
+    /// disconnects and reconnects, this must be treated as a new client, and
+    /// the client must be given a new key.
     type ClientKey: Send + Sync + Debug + Clone + PartialEq + Eq + Hash;
 
     /// Key uniquely identifying a sent message.
@@ -54,22 +56,16 @@ pub trait ServerTransport<P: TransportProtocol>: Sized {
     /// See [`ServerTransport::send`].
     type MessageKey: Send + Sync + Debug + Clone + PartialEq + Eq + Hash;
 
-    /// Reads the current state of this server.
+    /// Gets the current state of this server.
     ///
-    /// This can be used to access info such as the server's [local address],
-    /// if the transport exposes it.
-    ///
-    /// [local address]: crate::stats::LocalAddr
+    /// See [`ServerState`].
     fn state(&self) -> ServerState<Self::Opening<'_>, Self::Open<'_>>;
 
-    /// Reads the current state of a client.
-    ///
-    /// This can be used to access statistics on the connection, such as number
-    /// of bytes sent or [round-trip time], if the transport exposes it.
+    /// Gets the current state of a client.
     ///
     /// If the client does not exist, [`ClientState::Disconnected`] is returned.
     ///
-    /// [round-trip time]: crate::stats::Rtt
+    /// See [`ClientState`].
     fn client_state(
         &self,
         client_key: Self::ClientKey,
@@ -83,27 +79,29 @@ pub trait ServerTransport<P: TransportProtocol>: Sized {
     /// about it.
     fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_;
 
-    /// Attempts to send a message to a connected client.
+    /// Attempts to send a message along a specific lane to a connected client.
     ///
     /// This returns a key uniquely identifying the sent message. This can be
     /// used to query the state of the message, such as if it was acknowledged
     /// by the peer, if the implementation supports it.
     ///
     /// The implementation may choose to buffer the message before sending it
-    /// out - therefore, you should always call [`ServerTransport::flush`] to
-    /// ensure that all buffered messages are sent, e.g. at the end of each app
-    /// tick.
+    /// out - therefore, you should call [`ServerTransport::flush`] after you
+    /// have sent all of the messages you wish to send. You can run this at the
+    /// end of each app tick.
     ///
     /// # Errors
     ///
     /// Errors if the transport failed to *attempt to* send the message, e.g.
-    /// if the server is not open, or if the client is not connected. If a
-    /// transmission error occurs later after this function's scope has
+    /// if the server is not open, or if the client is not connected.
+    ///
+    /// If a transmission error occurs later after this function's scope has
     /// finished, then this will still return [`Ok`].
     fn send(
         &mut self,
         client_key: Self::ClientKey,
-        msg: impl Into<P::S2C>,
+        msg: Bytes,
+        lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::Error>;
 
     /// Sends all messages previously buffered by [`ServerTransport::send`] to
@@ -140,15 +138,17 @@ pub trait ServerTransport<P: TransportProtocol>: Sized {
     /// time elapsed since the last `poll` call.
     ///
     /// If this emits an event which changes the transport's state, then after
-    /// this function, the transport is guaranteed to be in this new state. Only
-    /// up to one state-changing event will be produced by this function per
-    /// function call.
-    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<P, Self>>;
+    /// this function, the transport is guaranteed to be in this new state. The
+    /// transport may emit an arbitrary number of state-changing events.
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<Self>>;
 }
 
-/// State of a [`ServerTransport`].
+/// Implementation-specific state details of a [`ServerTransport`].
 ///
-/// See [`ServerTransport::state`].
+/// This can be used to access info such as the server's [local address], if the
+/// transport exposes it.
+///
+/// [local address]: crate::stats::LocalAddr
 #[derive(Debug, Clone)]
 pub enum ServerState<A, B> {
     /// Not listening to client connections, and making no attempts to start
@@ -161,12 +161,19 @@ pub enum ServerState<A, B> {
     Open(B),
 }
 
-/// Shorthand for the [`ServerState`] of a given [`ServerTransport`].
-pub type ServerStateFor<'this, P, T> =
-    ServerState<<T as ServerTransport<P>>::Opening<'this>, <T as ServerTransport<P>>::Open<'this>>;
+/// Shortcut for getting the [`ServerState`] type used by a [`ServerTransport`].
+pub type ServerStateFor<'t, T> =
+    ServerState<<T as ServerTransport>::Opening<'t>, <T as ServerTransport>::Open<'t>>;
+
+/// Shortcut for getting the [`ClientState`] type used by a [`ServerTransport`].
+pub type ClientStateFor<'t, T> =
+    ClientState<<T as ServerTransport>::Connecting<'t>, <T as ServerTransport>::Connected<'t>>;
 
 impl<A, B> ServerState<A, B> {
     /// Gets if this is a [`ServerState::Closed`].
+    ///
+    /// This should be used to determine if the user is allowed to start a new
+    /// server.
     pub fn is_closed(&self) -> bool {
         matches!(self, Self::Closed)
     }
@@ -177,6 +184,8 @@ impl<A, B> ServerState<A, B> {
     }
 
     /// Gets if this is a [`ServerState::Open`].
+    ///
+    /// This should be used to determine if the app is ready to server clients.
     pub fn is_open(&self) -> bool {
         matches!(self, Self::Open(_))
     }
@@ -184,15 +193,8 @@ impl<A, B> ServerState<A, B> {
 
 /// Event emitted by a [`ServerTransport`].
 #[derive(Derivative)]
-#[derivative(
-    Debug(bound = "T::Error: Debug, P::C2S: Debug"),
-    Clone(bound = "T::Error: Clone, P::C2S: Clone")
-)]
-pub enum ServerEvent<P, T>
-where
-    P: TransportProtocol,
-    T: ServerTransport<P>,
-{
+#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+pub enum ServerEvent<T: ServerTransport + ?Sized> {
     // server state
     /// The server has completed setup and is ready to accept client
     /// connections, changing state to [`ServerState::Open`].
@@ -209,20 +211,15 @@ where
     ///
     /// The client has been given a key, and the server is trying to establish
     /// communication with this client, but messages cannot be transported yet.
-    ///
-    /// This event can be followed by [`ServerEvent::Connected`] or
-    /// [`ServerEvent::Disconnected`].
     Connecting {
         /// Key of the client.
         client_key: T::ClientKey,
     },
-    /// A remote client has fully established a connection to this server.
+    /// A remote client has fully established a connection to this server,
+    /// changing the client's state to [`ClientState::Connected`].
     ///
-    /// This event can be followed by [`ServerEvent::Recv`] or
-    /// [`ServerEvent::Disconnected`].
-    ///
-    /// After this event, you can run your player initialization logic such as
-    /// spawning the player's model in the world.
+    /// After this event, you can start sending messages to and receiving
+    /// messages from the client.
     Connected {
         /// Key of the client.
         client_key: T::ClientKey,
@@ -243,7 +240,7 @@ where
         /// Key of the client.
         client_key: T::ClientKey,
         /// The message received.
-        msg: P::C2S,
+        msg: Bytes,
     },
     /// A client acknowledged that they have fully received a message sent by
     /// us.
@@ -253,15 +250,15 @@ where
         /// Key of the sent message, obtained by [`ServerTransport::send`].
         msg_key: T::MessageKey,
     },
-    /// The server has experienced a non-fatal connection error while processing
-    /// a client's connection.
+    /// Our server believes that an unreliable message sent to a client has
+    /// probably been lost in transit.
     ///
-    /// The connection is still active until [`ServerEvent::Disconnected`] is
-    /// emitted.
-    ConnectionError {
+    /// An implementation is allowed to not emit this event if it is not able
+    /// to.
+    Nack {
         /// Key of the client.
         client_key: T::ClientKey,
-        /// Error which occurred.
-        error: T::Error,
+        /// Key of the sent message, obtained by [`ServerTransport::send`].
+        msg_key: T::MessageKey,
     },
 }

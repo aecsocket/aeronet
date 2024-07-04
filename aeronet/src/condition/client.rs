@@ -4,11 +4,11 @@ use std::{
     time::Duration,
 };
 
-use derivative::Derivative;
+use octs::Bytes;
 
 use crate::{
     client::{ClientEvent, ClientState, ClientTransport},
-    protocol::TransportProtocol,
+    lane::LaneIndex,
 };
 
 use super::{Conditioner, ConditionerConfig};
@@ -17,34 +17,24 @@ use super::{Conditioner, ConditionerConfig};
 /// incoming messages.
 ///
 /// See [`condition`](super).
-#[derive(Derivative)]
-#[derivative(Debug(bound = "T: Debug, P::S2C: Debug"))]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct ConditionedClient<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P>,
-{
+pub struct ConditionedClient<T: ClientTransport> {
     inner: T,
-    conditioner: Conditioner<ClientRecv<P>>,
+    conditioner: Conditioner<ClientRecv>,
 }
 
-#[derive(Derivative)]
-#[derivative(Debug(bound = "P::S2C: Debug"))]
-struct ClientRecv<P: TransportProtocol> {
-    msg: P::S2C,
+#[derive(Debug, Clone)]
+struct ClientRecv {
+    msg: Bytes,
 }
 
-impl<P, T> ConditionedClient<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P>,
-{
+impl<T: ClientTransport> ConditionedClient<T> {
     /// Wraps an existing transport in a conditioner.
     ///
     /// # Panics
     ///
-    /// Paniics if the configuration provided is invalid.
+    /// Panics if the configuration provided is invalid.
     pub fn new(inner: T, config: &ConditionerConfig) -> Self {
         let conditioner = Conditioner::new(config);
         Self { inner, conditioner }
@@ -67,11 +57,7 @@ where
     }
 }
 
-impl<P, T> Deref for ConditionedClient<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P>,
-{
+impl<T: ClientTransport> Deref for ConditionedClient<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -79,22 +65,18 @@ where
     }
 }
 
-impl<P, T> DerefMut for ConditionedClient<P, T>
-where
-    P: TransportProtocol,
-    T: ClientTransport<P>,
-{
+impl<T: ClientTransport> DerefMut for ConditionedClient<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
 
-impl<P: TransportProtocol, T: ClientTransport<P>> ClientTransport<P> for ConditionedClient<P, T> {
+impl<T: ClientTransport> ClientTransport for ConditionedClient<T> {
     type Error = T::Error;
 
-    type Connecting<'t> = T::Connecting<'t> where Self: 't;
+    type Connecting<'this> = T::Connecting<'this> where Self: 'this;
 
-    type Connected<'t> = T::Connected<'t> where Self: 't;
+    type Connected<'this> = T::Connected<'this> where Self: 'this;
 
     type MessageKey = T::MessageKey;
 
@@ -102,16 +84,20 @@ impl<P: TransportProtocol, T: ClientTransport<P>> ClientTransport<P> for Conditi
         self.inner.state()
     }
 
-    fn send(&mut self, msg: impl Into<P::C2S>) -> Result<Self::MessageKey, Self::Error> {
-        self.inner.send(msg)
+    fn send(
+        &mut self,
+        msg: Bytes,
+        lane: impl Into<LaneIndex>,
+    ) -> Result<Self::MessageKey, Self::Error> {
+        self.inner.send(msg, lane)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
         self.inner.flush()
     }
 
-    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<P, Self>> {
-        let mut events = Vec::<ClientEvent<P, Self>>::new();
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
+        let mut events = Vec::<ClientEvent<Self>>::new();
 
         events.extend(
             self.conditioner
@@ -120,7 +106,7 @@ impl<P: TransportProtocol, T: ClientTransport<P>> ClientTransport<P> for Conditi
         );
 
         for event in self.inner.poll(delta_time) {
-            // we have to remap ClientEvent<P, T> to ClientEvent<P, Self>
+            // we have to remap ClientEvent<T> to ClientEvent<Self>
             let event = match event {
                 ClientEvent::Connected => Some(ClientEvent::Connected),
                 ClientEvent::Disconnected { error } => Some(ClientEvent::Disconnected { error }),
@@ -129,9 +115,7 @@ impl<P: TransportProtocol, T: ClientTransport<P>> ClientTransport<P> for Conditi
                     .condition(ClientRecv { msg })
                     .map(|recv| ClientEvent::Recv { msg: recv.msg }),
                 ClientEvent::Ack { msg_key } => Some(ClientEvent::Ack { msg_key }),
-                ClientEvent::ConnectionError { error } => {
-                    Some(ClientEvent::ConnectionError { error })
-                }
+                ClientEvent::Nack { msg_key } => Some(ClientEvent::Nack { msg_key }),
             };
             if let Some(event) = event {
                 events.push(event);
