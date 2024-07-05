@@ -8,12 +8,13 @@ using aeronet.
 
 Replicon provides component-level replication for the Bevy game engine, and this crate provides the
 types and Bevy plugins to integrate any aeronet transport with Replicon. The transport does not
-necessarily have to even be networked, however it will still convert all messages to an intermediate
-byte form.
+necessarily have to even be networked.
 
 # Getting started
 
 ## Protocol
+
+TODO update
 
 First, you must create the underlying transport that you want to create - see the aeronet *Getting
 started* section to find an appropriate transport for your needs. You will also need to create a

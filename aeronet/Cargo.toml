@@ -18,9 +18,6 @@ workspace = true
 all-features = true
 
 [features]
-### Allows creating some types with [`arbitrary`](https://docs.rs/arbitrary).
-arbitrary = ["dep:arbitrary"]
-
 ## Enables serialization of certain types with [`serde`](https://docs.rs/serde).
 serde = ["dep:serde"]
 
@@ -28,7 +25,7 @@ serde = ["dep:serde"]
 condition = ["dep:rand", "dep:rand_distr"]
 
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = ["dep:bevy_ecs", "dep:bevy_app", "dep:bevy_time"]
+bevy = ["dep:bevy_ecs", "dep:bevy_app"]
 
 ## Enables [`bevy_replicon`](https://docs.rs/bevy) support.
 replicon = ["bevy", "dep:bevy_replicon"]
@@ -40,6 +37,7 @@ bevy-tokio-rt = ["bevy", "dep:tokio"]
 [dependencies]
 aeronet_derive = { workspace = true }
 
+arbitrary = { workspace = true }
 bytes = { workspace = true }
 derivative = { workspace = true }
 
@@ -47,14 +45,11 @@ serde = { workspace = true, optional = true }
 
 bitcode = { workspace = true, optional = true }
 
-arbitrary = { workspace = true, optional = true }
-
 rand = { workspace = true, optional = true }
 rand_distr = { workspace = true, optional = true }
 
 bevy_app = { workspace = true, optional = true }
 bevy_ecs = { workspace = true, optional = true }
-bevy_time = { workspace = true, optional = true }
 
 tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }
 

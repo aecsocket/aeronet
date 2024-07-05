@@ -31,6 +31,7 @@ pub struct ConditionedServer<T: ServerTransport> {
 struct ServerRecv<T: ServerTransport> {
     client_key: T::ClientKey,
     msg: Bytes,
+    lane: LaneIndex,
 }
 
 impl<T: ServerTransport> ConditionedServer<T> {
@@ -128,6 +129,7 @@ impl<T: ServerTransport> ServerTransport for ConditionedServer<T> {
         events.extend(self.conditioner.buffered().map(|recv| ServerEvent::Recv {
             client_key: recv.client_key,
             msg: recv.msg,
+            lane: recv.lane,
         }));
 
         for event in self.inner.poll(delta_time) {
@@ -143,15 +145,21 @@ impl<T: ServerTransport> ServerTransport for ConditionedServer<T> {
                 ServerEvent::Disconnected { client_key, error } => {
                     Some(ServerEvent::Disconnected { client_key, error })
                 }
-                ServerEvent::Recv { client_key, msg } => self
+                ServerEvent::Recv {
+                    client_key,
+                    msg,
+                    lane,
+                } => self
                     .conditioner
                     .condition(ServerRecv {
                         client_key: client_key.clone(),
                         msg,
+                        lane,
                     })
                     .map(|recv| ServerEvent::Recv {
                         client_key,
                         msg: recv.msg,
+                        lane: recv.lane,
                     }),
                 ServerEvent::Ack {
                     client_key,

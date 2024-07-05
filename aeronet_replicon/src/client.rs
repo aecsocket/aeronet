@@ -4,12 +4,14 @@ use std::marker::PhantomData;
 
 use aeronet::{
     client::{
-        client_connected, ClientConnectionError, ClientEvent, ClientFlushError, ClientState,
-        ClientTransport, ClientTransportSet, LocalClientConnected, LocalClientDisconnected,
+        client_connected, ClientEvent, ClientState, ClientTransport, ClientTransportSet,
+        LocalClientConnected, LocalClientDisconnected,
     },
-    protocol::TransportProtocol,
+    error::pretty_error,
+    lane::LaneIndex,
 };
-use bevy::prelude::*;
+use bevy_app::prelude::*;
+use bevy_ecs::prelude::*;
 use bevy_replicon::{
     client::{
         replicon_client::{RepliconClient, RepliconClientStatus},
@@ -17,38 +19,36 @@ use bevy_replicon::{
     },
     server::ServerSet,
 };
+use bevy_time::prelude::*;
 use derivative::Derivative;
-
-use crate::protocol::RepliconMessage;
+use tracing::warn;
 
 /// Provides a [`bevy_replicon`] client backend using the given [`aeronet`]
 /// transport.
 ///
-/// **Do not use both this plugin and [`ClientTransportPlugin`] together!**
+/// You must use [`RepliconClientPlugin`] and Replicon's [`ClientPlugin`]
+/// together.
 ///
-/// This behaves similarly to [`ClientTransportPlugin`], but does not send out
-/// [`FromServer`] and [`AckFromServer`], which are managed by Replicon.
+/// System sets:
+/// * [`ClientTransportSet::Recv`]
+/// * [`ClientTransportSet::Send`]
 ///
-/// [`ClientTransportPlugin`]: aeronet::client::ClientTransportPlugin
-/// [`FromServer`]: aeronet::client::FromServer
-/// [`AckFromServer`]: aeronet::client::AckFromServer
+/// Events:
+/// * [`LocalClientConnected`]
+/// * [`LocalClientDisconnected`]
+///
+/// [`ClientPlugin`]: bevy_replicon::client::ClientPlugin
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
-pub struct RepliconClientPlugin<P, T> {
+pub struct RepliconClientPlugin<T> {
     #[derivative(Debug = "ignore")]
-    _phantom: PhantomData<(P, T)>,
+    _phantom: PhantomData<T>,
 }
 
-impl<P, T> Plugin for RepliconClientPlugin<P, T>
-where
-    P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
-    T: ClientTransport<P> + Resource,
-{
+impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
     fn build(&self, app: &mut App) {
-        app.add_event::<LocalClientConnected<P, T>>()
-            .add_event::<LocalClientDisconnected<P, T>>()
-            .add_event::<ClientConnectionError<P, T>>()
-            .add_event::<ClientFlushError<P, T>>()
+        app.add_event::<LocalClientConnected<T>>()
+            .add_event::<LocalClientDisconnected<T>>()
             .configure_sets(
                 PreUpdate,
                 (
@@ -60,7 +60,7 @@ where
                 PostUpdate,
                 (
                     ClientSet::SendPackets,
-                    ClientTransportSet::Flush.after(ClientSet::SendPackets),
+                    ClientTransportSet::Send.after(ClientSet::SendPackets),
                 ),
             )
             .add_systems(
@@ -76,24 +76,19 @@ where
             .add_systems(
                 PostUpdate,
                 Self::send
-                    .run_if(client_connected::<P, T>)
+                    .run_if(client_connected::<T>)
                     .in_set(ServerSet::SendPackets),
             );
     }
 }
 
-impl<P, T> RepliconClientPlugin<P, T>
-where
-    P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
-    T: ClientTransport<P> + Resource,
-{
+impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
     fn recv(
         time: Res<Time>,
         mut client: ResMut<T>,
         mut replicon: ResMut<RepliconClient>,
-        mut connected: EventWriter<LocalClientConnected<P, T>>,
-        mut disconnected: EventWriter<LocalClientDisconnected<P, T>>,
-        mut errors: EventWriter<ClientConnectionError<P, T>>,
+        mut connected: EventWriter<LocalClientConnected<T>>,
+        mut disconnected: EventWriter<LocalClientDisconnected<T>>,
     ) {
         for event in client.poll(time.delta()) {
             match event {
@@ -105,13 +100,16 @@ where
                 ClientEvent::Disconnected { error } => {
                     disconnected.send(LocalClientDisconnected { error });
                 }
-                ClientEvent::Recv { msg } => {
-                    replicon.insert_received(msg.channel_id, msg.payload);
+                ClientEvent::Recv { msg, lane } => {
+                    let Ok(channel) = u8::try_from(lane.into_raw()) else {
+                        warn!(
+                            "Received message on {lane:?}, which is not a valid Replicon channel"
+                        );
+                        continue;
+                    };
+                    replicon.insert_received(channel, msg);
                 }
-                ClientEvent::Ack { .. } => {}
-                ClientEvent::ConnectionError { error } => {
-                    errors.send(ClientConnectionError { error });
-                }
+                ClientEvent::Ack { .. } | ClientEvent::Nack { .. } => {}
             }
         }
     }
@@ -128,21 +126,13 @@ where
         replicon.set_status(RepliconClientStatus::Disconnected);
     }
 
-    fn send(
-        mut client: ResMut<T>,
-        mut replicon: ResMut<RepliconClient>,
-        mut flush_errors: EventWriter<ClientFlushError<P, T>>,
-    ) {
+    fn send(mut client: ResMut<T>, mut replicon: ResMut<RepliconClient>) {
         for (channel_id, payload) in replicon.drain_sent() {
-            // ignore send failures
-            let _ = client.send(RepliconMessage {
-                channel_id,
-                payload,
-            });
+            let _ = client.send(payload, LaneIndex::from_raw(usize::from(channel_id)));
         }
 
         if let Err(error) = client.flush() {
-            flush_errors.send(ClientFlushError { error });
+            warn!("Failed to flush data: {:#}", pretty_error(&error));
         }
     }
 }

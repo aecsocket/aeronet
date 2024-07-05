@@ -1,10 +1,10 @@
 //! Server-side traits and items.
 
 #[cfg(feature = "bevy")]
-mod plugin;
+mod bevy;
 
 #[cfg(feature = "bevy")]
-pub use plugin::*;
+pub use bevy::*;
 
 use std::{error::Error, fmt::Debug, hash::Hash, time::Duration};
 
@@ -189,6 +189,17 @@ impl<A, B> ServerState<A, B> {
     pub fn is_open(&self) -> bool {
         matches!(self, Self::Open(_))
     }
+
+    /// Converts from `&ServerState<A, B>` to `ServerState<&A, &B>`.
+    ///
+    /// Analogous to [`Option::as_ref`].
+    pub fn as_ref(&self) -> ServerState<&A, &B> {
+        match self {
+            Self::Closed => ServerState::Closed,
+            Self::Opening(x) => ServerState::Opening(&x),
+            Self::Open(x) => ServerState::Open(&x),
+        }
+    }
 }
 
 /// Event emitted by a [`ServerTransport`].
@@ -211,6 +222,9 @@ pub enum ServerEvent<T: ServerTransport + ?Sized> {
     ///
     /// The client has been given a key, and the server is trying to establish
     /// communication with this client, but messages cannot be transported yet.
+    ///
+    /// For a given client, the transport is guaranteed to emit this event
+    /// before [`ServerEvent::Connected`].
     Connecting {
         /// Key of the client.
         client_key: T::ClientKey,
@@ -241,6 +255,8 @@ pub enum ServerEvent<T: ServerTransport + ?Sized> {
         client_key: T::ClientKey,
         /// The message received.
         msg: Bytes,
+        /// Lane on which the message was received.
+        lane: LaneIndex,
     },
     /// A client acknowledged that they have fully received a message sent by
     /// us.

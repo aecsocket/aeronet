@@ -43,8 +43,8 @@ pub struct ChannelServer {
 pub struct Connected {
     /// Statistics of this connection.
     pub stats: ConnectionStats,
-    recv_c2s: Receiver<Bytes>,
-    send_s2c: Sender<Bytes>,
+    recv_c2s: Receiver<(Bytes, LaneIndex)>,
+    send_s2c: Sender<(Bytes, LaneIndex)>,
     send_connected: bool,
 }
 
@@ -75,8 +75,8 @@ impl ChannelServer {
 
     pub(super) fn insert_client(
         &mut self,
-        recv_c2s: Receiver<Bytes>,
-        send_s2c: Sender<Bytes>,
+        recv_c2s: Receiver<(Bytes, LaneIndex)>,
+        send_s2c: Sender<(Bytes, LaneIndex)>,
     ) -> ClientKey {
         self.clients.insert(Client::Connected(Connected {
             stats: ConnectionStats::default(),
@@ -124,7 +124,7 @@ impl ServerTransport for ChannelServer {
         &mut self,
         client_key: Self::ClientKey,
         msg: Bytes,
-        _lane: impl Into<LaneIndex>,
+        lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::Error> {
         let Some(Client::Connected(client)) = self.clients.get_mut(client_key) else {
             return Err(ServerError::NoClient);
@@ -133,7 +133,7 @@ impl ServerTransport for ChannelServer {
         let msg_len = msg.len();
         client
             .send_s2c
-            .send(msg)
+            .send((msg, lane.into()))
             .map_err(|_| ServerError::Disconnected)?;
         client.stats.bytes_sent += msg_len;
         Ok(())
@@ -189,9 +189,13 @@ impl ChannelServer {
 
         loop {
             match client.recv_c2s.try_recv() {
-                Ok(msg) => {
+                Ok((msg, lane)) => {
                     client.stats.bytes_recv += msg.len();
-                    events.push(ServerEvent::Recv { client_key, msg });
+                    events.push(ServerEvent::Recv {
+                        client_key,
+                        msg,
+                        lane,
+                    });
                 }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {

@@ -1,117 +1,41 @@
-use aeronet::{error::pretty_error, protocol::ProtocolVersion};
-use bytes::Bytes;
-use futures::{
-    channel::{mpsc, oneshot},
-    never::Never,
-    FutureExt,
-};
+use futures::{channel::oneshot, never::Never};
 use tracing::debug;
-use xwt_core::{Connecting, EndpointConnect, OpenBiStream, OpeningBiStream};
 
-use crate::{
-    internal,
-    shared::{self, ConnectionStats},
-    ty,
-};
+use crate::internal;
 
-use super::{BackendError, NativeConfig};
-
-#[derive(Debug)]
-pub struct Connected {
-    pub send_c2s: mpsc::UnboundedSender<Bytes>,
-    pub recv_s2c: mpsc::Receiver<Bytes>,
-    pub recv_stats: mpsc::Receiver<ConnectionStats>,
-    pub initial_stats: ConnectionStats,
-}
+use super::{ClientConfig, ClientError, Connected};
 
 pub async fn start(
-    native_config: NativeConfig,
-    version: ProtocolVersion,
+    config: ClientConfig,
     target: String,
     send_connected: oneshot::Sender<Connected>,
-) -> BackendError {
-    match do_start(native_config, version, target, send_connected).await {
-        Ok(_) => unreachable!(),
-        Err(err @ BackendError::Generic(shared::BackendError::FrontendClosed)) => {
-            debug!("Client disconnected");
-            err
-        }
-        Err(err) => {
-            debug!("Client disconnected: {:#}", pretty_error(&err));
-            err
-        }
-    }
-}
-
-async fn do_start(
-    native_config: NativeConfig,
-    version: ProtocolVersion,
-    target: String,
-    send_connected: oneshot::Sender<Connected>,
-) -> Result<Never, BackendError> {
-    let endpoint = create_endpoint(native_config)?;
-    debug!("Connecting to {target:?}");
+) -> Result<Never, ClientError> {
+    let endpoint = create_endpoint(config)?;
+    debug!("Created endpoint, connecting to {target:?}");
     let conn = endpoint
-        .connect(&target)
+        .connect(target)
         .await
-        .map_err(|err| BackendError::Connect(err.into()))?
-        .wait_connect()
+        .map_err(ClientError::Connect)?
         .await
-        .map_err(|err| BackendError::AwaitConnection(err.into()))?;
+        .map_err(ClientError::AwaitConnect)?;
 
     if !internal::check_datagram_support(&conn) {
-        Err(shared::BackendError::DatagramsNotSupported)?;
+        return Err(ClientError::DatagramsNotSupported);
     }
 
-    debug!("Connection opened, opening managed stream");
-    let (mut send_managed, mut recv_managed) = conn
-        .open_bi()
-        .await
-        .map_err(|err| shared::BackendError::StartOpeningManaged(err.into()))?
-        .wait_bi()
-        .await
-        .map_err(|err| shared::BackendError::AwaitOpeningManaged(err.into()))?;
-
-    debug!("Managed stream open, negotiating protocol");
-    internal::negotiate::client(version, &mut send_managed, &mut recv_managed).await?;
-
-    debug!("Negotiated successfully, forwarding to frontend");
-    let (send_c2s, recv_c2s) = mpsc::unbounded::<Bytes>();
-    let (send_s2c, recv_s2c) = mpsc::channel::<Bytes>(internal::BUFFER_SIZE);
-    let (send_stats, recv_stats) = mpsc::channel::<ConnectionStats>(1);
-    send_connected
-        .send(Connected {
-            send_c2s,
-            recv_s2c,
-            recv_stats,
-            initial_stats: ConnectionStats::from(&conn),
-        })
-        .map_err(|_| shared::BackendError::FrontendClosed)?;
-
-    debug!("Starting connection loop");
-    // `receive_datagram` may not be cancel-safe, so we create two futures which
-    // loop infinitely independently, and wait for the first one to fail
-    let send = internal::send(&conn, recv_c2s);
-    let recv = internal::recv(&conn, send_s2c, send_stats);
-    futures::select! {
-        r = send.fuse() => r,
-        r = recv.fuse() => r,
+    loop {
+        todo!()
     }
-    .map_err(From::from)
 }
 
-#[cfg(target_family = "wasm")]
-fn create_endpoint(
-    config: xwt::current::WebTransportOptions,
-) -> Result<ty::Endpoint, BackendError> {
-    Ok(ty::Endpoint {
-        options: config.to_js(),
-    })
-}
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+    } else {
+        type ClientEndpoint = xwt::current::Endpoint<wtransport::endpoint::endpoint_side::Client>;
 
-#[cfg(not(target_family = "wasm"))]
-fn create_endpoint(config: wtransport::ClientConfig) -> Result<ty::Endpoint, BackendError> {
-    let endpoint =
-        wtransport::Endpoint::client(config).map_err(shared::BackendError::CreateEndpoint)?;
-    Ok(xwt::current::Endpoint(endpoint))
+        fn create_endpoint(config: ClientConfig) -> Result<ClientEndpoint, ClientError> {
+            let raw = wtransport::Endpoint::client(config).map_err(ClientError::CreateEndpoint)?;
+            Ok(xwt::current::Endpoint(raw))
+        }
+    }
 }

@@ -1,57 +1,59 @@
 //! Server-side traits and items.
 
-use std::{fmt::Debug, marker::PhantomData};
+use std::{marker::PhantomData, ops::Deref};
 
 use aeronet::{
-    protocol::TransportProtocol,
+    error::pretty_error,
+    lane::LaneIndex,
     server::{
         server_open, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
-        ServerClosed, ServerConnectionError, ServerEvent, ServerFlushError, ServerOpened,
-        ServerState, ServerTransport, ServerTransportSet,
+        ServerClosed, ServerEvent, ServerOpened, ServerState, ServerTransport, ServerTransportSet,
     },
 };
-use bevy::prelude::*;
+use bevy_app::prelude::*;
+use bevy_ecs::prelude::*;
 use bevy_replicon::{
     core::ClientId,
     server::{replicon_server::RepliconServer, ServerSet},
 };
+use bevy_time::prelude::*;
 use bimap::{BiHashMap, Overwritten};
 use derivative::Derivative;
-
-use crate::protocol::RepliconMessage;
+use tracing::{debug, warn};
 
 /// Provides a [`bevy_replicon`] server backend using the given [`aeronet`]
 /// transport.
 ///
-/// **Do not use both this plugin and [`ServerTransportPlugin`] together!**
+/// You must use [`RepliconServerPlugin`] and Replicon's [`ServerPlugin`]
+/// together.
 ///
-/// This behaves similarly to [`ServerTransportPlugin`], but does not send out
-/// [`FromClient`] and [`AckFromClient`], which are managed by Replicon.
+/// System sets:
+/// * [`ServerTransportSet::Recv`]
+/// * [`ServerTransportSet::Send`]
 ///
-/// [`ServerTransportPlugin`]: aeronet::server::ServerTransportPlugin
-/// [`FromClient`]: aeronet::server::FromClient
-/// [`AckFromClient`]: aeronet::server::AckFromClient
+/// Events:
+/// * [`ServerOpened`]
+/// * [`ServerClosed`]
+/// * [`RemoteClientConnecting`]
+/// * [`RemoteClientConnected`]
+/// * [`RemoteClientDisconnected`]
+///
+/// [`ServerPlugin`]: bevy_replicon::server::ServerPlugin
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
-pub struct RepliconServerPlugin<P, T> {
+pub struct RepliconServerPlugin<T> {
     #[derivative(Debug = "ignore")]
-    _phantom: PhantomData<(P, T)>,
+    _phantom: PhantomData<T>,
 }
 
-impl<P, T> Plugin for RepliconServerPlugin<P, T>
-where
-    P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
-    T: ServerTransport<P> + Resource,
-{
+impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
     fn build(&self, app: &mut App) {
-        app.add_event::<ServerOpened<P, T>>()
-            .add_event::<ServerClosed<P, T>>()
-            .add_event::<RemoteClientConnecting<P, T>>()
-            .add_event::<RemoteClientConnected<P, T>>()
-            .add_event::<RemoteClientDisconnected<P, T>>()
-            .add_event::<ServerConnectionError<P, T>>()
-            .add_event::<ServerFlushError<P, T>>()
-            .init_resource::<ClientKeys<P, T>>()
+        app.add_event::<ServerOpened<T>>()
+            .add_event::<ServerClosed<T>>()
+            .add_event::<RemoteClientConnecting<T>>()
+            .add_event::<RemoteClientConnected<T>>()
+            .add_event::<RemoteClientDisconnected<T>>()
+            .init_resource::<ClientKeys<T>>()
             .configure_sets(
                 PreUpdate,
                 (
@@ -62,8 +64,8 @@ where
             .configure_sets(
                 PostUpdate,
                 (
-                    ServerTransportSet::Flush,
-                    ServerSet::SendPackets.before(ServerTransportSet::Flush),
+                    ServerTransportSet::Send,
+                    ServerSet::SendPackets.before(ServerTransportSet::Send),
                 ),
             )
             .add_systems(
@@ -79,33 +81,35 @@ where
             .add_systems(
                 PostUpdate,
                 Self::send
-                    .run_if(server_open::<P, T>)
+                    .run_if(server_open::<T>)
                     .in_set(ServerSet::SendPackets),
             );
     }
 }
 
+type ClientMap<K> = BiHashMap<K, ClientId, ahash::RandomState, ahash::RandomState>;
+
 /// Stores mappings between `T::ClientKey`s and [`ClientId`]s as a bidirectional
 /// map.
-///
-/// Client IDs start at 1, because ID 0 is reserved for [`ClientId::SERVER`].
 #[derive(Derivative, Resource)]
-#[derivative(
-    Debug(bound = "T::ClientKey: Debug"),
-    Clone(bound = "T::ClientKey: Clone")
-)]
-pub struct ClientKeys<P: TransportProtocol, T: ServerTransport<P>> {
-    id_map: BiHashMap<T::ClientKey, ClientId, ahash::RandomState, ahash::RandomState>,
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct ClientKeys<T: ServerTransport> {
+    id_map: ClientMap<T::ClientKey>,
     next_id: ClientId,
 }
 
-impl<P: TransportProtocol, T: ServerTransport<P>> ClientKeys<P, T> {
-    /// Gets the mappings between `T::ClientKey`s and [`ClientId`]s as a
-    /// bidirectional map.
+impl<T: ServerTransport> Deref for ClientKeys<T> {
+    type Target = ClientMap<T::ClientKey>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.id_map
+    }
+}
+
+impl<T: ServerTransport> ClientKeys<T> {
+    /// Gets the mappings between `T::ClientKey`s and [`ClientId`]s.
     #[must_use]
-    pub fn id_map(
-        &self,
-    ) -> &BiHashMap<T::ClientKey, ClientId, ahash::RandomState, ahash::RandomState> {
+    pub fn map(&self) -> &ClientMap<T::ClientKey> {
         &self.id_map
     }
 
@@ -116,7 +120,7 @@ impl<P: TransportProtocol, T: ServerTransport<P>> ClientKeys<P, T> {
     }
 }
 
-impl<P: TransportProtocol, T: ServerTransport<P>> Default for ClientKeys<P, T> {
+impl<T: ServerTransport> Default for ClientKeys<T> {
     fn default() -> Self {
         Self {
             id_map: BiHashMap::with_hashers(ahash::RandomState::new(), ahash::RandomState::new()),
@@ -128,23 +132,18 @@ impl<P: TransportProtocol, T: ServerTransport<P>> Default for ClientKeys<P, T> {
 
 type RepliconEvent = bevy_replicon::server::ServerEvent;
 
-impl<P, T> RepliconServerPlugin<P, T>
-where
-    P: TransportProtocol<C2S = RepliconMessage, S2C = RepliconMessage>,
-    T: ServerTransport<P> + Resource,
-{
+impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
     fn recv(
         time: Res<Time>,
         mut server: ResMut<T>,
         mut replicon_server: ResMut<RepliconServer>,
-        mut client_keys: ResMut<ClientKeys<P, T>>,
+        mut client_keys: ResMut<ClientKeys<T>>,
         mut replicon_events: EventWriter<bevy_replicon::server::ServerEvent>,
-        mut opened: EventWriter<ServerOpened<P, T>>,
-        mut closed: EventWriter<ServerClosed<P, T>>,
-        mut connecting: EventWriter<RemoteClientConnecting<P, T>>,
-        mut connected: EventWriter<RemoteClientConnected<P, T>>,
-        mut disconnected: EventWriter<RemoteClientDisconnected<P, T>>,
-        mut errors: EventWriter<ServerConnectionError<P, T>>,
+        mut opened: EventWriter<ServerOpened<T>>,
+        mut closed: EventWriter<ServerClosed<T>>,
+        mut connecting: EventWriter<RemoteClientConnecting<T>>,
+        mut connected: EventWriter<RemoteClientConnected<T>>,
+        mut disconnected: EventWriter<RemoteClientDisconnected<T>>,
     ) {
         for event in server.poll(time.delta()) {
             match event {
@@ -192,17 +191,24 @@ where
                         reason: reason_str,
                     });
                 }
-                ServerEvent::Recv { client_key, msg } => {
+                ServerEvent::Recv {
+                    client_key,
+                    msg,
+                    lane,
+                } => {
+                    let Ok(channel) = u8::try_from(lane.into_raw()) else {
+                        warn!(
+                            "Received message on {lane:?}, which is not a valid Replicon channel"
+                        );
+                        continue;
+                    };
                     let Some(client_id) = client_keys.id_map.get_by_left(&client_key) else {
                         warn!("Received message from client {client_key:?} which does not have a client ID");
-                        return;
+                        continue;
                     };
-                    replicon_server.insert_received(*client_id, msg.channel_id, msg.payload);
+                    replicon_server.insert_received(*client_id, channel, msg);
                 }
-                ServerEvent::Ack { .. } => {}
-                ServerEvent::ConnectionError { client_key, error } => {
-                    errors.send(ServerConnectionError { client_key, error });
-                }
+                ServerEvent::Ack { .. } | ServerEvent::Nack { .. } => {}
             }
         }
     }
@@ -221,8 +227,7 @@ where
     fn send(
         mut server: ResMut<T>,
         mut replicon: ResMut<RepliconServer>,
-        client_keys: Res<ClientKeys<P, T>>,
-        mut flush_errors: EventWriter<ServerFlushError<P, T>>,
+        client_keys: Res<ClientKeys<T>>,
     ) {
         for (client_id, channel_id, payload) in replicon.drain_sent() {
             let Some(client_key) = client_keys.id_map.get_by_right(&client_id) else {
@@ -232,18 +237,15 @@ where
                 continue;
             };
 
-            // ignore send failures
             let _ = server.send(
                 client_key.clone(),
-                RepliconMessage {
-                    channel_id,
-                    payload,
-                },
+                payload,
+                LaneIndex::from_raw(usize::from(channel_id)),
             );
         }
 
         if let Err(error) = server.flush() {
-            flush_errors.send(ServerFlushError { error });
+            warn!("Failed to flush data: {:#}", pretty_error(&error));
         }
     }
 }

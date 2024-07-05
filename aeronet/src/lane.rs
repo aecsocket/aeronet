@@ -183,9 +183,9 @@ impl LaneKind {
 }
 
 #[cfg(feature = "replicon")]
-impl From<bevy_replicon::core::replicon_channels::ChannelKind> for LaneKind {
-    fn from(value: bevy_replicon::core::replicon_channels::ChannelKind) -> Self {
-        use bevy_replicon::core::replicon_channels::ChannelKind;
+impl From<bevy_replicon::core::channels::ChannelKind> for LaneKind {
+    fn from(value: bevy_replicon::core::channels::ChannelKind) -> Self {
+        use bevy_replicon::core::channels::ChannelKind;
 
         match value {
             ChannelKind::Unreliable => Self::UnreliableUnordered,
@@ -207,8 +207,7 @@ impl From<bevy_replicon::core::replicon_channels::ChannelKind> for LaneKind {
 /// panic.
 ///
 /// [`ClientTransport::send`]: crate::client::ClientTransport::send
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, arbitrary::Arbitrary)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LaneIndex(usize);
 

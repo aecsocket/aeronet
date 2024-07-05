@@ -27,6 +27,7 @@ pub struct ConditionedClient<T: ClientTransport> {
 #[derive(Debug, Clone)]
 struct ClientRecv {
     msg: Bytes,
+    lane: LaneIndex,
 }
 
 impl<T: ClientTransport> ConditionedClient<T> {
@@ -99,21 +100,23 @@ impl<T: ClientTransport> ClientTransport for ConditionedClient<T> {
     fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
         let mut events = Vec::<ClientEvent<Self>>::new();
 
-        events.extend(
-            self.conditioner
-                .buffered()
-                .map(|recv| ClientEvent::Recv { msg: recv.msg }),
-        );
+        events.extend(self.conditioner.buffered().map(|recv| ClientEvent::Recv {
+            msg: recv.msg,
+            lane: recv.lane,
+        }));
 
         for event in self.inner.poll(delta_time) {
             // we have to remap ClientEvent<T> to ClientEvent<Self>
             let event = match event {
                 ClientEvent::Connected => Some(ClientEvent::Connected),
                 ClientEvent::Disconnected { error } => Some(ClientEvent::Disconnected { error }),
-                ClientEvent::Recv { msg } => self
+                ClientEvent::Recv { msg, lane } => self
                     .conditioner
-                    .condition(ClientRecv { msg })
-                    .map(|recv| ClientEvent::Recv { msg: recv.msg }),
+                    .condition(ClientRecv { msg, lane })
+                    .map(|recv| ClientEvent::Recv {
+                        msg: recv.msg,
+                        lane: recv.lane,
+                    }),
                 ClientEvent::Ack { msg_key } => Some(ClientEvent::Ack { msg_key }),
                 ClientEvent::Nack { msg_key } => Some(ClientEvent::Nack { msg_key }),
             };

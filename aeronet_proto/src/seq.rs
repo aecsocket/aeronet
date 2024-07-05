@@ -1,8 +1,7 @@
 //! See [`Seq`].
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, convert::Infallible};
 
-use aeronet::octs;
 use arbitrary::Arbitrary;
 
 /// Sequence number uniquely identifying an item sent across a network.
@@ -150,19 +149,22 @@ impl std::ops::SubAssign for Seq {
     }
 }
 
-impl octs::ConstEncodeLen for Seq {
+impl octs::FixedEncodeLen for Seq {
     const ENCODE_LEN: usize = u16::ENCODE_LEN;
 }
 
 impl octs::Encode for Seq {
-    fn encode(&self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
-        buf.write(&self.0)?;
-        Ok(())
+    type Error = Infallible;
+
+    fn encode(&self, mut buf: impl octs::Write) -> Result<(), octs::BufTooShortOr<Self::Error>> {
+        buf.write(&self.0)
     }
 }
 
 impl octs::Decode for Seq {
-    fn decode(buf: &mut impl octs::ReadBytes) -> octs::Result<Self> {
+    type Error = Infallible;
+
+    fn decode(mut buf: impl octs::Read) -> Result<Self, octs::BufTooShortOr<Self::Error>> {
         Ok(Self(buf.read()?))
     }
 }
@@ -171,7 +173,7 @@ impl octs::Decode for Seq {
 mod tests {
     use bytes::BytesMut;
 
-    use aeronet::octs::{ConstEncodeLen, ReadBytes, WriteBytes};
+    use octs::{FixedEncodeLen, Read, Write};
 
     use super::*;
 

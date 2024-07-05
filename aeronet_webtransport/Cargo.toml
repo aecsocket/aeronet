@@ -30,45 +30,46 @@ dangerous-configuration = ["wtransport/dangerous-configuration"]
 replicon = ["aeronet_proto/replicon"]
 
 [dependencies]
-aeronet.workspace = true
-aeronet_proto.workspace = true
+aeronet = { workspace = true }
+aeronet_proto = { workspace = true }
 
-bytes.workspace = true
-cfg-if.workspace = true
-derivative.workspace = true
-either.workspace = true
-futures.workspace = true
-replace_with.workspace = true
-slotmap.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-web-time.workspace = true
+arbitrary = { workspace = true }
+cfg-if = { workspace = true }
+derivative = { workspace = true }
+either = { workspace = true }
+futures = { workspace = true }
+octs = { workspace = true }
+replace_with = { workspace = true }
+slotmap = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+web-time = { workspace = true }
 
-xwt.workspace = true
-xwt-core.workspace = true
+xwt = { workspace = true }
+xwt-core = { workspace = true }
 
 bevy_ecs = { workspace = true, optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-js-sys.workspace = true
-wasm-bindgen.workspace = true
-wasm-bindgen-futures.workspace = true
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-base64.workspace = true
-spki.workspace = true
+base64 = { workspace = true }
+spki = { workspace = true }
 tokio = { workspace = true, features = ["rt"] }
-wtransport.workspace = true
-x509-cert.workspace = true
+wtransport = { workspace = true }
+x509-cert = { workspace = true }
 
 [dev-dependencies]
-aeronet_replicon.workspace = true
+aeronet_replicon = { workspace = true }
 
-serde.workspace = true
+serde = { workspace = true }
 
-bevy.workspace = true
-bevy_egui.workspace = true
-bevy_replicon.workspace = true
+bevy = { workspace = true }
+bevy_egui = { workspace = true }
+bevy_replicon = { workspace = true }
 
 [[example]]
 name = "box_demo_client"

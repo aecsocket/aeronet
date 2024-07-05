@@ -4,8 +4,8 @@ members = [
   "aeronet_derive",
   "aeronet_replicon",
   "aeronet_channel",
-  "aeronet_proto",
-  #"aeronet_webtransport",
+  #"aeronet_proto",
+  "aeronet_webtransport",
   #"aeronet_steam",
 ]
 resolver = "2"
@@ -59,7 +59,7 @@ derivative = "2.2.0"
 either = "1.9.0"
 enum_dispatch = "0.3.12"
 integer-encoding = "4.0.0"
-octs = "0.3.0"
+octs = "0.4.0"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 replace_with = "0.1.7"
@@ -78,12 +78,12 @@ crossbeam-channel = "0.5.11"
 futures = "0.3.30"
 tokio = { version = "1.36.0", default-features = false }
 
-bevy = "0.13.1"
-bevy_app = { version = "0.13.1", default-features = false }
-bevy_ecs = { version = "0.13.1", default-features = false }
-bevy_egui = "0.26.0"
-bevy_replicon = "0.24.1"
-bevy_time = { version = "0.13.1", default-features = false }
+bevy = "0.14.0"
+bevy_app = { version = "0.14.0", default-features = false }
+bevy_ecs = { version = "0.14.0", default-features = false }
+bevy_egui = { git = "https://github.com/Friz64/bevy_egui", branch = "bevy-0.14" } # 0.28.0
+bevy_replicon = "0.27.0"
+bevy_time = { version = "0.14.0", default-features = false }
 
 base64 = "0.22.0"
 spki = { version = "0.7.3", features = ["fingerprint"] }

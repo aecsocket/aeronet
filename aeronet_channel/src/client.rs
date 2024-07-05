@@ -40,8 +40,8 @@ pub struct Connected {
     pub key: ClientKey,
     /// Statistics of this connection.
     pub stats: ConnectionStats,
-    send_c2s: Sender<Bytes>,
-    recv_s2c: Receiver<Bytes>,
+    send_c2s: Sender<(Bytes, LaneIndex)>,
+    recv_s2c: Receiver<(Bytes, LaneIndex)>,
     #[allow(clippy::struct_field_names)]
     send_connected: bool,
 }
@@ -139,7 +139,7 @@ impl ClientTransport for ChannelClient {
     fn send(
         &mut self,
         msg: Bytes,
-        _lane: impl Into<LaneIndex>,
+        lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::Error> {
         let Inner::Connected(client) = &mut self.inner else {
             return Err(ClientError::NotConnected);
@@ -148,7 +148,7 @@ impl ClientTransport for ChannelClient {
         let msg_len = msg.len();
         client
             .send_c2s
-            .send(msg)
+            .send((msg, lane.into()))
             .map_err(|_| ClientError::Disconnected)?;
         client.stats.bytes_sent += msg_len;
         Ok(())
@@ -184,9 +184,9 @@ impl ChannelClient {
 
         let res = (|| loop {
             match client.recv_s2c.try_recv() {
-                Ok(msg) => {
+                Ok((msg, lane)) => {
                     client.stats.bytes_recv += msg.len();
-                    events.push(ClientEvent::Recv { msg });
+                    events.push(ClientEvent::Recv { msg, lane });
                 }
                 Err(TryRecvError::Empty) => return Ok(()),
                 Err(TryRecvError::Disconnected) => return Err(ClientError::Disconnected),

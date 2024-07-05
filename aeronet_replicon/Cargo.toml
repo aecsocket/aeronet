@@ -20,11 +20,17 @@ all-features = true
 [dependencies]
 aeronet = { workspace = true, features = ["bevy", "replicon"] }
 
-ahash.workspace = true
-bimap.workspace = true
-derivative.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
+ahash = { workspace = true }
+bimap = { workspace = true }
+derivative = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
 
-bevy.workspace = true
-bevy_replicon.workspace = true
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_replicon = { workspace = true }
+bevy_time = { workspace = true }
+
+[dev-dependencies]
+aeronet_channel = { workspace = true, features = ["bevy"] }
+bevy = { workspace = true }

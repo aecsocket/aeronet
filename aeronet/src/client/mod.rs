@@ -1,10 +1,10 @@
 //! Client-side traits and items.
 
 #[cfg(feature = "bevy")]
-mod plugin;
+mod bevy;
 
 #[cfg(feature = "bevy")]
-pub use plugin::*;
+pub use bevy::*;
 
 use std::{error::Error, fmt::Debug, hash::Hash, time::Duration};
 
@@ -138,6 +138,17 @@ impl<A, B> ClientState<A, B> {
     pub fn is_connected(&self) -> bool {
         matches!(self, Self::Connected(_))
     }
+
+    /// Converts from `&ClientState<A, B>` to `ClientState<&A, &B>`.
+    ///
+    /// Analogous to [`Option::as_ref`].
+    pub fn as_ref(&self) -> ClientState<&A, &B> {
+        match self {
+            Self::Disconnected => ClientState::Disconnected,
+            Self::Connecting(x) => ClientState::Connecting(&x),
+            Self::Connected(x) => ClientState::Connected(&x),
+        }
+    }
 }
 
 /// Event emitted by a [`ClientTransport`].
@@ -164,6 +175,8 @@ pub enum ClientEvent<T: ClientTransport + ?Sized> {
     Recv {
         /// The message received.
         msg: Bytes,
+        /// Lane on which the message was received.
+        lane: LaneIndex,
     },
     /// The peer acknowledged that they have fully received a message sent by
     /// us.

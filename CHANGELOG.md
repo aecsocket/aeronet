@@ -1,5 +1,6 @@
 # 0.6.0
 
+* Bevy 0.14
 * Removed the concept of protocols
   * `u8`s and lanes are baked into the core `-Transport` traits, simplifying working with networked
     transports
@@ -7,6 +8,10 @@
     made working with transports very tedious due to the extra protocol type parameter, and didn't
     make much sense since only MPSC channels needed this abstraction
   * Messages are just `bytes::Bytes` now
+* Removed the core aeronet client/server plugins
+  * Since we're now using bytes directly, it makes no sense to receive messages as events - the API
+    user is encouraged to own their own `Bytes` messages, which events don't let you do
+  * Users should use `transport.poll()` and `transport.flush()` manually in their own systems
 
 # 0.5.0
 

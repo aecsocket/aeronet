@@ -1,119 +1,66 @@
-use std::{collections::HashMap, net::SocketAddr};
-
-use aeronet::{error::pretty_error, protocol::ProtocolVersion};
-use bytes::Bytes;
+use aeronet::error::pretty_error;
 use futures::{
     channel::{mpsc, oneshot},
     never::Never,
-    FutureExt, SinkExt,
+    FutureExt, SinkExt, StreamExt,
 };
+use octs::Bytes;
+use slotmap::SlotMap;
 use tracing::{debug, debug_span, Instrument};
 use wtransport::endpoint::{IncomingSession, SessionRequest};
 
-use crate::{
-    internal,
-    server::ConnectionResponse,
-    shared::{self, ConnectionStats},
-    ty,
-};
+use crate::{internal, shared::ConnectionStats};
 
-use super::{BackendError, ClientKey};
-
-#[derive(Debug)]
-pub struct Open {
-    pub local_addr: SocketAddr,
-    pub recv_connecting: mpsc::Receiver<Connecting>,
-}
-
-#[derive(Debug)]
-pub struct Connecting {
-    pub authority: String,
-    pub path: String,
-    pub origin: Option<String>,
-    pub user_agent: Option<String>,
-    pub headers: HashMap<String, String>,
-    pub send_key: oneshot::Sender<ClientKey>,
-    pub send_conn_resp: oneshot::Sender<ConnectionResponse>,
-    pub recv_err: oneshot::Receiver<BackendError>,
-    pub recv_connected: oneshot::Receiver<Connected>,
-}
-
-#[derive(Debug)]
-pub struct Connected {
-    pub remote_addr: SocketAddr,
-    pub initial_stats: ConnectionStats,
-    pub recv_c2s: mpsc::Receiver<Bytes>,
-    pub send_s2c: mpsc::UnboundedSender<Bytes>,
-    pub recv_stats: mpsc::Receiver<ConnectionStats>,
-}
+use super::{ClientKey, Connected, Connecting, ConnectionResponse, Open, ServerError};
 
 pub async fn start(
-    native_config: wtransport::ServerConfig,
-    version: ProtocolVersion,
+    config: wtransport::ServerConfig,
     send_open: oneshot::Sender<Open>,
-) -> BackendError {
-    match do_start(native_config, version, send_open).await {
-        Ok(_) => unreachable!(),
-        Err(err @ BackendError::Generic(shared::BackendError::FrontendClosed)) => {
-            debug!("Server closed");
-            err
-        }
-        Err(err) => {
-            debug!("Server closed: {:#}", pretty_error(&err));
-            err
-        }
-    }
-}
+) -> Result<Never, ServerError> {
+    let endpoint = wtransport::Endpoint::server(config).map_err(ServerError::CreateEndpoint)?;
+    let local_addr = endpoint.local_addr().map_err(ServerError::GetLocalAddr)?;
 
-async fn do_start(
-    native_config: wtransport::ServerConfig,
-    version: ProtocolVersion,
-    send_open: oneshot::Sender<Open>,
-) -> Result<Never, BackendError> {
-    debug!("Opening server");
-    let endpoint = wtransport::Endpoint::server(native_config)
-        .map_err(shared::BackendError::CreateEndpoint)?;
-
-    debug!("Opened server, sending channels to frontend");
-    let local_addr = endpoint
-        .local_addr()
-        .map_err(shared::BackendError::GetLocalAddr)?;
-    let (send_connecting, recv_connecting) = mpsc::channel::<Connecting>(internal::BUFFER_SIZE);
+    let (send_closed, mut recv_closed) = oneshot::channel::<()>();
+    let (send_connecting, recv_connecting) = mpsc::channel::<Connecting>(4);
     send_open
         .send(Open {
             local_addr,
             recv_connecting,
+            clients: SlotMap::default(),
+            _send_closed: send_closed,
         })
-        .map_err(|_| shared::BackendError::FrontendClosed)?;
+        .map_err(|_| ServerError::FrontendClosed)?;
 
-    debug!("Awaiting sessions");
     loop {
-        let session = endpoint.accept().await;
-        tokio::spawn(start_handle_session(
-            send_connecting.clone(),
-            version,
-            session,
-        ));
+        let session = futures::select! {
+            _ = recv_closed => return Err(ServerError::FrontendClosed),
+            x = endpoint.accept().fuse() => x,
+        };
+        let send_connecting = send_connecting.clone();
+        tokio::spawn(async move {
+            if let Err(err) = start_handle_session(send_connecting, session).await {
+                debug!("Failed to start handling session: {:#}", pretty_error(&err));
+            }
+        });
     }
 }
 
 async fn start_handle_session(
     mut send_connecting: mpsc::Sender<Connecting>,
-    version: ProtocolVersion,
     session: IncomingSession,
-) -> Result<(), BackendError> {
-    let req = session.await.map_err(BackendError::AwaitSessionRequest)?;
+) -> Result<(), ServerError> {
+    let req = session.await.map_err(ServerError::AwaitSessionRequest)?;
 
     let (send_key, recv_key) = oneshot::channel::<ClientKey>();
     let (send_conn_resp, recv_conn_resp) = oneshot::channel::<ConnectionResponse>();
-    let (send_err, recv_err) = oneshot::channel::<BackendError>();
+    let (send_err, recv_err) = oneshot::channel::<ServerError>();
     let (send_connected, recv_connected) = oneshot::channel::<Connected>();
     send_connecting
         .send(Connecting {
             authority: req.authority().to_string(),
             path: req.path().to_string(),
-            origin: req.origin().map(ToString::to_string),
-            user_agent: req.user_agent().map(ToString::to_string),
+            origin: req.origin().map(ToOwned::to_owned),
+            user_agent: req.user_agent().map(ToOwned::to_owned),
             headers: req.headers().clone(),
             send_key,
             send_conn_resp,
@@ -121,21 +68,19 @@ async fn start_handle_session(
             recv_connected,
         })
         .await
-        .map_err(|_| shared::BackendError::FrontendClosed)?;
-    let client_key = recv_key
-        .await
-        .map_err(|_| shared::BackendError::FrontendClosed)?;
+        .map_err(|_| ServerError::FrontendClosed)?;
+    let client_key = recv_key.await.map_err(|_| ServerError::FrontendClosed)?;
 
     let err = async move {
-        let Err(err) = handle_session(version, req, recv_conn_resp, send_connected).await else {
+        let Err(err) = handle_session(req, recv_conn_resp, send_connected).await else {
             unreachable!()
         };
         match &err {
-            BackendError::Generic(shared::BackendError::FrontendClosed) => {
+            ServerError::FrontendClosed => {
                 debug!("Session closed");
             }
             err => {
-                debug!("Session closed: {:#}", pretty_error(&err));
+                debug!("Session closed: {:#}", pretty_error(err));
             }
         }
         err
@@ -150,61 +95,56 @@ async fn start_handle_session(
 }
 
 async fn handle_session(
-    version: ProtocolVersion,
     req: SessionRequest,
     recv_conn_resp: oneshot::Receiver<ConnectionResponse>,
     send_connected: oneshot::Sender<Connected>,
-) -> Result<Never, BackendError> {
+) -> Result<Never, ServerError> {
     debug!("New session request from {}{}", req.authority(), req.path());
+
     let conn_resp = recv_conn_resp
         .await
-        .map_err(|_| shared::BackendError::FrontendClosed)?;
-
+        .map_err(|_| ServerError::FrontendClosed)?;
     debug!("Frontend responded to this request with {conn_resp:?}");
+
     let conn = match conn_resp {
         ConnectionResponse::Accept => req.accept(),
         ConnectionResponse::Forbidden => {
             req.forbidden().await;
-            return Err(BackendError::ForceDisconnect);
+            return Err(ServerError::ForceDisconnect);
         }
         ConnectionResponse::NotFound => {
             req.not_found().await;
-            return Err(BackendError::ForceDisconnect);
+            return Err(ServerError::ForceDisconnect);
         }
     }
     .await
-    .map_err(BackendError::AcceptSessionRequest)?;
+    .map_err(ServerError::AcceptSessionRequest)?;
 
-    debug!("Connection opened, waiting for managed stream");
-    let (mut send_managed, mut recv_managed) = conn
-        .accept_bi()
-        .await
-        .map_err(shared::BackendError::AcceptManaged)?;
+    debug!("Connection opened, forwarding to frontend");
 
-    debug!("Managed stream open, negotiating protocol");
-    internal::negotiate::server(version, &mut send_managed, &mut recv_managed).await?;
-
-    debug!("Negotiated successfully, forwarding to frontend");
-    let (send_c2s, recv_c2s) = mpsc::channel::<Bytes>(internal::BUFFER_SIZE);
-    let (send_s2c, recv_s2c) = mpsc::unbounded::<Bytes>();
+    let (send_c2s, recv_c2s) = mpsc::channel::<Bytes>(internal::MSG_BUF_CAP);
+    let (send_s2c, mut recv_s2c) = mpsc::unbounded::<Bytes>();
     let (send_stats, recv_stats) = mpsc::channel::<ConnectionStats>(1);
     send_connected
         .send(Connected {
             remote_addr: conn.remote_address(),
-            initial_stats: ConnectionStats::from(&conn),
+            stats: ConnectionStats {
+                rtt: conn.rtt(),
+                ..Default::default()
+            },
             recv_c2s,
             send_s2c,
             recv_stats,
         })
-        .map_err(|_| shared::BackendError::FrontendClosed)?;
+        .map_err(|_| ServerError::FrontendClosed)?;
 
     debug!("Starting connection loop");
-    let conn = ty::Connection(conn);
-    let send = internal::send(&conn, recv_s2c);
-    let recv = internal::recv(&conn, send_c2s, send_stats);
-    futures::select! {
-        r = send.fuse() => r,
-        r = recv.fuse() => r,
-    }
-    .map_err(From::from)
+    let send = async {
+        loop {
+            let msg = recv_s2c.next().await.ok_or(ServerError::FrontendClosed)?;
+            conn.send_datagram(msg).map_err(ServerError::SendDatagram)?;
+        }
+    };
+
+    todo!()
 }

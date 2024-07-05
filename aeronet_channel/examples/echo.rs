@@ -65,7 +65,7 @@ fn client_poll(
                     .log
                     .push(format!("Disconnected: {:#}", pretty_error(&error)));
             }
-            ClientEvent::Recv { msg } => {
+            ClientEvent::Recv { msg, .. } => {
                 let msg = String::from_utf8(msg.into()).unwrap();
                 ui_state.log.push(format!("> {msg}"));
             }
@@ -156,7 +156,9 @@ fn server_poll(
                     pretty_error(&error)
                 ));
             }
-            ServerEvent::Recv { client_key, msg } => {
+            ServerEvent::Recv {
+                client_key, msg, ..
+            } => {
                 let msg = String::from_utf8(msg.to_vec()).unwrap();
                 ui_state.log.push(format!("{client_key} > {}", msg));
 

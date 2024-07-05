@@ -22,18 +22,19 @@ all-features = true
 replicon = ["aeronet/replicon", "dep:bevy_replicon"]
 
 [dependencies]
-aeronet.workspace = true
+aeronet = { workspace = true }
 
-ahash.workspace = true
-arbitrary.workspace = true
-bitvec.workspace = true
-bytes.workspace = true
-derivative.workspace = true
-either.workspace = true
-static_assertions.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-web-time.workspace = true
+ahash = { workspace = true }
+arbitrary = { workspace = true }
+bitvec = { workspace = true }
+bytes = { workspace = true }
+derivative = { workspace = true }
+either = { workspace = true }
+octs = { workspace = true }
+static_assertions = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+web-time = { workspace = true }
 
 bevy_replicon = { workspace = true, optional = true }
 

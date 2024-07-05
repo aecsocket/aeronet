@@ -1,4 +1,4 @@
-//! Items shared between client and server.
+//! Items shared between client and server code.
 
 use aeronet::stats::MessageStats;
 
