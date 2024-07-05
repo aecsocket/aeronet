@@ -21,28 +21,27 @@ access the client's key via its state, to disconnect it from the server later.
 use aeronet::{
     client::{ClientTransport, ClientState},
     server::ServerTransport,
-    message::Message,
-    protocol::TransportProtocol,
+    bytes::Bytes,
+    lane::LaneKey,
 };
 use aeronet_channel::{
     client::ChannelClient,
     server::{ClientKey, ChannelServer},
 };
 
-#[derive(Message)]
-struct AppMessage(String);
-
-struct AppProtocol;
-
-impl TransportProtocol for AppProtocol {
-    type C2S = AppMessage;
-    type S2C = AppMessage;
+#[derive(Debug, Clone, Copy, LaneKey)]
+enum Lane {
+    // the lane kind doesn't actually matter since we're using MPSC
+    // but for other transports it would
+    #[lane_kind(ReliableOrdered)]
+    Default,
 }
 
-let mut server = ChannelServer::<AppProtocol>::open();
+let mut server = ChannelServer::open();
 let mut client = ChannelClient::connect_new(&mut server);
 
-client.send(AppMessage("hi!".into())).unwrap();
+let msg = Bytes::from_static(b"hi!");
+client.send(msg, Lane::Default).unwrap();
 
 let ClientState::Connected(client_state) = client.state() else {
     unreachable!();

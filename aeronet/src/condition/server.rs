@@ -4,8 +4,8 @@ use std::{
     time::Duration,
 };
 
+use bytes::Bytes;
 use derivative::Derivative;
-use octs::Bytes;
 
 use crate::{
     client::ClientState,

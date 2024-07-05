@@ -3,8 +3,8 @@ use std::{fmt::Debug, marker::PhantomData};
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_time::Time;
+use bytes::Bytes;
 use derivative::Derivative;
-use octs::Bytes;
 
 use crate::client::{ClientEvent, ClientTransport};
 

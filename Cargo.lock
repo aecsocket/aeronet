@@ -98,8 +98,8 @@ dependencies = [
  "bevy_replicon",
  "bevy_time",
  "bitcode",
+ "bytes",
  "derivative",
- "octs",
  "rand",
  "rand_distr",
  "serde",
@@ -114,6 +114,7 @@ dependencies = [
  "bevy",
  "bevy_ecs",
  "bevy_egui",
+ "bytes",
  "crossbeam-channel",
  "derivative",
  "either",
@@ -3033,15 +3034,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c8bb09a4a2b1d668170cfe0a7d5bc103f8999fb316c98099b6a9939c9f2e79d"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "octs"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f63a045df221fd42dd7fb739e8c13986990cfd4dcb38cbdcd084506ceda4693"
-dependencies = [
- "bytes",
 ]
 
 [[package]]

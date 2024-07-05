@@ -21,20 +21,21 @@ all-features = true
 bevy = ["dep:bevy_ecs", "aeronet/bevy"]
 
 [dependencies]
-aeronet.workspace = true
+aeronet = { workspace = true }
 
-crossbeam-channel.workspace = true
-derivative.workspace = true
-either.workspace = true
-replace_with.workspace = true
-slotmap.workspace = true
-thiserror.workspace = true
+bytes = { workspace = true }
+crossbeam-channel = { workspace = true }
+derivative = { workspace = true }
+either = { workspace = true }
+replace_with = { workspace = true }
+slotmap = { workspace = true }
+thiserror = { workspace = true }
 
 bevy_ecs = { workspace = true, optional = true }
 
 [dev-dependencies]
-bevy.workspace = true
-bevy_egui.workspace = true
+bevy = { workspace = true }
+bevy_egui = { workspace = true }
 
 [[example]]
 name = "echo"

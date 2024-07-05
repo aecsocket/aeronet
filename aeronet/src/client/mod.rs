@@ -8,8 +8,8 @@ pub use plugin::*;
 
 use std::{error::Error, fmt::Debug, hash::Hash, time::Duration};
 
+use bytes::Bytes;
 use derivative::Derivative;
-use octs::Bytes;
 
 use crate::lane::LaneIndex;
 

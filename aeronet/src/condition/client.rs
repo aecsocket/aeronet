@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use octs::Bytes;
+use bytes::Bytes;
 
 use crate::{
     client::{ClientEvent, ClientState, ClientTransport},

@@ -3,8 +3,8 @@ use std::{fmt::Debug, marker::PhantomData};
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_time::Time;
+use bytes::Bytes;
 use derivative::Derivative;
-use octs::Bytes;
 
 use super::{ServerEvent, ServerTransport};
 
@@ -51,6 +51,7 @@ impl<T: ServerTransport + Resource> Plugin for ServerTransportPlugin<T> {
             .add_event::<RemoteClientDisconnected<T>>()
             .add_event::<FromClient<T>>()
             .add_event::<AckFromClient<T>>()
+            .add_event::<NackFromClient<T>>()
             .add_event::<ServerFlushError<T>>()
             .configure_sets(PreUpdate, ServerTransportSet::Recv)
             .configure_sets(PostUpdate, ServerTransportSet::Flush)

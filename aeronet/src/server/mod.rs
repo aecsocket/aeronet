@@ -3,12 +3,12 @@
 #[cfg(feature = "bevy")]
 mod plugin;
 
-use octs::Bytes;
 #[cfg(feature = "bevy")]
 pub use plugin::*;
 
 use std::{error::Error, fmt::Debug, hash::Hash, time::Duration};
 
+use bytes::Bytes;
 use derivative::Derivative;
 
 use crate::{client::ClientState, lane::LaneIndex};

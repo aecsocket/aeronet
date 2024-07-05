@@ -2,41 +2,30 @@
 //! message, and the server just echoes back that message to the client.
 
 use aeronet::{
-    client::{ClientTransport, ClientTransportPlugin, FromServer, LocalClientConnected},
+    client::{ClientEvent, ClientTransport},
     condition::{ConditionedClient, ConditionedServer, ConditionerConfig},
-    message::Message,
-    protocol::TransportProtocol,
-    server::{
-        FromClient, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
-        ServerTransport, ServerTransportPlugin,
-    },
+    error::pretty_error,
+    lane::LaneKey,
+    server::{ServerEvent, ServerTransport},
 };
 use aeronet_channel::{client::ChannelClient, server::ChannelServer};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-
-// Protocol
-
-#[derive(Debug, Clone, Message)]
-struct AppMessage(String);
-
-struct AppProtocol;
-
-impl TransportProtocol for AppProtocol {
-    type C2S = AppMessage;
-    type S2C = AppMessage;
-}
-
-type Client = ConditionedClient<AppProtocol, ChannelClient<AppProtocol>>;
-type Server = ConditionedServer<AppProtocol, ChannelServer<AppProtocol>>;
+use bytes::Bytes;
 
 const CONDITIONER_CONFIG: ConditionerConfig = ConditionerConfig {
-    loss_rate: 0.25,
-    delay_mean: 2.0,
-    delay_std_dev: 0.5,
+    loss_rate: 0.2,
+    delay_mean: 1.0,
+    delay_std_dev: 0.25,
 };
 
-// Logic
+#[derive(Debug, Clone, Copy, LaneKey)]
+enum Lane {
+    // the lane kind doesn't actually matter since we're using MPSC
+    // but for other transports it would
+    #[lane_kind(ReliableOrdered)]
+    Default,
+}
 
 #[derive(Debug, Default, Resource)]
 struct ClientUiState {
@@ -51,61 +40,60 @@ struct ServerUiState {
 
 fn main() {
     App::new()
-        .add_plugins((
-            DefaultPlugins,
-            EguiPlugin,
-            ClientTransportPlugin::<_, Client>::default(),
-            ServerTransportPlugin::<_, Server>::default(),
-        ))
+        .add_plugins((DefaultPlugins, EguiPlugin))
         .init_resource::<ClientUiState>()
         .init_resource::<ServerUiState>()
         .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            (
-                (client_on_connected, client_on_recv, client_ui).chain(),
-                (
-                    server_on_connecting,
-                    server_on_connected,
-                    server_on_recv,
-                    server_on_disconnected,
-                    server_ui,
-                )
-                    .chain(),
-            ),
-        )
+        .add_systems(PreUpdate, (client_poll, server_poll))
+        .add_systems(PostUpdate, (client_flush, server_flush))
+        .add_systems(Update, (client_ui, server_ui))
         .run();
 }
 
 fn setup(mut commands: Commands) {
-    let mut server = Server::new(ChannelServer::open(), &CONDITIONER_CONFIG);
-    let client = Client::new(ChannelClient::connect_new(&mut server), &CONDITIONER_CONFIG);
-    commands.insert_resource(server);
-    commands.insert_resource(client);
+    let mut server = ChannelServer::open();
+    let client = ChannelClient::connect_new(&mut server);
+    commands.insert_resource(ConditionedServer::new(server, &CONDITIONER_CONFIG));
+    commands.insert_resource(ConditionedClient::new(client, &CONDITIONER_CONFIG));
 }
 
-fn client_on_connected(
+fn client_poll(
+    time: Res<Time>,
+    mut client: ResMut<ConditionedClient<ChannelClient>>,
     mut ui_state: ResMut<ClientUiState>,
-    mut events: EventReader<LocalClientConnected<AppProtocol, Client>>,
 ) {
-    for LocalClientConnected { .. } in events.read() {
-        ui_state.log.push(format!("Connected"));
+    for event in client.poll(time.delta()) {
+        match event {
+            ClientEvent::Connected => {
+                ui_state.log.push(format!("Connected"));
+            }
+            ClientEvent::Disconnected { error } => {
+                ui_state
+                    .log
+                    .push(format!("Disconnected: {:#}", pretty_error(&error)));
+            }
+            ClientEvent::Recv { msg } => {
+                let msg = String::from_utf8(msg.into()).unwrap();
+                ui_state.log.push(format!("> {msg}"));
+            }
+            // ignore acks/nacks for this example
+            ClientEvent::Ack { .. } => {}
+            ClientEvent::Nack { .. } => {}
+        }
     }
 }
 
-fn client_on_recv(
-    mut ui_state: ResMut<ClientUiState>,
-    mut events: EventReader<FromServer<AppProtocol, Client>>,
-) {
-    for FromServer { msg, .. } in events.read() {
-        ui_state.log.push(format!("> {}", msg.0));
-    }
+fn client_flush(mut client: ResMut<ConditionedClient<ChannelClient>>) {
+    // technically for the channel transport we don't need to flush
+    // since messages are guaranteed to be instantly sent along the channel
+    // but all other transports must be periodically flushed
+    let _ = client.flush();
 }
 
 fn client_ui(
     mut egui: EguiContexts,
     mut ui_state: ResMut<ClientUiState>,
-    mut client: ResMut<Client>,
+    mut client: ResMut<ConditionedClient<ChannelClient>>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -135,7 +123,7 @@ fn client_ui(
                     }
 
                     ui_state.log.push(format!("< {msg}"));
-                    let _ = client.send(AppMessage(msg));
+                    let _ = client.send(Bytes::from(msg), Lane::Default);
                 })();
             }
 
@@ -147,62 +135,58 @@ fn client_ui(
     });
 }
 
-fn server_on_connecting(
+fn server_poll(
+    time: Res<Time>,
+    mut server: ResMut<ConditionedServer<ChannelServer>>,
     mut ui_state: ResMut<ServerUiState>,
-    mut events: EventReader<RemoteClientConnecting<AppProtocol, Server>>,
 ) {
-    for RemoteClientConnecting {
-        client_key: client, ..
-    } in events.read()
-    {
-        ui_state.log.push(format!("Client {client} connecting"));
+    let mut to_send = Vec::new();
+    for event in server.poll(time.delta()) {
+        match event {
+            ServerEvent::Opened => {
+                ui_state.log.push(format!("Server opened"));
+            }
+            ServerEvent::Closed { error } => {
+                ui_state
+                    .log
+                    .push(format!("Server closed: {:#}", pretty_error(&error)));
+            }
+            ServerEvent::Connecting { client_key } => {
+                ui_state.log.push(format!("Client {client_key} connecting"));
+            }
+            ServerEvent::Connected { client_key } => {
+                ui_state.log.push(format!("Client {client_key} connected"));
+            }
+            ServerEvent::Disconnected { client_key, error } => {
+                ui_state.log.push(format!(
+                    "Client {client_key} disconnected: {:#}",
+                    pretty_error(&error)
+                ));
+            }
+            ServerEvent::Recv { client_key, msg } => {
+                let msg = String::from_utf8(msg.to_vec()).unwrap();
+                ui_state.log.push(format!("{client_key} > {}", msg));
+
+                let resp = format!("You sent: {}", msg);
+                ui_state.log.push(format!("{client_key} < {resp}"));
+                to_send.push((client_key, resp));
+            }
+            // ignore acks/nacks for this example
+            ServerEvent::Ack { .. } => {}
+            ServerEvent::Nack { .. } => {}
+        }
+    }
+
+    for (client_key, msg) in to_send {
+        let _ = server.send(client_key, Bytes::from(msg), Lane::Default);
     }
 }
 
-fn server_on_connected(
-    mut ui_state: ResMut<ServerUiState>,
-    mut events: EventReader<RemoteClientConnected<AppProtocol, Server>>,
-) {
-    for RemoteClientConnected {
-        client_key: client, ..
-    } in events.read()
-    {
-        ui_state.log.push(format!("Client {client} connected"));
-    }
-}
-
-fn server_on_recv(
-    mut ui_state: ResMut<ServerUiState>,
-    mut recv: EventReader<FromClient<AppProtocol, Server>>,
-    mut server: ResMut<Server>,
-) {
-    for FromClient {
-        client_key: client,
-        msg,
-        ..
-    } in recv.read()
-    {
-        ui_state.log.push(format!("{client} > {}", msg.0));
-
-        let resp = format!("You sent: {}", msg.0);
-        ui_state.log.push(format!("{client} < {resp}"));
-        let _ = server.send(*client, AppMessage(resp));
-    }
-}
-
-fn server_on_disconnected(
-    mut ui_state: ResMut<ServerUiState>,
-    mut events: EventReader<RemoteClientDisconnected<AppProtocol, Server>>,
-) {
-    for RemoteClientDisconnected {
-        client_key: client,
-        error: reason,
-    } in events.read()
-    {
-        ui_state
-            .log
-            .push(format!("Client {client} disconnected: {reason:#}"));
-    }
+fn server_flush(mut server: ResMut<ConditionedServer<ChannelServer>>) {
+    // technically for the channel transport we don't need to flush
+    // since messages are guaranteed to be instantly sent along the channel
+    // but all other transports must be periodically flushed
+    let _ = server.flush();
 }
 
 fn server_ui(mut egui: EguiContexts, ui_state: Res<ServerUiState>) {

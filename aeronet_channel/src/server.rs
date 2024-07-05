@@ -4,9 +4,10 @@ use std::{fmt::Display, time::Duration};
 
 use aeronet::{
     client::ClientState,
-    protocol::TransportProtocol,
+    lane::LaneIndex,
     server::{ServerEvent, ServerState, ServerTransport},
 };
+use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;
@@ -30,29 +31,28 @@ impl Display for ClientKey {
 /// Implementation of [`ServerTransport`] using in-memory MPSC channels.
 ///
 /// See the [crate-level documentation](crate).
-#[derive(Derivative)]
-#[derivative(Debug(bound = ""), Default(bound = ""))]
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct ChannelServer<P: TransportProtocol> {
-    clients: SlotMap<ClientKey, Client<P>>,
+pub struct ChannelServer {
+    clients: SlotMap<ClientKey, Client>,
 }
 
 /// State of a [`ChannelServer`]'s client when it is [`ClientState::Connected`].
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct Connected<P: TransportProtocol> {
+pub struct Connected {
     /// Statistics of this connection.
     pub stats: ConnectionStats,
-    recv_c2s: Receiver<P::C2S>,
-    send_s2c: Sender<P::S2C>,
+    recv_c2s: Receiver<Bytes>,
+    send_s2c: Sender<Bytes>,
     send_connected: bool,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-enum Client<P: TransportProtocol> {
+enum Client {
     Disconnected,
-    Connected(Connected<P>),
+    Connected(Connected),
 }
 
 /// Error type for operations on a [`ChannelServer`].
@@ -66,7 +66,7 @@ pub enum ServerError {
     Disconnected,
 }
 
-impl<P: TransportProtocol> ChannelServer<P> {
+impl ChannelServer {
     /// Creates a server with no connected clients.
     #[must_use]
     pub fn open() -> Self {
@@ -75,8 +75,8 @@ impl<P: TransportProtocol> ChannelServer<P> {
 
     pub(super) fn insert_client(
         &mut self,
-        recv_c2s: Receiver<P::C2S>,
-        send_s2c: Sender<P::S2C>,
+        recv_c2s: Receiver<Bytes>,
+        send_s2c: Sender<Bytes>,
     ) -> ClientKey {
         self.clients.insert(Client::Connected(Connected {
             stats: ConnectionStats::default(),
@@ -87,16 +87,16 @@ impl<P: TransportProtocol> ChannelServer<P> {
     }
 }
 
-impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
+impl ServerTransport for ChannelServer {
     type Error = ServerError;
 
-    type Opening<'t> = ();
+    type Opening<'this> = ();
 
-    type Open<'t> = ();
+    type Open<'this> = ();
 
-    type Connecting<'t> = ();
+    type Connecting<'this> = ();
 
-    type Connected<'t> = &'t Connected<P>;
+    type Connected<'this> = &'this Connected;
 
     type ClientKey = ClientKey;
 
@@ -123,17 +123,19 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
     fn send(
         &mut self,
         client_key: Self::ClientKey,
-        msg: impl Into<P::S2C>,
+        msg: Bytes,
+        _lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::Error> {
         let Some(Client::Connected(client)) = self.clients.get_mut(client_key) else {
             return Err(ServerError::NoClient);
         };
-        let msg = msg.into();
+
+        let msg_len = msg.len();
         client
             .send_s2c
             .send(msg)
             .map_err(|_| ServerError::Disconnected)?;
-        client.stats.msgs_sent += 1;
+        client.stats.bytes_sent += msg_len;
         Ok(())
     }
 
@@ -144,7 +146,7 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
             .map(drop)
     }
 
-    fn poll(&mut self, _: Duration) -> impl Iterator<Item = ServerEvent<P, Self>> {
+    fn poll(&mut self, _: Duration) -> impl Iterator<Item = ServerEvent<Self>> {
         let mut events = Vec::new();
         for (client_key, client) in &mut self.clients {
             replace_with::replace_with_or_abort(client, |client| match client {
@@ -173,12 +175,12 @@ impl<P: TransportProtocol> ServerTransport<P> for ChannelServer<P> {
     }
 }
 
-impl<P: TransportProtocol> ChannelServer<P> {
+impl ChannelServer {
     fn poll_connected(
-        events: &mut Vec<ServerEvent<P, Self>>,
+        events: &mut Vec<ServerEvent<Self>>,
         client_key: ClientKey,
-        mut client: Connected<P>,
-    ) -> Client<P> {
+        mut client: Connected,
+    ) -> Client {
         if client.send_connected {
             events.push(ServerEvent::Connecting { client_key });
             events.push(ServerEvent::Connected { client_key });
@@ -188,8 +190,8 @@ impl<P: TransportProtocol> ChannelServer<P> {
         loop {
             match client.recv_c2s.try_recv() {
                 Ok(msg) => {
+                    client.stats.bytes_recv += msg.len();
                     events.push(ServerEvent::Recv { client_key, msg });
-                    client.stats.msgs_recv += 1;
                 }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {

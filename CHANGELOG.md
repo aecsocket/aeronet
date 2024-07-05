@@ -1,3 +1,13 @@
+# 0.6.0
+
+* Removed the concept of protocols
+  * `u8`s and lanes are baked into the core `-Transport` traits, simplifying working with networked
+    transports
+  * Originally, the concept of bytes and lanes was abstracted out of the core API. However, this
+    made working with transports very tedious due to the extra protocol type parameter, and didn't
+    make much sense since only MPSC channels needed this abstraction
+  * Messages are just `bytes::Bytes` now
+
 # 0.5.0
 
 * Complete overhaul of the crate (again)
