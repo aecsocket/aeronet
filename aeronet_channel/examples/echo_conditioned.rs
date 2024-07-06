@@ -3,7 +3,7 @@
 
 use aeronet::{
     client::{ClientEvent, ClientTransport},
-    condition::{ConditionedClient, ConditionedServer, ConditionerConfig},
+    condition::{ClientConditioner, ConditionerConfig, ServerConditioner},
     error::pretty_error,
     lane::LaneKey,
     server::{ServerEvent, ServerTransport},
@@ -53,16 +53,20 @@ fn main() {
 fn setup(mut commands: Commands) {
     let mut server = ChannelServer::open();
     let client = ChannelClient::connect_new(&mut server);
-    commands.insert_resource(ConditionedServer::new(server, &CONDITIONER_CONFIG));
-    commands.insert_resource(ConditionedClient::new(client, &CONDITIONER_CONFIG));
+    commands.insert_resource(server);
+    commands.insert_resource(client);
+
+    commands.insert_resource(ServerConditioner::<ChannelServer>::new(&CONDITIONER_CONFIG));
+    commands.insert_resource(ClientConditioner::<ChannelClient>::new(&CONDITIONER_CONFIG));
 }
 
 fn client_poll(
     time: Res<Time>,
-    mut client: ResMut<ConditionedClient<ChannelClient>>,
+    mut client: ResMut<ChannelClient>,
+    mut conditioner: ResMut<ClientConditioner<ChannelClient>>,
     mut ui_state: ResMut<ClientUiState>,
 ) {
-    for event in client.poll(time.delta()) {
+    for event in conditioner.poll(&mut client, time.delta()) {
         match event {
             ClientEvent::Connected => {
                 ui_state.log.push(format!("Connected"));
@@ -83,7 +87,7 @@ fn client_poll(
     }
 }
 
-fn client_flush(mut client: ResMut<ConditionedClient<ChannelClient>>) {
+fn client_flush(mut client: ResMut<ChannelClient>) {
     // technically for the channel transport we don't need to flush
     // since messages are guaranteed to be instantly sent along the channel
     // but all other transports must be periodically flushed
@@ -93,7 +97,7 @@ fn client_flush(mut client: ResMut<ConditionedClient<ChannelClient>>) {
 fn client_ui(
     mut egui: EguiContexts,
     mut ui_state: ResMut<ClientUiState>,
-    mut client: ResMut<ConditionedClient<ChannelClient>>,
+    mut client: ResMut<ChannelClient>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -137,11 +141,12 @@ fn client_ui(
 
 fn server_poll(
     time: Res<Time>,
-    mut server: ResMut<ConditionedServer<ChannelServer>>,
+    mut server: ResMut<ChannelServer>,
+    mut conditioner: ResMut<ServerConditioner<ChannelServer>>,
     mut ui_state: ResMut<ServerUiState>,
 ) {
     let mut to_send = Vec::new();
-    for event in server.poll(time.delta()) {
+    for event in conditioner.poll(&mut server, time.delta()) {
         match event {
             ServerEvent::Opened => {
                 ui_state.log.push(format!("Server opened"));
@@ -184,7 +189,7 @@ fn server_poll(
     }
 }
 
-fn server_flush(mut server: ResMut<ConditionedServer<ChannelServer>>) {
+fn server_flush(mut server: ResMut<ChannelServer>) {
     // technically for the channel transport we don't need to flush
     // since messages are guaranteed to be instantly sent along the channel
     // but all other transports must be periodically flushed

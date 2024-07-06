@@ -1,21 +1,31 @@
 use futures::{channel::oneshot, never::Never};
 use tracing::debug;
+use xwt_core::prelude::*;
 
 use crate::internal;
 
-use super::{ClientConfig, ClientError, Connected};
+use super::{ClientConfig, ClientError, Connected, Endpoint};
 
 pub async fn start(
     config: ClientConfig,
     target: String,
     send_connected: oneshot::Sender<Connected>,
 ) -> Result<Never, ClientError> {
-    let endpoint = create_endpoint(config)?;
+    #[cfg(target_family = "wasm")]
+    let endpoint = todo!();
+
+    #[cfg(not(target_family = "wasm"))]
+    let endpoint = {
+        let raw = wtransport::Endpoint::client(config).map_err(ClientError::CreateEndpoint)?;
+        Ok(xwt::current::Endpoint(raw))
+    }?;
+
     debug!("Created endpoint, connecting to {target:?}");
     let conn = endpoint
-        .connect(target)
+        .connect(&target)
         .await
         .map_err(ClientError::Connect)?
+        .wait_connect()
         .await
         .map_err(ClientError::AwaitConnect)?;
 
@@ -23,19 +33,18 @@ pub async fn start(
         return Err(ClientError::DatagramsNotSupported);
     }
 
-    loop {
-        todo!()
-    }
-}
+    send_connected
+        .send(Connected {
+            #[cfg(not(target_family = "wasm"))]
+            local_addr: endpoint.0.local_addr().map_err(ClientError::GetLocalAddr)?,
+            #[cfg(not(target_family = "wasm"))]
+            remote_addr: conn.0.remote_address(),
+            stats: (),
+            recv_s2c: (),
+            send_c2s: (),
+            recv_stats: (),
+        })
+        .map_err(|_| ClientError::FrontendClosed)?;
 
-cfg_if::cfg_if! {
-    if #[cfg(target_family = "wasm")] {
-    } else {
-        type ClientEndpoint = xwt::current::Endpoint<wtransport::endpoint::endpoint_side::Client>;
-
-        fn create_endpoint(config: ClientConfig) -> Result<ClientEndpoint, ClientError> {
-            let raw = wtransport::Endpoint::client(config).map_err(ClientError::CreateEndpoint)?;
-            Ok(xwt::current::Endpoint(raw))
-        }
-    }
+    loop {}
 }

@@ -57,7 +57,7 @@ pub use aeronet_derive::LaneKey;
 /// Kind of lane which can provide guarantees about the manner of message
 /// delivery.
 ///
-/// See the [module-level documentation](self).
+/// See [`lane`](crate::lane).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LaneKind {
     /// No guarantees given on *reliability* or *ordering*.
@@ -182,19 +182,6 @@ impl LaneKind {
     }
 }
 
-#[cfg(feature = "replicon")]
-impl From<bevy_replicon::core::channels::ChannelKind> for LaneKind {
-    fn from(value: bevy_replicon::core::channels::ChannelKind) -> Self {
-        use bevy_replicon::core::channels::ChannelKind;
-
-        match value {
-            ChannelKind::Unreliable => Self::UnreliableUnordered,
-            ChannelKind::Unordered => Self::ReliableUnordered,
-            ChannelKind::Ordered => Self::ReliableOrdered,
-        }
-    }
-}
-
 /// Index of a lane.
 ///
 /// # Correctness
@@ -208,7 +195,6 @@ impl From<bevy_replicon::core::channels::ChannelKind> for LaneKind {
 ///
 /// [`ClientTransport::send`]: crate::client::ClientTransport::send
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, arbitrary::Arbitrary)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LaneIndex(usize);
 
 impl LaneIndex {

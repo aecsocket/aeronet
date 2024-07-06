@@ -13,21 +13,18 @@
 //! is purely random, and this configuration allows you to tweak the values of
 //! this randomness.
 //!
-//! Note that conditioners only work on the smallest unit of transmission
-//! exposed in the API - individual messages. They will only delay or drop
-//! incoming messages, without affecting outgoing messages at all.
+//! Note that conditioners work on individual messages, rather than bytes or
+//! packets. They only affect incoming messages received from `poll`, and do not
+//! affect outgoing messages (`send`).
 
 mod client;
 mod server;
 
 pub use client::*;
 pub use server::*;
+use web_time::{Duration, Instant};
 
-use std::{
-    fmt::Debug,
-    mem,
-    time::{Duration, Instant},
-};
+use std::fmt::Debug;
 
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
@@ -114,7 +111,7 @@ impl<E> Conditioner<E> {
     fn buffered(&mut self) -> impl Iterator<Item = E> {
         let now = Instant::now();
 
-        let event_buf = mem::take(&mut self.event_buf);
+        let event_buf = std::mem::take(&mut self.event_buf);
         let mut buffered = Vec::new();
         for event in event_buf {
             if now > event.send_at {

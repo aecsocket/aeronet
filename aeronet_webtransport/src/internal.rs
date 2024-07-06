@@ -1,6 +1,5 @@
 use futures::{channel::mpsc, never::Never};
 use octs::Bytes;
-use xwt::current::Connection;
 
 use crate::ty;
 

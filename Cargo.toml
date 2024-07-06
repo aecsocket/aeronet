@@ -2,7 +2,7 @@
 members = [
   "aeronet",
   "aeronet_derive",
-  "aeronet_replicon",
+  #"aeronet_replicon",
   "aeronet_channel",
   #"aeronet_proto",
   "aeronet_webtransport",
@@ -17,7 +17,7 @@ edition = "2021"
 keywords = ["gamedev", "network", "bevy"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aecsocket/aeronet"
-rust-version = "1.77.0"
+rust-version = "1.79.0"
 version = "0.6.0"
 
 [workspace.lints.rust]
@@ -81,7 +81,7 @@ tokio = { version = "1.36.0", default-features = false }
 bevy = "0.14.0"
 bevy_app = { version = "0.14.0", default-features = false }
 bevy_ecs = { version = "0.14.0", default-features = false }
-bevy_egui = { git = "https://github.com/Friz64/bevy_egui", branch = "bevy-0.14" } # 0.28.0
+bevy_egui = "0.28.0"
 bevy_replicon = "0.27.0"
 bevy_time = { version = "0.14.0", default-features = false }
 

@@ -18,17 +18,11 @@ workspace = true
 all-features = true
 
 [features]
-## Enables serialization of certain types with [`serde`](https://docs.rs/serde).
-serde = ["dep:serde"]
-
 ## Enables the [`condition`] module.
 condition = ["dep:rand", "dep:rand_distr"]
 
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = ["dep:bevy_ecs", "dep:bevy_app"]
-
-## Enables [`bevy_replicon`](https://docs.rs/bevy) support.
-replicon = ["bevy", "dep:bevy_replicon"]
+bevy = ["dep:bevy_ecs"]
 
 ## Allows storing an async multi-threaded [`tokio`](https://docs.rs/tokio) runtime in a
 ## [`bevy`](https://docs.rs/bevy) resource.
@@ -40,17 +34,14 @@ aeronet_derive = { workspace = true }
 arbitrary = { workspace = true }
 bytes = { workspace = true }
 derivative = { workspace = true }
-
-serde = { workspace = true, optional = true }
-
-bitcode = { workspace = true, optional = true }
+web-time = { workspace = true }
 
 rand = { workspace = true, optional = true }
 rand_distr = { workspace = true, optional = true }
 
-bevy_app = { workspace = true, optional = true }
 bevy_ecs = { workspace = true, optional = true }
 
 tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }
 
-bevy_replicon = { workspace = true, optional = true }
+[dev-dependencies]
+bevy_app = { workspace = true }

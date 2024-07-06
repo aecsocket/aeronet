@@ -1,4 +1,3 @@
-use aeronet::stats::{MessageStats, Rtt};
 use aeronet_proto::seq::Seq;
 use web_time::Duration;
 
@@ -22,20 +21,4 @@ pub struct ConnectionStats {
     pub rtt: Duration,
     pub bytes_sent: usize,
     pub bytes_recv: usize,
-}
-
-impl Rtt for ConnectionStats {
-    fn rtt(&self) -> Duration {
-        self.rtt
-    }
-}
-
-impl MessageStats for ConnectionStats {
-    fn bytes_sent(&self) -> usize {
-        self.bytes_sent
-    }
-
-    fn bytes_recv(&self) -> usize {
-        self.bytes_recv
-    }
 }

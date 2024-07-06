@@ -5,8 +5,9 @@ mod bevy;
 
 #[cfg(feature = "bevy")]
 pub use bevy::*;
+use web_time::Duration;
 
-use std::{error::Error, fmt::Debug, hash::Hash, time::Duration};
+use std::{error::Error, fmt::Debug, hash::Hash};
 
 use bytes::Bytes;
 use derivative::Derivative;

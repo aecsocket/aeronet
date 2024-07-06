@@ -12,6 +12,11 @@
   * Since we're now using bytes directly, it makes no sense to receive messages as events - the API
     user is encouraged to own their own `Bytes` messages, which events don't let you do
   * Users should use `transport.poll()` and `transport.flush()` manually in their own systems
+* Changed how conditioners work
+  * Instead of wrapping client/server types, they are now an additional value that you use - replace
+    `client.poll(..)` with `conditioner.poll(&mut client, ..)`
+  * This is because the user is now responsible for driving polling
+  * You don't have to replace all of your `ResMut<Client>` with `ResMut<ConditionedClient<Client>>`
 
 # 0.5.0
 

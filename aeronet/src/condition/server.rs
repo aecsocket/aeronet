@@ -1,56 +1,37 @@
-use std::{
-    fmt::Debug,
-    ops::{Deref, DerefMut},
-    time::Duration,
-};
+use std::fmt::Debug;
 
 use bytes::Bytes;
-use derivative::Derivative;
+use web_time::Duration;
 
 use crate::{
-    client::ClientState,
     lane::LaneIndex,
-    server::{ServerEvent, ServerState, ServerTransport},
+    server::{ServerEvent, ServerTransport},
 };
 
 use super::{Conditioner, ConditionerConfig};
 
-/// Wrapper around a [`ServerTransport`] which randomly delays and drops
-/// incoming messages.
+/// Conditioner for a [`ServerTransport`].
 ///
-/// See [`condition`](super).
+/// See [`condition`](crate::condition).
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct ConditionedServer<T: ServerTransport> {
-    inner: T,
-    conditioner: Conditioner<ServerRecv<T>>,
+pub struct ServerConditioner<T: ServerTransport + ?Sized> {
+    inner: Conditioner<(T::ClientKey, Bytes, LaneIndex)>,
 }
 
-#[derive(Derivative)]
-#[derivative(Debug(bound = ""), Clone(bound = ""))]
-struct ServerRecv<T: ServerTransport> {
-    client_key: T::ClientKey,
-    msg: Bytes,
-    lane: LaneIndex,
-}
-
-impl<T: ServerTransport> ConditionedServer<T> {
-    /// Wraps an existing transport in a conditioner.
+impl<T: ServerTransport + ?Sized> ServerConditioner<T> {
+    /// Creates a new conditioner.
     ///
     /// # Panics
     ///
     /// Panics if the configuration provided is invalid.
-    pub fn new(inner: T, config: &ConditionerConfig) -> Self {
-        let conditioner = Conditioner::new(config);
-        Self { inner, conditioner }
+    pub fn new(config: &ConditionerConfig) -> Self {
+        Self {
+            inner: Conditioner::new(config),
+        }
     }
 
-    /// Takes the wrapped transport out of this transport.
-    pub fn into_inner(self) -> T {
-        self.inner
-    }
-
-    /// Sets the configuration of the existing conditioner on this transport.
+    /// Sets the configuration of this conditioner.
     ///
     /// This will not change the state of any buffered messages.
     ///
@@ -58,123 +39,42 @@ impl<T: ServerTransport> ConditionedServer<T> {
     ///
     /// Panics if the configuration provided is invalid.
     pub fn set_config(&mut self, config: &ConditionerConfig) {
-        self.conditioner.set_config(config);
-    }
-}
-
-impl<T: ServerTransport> Deref for ConditionedServer<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T: ServerTransport> DerefMut for ConditionedServer<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl<T: ServerTransport> ServerTransport for ConditionedServer<T> {
-    type Error = T::Error;
-
-    type Opening<'this> = T::Opening<'this> where Self: 'this;
-
-    type Open<'this> = T::Open<'this> where Self: 'this;
-
-    type Connecting<'this> = T::Connecting<'this> where Self: 'this;
-
-    type Connected<'this> = T::Connected<'this> where Self: 'this;
-
-    type ClientKey = T::ClientKey;
-
-    type MessageKey = T::MessageKey;
-
-    fn state(&self) -> ServerState<Self::Opening<'_>, Self::Open<'_>> {
-        self.inner.state()
+        self.inner.set_config(config);
     }
 
-    fn client_state(
-        &self,
-        client: Self::ClientKey,
-    ) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
-        self.inner.client_state(client)
-    }
-
-    fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> {
-        self.inner.client_keys()
-    }
-
-    fn send(
+    /// Runs [`ServerTransport::poll`] using this conditioner, potentially
+    /// dropping or delaying events.
+    pub fn poll(
         &mut self,
-        client: Self::ClientKey,
-        msg: Bytes,
-        lane: impl Into<LaneIndex>,
-    ) -> Result<Self::MessageKey, Self::Error> {
-        self.inner.send(client, msg, lane)
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        self.inner.flush()
-    }
-
-    fn disconnect(&mut self, client: Self::ClientKey) -> Result<(), Self::Error> {
-        self.inner.disconnect(client)
-    }
-
-    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<Self>> {
+        server: &mut T,
+        delta_time: Duration,
+    ) -> impl Iterator<Item = ServerEvent<T>> {
         let mut events = Vec::new();
 
-        events.extend(self.conditioner.buffered().map(|recv| ServerEvent::Recv {
-            client_key: recv.client_key,
-            msg: recv.msg,
-            lane: recv.lane,
-        }));
+        events.extend(
+            self.inner
+                .buffered()
+                .map(|(client_key, msg, lane)| ServerEvent::Recv {
+                    client_key,
+                    msg,
+                    lane,
+                }),
+        );
 
-        for event in self.inner.poll(delta_time) {
+        for event in server.poll(delta_time) {
             let event = match event {
-                ServerEvent::Opened => Some(ServerEvent::Opened),
-                ServerEvent::Closed { error } => Some(ServerEvent::Closed { error }),
-                ServerEvent::Connecting { client_key } => {
-                    Some(ServerEvent::Connecting { client_key })
-                }
-                ServerEvent::Connected { client_key } => {
-                    Some(ServerEvent::Connected { client_key })
-                }
-                ServerEvent::Disconnected { client_key, error } => {
-                    Some(ServerEvent::Disconnected { client_key, error })
-                }
                 ServerEvent::Recv {
                     client_key,
                     msg,
                     lane,
-                } => self
-                    .conditioner
-                    .condition(ServerRecv {
-                        client_key: client_key.clone(),
+                } => self.inner.condition((client_key.clone(), msg, lane)).map(
+                    |(client_key, msg, lane)| ServerEvent::Recv {
+                        client_key,
                         msg,
                         lane,
-                    })
-                    .map(|recv| ServerEvent::Recv {
-                        client_key,
-                        msg: recv.msg,
-                        lane: recv.lane,
-                    }),
-                ServerEvent::Ack {
-                    client_key,
-                    msg_key,
-                } => Some(ServerEvent::Ack {
-                    client_key,
-                    msg_key,
-                }),
-                ServerEvent::Nack {
-                    client_key,
-                    msg_key,
-                } => Some(ServerEvent::Nack {
-                    client_key,
-                    msg_key,
-                }),
+                    },
+                ),
+                event => Some(event),
             };
             if let Some(event) = event {
                 events.push(event);

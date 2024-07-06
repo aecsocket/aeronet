@@ -17,10 +17,6 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-[features]
-## Enables [`bevy_replicon`](https://docs.rs/bevy_replicon) support.
-replicon = ["aeronet/replicon", "dep:bevy_replicon"]
-
 [dependencies]
 aeronet = { workspace = true }
 
@@ -36,7 +32,5 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 web-time = { workspace = true }
 
-bevy_replicon = { workspace = true, optional = true }
-
 [dev-dependencies]
-assert_matches.workspace = true
+assert_matches = { workspace = true }

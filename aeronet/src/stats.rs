@@ -11,7 +11,9 @@
 //! [`ClientTransport::state`]: crate::client::ClientTransport::state
 //! [`ServerTransport::client_state`]: crate::server::ServerTransport::client_state
 
-use std::{net::SocketAddr, time::Duration};
+use std::net::SocketAddr;
+
+use web_time::Duration;
 
 /// Gets the round-trip time (RTT) of a connection.
 ///
@@ -25,8 +27,7 @@ use std::{net::SocketAddr, time::Duration};
 /// network conditions change. However, it aims to be a good-enough estimate for
 /// use in e.g. lag compensation estimates, or displaying to other clients.
 ///
-/// See the [module-level documentation](self) on how to get access to this
-/// info.
+/// See [`stats`](crate::stats) on how to get access to this info.
 #[doc(alias = "latency")]
 #[doc(alias = "ping")]
 pub trait Rtt {
@@ -41,8 +42,7 @@ pub trait Rtt {
 /// - for sending, it indicates how many bytes we attempted to send
 /// - for receiving, it indicates how many bytes we received and acknowledged
 ///
-/// See the [module-level documentation](self) on how to get access to this
-/// info.
+/// See [`stats`](crate::stats) on how to get access to this info.
 ///
 /// Implementors must ensure that, when increasing these counters, saturating
 /// addition is used in order to avoid panics or overflows - see
@@ -61,8 +61,7 @@ pub trait MessageStats {
 /// communication, which has a specific address. This trait exposes the address
 /// of our side's socket.
 ///
-/// See the [module-level documentation](self) on how to get access to this
-/// info.
+/// See [`stats`](crate::stats) on how to get access to this info.
 ///
 /// To access the remote address of a connection, see [`RemoteAddr`].
 pub trait LocalAddr {
@@ -76,8 +75,7 @@ pub trait LocalAddr {
 /// communication, which has a specific address. This trait exposes the address
 /// of the other side of the socket.
 ///
-/// See the [module-level documentation](self) on how to get access to this
-/// info.
+/// See [`stats`](crate::stats) on how to get access to this info.
 ///
 /// To access the local address of a connection, see [`LocalAddr`].
 pub trait RemoteAddr {

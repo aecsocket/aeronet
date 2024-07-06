@@ -18,7 +18,7 @@ workspace = true
 all-features = true
 
 [dependencies]
-aeronet = { workspace = true, features = ["bevy", "replicon"] }
+aeronet = { workspace = true, features = ["bevy"] }
 
 ahash = { workspace = true }
 bimap = { workspace = true }

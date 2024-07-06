@@ -116,6 +116,16 @@ impl WebTransportServer {
         }
     }
 
+    pub fn close(&mut self) -> Result<(), ServerError> {
+        match self.state {
+            State::Closed => Err(ServerError::AlreadyClosed),
+            State::Opening(_) | State::Open(_) => {
+                *self = Self::closed();
+                Ok(())
+            }
+        }
+    }
+
     pub fn open_new(config: wtransport::ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel::<Open>();
         let (send_err, recv_err) = oneshot::channel::<ServerError>();
@@ -145,16 +155,6 @@ impl WebTransportServer {
                 Ok(backend)
             }
             State::Opening(_) | State::Open(_) => Err(ServerError::AlreadyOpen),
-        }
-    }
-
-    pub fn close(&mut self) -> Result<(), ServerError> {
-        match self.state {
-            State::Closed => Err(ServerError::AlreadyClosed),
-            State::Opening(_) | State::Open(_) => {
-                self.state = State::Closed;
-                Ok(())
-            }
         }
     }
 }

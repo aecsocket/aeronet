@@ -26,9 +26,6 @@ bevy = ["dep:bevy_ecs", "aeronet/bevy"]
 ## on targets building against native `wtransport`.
 dangerous-configuration = ["wtransport/dangerous-configuration"]
 
-## Enables [`bevy_replicon`](https://docs.rs/bevy_replicon) support.
-replicon = ["aeronet_proto/replicon"]
-
 [dependencies]
 aeronet = { workspace = true }
 aeronet_proto = { workspace = true }
@@ -45,7 +42,6 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 web-time = { workspace = true }
 
-xwt = { workspace = true }
 xwt-core = { workspace = true }
 
 bevy_ecs = { workspace = true, optional = true }
