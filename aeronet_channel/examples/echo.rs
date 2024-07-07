@@ -69,9 +69,7 @@ fn client_poll(
                 let msg = String::from_utf8(msg.into()).unwrap();
                 ui_state.log.push(format!("> {msg}"));
             }
-            // ignore acks/nacks for this example
-            ClientEvent::Ack { .. } => {}
-            ClientEvent::Nack { .. } => {}
+            ClientEvent::Ack { .. } | ClientEvent::Nack { .. } => {}
         }
     }
 }
@@ -166,9 +164,7 @@ fn server_poll(
                 ui_state.log.push(format!("{client_key} < {resp}"));
                 to_send.push((client_key, resp));
             }
-            // ignore acks/nacks for this example
-            ServerEvent::Ack { .. } => {}
-            ServerEvent::Nack { .. } => {}
+            ServerEvent::Ack { .. } | ServerEvent::Nack { .. } => {}
         }
     }
 

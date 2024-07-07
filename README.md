@@ -66,31 +66,32 @@ This crate does not aim to be:
 
 ## Messages
 
-TODO this is wrong
-
-The smallest unit of transmission that the API exposes is a [`Message`]. This is a user-defined type
-which contains the data that your app wants to send out and receive. The client-to-server and
-server-to-client message types may be different.
+The smallest unit of transmission that the API exposes is a message. A message is represented as a
+[`Bytes`] - a container for a byte sequence which allows zero-copy networking code. It is up to the
+user to give meaning to these bytes.
 
 ## Lanes
 
 [Lanes](lane) define the manner in which a message is delivered to the other side, such as
-unreliable, reliable ordered, etc.
-These are similar to *streams* or *channels* in some protocols, but lanes are abstractions over
-the manner of delivery, rather than the individual stream or channel.
-The types of lanes that are supported, and therefore what guarantees are given, are listed in
-[`LaneKind`].
+unreliable, reliable ordered, etc. These are similar to *streams* or *channels* in some protocols,
+but lanes are abstractions over the manner of delivery, rather than the individual stream or
+channel. The types of lanes that are supported, and therefore what guarantees are given, are listed
+in [`LaneKind`].
 
 Note that if a transport does not support lanes, then it inherently guarantees the strongest
 guarantees provided by lanes - that is, communication is always reliable-ordered.
+
+Typically, a transport implementation will require you to pass a configuration on creation,
+which defines which lanes are available to the transport, and what their properties are (i.e. is it
+reliable, ordered, etc).
 
 ## Bevy plugin
 
 *Feature flag: `bevy`*
 
-This crate provides plugins for automatically processing a client and server transport via
-[`ClientTransportPlugin`] and [`ServerTransportPlugin`] respectively. These will automatically
-update the transports and send out events when e.g. a client connects, or a message is received.
+This crate provides some useful items and types for working with transports, which can be added to
+your app as a resource. However, note that no plugins are provided - instead, it is your
+responsibility to drive the transport event loop manually.
 
 ## Conditioning
 
@@ -133,107 +134,68 @@ aeronet_whatever_transport_impl = "version"
 The version of this crate is synced between all official subcrates of aeronet - use the same version
 that you use for aeronet for your transport, and you're good to go.
 
-### Protocol
-
-TODO this is wrong
-
-You will need to define your own type implementing [`TransportProtocol`] which defines what type of
-messages are communicated by your app. The message types must implement [`Message`].
-
-```rs
-use aeronet::{message::Message, protocol::TransportProtocol};
-
-#[derive(Debug, Clone, Message)]
-pub enum ClientToServer {
-  Shoot,
-  Move { x: f32, y: f32 },
-  UseItem {
-    // NOTE: you shouldn't use `usize`s for transport messages,
-    // since the size of a `usize` is target-dependent!
-    index: u64,
-  },
-  // ...
-}
-
-#[derive(Debug, Clone, Message)]
-pub enum ServerToClient {
-  SpawnBullet { color: u32 },
-  SpawnPlayer { x: f32, y: f32 },
-  // ...
-}
-
-#[derive(Debug)]
-pub struct AppProtocol;
-
-impl TransportProtocol for AppProtocol {
-  type C2S: ClientToServer;
-  type S2C: ServerToClient;
-}
-```
-
-Transports which send data over a network will most likely also require your message types to
-implement [`TryIntoBytes`] and [`TryFromBytes`], for de/serialization to/from the wire format.
-
-```rs
-use aeronet::{bytes::Bytes, message::{Message, TryIntoBytes, TryFromBytes}};
-
-#[derive(Debug, Clone, Message)]
-pub struct AppMessage(pub String);
-
-impl TryIntoBytes for AppMessage {
-    type Error = std::convert::Infallible;
-
-    fn try_into_bytes(self) -> Result<Bytes, Self::Error> {
-        Ok(Bytes::from(self.0.into_vec()))
-    }
-}
-
-impl TryFromBytes for AppMessage {
-    type Error = std::str::FromUtf8Error;
-
-    fn try_from_bytes(buf: Bytes) -> Result<Self, Self::Error> {
-        String::from_utf8(buf.to_vec()).map(AppMessage)
-    }
-}
-```
-
-Note that if you would like to use raw bytes for transporting messages, you can do this too. The
-crate defines infallible [`TryIntoBytes`] and [`TryFromBytes`] implementations for `Vec<u8>` and
-[`bytes::Bytes`].
-
-**If using `aeronet_replicon`:** You **must** use the `RepliconMessage` type as both your
-client-to-server and server-to-client message types.
-
-### Lanes
-
-Transports may also require you to specify along which *lane* your message is sent on. Lanes are
-similar to channels or streams in other networking libraries, in that they provide a set of
-guarantees for how messages along that lane will be transported. For example, if you want all
-messages of a certain type to be sent *reliable-ordered* (resent if lost in transit, and always
-received in order), you can define that using lanes.
-
-Typically, a transport implementation will require you to pass a configuration on creation,
-which defines which lanes are available to the transport, and what their properties are (i.e. is it
-reliable, ordered, etc).
-
-See [`lane`] for more details.
-
-### Connection
-
-After seeing your transport implementation's *Getting Started* section in the readme to find out how
-to create a client/server, you can now either start a connection or listen for connections.
-
-This crate abstracts a client's connection into either disconnected, connecting, or connected; and
-servers into closed, opening, or open. See [`ClientState`] and [`ServerState`] for more info.
+To create a value for your given transport, and how exactly to configure it, see the transport's
+*Getting Started* section in the readme. If using Bevy, you should insert the transport as a
+resource into your app. Otherwise, keep a hold of your transport somewhere where you can use it in
+your main update loop - you will need to manually drive it by `poll`ing.
 
 You can use the traits [`ClientTransport`] and [`ServerTransport`] to control your client or server,
 such as sending and receiving messages.
 
+### Client and server state
+
+This crate abstracts a client's connection into either disconnected, connecting, or connected; and
+servers into closed, opening, or open. By default, clients start disconnected, and servers start
+closed - you must manually start a connection or open the server, by providing a configuration such
+as address to connect to, port to open on, etc. This will vary depending on the transport
+implementation.
+
+See [`ClientState`] and [`ServerState`] for more info.
+
+### Managing the connection
+
+After a connection is established:
+- use `send` to buffer up a message for sending from this peer to the other side
+- use `flush` to flush all buffered messages and actually send them across the transport
+- use `poll` to update the internal state of the transport and receive events about what happened
+
+It is recommended that you use `send` to buffer up messages for sending during your app's update,
+then use `poll` and `flush` at the end of each update to finalize the update.
+
+It is up to you to encode and decode your own data into the [`Bytes`].
+
+```rust
+use aeronet::bytes::Bytes;
+use aeronet::client::{ClientEvent, ClientTransport};
+use aeronet::lane::{LaneIndex, LaneKey};
+
+#[derive(Debug, Clone, Copy, LaneKey)]
+enum Lane {
+    #[lane_kind(ReliableOrdered)]
+    HighPriority,
+    #[lane_kind(UnreliableUnordered)]
+    LowPriority,
+}
+
+# fn run(mut client: impl ClientTransport, delta_time: web_time::Duration) {
+let message: Bytes = Bytes::from_static(b"hello world");
+client.send(message, Lane::HighPriority).unwrap();
+
+client.flush().unwrap();
+
+for event in client.poll(delta_time) {
+    match event {
+        ClientEvent::Recv { msg, lane } => {
+            let msg = String::from_utf8(Vec::from(msg)).unwrap();
+            println!("Received on {lane:?}: {msg}");
+        }
+        _ => todo!()
+    }
+}
+# }
+```
+
 [`Bytes`]: bytes::Bytes
-[`Message`]: message::Message
-[`TryIntoBytes`]: message::TryIntoBytes
-[`TryFromBytes`]: message::TryFromBytes
-[`TransportProtocol`]: protocol::TransportProtocol
 [`LaneKind`]: lane::LaneKind
 [`LaneIndex`]: lane::LaneIndex
 [`ClientTransport`]: client::ClientTransport

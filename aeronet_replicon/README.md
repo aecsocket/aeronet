@@ -22,7 +22,7 @@ protocol type for your given transport. The protocol's `C2S` and `S2C` associate
 [`RepliconMessage`]. This type implements most traits required such as [`TryIntoBytes`] and
 [`OnLane`], so it should be compatible with your transport.
 
-```rs
+```rust
 use aeronet::protocol::TransportProtocol;
 use aeronet_replicon::protocol::RepliconMessage;
 
@@ -50,7 +50,7 @@ Make sure to **not** add the [`aeronet::client::ClientTransportPlugin`] or the
 Once you have made your app, follow your transport's setup guide on how to configure your transport
 to create an instance of the type, then add it as a resource.
 
-```rs
+```rust
 use aeronet::{client::ClientTransport, protocol::TransportProtocol};
 use aeronet_replicon::client::RepliconClientPlugin;
 use bevy::prelude::*;
