@@ -14,8 +14,9 @@ cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         pub use xwt_web_sys::WebTransportOptions;
     } else {
-        pub use xwt_wtransport::wtransport;
+        pub use wtransport;
 
+        pub mod cert;
         pub mod server;
         pub use server::{ServerError, WebTransportServer, ConnectionResponse};
     }

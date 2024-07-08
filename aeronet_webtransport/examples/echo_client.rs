@@ -149,6 +149,7 @@ fn ui(
         if do_send {
             ui.memory_mut(|m| m.request_focus(msg_resp.id));
             let msg = std::mem::take(&mut ui_state.msg);
+            ui_state.log.push(format!("< {msg}"));
             if let Err(err) = client.send(msg, Lane::Default) {
                 ui_state
                     .log
