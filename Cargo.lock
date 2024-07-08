@@ -101,7 +101,6 @@ dependencies = [
  "derivative",
  "rand",
  "rand_distr",
- "tokio",
  "web-time",
 ]
 
@@ -152,42 +151,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "aeronet_replicon"
-version = "0.6.0"
-dependencies = [
- "aeronet",
- "aeronet_channel",
- "ahash",
- "bevy",
- "bevy_app",
- "bevy_ecs",
- "bevy_replicon",
- "bevy_time",
- "bimap",
- "derivative",
- "thiserror",
- "tracing",
-]
-
-[[package]]
 name = "aeronet_webtransport"
 version = "0.6.0"
 dependencies = [
  "aeronet",
  "aeronet_proto",
- "aeronet_replicon",
  "arbitrary",
  "base64 0.22.1",
  "bevy",
+ "bevy-tokio-tasks",
  "bevy_ecs",
  "bevy_egui",
  "bevy_replicon",
+ "bytes",
  "cfg-if",
  "derivative",
  "either",
  "futures",
  "js-sys",
- "octs",
  "replace_with",
  "serde",
  "slotmap",
@@ -201,6 +182,7 @@ dependencies = [
  "wtransport",
  "x509-cert",
  "xwt-core",
+ "xwt-wtransport",
 ]
 
 [[package]]
@@ -520,6 +502,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e938630e9f472b1899c78ef84aa907081b23bad8333140e2295c620485b6ee7"
 dependencies = [
  "bevy_internal",
+]
+
+[[package]]
+name = "bevy-tokio-tasks"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8893452e2329cdbfdee5244bb6bd1be1910b91530f91ca44565edca90b16cdb"
+dependencies = [
+ "bevy_app",
+ "bevy_ecs",
+ "tokio",
 ]
 
 [[package]]
@@ -1374,12 +1367,6 @@ dependencies = [
  "web-sys",
  "winit",
 ]
-
-[[package]]
-name = "bimap"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "230c5f1ca6a325a32553f8640d31ac9b49f2411e901e427570154868b46da4f7"
 
 [[package]]
 name = "bincode"
@@ -5848,6 +5835,16 @@ name = "xwt-core"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1f98acac2f9398db512d6cc2d1fd12ce5e896192e9c961a83dd48d32c7fed8c"
+
+[[package]]
+name = "xwt-wtransport"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f2dbaad8856f65bee36cab11271a4662ed9659986b161bab22d2d1cef16dd87"
+dependencies = [
+ "wtransport",
+ "xwt-core",
+]
 
 [[package]]
 name = "yasna"

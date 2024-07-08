@@ -88,7 +88,7 @@ fn client_ui(
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for line in ui_state.log.iter() {
+            for line in &ui_state.log {
                 ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
             }
         });
@@ -114,7 +114,7 @@ fn client_ui(
                     }
 
                     ui_state.log.push(format!("< {msg}"));
-                    let _ = client.send(Bytes::from(msg), Lane::Default);
+                    let _ = client.send(msg, Lane::Default);
                 })();
             }
 
@@ -183,7 +183,7 @@ fn server_flush(mut server: ResMut<ChannelServer>) {
 fn server_ui(mut egui: EguiContexts, ui_state: Res<ServerUiState>) {
     egui::Window::new("Server").show(egui.ctx_mut(), |ui| {
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for line in ui_state.log.iter() {
+            for line in &ui_state.log {
                 ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
             }
         });

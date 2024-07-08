@@ -31,11 +31,11 @@ aeronet = { workspace = true }
 aeronet_proto = { workspace = true }
 
 arbitrary = { workspace = true }
+bytes = { workspace = true }
 cfg-if = { workspace = true }
 derivative = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
-octs = { workspace = true }
 replace_with = { workspace = true }
 slotmap = { workspace = true }
 thiserror = { workspace = true }
@@ -57,22 +57,22 @@ spki = { workspace = true }
 tokio = { workspace = true, features = ["rt"] }
 wtransport = { workspace = true }
 x509-cert = { workspace = true }
+xwt-wtransport = { workspace = true }
 
 [dev-dependencies]
-aeronet_replicon = { workspace = true }
-
 serde = { workspace = true }
 
 bevy = { workspace = true }
+bevy-tokio-tasks = { workspace = true }
 bevy_egui = { workspace = true }
 bevy_replicon = { workspace = true }
 
 [[example]]
-name = "box_demo_client"
-path = "examples/box_demo_client.rs"
+name = "echo_client"
+path = "examples/echo_client.rs"
 required-features = ["bevy", "dangerous-configuration"]
 
 [[example]]
-name = "box_demo_server"
-path = "examples/box_demo_server.rs"
+name = "echo_server"
+path = "examples/echo_server.rs"
 required-features = ["bevy"]

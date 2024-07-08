@@ -101,7 +101,7 @@ pub trait ServerTransport {
     fn send(
         &mut self,
         client_key: Self::ClientKey,
-        msg: Bytes,
+        msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::Error>;
 
@@ -150,10 +150,11 @@ pub trait ServerTransport {
 /// transport exposes it.
 ///
 /// [local address]: crate::stats::LocalAddr
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum ServerState<A, B> {
     /// Not listening to client connections, and making no attempts to start
     /// listening.
+    #[default]
     Closed,
     /// Attempting to start listening for client connections, but is not
     /// ready to accept connections yet.

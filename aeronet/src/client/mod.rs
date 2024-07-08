@@ -66,7 +66,7 @@ pub trait ClientTransport {
     /// finished, then this will still return [`Ok`].
     fn send(
         &mut self,
-        msg: Bytes,
+        msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::Error>;
 
@@ -103,9 +103,10 @@ pub trait ClientTransport {
 /// of bytes sent or [round-trip time], if the transport exposes it.
 ///
 /// [round-trip time]: crate::stats::Rtt
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum ClientState<A, B> {
     /// Not connected to a server, and making no attempts to connect to one.
+    #[default]
     Disconnected,
     /// Attempting to establish a connection to a server, but is not ready for
     /// transporting data yet.

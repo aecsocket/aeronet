@@ -79,6 +79,7 @@ futures = "0.3.30"
 tokio = { version = "1.36.0", default-features = false }
 
 bevy = "0.14.0"
+bevy-tokio-tasks = "0.14.0"
 bevy_app = { version = "0.14.0", default-features = false }
 bevy_ecs = { version = "0.14.0", default-features = false }
 bevy_egui = "0.28.0"
@@ -89,8 +90,10 @@ base64 = "0.22.0"
 spki = { version = "0.7.3", features = ["fingerprint"] }
 wtransport = "0.1.12"
 x509-cert = "0.2.5"
+
 xwt = "0.13.0"
 xwt-core = "0.4.2"
+xwt-wtransport = "0.7.1"
 
 js-sys = "0.3.69"
 wasm-bindgen = "0.2.92"

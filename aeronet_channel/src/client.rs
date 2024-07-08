@@ -138,17 +138,20 @@ impl ClientTransport for ChannelClient {
 
     fn send(
         &mut self,
-        msg: Bytes,
+        msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::Error> {
         let Inner::Connected(client) = &mut self.inner else {
             return Err(ClientError::NotConnected);
         };
 
+        let msg = msg.into();
+        let lane = lane.into();
+
         let msg_len = msg.len();
         client
             .send_c2s
-            .send((msg, lane.into()))
+            .send((msg, lane))
             .map_err(|_| ClientError::Disconnected)?;
         client.stats.bytes_sent += msg_len;
         Ok(())

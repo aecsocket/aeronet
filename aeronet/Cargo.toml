@@ -24,10 +24,6 @@ condition = ["dep:rand", "dep:rand_distr"]
 ## Enables [`bevy`](https://docs.rs/bevy) support.
 bevy = ["dep:bevy_ecs"]
 
-## Allows storing an async multi-threaded [`tokio`](https://docs.rs/tokio) runtime in a
-## [`bevy`](https://docs.rs/bevy) resource.
-bevy-tokio-rt = ["bevy", "dep:tokio"]
-
 [dependencies]
 aeronet_derive = { workspace = true }
 
@@ -40,8 +36,6 @@ rand = { workspace = true, optional = true }
 rand_distr = { workspace = true, optional = true }
 
 bevy_ecs = { workspace = true, optional = true }
-
-tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }
 
 [dev-dependencies]
 bevy_app = { workspace = true }

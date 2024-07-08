@@ -1,28 +1,30 @@
 mod backend;
+mod frontend;
 
 use std::{
     collections::HashMap,
     fmt::{Debug, Display},
-    future::Future,
     io,
     net::SocketAddr,
 };
 
 use aeronet::{
     client::ClientState,
-    lane::LaneIndex,
-    server::{ServerState, ServerTransport},
+    server::ServerState,
+    stats::{MessageStats, RemoteAddr, Rtt},
 };
+use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
-use octs::Bytes;
 use slotmap::SlotMap;
-use wtransport::error::{ConnectionError, SendDatagramError};
+use web_time::Duration;
+use wtransport::error::ConnectionError;
 
-use crate::shared::{ConnectionStats, MessageKey};
+use crate::internal;
 
-#[derive(Derivative)]
+#[derive(Derivative, Default)]
 #[derivative(Debug = "transparent")]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportServer {
     state: State,
 }
@@ -39,14 +41,24 @@ pub enum ConnectionResponse {
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
     // frontend
-    #[error("frontend closed")]
-    FrontendClosed,
+    #[error("backend closed")]
+    BackendClosed,
     #[error("already opening or open")]
     AlreadyOpen,
     #[error("already closed")]
     AlreadyClosed,
+    #[error("not open")]
+    NotOpen,
+    #[error("client not connected")]
+    ClientNotConnected,
+    #[error("client not connecting")]
+    ClientNotConnecting,
+    #[error("already responded to this client's connection request")]
+    AlreadyResponded,
 
     // backend
+    #[error("frontend closed")]
+    FrontendClosed,
     #[error("failed to create endpoint")]
     CreateEndpoint(#[source] io::Error),
     #[error("failed to get endpoint local address")]
@@ -57,46 +69,12 @@ pub enum ServerError {
     AcceptSessionRequest(#[source] ConnectionError),
     #[error("server forced disconnect")]
     ForceDisconnect,
+
+    // connection
+    #[error("connection lost")]
+    ConnectionLost(#[source] <internal::Connection as xwt_core::session::datagram::Receive>::Error),
     #[error("failed to send datagram")]
-    SendDatagram(#[source] SendDatagramError),
-}
-
-#[derive(Debug)]
-pub struct Opening {
-    recv_open: oneshot::Receiver<Open>,
-    recv_err: oneshot::Receiver<ServerError>,
-}
-
-#[derive(Debug)]
-pub struct Open {
-    pub local_addr: SocketAddr,
-    recv_connecting: mpsc::Receiver<Connecting>,
-    clients: SlotMap<ClientKey, Client>,
-    _send_closed: oneshot::Sender<()>,
-}
-
-type Client = ClientState<Connecting, Connected>;
-
-#[derive(Debug)]
-pub struct Connecting {
-    pub authority: String,
-    pub path: String,
-    pub origin: Option<String>,
-    pub user_agent: Option<String>,
-    pub headers: HashMap<String, String>,
-    send_key: oneshot::Sender<ClientKey>,
-    send_conn_resp: oneshot::Sender<ConnectionResponse>,
-    recv_err: oneshot::Receiver<ServerError>,
-    recv_connected: oneshot::Receiver<Connected>,
-}
-
-#[derive(Debug)]
-pub struct Connected {
-    pub remote_addr: SocketAddr,
-    pub stats: ConnectionStats,
-    recv_c2s: mpsc::Receiver<Bytes>,
-    send_s2c: mpsc::UnboundedSender<Bytes>,
-    recv_stats: mpsc::Receiver<ConnectionStats>,
+    SendDatagram(#[source] <internal::Connection as xwt_core::session::datagram::Send>::Error),
 }
 
 slotmap::new_key_type! {
@@ -109,95 +87,86 @@ impl Display for ClientKey {
     }
 }
 
-impl WebTransportServer {
-    pub fn closed() -> Self {
-        Self {
-            state: State::Closed,
-        }
-    }
+#[derive(Debug)]
+pub struct Opening {
+    recv_open: oneshot::Receiver<Open>,
+    recv_err: oneshot::Receiver<ServerError>,
+}
 
-    pub fn close(&mut self) -> Result<(), ServerError> {
-        match self.state {
-            State::Closed => Err(ServerError::AlreadyClosed),
-            State::Opening(_) | State::Open(_) => {
-                *self = Self::closed();
-                Ok(())
-            }
-        }
-    }
+#[derive(Debug)]
+pub struct Open {
+    pub local_addr: SocketAddr,
+    recv_connecting: mpsc::Receiver<ToConnecting>,
+    clients: SlotMap<ClientKey, Client>,
+    _send_closed: oneshot::Sender<()>,
+}
 
-    pub fn open_new(config: wtransport::ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
-        let (send_open, recv_open) = oneshot::channel::<Open>();
-        let (send_err, recv_err) = oneshot::channel::<ServerError>();
+type Client = ClientState<Connecting, Connected>;
 
-        let frontend = Self {
-            state: State::Opening(Opening {
-                recv_open,
-                recv_err,
-            }),
-        };
-        let backend = async move {
-            if let Err(err) = backend::start(config, send_open).await {
-                let _ = send_err.send(err);
-            }
-        };
-        (frontend, backend)
-    }
+#[derive(Debug)]
+struct ToConnecting {
+    authority: String,
+    path: String,
+    origin: Option<String>,
+    user_agent: Option<String>,
+    headers: HashMap<String, String>,
+    recv_err: oneshot::Receiver<ServerError>,
+    send_key: oneshot::Sender<ClientKey>,
+    send_conn_resp: oneshot::Sender<ConnectionResponse>,
+    recv_connected: oneshot::Receiver<ToConnected>,
+}
 
-    pub fn open(
-        &mut self,
-        config: wtransport::ServerConfig,
-    ) -> Result<impl Future<Output = ()> + Send, ServerError> {
-        match self.state {
-            State::Closed => {
-                let (frontend, backend) = Self::open_new(config);
-                *self = frontend;
-                Ok(backend)
-            }
-            State::Opening(_) | State::Open(_) => Err(ServerError::AlreadyOpen),
-        }
+#[derive(Debug)]
+pub struct Connecting {
+    pub authority: String,
+    pub path: String,
+    pub origin: Option<String>,
+    pub user_agent: Option<String>,
+    pub headers: HashMap<String, String>,
+    recv_err: oneshot::Receiver<ServerError>,
+    send_conn_resp: Option<oneshot::Sender<ConnectionResponse>>,
+    recv_connected: oneshot::Receiver<ToConnected>,
+}
+
+#[derive(Debug)]
+struct ToConnected {
+    remote_addr: SocketAddr,
+    initial_rtt: Duration,
+    recv_rtt: mpsc::Receiver<Duration>,
+    recv_c2s: mpsc::Receiver<Bytes>,
+    send_s2c: mpsc::UnboundedSender<Bytes>,
+}
+
+#[derive(Debug)]
+pub struct Connected {
+    pub remote_addr: SocketAddr,
+    pub rtt: Duration,
+    pub bytes_sent: usize,
+    pub bytes_recv: usize,
+    recv_err: oneshot::Receiver<ServerError>,
+    recv_rtt: mpsc::Receiver<Duration>,
+    recv_c2s: mpsc::Receiver<Bytes>,
+    send_s2c: mpsc::UnboundedSender<Bytes>,
+}
+
+impl Rtt for Connected {
+    fn rtt(&self) -> Duration {
+        self.rtt
     }
 }
 
-impl ServerTransport for WebTransportServer {
-    type Error = ServerError;
-
-    type Opening<'this> = &'this Opening;
-
-    type Open<'this> = &'this Open;
-
-    type Connecting<'this> = &'this Connecting;
-
-    type Connected<'this> = &'this Connected;
-
-    type ClientKey = ClientKey;
-
-    type MessageKey = MessageKey;
-
-    fn state(&self) -> ServerState<Self::Opening<'_>, Self::Open<'_>> {
-        self.state.as_ref()
+impl MessageStats for Connected {
+    fn bytes_sent(&self) -> usize {
+        self.bytes_sent
     }
 
-    fn client_state(
-        &self,
-        client_key: Self::ClientKey,
-    ) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
-        let State::Open(server) = &self.state else {
-            return ClientState::Disconnected;
-        };
-        server
-            .clients
-            .get(client_key)
-            .map(ClientState::as_ref)
-            .unwrap_or(ClientState::Disconnected)
+    fn bytes_recv(&self) -> usize {
+        self.bytes_recv
     }
+}
 
-    fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_ {
-        match &self.state {
-            State::Closed | State::Opening(_) => None,
-            State::Open(server) => Some(server.clients.keys()),
-        }
-        .into_iter()
-        .flatten()
+impl RemoteAddr for Connected {
+    fn remote_addr(&self) -> SocketAddr {
+        self.remote_addr
     }
 }

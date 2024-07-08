@@ -123,17 +123,20 @@ impl ServerTransport for ChannelServer {
     fn send(
         &mut self,
         client_key: Self::ClientKey,
-        msg: Bytes,
+        msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::Error> {
         let Some(Client::Connected(client)) = self.clients.get_mut(client_key) else {
             return Err(ServerError::NoClient);
         };
 
+        let msg = msg.into();
+        let lane = lane.into();
+
         let msg_len = msg.len();
         client
             .send_s2c
-            .send((msg, lane.into()))
+            .send((msg, lane))
             .map_err(|_| ServerError::Disconnected)?;
         client.stats.bytes_sent += msg_len;
         Ok(())

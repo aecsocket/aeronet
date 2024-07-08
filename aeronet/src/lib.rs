@@ -11,6 +11,3 @@ pub mod stats;
 
 #[cfg(feature = "condition")]
 pub mod condition;
-
-#[cfg(feature = "bevy-tokio-rt")]
-pub mod bevy_tokio_rt;

@@ -1,17 +1,18 @@
 use aeronet::error::pretty_error;
+use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
     never::Never,
-    FutureExt, SinkExt, StreamExt,
+    FutureExt, SinkExt,
 };
-use octs::Bytes;
 use slotmap::SlotMap;
 use tracing::{debug, debug_span, Instrument};
+use web_time::Duration;
 use wtransport::endpoint::{IncomingSession, SessionRequest};
 
-use crate::{internal, shared::ConnectionStats};
+use crate::{internal, server::ToConnected};
 
-use super::{ClientKey, Connected, Connecting, ConnectionResponse, Open, ServerError};
+use super::{ClientKey, Connecting, ConnectionResponse, Open, ServerError, ToConnecting};
 
 pub async fn start(
     config: wtransport::ServerConfig,
@@ -21,7 +22,7 @@ pub async fn start(
     let local_addr = endpoint.local_addr().map_err(ServerError::GetLocalAddr)?;
 
     let (send_closed, mut recv_closed) = oneshot::channel::<()>();
-    let (send_connecting, recv_connecting) = mpsc::channel::<Connecting>(4);
+    let (send_connecting, recv_connecting) = mpsc::channel::<ToConnecting>(4);
     send_open
         .send(Open {
             local_addr,
@@ -46,7 +47,7 @@ pub async fn start(
 }
 
 async fn start_handle_session(
-    mut send_connecting: mpsc::Sender<Connecting>,
+    mut send_connecting: mpsc::Sender<ToConnecting>,
     session: IncomingSession,
 ) -> Result<(), ServerError> {
     let req = session.await.map_err(ServerError::AwaitSessionRequest)?;
@@ -54,9 +55,9 @@ async fn start_handle_session(
     let (send_key, recv_key) = oneshot::channel::<ClientKey>();
     let (send_conn_resp, recv_conn_resp) = oneshot::channel::<ConnectionResponse>();
     let (send_err, recv_err) = oneshot::channel::<ServerError>();
-    let (send_connected, recv_connected) = oneshot::channel::<Connected>();
+    let (send_connected, recv_connected) = oneshot::channel::<ToConnected>();
     send_connecting
-        .send(Connecting {
+        .send(ToConnecting {
             authority: req.authority().to_string(),
             path: req.path().to_string(),
             origin: req.origin().map(ToOwned::to_owned),
@@ -97,7 +98,7 @@ async fn start_handle_session(
 async fn handle_session(
     req: SessionRequest,
     recv_conn_resp: oneshot::Receiver<ConnectionResponse>,
-    send_connected: oneshot::Sender<Connected>,
+    send_connected: oneshot::Sender<ToConnected>,
 ) -> Result<Never, ServerError> {
     debug!("New session request from {}{}", req.authority(), req.path());
 
@@ -122,29 +123,32 @@ async fn handle_session(
 
     debug!("Connection opened, forwarding to frontend");
 
+    let (send_rtt, recv_rtt) = mpsc::channel::<Duration>(1);
     let (send_c2s, recv_c2s) = mpsc::channel::<Bytes>(internal::MSG_BUF_CAP);
-    let (send_s2c, mut recv_s2c) = mpsc::unbounded::<Bytes>();
-    let (send_stats, recv_stats) = mpsc::channel::<ConnectionStats>(1);
+    let (send_s2c, recv_s2c) = mpsc::unbounded::<Bytes>();
     send_connected
-        .send(Connected {
+        .send(ToConnected {
             remote_addr: conn.remote_address(),
-            stats: ConnectionStats {
-                rtt: conn.rtt(),
-                ..Default::default()
-            },
+            initial_rtt: conn.rtt(),
+            recv_rtt,
             recv_c2s,
             send_s2c,
-            recv_stats,
         })
         .map_err(|_| ServerError::FrontendClosed)?;
 
     debug!("Starting connection loop");
-    let send = async {
-        loop {
-            let msg = recv_s2c.next().await.ok_or(ServerError::FrontendClosed)?;
-            conn.send_datagram(msg).map_err(ServerError::SendDatagram)?;
-        }
-    };
-
-    todo!()
+    let conn = xwt_wtransport::Connection(conn);
+    let send_loop = internal::send_loop(&conn, recv_s2c);
+    let recv_loop = internal::recv_loop(&conn, send_c2s);
+    let update_rtt_loop = internal::update_rtt_loop(&conn, send_rtt);
+    futures::select! {
+        r = send_loop.fuse() => r,
+        r = recv_loop.fuse() => r,
+        r = update_rtt_loop.fuse() => r,
+    }
+    .map_err(|err| match err {
+        internal::Error::FrontendClosed => ServerError::FrontendClosed,
+        internal::Error::ConnectionLost(err) => ServerError::ConnectionLost(err),
+        internal::Error::SendDatagram(err) => ServerError::SendDatagram(err),
+    })
 }

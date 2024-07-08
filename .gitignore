@@ -1,4 +1,9 @@
+# IDEs
+.vscode
+
+# direnv
+.direnv
+.envrc
+
+# Cargo
 /target
-/wasm_target
-/.direnv
-/.vscode
