@@ -22,6 +22,8 @@ use wtransport::error::ConnectionError;
 
 use crate::internal;
 
+pub type ServerConfig = wtransport::ServerConfig;
+
 #[derive(Derivative, Default)]
 #[derivative(Debug = "transparent")]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]

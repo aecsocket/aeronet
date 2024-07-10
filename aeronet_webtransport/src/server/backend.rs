@@ -10,12 +10,14 @@ use tracing::{debug, debug_span, Instrument};
 use web_time::Duration;
 use wtransport::endpoint::{IncomingSession, SessionRequest};
 
-use crate::{internal, server::ToConnected};
+use crate::internal;
 
-use super::{ClientKey, Connecting, ConnectionResponse, Open, ServerError, ToConnecting};
+use super::{
+    ClientKey, ConnectionResponse, Open, ServerConfig, ServerError, ToConnected, ToConnecting,
+};
 
 pub async fn start(
-    config: wtransport::ServerConfig,
+    config: ServerConfig,
     send_open: oneshot::Sender<Open>,
 ) -> Result<Never, ServerError> {
     let endpoint = wtransport::Endpoint::server(config).map_err(ServerError::CreateEndpoint)?;

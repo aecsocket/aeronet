@@ -9,9 +9,9 @@
 /// number of bytes from this counter.
 pub trait ByteLimit {
     /// Value returned by [`ByteLimit::try_consume`].
-    type Consume<'a>: ConsumeBytes
+    type Consume<'this>: ConsumeBytes
     where
-        Self: 'a;
+        Self: 'this;
 
     /// Checks if this value has at least `n` bytes remaining, and if so,
     /// provides a value which can be used to consume those bytes.

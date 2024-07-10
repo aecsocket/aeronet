@@ -10,11 +10,11 @@ use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot;
 use replace_with::replace_with_or_abort_and_return;
-use tracing::{debug, info};
+use tracing::debug;
 use web_time::Duration;
 use xwt_core::utils::maybe;
 
-use crate::MessageKey;
+use crate::shared::MessageKey;
 
 use super::{
     backend, ClientConfig, ClientError, Connected, Connecting, State, ToConnected,

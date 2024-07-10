@@ -140,7 +140,6 @@ dependencies = [
  "arbitrary",
  "assert_matches",
  "bitvec",
- "bytes",
  "derivative",
  "either",
  "octs",
@@ -168,9 +167,9 @@ dependencies = [
  "derivative",
  "either",
  "futures",
+ "gloo-timers",
  "js-sys",
  "replace_with",
- "serde",
  "slotmap",
  "spki",
  "thiserror",
@@ -182,6 +181,7 @@ dependencies = [
  "wtransport",
  "x509-cert",
  "xwt-core",
+ "xwt-web-sys",
  "xwt-wtransport",
 ]
 
@@ -2525,6 +2525,18 @@ name = "glob"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
+
+[[package]]
+name = "gloo-timers"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbb143cf96099802033e0d4f4963b19fd2e0b728bcf076cd9cf7f6634f092994"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "js-sys",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "glow"
@@ -5167,6 +5179,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-sys-async-io"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65a1ea96a932ec2252276bc517eb4fccaebc0ecfea2faa49e242de769d188409"
+dependencies = [
+ "js-sys",
+ "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "web-sys-stream-utils"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90a913a6d558dbf153010d8add2f27bf5964427aa395299b57a7680a5e971cc7"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "web-time"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5835,6 +5872,22 @@ name = "xwt-core"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1f98acac2f9398db512d6cc2d1fd12ce5e896192e9c961a83dd48d32c7fed8c"
+
+[[package]]
+name = "xwt-web-sys"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1e028f18e310bc2e8e3650ba9cbbf3b7a5b13277e8c0ded6a0d81b510ccc1a6"
+dependencies = [
+ "js-sys",
+ "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-sys-async-io",
+ "web-sys-stream-utils",
+ "xwt-core",
+]
 
 [[package]]
 name = "xwt-wtransport"

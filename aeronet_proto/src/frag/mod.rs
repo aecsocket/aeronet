@@ -12,16 +12,27 @@
 //!
 //! Due to the fact that fragments may be dropped in transport, and that old
 //! messages waiting for more fragments to be received may never get those
-//! fragments, users should be careful to clean up fragments periodically -
-//! see [`FragmentReceiver::clean_up`].
+//! fragments, you need a strategy to handle fragments which may never be fully
+//! reassembled. Some possible strategies are:
+//! * for unreliable lanes
+//!   * incomplete messages are removed if they have not received a new fragment
+//!     in X milliseconds
+//!   * if a new message comes in and it takes more memory than is available,
+//!     the oldest existing messages are removed until there is enough memory
+//! * for reliable lanes
+//!   * if we don't have enough memory to fit a new message in, the connection
+//!     is reset
+//!
+//! This is automatically handled in [`session`](crate::session).
 //!
 //! [*Gaffer On Games*]: https://gafferongames.com/post/packet_fragmentation_and_reassembly/#data-structure-on-receiver-side
 
-use aeronet::{
-    integer_encoding::VarInt,
-    octs::{self, ConstEncodeLen},
-};
+use std::convert::Infallible;
+
 use arbitrary::Arbitrary;
+use octs::{
+    BufTooShortOr, Bytes, Decode, Encode, FixedEncodeLen, Read, VarInt, VarIntTooLarge, Write,
+};
 
 use crate::seq::Seq;
 
@@ -38,87 +49,73 @@ pub struct FragmentHeader {
     pub msg_seq: Seq,
     /// How many fragments this packet's message is split up into.
     pub num_frags: u8,
-    /// Index of this fragment in the total message.
+    /// Index of this fragment in the complete message.
     pub frag_index: u8,
 }
 
-impl octs::ConstEncodeLen for FragmentHeader {
+impl FixedEncodeLen for FragmentHeader {
     const ENCODE_LEN: usize = Seq::ENCODE_LEN + u8::ENCODE_LEN + u8::ENCODE_LEN;
 }
 
-impl octs::Encode for FragmentHeader {
-    fn encode(&self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
-        buf.write(&self.msg_seq)?;
-        buf.write(&self.num_frags)?;
-        buf.write(&self.frag_index)?;
+impl Encode for FragmentHeader {
+    type Error = Infallible;
+
+    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+        dst.write(&self.msg_seq)?;
+        dst.write(&self.num_frags)?;
+        dst.write(&self.frag_index)?;
         Ok(())
     }
 }
 
-impl octs::Decode for FragmentHeader {
-    fn decode(buf: &mut impl octs::ReadBytes) -> octs::Result<Self> {
+impl Decode for FragmentHeader {
+    type Error = Infallible;
+
+    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
         Ok(Self {
-            msg_seq: buf.read()?,
-            num_frags: buf.read()?,
-            frag_index: buf.read()?,
+            msg_seq: src.read()?,
+            num_frags: src.read()?,
+            frag_index: src.read()?,
         })
     }
 }
 
 /// Fragment of a message as it is encoded inside a packet.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Fragment<B> {
+pub struct Fragment {
     /// Metadata of this fragment, such as which message this fragment is a part
     /// of.
     pub header: FragmentHeader,
     /// Buffer storing the message payload of this fragment.
-    pub payload: B,
+    pub payload: Bytes,
 }
 
-impl<B: bytes::Buf> Fragment<B> {
-    /// Writes this value into a [`octs::WriteBytes`].
-    ///
-    /// This is equivalent to [`Encode`], but consumes `self` instead of taking
-    /// a shared reference. This is because we consume the payload when writing
-    /// it into a buffer.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the buffer is not long enough to fit the extra bytes.
-    ///
-    /// [`Encode`]: octs::Encode
-    pub fn encode_into(mut self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
-        buf.write(&self.header)?;
-        // if B is Bytes, this will be nearly free -
-        // doesn't even increment the ref count
-        let payload = self.payload.copy_to_bytes(self.payload.remaining());
-        buf.write(&payload)?;
+impl Encode for Fragment {
+    type Error = Infallible;
+
+    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+        dst.write(&self.header)?;
+        dst.write(VarInt(self.payload.len()))?;
+        dst.write_from(self.payload.clone())?;
         Ok(())
     }
 }
 
-impl<B: bytes::Buf> octs::EncodeLen for Fragment<B> {
-    fn encode_len(&self) -> usize {
-        let len = self.payload.remaining();
-        FragmentHeader::ENCODE_LEN + VarInt::required_space(len) + len
-    }
-}
+impl Decode for Fragment {
+    type Error = VarIntTooLarge;
 
-impl octs::Decode for Fragment<bytes::Bytes> {
-    fn decode(buf: &mut impl octs::ReadBytes) -> octs::Result<Self> {
-        Ok(Self {
-            header: buf.read()?,
-            payload: buf.read()?,
-        })
+    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
+        let header = src.read()?;
+        let payload_len = src.read::<VarInt<usize>>()?.0;
+        let payload = src.read_next(payload_len)?;
+        Ok(Self { header, payload })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use bytes::{Bytes, BytesMut};
-
-    use aeronet::octs::{ConstEncodeLen, ReadBytes, WriteBytes};
+    use octs::{Bytes, BytesMut};
 
     use super::*;
 
@@ -146,7 +143,7 @@ mod tests {
     fn frag() -> (FragmentSender, FragmentReceiver) {
         (
             FragmentSender::new(PAYLOAD_LEN),
-            FragmentReceiver::new(PAYLOAD_LEN, usize::MAX),
+            FragmentReceiver::new(PAYLOAD_LEN),
         )
     }
 
@@ -158,24 +155,15 @@ mod tests {
         let p3 = send.fragment(Seq(2), MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG1,
-            recv.reassemble(&p1.header, &p1.payload)
-                .unwrap()
-                .unwrap()
-                .unwrap()
+            recv.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG2,
-            recv.reassemble(&p2.header, &p2.payload)
-                .unwrap()
-                .unwrap()
-                .unwrap()
+            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG3,
-            recv.reassemble(&p3.header, &p3.payload)
-                .unwrap()
-                .unwrap()
-                .unwrap()
+            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
         );
     }
 
@@ -187,24 +175,15 @@ mod tests {
         let p3 = send.fragment(Seq(2), MSG3).unwrap().next().unwrap();
         assert_eq!(
             MSG3,
-            recv.reassemble(&p3.header, &p3.payload)
-                .unwrap()
-                .unwrap()
-                .unwrap()
+            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG1,
-            recv.reassemble(&p1.header, &p1.payload)
-                .unwrap()
-                .unwrap()
-                .unwrap()
+            recv.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
         );
         assert_eq!(
             MSG2,
-            recv.reassemble(&p2.header, &p2.payload)
-                .unwrap()
-                .unwrap()
-                .unwrap()
+            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
         );
     }
 
@@ -218,13 +197,10 @@ mod tests {
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(Ok(None)));
+        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(None));
         assert_eq!(
             msg,
-            recv.reassemble(&p2.header, &p2.payload)
-                .unwrap()
-                .unwrap()
-                .unwrap()
+            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
         );
     }
 
@@ -238,14 +214,11 @@ mod tests {
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(Ok(None)));
-        assert_matches!(recv.reassemble(&p2.header, &p2.payload), Ok(Ok(None)));
+        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(None));
+        assert_matches!(recv.reassemble(&p2.header, &p2.payload), Ok(None));
         assert_eq!(
             msg,
-            recv.reassemble(&p3.header, &p3.payload)
-                .unwrap()
-                .unwrap()
-                .unwrap()
+            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
         );
     }
 }

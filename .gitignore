@@ -7,3 +7,7 @@
 
 # Cargo
 /target
+# manually overridden using CARGO_TARGET_DIR
+# when developing against native + WASM at the same time
+/native_target
+/wasm_target

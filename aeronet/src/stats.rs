@@ -39,8 +39,8 @@ pub trait Rtt {
 ///
 /// Note that a counter increasing does not necessarily mean that a message was
 /// *successfully* sent or received:
-/// - for sending, it indicates how many bytes we attempted to send
-/// - for receiving, it indicates how many bytes we received and acknowledged
+/// * for sending, it indicates how many bytes we attempted to send
+/// * for receiving, it indicates how many bytes we received and acknowledged
 ///
 /// See [`stats`](crate::stats) on how to get access to this info.
 ///

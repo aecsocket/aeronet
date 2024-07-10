@@ -1,8 +1,13 @@
 //! See [`Seq`].
 
-use std::{cmp::Ordering, convert::Infallible};
+use std::{
+    cmp::Ordering,
+    convert::Infallible,
+    ops::{Add, AddAssign, Sub, SubAssign},
+};
 
 use arbitrary::Arbitrary;
+use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///
@@ -121,7 +126,7 @@ impl PartialOrd for Seq {
     }
 }
 
-impl std::ops::Add<Seq> for Seq {
+impl Add<Seq> for Seq {
     type Output = Seq;
 
     fn add(self, rhs: Seq) -> Self::Output {
@@ -129,13 +134,13 @@ impl std::ops::Add<Seq> for Seq {
     }
 }
 
-impl std::ops::AddAssign for Seq {
+impl AddAssign for Seq {
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs;
     }
 }
 
-impl std::ops::Sub<Seq> for Seq {
+impl Sub<Seq> for Seq {
     type Output = Seq;
 
     fn sub(self, rhs: Seq) -> Self::Output {
@@ -143,37 +148,35 @@ impl std::ops::Sub<Seq> for Seq {
     }
 }
 
-impl std::ops::SubAssign for Seq {
+impl SubAssign for Seq {
     fn sub_assign(&mut self, rhs: Self) {
         *self = *self - rhs;
     }
 }
 
-impl octs::FixedEncodeLen for Seq {
+impl FixedEncodeLen for Seq {
     const ENCODE_LEN: usize = u16::ENCODE_LEN;
 }
 
-impl octs::Encode for Seq {
+impl Encode for Seq {
     type Error = Infallible;
 
-    fn encode(&self, mut buf: impl octs::Write) -> Result<(), octs::BufTooShortOr<Self::Error>> {
-        buf.write(&self.0)
+    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+        dst.write(&self.0)
     }
 }
 
-impl octs::Decode for Seq {
+impl Decode for Seq {
     type Error = Infallible;
 
-    fn decode(mut buf: impl octs::Read) -> Result<Self, octs::BufTooShortOr<Self::Error>> {
-        Ok(Self(buf.read()?))
+    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
+        Ok(Self(src.read()?))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use bytes::BytesMut;
-
-    use octs::{FixedEncodeLen, Read, Write};
+    use octs::BytesMut;
 
     use super::*;
 

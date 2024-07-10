@@ -1,6 +1,9 @@
-use std::iter::FusedIterator;
+use std::iter::{Enumerate, FusedIterator};
 
-use aeronet::octs;
+use octs::{
+    chunks::{ByteChunks, ByteChunksExt},
+    Buf, Bytes,
+};
 
 use crate::seq::Seq;
 
@@ -8,6 +11,8 @@ use super::{Fragment, FragmentHeader};
 
 /// Handles splitting a single large message into multiple smaller fragments
 /// which can be reassembled by a [`FragmentReceiver`].
+///
+/// See [`frag`](crate::frag).
 ///
 /// [`FragmentReceiver`]: crate::frag::FragmentReceiver
 #[derive(Debug, Clone)]
@@ -63,11 +68,12 @@ impl FragmentSender {
     ///
     /// Errors if the message was not a valid message which could be fragmented.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
-    pub fn fragment<B>(&self, msg_seq: Seq, msg: B) -> Result<Fragments<B>, FragmentError>
-    where
-        B: bytes::Buf + octs::ByteChunksExt,
-        octs::ByteChunks<B>: ExactSizeIterator,
-    {
+    pub fn fragment(
+        &self,
+        msg_seq: Seq,
+        msg: impl Into<Bytes>,
+    ) -> Result<Fragments, FragmentError> {
+        let msg = msg.into();
         let msg_len = msg.remaining();
         let chunks = msg.byte_chunks(self.max_payload_len);
         let num_frags = u8::try_from(chunks.len()).map_err(|_| FragmentError::MessageTooBig {
@@ -85,24 +91,21 @@ impl FragmentSender {
 
 /// Iterator over fragments created by [`FragmentSender::fragment`].
 #[derive(Debug)]
-pub struct Fragments<B> {
+pub struct Fragments {
     msg_seq: Seq,
     num_frags: u8,
-    iter: std::iter::Enumerate<octs::ByteChunks<B>>,
+    iter: Enumerate<ByteChunks>,
 }
 
-impl<B> Fragments<B> {
+impl Fragments {
     /// Gets the number of fragments that this iterator produces in total.
     pub fn num_frags(&self) -> u8 {
         self.num_frags
     }
 }
 
-impl<T, U> Iterator for Fragments<T>
-where
-    octs::ByteChunks<T>: Iterator<Item = U>,
-{
-    type Item = Fragment<U>;
+impl Iterator for Fragments {
+    type Item = Fragment;
 
     fn next(&mut self) -> Option<Self::Item> {
         let (frag_index, payload) = self.iter.next()?;
@@ -121,9 +124,9 @@ where
     }
 }
 
-impl<T, U> ExactSizeIterator for Fragments<T> where octs::ByteChunks<T>: ExactSizeIterator<Item = U> {}
+impl ExactSizeIterator for Fragments {}
 
-impl<T, U> FusedIterator for Fragments<T> where octs::ByteChunks<T>: FusedIterator<Item = U> {}
+impl FusedIterator for Fragments {}
 
 #[cfg(test)]
 mod tests {
@@ -150,7 +153,7 @@ mod tests {
         assert_eq!(
             Fragment {
                 header,
-                payload: &[1][..],
+                payload: Bytes::from_static(&[1]),
             },
             frags.next().unwrap()
         );
@@ -169,7 +172,7 @@ mod tests {
         assert_eq!(
             Fragment {
                 header,
-                payload: &[1, 2][..],
+                payload: Bytes::from_static(&[1, 2]),
             },
             frags.next().unwrap()
         );
@@ -191,7 +194,7 @@ mod tests {
                     frag_index: 0,
                     ..header
                 },
-                payload: &[1, 2][..],
+                payload: Bytes::from_static(&[1, 2]),
             },
             frags.next().unwrap()
         );
@@ -201,7 +204,7 @@ mod tests {
                     frag_index: 1,
                     ..header
                 },
-                payload: &[3][..],
+                payload: Bytes::from_static(&[3]),
             },
             frags.next().unwrap()
         );
@@ -223,7 +226,7 @@ mod tests {
                     frag_index: 0,
                     ..header
                 },
-                payload: &[1, 2][..],
+                payload: Bytes::from_static(&[1, 2]),
             },
             frags.next().unwrap()
         );
@@ -233,7 +236,7 @@ mod tests {
                     frag_index: 1,
                     ..header
                 },
-                payload: &[3, 4][..],
+                payload: Bytes::from_static(&[3, 4]),
             },
             frags.next().unwrap()
         );
@@ -243,7 +246,7 @@ mod tests {
                     frag_index: 2,
                     ..header
                 },
-                payload: &[5][..],
+                payload: Bytes::from_static(&[5]),
             },
             frags.next().unwrap()
         );

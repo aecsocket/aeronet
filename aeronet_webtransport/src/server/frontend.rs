@@ -8,15 +8,16 @@ use aeronet::{
 use aeronet_proto::seq::Seq;
 use bytes::Bytes;
 use either::Either;
-use futures::{channel::oneshot, SinkExt};
+use futures::channel::oneshot;
 use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
 use slotmap::SlotMap;
 use web_time::Duration;
 
-use crate::{MessageKey, ServerError, WebTransportServer};
+use crate::shared::MessageKey;
 
 use super::{
-    backend, Client, ClientKey, Connected, Connecting, ConnectionResponse, Open, Opening, State,
+    backend, Client, ClientKey, Connected, Connecting, ConnectionResponse, Open, Opening,
+    ServerConfig, ServerError, State, WebTransportServer,
 };
 
 impl WebTransportServer {
@@ -36,7 +37,7 @@ impl WebTransportServer {
         }
     }
 
-    pub fn open_new(config: wtransport::ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
+    pub fn open_new(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
         let (send_open, recv_open) = oneshot::channel::<Open>();
         let (send_err, recv_err) = oneshot::channel::<ServerError>();
 

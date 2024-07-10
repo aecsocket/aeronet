@@ -3,21 +3,20 @@
 
 pub use aeronet_proto as proto;
 
-mod client;
+pub mod client;
 mod internal;
-mod shared;
-
-pub use client::{ClientConfig, ClientError, WebTransportClient};
-pub use shared::MessageKey;
+pub mod shared;
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         pub use xwt_web_sys::WebTransportOptions;
+
+        mod js_error;
+        pub use js_error::JsError;
     } else {
         pub use wtransport;
 
         pub mod cert;
         pub mod server;
-        pub use server::{ServerError, WebTransportServer, ConnectionResponse};
     }
 }

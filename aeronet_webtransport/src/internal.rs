@@ -11,7 +11,7 @@ cfg_if::cfg_if! {
         pub type Connection = xwt_web_sys::Session;
         pub type ClientEndpoint = xwt_web_sys::Endpoint;
 
-        pub fn check_datagram_support(_: &Connection) -> bool {
+        pub fn supports_datagrams(_: &Connection) -> bool {
             // TODO I think there's a way to do this on wasm
             true
         }
@@ -83,10 +83,20 @@ pub async fn update_rtt_loop(
     mut send_rtt: mpsc::Sender<Duration>,
 ) -> Result<Never, Error> {
     loop {
-        tokio::time::sleep(STATS_UPDATE_INTERVAL).await;
+        sleep(STATS_UPDATE_INTERVAL).await;
         send_rtt
             .send(rtt_of(conn))
             .await
             .map_err(|_| Error::FrontendClosed)?;
     }
+}
+
+#[cfg(target_family = "wasm")]
+async fn sleep(duration: Duration) {
+    gloo_timers::future::sleep(duration).await
+}
+
+#[cfg(not(target_family = "wasm"))]
+async fn sleep(duration: Duration) {
+    tokio::time::sleep(duration).await;
 }

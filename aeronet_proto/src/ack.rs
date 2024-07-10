@@ -1,7 +1,9 @@
 //! See [`Acknowledge`].
 
-use aeronet::octs;
+use std::convert::Infallible;
+
 use arbitrary::Arbitrary;
+use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
 
 use crate::seq::Seq;
 
@@ -167,23 +169,27 @@ impl Acknowledge {
     }
 }
 
-impl octs::ConstEncodeLen for Acknowledge {
+impl FixedEncodeLen for Acknowledge {
     const ENCODE_LEN: usize = Seq::ENCODE_LEN + u32::ENCODE_LEN;
 }
 
-impl octs::Encode for Acknowledge {
-    fn encode(&self, buf: &mut impl octs::WriteBytes) -> octs::Result<()> {
-        buf.write(&self.last_recv)?;
-        buf.write(&self.ack_bits)?;
+impl Encode for Acknowledge {
+    type Error = Infallible;
+
+    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+        dst.write(&self.last_recv)?;
+        dst.write(&self.ack_bits)?;
         Ok(())
     }
 }
 
-impl octs::Decode for Acknowledge {
-    fn decode(buf: &mut impl octs::ReadBytes) -> octs::Result<Self> {
+impl Decode for Acknowledge {
+    type Error = Infallible;
+
+    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
         Ok(Self {
-            last_recv: buf.read()?,
-            ack_bits: buf.read()?,
+            last_recv: src.read()?,
+            ack_bits: src.read()?,
         })
     }
 }
@@ -197,11 +203,9 @@ fn shl(n: u32, by: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use bytes::BytesMut;
+    use octs::BytesMut;
 
-    use aeronet::octs::{ConstEncodeLen, ReadBytes, WriteBytes};
-
-    use super::{shl, *};
+    use super::*;
 
     #[test]
     fn shl_in_range() {

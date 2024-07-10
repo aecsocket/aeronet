@@ -3,16 +3,12 @@ use aeronet::{
     error::pretty_error,
     lane::LaneKey,
 };
-use aeronet_webtransport::WebTransportClient;
+use aeronet_webtransport::client::{ClientConfig, WebTransportClient};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-use bevy_tokio_tasks::{TokioTasksPlugin, TokioTasksRuntime};
-use web_time::Duration;
 
 #[derive(Debug, Clone, Copy, LaneKey)]
 enum Lane {
-    // the lane kind doesn't actually matter since we're using MPSC
-    // but for other transports it would
     #[lane_kind(ReliableOrdered)]
     Default,
 }
@@ -25,8 +21,8 @@ struct UiState {
 }
 
 fn main() {
-    App::new()
-        .add_plugins((DefaultPlugins, EguiPlugin, TokioTasksPlugin::default()))
+    let mut app = App::new();
+    app.add_plugins((DefaultPlugins, EguiPlugin))
         .init_resource::<UiState>()
         .init_resource::<WebTransportClient>()
         .add_systems(PreUpdate, poll_client)
@@ -34,13 +30,26 @@ fn main() {
         .add_systems(
             PostUpdate,
             flush_client.run_if(client_connected::<WebTransportClient>),
-        )
-        .run();
+        );
+
+    #[cfg(not(target_family = "wasm"))]
+    {
+        app.add_plugins(bevy_tokio_tasks::TokioTasksPlugin::default());
+    }
+
+    app.run();
+}
+
+#[cfg(target_family = "wasm")]
+fn client_config() -> ClientConfig {
+    ClientConfig::default()
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn client_config() -> aeronet_webtransport::ClientConfig {
-    aeronet_webtransport::wtransport::ClientConfig::builder()
+fn client_config() -> ClientConfig {
+    use web_time::Duration;
+
+    ClientConfig::builder()
         .with_bind_default()
         .with_no_cert_validation()
         .keep_alive_interval(Some(Duration::from_secs(1)))
@@ -87,7 +96,7 @@ fn ui(
     mut egui: EguiContexts,
     mut ui_state: ResMut<UiState>,
     mut client: ResMut<WebTransportClient>,
-    rt: Res<TokioTasksRuntime>,
+    #[cfg(not(target_family = "wasm"))] rt: Res<bevy_tokio_tasks::TokioTasksRuntime>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -128,7 +137,14 @@ fn ui(
             ui_state.log.push(format!("Connecting to {target}"));
             match client.connect(client_config(), target) {
                 Ok(backend) => {
-                    rt.runtime().spawn(backend);
+                    #[cfg(target_family = "wasm")]
+                    {
+                        wasm_bindgen_futures::spawn_local(backend);
+                    }
+                    #[cfg(not(target_family = "wasm"))]
+                    {
+                        rt.runtime().spawn(backend);
+                    }
                 }
                 Err(err) => {
                     ui_state.log.push(format!(

@@ -4,7 +4,7 @@ members = [
   "aeronet_derive",
   #"aeronet_replicon",
   "aeronet_channel",
-  #"aeronet_proto",
+  # "aeronet_proto",
   "aeronet_webtransport",
   #"aeronet_steam",
 ]
@@ -70,13 +70,7 @@ thiserror = "1.0.57"
 tracing = "0.1.40"
 web-time = "1.1.0"
 
-proc-macro2 = "1.0.76"
-quote = "1.0.35"
-syn = "2.0.48"
-
-crossbeam-channel = "0.5.11"
-futures = "0.3.30"
-tokio = { version = "1.36.0", default-features = false }
+# bevy
 
 bevy = "0.14.0"
 bevy-tokio-tasks = "0.14.0"
@@ -86,17 +80,34 @@ bevy_egui = "0.28.0"
 bevy_replicon = "0.27.0"
 bevy_time = { version = "0.14.0", default-features = false }
 
+# aeronet_derive
+
+proc-macro2 = "1.0.76"
+quote = "1.0.35"
+syn = "2.0.48"
+
+# aeronet_channel
+
+crossbeam-channel = "0.5.11"
+futures = "0.3.30"
+tokio = { version = "1.36.0", default-features = false }
+
+# aeronet_webtransport
+
+xwt-core = "0.4.2"
+
 base64 = "0.22.0"
 spki = { version = "0.7.3", features = ["fingerprint"] }
 wtransport = "0.1.12"
 x509-cert = "0.2.5"
-
-xwt = "0.13.0"
-xwt-core = "0.4.2"
 xwt-wtransport = "0.7.1"
 
+gloo-timers = { version = "0.3.0", features = ["futures"] }
 js-sys = "0.3.69"
 wasm-bindgen = "0.2.92"
 wasm-bindgen-futures = "0.4.41"
+xwt-web-sys = "0.11.0"
+
+# aeronet_steam
 
 steamworks = "0.11.0"

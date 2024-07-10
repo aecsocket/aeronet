@@ -1,19 +1,40 @@
 mod backend;
 mod frontend;
 
-use std::{io, net::SocketAddr};
+use std::io;
 
 use aeronet::{
     client::ClientState,
-    stats::{LocalAddr, MessageStats, RemoteAddr, Rtt},
+    stats::{MessageStats, Rtt},
 };
 use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use web_time::Duration;
-use xwt_core::endpoint::Connect;
 
-use crate::internal;
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+        use crate::js_error::JsError;
+
+        pub type ClientConfig = xwt_web_sys::WebTransportOptions;
+        type ConnectError = JsError;
+        type AwaitConnectError = JsError;
+        type ConnectionLostError = JsError;
+        type SendDatagramError = JsError;
+    } else {
+        use std::net::SocketAddr;
+
+        use xwt_core::endpoint::Connect;
+
+        use crate::internal;
+
+        pub type ClientConfig = xwt_wtransport::wtransport::ClientConfig;
+        type ConnectError = <internal::ClientEndpoint as Connect>::Error;
+        type AwaitConnectError = <<internal::ClientEndpoint as Connect>::Connecting as xwt_core::endpoint::connect::Connecting>::Error;
+        type ConnectionLostError = <internal::Connection as xwt_core::session::datagram::Receive>::Error;
+        type SendDatagramError = <internal::Connection as xwt_core::session::datagram::Send>::Error;
+    }
+}
 
 #[derive(Derivative, Default)]
 #[derivative(Debug = "transparent")]
@@ -42,12 +63,9 @@ pub enum ClientError {
     #[error("failed to create endpoint")]
     CreateEndpoint(#[source] io::Error),
     #[error("failed to connect")]
-    Connect(#[source] <internal::ClientEndpoint as Connect>::Error),
+    Connect(#[source] ConnectError),
     #[error("failed to await connection")]
-    AwaitConnect(
-        #[source]
-        <<internal::ClientEndpoint as Connect>::Connecting as xwt_core::endpoint::connect::Connecting>::Error,
-    ),
+    AwaitConnect(#[source] AwaitConnectError),
     #[error("datagrams are not supported on this peer")]
     DatagramsNotSupported,
     #[error("failed to get endpoint local address")]
@@ -55,16 +73,10 @@ pub enum ClientError {
 
     // connection
     #[error("connection lost")]
-    ConnectionLost(#[source] <internal::Connection as xwt_core::session::datagram::Receive>::Error),
+    ConnectionLost(#[source] ConnectionLostError),
     #[error("failed to send datagram")]
-    SendDatagram(#[source] <internal::Connection as xwt_core::session::datagram::Send>::Error),
+    SendDatagram(#[source] SendDatagramError),
 }
-
-#[cfg(not(target_family = "wasm"))]
-pub type ClientConfig = xwt_wtransport::wtransport::ClientConfig;
-
-#[cfg(target_family = "wasm")]
-pub type ClientConfig = xwt_web_sys::WebTransportOptions;
 
 #[derive(Debug)]
 pub struct Connecting {
@@ -116,14 +128,14 @@ impl MessageStats for Connected {
 }
 
 #[cfg(not(target_family = "wasm"))]
-impl LocalAddr for Connected {
+impl aeronet::stats::LocalAddr for Connected {
     fn local_addr(&self) -> SocketAddr {
         self.local_addr
     }
 }
 
 #[cfg(not(target_family = "wasm"))]
-impl RemoteAddr for Connected {
+impl aeronet::stats::RemoteAddr for Connected {
     fn remote_addr(&self) -> SocketAddr {
         self.remote_addr
     }

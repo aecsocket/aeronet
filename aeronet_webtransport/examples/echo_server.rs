@@ -3,7 +3,9 @@ use aeronet::{
     lane::LaneKey,
     server::{ServerEvent, ServerTransport},
 };
-use aeronet_webtransport::{server::ClientKey, wtransport, ConnectionResponse, WebTransportServer};
+use aeronet_webtransport::server::{
+    ClientKey, ConnectionResponse, ServerConfig, WebTransportServer,
+};
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_ecs::system::SystemId;
 use bevy_tokio_tasks::{TokioTasksPlugin, TokioTasksRuntime};
@@ -11,8 +13,6 @@ use web_time::Duration;
 
 #[derive(Debug, Clone, Copy, LaneKey)]
 enum Lane {
-    // the lane kind doesn't actually matter since we're using MPSC
-    // but for other transports it would
     #[lane_kind(ReliableOrdered)]
     Default,
 }
@@ -41,10 +41,13 @@ fn setup(
     info!("*** SPKI FINGERPRINT ***");
     info!("{spki_fingerprint}");
     info!("************************");
-    let config = wtransport::ServerConfig::builder()
+
+    let config = ServerConfig::builder()
         .with_bind_default(25565)
         .with_identity(&identity)
-        .keep_alive_interval(Some(Duration::from_secs(5)))
+        .keep_alive_interval(Some(Duration::from_secs(1)))
+        .max_idle_timeout(Some(Duration::from_secs(5)))
+        .unwrap()
         .build();
     let backend = server.open(config).unwrap();
     rt.runtime().spawn(backend);

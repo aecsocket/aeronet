@@ -18,13 +18,16 @@ pub async fn start(
     send_connected: oneshot::Sender<ToConnected>,
 ) -> Result<Never, ClientError> {
     let endpoint = {
-        cfg_if::cfg_if! {
-            if #[cfg(target_family = "wasm")] {
-                todo!()
-            } else {
-                let raw = wtransport::Endpoint::client(config).map_err(ClientError::CreateEndpoint)?;
-                Ok(xwt_wtransport::Endpoint(raw))
-            }
+        #[cfg(target_family = "wasm")]
+        {
+            Ok(xwt_web_sys::Endpoint {
+                options: config.to_js(),
+            })
+        }
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let raw = wtransport::Endpoint::client(config).map_err(ClientError::CreateEndpoint)?;
+            Ok(xwt_wtransport::Endpoint(raw))
         }
     }?;
 
@@ -32,10 +35,10 @@ pub async fn start(
     let conn = endpoint
         .connect(&target)
         .await
-        .map_err(ClientError::Connect)?
+        .map_err(|err| ClientError::Connect(err.into()))?
         .wait_connect()
         .await
-        .map_err(ClientError::AwaitConnect)?;
+        .map_err(|err| ClientError::AwaitConnect(err.into()))?;
 
     if !internal::supports_datagrams(&conn) {
         return Err(ClientError::DatagramsNotSupported);
@@ -70,7 +73,7 @@ pub async fn start(
     }
     .map_err(|err| match err {
         internal::Error::FrontendClosed => ClientError::FrontendClosed,
-        internal::Error::ConnectionLost(err) => ClientError::ConnectionLost(err),
-        internal::Error::SendDatagram(err) => ClientError::SendDatagram(err),
+        internal::Error::ConnectionLost(err) => ClientError::ConnectionLost(err.into()),
+        internal::Error::SendDatagram(err) => ClientError::SendDatagram(err.into()),
     })
 }
