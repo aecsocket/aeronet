@@ -6,8 +6,7 @@ use std::{
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
-use arbitrary::Arbitrary;
-use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
+use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen};
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///
@@ -37,7 +36,7 @@ use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
 /// [Addition](std::ops::Add) and [subtraction](std::ops::Sub) will always wrap.
 ///
 /// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]
 pub struct Seq(pub u16);
 
 impl Seq {
@@ -161,7 +160,7 @@ impl FixedEncodeLen for Seq {
 impl Encode for Seq {
     type Error = Infallible;
 
-    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+    fn encode(&self, mut dst: impl octs::Write) -> Result<(), BufTooShortOr<Self::Error>> {
         dst.write(&self.0)
     }
 }
@@ -169,14 +168,14 @@ impl Encode for Seq {
 impl Decode for Seq {
     type Error = Infallible;
 
-    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
+    fn decode(mut src: impl octs::Read) -> Result<Self, BufTooShortOr<Self::Error>> {
         Ok(Self(src.read()?))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use octs::BytesMut;
+    use octs::{BytesMut, Read, Write};
 
     use super::*;
 

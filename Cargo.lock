@@ -140,6 +140,7 @@ dependencies = [
  "arbitrary",
  "assert_matches",
  "bitvec",
+ "const_format",
  "derivative",
  "either",
  "octs",
@@ -1735,6 +1736,26 @@ dependencies = [
  "getrandom",
  "once_cell",
  "tiny-keccak",
+]
+
+[[package]]
+name = "const_format"
+version = "0.2.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a214c7af3d04997541b18d432afaff4c455e79e2029079647e72fc2bd27673"
+dependencies = [
+ "const_format_proc_macros",
+]
+
+[[package]]
+name = "const_format_proc_macros"
+version = "0.2.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7f6ff08fd20f4f299298a28e2dfa8a8ba1036e6cd2460ac1de7b425d76f2500"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-xid",
 ]
 
 [[package]]
@@ -3600,9 +3621,9 @@ checksum = "109983a091271ee8916076731ba5fdc9ee22fea871bc7c6ceab9bfd423eb1d99"
 
 [[package]]
 name = "octs"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d40c77b9d2d6f1bc1d6880f25f4514ff35a3b268dd658f26df46d3b583aadf1"
+checksum = "b2a48b4d9e5dd429ac79ecc89f3b6c0af954a695914fe3fc104ae60b6393de69"
 dependencies = [
  "bytes",
 ]

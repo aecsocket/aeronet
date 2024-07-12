@@ -23,6 +23,7 @@ aeronet = { workspace = true }
 ahash = { workspace = true }
 arbitrary = { workspace = true }
 bitvec = { workspace = true }
+const_format = { workspace = true }
 derivative = { workspace = true }
 either = { workspace = true }
 octs = { workspace = true }

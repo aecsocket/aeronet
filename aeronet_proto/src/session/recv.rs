@@ -3,7 +3,7 @@ use octs::{BufError, BufTooShortOr, Bytes, Read};
 
 use crate::{ack::Acknowledge, seq::Seq};
 
-use super::Session;
+use super::{Packet, Session};
 
 #[derive(Debug, Clone)]
 pub(super) enum RecvLane {
@@ -38,8 +38,9 @@ impl Session {
     //         .ok_or(SendError::InvalidLane)?;
     // }
 
-    pub fn start_recv(&mut self, packet: impl Into<Bytes>) -> ReadAcks<'_> {
-        let packet = packet.into();
+    pub fn recv(&mut self, packet: impl Into<Bytes>) -> ReadAcks<'_> {
+        let packet = packet.into().read::<Packet>();
+
         self.bytes_recv = self.bytes_recv.saturating_add(packet.len());
         ReadAcks {
             session: self,

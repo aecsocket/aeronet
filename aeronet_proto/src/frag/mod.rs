@@ -31,30 +31,94 @@ use std::convert::Infallible;
 
 use arbitrary::Arbitrary;
 use octs::{
-    BufTooShortOr, Bytes, Decode, Encode, FixedEncodeLen, Read, VarInt, VarIntTooLarge, Write,
+    BufTooShortOr, Bytes, Decode, Encode, EncodeLen, FixedEncodeLen, Read, VarInt, VarIntTooLarge,
+    Write,
 };
 
-use crate::seq::Seq;
+use crate::packet::MessageSeq;
 
 mod recv;
 mod send;
 
 pub use {recv::*, send::*};
 
+/// Indicates what index a [`Fragment`] represents, and whether this fragment
+/// is the last fragment in a message.
+// TODO docs
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]
+pub struct FragmentMarker(pub(crate) u8);
+
+const LAST_MASK: u8 = 0b1000_0000;
+
+impl FragmentMarker {
+    pub const MIN_NON_LAST: Self = Self(0);
+
+    pub const MIN_LAST: Self = Self(0 | LAST_MASK);
+
+    pub const MAX_NON_LAST: Self = Self(u8::MAX & !LAST_MASK);
+
+    pub const MAX_LAST: Self = Self(u8::MAX);
+
+    pub const MAX_FRAGS: u8 = Self::MAX_NON_LAST.index();
+
+    #[inline]
+    #[must_use]
+    pub const fn from_raw(raw: u8) -> Self {
+        Self(raw)
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn into_raw(self) -> u8 {
+        self.0
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn non_last(index: u8) -> Option<Self> {
+        if index & LAST_MASK == 0 {
+            Some(Self(index))
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn last(index: u8) -> Option<Self> {
+        if index & LAST_MASK == 0 {
+            Some(Self(index | LAST_MASK))
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn index(self) -> u8 {
+        self.0 & !LAST_MASK
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn is_last(self) -> bool {
+        self.0 & LAST_MASK != 0
+    }
+}
+
 /// Metadata for a packet produced by [`FragmentSender::fragment`] and read by
 /// [`FragmentReceiver::reassemble`].
-#[derive(Debug, Clone, PartialEq, Eq, Arbitrary)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Arbitrary)]
 pub struct FragmentHeader {
     /// Sequence number of the message that this fragment is a part of.
-    pub msg_seq: Seq,
-    /// How many fragments this packet's message is split up into.
-    pub num_frags: u8,
-    /// Index of this fragment in the complete message.
-    pub frag_index: u8,
+    pub msg_seq: MessageSeq,
+    /// Marker of this fragment, indicating the fragment's index and whether it
+    /// is the last fragment or not.
+    pub marker: FragmentMarker,
 }
 
 impl FixedEncodeLen for FragmentHeader {
-    const ENCODE_LEN: usize = Seq::ENCODE_LEN + u8::ENCODE_LEN + u8::ENCODE_LEN;
+    const ENCODE_LEN: usize = MessageSeq::ENCODE_LEN + FragmentMarker::ENCODE_LEN;
 }
 
 impl Encode for FragmentHeader {
@@ -62,8 +126,7 @@ impl Encode for FragmentHeader {
 
     fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
         dst.write(&self.msg_seq)?;
-        dst.write(&self.num_frags)?;
-        dst.write(&self.frag_index)?;
+        dst.write(&self.marker)?;
         Ok(())
     }
 }
@@ -74,8 +137,7 @@ impl Decode for FragmentHeader {
     fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
         Ok(Self {
             msg_seq: src.read()?,
-            num_frags: src.read()?,
-            frag_index: src.read()?,
+            marker: src.read()?,
         })
     }
 }
@@ -88,6 +150,12 @@ pub struct Fragment {
     pub header: FragmentHeader,
     /// Buffer storing the message payload of this fragment.
     pub payload: Bytes,
+}
+
+impl EncodeLen for Fragment {
+    fn encode_len(&self) -> usize {
+        self.header.encode_len() + VarInt(self.payload.len()).encode_len() + self.payload.len()
+    }
 }
 
 impl Encode for Fragment {
@@ -116,15 +184,15 @@ impl Decode for Fragment {
 mod tests {
     use assert_matches::assert_matches;
     use octs::{Bytes, BytesMut};
+    use web_time::Instant;
 
     use super::*;
 
     #[test]
-    fn encode_decode_header() {
+    fn round_trip_header() {
         let v = FragmentHeader {
-            msg_seq: Seq(1),
-            num_frags: 12,
-            frag_index: 34,
+            msg_seq: MessageSeq::new(12),
+            marker: FragmentMarker::from_raw(34),
         };
         let mut buf = BytesMut::with_capacity(FragmentHeader::ENCODE_LEN);
 
@@ -147,43 +215,83 @@ mod tests {
         )
     }
 
+    fn now() -> Instant {
+        Instant::now()
+    }
+
     #[test]
     fn single_in_order() {
         let (send, mut recv) = frag();
-        let p1 = send.fragment(Seq(0), MSG1).unwrap().next().unwrap();
-        let p2 = send.fragment(Seq(1), MSG2).unwrap().next().unwrap();
-        let p3 = send.fragment(Seq(2), MSG3).unwrap().next().unwrap();
+        let p1 = send
+            .fragment(MessageSeq::new(0), MSG1)
+            .unwrap()
+            .next()
+            .unwrap();
+        let p2 = send
+            .fragment(MessageSeq::new(1), MSG2)
+            .unwrap()
+            .next()
+            .unwrap();
+        let p3 = send
+            .fragment(MessageSeq::new(2), MSG3)
+            .unwrap()
+            .next()
+            .unwrap();
         assert_eq!(
             MSG1,
-            recv.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
+            recv.reassemble(now(), &p1.header, &p1.payload)
+                .unwrap()
+                .unwrap()
         );
         assert_eq!(
             MSG2,
-            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
+            recv.reassemble(now(), &p2.header, &p2.payload)
+                .unwrap()
+                .unwrap()
         );
         assert_eq!(
             MSG3,
-            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
+            recv.reassemble(now(), &p3.header, &p3.payload)
+                .unwrap()
+                .unwrap()
         );
     }
 
     #[test]
     fn single_out_of_order() {
         let (send, mut recv) = frag();
-        let p1 = send.fragment(Seq(0), MSG1).unwrap().next().unwrap();
-        let p2 = send.fragment(Seq(1), MSG2).unwrap().next().unwrap();
-        let p3 = send.fragment(Seq(2), MSG3).unwrap().next().unwrap();
+        let p1 = send
+            .fragment(MessageSeq::new(0), MSG1)
+            .unwrap()
+            .next()
+            .unwrap();
+        let p2 = send
+            .fragment(MessageSeq::new(1), MSG2)
+            .unwrap()
+            .next()
+            .unwrap();
+        let p3 = send
+            .fragment(MessageSeq::new(2), MSG3)
+            .unwrap()
+            .next()
+            .unwrap();
         assert_eq!(
             MSG3,
-            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
+            recv.reassemble(now(), &p3.header, &p3.payload)
+                .unwrap()
+                .unwrap()
         );
         assert_eq!(
             MSG1,
-            recv.reassemble(&p1.header, &p1.payload).unwrap().unwrap()
+            recv.reassemble(now(), &p1.header, &p1.payload)
+                .unwrap()
+                .unwrap()
         );
         assert_eq!(
             MSG2,
-            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
+            recv.reassemble(now(), &p2.header, &p2.payload)
+                .unwrap()
+                .unwrap()
         );
     }
 
@@ -192,15 +300,17 @@ mod tests {
         let (send, mut recv) = frag();
         let msg = Bytes::from(b"x".repeat(PAYLOAD_LEN + 1));
         let [p1, p2] = send
-            .fragment(Seq(0), msg.clone())
+            .fragment(MessageSeq::new(0), msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(None));
+        assert_matches!(recv.reassemble(now(), &p1.header, &p1.payload), Ok(None));
         assert_eq!(
             msg,
-            recv.reassemble(&p2.header, &p2.payload).unwrap().unwrap()
+            recv.reassemble(now(), &p2.header, &p2.payload)
+                .unwrap()
+                .unwrap()
         );
     }
 
@@ -209,16 +319,18 @@ mod tests {
         let (send, mut recv) = frag();
         let msg = Bytes::from(b"x".repeat(PAYLOAD_LEN * 2 + 1));
         let [p1, p2, p3] = send
-            .fragment(Seq(0), msg.clone())
+            .fragment(MessageSeq::new(0), msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(recv.reassemble(&p1.header, &p1.payload), Ok(None));
-        assert_matches!(recv.reassemble(&p2.header, &p2.payload), Ok(None));
+        assert_matches!(recv.reassemble(now(), &p1.header, &p1.payload), Ok(None));
+        assert_matches!(recv.reassemble(now(), &p2.header, &p2.payload), Ok(None));
         assert_eq!(
             msg,
-            recv.reassemble(&p3.header, &p3.payload).unwrap().unwrap()
+            recv.reassemble(now(), &p3.header, &p3.payload)
+                .unwrap()
+                .unwrap()
         );
     }
 }

@@ -1,13 +1,8 @@
-use std::iter::{Enumerate, FusedIterator};
+use octs::{chunks::ByteChunksExt, Buf, Bytes};
 
-use octs::{
-    chunks::{ByteChunks, ByteChunksExt},
-    Buf, Bytes,
-};
+use crate::packet::MessageSeq;
 
-use crate::seq::Seq;
-
-use super::{Fragment, FragmentHeader};
+use super::{Fragment, FragmentHeader, FragmentMarker};
 
 /// Handles splitting a single large message into multiple smaller fragments
 /// which can be reassembled by a [`FragmentReceiver`].
@@ -20,24 +15,23 @@ pub struct FragmentSender {
     max_payload_len: usize,
 }
 
-/// Error that occurs when using [`FragmentSender::fragment`].
+/// Attempted to fragment a message which was too big.
+///
+/// Occurs when using [`FragmentSender::fragment`].
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum FragmentError {
-    /// Attempted to fragment a message which was too big.
-    #[error("message too big - {len} / {max} bytes")]
-    MessageTooBig {
-        /// Length of the message in bytes.
-        len: usize,
-        /// Maximum length of the message in bytes.
-        max: usize,
-    },
+#[error("message too big - {len} / {max} bytes")]
+pub struct MessageTooBig {
+    /// Length of the message in bytes.
+    len: usize,
+    /// Maximum length of the message in bytes.
+    max: usize,
 }
 
 impl FragmentSender {
     /// Creates a new [`FragmentSender`].
     ///
-    /// * `max_payload_len` defines the maximum length, in bytes, that the payload
-    ///   of a single fragmented packet can be. This must be greater than 0.
+    /// `max_payload_len` defines the maximum length, in bytes, that the payload
+    /// of a single fragmented packet can be. This must be greater than 0.
     ///
     /// # Panics
     ///
@@ -54,86 +48,72 @@ impl FragmentSender {
         self.max_payload_len
     }
 
-    /// Splits a message up into individual fragmented packets and creates the
-    /// appropriate headers for each packet.
+    /// Splits a message up into individual fragments and combines them with
+    /// per-fragment metadata, ready to be reassembled by a
+    /// [`FragmentReceiver`].
     ///
-    /// Returns an iterator over the individual fragments.
+    /// `msg_seq` represents the sequence number of this specific message (note
+    /// that this is different from the *packet* sequence number - fragments may
+    /// be sent out in different packets, with different packet sequence
+    /// numbers).
     ///
-    /// * `msg_seq` represents the sequence of this specific message - note that
-    ///   each fragment may be sent in a different packet with a different
-    ///   packet sequence.
-    /// * If `msg` is empty, this will return an empty iterator.
+    /// Fragments are returned in the opposite order to the fragment index -
+    /// that is, if a message is split into fragments A, B, C, the iterator will
+    /// return them in the order C, B, A. This is done to make reassembly more
+    /// efficient.
+    ///
+    /// If `msg` is empty, this will return an empty iterator.
     ///
     /// # Errors
     ///
-    /// Errors if the message was not a valid message which could be fragmented.
+    /// Errors if the message was larger than `FragmentMarker::MAX_FRAGS *
+    /// max_payload_len`.
+    ///
+    /// [`FragmentReceiver`]: crate::frag::FragmentReceiver
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn fragment(
         &self,
-        msg_seq: Seq,
+        msg_seq: MessageSeq,
         msg: impl Into<Bytes>,
-    ) -> Result<Fragments, FragmentError> {
-        let msg = msg.into();
+    ) -> Result<impl Iterator<Item = Fragment>, MessageTooBig> {
+        const MAX_FRAGS: usize = FragmentMarker::MAX_FRAGS as usize;
+
+        let msg: Bytes = msg.into();
         let msg_len = msg.remaining();
-        let chunks = msg.byte_chunks(self.max_payload_len);
-        let num_frags = u8::try_from(chunks.len()).map_err(|_| FragmentError::MessageTooBig {
-            len: msg_len,
-            max: usize::from(u8::MAX) * self.max_payload_len,
-        })?;
+        let iter = msg.byte_chunks(self.max_payload_len).enumerate().rev();
+        if iter.len() > MAX_FRAGS {
+            return Err(MessageTooBig {
+                len: msg_len,
+                max: MAX_FRAGS * self.max_payload_len,
+            });
+        }
 
-        Ok(Fragments {
-            msg_seq,
-            num_frags,
-            iter: chunks.enumerate(),
-        })
+        let last_index = iter.len() - 1;
+        Ok(iter.map(move |(index, payload)| {
+            let is_last = index == last_index;
+            let index =
+                u8::try_from(index).expect("we just checked that `iter.len() <= MAX_FRAGS`");
+            let marker = if is_last {
+                FragmentMarker::last(index)
+            } else {
+                FragmentMarker::non_last(index)
+            }
+            .expect("we just checked that `iter.len() <= MAX_FRAGS`");
+
+            Fragment {
+                header: FragmentHeader { msg_seq, marker },
+                payload,
+            }
+        }))
     }
 }
-
-/// Iterator over fragments created by [`FragmentSender::fragment`].
-#[derive(Debug)]
-pub struct Fragments {
-    msg_seq: Seq,
-    num_frags: u8,
-    iter: Enumerate<ByteChunks>,
-}
-
-impl Fragments {
-    /// Gets the number of fragments that this iterator produces in total.
-    pub fn num_frags(&self) -> u8 {
-        self.num_frags
-    }
-}
-
-impl Iterator for Fragments {
-    type Item = Fragment;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (frag_index, payload) = self.iter.next()?;
-        let frag_index = u8::try_from(frag_index)
-            .expect("`num_frags` is a u8, so `frag_index` should be convertible");
-        let header = FragmentHeader {
-            msg_seq: self.msg_seq,
-            num_frags: self.num_frags,
-            frag_index,
-        };
-        Some(Fragment { header, payload })
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
-    }
-}
-
-impl ExactSizeIterator for Fragments {}
-
-impl FusedIterator for Fragments {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const PAYLOAD_LEN: usize = 2;
-    const MSG_SEQ: Seq = Seq(0);
+    const MSG_SEQ: MessageSeq = MessageSeq::new(0);
 
     #[test]
     #[should_panic]
@@ -142,17 +122,26 @@ mod tests {
     }
 
     #[test]
+    fn msg_too_large() {
+        let frag = FragmentSender::new(1);
+        assert!(frag
+            .fragment(MSG_SEQ, &[1; FragmentMarker::MAX_FRAGS as usize][..])
+            .is_ok());
+        assert!(frag
+            .fragment(MSG_SEQ, &[1; FragmentMarker::MAX_FRAGS as usize + 1][..])
+            .is_err())
+    }
+
+    #[test]
     fn msg_smaller_than_payload_len() {
         let frag = FragmentSender::new(PAYLOAD_LEN);
         let mut frags = frag.fragment(MSG_SEQ, &[1][..]).unwrap();
-        let header = FragmentHeader {
-            msg_seq: MSG_SEQ,
-            num_frags: 1,
-            frag_index: 0,
-        };
         assert_eq!(
             Fragment {
-                header,
+                header: FragmentHeader {
+                    msg_seq: MSG_SEQ,
+                    marker: FragmentMarker::last(0).unwrap(),
+                },
                 payload: Bytes::from_static(&[1]),
             },
             frags.next().unwrap()
@@ -164,14 +153,12 @@ mod tests {
     fn msg_equal_to_payload_len() {
         let frag = FragmentSender::new(PAYLOAD_LEN);
         let mut frags = frag.fragment(MSG_SEQ, &[1, 2][..]).unwrap();
-        let header = FragmentHeader {
-            msg_seq: MSG_SEQ,
-            num_frags: 1,
-            frag_index: 0,
-        };
         assert_eq!(
             Fragment {
-                header,
+                header: FragmentHeader {
+                    msg_seq: MSG_SEQ,
+                    marker: FragmentMarker::last(0).unwrap(),
+                },
                 payload: Bytes::from_static(&[1, 2]),
             },
             frags.next().unwrap()
@@ -183,28 +170,24 @@ mod tests {
     fn msg_larger_than_payload_len_1() {
         let frag = FragmentSender::new(PAYLOAD_LEN);
         let mut frags = frag.fragment(MSG_SEQ, &[1, 2, 3][..]).unwrap();
-        let header = FragmentHeader {
-            msg_seq: MSG_SEQ,
-            num_frags: 2,
-            frag_index: 0,
-        };
+        // remember, fragments are output in opposite index order
         assert_eq!(
             Fragment {
                 header: FragmentHeader {
-                    frag_index: 0,
-                    ..header
+                    msg_seq: MSG_SEQ,
+                    marker: FragmentMarker::last(1).unwrap(),
                 },
-                payload: Bytes::from_static(&[1, 2]),
+                payload: Bytes::from_static(&[3]),
             },
             frags.next().unwrap()
         );
         assert_eq!(
             Fragment {
                 header: FragmentHeader {
-                    frag_index: 1,
-                    ..header
+                    msg_seq: MSG_SEQ,
+                    marker: FragmentMarker::non_last(0).unwrap(),
                 },
-                payload: Bytes::from_static(&[3]),
+                payload: Bytes::from_static(&[1, 2]),
             },
             frags.next().unwrap()
         );
@@ -215,26 +198,21 @@ mod tests {
     fn msg_larger_than_payload_len_2() {
         let frag = FragmentSender::new(PAYLOAD_LEN);
         let mut frags = frag.fragment(MSG_SEQ, &[1, 2, 3, 4, 5][..]).unwrap();
-        let header = FragmentHeader {
-            msg_seq: MSG_SEQ,
-            num_frags: 3,
-            frag_index: 0,
-        };
         assert_eq!(
             Fragment {
                 header: FragmentHeader {
-                    frag_index: 0,
-                    ..header
+                    msg_seq: MSG_SEQ,
+                    marker: FragmentMarker::last(2).unwrap(),
                 },
-                payload: Bytes::from_static(&[1, 2]),
+                payload: Bytes::from_static(&[5]),
             },
             frags.next().unwrap()
         );
         assert_eq!(
             Fragment {
                 header: FragmentHeader {
-                    frag_index: 1,
-                    ..header
+                    msg_seq: MSG_SEQ,
+                    marker: FragmentMarker::non_last(1).unwrap(),
                 },
                 payload: Bytes::from_static(&[3, 4]),
             },
@@ -243,10 +221,10 @@ mod tests {
         assert_eq!(
             Fragment {
                 header: FragmentHeader {
-                    frag_index: 2,
-                    ..header
+                    msg_seq: MSG_SEQ,
+                    marker: FragmentMarker::non_last(0).unwrap(),
                 },
-                payload: Bytes::from_static(&[5]),
+                payload: Bytes::from_static(&[1, 2]),
             },
             frags.next().unwrap()
         );

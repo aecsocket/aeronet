@@ -1,55 +1,61 @@
+mod packet;
 mod recv;
 mod send;
 
+use std::{
+    convert::Infallible,
+    ops::{Deref, DerefMut},
+};
+
 pub use {recv::*, send::*};
 
-use aeronet::lane::LaneKind;
+use aeronet::lane::{LaneIndex, LaneKind};
 use ahash::AHashMap;
-use web_time::Duration;
+use octs::{
+    chunks::ByteChunksExt, BufTooShortOr, Bytes, Decode, Encode, EncodeLen, FixedEncodeLen, Read,
+    VarInt, VarIntTooLarge, Write,
+};
+use packet::PacketHeader;
+use web_time::{Duration, Instant};
 
-use crate::{ack::Acknowledge, frag::FragmentReceiver, seq::Seq};
+use crate::{
+    ack::Acknowledge,
+    frag::{Fragment, FragmentHeader, FragmentReceiver},
+    packet::MessageSeq,
+    seq::Seq,
+};
 
 #[derive(Debug)]
 pub struct Session {
-    acks: Acknowledge,
-    flushed_packets: AHashMap<Seq, ()>,
-    // send
     send_lanes: Box<[SendLane]>,
-    // recv
-    recv_lanes: Box<[RecvLane]>,
-    recv_frags: FragmentReceiver,
-    max_memory_usage: usize,
-    bytes_recv: usize,
+    sent_msgs: AHashMap<MessageSeq, SentMessage>,
 }
 
-#[derive(Debug, Clone)]
-pub struct LaneConfig {
-    pub kind: LaneKind,
-    pub bytes_per_sec: usize,
-    pub resend_after: Duration,
+#[derive(Debug)]
+enum SendLane {
+    Unreliable,
+    Reliable { resend_after: Duration },
 }
 
-impl Default for LaneConfig {
-    fn default() -> Self {
-        Self {
-            kind: LaneKind::UnreliableUnordered,
-            bytes_per_sec: usize::MAX,
-            resend_after: Duration::from_millis(100),
-        }
+#[derive(Debug)]
+struct SentMessage {
+    lane_index: LaneIndex,
+    frags: Box<[Option<SentFragment>]>,
+}
+
+#[derive(Debug)]
+struct SentFragment {
+    payload: Bytes,
+    next_flush_at: Instant,
+}
+
+impl Session {
+    pub fn new(max_packet_len: usize) -> Self {
+        todo!()
     }
-}
 
-impl LaneConfig {
-    pub fn new(kind: LaneKind) -> Self {
-        Self {
-            kind,
-            ..Default::default()
-        }
+    pub fn send(&mut self, msg: impl Into<Bytes>) {
+        let msg: Bytes = msg.into();
+        msg.byte_chunks(chunk_len)
     }
-}
-
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum SendError {
-    #[error("invalid lane index")]
-    InvalidLane,
 }
