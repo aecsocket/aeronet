@@ -105,10 +105,44 @@ pub trait ConsumeBytes {
 }
 
 impl<T: ByteLimit> ByteLimit for &mut T {
-    type Consume<'s> = T::Consume<'s> where Self: 's;
+    type Consume<'this> = T::Consume<'this> where Self: 'this;
 
+    #[inline]
     fn try_consume(&mut self, n: usize) -> Result<Self::Consume<'_>, NotEnoughBytes> {
         T::try_consume(self, n)
+    }
+}
+
+impl ByteLimit for usize {
+    type Consume<'this> = ConsumeImpl<'this>;
+
+    #[inline]
+    fn try_consume(&mut self, n: usize) -> Result<Self::Consume<'_>, NotEnoughBytes> {
+        if *self >= n {
+            Ok(ConsumeImpl { rem: self, n })
+        } else {
+            Err(NotEnoughBytes)
+        }
+    }
+
+    #[inline]
+    fn consume(&mut self, n: usize) -> Result<(), NotEnoughBytes> {
+        *self = self.checked_sub(n).ok_or(NotEnoughBytes)?;
+        Ok(())
+    }
+}
+
+/// Output of [`ByteLimit::try_consume`].
+#[derive(Debug)]
+pub struct ConsumeImpl<'a> {
+    rem: &'a mut usize,
+    n: usize,
+}
+
+impl ConsumeBytes for ConsumeImpl<'_> {
+    #[inline]
+    fn consume(self) {
+        *self.rem -= self.n;
     }
 }
 
@@ -193,6 +227,7 @@ impl ByteBucket {
     /// assert_eq!(1000, bytes.get());
     /// assert_eq!(0, bytes.used());
     /// ```
+    #[inline]
     pub fn refill(&mut self) {
         self.rem = self.cap;
     }
@@ -261,11 +296,12 @@ impl ByteBucket {
 }
 
 impl ByteLimit for ByteBucket {
-    type Consume<'a> = ConsumeByteBucket<'a>;
+    type Consume<'this> = ConsumeImpl<'this>;
 
+    #[inline]
     fn try_consume(&mut self, n: usize) -> Result<Self::Consume<'_>, NotEnoughBytes> {
         if self.rem >= n {
-            Ok(ConsumeByteBucket {
+            Ok(ConsumeImpl {
                 rem: &mut self.rem,
                 n,
             })
@@ -274,22 +310,10 @@ impl ByteLimit for ByteBucket {
         }
     }
 
+    #[inline]
     fn consume(&mut self, n: usize) -> Result<(), NotEnoughBytes> {
         self.rem = self.rem.checked_sub(n).ok_or(NotEnoughBytes)?;
         Ok(())
-    }
-}
-
-/// Output of [`ByteBucket::try_consume`].
-#[derive(Debug)]
-pub struct ConsumeByteBucket<'a> {
-    rem: &'a mut usize,
-    n: usize,
-}
-
-impl ConsumeBytes for ConsumeByteBucket<'_> {
-    fn consume(self) {
-        *self.rem -= self.n;
     }
 }
 
@@ -317,6 +341,7 @@ impl<A, B> MinOf<A, B> {
     /// assert_eq!(ByteBucket::new(100), bytes1);
     /// assert_eq!(ByteBucket::new(200), bytes2);
     /// ```
+    #[inline]
     pub fn into_inner(self) -> (A, B) {
         (self.a, self.b)
     }
@@ -325,6 +350,7 @@ impl<A, B> MinOf<A, B> {
 impl<A: ByteLimit, B: ByteLimit> ByteLimit for MinOf<A, B> {
     type Consume<'s> = ConsumeMinOf<A::Consume<'s>, B::Consume<'s>> where Self: 's;
 
+    #[inline]
     fn try_consume(&mut self, n: usize) -> Result<Self::Consume<'_>, NotEnoughBytes> {
         let consume_a = self.a.try_consume(n)?;
         let consume_b = self.b.try_consume(n)?;
@@ -343,6 +369,7 @@ pub struct ConsumeMinOf<A, B> {
 }
 
 impl<A: ConsumeBytes, B: ConsumeBytes> ConsumeBytes for ConsumeMinOf<A, B> {
+    #[inline]
     fn consume(self) {
         self.consume_a.consume();
         self.consume_b.consume();

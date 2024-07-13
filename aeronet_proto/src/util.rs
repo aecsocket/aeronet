@@ -1,4 +1,4 @@
-use std::ops::{Deref, DerefMut};
+use std::ops::{Add, AddAssign, Deref, DerefMut, Sub, SubAssign};
 
 use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
 
@@ -21,6 +21,38 @@ macro_rules! forward_deref {
         impl DerefMut for $ty {
             fn deref_mut(&mut self) -> &mut Self::Target {
                 &mut self.0
+            }
+        }
+    };
+}
+
+macro_rules! forward_add_sub {
+    ($ty:ty) => {
+        impl Add for $ty {
+            type Output = Self;
+
+            fn add(self, rhs: Self) -> Self::Output {
+                Self(self.0 + rhs.0)
+            }
+        }
+
+        impl AddAssign for $ty {
+            fn add_assign(&mut self, rhs: Self) {
+                *self = *self + rhs;
+            }
+        }
+
+        impl Sub for $ty {
+            type Output = Self;
+
+            fn sub(self, rhs: Self) -> Self::Output {
+                Self(self.0 - rhs.0)
+            }
+        }
+
+        impl SubAssign for $ty {
+            fn sub_assign(&mut self, rhs: Self) {
+                *self = *self - rhs;
             }
         }
     };
@@ -55,10 +87,12 @@ macro_rules! forward_fixed_encode_len {
 }
 
 forward_deref!(MessageSeq, Seq);
+forward_add_sub!(MessageSeq);
 forward_encode_decode!(MessageSeq, Seq);
 forward_fixed_encode_len!(MessageSeq, Seq);
 
 forward_deref!(PacketSeq, Seq);
+forward_add_sub!(PacketSeq);
 forward_encode_decode!(PacketSeq, Seq);
 forward_fixed_encode_len!(PacketSeq, Seq);
 

@@ -29,7 +29,6 @@
 
 use std::convert::Infallible;
 
-use arbitrary::Arbitrary;
 use octs::{
     BufTooShortOr, Bytes, Decode, Encode, EncodeLen, FixedEncodeLen, Read, VarInt, VarIntTooLarge,
     Write,
@@ -95,6 +94,16 @@ impl FragmentMarker {
 
     #[inline]
     #[must_use]
+    pub const fn new(index: u8, is_last: bool) -> Option<Self> {
+        if is_last {
+            Self::last(index)
+        } else {
+            Self::non_last(index)
+        }
+    }
+
+    #[inline]
+    #[must_use]
     pub const fn index(self) -> u8 {
         self.0 & !LAST_MASK
     }
@@ -108,12 +117,12 @@ impl FragmentMarker {
 
 /// Metadata for a packet produced by [`FragmentSender::fragment`] and read by
 /// [`FragmentReceiver::reassemble`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Arbitrary)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, arbitrary::Arbitrary)]
 pub struct FragmentHeader {
     /// Sequence number of the message that this fragment is a part of.
     pub msg_seq: MessageSeq,
-    /// Marker of this fragment, indicating the fragment's index and whether it
-    /// is the last fragment or not.
+    /// Marker of this fragment, indicating the fragment's index, and whether it
+    /// is the last fragment of this message or not.
     pub marker: FragmentMarker,
 }
 

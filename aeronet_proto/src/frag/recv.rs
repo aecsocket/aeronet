@@ -62,6 +62,8 @@ struct MessageBuffer {
 }
 
 /// Error that occurs when using [`FragmentReceiver::reassemble`].
+///
+/// It is safe to ignore this error.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ReassembleError {
     /// Fragment for the given index was already received.
@@ -184,7 +186,6 @@ impl FragmentReceiver {
 
             buf.payload.resize(end, 0);
             debug_assert_eq!(buf.payload.len(), end);
-            buf.payload[start..end].copy_from_slice(payload);
         } else {
             if payload.len() != self.max_payload_len {
                 return Err(ReassembleError::InvalidPayloadLength {
@@ -196,8 +197,8 @@ impl FragmentReceiver {
             if end >= buf.payload.len() {
                 buf.payload.resize(end, 0);
             }
-            buf.payload[start..end].copy_from_slice(payload);
         }
+        buf.payload[start..end].copy_from_slice(payload);
         self.bytes_used += buf.payload.capacity() - cap_before;
 
         // only update the buffer meta once we know there are no more error paths

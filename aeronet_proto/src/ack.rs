@@ -122,7 +122,7 @@ impl Acknowledge {
     /// assert!(!acks.is_acked(PacketSeq::from(10)));
     /// ```
     #[must_use]
-    pub fn is_acked(&self, seq: Seq) -> bool {
+    pub fn is_acked(&self, seq: PacketSeq) -> bool {
         let dist = seq.dist_to(self.last_recv.0);
         #[allow(clippy::option_if_let_else)] // makes the code clearer
         match u32::try_from(dist) {
@@ -155,12 +155,12 @@ impl Acknowledge {
     /// assert_eq!(None, iter.next());
     /// ```
     #[inline]
-    pub fn seqs(self) -> impl Iterator<Item = Seq> {
+    pub fn seqs(self) -> impl Iterator<Item = PacketSeq> {
         // explicitly don't ack `last_recv` *unless* bit 0 is set
         // we may be in a situation where we literally haven't received any of
         // the last 32 packets, so it'd be invalid to ack the `last_recv`
         (0..32).filter_map(move |bit_index| {
-            let packet_seq = self.last_recv.0 - Seq(bit_index);
+            let packet_seq = self.last_recv - PacketSeq::new(bit_index);
             if self.ack_bits & shl(1, u32::from(bit_index)) == 0 {
                 None
             } else {

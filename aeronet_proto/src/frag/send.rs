@@ -15,9 +15,8 @@ pub struct FragmentSender {
     max_payload_len: usize,
 }
 
-/// Attempted to fragment a message which was too big.
-///
-/// Occurs when using [`FragmentSender::fragment`].
+/// Attempted to fragment a message which was too big using
+/// [`FragmentSender::fragment`].
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("message too big - {len} / {max} bytes")]
 pub struct MessageTooBig {
@@ -74,22 +73,20 @@ impl FragmentSender {
     pub fn fragment(
         &self,
         msg_seq: MessageSeq,
-        msg: impl Into<Bytes>,
-    ) -> Result<impl Iterator<Item = Fragment>, MessageTooBig> {
+        msg: Bytes,
+    ) -> Result<Fragments<impl Iterator<Item = Fragment>>, MessageTooBig> {
         const MAX_FRAGS: usize = FragmentMarker::MAX_FRAGS as usize;
 
-        let msg: Bytes = msg.into();
         let msg_len = msg.remaining();
         let iter = msg.byte_chunks(self.max_payload_len).enumerate().rev();
-        if iter.len() > MAX_FRAGS {
-            return Err(MessageTooBig {
-                len: msg_len,
-                max: MAX_FRAGS * self.max_payload_len,
-            });
-        }
+        let num_frags = u8::try_from(iter.len()).map_err(|_| MessageTooBig {
+            len: msg_len,
+            max: MAX_FRAGS * self.max_payload_len,
+        })?;
+        debug_assert!(iter.len() <= MAX_FRAGS);
 
         let last_index = iter.len() - 1;
-        Ok(iter.map(move |(index, payload)| {
+        let iter = iter.map(move |(index, payload)| {
             let is_last = index == last_index;
             let index =
                 u8::try_from(index).expect("we just checked that `iter.len() <= MAX_FRAGS`");
@@ -104,7 +101,28 @@ impl FragmentSender {
                 header: FragmentHeader { msg_seq, marker },
                 payload,
             }
-        }))
+        });
+        Ok(Fragments { num_frags, iter })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Fragments<I> {
+    num_frags: u8,
+    iter: I,
+}
+
+impl<I> Fragments<I> {
+    pub const fn num_frags(&self) -> u8 {
+        self.num_frags
+    }
+}
+
+impl<I: Iterator> Iterator for Fragments<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
     }
 }
 
@@ -125,17 +143,20 @@ mod tests {
     fn msg_too_large() {
         let frag = FragmentSender::new(1);
         assert!(frag
-            .fragment(MSG_SEQ, &[1; FragmentMarker::MAX_FRAGS as usize][..])
+            .fragment(MSG_SEQ, vec![1; FragmentMarker::MAX_FRAGS as usize].into())
             .is_ok());
         assert!(frag
-            .fragment(MSG_SEQ, &[1; FragmentMarker::MAX_FRAGS as usize + 1][..])
+            .fragment(
+                MSG_SEQ,
+                vec![1; FragmentMarker::MAX_FRAGS as usize + 1].into()
+            )
             .is_err())
     }
 
     #[test]
     fn msg_smaller_than_payload_len() {
         let frag = FragmentSender::new(PAYLOAD_LEN);
-        let mut frags = frag.fragment(MSG_SEQ, &[1][..]).unwrap();
+        let mut frags = frag.fragment(MSG_SEQ, vec![1].into()).unwrap();
         assert_eq!(
             Fragment {
                 header: FragmentHeader {
@@ -152,7 +173,7 @@ mod tests {
     #[test]
     fn msg_equal_to_payload_len() {
         let frag = FragmentSender::new(PAYLOAD_LEN);
-        let mut frags = frag.fragment(MSG_SEQ, &[1, 2][..]).unwrap();
+        let mut frags = frag.fragment(MSG_SEQ, vec![1, 2].into()).unwrap();
         assert_eq!(
             Fragment {
                 header: FragmentHeader {
@@ -169,7 +190,7 @@ mod tests {
     #[test]
     fn msg_larger_than_payload_len_1() {
         let frag = FragmentSender::new(PAYLOAD_LEN);
-        let mut frags = frag.fragment(MSG_SEQ, &[1, 2, 3][..]).unwrap();
+        let mut frags = frag.fragment(MSG_SEQ, vec![1, 2, 3].into()).unwrap();
         // remember, fragments are output in opposite index order
         assert_eq!(
             Fragment {
@@ -197,7 +218,7 @@ mod tests {
     #[test]
     fn msg_larger_than_payload_len_2() {
         let frag = FragmentSender::new(PAYLOAD_LEN);
-        let mut frags = frag.fragment(MSG_SEQ, &[1, 2, 3, 4, 5][..]).unwrap();
+        let mut frags = frag.fragment(MSG_SEQ, vec![1, 2, 3, 4, 5].into()).unwrap();
         assert_eq!(
             Fragment {
                 header: FragmentHeader {

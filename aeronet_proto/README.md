@@ -36,6 +36,10 @@ The client always acts as the initiator, sending the first message.
   lowest-level API type that is exposed by [`aeronet`] through its `-Transport` traits.
 - *packet*: a byte buffer which can be sent or received as a single, whole block. This is the
   lowest-level API type that implementations using the aeronet protocol have to worry about.
+- *connection*: the underlying network connection that is used for transporting raw bytes of data
+  between two peers
+- *session*: [`Session`] - can be used to send data over a connection while using the features
+  outlined in *Features* i.e. fragmentation, reliability, ordering
 
 ## Requirements
 
@@ -48,7 +52,7 @@ The aeronet protocol can be used on top of nearly any transport. The requirement
   - If we send a packet P to a peer, then if the packet transport is successful (i.e. the packet was
     not lost in transit or corrupted), the peer MUST be able to read a byte-for-byte copy of the
     original packet P
-- Reliability or ordering do not have to be guaranteed
+- Reliability, ordering, or deduplication do not have to be guaranteed
 
 ## Layout
 
@@ -61,11 +65,15 @@ struct Packet {
 }
 
 struct Fragment {
-    lane_index: VarInt<usize>,  // variable size
     message_seq: u16,           // +2
     fragment_id: u8,            // +1
-    payload_len: VarInt<usize>, // variable size
+    payload_len: VarInt<usize>, // variable-length
     payload: [u8],              // +`payload_len`
+}
+
+struct Payload {
+    lane_index: VarInt<usize>, // variable-length
+    user_message: [u8],        // user-defined variable-length message payload
 }
 ```
 
@@ -106,11 +114,11 @@ is not a problem. See [*Sequence Buffers*].
   - overall, non-stateful is probably better
 - clever fragment encoding idea
   - fragment header holds `msg_seq: u16, frag_id: u8`
-  - fragments are sent in *reverse frag_id order* i.e. if a message is split into fragments (0, 1, 2), then they are sent out as (2, 1, 0)
+  - fragments are sent in *reverse frag id order* i.e. if a message is split into fragments (0, 1, 2), then they are sent out as (2, 1, 0)
   - MSB determines if this is the last frag
   - on the receiver side, when we receive a fragment:
     - if we don't have this message tracked yet, make a buffer with space for `max_frag_len * (frag_id + 1)` bytes
-    - this is why we send it out in reverse largest order - since we get frag_id `2` first, we know that the msg is at least `max_frag_len * 3` big
+    - this is why we send it out in reverse largest order - since we get frag id `2` first, we know that the msg is at least `max_frag_len * 3` big
     - if we already are tracking the message, and `frag_id` is within the existing capacity for the message buf, copy it in
     - if we get a fragment for an *existing message* but the `frag_id` is *greater* than our existing capacity, then we allocate a new buffer for the larger message
       - this can happen if we lose one of the earlier fragments i.e. we send (2, 1, 0) but get them in the order (1, 0, 2)
@@ -119,7 +127,7 @@ is not a problem. See [*Sequence Buffers*].
     - worst-case only in terms of reallocs and CPU usage
     - best-case in terms of minimal network overhead
 
-MSB in frag_id indicates if this is the last fragment
+MSB in frag id indicates if this is the last fragment
 let's walk through an example receiver:
 - I get a message with `frag_index: 0b1000_0000` -> this is fragment 0, and is the last one
   - this message consists of only 1 fragment, and we've already got it, cool
