@@ -256,7 +256,7 @@ impl ByteBucket {
         #[allow(clippy::cast_possible_truncation)]
         #[allow(clippy::cast_precision_loss)]
         let n = ((self.cap as f32) * f) as usize;
-        self.refill_exact(n)
+        self.refill_exact(n);
     }
 }
 

@@ -4,7 +4,7 @@ use syn::{Attribute, Data, DataEnum, DeriveInput, Error, Fields, Result};
 
 use crate::{util, LANE_KIND};
 
-pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
+pub fn derive(input: &DeriveInput) -> Result<TokenStream> {
     match &input.data {
         Data::Struct(_) => on_struct(input),
         Data::Enum(data) => on_enum(input, data),

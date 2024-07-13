@@ -25,6 +25,7 @@ impl<T: ServerTransport + ?Sized> ServerConditioner<T> {
     /// # Panics
     ///
     /// Panics if the configuration provided is invalid.
+    #[must_use]
     pub fn new(config: &ConditionerConfig) -> Self {
         Self {
             inner: Conditioner::new(config),

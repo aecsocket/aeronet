@@ -67,7 +67,7 @@ pub enum ClientError {
 impl ChannelClient {
     /// Creates a new client which is not connected to a server.
     #[must_use]
-    pub fn disconnected() -> Self {
+    pub const fn disconnected() -> Self {
         Self {
             inner: Inner::Disconnected,
         }
@@ -79,7 +79,7 @@ impl ChannelClient {
     ///
     /// Errors if this is not [`ClientState::Connected`].
     pub fn disconnect(&mut self) -> Result<(), ClientError> {
-        if let Inner::Disconnected = self.inner {
+        if matches!(self.inner, Inner::Disconnected) {
             return Err(ClientError::AlreadyDisconnected);
         }
 

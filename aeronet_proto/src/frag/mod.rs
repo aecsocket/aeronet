@@ -53,7 +53,7 @@ const LAST_MASK: u8 = 0b1000_0000;
 impl FragmentMarker {
     pub const MIN_NON_LAST: Self = Self(0);
 
-    pub const MIN_LAST: Self = Self(0 | LAST_MASK);
+    pub const MIN_LAST: Self = Self(LAST_MASK);
 
     pub const MAX_NON_LAST: Self = Self(u8::MAX & !LAST_MASK);
 
@@ -222,96 +222,61 @@ mod tests {
     #[test]
     fn single_in_order() {
         let (send, mut recv) = frag();
-        let p1 = send
+        let f1 = send
             .fragment(MessageSeq::new(0), MSG1)
             .unwrap()
             .next()
             .unwrap();
-        let p2 = send
+        let f2 = send
             .fragment(MessageSeq::new(1), MSG2)
             .unwrap()
             .next()
             .unwrap();
-        let p3 = send
+        let f3 = send
             .fragment(MessageSeq::new(2), MSG3)
             .unwrap()
             .next()
             .unwrap();
-        assert_eq!(
-            MSG1,
-            recv.reassemble(now(), &p1.header, &p1.payload)
-                .unwrap()
-                .unwrap()
-        );
-        assert_eq!(
-            MSG2,
-            recv.reassemble(now(), &p2.header, &p2.payload)
-                .unwrap()
-                .unwrap()
-        );
-        assert_eq!(
-            MSG3,
-            recv.reassemble(now(), &p3.header, &p3.payload)
-                .unwrap()
-                .unwrap()
-        );
+        assert_eq!(MSG1, recv.reassemble_frag(now(), f1).unwrap().unwrap());
+        assert_eq!(MSG2, recv.reassemble_frag(now(), f2).unwrap().unwrap());
+        assert_eq!(MSG3, recv.reassemble_frag(now(), f3).unwrap().unwrap());
     }
 
     #[test]
     fn single_out_of_order() {
         let (send, mut recv) = frag();
-        let p1 = send
+        let f1 = send
             .fragment(MessageSeq::new(0), MSG1)
             .unwrap()
             .next()
             .unwrap();
-        let p2 = send
+        let f2 = send
             .fragment(MessageSeq::new(1), MSG2)
             .unwrap()
             .next()
             .unwrap();
-        let p3 = send
+        let f3 = send
             .fragment(MessageSeq::new(2), MSG3)
             .unwrap()
             .next()
             .unwrap();
-        assert_eq!(
-            MSG3,
-            recv.reassemble(now(), &p3.header, &p3.payload)
-                .unwrap()
-                .unwrap()
-        );
-        assert_eq!(
-            MSG1,
-            recv.reassemble(now(), &p1.header, &p1.payload)
-                .unwrap()
-                .unwrap()
-        );
-        assert_eq!(
-            MSG2,
-            recv.reassemble(now(), &p2.header, &p2.payload)
-                .unwrap()
-                .unwrap()
-        );
+        assert_eq!(MSG3, recv.reassemble_frag(now(), f3).unwrap().unwrap());
+        assert_eq!(MSG1, recv.reassemble_frag(now(), f1).unwrap().unwrap());
+        assert_eq!(MSG2, recv.reassemble_frag(now(), f2).unwrap().unwrap());
     }
 
     #[test]
     fn large1() {
         let (send, mut recv) = frag();
         let msg = Bytes::from(b"x".repeat(PAYLOAD_LEN + 1));
-        let [p1, p2] = send
+        let [f1, f2] = send
             .fragment(MessageSeq::new(0), msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(recv.reassemble(now(), &p1.header, &p1.payload), Ok(None));
-        assert_eq!(
-            msg,
-            recv.reassemble(now(), &p2.header, &p2.payload)
-                .unwrap()
-                .unwrap()
-        );
+        assert_matches!(recv.reassemble_frag(now(), f1), Ok(None));
+        assert_matches!(recv.reassemble_frag(now(), f2), Ok(Some(b)) if b == msg);
     }
 
     #[test]
@@ -324,13 +289,8 @@ mod tests {
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(recv.reassemble(now(), &p1.header, &p1.payload), Ok(None));
-        assert_matches!(recv.reassemble(now(), &p2.header, &p2.payload), Ok(None));
-        assert_eq!(
-            msg,
-            recv.reassemble(now(), &p3.header, &p3.payload)
-                .unwrap()
-                .unwrap()
-        );
+        assert_matches!(recv.reassemble_frag(now(), p1), Ok(None));
+        assert_matches!(recv.reassemble_frag(now(), p2), Ok(None));
+        assert_matches!(recv.reassemble_frag(now(), p3), Ok(Some(b)) if b == msg);
     }
 }

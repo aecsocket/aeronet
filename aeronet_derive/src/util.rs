@@ -66,8 +66,6 @@ where
     I: ?Sized + Display,
     Ident: PartialEq<I>,
 {
-    parse_attr_with_one_arg(ident, attrs)?.ok_or(Error::new_spanned(
-        tokens,
-        format!("missing #[{ident}] attribute"),
-    ))
+    parse_attr_with_one_arg(ident, attrs)?
+        .ok_or_else(|| Error::new_spanned(tokens, format!("missing #[{ident}] attribute")))
 }

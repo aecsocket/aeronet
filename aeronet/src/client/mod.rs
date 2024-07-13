@@ -124,12 +124,12 @@ impl<A, B> ClientState<A, B> {
     ///
     /// This should be used to determine if the user is allowed to start
     /// connecting to a server.
-    pub fn is_disconnected(&self) -> bool {
+    pub const fn is_disconnected(&self) -> bool {
         matches!(self, Self::Disconnected)
     }
 
     /// Gets if this is a [`ClientState::Connecting`].
-    pub fn is_connecting(&self) -> bool {
+    pub const fn is_connecting(&self) -> bool {
         matches!(self, Self::Connecting(_))
     }
 
@@ -137,18 +137,18 @@ impl<A, B> ClientState<A, B> {
     ///
     /// This should be used to determine if the user is allowed to send messages
     /// to the server.
-    pub fn is_connected(&self) -> bool {
+    pub const fn is_connected(&self) -> bool {
         matches!(self, Self::Connected(_))
     }
 
     /// Converts from `&ClientState<A, B>` to `ClientState<&A, &B>`.
     ///
     /// Analogous to [`Option::as_ref`].
-    pub fn as_ref(&self) -> ClientState<&A, &B> {
+    pub const fn as_ref(&self) -> ClientState<&A, &B> {
         match self {
             Self::Disconnected => ClientState::Disconnected,
-            Self::Connecting(x) => ClientState::Connecting(&x),
-            Self::Connected(x) => ClientState::Connected(&x),
+            Self::Connecting(x) => ClientState::Connecting(x),
+            Self::Connected(x) => ClientState::Connected(x),
         }
     }
 }

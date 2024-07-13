@@ -41,7 +41,7 @@ pub struct Seq(pub u16);
 
 impl Seq {
     /// Sequence number with value [`u16::MAX`].
-    pub const MAX: Seq = Seq(u16::MAX);
+    pub const MAX: Self = Self(u16::MAX);
 
     /// Gets a signed number for the value of packet sequences "elapsed" between
     /// `rhs` and `self`.
@@ -125,10 +125,10 @@ impl PartialOrd for Seq {
     }
 }
 
-impl Add<Seq> for Seq {
-    type Output = Seq;
+impl Add for Seq {
+    type Output = Self;
 
-    fn add(self, rhs: Seq) -> Self::Output {
+    fn add(self, rhs: Self) -> Self::Output {
         Self(self.0.wrapping_add(rhs.0))
     }
 }
@@ -139,10 +139,10 @@ impl AddAssign for Seq {
     }
 }
 
-impl Sub<Seq> for Seq {
-    type Output = Seq;
+impl Sub for Seq {
+    type Output = Self;
 
-    fn sub(self, rhs: Seq) -> Self::Output {
+    fn sub(self, rhs: Self) -> Self::Output {
         Self(self.0.wrapping_sub(rhs.0))
     }
 }

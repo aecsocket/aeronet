@@ -44,7 +44,7 @@ impl FragmentSender {
 
     /// Gets the maximum payload length as defined on construction.
     #[must_use]
-    pub fn max_payload_len(&self) -> usize {
+    pub const fn max_payload_len(&self) -> usize {
         self.max_payload_len
     }
 

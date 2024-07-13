@@ -124,6 +124,7 @@ impl Acknowledge {
     #[must_use]
     pub fn is_acked(&self, seq: Seq) -> bool {
         let dist = seq.dist_to(self.last_recv.0);
+        #[allow(clippy::option_if_let_else)] // makes the code clearer
         match u32::try_from(dist) {
             Ok(delta) => {
                 // `seq` is before or equal to `last_recv`,
@@ -153,7 +154,6 @@ impl Acknowledge {
     /// assert_eq!(PacketSeq::from(46), iter.next().unwrap());
     /// assert_eq!(None, iter.next());
     /// ```
-    #[must_use]
     #[inline]
     pub fn seqs(self) -> impl Iterator<Item = Seq> {
         // explicitly don't ack `last_recv` *unless* bit 0 is set

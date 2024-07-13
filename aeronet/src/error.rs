@@ -31,6 +31,6 @@ impl<E: Error> fmt::Display for PrettyError<'_, E> {
 /// impl write the entire error chain.
 ///
 /// See [`PrettyError`].
-pub fn pretty_error<E: Error>(err: &E) -> PrettyError<'_, E> {
+pub const fn pretty_error<E: Error>(err: &E) -> PrettyError<'_, E> {
     PrettyError(err)
 }

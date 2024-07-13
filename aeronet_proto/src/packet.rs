@@ -15,6 +15,7 @@ use crate::{ack::Acknowledge, seq::Seq};
 pub struct PacketSeq(pub Seq);
 
 impl PacketSeq {
+    #[must_use]
     pub const fn new(n: u16) -> Self {
         Self(Seq(n))
     }
@@ -24,6 +25,7 @@ impl PacketSeq {
 pub struct MessageSeq(pub Seq);
 
 impl MessageSeq {
+    #[must_use]
     pub const fn new(n: u16) -> Self {
         Self(Seq(n))
     }

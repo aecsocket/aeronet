@@ -1,13 +1,13 @@
-use std::{cmp::Ordering, collections::hash_map::Entry, num::NonZeroU8};
+use std::collections::hash_map::Entry;
 
 use ahash::AHashMap;
 use bitvec::{array::BitArray, bitarr};
 use octs::Bytes;
 use web_time::Instant;
 
-use crate::{packet::MessageSeq, seq::Seq};
+use crate::packet::MessageSeq;
 
-use super::FragmentHeader;
+use super::{Fragment, FragmentHeader};
 
 /// Handles reassembling small message fragments, produced by a
 /// [`FragmentSender`], into one larger message.
@@ -64,12 +64,14 @@ struct MessageBuffer {
 /// Error that occurs when using [`FragmentReceiver::reassemble`].
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ReassembleError {
-    /// The fragment for the given index was already received.
+    /// Fragment for the given index was already received.
     #[error("already received this fragment")]
     AlreadyReceived,
+    /// Fragment reports that it is the last fragment, but we have already
+    /// received a non-last fragment with a greater index.
     #[error("this cannot be the last fragment")]
     InvalidLastFragment,
-    /// The fragment does not have the correct payload length.
+    /// Fragment does not have the correct payload length.
     #[error("invalid payload length - length: {len}, expected: {expected}")]
     InvalidPayloadLength {
         /// Length of the payload received.
@@ -114,7 +116,7 @@ impl FragmentReceiver {
     /// Gets the total number of bytes used for storing messages which have not
     /// been fully reassembled yet.
     #[must_use]
-    pub fn bytes_used(&self) -> usize {
+    pub const fn bytes_used(&self) -> usize {
         self.bytes_used
     }
 
@@ -165,7 +167,10 @@ impl FragmentReceiver {
         }
 
         // copy the payload data into the buffer
-        let len_to_copy = if marker.is_last() {
+        let cap_before = buf.payload.capacity();
+        let start = usize::from(frag_index) * self.max_payload_len;
+        let end = start + payload.len();
+        if marker.is_last() {
             if buf.last_frag_index.is_some() {
                 return Err(ReassembleError::AlreadyReceived);
             }
@@ -177,12 +182,9 @@ impl FragmentReceiver {
                 return Err(ReassembleError::InvalidLastFragment);
             }
 
-            let new_len = usize::from(frag_index) * self.max_payload_len + payload.len();
-            // TODO
-            buf.payload.resize(new_len, 0);
-            // END TODO
-
-            payload.len()
+            buf.payload.resize(end, 0);
+            debug_assert_eq!(buf.payload.len(), end);
+            buf.payload[start..end].copy_from_slice(payload);
         } else {
             if payload.len() != self.max_payload_len {
                 return Err(ReassembleError::InvalidPayloadLength {
@@ -191,22 +193,16 @@ impl FragmentReceiver {
                 });
             }
 
-            self.max_payload_len
-        };
-        let start = usize::from(frag_index) * self.max_payload_len;
-        let end = start + len_to_copy;
-        // TODO
-        if end > buf.payload.len() {
-            self.bytes_used += end - buf.payload.len();
-            buf.payload.resize(end, 0);
+            if end >= buf.payload.len() {
+                buf.payload.resize(end, 0);
+            }
+            buf.payload[start..end].copy_from_slice(payload);
         }
-        // END TODO
-        buf.payload[start..end].copy_from_slice(payload);
+        self.bytes_used += buf.payload.capacity() - cap_before;
 
         // only update the buffer meta once we know there are no more error paths
-        buf.num_frags_recv += 1;
-        buf.last_recv_at = now;
         *is_received = true;
+        buf.last_recv_at = now;
         drop(is_received);
 
         // if we've fully reassembled the message, we can return it now
@@ -218,20 +214,43 @@ impl FragmentReceiver {
                 .messages
                 .remove(&msg_seq)
                 .expect("`buf` is a mut ref to this buffer");
-            debug_assert_eq!(buf.payload.capacity(), buf.payload.len());
             self.bytes_used -= buf.payload.capacity();
+            debug_assert!(!self.messages.is_empty() || self.bytes_used == 0);
             Ok(Some(Bytes::from(buf.payload)))
         } else {
+            // this happens separately from the other buffer meta update
+            // so that the `if` condition just above works properly
+            buf.num_frags_recv += 1;
             Ok(None)
         }
     }
 
-    /// Removes a message with the given sequence, dropping all its fragments.
-    pub fn remove(&mut self, msg_seq: MessageSeq) {
-        let Some(buf) = self.messages.remove(&msg_seq) else {
-            return;
-        };
-        self.bytes_used -= buf.payload.capacity();
+    /// Receives a fragmented packet and attempts to reassemble this fragment
+    /// into a message.
+    ///
+    /// See [`FragmentReceiver::reassemble`].
+    ///
+    /// # Errors
+    ///
+    /// See [`FragmentReceiver::reassemble`].
+    pub fn reassemble_frag(
+        &mut self,
+        now: Instant,
+        frag: Fragment,
+    ) -> Result<Option<Bytes>, ReassembleError> {
+        self.reassemble(now, &frag.header, frag.payload)
+    }
+
+    /// Removes a message with the given sequence, dropping all its fragments,
+    /// returning `true` if the message previously existed.
+    pub fn remove(&mut self, msg_seq: MessageSeq) -> bool {
+        match self.messages.remove(&msg_seq) {
+            Some(buf) => {
+                self.bytes_used -= buf.payload.capacity();
+                true
+            }
+            None => false,
+        }
     }
 
     /// Drops all currently buffered messages.
@@ -249,20 +268,38 @@ mod tests {
 
     use super::*;
 
+    const MSG_SEQ: MessageSeq = MessageSeq::new(1234);
     const PAYLOAD_LEN: usize = 2;
 
     fn now() -> Instant {
         Instant::now()
     }
 
+    // we explicitly don't test `bytes_used`, because this is basically an impl
+    // detail, and is closely tied to the platform allocator
+    // instead, use debug asserts to test that memory is de/allocated and
+    // counted properly
+
+    #[test]
+    fn empty() {
+        let mut recv = FragmentReceiver::new(PAYLOAD_LEN);
+        let f = Fragment {
+            header: FragmentHeader {
+                msg_seq: MSG_SEQ,
+                marker: FragmentMarker::last(0).unwrap(),
+            },
+            payload: Bytes::new(),
+        };
+        assert_matches!(
+            recv.reassemble_frag(now(), f),
+            Ok(Some(b)) if b == &[][..]
+        );
+    }
+
     #[test]
     fn single() {
-        const MSG_SEQ: MessageSeq = MessageSeq::new(1234);
-
         let mut recv = FragmentReceiver::new(PAYLOAD_LEN);
-        assert_eq!(0, recv.bytes_used());
-
-        let frag = Fragment {
+        let f = Fragment {
             header: FragmentHeader {
                 msg_seq: MSG_SEQ,
                 marker: FragmentMarker::last(0).unwrap(),
@@ -270,19 +307,15 @@ mod tests {
             payload: vec![1, 2].into(),
         };
         assert_matches!(
-            recv.reassemble(now(), &frag.header, frag.payload),
+            recv.reassemble_frag(now(), f),
             Ok(Some(b)) if b == &[1, 2][..]
         );
-        assert_eq!(0, recv.bytes_used());
     }
 
     #[test]
     fn two_frags_in_order() {
-        const MSG_SEQ: MessageSeq = MessageSeq::new(1234);
-        const NUM_FRAGS: usize = 2;
-
         let mut recv = FragmentReceiver::new(PAYLOAD_LEN);
-        let frags: [_; NUM_FRAGS] = [
+        let [f1, f2] = [
             Fragment {
                 header: FragmentHeader {
                     msg_seq: MSG_SEQ,
@@ -299,24 +332,17 @@ mod tests {
             },
         ];
 
+        assert_matches!(recv.reassemble_frag(now(), f1), Ok(None));
         assert_matches!(
-            recv.reassemble(now(), &frags[0].header, &frags[0].payload),
-            Ok(None)
+            recv.reassemble_frag(now(), f2),
+            Ok(Some(b)) if b == &[1, 2, 3, 4][..]
         );
-        // receiver knows it'll take at least 1 fragment right now, but it
-        // doesn't know about the 2nd one
-        assert_eq!(PAYLOAD_LEN * 1, recv.bytes_used());
-
-        assert_matches!(recv.reassemble(now(), &frags[1].header, &frags[1].payload), Ok(Some(b)) if b == &[1, 2, 3, 4][..]);
-        assert_eq!(0, recv.bytes_used());
     }
 
     #[test]
     fn two_frags_out_of_order() {
-        const MSG_SEQ: MessageSeq = MessageSeq::new(1234);
-
         let mut recv = FragmentReceiver::new(PAYLOAD_LEN);
-        let frags = [
+        let [f1, f2] = [
             Fragment {
                 header: FragmentHeader {
                     msg_seq: MSG_SEQ,
@@ -333,25 +359,17 @@ mod tests {
             },
         ];
 
+        assert_matches!(recv.reassemble_frag(now(), f1), Ok(None));
         assert_matches!(
-            recv.reassemble(now(), &frags[1].header, &frags[1].payload),
-            Ok(None)
+            recv.reassemble_frag(now(), f2),
+            Ok(Some(b)) if b == &[1, 2, 3, 4][..]
         );
-        // receiver knows that the 2nd fragment is the last one, so it knows
-        // the total size
-        assert_eq!(PAYLOAD_LEN * 2, recv.bytes_used());
-
-        assert_matches!(recv.reassemble(now(), &frags[0].header, &frags[0].payload), Ok(Some(b)) if b == &[1, 2, 3, 4][..]);
-        assert_eq!(0, recv.bytes_used());
     }
 
     #[test]
-    fn three_frags() {
-        const MSG_SEQ: MessageSeq = MessageSeq::new(1234);
-        const NUM_FRAGS: usize = 3;
-
+    fn three_frags_in_order() {
         let mut recv = FragmentReceiver::new(PAYLOAD_LEN);
-        let frags: [_; NUM_FRAGS] = [
+        let [f1, f2, f3] = [
             Fragment {
                 header: FragmentHeader {
                     msg_seq: MSG_SEQ,
@@ -375,32 +393,18 @@ mod tests {
             },
         ];
 
+        assert_matches!(recv.reassemble_frag(now(), f1), Ok(None));
+        assert_matches!(recv.reassemble_frag(now(), f2), Ok(None));
         assert_matches!(
-            recv.reassemble(now(), &frags[0].header, &frags[0].payload),
-            Ok(None)
-        );
-        assert_eq!(PAYLOAD_LEN * NUM_FRAGS, recv.bytes_used());
-
-        assert_matches!(
-            recv.reassemble(now(), &frags[1].header, &frags[1].payload),
-            Ok(None)
-        );
-        assert_eq!(PAYLOAD_LEN * NUM_FRAGS, recv.bytes_used());
-
-        assert_matches!(
-            recv.reassemble(now(), &frags[2].header, &frags[2].payload),
+            recv.reassemble_frag(now(), f3),
             Ok(Some(b)) if b == &[1, 2, 3, 4, 5][..]
         );
-        assert_eq!(0, recv.bytes_used());
     }
 
     #[test]
-    fn out_of_order() {
-        const MSG_SEQ: MessageSeq = MessageSeq::new(1234);
-        const NUM_FRAGS: usize = 3;
-
+    fn three_frags_out_of_order() {
         let mut recv = FragmentReceiver::new(PAYLOAD_LEN);
-        let frags: [_; NUM_FRAGS] = [
+        let [f1, f2, f3] = [
             Fragment {
                 header: FragmentHeader {
                     msg_seq: MSG_SEQ,
@@ -424,105 +428,57 @@ mod tests {
             },
         ];
 
+        assert_matches!(recv.reassemble_frag(now(), f3), Ok(None));
+        assert_matches!(recv.reassemble_frag(now(), f1), Ok(None));
         assert_matches!(
-            recv.reassemble(now(), &frags[0].header, &frags[0].payload),
-            Ok(None)
-        );
-        assert_eq!(PAYLOAD_LEN * NUM_FRAGS, recv.bytes_used());
-
-        assert_matches!(
-            recv.reassemble(now(), &frags[1].header, &frags[1].payload),
-            Ok(None)
-        );
-        // notice here, that even though we've just reassembled the last
-        // fragment, we haven't deallocated any data
-        // so we're still using the same amount of memory internally
-        assert_eq!(PAYLOAD_LEN * NUM_FRAGS, recv.bytes_used());
-
-        assert_matches!(
-            recv.reassemble(now(), &frags[2].header, &frags[2].payload),
+            recv.reassemble_frag(now(), f2),
             Ok(Some(b)) if b == &[1, 2, 3, 4, 5][..]
-        );
-        assert_eq!(0, recv.bytes_used());
-    }
-
-    /*
-    #[test]
-    fn invalid_header() {
-        let mut recv = recv();
-        let header = FragmentHeader {
-            msg_seq: Seq(0),
-            num_frags: 0,
-            marker: 0,
-        };
-        assert_matches!(recv.reassemble(&header, &[]), Err(ReassembleError::NoFrags));
-
-        let header = FragmentHeader {
-            msg_seq: Seq(0),
-            num_frags: 10,
-            marker: 10,
-        };
-        assert_matches!(
-            recv.reassemble(&header, &[]),
-            Err(ReassembleError::InvalidFragIndex { frag_index: 10 })
         );
     }
 
     #[test]
     fn already_received() {
-        let mut recv = recv();
-        let header = FragmentHeader {
-            msg_seq: Seq(0),
-            num_frags: 2,
-            marker: 0,
+        let mut recv = FragmentReceiver::new(PAYLOAD_LEN);
+        let f = Fragment {
+            header: FragmentHeader {
+                msg_seq: MSG_SEQ,
+                marker: FragmentMarker::non_last(0).unwrap(),
+            },
+            payload: vec![1, 2].into(),
         };
-        assert_matches!(recv.reassemble(&header, &[1, 2]), Ok(None));
-
+        assert_matches!(recv.reassemble_frag(now(), f.clone()), Ok(None));
         assert_matches!(
-            recv.reassemble(&header, &[1, 2]),
+            recv.reassemble_frag(now(), f),
             Err(ReassembleError::AlreadyReceived)
         );
     }
 
     #[test]
     fn remove() {
-        let mut recv = recv();
-        assert_eq!(0, recv.bytes_used());
-
-        let header = FragmentHeader {
-            msg_seq: Seq(0),
-            num_frags: 2,
-            marker: 0,
+        let mut recv = FragmentReceiver::new(PAYLOAD_LEN);
+        let f = Fragment {
+            header: FragmentHeader {
+                msg_seq: MSG_SEQ,
+                marker: FragmentMarker::non_last(0).unwrap(),
+            },
+            payload: vec![1, 2].into(),
         };
-        assert_matches!(recv.reassemble(&header, &[1, 2]), Ok(None));
-        assert_eq!(PAYLOAD_LEN * 2, recv.bytes_used());
-
-        let header = FragmentHeader {
-            msg_seq: Seq(1),
-            num_frags: 2,
-            marker: 0,
-        };
-        assert_matches!(recv.reassemble(&header, &[1, 2]), Ok(None));
-        assert_eq!(PAYLOAD_LEN * 2 * 2, recv.bytes_used());
-
-        recv.remove(Seq(0));
-        assert_eq!(PAYLOAD_LEN * 2, recv.bytes_used());
+        assert_matches!(recv.reassemble_frag(now(), f), Ok(None));
+        assert!(recv.remove(MSG_SEQ));
     }
 
     #[test]
     fn clear() {
-        let mut recv = recv();
-        assert_eq!(0, recv.bytes_used());
-
-        let header = FragmentHeader {
-            msg_seq: Seq(0),
-            num_frags: 2,
-            marker: 0,
+        let mut recv = FragmentReceiver::new(PAYLOAD_LEN);
+        let f = Fragment {
+            header: FragmentHeader {
+                msg_seq: MSG_SEQ,
+                marker: FragmentMarker::non_last(0).unwrap(),
+            },
+            payload: vec![1, 2].into(),
         };
-        assert_matches!(recv.reassemble(&header, &[1, 2]), Ok(None));
-        assert_eq!(2 * 2, recv.bytes_used());
-
+        assert_matches!(recv.reassemble_frag(now(), f), Ok(None));
         recv.clear();
-        assert_eq!(0, recv.bytes_used());
-    }*/
+        assert!(!recv.remove(MSG_SEQ));
+    }
 }

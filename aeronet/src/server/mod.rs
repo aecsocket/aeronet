@@ -176,30 +176,30 @@ impl<A, B> ServerState<A, B> {
     ///
     /// This should be used to determine if the user is allowed to start a new
     /// server.
-    pub fn is_closed(&self) -> bool {
+    pub const fn is_closed(&self) -> bool {
         matches!(self, Self::Closed)
     }
 
     /// Gets if this is a [`ServerState::Opening`].
-    pub fn is_opening(&self) -> bool {
+    pub const fn is_opening(&self) -> bool {
         matches!(self, Self::Opening(_))
     }
 
     /// Gets if this is a [`ServerState::Open`].
     ///
     /// This should be used to determine if the app is ready to server clients.
-    pub fn is_open(&self) -> bool {
+    pub const fn is_open(&self) -> bool {
         matches!(self, Self::Open(_))
     }
 
     /// Converts from `&ServerState<A, B>` to `ServerState<&A, &B>`.
     ///
     /// Analogous to [`Option::as_ref`].
-    pub fn as_ref(&self) -> ServerState<&A, &B> {
+    pub const fn as_ref(&self) -> ServerState<&A, &B> {
         match self {
             Self::Closed => ServerState::Closed,
-            Self::Opening(x) => ServerState::Opening(&x),
-            Self::Open(x) => ServerState::Open(&x),
+            Self::Opening(x) => ServerState::Opening(x),
+            Self::Open(x) => ServerState::Open(x),
         }
     }
 }
