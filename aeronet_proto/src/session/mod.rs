@@ -503,7 +503,7 @@ impl Session {
     ) -> Result<
         (
             impl Iterator<Item = MessageSeq> + '_,
-            impl Iterator<Item = Result<Bytes, OneOf<(RecvError, OutOfMemory)>>> + '_,
+            impl Iterator<Item = Result<(Bytes, LaneIndex), OneOf<(RecvError, OutOfMemory)>>> + '_,
         ),
         RecvError,
     > {
@@ -561,7 +561,8 @@ impl Session {
         recv_frags: &'a mut FragmentReceiver,
         recv_frags_cap: usize,
         mut packet: Bytes,
-    ) -> impl Iterator<Item = Result<Bytes, OneOf<(RecvError, OutOfMemory)>>> + 'a {
+    ) -> impl Iterator<Item = Result<(Bytes, LaneIndex), OneOf<(RecvError, OutOfMemory)>>> + 'a
+    {
         // this would be so much easier with coroutines...
         std::iter::from_fn(move || {
             if !packet.has_remaining() {
@@ -588,7 +589,8 @@ impl Session {
         recv_frags: &'a mut FragmentReceiver,
         recv_frags_cap: usize,
         packet: &'a mut Bytes,
-    ) -> Result<impl Iterator<Item = Bytes> + 'a, OneOf<(RecvError, OutOfMemory)>> {
+    ) -> Result<impl Iterator<Item = (Bytes, LaneIndex)> + 'a, OneOf<(RecvError, OutOfMemory)>>
+    {
         let frag = packet
             .read::<Fragment>()
             .map_err(RecvError::ReadFragment)
@@ -599,7 +601,7 @@ impl Session {
             .map_err(RecvError::Reassemble)
             .map_err(|err| OneOf::from(err).broaden())?
         else {
-            return Ok(Either::Left(std::iter::empty::<Bytes>()));
+            return Ok(Either::Left(std::iter::empty()));
         };
 
         if recv_frags.bytes_used() > recv_frags_cap {
@@ -616,7 +618,10 @@ impl Session {
             .ok_or(RecvError::InvalidLaneIndex { index: lane_index })
             .map_err(|err| OneOf::from(err).broaden())?;
 
-        Ok(Either::Right(Self::recv_on_lane(lane, msg, msg_seq)))
+        Ok(Either::Right(
+            Self::recv_on_lane(lane, msg, msg_seq)
+                .map(move |msg| (msg, LaneIndex::from_raw(lane_index))),
+        ))
     }
 
     fn recv_on_lane(

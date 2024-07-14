@@ -7,7 +7,7 @@ use aeronet::{
     client::ClientState,
     stats::{MessageStats, Rtt},
 };
-use aeronet_proto::session::Session;
+use aeronet_proto::session::{OutOfMemory, SendError, Session, SessionConfig};
 use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
@@ -57,6 +57,10 @@ pub enum ClientError {
     AlreadyDisconnected,
     #[error("not connected")]
     NotConnected,
+    #[error(transparent)]
+    Send(SendError),
+    #[error(transparent)]
+    OutOfMemory(OutOfMemory),
 
     // backend
     #[error("frontend closed")]
@@ -83,6 +87,7 @@ pub enum ClientError {
 pub struct Connecting {
     recv_connected: oneshot::Receiver<ToConnected>,
     recv_err: oneshot::Receiver<ClientError>,
+    session_config: SessionConfig,
 }
 
 #[derive(Debug)]

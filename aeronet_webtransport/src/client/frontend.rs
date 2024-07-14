@@ -5,13 +5,13 @@ use aeronet::{
     error::pretty_error,
     lane::LaneIndex,
 };
-use aeronet_proto::seq::Seq;
+use aeronet_proto::session::{RecvError, Session, SessionConfig};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot;
 use replace_with::replace_with_or_abort_and_return;
 use tracing::debug;
-use web_time::Duration;
+use web_time::{Duration, Instant};
 use xwt_core::utils::maybe;
 
 use crate::shared::MessageKey;
@@ -39,7 +39,8 @@ impl WebTransportClient {
     }
 
     pub fn connect_new(
-        config: ClientConfig,
+        net_config: ClientConfig,
+        session_config: SessionConfig,
         target: impl Into<String>,
     ) -> (Self, impl Future<Output = ()> + maybe::Send) {
         let (send_connected, recv_connected) = oneshot::channel::<ToConnected>();
@@ -50,10 +51,11 @@ impl WebTransportClient {
             state: State::Connecting(Connecting {
                 recv_connected,
                 recv_err,
+                session_config,
             }),
         };
         let backend = async move {
-            match backend::start(config, target, send_connected).await {
+            match backend::start(net_config, target, send_connected).await {
                 Err(ClientError::FrontendClosed) => {
                     debug!("Client disconnected");
                 }
@@ -70,12 +72,13 @@ impl WebTransportClient {
 
     pub fn connect(
         &mut self,
-        config: ClientConfig,
+        net_config: ClientConfig,
+        session_config: SessionConfig,
         target: impl Into<String>,
     ) -> Result<impl Future<Output = ()> + maybe::Send, ClientError> {
         match self.state {
             State::Disconnected => {
-                let (frontend, backend) = Self::connect_new(config, target);
+                let (frontend, backend) = Self::connect_new(net_config, session_config, target);
                 *self = frontend;
                 Ok(backend)
             }
@@ -108,14 +111,22 @@ impl ClientTransport for WebTransportClient {
 
         let msg = msg.into();
         let lane = lane.into();
-        // TODO lanes
-        // ignore errors here because we'll pick up errors in `poll`
-        let _ = client.send_c2s.unbounded_send(msg);
-        Ok(MessageKey::from_raw(Seq(0))) // TODO
+        client
+            .session
+            .send(Instant::now(), &msg, lane)
+            .map(MessageKey::from_raw)
+            .map_err(ClientError::Send)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        // todo
+        let State::Connected(client) = &mut self.state else {
+            return Err(ClientError::NotConnected);
+        };
+
+        for packet in client.session.flush(Instant::now()) {
+            // ignore errors here, pick them up in `poll`
+            let _ = client.send_c2s.unbounded_send(packet);
+        }
         Ok(())
     }
 
@@ -160,6 +171,7 @@ impl WebTransportClient {
                     recv_rtt: next.recv_rtt,
                     send_c2s: next.send_c2s,
                     recv_s2c: next.recv_s2c,
+                    session: Session::new(client.session_config),
                 }),
             ),
             Err(_) => (
@@ -189,12 +201,42 @@ impl WebTransportClient {
                 client.rtt = rtt;
             }
 
-            while let Ok(Some(msg)) = client.recv_s2c.try_next() {
-                // TODO lanes and stuff
-                events.push(ClientEvent::Recv {
-                    msg,
-                    lane: LaneIndex::from_raw(0),
-                });
+            client
+                .session
+                .refill_bytes_portion(delta_time.as_secs_f32());
+
+            while let Ok(Some(packet)) = client.recv_s2c.try_next() {
+                let (acks, msgs) = match client.session.recv(Instant::now(), packet) {
+                    Ok(x) => x,
+                    Err(err) => {
+                        debug!(
+                            "Error while reading packet from server: {:#}",
+                            pretty_error(&err)
+                        );
+                        continue;
+                    }
+                };
+
+                events.extend(acks.map(|seq| ClientEvent::Ack {
+                    msg_key: MessageKey::from_raw(seq),
+                }));
+
+                for res in msgs {
+                    match res {
+                        Ok((msg, lane)) => events.push(ClientEvent::Recv { msg, lane }),
+                        Err(err) => match err.narrow::<RecvError, _>() {
+                            Ok(err) => {
+                                debug!(
+                                    "Error while reading packet from server: {:#}",
+                                    pretty_error(&err)
+                                );
+                            }
+                            Err(err) => {
+                                return Err(ClientError::OutOfMemory(err.take()));
+                            }
+                        },
+                    }
+                }
             }
 
             Ok(())
