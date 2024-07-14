@@ -5,7 +5,6 @@ use futures::{
     never::Never,
     FutureExt, SinkExt,
 };
-use slotmap::SlotMap;
 use tracing::{debug, debug_span, Instrument};
 use web_time::Duration;
 use wtransport::endpoint::{IncomingSession, SessionRequest};
@@ -13,12 +12,12 @@ use wtransport::endpoint::{IncomingSession, SessionRequest};
 use crate::internal;
 
 use super::{
-    ClientKey, ConnectionResponse, Open, ServerConfig, ServerError, ToConnected, ToConnecting,
+    ClientKey, ConnectionResponse, ServerConfig, ServerError, ToConnected, ToConnecting, ToOpen,
 };
 
 pub async fn start(
     config: ServerConfig,
-    send_open: oneshot::Sender<Open>,
+    send_open: oneshot::Sender<ToOpen>,
 ) -> Result<Never, ServerError> {
     let endpoint = wtransport::Endpoint::server(config).map_err(ServerError::CreateEndpoint)?;
     let local_addr = endpoint.local_addr().map_err(ServerError::GetLocalAddr)?;
@@ -26,11 +25,10 @@ pub async fn start(
     let (send_closed, mut recv_closed) = oneshot::channel::<()>();
     let (send_connecting, recv_connecting) = mpsc::channel::<ToConnecting>(4);
     send_open
-        .send(Open {
+        .send(ToOpen {
             local_addr,
             recv_connecting,
-            clients: SlotMap::default(),
-            _send_closed: send_closed,
+            send_closed,
         })
         .map_err(|_| ServerError::FrontendClosed)?;
 

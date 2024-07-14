@@ -5,19 +5,22 @@ use aeronet::{
     lane::LaneIndex,
     server::{ServerEvent, ServerState, ServerTransport},
 };
-use aeronet_proto::seq::Seq;
+use aeronet_proto::{
+    seq::Seq,
+    session::{Session, SessionConfig},
+};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot;
 use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
 use slotmap::SlotMap;
-use web_time::Duration;
+use web_time::{Duration, Instant};
 
 use crate::shared::MessageKey;
 
 use super::{
     backend, Client, ClientKey, Connected, Connecting, ConnectionResponse, Open, Opening,
-    ServerConfig, ServerError, State, WebTransportServer,
+    ServerConfig, ServerError, State, ToOpen, WebTransportServer,
 };
 
 impl WebTransportServer {
@@ -37,18 +40,22 @@ impl WebTransportServer {
         }
     }
 
-    pub fn open_new(config: ServerConfig) -> (Self, impl Future<Output = ()> + Send) {
-        let (send_open, recv_open) = oneshot::channel::<Open>();
+    pub fn open_new(
+        net_config: ServerConfig,
+        session_config: SessionConfig,
+    ) -> (Self, impl Future<Output = ()> + Send) {
+        let (send_open, recv_open) = oneshot::channel::<ToOpen>();
         let (send_err, recv_err) = oneshot::channel::<ServerError>();
 
         let frontend = Self {
             state: State::Opening(Opening {
                 recv_open,
                 recv_err,
+                session_config,
             }),
         };
         let backend = async move {
-            if let Err(err) = backend::start(config, send_open).await {
+            if let Err(err) = backend::start(net_config, send_open).await {
                 let _ = send_err.send(err);
             }
         };
@@ -57,11 +64,12 @@ impl WebTransportServer {
 
     pub fn open(
         &mut self,
-        config: wtransport::ServerConfig,
+        net_config: ServerConfig,
+        session_config: SessionConfig,
     ) -> Result<impl Future<Output = ()> + Send, ServerError> {
         match self.state {
             State::Closed => {
-                let (frontend, backend) = Self::open_new(config);
+                let (frontend, backend) = Self::open_new(net_config, session_config);
                 *self = frontend;
                 Ok(backend)
             }
@@ -121,20 +129,34 @@ impl ServerTransport for WebTransportServer {
         let State::Open(server) = &mut self.state else {
             return Err(ServerError::NotOpen);
         };
-        let Some(Client::Connected(client)) = server.clients.get(client_key) else {
+        let Some(Client::Connected(client)) = server.clients.get_mut(client_key) else {
             return Err(ServerError::ClientNotConnected);
         };
 
         let msg = msg.into();
         let lane = lane.into();
-        // TODO lanes
-        // ignore errors here because we'll pick up errors in `poll`
-        let _ = client.send_s2c.unbounded_send(msg);
-        Ok(MessageKey::from_raw(Seq(0))) // TODO
+        client
+            .session
+            .send(Instant::now(), &msg, lane)
+            .map(MessageKey::from_raw)
+            .map_err(ServerError::Send)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        // todo
+        let State::Open(server) = &mut self.state else {
+            return Err(ServerError::NotOpen);
+        };
+
+        for (_, client) in server.clients.iter_mut() {
+            let Client::Connected(client) = client else {
+                continue;
+            };
+
+            for packet in client.session.flush(Instant::now()) {
+                // ignore errors here, pick them up in `poll`
+                let _ = client.send_s2c.unbounded_send(packet);
+            }
+        }
         Ok(())
     }
 
@@ -142,6 +164,7 @@ impl ServerTransport for WebTransportServer {
         let State::Open(server) = &mut self.state else {
             return Err(ServerError::NotOpen);
         };
+
         server
             .clients
             .remove(client_key)
@@ -198,9 +221,10 @@ impl WebTransportServer {
                 Some(ServerEvent::Opened),
                 State::Open(Open {
                     local_addr: next.local_addr,
+                    session_config: server.session_config,
                     recv_connecting: next.recv_connecting,
                     clients: SlotMap::default(),
-                    _send_closed: next._send_closed,
+                    _send_closed: next.send_closed,
                 }),
             ),
             Err(_) => (
@@ -234,9 +258,12 @@ impl WebTransportServer {
             for (client_key, client) in &mut server.clients {
                 replace_with_or_abort(client, |client_state| match client_state {
                     Client::Disconnected => ClientState::Disconnected,
-                    Client::Connecting(client) => {
-                        Self::poll_connecting(client_key, client, &mut events)
-                    }
+                    Client::Connecting(client) => Self::poll_connecting(
+                        client_key,
+                        client,
+                        &mut events,
+                        server.session_config.clone(),
+                    ),
                     Client::Connected(client) => {
                         Self::poll_connected(client_key, client, &mut events, delta_time)
                     }
@@ -263,6 +290,7 @@ impl WebTransportServer {
         client_key: ClientKey,
         mut client: Connecting,
         events: &mut Vec<ServerEvent<Self>>,
+        session_config: SessionConfig,
     ) -> Client {
         let res = (|| {
             if let Some(err) = client
@@ -284,6 +312,7 @@ impl WebTransportServer {
                     recv_rtt: next.recv_rtt,
                     recv_c2s: next.recv_c2s,
                     send_s2c: next.send_s2c,
+                    session: Session::new(session_config),
                 }))
             } else {
                 Ok(Client::Connecting(client))

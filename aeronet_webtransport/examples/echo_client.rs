@@ -1,8 +1,9 @@
 use aeronet::{
     client::{client_connected, ClientEvent, ClientTransport},
     error::pretty_error,
-    lane::LaneKey,
+    lane::{LaneKey, LaneKind},
 };
+use aeronet_proto::session::{LaneConfig, SessionConfig};
 use aeronet_webtransport::client::{ClientConfig, WebTransportClient};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
@@ -56,6 +57,18 @@ fn client_config() -> ClientConfig {
         .max_idle_timeout(Some(Duration::from_secs(5)))
         .unwrap()
         .build()
+}
+
+fn session_config() -> SessionConfig {
+    let lanes = vec![LaneConfig::new(LaneKind::ReliableOrdered)];
+    SessionConfig {
+        send_lanes: lanes.clone(),
+        recv_lanes: lanes,
+        default_packet_cap: 0,
+        max_packet_len: 1024,
+        send_cap: usize::MAX,
+        recv_frags_cap: usize::MAX,
+    }
 }
 
 fn poll_client(
@@ -135,7 +148,7 @@ fn ui(
         if do_connect {
             let target = ui_state.target.clone();
             ui_state.log.push(format!("Connecting to {target}"));
-            match client.connect(client_config(), target) {
+            match client.connect(client_config(), session_config(), target) {
                 Ok(backend) => {
                     #[cfg(target_family = "wasm")]
                     {

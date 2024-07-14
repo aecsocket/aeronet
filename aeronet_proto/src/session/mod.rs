@@ -122,7 +122,7 @@ pub struct Session {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionConfig {
     pub send_lanes: Vec<LaneConfig>,
-    pub recv_lanes: Vec<LaneKind>,
+    pub recv_lanes: Vec<LaneConfig>,
     pub default_packet_cap: usize,
     pub max_packet_len: usize,
     pub send_cap: usize,
@@ -134,7 +134,7 @@ impl Default for SessionConfig {
         Self {
             send_lanes: Vec::new(),
             recv_lanes: Vec::new(),
-            default_packet_cap: 128,
+            default_packet_cap: 0,
             max_packet_len: 1024,
             send_cap: usize::MAX,
             recv_frags_cap: usize::MAX,
@@ -151,8 +151,14 @@ pub struct LaneConfig {
 
 impl Default for LaneConfig {
     fn default() -> Self {
+        Self::new(LaneKind::UnreliableUnordered)
+    }
+}
+
+impl LaneConfig {
+    pub const fn new(kind: LaneKind) -> Self {
         Self {
-            kind: LaneKind::UnreliableUnordered,
+            kind,
             send_cap: usize::MAX,
             resend_after: Duration::from_millis(100),
         }
@@ -293,7 +299,7 @@ impl Session {
             recv_lanes: config
                 .recv_lanes
                 .into_iter()
-                .map(|kind| match kind {
+                .map(|config| match config.kind {
                     LaneKind::UnreliableUnordered => RecvLane::UnreliableUnordered,
                     LaneKind::UnreliableSequenced => RecvLane::UnreliableSequenced {
                         pending_seq: MessageSeq::default(),

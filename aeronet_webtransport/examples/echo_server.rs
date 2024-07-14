@@ -1,10 +1,12 @@
 use aeronet::{
     error::pretty_error,
-    lane::LaneKey,
+    lane::{LaneKey, LaneKind},
     server::{ServerEvent, ServerTransport},
 };
-use aeronet_webtransport::server::{
-    ClientKey, ConnectionResponse, ServerConfig, WebTransportServer,
+use aeronet_proto::session::{LaneConfig, SessionConfig};
+use aeronet_webtransport::{
+    server::{ClientKey, ConnectionResponse, ServerConfig, WebTransportServer},
+    wtransport,
 };
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_ecs::system::SystemId;
@@ -30,6 +32,28 @@ fn main() {
         .run();
 }
 
+fn server_config(identity: &wtransport::Identity) -> ServerConfig {
+    wtransport::ServerConfig::builder()
+        .with_bind_default(25565)
+        .with_identity(&identity)
+        .keep_alive_interval(Some(Duration::from_secs(1)))
+        .max_idle_timeout(Some(Duration::from_secs(5)))
+        .unwrap()
+        .build()
+}
+
+fn session_config() -> SessionConfig {
+    let lanes = vec![LaneConfig::new(LaneKind::ReliableOrdered)];
+    SessionConfig {
+        send_lanes: lanes.clone(),
+        recv_lanes: lanes,
+        default_packet_cap: 0,
+        max_packet_len: 1024,
+        send_cap: usize::MAX,
+        recv_frags_cap: usize::MAX,
+    }
+}
+
 fn setup(
     mut commands: Commands,
     mut server: ResMut<WebTransportServer>,
@@ -42,14 +66,9 @@ fn setup(
     info!("{spki_fingerprint}");
     info!("************************");
 
-    let config = ServerConfig::builder()
-        .with_bind_default(25565)
-        .with_identity(&identity)
-        .keep_alive_interval(Some(Duration::from_secs(1)))
-        .max_idle_timeout(Some(Duration::from_secs(5)))
-        .unwrap()
-        .build();
-    let backend = server.open(config).unwrap();
+    let backend = server
+        .open(server_config(&identity), session_config())
+        .unwrap();
     rt.runtime().spawn(backend);
 
     let accept_client = commands.register_one_shot_system(accept_client);

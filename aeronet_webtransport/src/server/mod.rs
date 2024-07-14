@@ -13,6 +13,7 @@ use aeronet::{
     server::ServerState,
     stats::{MessageStats, RemoteAddr, Rtt},
 };
+use aeronet_proto::session::{OutOfMemory, SendError, Session, SessionConfig};
 use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
@@ -57,6 +58,10 @@ pub enum ServerError {
     ClientNotConnecting,
     #[error("already responded to this client's connection request")]
     AlreadyResponded,
+    #[error(transparent)]
+    Send(SendError),
+    #[error(transparent)]
+    OutOfMemory(OutOfMemory),
 
     // backend
     #[error("frontend closed")]
@@ -91,13 +96,22 @@ impl Display for ClientKey {
 
 #[derive(Debug)]
 pub struct Opening {
-    recv_open: oneshot::Receiver<Open>,
+    recv_open: oneshot::Receiver<ToOpen>,
     recv_err: oneshot::Receiver<ServerError>,
+    session_config: SessionConfig,
+}
+
+#[derive(Debug)]
+struct ToOpen {
+    local_addr: SocketAddr,
+    recv_connecting: mpsc::Receiver<ToConnecting>,
+    send_closed: oneshot::Sender<()>,
 }
 
 #[derive(Debug)]
 pub struct Open {
     pub local_addr: SocketAddr,
+    session_config: SessionConfig,
     recv_connecting: mpsc::Receiver<ToConnecting>,
     clients: SlotMap<ClientKey, Client>,
     _send_closed: oneshot::Sender<()>,
@@ -149,6 +163,7 @@ pub struct Connected {
     recv_rtt: mpsc::Receiver<Duration>,
     recv_c2s: mpsc::Receiver<Bytes>,
     send_s2c: mpsc::UnboundedSender<Bytes>,
+    session: Session,
 }
 
 impl Rtt for Connected {
