@@ -74,19 +74,19 @@ impl FragmentSender {
         &self,
         msg_seq: MessageSeq,
         msg: Bytes,
-    ) -> Result<Fragments<impl Iterator<Item = Fragment>>, MessageTooBig> {
+    ) -> Result<impl Iterator<Item = Fragment>, MessageTooBig> {
         const MAX_FRAGS: usize = FragmentMarker::MAX_FRAGS as usize;
 
         let msg_len = msg.remaining();
         let iter = msg.byte_chunks(self.max_payload_len).enumerate().rev();
-        let num_frags = u8::try_from(iter.len()).map_err(|_| MessageTooBig {
+        u8::try_from(iter.len()).map_err(|_| MessageTooBig {
             len: msg_len,
             max: MAX_FRAGS * self.max_payload_len,
         })?;
         debug_assert!(iter.len() <= MAX_FRAGS);
 
         let last_index = iter.len() - 1;
-        let iter = iter.map(move |(index, payload)| {
+        Ok(iter.map(move |(index, payload)| {
             let is_last = index == last_index;
             let index =
                 u8::try_from(index).expect("we just checked that `iter.len() <= MAX_FRAGS`");
@@ -101,28 +101,7 @@ impl FragmentSender {
                 header: FragmentHeader { msg_seq, marker },
                 payload,
             }
-        });
-        Ok(Fragments { num_frags, iter })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Fragments<I> {
-    num_frags: u8,
-    iter: I,
-}
-
-impl<I> Fragments<I> {
-    pub const fn num_frags(&self) -> u8 {
-        self.num_frags
-    }
-}
-
-impl<I: Iterator> Iterator for Fragments<I> {
-    type Item = I::Item;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
+        }))
     }
 }
 

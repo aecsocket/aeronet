@@ -68,6 +68,7 @@ replace_with = "0.1.7"
 serde = { version = "1.0.197", features = ["derive"] }
 slotmap = "1.0.7"
 static_assertions = "1.1.0"
+terrors = "0.3.0"
 thiserror = "1.0.57"
 tracing = "0.1.40"
 web-time = "1.1.0"

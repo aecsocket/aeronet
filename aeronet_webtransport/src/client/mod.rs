@@ -7,6 +7,7 @@ use aeronet::{
     client::ClientState,
     stats::{MessageStats, Rtt},
 };
+use aeronet_proto::session::Session;
 use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
@@ -109,6 +110,7 @@ pub struct Connected {
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
     recv_rtt: mpsc::Receiver<Duration>,
+    session: Session,
 }
 
 impl Rtt for Connected {

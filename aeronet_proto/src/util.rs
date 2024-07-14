@@ -1,4 +1,7 @@
-use std::ops::{Add, AddAssign, Deref, DerefMut, Sub, SubAssign};
+use std::{
+    cmp::Ordering,
+    ops::{Add, AddAssign, Deref, DerefMut, Sub, SubAssign},
+};
 
 use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
 
@@ -26,8 +29,20 @@ macro_rules! forward_deref {
     };
 }
 
-macro_rules! forward_add_sub {
+macro_rules! forward_arithmetic {
     ($ty:ty) => {
+        impl PartialOrd for $ty {
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                self.0.partial_cmp(&other.0)
+            }
+        }
+
+        impl Ord for $ty {
+            fn cmp(&self, other: &Self) -> Ordering {
+                self.0.cmp(&other.0)
+            }
+        }
+
         impl Add for $ty {
             type Output = Self;
 
@@ -87,12 +102,12 @@ macro_rules! forward_fixed_encode_len {
 }
 
 forward_deref!(MessageSeq, Seq);
-forward_add_sub!(MessageSeq);
+forward_arithmetic!(MessageSeq);
 forward_encode_decode!(MessageSeq, Seq);
 forward_fixed_encode_len!(MessageSeq, Seq);
 
 forward_deref!(PacketSeq, Seq);
-forward_add_sub!(PacketSeq);
+forward_arithmetic!(PacketSeq);
 forward_encode_decode!(PacketSeq, Seq);
 forward_fixed_encode_len!(PacketSeq, Seq);
 

@@ -28,6 +28,7 @@ derivative = { workspace = true }
 either = { workspace = true }
 octs = { workspace = true }
 static_assertions = { workspace = true }
+terrors = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 web-time = { workspace = true }

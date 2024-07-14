@@ -24,6 +24,7 @@ pub async fn start(
                 options: config.to_js(),
             })
         }
+
         #[cfg(not(target_family = "wasm"))]
         {
             let raw = wtransport::Endpoint::client(config).map_err(ClientError::CreateEndpoint)?;
@@ -61,8 +62,8 @@ pub async fn start(
         .map_err(|_| ClientError::FrontendClosed)?;
 
     debug!("Starting connection loop");
-    // `receive_datagram` may not be cancel-safe, so we create two futures which
-    // loop infinitely independently, and wait for the first one to fail
+    // `receive_datagram` may not be cancel-safe, so we create multiple futures
+    // which loop infinitely independently, and wait for the first one to fail
     let send_loop = internal::send_loop(&conn, recv_c2s);
     let recv_loop = internal::recv_loop(&conn, send_s2c);
     let update_rtt_loop = internal::update_rtt_loop(&conn, send_rtt);
