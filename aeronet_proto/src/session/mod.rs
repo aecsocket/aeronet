@@ -531,7 +531,7 @@ impl Session {
         })
     }
 
-    /// Gets the nubmer of bytes sent over the lifetime of this session.
+    /// Gets the number of bytes sent over the lifetime of this session.
     ///
     /// When calling [`Session::flush`], the length of each packet returned is
     /// added to this value.
@@ -540,7 +540,7 @@ impl Session {
         self.bytes_sent
     }
 
-    /// Gets the nubmer of bytes received over the lifetime of this session.
+    /// Gets the number of bytes received over the lifetime of this session.
     ///
     /// When calling [`Session::recv`], the length of the packet is added to
     /// this value.

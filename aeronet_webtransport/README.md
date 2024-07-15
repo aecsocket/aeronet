@@ -73,7 +73,7 @@ fn run_async_task(f: impl std::future::Future) { todo!() }
 ## Server
 
 Create a [`WebTransportServer`] using:
-- [`WebTransportServer::closed`] to create a closed server, whic must be manually opened later
+- [`WebTransportServer::closed`] to create a closed server, which must be manually opened later
 - [`WebTransportServer::open_new`] to create a server which is already opening up for client
   connections
 
