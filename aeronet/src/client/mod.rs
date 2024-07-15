@@ -147,8 +147,21 @@ impl<A, B> ClientState<A, B> {
     pub const fn as_ref(&self) -> ClientState<&A, &B> {
         match self {
             Self::Disconnected => ClientState::Disconnected,
-            Self::Connecting(x) => ClientState::Connecting(x),
-            Self::Connected(x) => ClientState::Connected(x),
+            Self::Connecting(a) => ClientState::Connecting(a),
+            Self::Connected(b) => ClientState::Connected(b),
+        }
+    }
+
+    /// Converts from `ClientState<A, B>` to `ClientState<A2, B2>`.
+    pub fn map<A2, B2>(
+        self,
+        fa: impl FnOnce(A) -> A2,
+        fb: impl FnOnce(B) -> B2,
+    ) -> ClientState<A2, B2> {
+        match self {
+            Self::Disconnected => ClientState::Disconnected,
+            Self::Connecting(a) => ClientState::Connecting(fa(a)),
+            Self::Connected(b) => ClientState::Connected(fb(b)),
         }
     }
 }

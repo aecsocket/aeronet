@@ -198,8 +198,21 @@ impl<A, B> ServerState<A, B> {
     pub const fn as_ref(&self) -> ServerState<&A, &B> {
         match self {
             Self::Closed => ServerState::Closed,
-            Self::Opening(x) => ServerState::Opening(x),
-            Self::Open(x) => ServerState::Open(x),
+            Self::Opening(a) => ServerState::Opening(a),
+            Self::Open(b) => ServerState::Open(b),
+        }
+    }
+
+    /// Converts from `ServerState<A, B>` to `ServerState<A2, B2>`.
+    pub fn map<A2, B2>(
+        self,
+        fa: impl FnOnce(A) -> A2,
+        fb: impl FnOnce(B) -> B2,
+    ) -> ServerState<A2, B2> {
+        match self {
+            Self::Closed => ServerState::Closed,
+            Self::Opening(a) => ServerState::Opening(fa(a)),
+            Self::Open(b) => ServerState::Open(fb(b)),
         }
     }
 }
