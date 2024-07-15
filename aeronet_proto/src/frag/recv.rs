@@ -93,6 +93,14 @@ impl MessageBuffer {
             last_recv_at: now,
         }
     }
+
+    fn byte_size(&self) -> usize {
+        // we have to also take into account how big the message buf itself is
+        // because if a peer sends us a ton of tiny 1-byte messages, then we'll
+        // think that we're using a lot less memory than we actually are
+        // because the MessageBuffer struct alloc also takes some memory
+        std::mem::size_of::<Self>() + self.payload.capacity()
+    }
 }
 
 impl FragmentReceiver {
@@ -154,22 +162,22 @@ impl FragmentReceiver {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => {
                 let buf = MessageBuffer::new(now, self.max_payload_len, frag_index);
-                self.bytes_used += buf.payload.capacity();
+                self.bytes_used += buf.byte_size();
                 entry.insert(buf)
             }
         };
 
         // check if this fragment has been received yet
-        let mut is_received = buf
+        if *buf
             .recv_frags
             .get_mut(usize::from(frag_index))
-            .expect("`recv_frags` has 256 bits, and we are indexing using a `u8`");
-        if *is_received {
+            .expect("`recv_frags` has 256 bits, and we are indexing using a `u8`")
+        {
             return Err(ReassembleError::AlreadyReceived);
         }
 
         // copy the payload data into the buffer
-        let cap_before = buf.payload.capacity();
+        let cap_before = buf.byte_size();
         let start = usize::from(frag_index) * self.max_payload_len;
         let end = start + payload.len();
         if marker.is_last() {
@@ -199,12 +207,11 @@ impl FragmentReceiver {
             }
         }
         buf.payload[start..end].copy_from_slice(payload);
-        self.bytes_used += buf.payload.capacity() - cap_before;
+        self.bytes_used += buf.byte_size() - cap_before;
 
         // only update the buffer meta once we know there are no more error paths
-        *is_received = true;
+        buf.recv_frags.set(usize::from(frag_index), true);
         buf.last_recv_at = now;
-        drop(is_received);
 
         // if we've fully reassembled the message, we can return it now
         if buf
@@ -215,7 +222,7 @@ impl FragmentReceiver {
                 .messages
                 .remove(&msg_seq)
                 .expect("`buf` is a mut ref to this buffer");
-            self.bytes_used -= buf.payload.capacity();
+            self.bytes_used -= buf.byte_size();
             debug_assert!(!self.messages.is_empty() || self.bytes_used == 0);
             Ok(Some(Bytes::from(buf.payload)))
         } else {
@@ -247,7 +254,7 @@ impl FragmentReceiver {
     pub fn remove(&mut self, msg_seq: MessageSeq) -> bool {
         match self.messages.remove(&msg_seq) {
             Some(buf) => {
-                self.bytes_used -= buf.payload.capacity();
+                self.bytes_used -= buf.byte_size();
                 true
             }
             None => false,

@@ -211,7 +211,7 @@ mod tests {
         assert_eq!(v, buf.freeze().read::<FragmentHeader>().unwrap());
     }
 
-    const PAYLOAD_LEN: usize = 1024;
+    const PAYLOAD_LEN: usize = 64;
 
     const MSG1: Bytes = Bytes::from_static(b"Message 1");
     const MSG2: Bytes = Bytes::from_static(b"Message 2");
@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn large1() {
         let (send, mut recv) = frag();
-        let msg = Bytes::from(b"x".repeat(PAYLOAD_LEN + 1));
+        let msg = Bytes::from(b"x".repeat(PAYLOAD_LEN + 10));
         let [f1, f2] = send
             .fragment(MessageSeq::new(0), msg.clone())
             .unwrap()
@@ -291,15 +291,15 @@ mod tests {
     #[test]
     fn large2() {
         let (send, mut recv) = frag();
-        let msg = Bytes::from(b"x".repeat(PAYLOAD_LEN * 2 + 1));
-        let [p1, p2, p3] = send
+        let msg = Bytes::from(b"x".repeat(PAYLOAD_LEN * 2 + 10));
+        let [f1, f2, f3] = send
             .fragment(MessageSeq::new(0), msg.clone())
             .unwrap()
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        assert_matches!(recv.reassemble_frag(now(), p1), Ok(None));
-        assert_matches!(recv.reassemble_frag(now(), p2), Ok(None));
-        assert_matches!(recv.reassemble_frag(now(), p3), Ok(Some(b)) if b == msg);
+        assert_matches!(recv.reassemble_frag(now(), f1), Ok(None));
+        assert_matches!(recv.reassemble_frag(now(), f2), Ok(None));
+        assert_matches!(recv.reassemble_frag(now(), f3), Ok(Some(b)) if b == msg);
     }
 }

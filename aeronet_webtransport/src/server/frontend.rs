@@ -2,18 +2,17 @@ use std::future::Future;
 
 use aeronet::{
     client::ClientState,
+    error::pretty_error,
     lane::LaneIndex,
     server::{ServerEvent, ServerState, ServerTransport},
 };
-use aeronet_proto::{
-    seq::Seq,
-    session::{Session, SessionConfig},
-};
+use aeronet_proto::session::{Session, SessionConfig};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot;
 use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
 use slotmap::SlotMap;
+use tracing::debug;
 use web_time::{Duration, Instant};
 
 use crate::shared::MessageKey;
@@ -347,13 +346,46 @@ impl WebTransportServer {
                 client.rtt = rtt;
             }
 
-            while let Ok(Some(msg)) = client.recv_c2s.try_next() {
-                // todo lanes
-                events.push(ServerEvent::Recv {
+            client
+                .session
+                .refill_bytes_portion(delta_time.as_secs_f32());
+
+            while let Ok(Some(packet)) = client.recv_c2s.try_next() {
+                let (acks, mut msgs) = match client.session.recv(Instant::now(), packet) {
+                    Ok(x) => x,
+                    Err(err) => {
+                        debug!(
+                            "Error while reading packet from server: {:#}",
+                            pretty_error(&err)
+                        );
+                        continue;
+                    }
+                };
+
+                events.extend(acks.map(|seq| ServerEvent::Ack {
                     client_key,
-                    msg,
-                    lane: LaneIndex::from_raw(0),
+                    msg_key: MessageKey::from_raw(seq),
+                }));
+
+                let res = msgs.for_each_msg(|res| match res {
+                    Ok((msg, lane)) => {
+                        events.push(ServerEvent::Recv {
+                            client_key,
+                            msg,
+                            lane,
+                        });
+                    }
+                    Err(err) => {
+                        debug!(
+                            "Error while reading packet from server: {:#}",
+                            pretty_error(&err)
+                        );
+                    }
                 });
+
+                if let Err(err) = res {
+                    return Err(ServerError::OutOfMemory(err));
+                }
             }
 
             Ok(())

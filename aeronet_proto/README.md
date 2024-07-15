@@ -65,11 +65,15 @@ struct Packet {
 }
 
 struct Fragment {
-    message_seq: u16,           // +2
-    fragment_id: u8,            // +1
-    payload_len: VarInt<usize>, // variable-length
-    payload: [u8],              // +`payload_len`
+    message_seq: u16,                // +2
+    fragment_marker: FragmentMarker, // +1
+    payload_len: VarInt<usize>,      // variable-length
+    payload: [u8],                   // +`payload_len`
 }
+
+// if MSB is set, this is the last fragment
+// remaining 7 bits mark fragment index
+struct FragmentMarker(u8)
 
 struct Payload {
     lane_index: VarInt<usize>, // variable-length

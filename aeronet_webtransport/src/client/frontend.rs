@@ -5,7 +5,7 @@ use aeronet::{
     error::pretty_error,
     lane::LaneIndex,
 };
-use aeronet_proto::session::{RecvError, Session, SessionConfig};
+use aeronet_proto::session::{Session, SessionConfig};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot;
@@ -206,7 +206,7 @@ impl WebTransportClient {
                 .refill_bytes_portion(delta_time.as_secs_f32());
 
             while let Ok(Some(packet)) = client.recv_s2c.try_next() {
-                let (acks, msgs) = match client.session.recv(Instant::now(), packet) {
+                let (acks, mut msgs) = match client.session.recv(Instant::now(), packet) {
                     Ok(x) => x,
                     Err(err) => {
                         debug!(
@@ -221,21 +221,20 @@ impl WebTransportClient {
                     msg_key: MessageKey::from_raw(seq),
                 }));
 
-                for res in msgs {
-                    match res {
-                        Ok((msg, lane)) => events.push(ClientEvent::Recv { msg, lane }),
-                        Err(err) => match err.narrow::<RecvError, _>() {
-                            Ok(err) => {
-                                debug!(
-                                    "Error while reading packet from server: {:#}",
-                                    pretty_error(&err)
-                                );
-                            }
-                            Err(err) => {
-                                return Err(ClientError::OutOfMemory(err.take()));
-                            }
-                        },
+                let res = msgs.for_each_msg(|res| match res {
+                    Ok((msg, lane)) => {
+                        events.push(ClientEvent::Recv { msg, lane });
                     }
+                    Err(err) => {
+                        debug!(
+                            "Error while reading packet from server: {:#}",
+                            pretty_error(&err)
+                        );
+                    }
+                });
+
+                if let Err(err) = res {
+                    return Err(ClientError::OutOfMemory(err));
                 }
             }
 

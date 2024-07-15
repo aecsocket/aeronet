@@ -1,3 +1,5 @@
+use std::iter::FusedIterator;
+
 use octs::{chunks::ByteChunksExt, Buf, Bytes};
 
 use crate::packet::MessageSeq;
@@ -74,7 +76,10 @@ impl FragmentSender {
         &self,
         msg_seq: MessageSeq,
         msg: Bytes,
-    ) -> Result<impl Iterator<Item = Fragment>, MessageTooBig> {
+    ) -> Result<
+        Fragments<impl Iterator<Item = Fragment> + ExactSizeIterator + FusedIterator>,
+        MessageTooBig,
+    > {
         const MAX_FRAGS: usize = FragmentMarker::MAX_FRAGS as usize;
 
         let msg_len = msg.remaining();
@@ -86,7 +91,7 @@ impl FragmentSender {
         debug_assert!(iter.len() <= MAX_FRAGS);
 
         let last_index = iter.len() - 1;
-        Ok(iter.map(move |(index, payload)| {
+        Ok(Fragments(iter.map(move |(index, payload)| {
             let is_last = index == last_index;
             let index =
                 u8::try_from(index).expect("we just checked that `iter.len() <= MAX_FRAGS`");
@@ -101,9 +106,28 @@ impl FragmentSender {
                 header: FragmentHeader { msg_seq, marker },
                 payload,
             }
-        }))
+        })))
     }
 }
+
+#[derive(Debug)]
+pub struct Fragments<I>(I);
+
+impl<I: Iterator> Iterator for Fragments<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+}
+
+impl<I: ExactSizeIterator> ExactSizeIterator for Fragments<I> {}
+
+impl<I: FusedIterator> FusedIterator for Fragments<I> {}
 
 #[cfg(test)]
 mod tests {
