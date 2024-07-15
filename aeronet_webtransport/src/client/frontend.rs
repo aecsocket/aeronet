@@ -22,12 +22,20 @@ use super::{
 };
 
 impl WebTransportClient {
-    pub fn disconnected() -> Self {
+    /// Creates a new client which starts [`ClientState::Disconnected`].
+    #[must_use]
+    pub const fn disconnected() -> Self {
         Self {
             state: State::Disconnected,
         }
     }
 
+    /// Disconnects this client from its currently connected server, putting it
+    /// into [`ClientState::Disconnected`].
+    ///
+    /// # Errors
+    ///
+    /// Errors if the client is already disconnected.
     pub fn disconnect(&mut self) -> Result<(), ClientError> {
         match self.state {
             State::Disconnected => Err(ClientError::AlreadyDisconnected),
@@ -38,6 +46,13 @@ impl WebTransportClient {
         }
     }
 
+    /// Creates a new client which starts [`ClientState::Connecting`].
+    ///
+    /// `target` must be given in the form of a URL, i.e. `https://[::1]:1234`.
+    ///
+    /// This returns both:
+    /// - the frontend, [`WebTransportClient`], used to interact with...
+    /// - the backend, which you should spawn on an async task runtime
     pub fn connect_new(
         net_config: ClientConfig,
         session_config: SessionConfig,
@@ -69,6 +84,17 @@ impl WebTransportClient {
         (frontend, backend)
     }
 
+    /// Starts connecting this client to a server, putting it into
+    /// [`ClientState::Connecting`].
+    ///
+    /// `target` must be given in the form of a URL, i.e. `https://[::1]:1234`.
+    ///
+    /// This returns the backend, which you should spawn on an async task
+    /// runtime.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the client is already connecting or connected.
     pub fn connect(
         &mut self,
         net_config: ClientConfig,

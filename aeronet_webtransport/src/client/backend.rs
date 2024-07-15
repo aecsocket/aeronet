@@ -39,6 +39,7 @@ pub async fn start(
     }?;
 
     debug!("Created endpoint, connecting to {target:?}");
+    #[allow(clippy::useless_conversion)] // multi-target support
     let conn = endpoint
         .connect(&target)
         .await
@@ -63,7 +64,6 @@ pub async fn start(
             #[cfg(not(target_family = "wasm"))]
             remote_addr: conn.0.remote_address(),
             initial_rtt: internal::get_rtt(&conn),
-            initial_mtu: mtu,
             recv_meta,
             send_c2s,
             recv_s2c,
@@ -77,6 +77,7 @@ pub async fn start(
     let send_loop = internal::send_loop(&conn, recv_c2s);
     let recv_loop = internal::recv_loop(&conn, send_s2c);
     let update_rtt_loop = internal::update_meta(&conn, send_meta);
+    #[allow(clippy::useless_conversion)] // multi-target support
     futures::select! {
         r = send_loop.fuse() => r,
         r = recv_loop.fuse() => r,

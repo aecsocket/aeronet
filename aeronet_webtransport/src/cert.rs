@@ -1,3 +1,5 @@
+//! Utilities for working with X509 certificates.
+
 use base64::Engine;
 use x509_cert::der::Decode;
 
@@ -8,6 +10,7 @@ use x509_cert::der::Decode;
 ///
 /// Returns [`None`] if the certificate cannot be converted to an
 /// [`x509_cert::Certificate`].
+#[must_use]
 pub fn spki_fingerprint(cert: &wtransport::tls::Certificate) -> Option<spki::FingerprintBytes> {
     let cert = x509_cert::Certificate::from_der(cert.der()).ok()?;
     let fingerprint = cert
@@ -26,6 +29,7 @@ pub fn spki_fingerprint(cert: &wtransport::tls::Certificate) -> Option<spki::Fin
 /// ```text
 /// --ignore-certificate-errors-spki-list=[output of this function]
 /// ```
+#[must_use]
 pub fn spki_fingerprint_base64(cert: &wtransport::tls::Certificate) -> Option<String> {
     spki_fingerprint(cert)
         .map(|fingerprint| base64::engine::general_purpose::STANDARD.encode(fingerprint))

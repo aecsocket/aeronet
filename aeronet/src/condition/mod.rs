@@ -29,7 +29,7 @@ use std::fmt::Debug;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
-/// Configuration for a [`ConditionedClient`] or [`ConditionedServer`].
+/// Configuration for a [`ClientConditioner`] or [`ServerConditioner`].
 ///
 /// The randomness of how long messages are delayed for is based on a normal
 /// distribution with mean `delay_mean` and standard deviation `delay_std_dev`.

@@ -113,3 +113,10 @@ fn run_async_task(f: impl std::future::Future) { todo!() }
 
 [`aeronet_proto`]: https://docs.rs/aeronet_proto
 [`ServerEvent::Connecting`]: aeronet::server::ServerEvent::Connecting
+[`WebTransportClient`]: client::WebTransportClient
+[`WebTransportClient::disconnected`]: client::WebTransportClient::disconnected
+[`WebTransportClient::connect_new`]: client::WebTransportClient::connect_new
+[`WebTransportServer`]: server::WebTransportServer
+[`WebTransportServer::closed`]: server::WebTransportServer::closed
+[`WebTransportServer::open_new`]: server::WebTransportServer::open_new
+[`WebTransportServer::respond_to_request`]: server::WebTransportServer::respond_to_request

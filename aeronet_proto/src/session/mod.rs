@@ -275,7 +275,7 @@ impl SessionConfig {
 
     /// Sets [`SessionConfig::send_bytes_per_sec`] on this value.
     #[must_use]
-    pub fn with_send_bytes_per_sec(mut self, send_bytes_per_sec: usize) -> Self {
+    pub const fn with_send_bytes_per_sec(mut self, send_bytes_per_sec: usize) -> Self {
         self.send_bytes_per_sec = send_bytes_per_sec;
         self
     }
@@ -453,7 +453,6 @@ impl Session {
     /// Errors if `min_mtu` or `initial_mtu` are too small.
     ///
     /// See [`Session`].
-    #[must_use]
     pub fn new(
         now: Instant,
         config: SessionConfig,

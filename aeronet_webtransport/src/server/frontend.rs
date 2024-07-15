@@ -6,13 +6,13 @@ use aeronet::{
     lane::LaneIndex,
     server::{ServerEvent, ServerState, ServerTransport},
 };
-use aeronet_proto::session::{Session, SessionConfig};
+use aeronet_proto::session::SessionConfig;
 use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot;
 use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
 use slotmap::SlotMap;
-use tracing::{debug, info};
+use tracing::debug;
 use web_time::{Duration, Instant};
 
 use crate::shared::MessageKey;
@@ -23,12 +23,19 @@ use super::{
 };
 
 impl WebTransportServer {
-    pub fn closed() -> Self {
+    /// Creates a new server which starts [`ServerState::Closed`].
+    #[must_use]
+    pub const fn closed() -> Self {
         Self {
             state: State::Closed,
         }
     }
 
+    /// Closes this server, putting it into [`ServerState::Closed`].
+    ///
+    /// # Errors
+    ///
+    /// Errors if the server is already closed.
     pub fn close(&mut self) -> Result<(), ServerError> {
         match self.state {
             State::Closed => Err(ServerError::AlreadyClosed),
@@ -39,6 +46,11 @@ impl WebTransportServer {
         }
     }
 
+    /// Creates a new server which starts [`ServerState::Opening`].
+    ///
+    /// This returns both:
+    /// - the frontend, [`WebTransportServer`], used to interact with...
+    /// - the backend, which you should spawn on an async task runtime
     pub fn open_new(
         net_config: ServerConfig,
         session_config: SessionConfig,
@@ -60,6 +72,14 @@ impl WebTransportServer {
         (frontend, backend)
     }
 
+    /// Starts opening this server, putting it into [`ServerState::Opening`].
+    ///
+    /// This returns the backend, which you should spawn on an async task
+    /// runtime.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the server is already opening or open.
     pub fn open(
         &mut self,
         net_config: ServerConfig,
@@ -105,8 +125,7 @@ impl ServerTransport for WebTransportServer {
         server
             .clients
             .get(client_key)
-            .map(ClientState::as_ref)
-            .unwrap_or(ClientState::Disconnected)
+            .map_or(ClientState::Disconnected, ClientState::as_ref)
     }
 
     fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_ {
@@ -145,7 +164,7 @@ impl ServerTransport for WebTransportServer {
             return Err(ServerError::NotOpen);
         };
 
-        for (_, client) in server.clients.iter_mut() {
+        for (_, client) in &mut server.clients {
             let Client::Connected(client) = client else {
                 continue;
             };
@@ -187,6 +206,13 @@ impl ServerTransport for WebTransportServer {
 }
 
 impl WebTransportServer {
+    /// Responds to a connecting client's connection request, determining
+    /// whether this client is allowed to connect or should be rejected.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the server is not open, the client is not connecting, or if
+    /// we have already responded to this client's connection request.
     pub fn respond_to_request(
         &mut self,
         client_key: ClientKey,

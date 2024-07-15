@@ -1,3 +1,5 @@
+//! Server-side transport implementation.
+
 mod backend;
 mod frontend;
 
@@ -23,8 +25,14 @@ use wtransport::error::ConnectionError;
 
 use crate::internal::{self, ConnectionMeta};
 
+/// Server network configuration.
 pub type ServerConfig = wtransport::ServerConfig;
 
+/// WebTransport implementation of [`ServerTransport`].
+///
+/// See the [crate-level documentation](crate).
+///
+/// [`ServerTransport`]: aeronet::server::ServerTransport
 #[derive(Derivative, Default)]
 #[derivative(Debug = "transparent")]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
@@ -34,61 +42,92 @@ pub struct WebTransportServer {
 
 type State = ServerState<Opening, Open>;
 
+/// How a [`WebTransportServer`] should respond to a client attempting to
+/// connect to it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConnectionResponse {
+    /// Allow the client to connect.
     Accept,
+    /// 403 Forbidden.
     Forbidden,
+    /// 404 Not Found.
     NotFound,
 }
 
+/// Error type for operations on a [`WebTransportServer`].
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
     // frontend
+    /// Backend server task was cancelled, dropping the underlying connections.
     #[error("backend closed")]
     BackendClosed,
+    /// Server is already opening or open.
     #[error("already opening or open")]
     AlreadyOpen,
+    /// Server is already closed.
     #[error("already closed")]
     AlreadyClosed,
+    /// Server is not open.
     #[error("not open")]
     NotOpen,
+    /// Given client is not connected.
     #[error("client not connected")]
     ClientNotConnected,
+    /// Given client is not connecting.
     #[error("client not connecting")]
     ClientNotConnecting,
+    /// Already responded to this client's connection request.
     #[error("already responded to this client's connection request")]
     AlreadyResponded,
+    /// See [`SendError`].
     #[error(transparent)]
     Send(SendError),
+    /// See [`OutOfMemory`].
     #[error(transparent)]
     OutOfMemory(OutOfMemory),
 
     // backend
+    /// Server frontend was closed.
     #[error("frontend closed")]
     FrontendClosed,
+    /// Failed to create the endpoint for listening to connections from.
     #[error("failed to create endpoint")]
     CreateEndpoint(#[source] io::Error),
+    /// Failed to get our endpoint's local socket address.
     #[error("failed to get endpoint local address")]
     GetLocalAddr(#[source] io::Error),
+    /// Failed to await the client's session request.
     #[error("failed to await session request")]
     AwaitSessionRequest(#[source] ConnectionError),
+    /// Failed to accept the client's session request.
     #[error("failed to accept session request")]
     AcceptSessionRequest(#[source] ConnectionError),
+    /// Established a connection with the client, but it does not support
+    /// datagrams.
     #[error("datagrams are not supported on this peer")]
     DatagramsNotSupported,
+    /// Client supports datagrams, but the maximum datagram size it supports is
+    /// too small for us.
     #[error("connection MTU too small")]
     MtuTooSmall(#[source] MtuTooSmall),
+    /// Frontend forced this client to disconnect.
     #[error("server forced disconnect")]
     ForceDisconnect,
 
     // connection
+    /// Lost connection.
     #[error("connection lost")]
     ConnectionLost(#[source] <internal::Connection as xwt_core::session::datagram::Receive>::Error),
+    /// Failed to send a datagram along the connection.
     #[error("failed to send datagram")]
     SendDatagram(#[source] <internal::Connection as xwt_core::session::datagram::Send>::Error),
 }
 
 slotmap::new_key_type! {
+    /// Key uniquely identifying a client in a [`WebTransportServer`].
+    ///
+    /// If the same physical client disconnects and reconnects (i.e. the same
+    /// computer), this counts as a new client.
     pub struct ClientKey;
 }
 
@@ -98,6 +137,7 @@ impl Display for ClientKey {
     }
 }
 
+/// State of a [`WebTransportServer`] when it is [`ServerState::Opening`].
 #[derive(Debug)]
 pub struct Opening {
     recv_open: oneshot::Receiver<ToOpen>,
@@ -111,8 +151,10 @@ struct ToOpen {
     send_closed: oneshot::Sender<()>,
 }
 
+/// State of a [`WebTransportServer`] when it is [`ServerState::Open`].
 #[derive(Debug)]
 pub struct Open {
+    /// Address of the local socket that this server's endpoint is bound to.
     pub local_addr: SocketAddr,
     recv_connecting: mpsc::Receiver<ToConnecting>,
     clients: SlotMap<ClientKey, Client>,
@@ -134,12 +176,24 @@ struct ToConnecting {
     recv_connected: oneshot::Receiver<ToConnected>,
 }
 
+/// State of a client connected to a [`WebTransportServer`] when it is
+/// [`ClientState::Connecting`].
+///
+/// After receiving a [`ServerEvent::Connecting`], use the information in this
+/// to determine whether to accept or to reject this client.
+///
+/// [`ServerEvent::Connecting`]: aeronet::server::ServerEvent::Connecting
 #[derive(Debug)]
 pub struct Connecting {
+    /// `:authority` field of the request.
     pub authority: String,
+    /// `:path` field of the request.
     pub path: String,
+    /// `origin` field of the request.
     pub origin: Option<String>,
+    /// `user-agent` field of the request.
     pub user_agent: Option<String>,
+    /// All headers present in the request.
     pub headers: HashMap<String, String>,
     recv_err: oneshot::Receiver<ServerError>,
     send_conn_resp: Option<oneshot::Sender<ConnectionResponse>>,
@@ -150,17 +204,26 @@ pub struct Connecting {
 struct ToConnected {
     remote_addr: SocketAddr,
     initial_rtt: Duration,
-    initial_max_datagram_len: usize,
     recv_meta: mpsc::Receiver<ConnectionMeta>,
     recv_c2s: mpsc::Receiver<Bytes>,
     send_s2c: mpsc::UnboundedSender<Bytes>,
     session: Session,
 }
 
+/// State of a client connected to a [`WebTransportServer`] when it is
+/// [`ClientState::Connected`].
 #[derive(Debug)]
 pub struct Connected {
+    /// Address of the remote socket that our server is talking to this client
+    /// along.
     pub remote_addr: SocketAddr,
+    /// [Round-trip time] of the connection.
+    ///
+    /// [Round-trip time]: aeronet::stats::Rtt
+    #[doc(alias = "ping")]
+    #[doc(alias = "latency")]
     pub rtt: Duration,
+    /// Protocol session state, used for reading more advanced info.
     pub session: Session,
     recv_err: oneshot::Receiver<ServerError>,
     recv_meta: mpsc::Receiver<ConnectionMeta>,

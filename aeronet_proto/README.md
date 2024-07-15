@@ -142,6 +142,8 @@ let's walk through an example receiver:
 - I get `frag_index: 0b0000_0001` -> message has at least 2 fragments, we just got the 2nd one
 - `0b0111_1111` is impossible, since that implies that frag 127 isn't the last one, but it can't be any higher
 
+<!--
+
 # Fuzzing
 
 TODO update
@@ -157,6 +159,7 @@ To fuzz a particular component, run this from the `/aeronet_proto` directory:
   * `cargo +nightly fuzz run frag`
 * [`Lanes`]
   * `cargo +nightly fuzz run lanes`
+-->
 
 [*Building a Game Network Protocol*]: https://gafferongames.com/categories/building-a-game-network-protocol/
 [*Sequence Buffers*]: https://gafferongames.com/post/reliable_ordered_messages/#sequence-buffers

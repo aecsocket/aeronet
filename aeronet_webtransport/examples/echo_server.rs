@@ -117,6 +117,13 @@ fn poll_server(
             }
             ServerEvent::Connected { client_key } => {
                 info!("Client {client_key} connected");
+                commands.run_system_with_input(
+                    send_message.0,
+                    (
+                        client_key,
+                        format!("Welcome! Send a message and I will echo it back"),
+                    ),
+                );
             }
             ServerEvent::Recv {
                 client_key, msg, ..

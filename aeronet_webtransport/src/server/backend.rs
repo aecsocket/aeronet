@@ -144,7 +144,6 @@ async fn handle_session(
         .send(ToConnected {
             remote_addr: conn.remote_address(),
             initial_rtt: conn.rtt(),
-            initial_max_datagram_len: mtu,
             recv_meta,
             recv_c2s,
             send_s2c,

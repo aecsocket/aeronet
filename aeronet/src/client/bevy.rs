@@ -74,15 +74,16 @@ pub fn client_disconnected<T: ClientTransport + Resource>(client: Option<Res<T>>
     client.map_or(true, |client| client.state().is_disconnected())
 }
 
-/// The client has fully established a connection to the server.
-///
-/// This event can be followed by [`ClientEvent::Recv`] or
-/// [`ClientEvent::Disconnected`].
+/// The client has fully established a connection to the server,
+/// changing state to [`ClientState::Connected`].
 ///
 /// After this event, you can run your game initialization logic such as
 /// receiving the initial world state and e.g. showing a spawn screen.
 ///
 /// See [`ClientEvent::Connected`].
+///
+/// [`ClientState::Connected`]: crate::client::ClientState::Connected
+/// [`ClientEvent::Connected`]: crate::client::ClientEvent::Connected
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct LocalClientConnected<T: ClientTransport> {
@@ -97,6 +98,8 @@ pub struct LocalClientConnected<T: ClientTransport> {
 /// This event is not raised when the app invokes a disconnect.
 ///
 /// See [`ClientEvent::Disconnected`].
+///
+/// [`ClientEvent::Disconnected`]: crate::client::ClientEvent::Disconnected
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
 pub struct LocalClientDisconnected<T: ClientTransport> {
@@ -108,6 +111,8 @@ pub struct LocalClientDisconnected<T: ClientTransport> {
 /// us.
 ///
 /// See [`ClientEvent::Ack`].
+///
+/// [`ClientEvent::Ack`]: crate::client::ClientEvent::Ack
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct AckFromServer<T: ClientTransport> {
@@ -121,6 +126,8 @@ pub struct AckFromServer<T: ClientTransport> {
 /// An implementation is allowed to not emit this event if it is not able to.
 ///
 /// See [`ClientEvent::Nack`].
+///
+/// [`ClientEvent::Nack`]: crate::client::ClientEvent::Nack
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct NackFromServer<T: ClientTransport> {
