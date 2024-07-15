@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 pub use bytes;
+pub use web_time;
 
 pub mod client;
 pub mod error;
