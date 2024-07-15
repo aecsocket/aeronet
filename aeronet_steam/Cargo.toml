@@ -1,0 +1,57 @@
+[package]
+description = "Steam networking sockets implementation for aeronet"
+name = "aeronet_steam"
+
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[features]
+## Enables [`bevy`](https://docs.rs/bevy) support.
+bevy = ["dep:bevy_ecs", "aeronet/bevy", "aeronet/bevy-tokio-rt"]
+
+[dependencies]
+aeronet.workspace = true
+aeronet_proto.workspace = true
+
+ahash.workspace = true
+bytes.workspace = true
+dashmap.workspace = true
+derivative.workspace = true
+either.workspace = true
+futures.workspace = true
+replace_with.workspace = true
+slotmap.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+steamworks.workspace = true
+
+bevy_ecs = { workspace = true, optional = true }
+
+[dev-dependencies]
+anyhow.workspace = true
+bevy = { workspace = true, default-features = true }
+bevy_egui.workspace = true
+
+[[example]]
+name = "echo_client"
+path = "examples/echo_client.rs"
+required-features = ["bevy"]
+
+[[example]]
+name = "echo_server"
+path = "examples/echo_server.rs"
+required-features = ["bevy"]

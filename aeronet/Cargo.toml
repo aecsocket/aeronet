@@ -1,14 +1,15 @@
 [package]
+description = "Lightweight client/server transport abstraction"
 name = "aeronet"
-description = "Lightweight client/server network library"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+
 authors.workspace = true
-repository.workspace = true
-keywords.workspace = true
 categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [lints]
 workspace = true
@@ -17,26 +18,24 @@ workspace = true
 all-features = true
 
 [features]
+## Enables the [`condition`] module.
+condition = ["dep:rand", "dep:rand_distr"]
+
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = [ "dep:bevy" ]
-
-## Enables using an async [`tokio`](https://docs.rs/tokio) runtime in a
-## [`bevy`](https://docs.rs/bevy) resource.
-bevy-tokio-rt = [ "bevy", "dep:tokio" ]
-
-## Allows using [`bincode`](https://docs.rs/bincode) as a format for message serialization
-## using [`serde`](https://docs.rs/serde).
-bincode = [ "dep:serde", "dep:bincode" ]
+bevy = ["dep:bevy_ecs"]
 
 [dependencies]
-aeronet_derive.workspace = true
+aeronet_derive = { workspace = true }
 
-derivative.workspace = true
-thiserror.workspace = true
-anyhow.workspace = true
+arbitrary = { workspace = true }
+bytes = { workspace = true }
+derivative = { workspace = true }
+web-time = { workspace = true }
 
-serde = { workspace = true, optional = true }
-bincode = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
+rand_distr = { workspace = true, optional = true }
 
-bevy = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true, default-features = false, features = [ "rt-multi-thread" ] }
+bevy_ecs = { workspace = true, optional = true }
+
+[dev-dependencies]
+bevy_app = { workspace = true }

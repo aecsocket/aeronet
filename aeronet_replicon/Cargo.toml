@@ -1,0 +1,36 @@
+[package]
+description = "bevy_replicon backend implementation using aeronet"
+name = "aeronet_replicon"
+
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+aeronet = { workspace = true, features = ["bevy"] }
+
+ahash = { workspace = true }
+bimap = { workspace = true }
+derivative = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_replicon = { workspace = true }
+bevy_time = { workspace = true }
+
+[dev-dependencies]
+aeronet_channel = { workspace = true, features = ["bevy"] }
+bevy = { workspace = true }

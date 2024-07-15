@@ -1,7 +1,6 @@
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
-mod client;
-mod server;
-mod shared;
-
-pub use {client::*, server::*, shared::*};
+pub mod client;
+pub mod server;
+pub mod shared;

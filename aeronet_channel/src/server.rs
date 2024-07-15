@@ -1,127 +1,216 @@
-use std::mem;
+//! Server-side items.
 
-use aeronet::{TransportProtocol, TransportServer};
+use std::{fmt::Display, time::Duration};
+
+use aeronet::{
+    client::ClientState,
+    lane::LaneIndex,
+    server::{ServerEvent, ServerState, ServerTransport},
+};
+use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;
 
-use crate::{ChannelError, ClientKey};
+use crate::shared::ConnectionStats;
 
-type ServerEvent<P> = aeronet::ServerEvent<P, ChannelServer<P>>;
+slotmap::new_key_type! {
+    /// Key identifying a unique client connected to a [`ChannelServer`].
+    ///
+    /// If a client is connected, disconnected, and reconnected to the same
+    /// server, it will have a different client key.
+    pub struct ClientKey;
+}
 
-/// Implementation of [`TransportServer`] using in-memory MPSC channels.
+impl Display for ClientKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+/// Implementation of [`ServerTransport`] using in-memory MPSC channels.
 ///
-/// See the [crate-level docs](crate).
-#[derive(Derivative, Default)]
-#[derivative(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Resource))]
-pub struct ChannelServer<P>
-where
-    P: TransportProtocol,
-{
-    #[derivative(Debug = "ignore")]
-    pub(super) clients: SlotMap<ClientKey, ClientState<P>>,
-    #[derivative(Debug = "ignore")]
-    pub(super) event_buf: Vec<ServerEvent<P>>,
+/// See the [crate-level documentation](crate).
+#[derive(Debug, Default)]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
+pub struct ChannelServer {
+    clients: SlotMap<ClientKey, Client>,
 }
 
-#[derive(Debug)]
-pub(super) struct ClientState<P>
-where
-    P: TransportProtocol,
-{
-    pub(super) send_s2c: Sender<P::S2C>,
-    pub(super) recv_c2s: Receiver<P::C2S>,
+/// State of a [`ChannelServer`]'s client when it is [`ClientState::Connected`].
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+pub struct Connected {
+    /// Statistics of this connection.
+    pub stats: ConnectionStats,
+    recv_c2s: Receiver<(Bytes, LaneIndex)>,
+    send_s2c: Sender<(Bytes, LaneIndex)>,
+    send_connected: bool,
 }
 
-impl<P> ChannelServer<P>
-where
-    P: TransportProtocol,
-{
-    /// Creates a new server with no clients connected.
-    ///
-    /// See [`ChannelClient`] on how to create and connect a client to this
-    /// server.
-    ///
-    /// [`ChannelClient`]: crate::ChannelClient
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+enum Client {
+    Disconnected,
+    Connected(Connected),
+}
+
+/// Error type for operations on a [`ChannelServer`].
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ServerError {
+    /// No client exists for the given key.
+    #[error("no client with this key")]
+    NoClient,
+    /// Client was unexpectedly disconnected.
+    #[error("client disconnected")]
+    Disconnected,
+}
+
+impl ChannelServer {
+    /// Creates a server with no connected clients.
     #[must_use]
-    pub fn new() -> Self {
-        Self {
-            clients: SlotMap::default(),
-            event_buf: Vec::default(),
+    pub fn open() -> Self {
+        Self::default()
+    }
+
+    pub(super) fn insert_client(
+        &mut self,
+        recv_c2s: Receiver<(Bytes, LaneIndex)>,
+        send_s2c: Sender<(Bytes, LaneIndex)>,
+    ) -> ClientKey {
+        self.clients.insert(Client::Connected(Connected {
+            stats: ConnectionStats::default(),
+            recv_c2s,
+            send_s2c,
+            send_connected: true,
+        }))
+    }
+}
+
+impl ServerTransport for ChannelServer {
+    type Error = ServerError;
+
+    type Opening<'this> = ();
+
+    type Open<'this> = ();
+
+    type Connecting<'this> = ();
+
+    type Connected<'this> = &'this Connected;
+
+    type ClientKey = ClientKey;
+
+    type MessageKey = ();
+
+    fn state(&self) -> ServerState<Self::Opening<'_>, Self::Open<'_>> {
+        ServerState::Open(())
+    }
+
+    fn client_state(
+        &self,
+        client_key: ClientKey,
+    ) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
+        match self.clients.get(client_key) {
+            None | Some(Client::Disconnected) => ClientState::Disconnected,
+            Some(Client::Connected(client)) => ClientState::Connected(client),
         }
     }
-}
 
-impl<P> TransportServer<P> for ChannelServer<P>
-where
-    P: TransportProtocol,
-{
-    type Client = ClientKey;
-
-    type Error = ChannelError;
-
-    type ConnectionInfo = ();
-
-    type Event = ServerEvent<P>;
-
-    fn connection_info(&self, client: Self::Client) -> Option<Self::ConnectionInfo> {
-        self.clients.get(client).map(|_| ())
-    }
-
-    fn connected_clients(&self) -> impl Iterator<Item = Self::Client> {
+    fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_ {
         self.clients.keys()
     }
 
-    fn send(&mut self, client: Self::Client, msg: impl Into<P::S2C>) -> Result<(), Self::Error> {
-        let msg = msg.into();
-        let Some(client) = self.clients.get(client) else {
-            return Err(ChannelError::NoClient(client));
+    fn send(
+        &mut self,
+        client_key: Self::ClientKey,
+        msg: impl Into<Bytes>,
+        lane: impl Into<LaneIndex>,
+    ) -> Result<Self::MessageKey, Self::Error> {
+        let Some(Client::Connected(client)) = self.clients.get_mut(client_key) else {
+            return Err(ServerError::NoClient);
         };
+
+        let msg = msg.into();
+        let lane = lane.into();
+
+        let msg_len = msg.len();
         client
             .send_s2c
-            .send(msg)
-            .map_err(|_| ChannelError::Disconnected)
+            .send((msg, lane))
+            .map_err(|_| ServerError::Disconnected)?;
+        client.stats.bytes_sent += msg_len;
+        Ok(())
     }
 
-    fn recv<'a>(&mut self) -> impl Iterator<Item = Self::Event> + 'a {
-        let mut events = mem::take(&mut self.event_buf);
+    fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error> {
+        self.clients
+            .remove(client_key)
+            .ok_or(ServerError::NoClient)
+            .map(drop)
+    }
 
-        let mut to_remove = Vec::new();
-        for (client, state) in &self.clients {
-            loop {
-                match state.recv_c2s.try_recv() {
-                    Ok(msg) => events.push(ServerEvent::Recv { client, msg }),
-                    Err(TryRecvError::Empty) => break,
-                    Err(TryRecvError::Disconnected) => {
-                        events.push(ServerEvent::Disconnected {
-                            client,
-                            cause: ChannelError::Disconnected,
-                        });
-                        to_remove.push(client);
-                    }
-                }
-            }
+    fn poll(&mut self, _: Duration) -> impl Iterator<Item = ServerEvent<Self>> {
+        let mut events = Vec::new();
+        for (client_key, client) in &mut self.clients {
+            replace_with::replace_with_or_abort(client, |client| match client {
+                Client::Disconnected => client,
+                Client::Connected(client) => Self::poll_connected(&mut events, client_key, client),
+            });
         }
 
-        for client in to_remove {
-            self.clients.remove(client);
+        let removed_clients = self
+            .clients
+            .iter()
+            .filter_map(|(client_key, client)| match client {
+                Client::Connected(_) => None,
+                Client::Disconnected => Some(client_key),
+            })
+            .collect::<Vec<_>>();
+        for client_key in removed_clients {
+            self.clients.remove(client_key);
         }
 
         events.into_iter()
     }
 
-    fn disconnect(&mut self, client: impl Into<Self::Client>) -> Result<(), Self::Error> {
-        let client = client.into();
-        match self.clients.remove(client) {
-            Some(_) => {
-                self.event_buf.push(ServerEvent::Disconnected {
-                    client,
-                    cause: ChannelError::ForceDisconnect,
-                });
-                Ok(())
-            }
-            None => Err(ChannelError::NoClient(client)),
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+impl ChannelServer {
+    fn poll_connected(
+        events: &mut Vec<ServerEvent<Self>>,
+        client_key: ClientKey,
+        mut client: Connected,
+    ) -> Client {
+        if client.send_connected {
+            events.push(ServerEvent::Connecting { client_key });
+            events.push(ServerEvent::Connected { client_key });
+            client.send_connected = false;
         }
+
+        loop {
+            match client.recv_c2s.try_recv() {
+                Ok((msg, lane)) => {
+                    client.stats.bytes_recv += msg.len();
+                    events.push(ServerEvent::Recv {
+                        client_key,
+                        msg,
+                        lane,
+                    });
+                }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    events.push(ServerEvent::Disconnected {
+                        client_key,
+                        error: ServerError::Disconnected,
+                    });
+                    return Client::Disconnected;
+                }
+            }
+        }
+
+        Client::Connected(client)
     }
 }

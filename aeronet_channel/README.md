@@ -10,3 +10,46 @@ This transport can be used in any environment, native app or WASM, however canno
 other computers remotely over a network. This transport is useful when developing a local
 singleplayer server for a potentially multiplayer game, as it allows you to write the same logic
 without caring about if the server you're connected to is remote or local.
+
+# Getting started
+
+See [`aeronet`] for getting started with any transport. Create a [`ChannelServer`], which will
+handle client connections. Then create and connect a [`ChannelClient`] to this server. You can
+access the client's key via its state, to disconnect it from the server later.
+
+```rust
+use aeronet::{
+    client::{ClientTransport, ClientState},
+    server::ServerTransport,
+    bytes::Bytes,
+    lane::LaneKey,
+};
+use aeronet_channel::{
+    client::ChannelClient,
+    server::{ClientKey, ChannelServer},
+};
+
+#[derive(Debug, Clone, Copy, LaneKey)]
+enum Lane {
+    // the lane kind doesn't actually matter since we're using MPSC
+    // but for other transports it would
+    #[lane_kind(ReliableOrdered)]
+    Default,
+}
+
+let mut server = ChannelServer::open();
+let mut client = ChannelClient::connect_new(&mut server);
+
+let msg = Bytes::from_static(b"hi!");
+client.send(msg, Lane::Default).unwrap();
+
+let ClientState::Connected(client_state) = client.state() else {
+    unreachable!();
+};
+let client_key = client_state.key;
+
+server.disconnect(client_key);
+```
+
+[`ChannelClient`]: client::ChannelClient
+[`ChannelServer`]: server::ChannelServer

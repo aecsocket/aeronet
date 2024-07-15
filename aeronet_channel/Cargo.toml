@@ -1,13 +1,14 @@
 [package]
-name = "aeronet_channel"
 description = "In-memory MPSC channel transport implementation for aeronet"
-version.workspace = true
-edition.workspace = true
+name = "aeronet_channel"
+
 authors.workspace = true
-repository.workspace = true
-keywords.workspace = true
 categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
 license.workspace = true
+repository.workspace = true
+version.workspace = true
 
 [lints]
 workspace = true
@@ -17,30 +18,32 @@ all-features = true
 
 [features]
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = [ "dep:bevy", "aeronet/bevy" ]
+bevy = ["dep:bevy_ecs", "aeronet/bevy"]
 
 [dependencies]
-aeronet.workspace = true
+aeronet = { workspace = true }
 
-derivative.workspace = true
-tracing.workspace = true
-thiserror.workspace = true
-slotmap.workspace = true
-crossbeam-channel.workspace = true
+bytes = { workspace = true }
+crossbeam-channel = { workspace = true }
+derivative = { workspace = true }
+either = { workspace = true }
+replace_with = { workspace = true }
+slotmap = { workspace = true }
+thiserror = { workspace = true }
 
-bevy = { workspace = true, optional = true }
+bevy_ecs = { workspace = true, optional = true }
 
 [dev-dependencies]
-bevy = { workspace = true, default-features = true }
-bevy_egui.workspace = true
-anyhow.workspace = true
-
-# [[example]]
-# name = "echo_plugin"
-# path = "examples/echo_plugin.rs"
-# required-features = [ "bevy" ]
+assert_matches = { workspace = true }
+bevy = { workspace = true }
+bevy_egui = { workspace = true }
 
 [[example]]
-name = "echo_manual"
-path = "examples/echo_manual.rs"
-required-features = [ "bevy" ]
+name = "echo"
+path = "examples/echo.rs"
+required-features = ["bevy"]
+
+[[example]]
+name = "echo_conditioned"
+path = "examples/echo_conditioned.rs"
+required-features = ["bevy", "aeronet/condition"]

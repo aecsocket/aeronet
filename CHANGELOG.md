@@ -1,6 +1,52 @@
+# 0.6.0
+
+* Removed the concept of protocols
+  * `u8`s and lanes are baked into the core `-Transport` traits, simplifying working with networked
+    transports
+  * Originally, the concept of bytes and lanes was abstracted out of the core API. However, this
+    made working with transports very tedious due to the extra protocol type parameter, and didn't
+    make much sense since only MPSC channels needed this abstraction
+  * Messages are just `bytes::Bytes` now
+* Removed the core aeronet client/server plugins
+  * Since we're now using bytes directly, it makes no sense to receive messages as events - the API
+    user is encouraged to own their own `Bytes` messages, which events don't let you do
+  * Users should use `transport.poll()` and `transport.flush()` manually in their own systems
+* Changed how conditioners work
+  * Instead of wrapping client/server types, they are now an additional value that you use - replace
+    `client.poll(..)` with `conditioner.poll(&mut client, ..)`
+  * This is because the user is now responsible for driving polling
+  * You don't have to replace all of your `ResMut<Client>` with `ResMut<ConditionedClient<Client>>`
+
+# 0.5.0
+
+* Complete overhaul of the crate (again)
+
+# 0.4.1
+
+* `TryIntoBytes` renamed to `TryAsBytes` since it doesn't consume `self`
+* Doc updates
+
 # 0.4.0
 
 Overhaul of basically the entire crate. Treat this as a completely new crate.
+
+What worked:
+* Using a finite state machine internally for the transport impls
+  * Makes it much easier to isolate logic and determine what happens when
+* Using a single `TransportProtocol` type parameter instead of `<C2S, S2C>`
+  * I originally had this in 0.1.0, but I wasn't experienced enough with the type system to
+    implement it properly
+  * Switching back to a single protocol type makes the API simpler for consumers
+* `ChannelKind` moved into `aeronet` core, as opposed to being WT-specific
+  * Reliability is a general-purpose feature which should be transport-agnostic, and channels are
+    perfect for this
+
+What didn't work:
+* Representing WT native clients as `Closed <-> (Open <-> Connected)` FSM
+  * Overly complicated state machine, made the logic confusing
+  * Not much benefit to the consumer
+* Exposing the internal FSM types to the user
+  * Complicated the API a lot, and how many users are going to be using the FSM directly?
 
 # 0.3.0
 
