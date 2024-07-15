@@ -50,24 +50,35 @@ To start establishing a connection, use `connect` or `connect_new` and pass your
 configuration (i.e. what URL to connect to, timeout duration).
 
 ```rust
+use std::future::Future;
+
 use bevy::prelude::*;
-use aeronet_webtransport::WebTransportClient;
+use aeronet_webtransport::client::{WebTransportClient, ClientConfig};
+use aeronet_webtransport::proto::session::SessionConfig;
 
 App::new()
     .init_resource::<WebTransportClient>()
     .add_systems(Startup, connect);
 
 fn connect(mut client: ResMut<WebTransportClient>) {
-    let config = create_client_config();
-    let backend = client.connect(config, "https://[::1]:1234").unwrap();
+    let net_config = create_net_config();
+    let session_config = create_session_config();
+    let backend = client.connect(
+      net_config,
+      session_config,
+      "https://[::1]:1234",
+    )
+    .unwrap();
     run_async_task(backend);
 }
 
 // this will change depending on whether you target native or WASM
-fn create_client_config() -> aeronet_webtransport::ClientConfig { todo!() }
+fn create_net_config() -> ClientConfig { todo!() }
+
+fn create_session_config() -> SessionConfig { todo!() }
 
 // use an async runtime like tokio or wasm_bindgen_futures for this
-fn run_async_task(f: impl std::future::Future) { todo!() }
+fn run_async_task(f: impl Future) { todo!() }
 ```
 
 ## Server
@@ -91,24 +102,29 @@ accept or reject the client.
   or not.
 
 ```rust
+use std::future::Future;
 
 use bevy::prelude::*;
-use aeronet_webtransport::WebTransportServer;
+use aeronet_webtransport::server::{WebTransportServer, ServerConfig};
+use aeronet_webtransport::proto::session::SessionConfig;
 
 App::new()
     .init_resource::<WebTransportServer>()
     .add_systems(Startup, open);
 
 fn open(mut server: ResMut<WebTransportServer>) {
-    let config = create_server_config();
-    let backend = server.open(config).unwrap();
+    let net_config = create_net_config();
+    let session_config = create_session_config();
+    let backend = server.open(net_config, session_config).unwrap();
     run_async_task(backend);
 }
 
-fn create_server_config() -> aeronet_webtransport::ServerConfig { todo!() }
+fn create_net_config() -> ServerConfig { todo!() }
+
+fn create_session_config() -> SessionConfig { todo!() }
 
 // use an async runtime like tokio for this
-fn run_async_task(f: impl std::future::Future) { todo!() }
+fn run_async_task(f: impl Future) { todo!() }
 ```
 
 [`aeronet_proto`]: https://docs.rs/aeronet_proto

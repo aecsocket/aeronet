@@ -52,25 +52,25 @@ impl Acknowledge {
     /// ```
     /// # use aeronet_proto::{ack::Acknowledge, packet::PacketSeq};
     /// let mut acks = Acknowledge::new();
-    /// acks.ack(PacketSeq::from(0));
-    /// assert!(acks.is_acked(PacketSeq::from(0)));
-    /// assert!(!acks.is_acked(PacketSeq::from(1)));
+    /// acks.ack(PacketSeq::new(0));
+    /// assert!(acks.is_acked(PacketSeq::new(0)));
+    /// assert!(!acks.is_acked(PacketSeq::new(1)));
     ///
-    /// acks.ack(PacketSeq::from(1));
-    /// assert!(acks.is_acked(PacketSeq::from(1)));
+    /// acks.ack(PacketSeq::new(1));
+    /// assert!(acks.is_acked(PacketSeq::new(1)));
     ///
-    /// acks.ack(PacketSeq::from(2));
-    /// assert!(acks.is_acked(PacketSeq::from(2)));
+    /// acks.ack(PacketSeq::new(2));
+    /// assert!(acks.is_acked(PacketSeq::new(2)));
     ///
-    /// acks.ack(PacketSeq::from(5));
-    /// assert!(acks.is_acked(PacketSeq::from(0)));
-    /// assert!(acks.is_acked(PacketSeq::from(1)));
-    /// assert!(acks.is_acked(PacketSeq::from(2)));
-    /// assert!(acks.is_acked(PacketSeq::from(5)));
+    /// acks.ack(PacketSeq::new(5));
+    /// assert!(acks.is_acked(PacketSeq::new(0)));
+    /// assert!(acks.is_acked(PacketSeq::new(1)));
+    /// assert!(acks.is_acked(PacketSeq::new(2)));
+    /// assert!(acks.is_acked(PacketSeq::new(5)));
     ///
     /// // acknowledgement is an idempotent operation
     /// let acks_clone = acks.clone();
-    /// acks.ack(PacketSeq::from(2));
+    /// acks.ack(PacketSeq::new(2));
     /// assert_eq!(acks, acks_clone);
     /// ```
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
@@ -107,19 +107,19 @@ impl Acknowledge {
     /// # Example
     ///
     /// ```
-    /// # use aeronet_proto::{ack::Acknowledge, seq::Seq};
+    /// # use aeronet_proto::{ack::Acknowledge, packet::PacketSeq};
     /// let mut acks = Acknowledge::new();
-    /// acks.ack(PacketSeq::from(1));
-    /// assert!(acks.is_acked(PacketSeq::from(1)));
+    /// acks.ack(PacketSeq::new(1));
+    /// assert!(acks.is_acked(PacketSeq::new(1)));
     ///
-    /// acks.ack(PacketSeq::from(2));
-    /// assert!(acks.is_acked(PacketSeq::from(1)));
-    /// assert!(acks.is_acked(PacketSeq::from(2)));
-    /// assert!(!acks.is_acked(PacketSeq::from(3)));
+    /// acks.ack(PacketSeq::new(2));
+    /// assert!(acks.is_acked(PacketSeq::new(1)));
+    /// assert!(acks.is_acked(PacketSeq::new(2)));
+    /// assert!(!acks.is_acked(PacketSeq::new(3)));
     ///
-    /// acks.ack(PacketSeq::from(50));
-    /// assert!(acks.is_acked(PacketSeq::from(50)));
-    /// assert!(!acks.is_acked(PacketSeq::from(10)));
+    /// acks.ack(PacketSeq::new(50));
+    /// assert!(acks.is_acked(PacketSeq::new(50)));
+    /// assert!(!acks.is_acked(PacketSeq::new(10)));
     /// ```
     #[must_use]
     pub fn is_acked(&self, seq: PacketSeq) -> bool {
@@ -139,19 +139,20 @@ impl Acknowledge {
         }
     }
 
-    /// Converts this into an iterator over all [`Seq`]s this header contains.
+    /// Converts this into an iterator over all [`PacketSeq`]s this header
+    /// contains.
     ///
     /// # Example
     ///
     /// ```
-    /// # use aeronet_proto::{seq::Seq, ack::Acknowledge};
+    /// # use aeronet_proto::{packet::PacketSeq, ack::Acknowledge};
     /// let acks = Acknowledge {
-    ///     last_recv: PacketSeq::from(50),
+    ///     last_recv: PacketSeq::new(50),
     ///     ack_bits: 0b0010010,
     /// };
     /// let mut iter = acks.seqs();
-    /// assert_eq!(PacketSeq::from(49), iter.next().unwrap());
-    /// assert_eq!(PacketSeq::from(46), iter.next().unwrap());
+    /// assert_eq!(PacketSeq::new(49), iter.next().unwrap());
+    /// assert_eq!(PacketSeq::new(46), iter.next().unwrap());
     /// assert_eq!(None, iter.next());
     /// ```
     #[inline]

@@ -81,11 +81,12 @@ impl FragmentSender {
         let max_frags = usize::from(MAX_FRAGS);
         let msg_len = msg.remaining();
         let iter = msg.byte_chunks(self.max_payload_len).enumerate().rev();
-        u8::try_from(iter.len()).map_err(|_| MessageTooBig {
-            len: msg_len,
-            max: max_frags * self.max_payload_len,
-        })?;
-        debug_assert!(iter.len() <= max_frags);
+        if iter.len() > max_frags {
+            return Err(MessageTooBig {
+                len: msg_len,
+                max: max_frags * self.max_payload_len,
+            });
+        }
 
         let last_index = iter.len() - 1;
         Ok(iter.map(move |(index, payload)| {
