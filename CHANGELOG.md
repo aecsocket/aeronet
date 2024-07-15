@@ -1,6 +1,5 @@
 # 0.6.0
 
-* Bevy 0.14
 * Removed the concept of protocols
   * `u8`s and lanes are baked into the core `-Transport` traits, simplifying working with networked
     transports

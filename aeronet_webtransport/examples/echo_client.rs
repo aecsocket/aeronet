@@ -1,17 +1,46 @@
+//! Example client using WebTransport which allows sending a string to a server
+//! and reading a string back.
+
 use aeronet::{
-    client::{client_connected, ClientEvent, ClientTransport},
+    client::{client_connected, ClientEvent, ClientState, ClientTransport},
     error::pretty_error,
-    lane::{LaneKey, LaneKind},
+    lane::{LaneIndex, LaneKind},
+    stats::MessageStats,
 };
 use aeronet_proto::session::{LaneConfig, SessionConfig};
 use aeronet_webtransport::client::{ClientConfig, WebTransportClient};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
-#[derive(Debug, Clone, Copy, LaneKey)]
-enum Lane {
-    #[lane_kind(ReliableOrdered)]
-    Default,
+#[cfg(not(target_family = "wasm"))]
+#[derive(Debug, Resource)]
+struct TokioRuntime(tokio::runtime::Runtime);
+
+#[cfg(not(target_family = "wasm"))]
+impl FromWorld for TokioRuntime {
+    fn from_world(_: &mut World) -> Self {
+        Self(
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AppLane;
+
+impl From<AppLane> for LaneIndex {
+    fn from(_: AppLane) -> Self {
+        Self::from_raw(0)
+    }
+}
+
+impl From<AppLane> for LaneConfig {
+    fn from(_: AppLane) -> Self {
+        Self::new(LaneKind::ReliableOrdered)
+    }
 }
 
 #[derive(Debug, Default, Resource)]
@@ -35,7 +64,7 @@ fn main() {
 
     #[cfg(not(target_family = "wasm"))]
     {
-        app.add_plugins(bevy_tokio_tasks::TokioTasksPlugin::default());
+        app.init_resource::<TokioRuntime>();
     }
 
     app.run();
@@ -53,22 +82,16 @@ fn client_config() -> ClientConfig {
     ClientConfig::builder()
         .with_bind_default()
         .with_no_cert_validation()
-        .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
         .unwrap()
         .build()
 }
 
 fn session_config() -> SessionConfig {
-    let lanes = vec![LaneConfig::new(LaneKind::ReliableOrdered)];
-    SessionConfig {
-        send_lanes: lanes.clone(),
-        recv_lanes: lanes,
-        default_packet_cap: 0,
-        max_packet_len: 1024,
-        send_bytes_per_sec: usize::MAX,
-        max_recv_memory_usage: usize::MAX,
-    }
+    // configure both the sending and receiving lanes
+    // we will buffer up to 4MB of the server's fragments at once
+    // TODO is 4MB a reasonable number?
+    SessionConfig::new(1024 * 1024 * 4).with_lanes([AppLane])
 }
 
 fn poll_client(
@@ -109,7 +132,7 @@ fn ui(
     mut egui: EguiContexts,
     mut ui_state: ResMut<UiState>,
     mut client: ResMut<WebTransportClient>,
-    #[cfg(not(target_family = "wasm"))] rt: Res<bevy_tokio_tasks::TokioTasksRuntime>,
+    #[cfg(not(target_family = "wasm"))] rt: Res<TokioRuntime>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -156,7 +179,7 @@ fn ui(
                     }
                     #[cfg(not(target_family = "wasm"))]
                     {
-                        rt.runtime().spawn(backend);
+                        rt.0.spawn(backend);
                     }
                 }
                 Err(err) => {
@@ -179,11 +202,43 @@ fn ui(
             ui.memory_mut(|m| m.request_focus(msg_resp.id));
             let msg = std::mem::take(&mut ui_state.msg);
             ui_state.log.push(format!("< {msg}"));
-            if let Err(err) = client.send(msg, Lane::Default) {
+            if let Err(err) = client.send(msg, AppLane) {
                 ui_state
                     .log
                     .push(format!("Failed to send message: {:#}", pretty_error(&err)));
             }
+        }
+
+        if let ClientState::Connected(client) = client.state() {
+            egui::Grid::new("meta").num_columns(2).show(ui, |ui| {
+                ui.label("Local/remote addr");
+                ui.label(format!("{} / {}", client.local_addr, client.remote_addr));
+                ui.end_row();
+
+                ui.label("RTT");
+                ui.label(format!("{:?}", client.rtt));
+                ui.end_row();
+
+                ui.label("Bytes sent/recv");
+                ui.label(format!("{} / {}", client.bytes_sent(), client.bytes_recv()));
+                ui.end_row();
+
+                ui.label("Bytes left / cap");
+                ui.label(format!(
+                    "{} / {}",
+                    client.session.bytes_left().get(),
+                    client.session.bytes_left().cap()
+                ));
+                ui.end_row();
+
+                ui.label("MTU min / current");
+                ui.label(format!(
+                    "{} / {}",
+                    client.session.min_mtu(),
+                    client.session.mtu()
+                ));
+                ui.end_row();
+            });
         }
 
         egui::ScrollArea::vertical().show(ui, |ui| {

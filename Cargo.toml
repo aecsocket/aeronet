@@ -75,13 +75,14 @@ web-time = "1.1.0"
 
 # bevy
 
-bevy = "0.14.0"
-bevy-tokio-tasks = "0.14.0"
-bevy_app = { version = "0.14.0", default-features = false }
-bevy_ecs = { version = "0.14.0", default-features = false }
-bevy_egui = "0.28.0"
-bevy_replicon = "0.27.0"
-bevy_time = { version = "0.14.0", default-features = false }
+bevy = "0.13.2"
+bevy_app = { version = "0.13.2", default-features = false }
+bevy_ecs = { version = "0.13.2", default-features = false }
+bevy_time = { version = "0.13.2", default-features = false }
+
+# bevy-tokio-tasks = "0.14.0"
+bevy_egui = "0.27.1"
+bevy_replicon = "0.26.3"
 
 # aeronet_derive
 

@@ -4,7 +4,7 @@
 use aeronet::{
     client::{ClientEvent, ClientTransport},
     error::pretty_error,
-    lane::LaneKey,
+    lane::LaneIndex,
     server::{ServerEvent, ServerTransport},
 };
 use aeronet_channel::{client::ChannelClient, server::ChannelServer};
@@ -12,13 +12,22 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bytes::Bytes;
 
-#[derive(Debug, Clone, Copy, LaneKey)]
-enum Lane {
-    // the lane kind doesn't actually matter since we're using MPSC
-    // but for other transports it would
-    #[lane_kind(ReliableOrdered)]
-    Default,
+// define what lanes our app will use
+// we're writing a very simple example, so we'll only use a single lane,
+// but your app will probably need more
+
+#[derive(Debug, Clone, Copy)]
+struct AppLane;
+
+// implement `Into<LaneIndex>` for your type so that you can pass it directly
+// into `send`
+impl From<AppLane> for LaneIndex {
+    fn from(_: AppLane) -> Self {
+        Self::from_raw(0)
+    }
 }
+
+// some helper structs to display a UI
 
 #[derive(Debug, Default, Resource)]
 struct ClientUiState {
@@ -114,7 +123,7 @@ fn client_ui(
                     }
 
                     ui_state.log.push(format!("< {msg}"));
-                    let _ = client.send(msg, Lane::Default);
+                    let _ = client.send(msg, AppLane);
                 })();
             }
 
@@ -169,7 +178,7 @@ fn server_poll(
     }
 
     for (client_key, msg) in to_send {
-        let _ = server.send(client_key, Bytes::from(msg), Lane::Default);
+        let _ = server.send(client_key, Bytes::from(msg), AppLane);
     }
 }
 

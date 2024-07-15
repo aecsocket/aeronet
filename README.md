@@ -195,6 +195,12 @@ for event in client.poll(delta_time) {
 # }
 ```
 
+# Bevy support
+
+| `bevy` | `aeronet` |
+|--------|-----------|
+| 0.13   | 0.6       |
+
 [`Bytes`]: bytes::Bytes
 [`LaneKind`]: lane::LaneKind
 [`LaneIndex`]: lane::LaneIndex

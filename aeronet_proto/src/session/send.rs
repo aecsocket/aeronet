@@ -134,14 +134,17 @@ impl Session {
             // this iteration, we want to build up one full packet
 
             // make a buffer for the packet
-            // NOTE: we don't use `max_packet_len`, because that might be a big length
+            // note: we may want to preallocate some memory for this,
+            // and have it be user-configurable, but I don't want to overcomplicate
+            // the SessionConfig.
+            // also, we don't preallocate `mtu` bytes, because that might be a big length
             // e.g. Steamworks already fragments messages, so we don't fragment messages
-            // ourselves, leading to very large `max_packet_len`s (~512KiB)
-            let mut packet = BytesMut::with_capacity(self.default_packet_cap);
+            // ourselves, leading to very large `mtu`s (~512KiB)
+            let mut packet = BytesMut::new();
 
-            // we can't put more than either `max_packet_len` or `bytes_left`
+            // we can't put more than either `mtu` or `bytes_left`
             // bytes into this packet, so we track this as well
-            let mut bytes_left = (&mut self.bytes_left).min_of(self.max_packet_len);
+            let mut bytes_left = (&mut self.bytes_left).min_of(self.mtu);
             let packet_seq = self.next_packet_seq;
             bytes_left.consume(PacketHeader::ENCODE_LEN).ok()?;
             packet
@@ -202,20 +205,25 @@ impl Session {
                 }
             }
 
-            if frags.is_empty() {
-                // we couldn't write any fragments - no more packets to send
+            let should_send_keep_alive = now >= self.next_keep_alive_at;
+            if frags.is_empty() && !should_send_keep_alive {
                 None
             } else {
-                // we wrote at least one fragment - we can send this packet
-                // and track what fragments we're sending in this packet
                 self.next_packet_seq += PacketSeq::new(1);
+
+                // track what fragments we're sending in this packet
                 self.flushed_packets.insert(
                     packet_seq,
                     FlushedPacket {
                         frags: frags.into_boxed_slice(),
                     },
                 );
-                Some(packet.freeze())
+                let packet = packet.freeze();
+
+                self.bytes_sent = self.bytes_sent.saturating_add(packet.len());
+                self.next_keep_alive_at = now + self.keep_alive_interval;
+
+                Some(packet)
             }
         })
     }

@@ -39,6 +39,33 @@ potential attack vectors:
 ///
 /// To use the aeronet protocol, this is the main type you should be interacting
 /// with when receiving or sending out byte messages.
+///
+/// # MTU
+///
+/// When dealing with individual packets, we have to be careful of the MTU
+/// (maximum transmissible unit) of the underlying connection. If we send a
+/// packet which is too large, then peers along our route will likely drop it.
+/// Therefore, we break large messages down into smaller fragments and send
+/// those over instead.
+///
+/// - The maximum length of a fragment is `min_mtu` minus some packet overhead
+/// - `min_mtu` must be at least [`OVERHEAD`] bytes
+/// - This remains constant for the whole session
+/// - Both sides must use the exact same `min_mtu`
+/// - It is recommended to use a compile-time constant for `min_mtu`
+///
+/// However, while the connection is active, the path MTU may change. If so,
+/// we would like to adapt the session to make the most of this new MTU.
+/// This means that the maximum packet length increases, and we can send
+/// more fragments out in a single packet (remember, though, that we can't
+/// make the fragments themselves larger).
+///
+/// - The maximum length of a packet is defined by `initial_mtu`
+/// - You may change this during the lifetime of the session by using
+///   [`Session::set_mtu`]
+/// - Both sides may have a different MTU
+/// - The MTU must always be greater than or equal to `min_mtu`, otherwise you
+///   get [`MtuTooSmall`]
 #[derive(Debug)]
 pub struct Session {
     /// Stores messages which have been sent using [`Session::send`], but still
@@ -82,10 +109,10 @@ pub struct Session {
     send_frags: FragmentSender,
     /// Outgoing lane state.
     send_lanes: Box<[SendLane]>,
-    /// Default byte buffer capacity to allocate when flushing packets.
-    default_packet_cap: usize,
-    /// Maximum length of a single flushed packet.
-    max_packet_len: usize,
+    /// Minimum MTU as defined in [`Session::new`].
+    min_mtu: usize,
+    /// Maximum length of a single flushed packet (maximum transmissible unit).
+    mtu: usize,
     /// Tracks how many bytes remaining we have to send to our peer.
     ///
     /// This should be filled up by the user using [`Session::refill_bytes`].
@@ -94,6 +121,12 @@ pub struct Session {
     next_msg_seq: MessageSeq,
     /// Next outgoing packet sequence.
     next_packet_seq: PacketSeq,
+    /// When we should send the next keep-alive packet.
+    next_keep_alive_at: Instant,
+    /// See [`SessionConfig::keep_alive_interval`].
+    keep_alive_interval: Duration,
+    /// Total number of bytes sent.
+    bytes_sent: usize,
 
     // recv
     /// Incoming lane state.
@@ -120,43 +153,27 @@ pub struct Session {
     /// Maximum number of bytes that `recv_frags` is allowed to use to buffer
     /// incomplete messages.
     recv_frags_cap: usize,
+    /// Total number of bytes received.
+    bytes_recv: usize,
 }
 
 /// Configuration for a [`Session`].
+///
+/// Not all session-specific configurations are exposed here. Transport-specific
+/// settings such as maximum packet length are not exposed to users, and are
+/// instead set directly when calling [`Session::new`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionConfig {
     /// Configurations for the lanes which can be used to send out data.
     pub send_lanes: Vec<LaneConfig>,
     /// Configurations for the lanes which can be used to receive data.
     pub recv_lanes: Vec<LaneConfig>,
-    /// Default packet capacity for new packets created in [`Session::flush`].
-    ///
-    /// When we start building up a packet to flush out, we may pre-allocate
-    /// some space for the bytes. This value determines how many bytes we
-    /// pre-allocate.
-    ///
-    /// You may keep this at 0 as a reasonable default.
-    pub default_packet_cap: usize,
-    /// Maximum length of a packet that is returned in [`Session::flush`].
-    ///
-    /// Often, transports may set a hard limit on how long packets may be (e.g.
-    /// if a UDP datagram is too large, peers may just drop the datagram
-    /// entirely). To get around this, you may set a hard limit on the size of
-    /// a packet, and the [`Session`] will never produce packets larger than
-    /// this size.
-    ///
-    /// If a transport can accurately identify the maximum size of a packet that
-    /// it can send, it should use that value here, and override any user-given
-    /// value.
-    pub max_packet_len: usize,
-    /// How many total bytes we can [`Session::flush`] out per second.
-    ///
-    /// When flushing, if we do not have enough bytes to send out any more
-    /// packets, we will stop returning any packets. You must remember to call
-    /// [`Session::refill_bytes`] in your update loop to refill this!
-    pub send_bytes_per_sec: usize,
     /// Maximum number of bytes of memory which can be used for receiving
     /// fragments from the peer.
+    ///
+    /// The default is 0. You **must** either use [`SessionConfig::new`] or
+    /// override this value explicitly, otherwise your session will always
+    /// error with [`OutOfMemory`] when [`Session::recv`]'ing!
     ///
     /// A malicious peer may send us an infinite amount of fragments which
     /// never get fully reassembled, leaving us having to buffer up all of their
@@ -169,6 +186,26 @@ pub struct SessionConfig {
     /// amount of bytes when receiving fragments, the connection will be
     /// forcibly reset by emitting an [`OutOfMemory`].
     pub max_recv_memory_usage: usize,
+    /// How many total bytes we can [`Session::flush`] out per second.
+    ///
+    /// This value is [`usize::MAX`] by default.
+    ///
+    /// When flushing, if we do not have enough bytes to send out any more
+    /// packets, we will stop returning any packets. You must remember to call
+    /// [`Session::refill_bytes`] in your update loop to refill this!
+    pub send_bytes_per_sec: usize,
+    /// How long to wait since sending the last packet until we send an empty
+    /// keep-alive packet.
+    ///
+    /// Even if we've got no messages to transmit, we need to send packets to
+    /// the peer regularly because:
+    /// - we need to keep the underlying connection alive
+    /// - we need to transmit packet acknowledgements
+    ///
+    /// This means that any transport-specific keep-alive mechanism should be
+    /// disabled, since the [`Session`] will handle it.
+    // TODO can this interval be automated?
+    pub keep_alive_interval: Duration,
 }
 
 impl Default for SessionConfig {
@@ -176,11 +213,71 @@ impl Default for SessionConfig {
         Self {
             send_lanes: Vec::new(),
             recv_lanes: Vec::new(),
-            default_packet_cap: 0,
-            max_packet_len: 1024,
+            max_recv_memory_usage: 0,
             send_bytes_per_sec: usize::MAX,
-            max_recv_memory_usage: usize::MAX,
+            keep_alive_interval: Duration::from_millis(500),
         }
+    }
+}
+
+impl SessionConfig {
+    /// Creates a new configuration with the default values set, apart from
+    /// [`SessionConfig::max_recv_memory_usage`], which must be manually
+    /// defined.
+    #[must_use]
+    pub fn new(max_recv_memory_usage: usize) -> Self {
+        Self {
+            max_recv_memory_usage,
+            ..Default::default()
+        }
+    }
+
+    /// Adds the given lanes to this configuration's
+    /// [`SessionConfig::send_lanes`].
+    ///
+    /// You can implement `From<LaneConfig> for [your own type]` to use it as
+    /// the item in this iterator.
+    #[must_use]
+    pub fn with_send_lanes(
+        mut self,
+        lanes: impl IntoIterator<Item = impl Into<LaneConfig>>,
+    ) -> Self {
+        self.send_lanes.extend(lanes.into_iter().map(Into::into));
+        self
+    }
+
+    /// Adds the given lanes to this configuration's
+    /// [`SessionConfig::recv_lanes`].
+    ///
+    /// You can implement `From<LaneConfig> for [your own type]` to use it as
+    /// the item in this iterator.
+    #[must_use]
+    pub fn with_recv_lanes(
+        mut self,
+        lanes: impl IntoIterator<Item = impl Into<LaneConfig>>,
+    ) -> Self {
+        self.recv_lanes.extend(lanes.into_iter().map(Into::into));
+        self
+    }
+
+    /// Adds the given lanes to this configuration's
+    /// [`SessionConfig::send_lanes`] and [`SessionConfig::recv_lanes`].
+    ///
+    /// You can implement `From<LaneConfig> for [your own type]` to use it as
+    /// the item in this iterator.
+    #[must_use]
+    pub fn with_lanes(mut self, lanes: impl IntoIterator<Item = impl Into<LaneConfig>>) -> Self {
+        let lanes = lanes.into_iter().map(Into::into).collect::<Vec<_>>();
+        self.send_lanes.extend(lanes.iter().cloned());
+        self.recv_lanes.extend(lanes.iter().cloned());
+        self
+    }
+
+    /// Sets [`SessionConfig::send_bytes_per_sec`] on this value.
+    #[must_use]
+    pub fn with_send_bytes_per_sec(mut self, send_bytes_per_sec: usize) -> Self {
+        self.send_bytes_per_sec = send_bytes_per_sec;
+        self
     }
 }
 
@@ -279,6 +376,18 @@ pub enum RecvError {
 #[error("out of memory")]
 pub struct OutOfMemory;
 
+/// Attempted to set the [`Session`]'s MTU to a value below the minimum MTU.
+///
+/// See [`Session`] for an explanation of how MTU works.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("MTU of {mtu} is too small (min {min})")]
+pub struct MtuTooSmall {
+    /// Minimum MTU.
+    pub min: usize,
+    /// MTU value that you attempted to set.
+    pub mtu: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct FragmentPath {
     msg_seq: MessageSeq,
@@ -332,24 +441,45 @@ enum RecvLane {
     },
 }
 
-/// Minimum length of a packet emitted by [`Session::flush`].
-pub const MIN_PACKET_LEN: usize = PacketHeader::ENCODE_LEN + FragmentHeader::ENCODE_LEN + 1;
+/// Minimum number of bytes of overhead in a packet produced by
+/// [`Session::flush`].
+pub const OVERHEAD: usize = PacketHeader::ENCODE_LEN + FragmentHeader::ENCODE_LEN + 1;
 
 impl Session {
     /// Creates a new session from the given configuration.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if [`SessionConfig::max_packet_len`] is less than
-    /// [`MIN_PACKET_LEN`].
+    /// Errors if `min_mtu` or `initial_mtu` are too small.
+    ///
+    /// See [`Session`].
     #[must_use]
-    pub fn new(config: SessionConfig) -> Self {
-        assert!(config.max_packet_len >= MIN_PACKET_LEN);
-        let max_payload_len = config.max_packet_len - MIN_PACKET_LEN;
-        Self {
+    pub fn new(
+        now: Instant,
+        config: SessionConfig,
+        min_mtu: usize,
+        initial_mtu: usize,
+    ) -> Result<Self, MtuTooSmall> {
+        if min_mtu < OVERHEAD {
+            return Err(MtuTooSmall {
+                min: OVERHEAD,
+                mtu: min_mtu,
+            });
+        }
+        if initial_mtu < min_mtu {
+            return Err(MtuTooSmall {
+                min: min_mtu,
+                mtu: initial_mtu,
+            });
+        }
+
+        let max_payload_len = min_mtu - OVERHEAD;
+        Ok(Self {
             sent_msgs: AHashMap::new(),
             flushed_packets: AHashMap::new(),
             acks: Acknowledge::new(),
+
+            // send
             send_frags: FragmentSender::new(max_payload_len),
             send_lanes: config
                 .send_lanes
@@ -368,11 +498,16 @@ impl Session {
                     },
                 })
                 .collect(),
-            default_packet_cap: config.default_packet_cap,
-            max_packet_len: config.max_packet_len,
+            min_mtu,
+            mtu: initial_mtu,
             bytes_left: ByteBucket::new(config.send_bytes_per_sec),
             next_msg_seq: MessageSeq::default(),
             next_packet_seq: PacketSeq::default(),
+            next_keep_alive_at: now,
+            keep_alive_interval: config.keep_alive_interval,
+            bytes_sent: 0,
+
+            // recv
             recv_lanes: config
                 .recv_lanes
                 .into_iter()
@@ -393,7 +528,26 @@ impl Session {
                 .collect(),
             recv_frags: FragmentReceiver::new(max_payload_len),
             recv_frags_cap: config.max_recv_memory_usage,
-        }
+            bytes_recv: 0,
+        })
+    }
+
+    /// Gets the nubmer of bytes sent over the lifetime of this session.
+    ///
+    /// When calling [`Session::flush`], the length of each packet returned is
+    /// added to this value.
+    #[must_use]
+    pub const fn bytes_sent(&self) -> usize {
+        self.bytes_sent
+    }
+
+    /// Gets the nubmer of bytes received over the lifetime of this session.
+    ///
+    /// When calling [`Session::recv`], the length of the packet is added to
+    /// this value.
+    #[must_use]
+    pub const fn bytes_recv(&self) -> usize {
+        self.bytes_recv
     }
 
     /// Gets the [`ByteBucket`] used to track how many bytes we have left for
@@ -408,6 +562,37 @@ impl Session {
     pub const fn send_lanes(&self) -> &[SendLane] {
         &self.send_lanes
     }
+
+    /// Gets the minimum MTU.
+    #[must_use]
+    pub const fn min_mtu(&self) -> usize {
+        self.min_mtu
+    }
+
+    /// Gets the current MTU.
+    #[must_use]
+    pub const fn mtu(&self) -> usize {
+        self.mtu
+    }
+
+    /// Sets the MTU of this session.
+    ///
+    /// See [`Session`] for an explanation of MTU values.
+    ///
+    /// # Errors
+    ///
+    /// Errors if `mtu` is less than `min_mtu` as defined on creation.
+    pub fn set_mtu(&mut self, mtu: usize) -> Result<(), MtuTooSmall> {
+        if mtu < self.min_mtu {
+            Err(MtuTooSmall {
+                min: self.min_mtu,
+                mtu,
+            })
+        } else {
+            self.mtu = mtu;
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -417,15 +602,7 @@ mod tests {
     const LOW_PRIO: LaneIndex = LaneIndex::from_raw(0);
 
     fn config() -> SessionConfig {
-        let lanes = vec![LaneConfig::new(LaneKind::UnreliableUnordered)];
-        SessionConfig {
-            send_lanes: lanes.clone(),
-            recv_lanes: lanes,
-            default_packet_cap: 0,
-            max_packet_len: 30,
-            send_bytes_per_sec: usize::MAX,
-            max_recv_memory_usage: usize::MAX,
-        }
+        SessionConfig::new(usize::MAX).with_lanes([LaneConfig::new(LaneKind::UnreliableUnordered)])
     }
 
     fn now() -> Instant {
@@ -436,7 +613,7 @@ mod tests {
 
     #[test]
     fn round_trip() {
-        let mut session = Session::new(config());
+        let mut session = Session::new(now(), config(), 30, 30).unwrap();
 
         println!("{}", session.bytes_left.get());
         // session.send(now(), b"hi", LOW_PRIO).unwrap();

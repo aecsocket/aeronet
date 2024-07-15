@@ -13,7 +13,7 @@ use aeronet::{
     server::ServerState,
     stats::{MessageStats, RemoteAddr, Rtt},
 };
-use aeronet_proto::session::{OutOfMemory, SendError, Session, SessionConfig};
+use aeronet_proto::session::{MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
@@ -21,7 +21,7 @@ use slotmap::SlotMap;
 use web_time::Duration;
 use wtransport::error::ConnectionError;
 
-use crate::internal;
+use crate::internal::{self, ConnectionMeta};
 
 pub type ServerConfig = wtransport::ServerConfig;
 
@@ -74,6 +74,10 @@ pub enum ServerError {
     AwaitSessionRequest(#[source] ConnectionError),
     #[error("failed to accept session request")]
     AcceptSessionRequest(#[source] ConnectionError),
+    #[error("datagrams are not supported on this peer")]
+    DatagramsNotSupported,
+    #[error("connection MTU too small")]
+    MtuTooSmall(#[source] MtuTooSmall),
     #[error("server forced disconnect")]
     ForceDisconnect,
 
@@ -98,7 +102,6 @@ impl Display for ClientKey {
 pub struct Opening {
     recv_open: oneshot::Receiver<ToOpen>,
     recv_err: oneshot::Receiver<ServerError>,
-    session_config: SessionConfig,
 }
 
 #[derive(Debug)]
@@ -111,7 +114,6 @@ struct ToOpen {
 #[derive(Debug)]
 pub struct Open {
     pub local_addr: SocketAddr,
-    session_config: SessionConfig,
     recv_connecting: mpsc::Receiver<ToConnecting>,
     clients: SlotMap<ClientKey, Client>,
     _send_closed: oneshot::Sender<()>,
@@ -148,22 +150,22 @@ pub struct Connecting {
 struct ToConnected {
     remote_addr: SocketAddr,
     initial_rtt: Duration,
-    recv_rtt: mpsc::Receiver<Duration>,
+    initial_max_datagram_len: usize,
+    recv_meta: mpsc::Receiver<ConnectionMeta>,
     recv_c2s: mpsc::Receiver<Bytes>,
     send_s2c: mpsc::UnboundedSender<Bytes>,
+    session: Session,
 }
 
 #[derive(Debug)]
 pub struct Connected {
     pub remote_addr: SocketAddr,
     pub rtt: Duration,
-    pub bytes_sent: usize,
-    pub bytes_recv: usize,
+    pub session: Session,
     recv_err: oneshot::Receiver<ServerError>,
-    recv_rtt: mpsc::Receiver<Duration>,
+    recv_meta: mpsc::Receiver<ConnectionMeta>,
     recv_c2s: mpsc::Receiver<Bytes>,
     send_s2c: mpsc::UnboundedSender<Bytes>,
-    session: Session,
 }
 
 impl Rtt for Connected {
@@ -174,11 +176,11 @@ impl Rtt for Connected {
 
 impl MessageStats for Connected {
     fn bytes_sent(&self) -> usize {
-        self.bytes_sent
+        self.session.bytes_sent()
     }
 
     fn bytes_recv(&self) -> usize {
-        self.bytes_recv
+        self.session.bytes_recv()
     }
 }
 

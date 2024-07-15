@@ -1,3 +1,4 @@
+use aeronet_proto::session::{Session, SessionConfig};
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
@@ -5,15 +6,19 @@ use futures::{
     FutureExt,
 };
 use tracing::debug;
-use web_time::Duration;
+use web_time::Instant;
 use xwt_core::prelude::*;
 
-use crate::{client::ToConnected, internal};
+use crate::{
+    client::ToConnected,
+    internal::{self, ConnectionMeta, MIN_MTU},
+};
 
 use super::{ClientConfig, ClientError};
 
 pub async fn start(
-    config: ClientConfig,
+    net_config: ClientConfig,
+    session_config: SessionConfig,
     target: String,
     send_connected: oneshot::Sender<ToConnected>,
 ) -> Result<Never, ClientError> {
@@ -21,13 +26,14 @@ pub async fn start(
         #[cfg(target_family = "wasm")]
         {
             Ok(xwt_web_sys::Endpoint {
-                options: config.to_js(),
+                options: net_config.to_js(),
             })
         }
 
         #[cfg(not(target_family = "wasm"))]
         {
-            let raw = wtransport::Endpoint::client(config).map_err(ClientError::CreateEndpoint)?;
+            let raw =
+                wtransport::Endpoint::client(net_config).map_err(ClientError::CreateEndpoint)?;
             Ok(xwt_wtransport::Endpoint(raw))
         }
     }?;
@@ -41,11 +47,13 @@ pub async fn start(
         .await
         .map_err(|err| ClientError::AwaitConnect(err.into()))?;
 
-    if !internal::supports_datagrams(&conn) {
+    let Some(mtu) = internal::get_mtu(&conn) else {
         return Err(ClientError::DatagramsNotSupported);
-    }
+    };
+    let session = Session::new(Instant::now(), session_config, MIN_MTU, mtu)
+        .map_err(ClientError::MtuTooSmall)?;
 
-    let (send_rtt, recv_rtt) = mpsc::channel::<Duration>(1);
+    let (send_meta, recv_meta) = mpsc::channel::<ConnectionMeta>(1);
     let (send_c2s, recv_c2s) = mpsc::unbounded::<Bytes>();
     let (send_s2c, recv_s2c) = mpsc::channel::<Bytes>(internal::MSG_BUF_CAP);
     send_connected
@@ -54,10 +62,12 @@ pub async fn start(
             local_addr: endpoint.0.local_addr().map_err(ClientError::GetLocalAddr)?,
             #[cfg(not(target_family = "wasm"))]
             remote_addr: conn.0.remote_address(),
-            initial_rtt: internal::rtt_of(&conn),
-            recv_rtt,
+            initial_rtt: internal::get_rtt(&conn),
+            initial_mtu: mtu,
+            recv_meta,
             send_c2s,
             recv_s2c,
+            session,
         })
         .map_err(|_| ClientError::FrontendClosed)?;
 
@@ -66,7 +76,7 @@ pub async fn start(
     // which loop infinitely independently, and wait for the first one to fail
     let send_loop = internal::send_loop(&conn, recv_c2s);
     let recv_loop = internal::recv_loop(&conn, send_s2c);
-    let update_rtt_loop = internal::update_rtt_loop(&conn, send_rtt);
+    let update_rtt_loop = internal::update_meta(&conn, send_meta);
     futures::select! {
         r = send_loop.fuse() => r,
         r = recv_loop.fuse() => r,
@@ -76,5 +86,6 @@ pub async fn start(
         internal::Error::FrontendClosed => ClientError::FrontendClosed,
         internal::Error::ConnectionLost(err) => ClientError::ConnectionLost(err.into()),
         internal::Error::SendDatagram(err) => ClientError::SendDatagram(err.into()),
+        internal::Error::DatagramsNotSupported => ClientError::DatagramsNotSupported,
     })
 }

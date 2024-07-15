@@ -7,11 +7,13 @@ use aeronet::{
     client::ClientState,
     stats::{MessageStats, Rtt},
 };
-use aeronet_proto::session::{OutOfMemory, SendError, Session, SessionConfig};
+use aeronet_proto::session::{MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use web_time::Duration;
+
+use crate::internal::ConnectionMeta;
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
@@ -73,6 +75,8 @@ pub enum ClientError {
     AwaitConnect(#[source] AwaitConnectError),
     #[error("datagrams are not supported on this peer")]
     DatagramsNotSupported,
+    #[error("connection MTU too small")]
+    MtuTooSmall(#[source] MtuTooSmall),
     #[error("failed to get endpoint local address")]
     GetLocalAddr(#[source] io::Error),
 
@@ -87,7 +91,6 @@ pub enum ClientError {
 pub struct Connecting {
     recv_connected: oneshot::Receiver<ToConnected>,
     recv_err: oneshot::Receiver<ClientError>,
-    session_config: SessionConfig,
 }
 
 #[derive(Debug)]
@@ -97,9 +100,11 @@ struct ToConnected {
     #[cfg(not(target_family = "wasm"))]
     remote_addr: SocketAddr,
     initial_rtt: Duration,
-    recv_rtt: mpsc::Receiver<Duration>,
+    initial_mtu: usize,
+    recv_meta: mpsc::Receiver<ConnectionMeta>,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
+    session: Session,
 }
 
 #[derive(Debug)]
@@ -109,13 +114,11 @@ pub struct Connected {
     #[cfg(not(target_family = "wasm"))]
     pub remote_addr: SocketAddr,
     pub rtt: Duration,
-    pub bytes_sent: usize,
-    pub bytes_recv: usize,
+    pub session: Session,
     recv_err: oneshot::Receiver<ClientError>,
+    recv_meta: mpsc::Receiver<ConnectionMeta>,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
-    recv_rtt: mpsc::Receiver<Duration>,
-    session: Session,
 }
 
 impl Rtt for Connected {
@@ -126,11 +129,11 @@ impl Rtt for Connected {
 
 impl MessageStats for Connected {
     fn bytes_sent(&self) -> usize {
-        self.bytes_sent
+        self.session.bytes_sent()
     }
 
     fn bytes_recv(&self) -> usize {
-        self.bytes_recv
+        self.session.bytes_recv()
     }
 }
 

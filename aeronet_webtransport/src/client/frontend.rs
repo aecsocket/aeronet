@@ -5,7 +5,7 @@ use aeronet::{
     error::pretty_error,
     lane::LaneIndex,
 };
-use aeronet_proto::session::{Session, SessionConfig};
+use aeronet_proto::session::SessionConfig;
 use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot;
@@ -51,11 +51,10 @@ impl WebTransportClient {
             state: State::Connecting(Connecting {
                 recv_connected,
                 recv_err,
-                session_config,
             }),
         };
         let backend = async move {
-            match backend::start(net_config, target, send_connected).await {
+            match backend::start(net_config, session_config, target, send_connected).await {
                 Err(ClientError::FrontendClosed) => {
                     debug!("Client disconnected");
                 }
@@ -165,13 +164,11 @@ impl WebTransportClient {
                     #[cfg(not(target_family = "wasm"))]
                     remote_addr: next.remote_addr,
                     rtt: next.initial_rtt,
-                    bytes_sent: 0,
-                    bytes_recv: 0,
+                    session: next.session,
                     recv_err: client.recv_err,
-                    recv_rtt: next.recv_rtt,
+                    recv_meta: next.recv_meta,
                     send_c2s: next.send_c2s,
                     recv_s2c: next.recv_s2c,
-                    session: Session::new(client.session_config),
                 }),
             ),
             Err(_) => (
@@ -197,8 +194,12 @@ impl WebTransportClient {
                 return Err(err);
             }
 
-            while let Ok(Some(rtt)) = client.recv_rtt.try_next() {
-                client.rtt = rtt;
+            while let Ok(Some(meta)) = client.recv_meta.try_next() {
+                client.rtt = meta.rtt;
+                client
+                    .session
+                    .set_mtu(meta.mtu)
+                    .map_err(ClientError::MtuTooSmall)?;
             }
 
             client.session.refill_bytes(delta_time);

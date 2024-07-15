@@ -12,7 +12,7 @@ use either::Either;
 use futures::channel::oneshot;
 use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
 use slotmap::SlotMap;
-use tracing::debug;
+use tracing::{debug, info};
 use web_time::{Duration, Instant};
 
 use crate::shared::MessageKey;
@@ -50,11 +50,10 @@ impl WebTransportServer {
             state: State::Opening(Opening {
                 recv_open,
                 recv_err,
-                session_config,
             }),
         };
         let backend = async move {
-            if let Err(err) = backend::start(net_config, send_open).await {
+            if let Err(err) = backend::start(net_config, session_config, send_open).await {
                 let _ = send_err.send(err);
             }
         };
@@ -220,7 +219,6 @@ impl WebTransportServer {
                 Some(ServerEvent::Opened),
                 State::Open(Open {
                     local_addr: next.local_addr,
-                    session_config: server.session_config,
                     recv_connecting: next.recv_connecting,
                     clients: SlotMap::default(),
                     _send_closed: next.send_closed,
@@ -257,12 +255,9 @@ impl WebTransportServer {
             for (client_key, client) in &mut server.clients {
                 replace_with_or_abort(client, |client_state| match client_state {
                     Client::Disconnected => ClientState::Disconnected,
-                    Client::Connecting(client) => Self::poll_connecting(
-                        client_key,
-                        client,
-                        &mut events,
-                        server.session_config.clone(),
-                    ),
+                    Client::Connecting(client) => {
+                        Self::poll_connecting(client_key, client, &mut events)
+                    }
                     Client::Connected(client) => {
                         Self::poll_connected(client_key, client, &mut events, delta_time)
                     }
@@ -289,7 +284,6 @@ impl WebTransportServer {
         client_key: ClientKey,
         mut client: Connecting,
         events: &mut Vec<ServerEvent<Self>>,
-        session_config: SessionConfig,
     ) -> Client {
         let res = (|| {
             if let Some(err) = client
@@ -305,13 +299,11 @@ impl WebTransportServer {
                 Ok(Client::Connected(Connected {
                     remote_addr: next.remote_addr,
                     rtt: next.initial_rtt,
-                    bytes_sent: 0,
-                    bytes_recv: 0,
+                    session: next.session,
                     recv_err: client.recv_err,
-                    recv_rtt: next.recv_rtt,
+                    recv_meta: next.recv_meta,
                     recv_c2s: next.recv_c2s,
                     send_s2c: next.send_s2c,
-                    session: Session::new(session_config),
                 }))
             } else {
                 Ok(Client::Connecting(client))
@@ -342,8 +334,12 @@ impl WebTransportServer {
                 return Err(err);
             }
 
-            while let Ok(Some(rtt)) = client.recv_rtt.try_next() {
-                client.rtt = rtt;
+            while let Ok(Some(meta)) = client.recv_meta.try_next() {
+                client.rtt = meta.rtt;
+                client
+                    .session
+                    .set_mtu(meta.mtu)
+                    .map_err(ServerError::MtuTooSmall)?;
             }
 
             client.session.refill_bytes(delta_time);

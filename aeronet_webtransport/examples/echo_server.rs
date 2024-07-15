@@ -1,7 +1,10 @@
+//! Example server using WebTransport which listens for clients sending strings
+//! and sends back a string reply.
+
 use aeronet::{
     error::pretty_error,
-    lane::{LaneKey, LaneKind},
-    server::{ServerEvent, ServerTransport},
+    lane::{LaneIndex, LaneKind},
+    server::{server_open, ServerEvent, ServerTransport},
 };
 use aeronet_proto::session::{LaneConfig, SessionConfig};
 use aeronet_webtransport::{
@@ -10,25 +13,48 @@ use aeronet_webtransport::{
 };
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_ecs::system::SystemId;
-use bevy_tokio_tasks::{TokioTasksPlugin, TokioTasksRuntime};
 use web_time::Duration;
 
-#[derive(Debug, Clone, Copy, LaneKey)]
-enum Lane {
-    #[lane_kind(ReliableOrdered)]
-    Default,
+#[derive(Debug, Resource)]
+struct TokioRuntime(tokio::runtime::Runtime);
+
+impl FromWorld for TokioRuntime {
+    fn from_world(_: &mut World) -> Self {
+        Self(
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AppLane;
+
+impl From<AppLane> for LaneIndex {
+    fn from(_: AppLane) -> Self {
+        Self::from_raw(0)
+    }
+}
+
+impl From<AppLane> for LaneConfig {
+    fn from(_: AppLane) -> Self {
+        Self::new(LaneKind::ReliableOrdered)
+    }
 }
 
 fn main() {
     App::new()
-        .add_plugins((
-            MinimalPlugins,
-            LogPlugin::default(),
-            TokioTasksPlugin::default(),
-        ))
+        .add_plugins((MinimalPlugins, LogPlugin::default()))
+        .init_resource::<TokioRuntime>()
         .init_resource::<WebTransportServer>()
-        .add_systems(Startup, setup)
-        .add_systems(Update, poll_server)
+        .add_systems(Startup, (setup_one_shot_systems, setup_server).chain())
+        .add_systems(PreUpdate, poll_server)
+        .add_systems(
+            PostUpdate,
+            flush_server.run_if(server_open::<WebTransportServer>),
+        )
         .run();
 }
 
@@ -36,29 +62,27 @@ fn server_config(identity: &wtransport::Identity) -> ServerConfig {
     wtransport::ServerConfig::builder()
         .with_bind_default(25565)
         .with_identity(&identity)
-        .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
         .unwrap()
         .build()
 }
 
 fn session_config() -> SessionConfig {
-    let lanes = vec![LaneConfig::new(LaneKind::ReliableOrdered)];
-    SessionConfig {
-        send_lanes: lanes.clone(),
-        recv_lanes: lanes,
-        default_packet_cap: 0,
-        max_packet_len: 1024,
-        send_bytes_per_sec: usize::MAX,
-        max_recv_memory_usage: usize::MAX,
-    }
+    // configure both the sending and receiving lanes
+    // we will buffer up to 4MB of the server's fragments at once
+    // TODO is 4MB a reasonable number?
+    SessionConfig::new(1024 * 1024 * 4).with_lanes([AppLane])
 }
 
-fn setup(
-    mut commands: Commands,
-    mut server: ResMut<WebTransportServer>,
-    rt: Res<TokioTasksRuntime>,
-) {
+fn setup_one_shot_systems(world: &mut World) {
+    let accept_client = world.register_system(accept_client);
+    world.insert_resource(AcceptClient(accept_client));
+
+    let send_message = world.register_system(send_message);
+    world.insert_resource(SendMessage(send_message));
+}
+
+fn setup_server(mut server: ResMut<WebTransportServer>, rt: Res<TokioRuntime>) {
     let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
     let cert = &identity.certificate_chain().as_slice()[0];
     let spki_fingerprint = aeronet_webtransport::cert::spki_fingerprint_base64(cert).unwrap();
@@ -69,13 +93,7 @@ fn setup(
     let backend = server
         .open(server_config(&identity), session_config())
         .unwrap();
-    rt.runtime().spawn(backend);
-
-    let accept_client = commands.register_one_shot_system(accept_client);
-    commands.insert_resource(AcceptClient(accept_client));
-
-    let send_message = commands.register_one_shot_system(send_message);
-    commands.insert_resource(SendMessage(send_message));
+    rt.0.spawn(backend);
 }
 
 fn poll_server(
@@ -135,11 +153,17 @@ fn send_message(
     In((client_key, msg)): In<(ClientKey, String)>,
     mut server: ResMut<WebTransportServer>,
 ) {
-    match server.send(client_key, msg.clone(), Lane::Default) {
+    match server.send(client_key, msg.clone(), AppLane) {
         Ok(_) => info!("{client_key} < {msg}"),
         Err(err) => warn!(
             "Failed to send message to {client_key}: {:#}",
             pretty_error(&err)
         ),
+    }
+}
+
+fn flush_server(mut server: ResMut<WebTransportServer>) {
+    if let Err(err) = server.flush() {
+        error!("Failed to flush messages: {:#}", pretty_error(&err));
     }
 }
