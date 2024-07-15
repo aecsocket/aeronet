@@ -3,10 +3,10 @@ use std::collections::hash_map::Entry;
 use aeronet::lane::LaneIndex;
 use ahash::AHashMap;
 use octs::{Bytes, BytesMut, EncodeLen, FixedEncodeLen, VarInt, Write};
-use web_time::Instant;
+use web_time::{Duration, Instant};
 
 use crate::{
-    byte_count::{ByteBucket, ByteLimit},
+    byte_count::ByteLimit,
     packet::{MessageSeq, PacketHeader, PacketSeq},
 };
 
@@ -15,25 +15,36 @@ use super::{
 };
 
 impl Session {
-    #[must_use]
-    pub const fn bytes_left(&self) -> &ByteBucket {
-        &self.bytes_left
-    }
-
-    pub fn refill_bytes_exact(&mut self, n: usize) {
-        self.bytes_left.refill_exact(n);
-        for lane in self.send_lanes.iter_mut() {
-            lane.bytes_left.refill_exact(n)
-        }
-    }
-
-    pub fn refill_bytes_portion(&mut self, f: f32) {
+    /// Refills the amount of bytes left for sending out data, given a time
+    /// delta since the last `refill_bytes` call.
+    ///
+    /// See [`SessionConfig::send_bytes_per_sec`].
+    ///
+    /// [`SessionConfig::send_bytes_per_sec`]: crate::session::SessionConfig::send_bytes_per_sec
+    pub fn refill_bytes(&mut self, delta_time: Duration) {
+        let f = delta_time.as_secs_f32();
         self.bytes_left.refill_portion(f);
         for lane in self.send_lanes.iter_mut() {
-            lane.bytes_left.refill_portion(f)
+            lane.bytes_left.refill_portion(f);
         }
     }
 
+    /// Buffers up a message for sending.
+    ///
+    /// After a message has been buffered for sending, it is considered *sent*
+    /// but not *flushed*. Use [`Session::flush`] to build up the packets to
+    /// send to the peer.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the message or lane index were invalid in some way.
+    ///
+    /// It is safe to ignore this error, however if this occurs when sending a
+    /// [reliable] message, a higher-level component in the stack may terminate
+    /// the connection.
+    ///
+    /// [reliable]: aeronet::lane::LaneReliability::Reliable
+    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn send(
         &mut self,
         now: Instant,
@@ -43,6 +54,10 @@ impl Session {
         if self.send_lanes.get(lane_index.into_raw()).is_none() {
             return Err(SendError::InvalidLane);
         }
+        let msg_seq = self.next_msg_seq;
+        let Entry::Vacant(entry) = self.sent_msgs.entry(msg_seq) else {
+            return Err(SendError::TooManyMessages);
+        };
 
         // encode the lane index directly into the start of the message payload
         let lane_index_enc = VarInt(lane_index.into_raw());
@@ -51,12 +66,8 @@ impl Session {
         buf.write_from(msg).unwrap();
         let buf = buf.freeze();
 
-        let msg_seq = self.next_msg_seq;
         let frags = self.send_frags.fragment(msg_seq, buf)?;
 
-        let Entry::Vacant(entry) = self.sent_msgs.entry(msg_seq) else {
-            return Err(SendError::TooManyMessages);
-        };
         self.next_msg_seq += MessageSeq::new(1);
         entry.insert(SentMessage {
             lane_index,
@@ -81,6 +92,13 @@ impl Session {
             .unwrap()
     }
 
+    /// Builds up packets to send to the peer.
+    ///
+    /// Each [`Bytes`] packet returned must be sent along the connection,
+    /// however it is OK if some packets are dropped or duplicated.
+    ///
+    /// This should be run at the end of each update.
+    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn flush(&mut self, now: Instant) -> impl Iterator<Item = Bytes> + '_ {
         // drop any messages which have no frags to send
         self.sent_msgs
@@ -147,7 +165,7 @@ impl Session {
 
                     // in theory, we can just store the fragment payload instead of header + payload
                     // and then here, we recreate the header, since we theoretically have the info to do it
-                    // but I would rather take the slightly higher memory usage here, because reforming the header
+                    // but I would rather take the slightly higher memory usage here, because recreating the header
                     // is error-prone - it's basically a FragmentSender impl detail
                     let frag = &sent_frag.frag;
 

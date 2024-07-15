@@ -346,9 +346,7 @@ impl WebTransportServer {
                 client.rtt = rtt;
             }
 
-            client
-                .session
-                .refill_bytes_portion(delta_time.as_secs_f32());
+            client.session.refill_bytes(delta_time);
 
             while let Ok(Some(packet)) = client.recv_c2s.try_next() {
                 let (acks, mut msgs) = match client.session.recv(Instant::now(), packet) {

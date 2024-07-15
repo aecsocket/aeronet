@@ -73,7 +73,7 @@ impl Acknowledge {
     /// acks.ack(PacketSeq::from(2));
     /// assert_eq!(acks, acks_clone);
     /// ```
-    #[allow(clippy::missing_panics_doc)] // won't panic
+    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn ack(&mut self, seq: PacketSeq) {
         let dist = seq.dist_to(self.last_recv.0);
         if let Ok(dist) = u32::try_from(dist) {

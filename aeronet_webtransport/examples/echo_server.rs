@@ -49,8 +49,8 @@ fn session_config() -> SessionConfig {
         recv_lanes: lanes,
         default_packet_cap: 0,
         max_packet_len: 1024,
-        send_cap: usize::MAX,
-        recv_frags_cap: usize::MAX,
+        send_bytes_per_sec: usize::MAX,
+        max_recv_memory_usage: usize::MAX,
     }
 }
 

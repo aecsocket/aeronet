@@ -43,35 +43,52 @@ pub use {recv::*, send::*};
 
 /// Indicates what index a [`Fragment`] represents, and whether this fragment
 /// is the last fragment in a message.
+///
+/// When transmitting fragments to a peer, we need some way to tell if we have
+/// received all of the fragments for a specific message. [*Gaffer On Games*]
+/// uses two [`u8`]s, a `fragment id` and `num fragments`, to represent this
+/// data. However, we do something smarter and use the MSB to indicate if this
+/// fragment is the last one in the message. This leaves us with 128 possible
+/// fragments per message, which should still be enough for most reasonable
+/// use cases, but saves 1 byte of overhead per fragment per packet.
+///
+/// If the MSB is set, this fragment is the last one in this message. The other
+/// 7 bits encode the index of this fragment in the message.
+///
+/// [*Gaffer On Games*]: https://gafferongames.com/post/packet_fragmentation_and_reassembly/#fragment-packet-structure
 // TODO docs
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]
 pub struct FragmentMarker(pub(crate) u8);
 
 const LAST_MASK: u8 = 0b1000_0000;
 
+/// Maximum number of fragments that a message can be split into using
+/// [`FragmentSender`].
+///
+/// See [`FragmentMarker`] for an explanation of how this value is determined.
+pub const MAX_FRAGS: u8 = u8::MAX & !LAST_MASK;
+
 impl FragmentMarker {
-    pub const MIN_NON_LAST: Self = Self(0);
-
-    pub const MIN_LAST: Self = Self(LAST_MASK);
-
-    pub const MAX_NON_LAST: Self = Self(u8::MAX & !LAST_MASK);
-
-    pub const MAX_LAST: Self = Self(u8::MAX);
-
-    pub const MAX_FRAGS: u8 = Self::MAX_NON_LAST.index();
-
+    /// Creates a new marker from a raw integer.
     #[inline]
     #[must_use]
     pub const fn from_raw(raw: u8) -> Self {
         Self(raw)
     }
 
+    /// Gets the raw integer from this fragment marker.
+    ///
+    /// To get the fragment index, use [`FragmentMarker::index`].
     #[inline]
     #[must_use]
     pub const fn into_raw(self) -> u8 {
         self.0
     }
 
+    /// Creates a new marker from an index indicating that this **is not** the
+    /// last fragment in the message.
+    ///
+    /// Returns [`None`] if the index is too large to be encoded properly.
     #[inline]
     #[must_use]
     pub const fn non_last(index: u8) -> Option<Self> {
@@ -82,6 +99,10 @@ impl FragmentMarker {
         }
     }
 
+    /// Creates a new marker from an index indicating that this **is** the last
+    /// fragment in the message.
+    ///
+    /// Returns [`None`] if the index is too large to be encoded properly.
     #[inline]
     #[must_use]
     pub const fn last(index: u8) -> Option<Self> {
@@ -92,6 +113,10 @@ impl FragmentMarker {
         }
     }
 
+    /// Creates a new marker.
+    ///
+    /// If you know whether the marker is last or non-last at compile-time,
+    /// prefer [`FragmentMarker::non_last`] or [`FragmentMarker::last`].
     #[inline]
     #[must_use]
     pub const fn new(index: u8, is_last: bool) -> Option<Self> {
@@ -102,12 +127,14 @@ impl FragmentMarker {
         }
     }
 
+    /// Gets the fragment index of this marker.
     #[inline]
     #[must_use]
     pub const fn index(self) -> u8 {
         self.0 & !LAST_MASK
     }
 
+    /// Gets if this fragment is the last one in the message.
     #[inline]
     #[must_use]
     pub const fn is_last(self) -> bool {

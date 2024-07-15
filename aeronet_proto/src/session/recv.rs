@@ -13,6 +13,20 @@ use crate::{
 use super::{FlushedPacket, OutOfMemory, RecvError, RecvLane, SentMessage, Session};
 
 impl Session {
+    /// Starts receiving a packet from the peer.
+    ///
+    /// If the packet header is valid, this will return:
+    /// - an iterator over all of our [`MessageSeq`]s that the peer has
+    ///   acknowledged
+    /// - a [`RecvMessages`], used to actually read the messages that we
+    ///   receive
+    ///
+    /// # Errors
+    ///
+    /// Errors if the packet has an invalid header.
+    ///
+    /// Even if this returns [`Ok`], you may still encounter errors when using
+    /// [`RecvMessages`].
     pub fn recv(
         &mut self,
         now: Instant,
@@ -70,6 +84,13 @@ impl Session {
     }
 }
 
+/// Allows reading the messages from a packet given to [`Session::recv`].
+///
+/// Use [`RecvMessages::for_each_msg`] to iterate through all the messages in
+/// the packet.
+///
+/// In a future version of the crate (when/if generators become stable), this
+/// may just become an `Iterator<Item = Bytes>`.
 // TODO: ideally this becomes an iterator like `recv_acks`
 // but the logic is really hard to make an iterator
 // this would be so much easier with coroutines...
@@ -83,6 +104,14 @@ pub struct RecvMessages<'session> {
 }
 
 impl RecvMessages<'_> {
+    /// Iterates through all messages in this packet, passing each one to `f`.
+    ///
+    /// # Errors
+    ///
+    /// If we fail to read one of the messages for a recoverable reason,
+    /// [`RecvError`] is passed to `f`. However, if we fail for a fatal error
+    /// e.g. [`OutOfMemory`], this error is returned from this function itself,
+    /// and the connection must be closed.
     pub fn for_each_msg(
         &mut self,
         mut f: impl FnMut(Result<(Bytes, LaneIndex), RecvError>),
@@ -95,7 +124,7 @@ impl RecvMessages<'_> {
                 self.recv_frags_cap,
                 &mut self.packet,
             ) {
-                Ok(iter) => iter.map(Ok).for_each(|x| f(x)),
+                Ok(iter) => iter.map(Ok).for_each(&mut f),
                 Err(err) => match err.narrow::<RecvError, _>() {
                     Ok(err) => f(Err(err)),
                     Err(err) => return Err(err.take()),
@@ -105,12 +134,12 @@ impl RecvMessages<'_> {
         Ok(())
     }
 
-    fn recv_next_frag<'session, 'packet>(
+    fn recv_next_frag<'session>(
         now: Instant,
         recv_lanes: &'session mut [RecvLane],
         recv_frags: &'session mut FragmentReceiver,
         recv_frags_cap: usize,
-        packet: &'packet mut Bytes,
+        packet: &mut Bytes,
     ) -> Result<impl Iterator<Item = (Bytes, LaneIndex)> + 'session, OneOf<(RecvError, OutOfMemory)>>
     {
         let frag = packet

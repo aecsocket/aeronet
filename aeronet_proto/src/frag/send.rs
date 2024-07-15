@@ -2,7 +2,7 @@ use std::iter::FusedIterator;
 
 use octs::{chunks::ByteChunksExt, Buf, Bytes};
 
-use crate::packet::MessageSeq;
+use crate::{frag::MAX_FRAGS, packet::MessageSeq};
 
 use super::{Fragment, FragmentHeader, FragmentMarker};
 
@@ -61,14 +61,15 @@ impl FragmentSender {
     /// Fragments are returned in the opposite order to the fragment index -
     /// that is, if a message is split into fragments A, B, C, the iterator will
     /// return them in the order C, B, A. This is done to make reassembly more
-    /// efficient.
+    /// efficient, since when the receiver receives C, it will immediately know
+    /// how many fragments there are total, and can allocate the right sized
+    /// buffer to fit this message.
     ///
     /// If `msg` is empty, this will return an empty iterator.
     ///
     /// # Errors
     ///
-    /// Errors if the message was larger than `FragmentMarker::MAX_FRAGS *
-    /// max_payload_len`.
+    /// Errors if the message is larger than `MAX_FRAGS * max_payload_len`.
     ///
     /// [`FragmentReceiver`]: crate::frag::FragmentReceiver
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
@@ -76,22 +77,18 @@ impl FragmentSender {
         &self,
         msg_seq: MessageSeq,
         msg: Bytes,
-    ) -> Result<
-        Fragments<impl Iterator<Item = Fragment> + ExactSizeIterator + FusedIterator>,
-        MessageTooBig,
-    > {
-        const MAX_FRAGS: usize = FragmentMarker::MAX_FRAGS as usize;
-
+    ) -> Result<impl ExactSizeIterator<Item = Fragment> + FusedIterator, MessageTooBig> {
+        let max_frags = usize::from(MAX_FRAGS);
         let msg_len = msg.remaining();
         let iter = msg.byte_chunks(self.max_payload_len).enumerate().rev();
         u8::try_from(iter.len()).map_err(|_| MessageTooBig {
             len: msg_len,
-            max: MAX_FRAGS * self.max_payload_len,
+            max: max_frags * self.max_payload_len,
         })?;
-        debug_assert!(iter.len() <= MAX_FRAGS);
+        debug_assert!(iter.len() <= max_frags);
 
         let last_index = iter.len() - 1;
-        Ok(Fragments(iter.map(move |(index, payload)| {
+        Ok(iter.map(move |(index, payload)| {
             let is_last = index == last_index;
             let index =
                 u8::try_from(index).expect("we just checked that `iter.len() <= MAX_FRAGS`");
@@ -106,28 +103,9 @@ impl FragmentSender {
                 header: FragmentHeader { msg_seq, marker },
                 payload,
             }
-        })))
+        }))
     }
 }
-
-#[derive(Debug)]
-pub struct Fragments<I>(I);
-
-impl<I: Iterator> Iterator for Fragments<I> {
-    type Item = I::Item;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
-    }
-}
-
-impl<I: ExactSizeIterator> ExactSizeIterator for Fragments<I> {}
-
-impl<I: FusedIterator> FusedIterator for Fragments<I> {}
 
 #[cfg(test)]
 mod tests {
@@ -146,13 +124,10 @@ mod tests {
     fn msg_too_large() {
         let frag = FragmentSender::new(1);
         assert!(frag
-            .fragment(MSG_SEQ, vec![1; FragmentMarker::MAX_FRAGS as usize].into())
+            .fragment(MSG_SEQ, vec![1; MAX_FRAGS as usize].into())
             .is_ok());
         assert!(frag
-            .fragment(
-                MSG_SEQ,
-                vec![1; FragmentMarker::MAX_FRAGS as usize + 1].into()
-            )
+            .fragment(MSG_SEQ, vec![1; MAX_FRAGS as usize + 1].into())
             .is_err())
     }
 

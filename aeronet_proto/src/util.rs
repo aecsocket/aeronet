@@ -31,15 +31,15 @@ macro_rules! forward_deref {
 
 macro_rules! forward_arithmetic {
     ($ty:ty) => {
-        impl PartialOrd for $ty {
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                self.0.partial_cmp(&other.0)
-            }
-        }
-
         impl Ord for $ty {
             fn cmp(&self, other: &Self) -> Ordering {
                 self.0.cmp(&other.0)
+            }
+        }
+
+        impl PartialOrd for $ty {
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                Some(self.cmp(other))
             }
         }
 

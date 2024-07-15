@@ -143,7 +143,7 @@ impl FragmentReceiver {
     ///
     /// Errors if the message could not be reassembled properly. It is safe and
     /// correct to ignore an error of this type.
-    #[allow(clippy::missing_panics_doc)] // we don't expect to panic
+    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn reassemble(
         &mut self,
         now: Instant,

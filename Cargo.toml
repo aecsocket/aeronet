@@ -2,9 +2,9 @@
 members = [
   "aeronet",
   "aeronet_derive",
-  #"aeronet_replicon",
+  # "aeronet_replicon",
   "aeronet_channel",
-  # "aeronet_proto",
+  "aeronet_proto",
   "aeronet_webtransport",
   #"aeronet_steam",
 ]
@@ -21,7 +21,7 @@ rust-version = "1.79.0"
 version = "0.6.0"
 
 [workspace.lints.rust]
-# missing_docs = "warn"
+missing_docs = "warn"
 # unused_crate_dependencies = "warn"
 
 [workspace.lints.clippy]
