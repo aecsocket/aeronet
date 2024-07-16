@@ -16,6 +16,7 @@
     `client.poll(..)` with `conditioner.poll(&mut client, ..)`
   * This is because the user is now responsible for driving polling
   * You don't have to replace all of your `ResMut<Client>` with `ResMut<ConditionedClient<Client>>`
+* Removed derive macros since we don't have a use for them anymore
 
 # 0.5.0
 

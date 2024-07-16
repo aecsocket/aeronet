@@ -6,13 +6,12 @@ use aeronet::{
     client::ClientState,
     lane::LaneIndex,
     server::{ServerEvent, ServerState, ServerTransport},
+    stats::MessageStats,
 };
 use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;
-
-use crate::shared::ConnectionStats;
 
 slotmap::new_key_type! {
     /// Key identifying a unique client connected to a [`ChannelServer`].
@@ -41,11 +40,23 @@ pub struct ChannelServer {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Connected {
-    /// Statistics of this connection.
-    pub stats: ConnectionStats,
+    /// See [`MessageStats::bytes_sent`].
+    pub bytes_sent: usize,
+    /// See [`MessageStats::bytes_recv`]
+    pub bytes_recv: usize,
     recv_c2s: Receiver<(Bytes, LaneIndex)>,
     send_s2c: Sender<(Bytes, LaneIndex)>,
     send_connected: bool,
+}
+
+impl MessageStats for Connected {
+    fn bytes_sent(&self) -> usize {
+        self.bytes_sent
+    }
+
+    fn bytes_recv(&self) -> usize {
+        self.bytes_recv
+    }
 }
 
 #[derive(Derivative)]
@@ -79,7 +90,8 @@ impl ChannelServer {
         send_s2c: Sender<(Bytes, LaneIndex)>,
     ) -> ClientKey {
         self.clients.insert(Client::Connected(Connected {
-            stats: ConnectionStats::default(),
+            bytes_sent: 0,
+            bytes_recv: 0,
             recv_c2s,
             send_s2c,
             send_connected: true,
@@ -138,7 +150,7 @@ impl ServerTransport for ChannelServer {
             .send_s2c
             .send((msg, lane))
             .map_err(|_| ServerError::Disconnected)?;
-        client.stats.bytes_sent += msg_len;
+        client.bytes_sent = client.bytes_sent.saturating_add(msg_len);
         Ok(())
     }
 
@@ -193,7 +205,7 @@ impl ChannelServer {
         loop {
             match client.recv_c2s.try_recv() {
                 Ok((msg, lane)) => {
-                    client.stats.bytes_recv += msg.len();
+                    client.bytes_recv = client.bytes_recv.saturating_add(msg.len());
                     events.push(ServerEvent::Recv {
                         client_key,
                         msg,

@@ -169,6 +169,7 @@ fn ui(
             .inner;
 
         if do_connect {
+            ui.memory_mut(|m| m.request_focus(msg_resp.id));
             let target = ui_state.target.clone();
             ui_state.log.push(format!("Connecting to {target}"));
             match client.connect(client_config(), session_config(), target) {
@@ -192,20 +193,16 @@ fn ui(
         }
 
         if do_disconnect {
-            ui_state.log.push(match client.disconnect() {
-                Ok(()) => format!("Disconnected by user"),
-                Err(err) => format!("Failed to disconnect: {:#}", pretty_error(&err)),
-            });
+            ui_state.log.push(format!("Disconnected by user"));
+            let _ = client.disconnect();
         }
 
         if do_send {
             ui.memory_mut(|m| m.request_focus(msg_resp.id));
             let msg = std::mem::take(&mut ui_state.msg);
-            ui_state.log.push(format!("< {msg}"));
-            if let Err(err) = client.send(msg, AppLane) {
-                ui_state
-                    .log
-                    .push(format!("Failed to send message: {:#}", pretty_error(&err)));
+            if !msg.is_empty() {
+                ui_state.log.push(format!("< {msg}"));
+                let _ = client.send(msg, AppLane);
             }
         }
 

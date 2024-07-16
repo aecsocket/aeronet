@@ -52,8 +52,6 @@
 //! [`ReliableUnordered`]: LaneKind::ReliableUnordered
 //! [`ReliableOrdered`]: LaneKind::ReliableOrdered
 
-pub use aeronet_derive::LaneKey;
-
 /// Kind of lane which can provide guarantees about the manner of message
 /// delivery.
 ///
@@ -212,45 +210,5 @@ impl LaneIndex {
     #[must_use]
     pub const fn into_raw(self) -> usize {
         self.0
-    }
-}
-
-/// App-defined type listing a set of [lanes](crate::lane) which a transport can
-/// use to send app messages along.
-///
-/// This trait should be derived - see [`aeronet_derive::LaneKey`]. Otherwise,
-/// you will have to make sure to follow the contract regarding panics.
-///
-/// There isn't much point to implementing this yourself - if you need
-/// fine-grained control over lanes, use [`LaneIndex`] manually.
-///
-/// # Correctness
-///
-/// This trait must be implemented correctly, otherwise transport
-/// implementations may panic.
-pub trait LaneKey {
-    /// Slice of all lane kinds under this key.
-    const ALL: &'static [LaneKind];
-
-    /// Iterator of all lane kinds under this key.
-    fn all() -> std::slice::Iter<'static, LaneKind> {
-        Self::ALL.iter()
-    }
-
-    /// Gets which lane index this variant represents.
-    ///
-    /// # Correctness
-    ///
-    /// See [`LaneIndex`] for the guarantees you must uphold when implementing
-    /// this.
-    fn index(&self) -> LaneIndex;
-
-    /// Gets the kind of lane this variant is.
-    fn kind(&self) -> LaneKind;
-}
-
-impl<T: LaneKey> From<T> for LaneIndex {
-    fn from(value: T) -> Self {
-        value.index()
     }
 }

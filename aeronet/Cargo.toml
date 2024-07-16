@@ -25,8 +25,6 @@ condition = ["dep:rand", "dep:rand_distr"]
 bevy = ["dep:bevy_ecs"]
 
 [dependencies]
-aeronet_derive = { workspace = true }
-
 arbitrary = { workspace = true }
 bytes = { workspace = true }
 derivative = { workspace = true }

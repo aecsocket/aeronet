@@ -42,8 +42,3 @@ bevy_egui = { workspace = true }
 name = "echo"
 path = "examples/echo.rs"
 required-features = ["bevy"]
-
-[[example]]
-name = "echo_conditioned"
-path = "examples/echo_conditioned.rs"
-required-features = ["bevy", "aeronet/condition"]

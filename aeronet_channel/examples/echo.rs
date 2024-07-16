@@ -2,10 +2,11 @@
 //! message, and the server just echoes back that message to the client.
 
 use aeronet::{
-    client::{ClientEvent, ClientTransport},
+    client::{ClientEvent, ClientState, ClientTransport},
     error::pretty_error,
     lane::LaneIndex,
     server::{ServerEvent, ServerTransport},
+    stats::MessageStats,
 };
 use aeronet_channel::{client::ChannelClient, server::ChannelServer};
 use bevy::prelude::*;
@@ -19,8 +20,8 @@ use bytes::Bytes;
 #[derive(Debug, Clone, Copy)]
 struct AppLane;
 
-// implement `Into<LaneIndex>` for your type so that you can pass it directly
-// into `send`
+// implement `Into<LaneIndex>` for your type so that
+// you can pass it directly into `send`
 impl From<AppLane> for LaneIndex {
     fn from(_: AppLane) -> Self {
         Self::from_raw(0)
@@ -96,40 +97,53 @@ fn client_ui(
     mut client: ResMut<ChannelClient>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
+        let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+
+        let mut do_disconnect = false;
+        ui.add_enabled_ui(!client.state().is_disconnected(), |ui| {
+            do_disconnect |= ui.button("Disconnected").clicked();
+        });
+
+        if do_disconnect {
+            ui_state.log.push(format!("Disconnected by user"));
+            let _ = client.disconnect();
+        }
+
+        let mut do_send = false;
+        let msg_resp = ui
+            .add_enabled_ui(client.state().is_connected(), |ui| {
+                ui.horizontal(|ui| {
+                    let msg_resp = ui.add(
+                        egui::TextEdit::singleline(&mut ui_state.msg).hint_text("[enter] to send"),
+                    );
+                    do_send |= msg_resp.lost_focus() && pressed_enter;
+                    do_send |= ui.button("Send").clicked();
+                    msg_resp
+                })
+                .inner
+            })
+            .inner;
+
+        if do_send {
+            ui.memory_mut(|m| m.request_focus(msg_resp.id));
+            let msg = std::mem::take(&mut ui_state.msg);
+            if !msg.is_empty() {
+                ui_state.log.push(format!("< {msg}"));
+                let _ = client.send(msg, AppLane);
+            }
+        }
+
+        if let ClientState::Connected(client) = client.state() {
+            egui::Grid::new("meta").num_columns(2).show(ui, |ui| {
+                ui.label("Bytes sent/recv");
+                ui.label(format!("{} / {}", client.bytes_sent(), client.bytes_recv()));
+                ui.end_row();
+            });
+        }
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             for line in &ui_state.log {
                 ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
-            }
-        });
-
-        ui.add_enabled_ui(client.state().is_connected(), |ui| {
-            let (send, msg_resp) = ui
-                .horizontal(|ui| {
-                    let mut send = false;
-                    let msg_resp = ui.text_edit_singleline(&mut ui_state.msg);
-                    send |= msg_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    send |= ui.button("Send").clicked();
-                    (send, msg_resp)
-                })
-                .inner;
-
-            if send {
-                (|| {
-                    ui.memory_mut(|m| m.request_focus(msg_resp.id));
-
-                    let msg = std::mem::take(&mut ui_state.msg);
-                    if msg.is_empty() {
-                        return;
-                    }
-
-                    ui_state.log.push(format!("< {msg}"));
-                    let _ = client.send(msg, AppLane);
-                })();
-            }
-
-            if ui.button("Disconnect").clicked() {
-                ui_state.log.push(format!("Disconnected by user"));
-                let _ = client.disconnect();
             }
         });
     });

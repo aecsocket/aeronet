@@ -5,15 +5,13 @@ use std::time::Duration;
 use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport},
     lane::LaneIndex,
+    stats::MessageStats,
 };
 use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use either::Either;
 
-use crate::{
-    server::{ChannelServer, ClientKey},
-    shared::ConnectionStats,
-};
+use crate::server::{ChannelServer, ClientKey};
 
 /// Implementation of [`ClientTransport`] using in-memory MPSC channels.
 ///
@@ -38,12 +36,24 @@ pub struct Connected {
     ///
     /// Use this key to disconnect this client from the server side.
     pub key: ClientKey,
-    /// Statistics of this connection.
-    pub stats: ConnectionStats,
+    /// See [`MessageStats::bytes_sent`].
+    pub bytes_sent: usize,
+    /// See [`MessageStats::bytes_recv`]
+    pub bytes_recv: usize,
     send_c2s: Sender<(Bytes, LaneIndex)>,
     recv_s2c: Receiver<(Bytes, LaneIndex)>,
     #[allow(clippy::struct_field_names)]
     send_connected: bool,
+}
+
+impl MessageStats for Connected {
+    fn bytes_sent(&self) -> usize {
+        self.bytes_sent
+    }
+
+    fn bytes_recv(&self) -> usize {
+        self.bytes_recv
+    }
 }
 
 /// Error type for operations on a [`ChannelClient`].
@@ -96,7 +106,8 @@ impl ChannelClient {
         Self {
             inner: Inner::Connected(Connected {
                 key,
-                stats: ConnectionStats::default(),
+                bytes_sent: 0,
+                bytes_recv: 0,
                 send_c2s,
                 recv_s2c,
                 send_connected: true,
@@ -153,7 +164,7 @@ impl ClientTransport for ChannelClient {
             .send_c2s
             .send((msg, lane))
             .map_err(|_| ClientError::Disconnected)?;
-        client.stats.bytes_sent += msg_len;
+        client.bytes_sent = client.bytes_sent.saturating_add(msg_len);
         Ok(())
     }
 
@@ -188,7 +199,7 @@ impl ChannelClient {
         let res = (|| loop {
             match client.recv_s2c.try_recv() {
                 Ok((msg, lane)) => {
-                    client.stats.bytes_recv += msg.len();
+                    client.bytes_recv = client.bytes_recv.saturating_add(msg.len());
                     events.push(ClientEvent::Recv { msg, lane });
                 }
                 Err(TryRecvError::Empty) => return Ok(()),

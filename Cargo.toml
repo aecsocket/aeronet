@@ -1,7 +1,6 @@
 [workspace]
 members = [
   "aeronet",
-  "aeronet_derive",
   # "aeronet_replicon",
   "aeronet_channel",
   "aeronet_proto",
@@ -37,7 +36,6 @@ too_many_arguments = "allow"
 [workspace.dependencies]
 aeronet = { version = "0.6.0", path = "aeronet" }
 aeronet_channel = { version = "0.6.0", path = "aeronet_channel" }
-aeronet_derive = { version = "0.6.0", path = "aeronet_derive" }
 aeronet_proto = { version = "0.6.0", path = "aeronet_proto" }
 aeronet_replicon = { version = "0.6.0", path = "aeronet_replicon" }
 aeronet_webtransport = { version = "0.6.0", path = "aeronet_webtransport" }
@@ -83,12 +81,6 @@ bevy_time = { version = "0.13.2", default-features = false }
 # bevy-tokio-tasks = "0.14.0"
 bevy_egui = "0.27.1"
 bevy_replicon = "0.26.3"
-
-# aeronet_derive
-
-proc-macro2 = "1.0.76"
-quote = "1.0.35"
-syn = "2.0.48"
 
 # aeronet_channel
 
