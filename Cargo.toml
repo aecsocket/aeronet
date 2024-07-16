@@ -1,7 +1,7 @@
 [workspace]
 members = [
   "aeronet",
-  # "aeronet_replicon",
+  "aeronet_replicon",
   "aeronet_channel",
   "aeronet_proto",
   "aeronet_webtransport",

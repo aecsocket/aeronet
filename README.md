@@ -167,19 +167,26 @@ It is up to you to encode and decode your own data into the [`Bytes`].
 ```rust
 use aeronet::bytes::Bytes;
 use aeronet::client::{ClientEvent, ClientTransport};
-use aeronet::lane::{LaneIndex, LaneKey};
+use aeronet::lane::LaneIndex;
 
-#[derive(Debug, Clone, Copy, LaneKey)]
-enum Lane {
-    #[lane_kind(ReliableOrdered)]
+#[derive(Debug, Clone, Copy)]
+enum AppLane {
     HighPriority,
-    #[lane_kind(UnreliableUnordered)]
     LowPriority,
+}
+
+impl From<AppLane> for LaneIndex {
+    fn from(value: AppLane) -> Self {
+        match value {
+            AppLane::HighPriority => LaneIndex::from_raw(0),
+            AppLane::LowPriority => LaneIndex::from_raw(1),
+        }
+    }
 }
 
 # fn run(mut client: impl ClientTransport, delta_time: web_time::Duration) {
 let message: Bytes = Bytes::from_static(b"hello world");
-client.send(message, Lane::HighPriority).unwrap();
+client.send(message, AppLane::HighPriority).unwrap();
 
 client.flush().unwrap();
 

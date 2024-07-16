@@ -22,26 +22,27 @@ use aeronet::{
     client::{ClientTransport, ClientState},
     server::ServerTransport,
     bytes::Bytes,
-    lane::LaneKey,
+    lane::LaneIndex,
 };
 use aeronet_channel::{
     client::ChannelClient,
     server::{ClientKey, ChannelServer},
 };
 
-#[derive(Debug, Clone, Copy, LaneKey)]
-enum Lane {
-    // the lane kind doesn't actually matter since we're using MPSC
-    // but for other transports it would
-    #[lane_kind(ReliableOrdered)]
-    Default,
+#[derive(Debug, Clone, Copy)]
+struct AppLane;
+
+impl From<AppLane> for LaneIndex {
+    fn from(_: AppLane) -> Self {
+        Self::from_raw(0)
+    }
 }
 
 let mut server = ChannelServer::open();
 let mut client = ChannelClient::connect_new(&mut server);
 
 let msg = Bytes::from_static(b"hi!");
-client.send(msg, Lane::Default).unwrap();
+client.send(msg, AppLane).unwrap();
 
 let ClientState::Connected(client_state) = client.state() else {
     unreachable!();

@@ -18,6 +18,7 @@ use bevy_replicon::{
 };
 use bevy_time::prelude::*;
 use bimap::{BiHashMap, Overwritten};
+use bytes::Bytes;
 use derivative::Derivative;
 use tracing::{debug, warn};
 
@@ -109,7 +110,7 @@ impl<T: ServerTransport> Deref for ClientKeys<T> {
 impl<T: ServerTransport> ClientKeys<T> {
     /// Gets the mappings between `T::ClientKey`s and [`ClientId`]s.
     #[must_use]
-    pub fn map(&self) -> &ClientMap<T::ClientKey> {
+    pub const fn map(&self) -> &ClientMap<T::ClientKey> {
         &self.id_map
     }
 
@@ -138,7 +139,7 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
         mut server: ResMut<T>,
         mut replicon_server: ResMut<RepliconServer>,
         mut client_keys: ResMut<ClientKeys<T>>,
-        mut replicon_events: EventWriter<bevy_replicon::server::ServerEvent>,
+        mut replicon_events: EventWriter<RepliconEvent>,
         mut opened: EventWriter<ServerOpened<T>>,
         mut closed: EventWriter<ServerClosed<T>>,
         mut connecting: EventWriter<RemoteClientConnecting<T>>,
@@ -158,59 +159,96 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
                 ServerEvent::Connecting { client_key } => {
                     connecting.send(RemoteClientConnecting { client_key });
                 }
-                ServerEvent::Connected { client_key } => {
-                    connected.send(RemoteClientConnected {
-                        client_key: client_key.clone(),
-                    });
-
-                    let client_id = client_keys.next_id();
-                    debug!("Associating {client_key:?} with {client_id:?}");
-                    match client_keys.id_map.insert(client_key, client_id) {
-                        Overwritten::Neither => {}
-                        overwritten => {
-                            warn!("Inserted duplicate client key/ID pair: {overwritten:?}");
-                        }
-                    }
-                    replicon_events.send(RepliconEvent::ClientConnected { client_id });
-                }
-                ServerEvent::Disconnected { client_key, error } => {
-                    let reason_str = format!("{:#}", aeronet::error::pretty_error(&error));
-                    disconnected.send(RemoteClientDisconnected {
-                        client_key: client_key.clone(),
-                        error,
-                    });
-
-                    let Some((_, client_id)) = client_keys.id_map.remove_by_left(&client_key)
-                    else {
-                        warn!("Disconnected client {client_key:?} which does not have a client ID");
-                        return;
-                    };
-                    debug!("Removed {client_key:?} associated with {client_id:?}");
-                    replicon_events.send(RepliconEvent::ClientDisconnected {
-                        client_id,
-                        reason: reason_str,
-                    });
-                }
+                ServerEvent::Connected { client_key } => Self::on_connected(
+                    client_keys.as_mut(),
+                    &mut connected,
+                    &mut replicon_events,
+                    client_key,
+                ),
+                ServerEvent::Disconnected { client_key, error } => Self::on_disconnected(
+                    client_keys.as_mut(),
+                    &mut disconnected,
+                    &mut replicon_events,
+                    client_key,
+                    error,
+                ),
                 ServerEvent::Recv {
                     client_key,
                     msg,
                     lane,
-                } => {
-                    let Ok(channel) = u8::try_from(lane.into_raw()) else {
-                        warn!(
-                            "Received message on {lane:?}, which is not a valid Replicon channel"
-                        );
-                        continue;
-                    };
-                    let Some(client_id) = client_keys.id_map.get_by_left(&client_key) else {
-                        warn!("Received message from client {client_key:?} which does not have a client ID");
-                        continue;
-                    };
-                    replicon_server.insert_received(*client_id, channel, msg);
-                }
+                } => Self::on_recv(
+                    client_keys.as_ref(),
+                    replicon_server.as_mut(),
+                    client_key,
+                    msg,
+                    lane,
+                ),
                 ServerEvent::Ack { .. } | ServerEvent::Nack { .. } => {}
             }
         }
+    }
+
+    fn on_connected(
+        client_keys: &mut ClientKeys<T>,
+        connected: &mut EventWriter<RemoteClientConnected<T>>,
+        replicon_events: &mut EventWriter<RepliconEvent>,
+        client_key: T::ClientKey,
+    ) {
+        connected.send(RemoteClientConnected {
+            client_key: client_key.clone(),
+        });
+
+        let client_id = client_keys.next_id();
+        debug!("Associating {client_key:?} with {client_id:?}");
+        match client_keys.id_map.insert(client_key, client_id) {
+            Overwritten::Neither => {}
+            overwritten => {
+                warn!("Inserted duplicate client key/ID pair: {overwritten:?}");
+            }
+        }
+        replicon_events.send(RepliconEvent::ClientConnected { client_id });
+    }
+
+    fn on_disconnected(
+        client_keys: &mut ClientKeys<T>,
+        disconnected: &mut EventWriter<RemoteClientDisconnected<T>>,
+        replicon_events: &mut EventWriter<RepliconEvent>,
+        client_key: T::ClientKey,
+        error: T::Error,
+    ) {
+        let reason_str = format!("{:#}", aeronet::error::pretty_error(&error));
+        disconnected.send(RemoteClientDisconnected {
+            client_key: client_key.clone(),
+            error,
+        });
+
+        let Some((_, client_id)) = client_keys.id_map.remove_by_left(&client_key) else {
+            warn!("Disconnected client {client_key:?} which does not have a client ID");
+            return;
+        };
+        debug!("Removed {client_key:?} associated with {client_id:?}");
+        replicon_events.send(RepliconEvent::ClientDisconnected {
+            client_id,
+            reason: reason_str,
+        });
+    }
+
+    fn on_recv(
+        client_keys: &ClientKeys<T>,
+        replicon_server: &mut RepliconServer,
+        client_key: T::ClientKey,
+        msg: Bytes,
+        lane: LaneIndex,
+    ) {
+        let Ok(channel) = u8::try_from(lane.into_raw()) else {
+            warn!("Received message on {lane:?}, which is not a valid Replicon channel");
+            return;
+        };
+        let Some(client_id) = client_keys.id_map.get_by_left(&client_key) else {
+            warn!("Received message from client {client_key:?} which does not have a client ID");
+            return;
+        };
+        replicon_server.insert_received(*client_id, channel, msg);
     }
 
     fn update_state(server: Res<T>, mut replicon: ResMut<RepliconServer>) {

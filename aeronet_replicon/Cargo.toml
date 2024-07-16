@@ -22,15 +22,17 @@ aeronet = { workspace = true, features = ["bevy"] }
 
 ahash = { workspace = true }
 bimap = { workspace = true }
+bytes = { workspace = true }
 derivative = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
-bevy_replicon = { workspace = true }
 bevy_time = { workspace = true }
 
+bevy_replicon = { workspace = true }
+
 [dev-dependencies]
-aeronet_channel = { workspace = true, features = ["bevy"] }
 bevy = { workspace = true }
+serde = { workspace = true }
