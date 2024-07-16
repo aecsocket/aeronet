@@ -24,7 +24,6 @@ ahash = { workspace = true }
 bimap = { workspace = true }
 bytes = { workspace = true }
 derivative = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 
 bevy_app = { workspace = true }
