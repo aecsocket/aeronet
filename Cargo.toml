@@ -1,12 +1,5 @@
 [workspace]
-members = [
-  "aeronet",
-  "aeronet_replicon",
-  "aeronet_channel",
-  "aeronet_proto",
-  "aeronet_webtransport",
-  #"aeronet_steam",
-]
+members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
@@ -34,11 +27,11 @@ similar_names = "allow"
 too_many_arguments = "allow"
 
 [workspace.dependencies]
-aeronet = { version = "0.6.0", path = "aeronet" }
-aeronet_channel = { version = "0.6.0", path = "aeronet_channel" }
-aeronet_proto = { version = "0.6.0", path = "aeronet_proto" }
-aeronet_replicon = { version = "0.6.0", path = "aeronet_replicon" }
-aeronet_webtransport = { version = "0.6.0", path = "aeronet_webtransport" }
+aeronet = { version = "0.6.0", path = "crates/aeronet" }
+aeronet_channel = { version = "0.6.0", path = "crates/aeronet_channel" }
+aeronet_proto = { version = "0.6.0", path = "crates/aeronet_proto" }
+aeronet_replicon = { version = "0.6.0", path = "crates/aeronet_replicon" }
+aeronet_webtransport = { version = "0.6.0", path = "crates/aeronet_webtransport" }
 
 ahash = { version = "0.8.11", default-features = false, features = [
   "std",
