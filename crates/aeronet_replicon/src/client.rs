@@ -66,9 +66,13 @@ impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
             .add_systems(
                 PreUpdate,
                 (
-                    Self::recv.run_if(resource_exists::<T>),
-                    Self::update_state.run_if(resource_exists::<T>),
-                    Self::on_removed.run_if(resource_removed::<T>()),
+                    Self::recv
+                        .run_if(resource_exists::<T>.and_then(resource_exists::<RepliconClient>)),
+                    Self::update_state
+                        .run_if(resource_exists::<T>.and_then(resource_exists::<RepliconClient>)),
+                    Self::on_removed.run_if(
+                        resource_removed::<T>().and_then(resource_exists::<RepliconClient>),
+                    ),
                 )
                     .chain()
                     .in_set(ServerSet::ReceivePackets),
@@ -76,7 +80,7 @@ impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
             .add_systems(
                 PostUpdate,
                 Self::send
-                    .run_if(client_connected::<T>)
+                    .run_if(client_connected::<T>.and_then(resource_exists::<RepliconClient>))
                     .in_set(ServerSet::SendPackets),
             );
     }
