@@ -1,0 +1,29 @@
+[package]
+description = "move_box demo server"
+name = "move_box_server"
+publish = false
+
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+move_box = { path = "../move_box" }
+
+bevy = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+
+aeronet = { workspace = true, features = ["bevy"] }
+aeronet_webtransport = { workspace = true, features = ["bevy", "serde"] }
+
+aeronet_replicon = { workspace = true }
+bevy_replicon = { workspace = true }

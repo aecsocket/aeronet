@@ -10,6 +10,7 @@ use crate::{ack::Acknowledge, seq::Seq};
 ///
 /// This is used in packet acknowledgements (see [`Acknowledge`]).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PacketSeq(pub Seq);
 
 impl PacketSeq {
@@ -28,6 +29,7 @@ impl PacketSeq {
 ///
 /// [`frag`]: crate::frag
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MessageSeq(pub Seq);
 
 impl MessageSeq {
@@ -44,6 +46,7 @@ impl MessageSeq {
 ///
 /// [`Session`]: crate::session::Session
 #[derive(Debug, Clone, Copy, PartialEq, Eq, arbitrary::Arbitrary)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PacketHeader {
     /// Sequence number of this packet.
     pub packet_seq: PacketSeq,

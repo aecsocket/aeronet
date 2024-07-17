@@ -31,6 +31,7 @@ use crate::{packet::PacketSeq, seq::Seq};
 ///
 /// [*Gaffer On Games*]: https://gafferongames.com/post/reliable_ordered_messages/#packet-levelacks
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, arbitrary::Arbitrary)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Acknowledge {
     /// Last received packet sequence number.
     pub last_recv: PacketSeq,

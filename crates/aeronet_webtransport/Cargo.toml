@@ -22,6 +22,9 @@ rustflags = ["--cfg=web_sys_unstable_apis"]
 ## Enables [`bevy`](https://docs.rs/bevy) support by deriving `Resource` on certain types.
 bevy = ["dep:bevy_ecs", "aeronet/bevy"]
 
+## Allows serializing types using [`serde`](https://docs.rs/serde).
+serde = ["dep:serde", "slotmap/serde"]
+
 ## Enables [`rustls/dangerous-configuration`](https://docs.rs/rustls/latest/rustls/#crate-features)
 ## on targets building against native `wtransport`.
 dangerous-configuration = ["wtransport/dangerous-configuration"]
@@ -45,6 +48,8 @@ web-time = { workspace = true }
 xwt-core = { workspace = true }
 
 bevy_ecs = { workspace = true, optional = true }
+
+serde = { workspace = true, optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gloo-timers = { workspace = true }

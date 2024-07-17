@@ -4,6 +4,7 @@ use aeronet_proto::packet::MessageSeq;
 
 /// Key identifying a message sent across a connection.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MessageKey(MessageSeq);
 
 impl MessageKey {

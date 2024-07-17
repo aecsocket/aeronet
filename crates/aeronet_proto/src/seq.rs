@@ -37,6 +37,7 @@ use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen};
 ///
 /// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Seq(pub u16);
 
 impl Seq {

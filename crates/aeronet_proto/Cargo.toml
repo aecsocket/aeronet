@@ -17,6 +17,10 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
+[features]
+## Allows serializing types using [`serde`](https://docs.rs/serde).
+serde = ["dep:serde"]
+
 [dependencies]
 aeronet = { workspace = true }
 
@@ -28,6 +32,8 @@ octs = { workspace = true }
 terrors = { workspace = true }
 thiserror = { workspace = true }
 web-time = { workspace = true }
+
+serde = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
