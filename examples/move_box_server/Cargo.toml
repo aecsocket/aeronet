@@ -20,10 +20,13 @@ move_box = { path = "../move_box" }
 
 bevy = { workspace = true }
 clap = { workspace = true }
+rand = { workspace = true }
 serde = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+web-time = { workspace = true }
 
 aeronet = { workspace = true, features = ["bevy"] }
 aeronet_webtransport = { workspace = true, features = ["bevy", "serde"] }
 
-aeronet_replicon = { workspace = true }
+aeronet_replicon = { workspace = true, features = ["proto"] }
 bevy_replicon = { workspace = true }

@@ -21,6 +21,9 @@ all-features = true
 ## Allows serializing types using [`serde`](https://docs.rs/serde).
 serde = ["dep:serde"]
 
+## Enables [`bevy_replicon`](https://docs.rs/bevy_replicon) support.
+replicon = ["dep:bevy_replicon"]
+
 [dependencies]
 aeronet = { workspace = true }
 
@@ -34,6 +37,8 @@ thiserror = { workspace = true }
 web-time = { workspace = true }
 
 serde = { workspace = true, optional = true }
+
+bevy_replicon = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

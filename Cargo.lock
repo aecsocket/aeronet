@@ -127,6 +127,7 @@ dependencies = [
  "ahash",
  "arbitrary",
  "assert_matches",
+ "bevy_replicon",
  "bitvec",
  "either",
  "octs",
@@ -141,6 +142,7 @@ name = "aeronet_replicon"
 version = "0.6.0"
 dependencies = [
  "aeronet",
+ "aeronet_proto",
  "ahash",
  "bevy",
  "bevy_app",
@@ -3138,6 +3140,7 @@ dependencies = [
 name = "move_box"
 version = "0.6.0"
 dependencies = [
+ "aeronet_webtransport",
  "bevy",
  "bevy_replicon",
  "serde",
@@ -3154,7 +3157,10 @@ dependencies = [
  "bevy_replicon",
  "clap",
  "move_box",
+ "rand",
  "serde",
+ "tokio",
+ "web-time 1.1.0",
 ]
 
 [[package]]
@@ -4341,6 +4347,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
+name = "signal-hook-registry"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9e9e0b4211b72e7b8b6e85c807d36c212bdb33ea8587f7569562a84df5465b1"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "simd-adler32"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4707,7 +4722,9 @@ dependencies = [
  "libc",
  "mio",
  "num_cpus",
+ "parking_lot",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.48.0",
