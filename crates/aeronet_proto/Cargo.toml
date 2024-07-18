@@ -30,11 +30,14 @@ aeronet = { workspace = true }
 ahash = { workspace = true }
 arbitrary = { workspace = true }
 bitvec = { workspace = true }
+datasize = { workspace = true }
 either = { workspace = true }
 octs = { workspace = true }
 terrors = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 web-time = { workspace = true }
+derivative = { workspace = true }
 
 serde = { workspace = true, optional = true }
 

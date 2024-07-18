@@ -30,6 +30,7 @@ either = { workspace = true }
 replace_with = { workspace = true }
 slotmap = { workspace = true }
 thiserror = { workspace = true }
+web-time = { workspace = true }
 
 bevy_ecs = { workspace = true, optional = true }
 

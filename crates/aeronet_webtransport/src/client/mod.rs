@@ -7,13 +7,13 @@ use std::io;
 
 use aeronet::{
     client::ClientState,
-    stats::{MessageStats, Rtt},
+    stats::{ConnectedAt, MessageStats, Rtt},
 };
 use aeronet_proto::session::{MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
-use web_time::Duration;
+use web_time::{Duration, Instant};
 
 use crate::internal::ConnectionMeta;
 
@@ -26,7 +26,6 @@ cfg_if::cfg_if! {
         type ConnectError = JsError;
         type AwaitConnectError = JsError;
         type ConnectionLostError = JsError;
-        type SendDatagramError = JsError;
     } else {
         use std::net::SocketAddr;
 
@@ -39,7 +38,6 @@ cfg_if::cfg_if! {
         type ConnectError = <internal::ClientEndpoint as Connect>::Error;
         type AwaitConnectError = <<internal::ClientEndpoint as Connect>::Connecting as xwt_core::endpoint::connect::Connecting>::Error;
         type ConnectionLostError = <internal::Connection as xwt_core::session::datagram::Receive>::Error;
-        type SendDatagramError = <internal::Connection as xwt_core::session::datagram::Send>::Error;
     }
 }
 
@@ -109,9 +107,6 @@ pub enum ClientError {
     /// Lost connection.
     #[error("connection lost")]
     ConnectionLost(#[source] ConnectionLostError),
-    /// Failed to send a datagram along the connection.
-    #[error("failed to send datagram")]
-    SendDatagram(#[source] SendDatagramError),
 }
 
 /// State of a [`WebTransportClient`] when it is [`ClientState::Connecting`].
@@ -123,6 +118,7 @@ pub struct Connecting {
 
 #[derive(Debug)]
 struct ToConnected {
+    connected_at: Instant,
     #[cfg(not(target_family = "wasm"))]
     local_addr: SocketAddr,
     #[cfg(not(target_family = "wasm"))]
@@ -137,16 +133,15 @@ struct ToConnected {
 /// State of a [`WebTransportClient`] when it is [`ClientState::Connected`].
 #[derive(Debug)]
 pub struct Connected {
-    /// Address of the local socket that this client's endpoint is bound to.
+    /// See [`LocalAddr`].
     #[cfg(not(target_family = "wasm"))]
     pub local_addr: SocketAddr,
-    /// Address of the remote socket that our client is talking to its server
-    /// along.
+    /// See [`RemoteAddr`].
     #[cfg(not(target_family = "wasm"))]
     pub remote_addr: SocketAddr,
-    /// [Round-trip time] of the connection.
-    ///
-    /// [Round-trip time]: aeronet::stats::Rtt
+    /// See [`ConnectedAt`].
+    pub connected_at: Instant,
+    /// See [`Rtt`].
     pub rtt: Duration,
     /// Protocol session state, used for reading more advanced info.
     pub session: Session,
@@ -154,6 +149,12 @@ pub struct Connected {
     recv_meta: mpsc::Receiver<ConnectionMeta>,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
+}
+
+impl ConnectedAt for Connected {
+    fn connected_at(&self) -> Instant {
+        self.connected_at
+    }
 }
 
 impl Rtt for Connected {

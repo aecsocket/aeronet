@@ -59,6 +59,7 @@ pub async fn start(
     let (send_s2c, recv_s2c) = mpsc::channel::<Bytes>(internal::MSG_BUF_CAP);
     send_connected
         .send(ToConnected {
+            connected_at: Instant::now(),
             #[cfg(not(target_family = "wasm"))]
             local_addr: endpoint.0.local_addr().map_err(ClientError::GetLocalAddr)?,
             #[cfg(not(target_family = "wasm"))]
@@ -86,7 +87,6 @@ pub async fn start(
     .map_err(|err| match err {
         internal::Error::FrontendClosed => ClientError::FrontendClosed,
         internal::Error::ConnectionLost(err) => ClientError::ConnectionLost(err.into()),
-        internal::Error::SendDatagram(err) => ClientError::SendDatagram(err.into()),
         internal::Error::DatagramsNotSupported => ClientError::DatagramsNotSupported,
     })
 }

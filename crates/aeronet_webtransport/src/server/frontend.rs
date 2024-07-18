@@ -323,6 +323,7 @@ impl WebTransportServer {
             if let Ok(Some(next)) = client.recv_connected.try_recv() {
                 events.push(ServerEvent::Connected { client_key });
                 Ok(Client::Connected(Connected {
+                    connected_at: next.connected_at,
                     remote_addr: next.remote_addr,
                     rtt: next.initial_rtt,
                     session: next.session,

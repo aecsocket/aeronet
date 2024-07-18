@@ -1,6 +1,6 @@
 //! Type definitions for packet-level types.
 
-use std::convert::Infallible;
+use std::{convert::Infallible, fmt::Debug};
 
 use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
 
@@ -9,9 +9,15 @@ use crate::{ack::Acknowledge, seq::Seq};
 /// Sequence number of a packet in transit.
 ///
 /// This is used in packet acknowledgements (see [`Acknowledge`]).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary, datasize::DataSize)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PacketSeq(pub Seq);
+
+impl Debug for PacketSeq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0 .0)
+    }
+}
 
 impl PacketSeq {
     /// Creates a new sequence number from a raw number.
@@ -28,9 +34,15 @@ impl PacketSeq {
 /// This is used in packet fragmentation and reassembly (see [`frag`]).
 ///
 /// [`frag`]: crate::frag
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary, datasize::DataSize)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MessageSeq(pub Seq);
+
+impl Debug for MessageSeq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0 .0)
+    }
+}
 
 impl MessageSeq {
     /// Creates a new sequence number from a raw number.

@@ -12,7 +12,7 @@ use super::{Fragment, FragmentHeader, FragmentMarker};
 /// See [`frag`](crate::frag).
 ///
 /// [`FragmentReceiver`]: crate::frag::FragmentReceiver
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, datasize::DataSize)]
 pub struct FragmentSender {
     max_payload_len: usize,
 }

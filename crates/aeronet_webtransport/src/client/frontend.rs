@@ -185,6 +185,7 @@ impl WebTransportClient {
             Ok(Some(next)) => (
                 Some(ClientEvent::Connected),
                 State::Connected(Connected {
+                    connected_at: next.connected_at,
                     #[cfg(not(target_family = "wasm"))]
                     local_addr: next.local_addr,
                     #[cfg(not(target_family = "wasm"))]

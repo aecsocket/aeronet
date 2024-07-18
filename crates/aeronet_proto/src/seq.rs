@@ -6,6 +6,7 @@ use std::{
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
+use derivative::Derivative;
 use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen};
 
 /// Sequence number uniquely identifying an item sent across a network.
@@ -36,7 +37,10 @@ use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen};
 /// [Addition](std::ops::Add) and [subtraction](std::ops::Sub) will always wrap.
 ///
 /// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]
+#[derive(
+    Derivative, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary, datasize::DataSize,
+)]
+#[derivative(Debug = "transparent")]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Seq(pub u16);
 

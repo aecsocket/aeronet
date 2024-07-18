@@ -2,6 +2,7 @@
 
 use std::convert::Infallible;
 
+use derivative::Derivative;
 use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen};
 
 use crate::{packet::PacketSeq, seq::Seq};
@@ -30,13 +31,21 @@ use crate::{packet::PacketSeq, seq::Seq};
 /// are sent, giving a lot of reliability and redundancy for acks.
 ///
 /// [*Gaffer On Games*]: https://gafferongames.com/post/reliable_ordered_messages/#packet-levelacks
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, arbitrary::Arbitrary)]
+#[derive(
+    Derivative, Clone, Copy, Default, PartialEq, Eq, arbitrary::Arbitrary, datasize::DataSize,
+)]
+#[derivative(Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Acknowledge {
     /// Last received packet sequence number.
     pub last_recv: PacketSeq,
     /// Bitfield of which packets before `last_recv` have been acknowledged.
+    #[derivative(Debug(format_with = "ack_bits_fmt"))]
     pub ack_bits: u32,
+}
+
+fn ack_bits_fmt(value: &u32, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+    write!(fmt, "{value:032b}")
 }
 
 impl Acknowledge {

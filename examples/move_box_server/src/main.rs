@@ -19,7 +19,7 @@ use bevy_replicon::{
     RepliconPlugins,
 };
 use move_box::{AsyncRuntime, MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
-use web_time::Duration;
+use web_time::{Duration, Instant};
 
 const DEFAULT_PORT: u16 = 25565;
 
@@ -141,19 +141,30 @@ fn on_server_event(
 }
 
 fn print_stats(server: Res<WebTransportServer>) {
-    let mut total_memory_used = 0usize;
+    let now = Instant::now();
+    let mut total_mem_used = 0usize;
     let cells = server
         .client_keys()
         .filter_map(|client_key| match server.client_state(client_key) {
             ClientState::Disconnected | ClientState::Connecting(_) => None,
             ClientState::Connected(client) => {
-                total_memory_used += client.session.memory_used();
+                dbg!(&client.session);
+                let mem_used = client.session.memory_used();
+                total_mem_used += mem_used;
+                let time = now - client.connected_at;
                 Some(vec![
                     format!("{}", client_key),
+                    format!("{:.1?}", time),
                     format!("{:?}", client.rtt),
-                    format!("{}", client.session.bytes_sent()),
-                    format!("{}", client.session.bytes_recv()),
-                    format!("{}", client.session.memory_used()),
+                    format!(
+                        "{:.1}",
+                        client.session.bytes_sent() as f64 / time.as_secs_f64()
+                    ),
+                    format!(
+                        "{:.1}",
+                        client.session.bytes_recv() as f64 / time.as_secs_f64()
+                    ),
+                    format!("{}", mem_used),
                 ])
             }
         })
@@ -165,13 +176,16 @@ fn print_stats(server: Res<WebTransportServer>) {
 
     let mut table = AsciiTable::default();
     table.column(0).set_header("client");
-    table.column(1).set_header("rtt");
-    table.column(2).set_header("tx");
-    table.column(3).set_header("rx");
-    table.column(4).set_header("mem usage");
+    table.column(1).set_header("time");
+    table.column(2).set_header("rtt");
+    table.column(3).set_header("tx/s");
+    table.column(4).set_header("rx/s");
+    table.column(5).set_header("mem");
 
     for line in table.format(&cells).lines() {
         info!("{line}");
     }
-    info!("{total_memory_used} bytes of memory used");
+
+    let total_mem_used = size::Size::from_bytes(total_mem_used);
+    info!("{total_mem_used} used");
 }

@@ -13,14 +13,14 @@ use std::{
 use aeronet::{
     client::ClientState,
     server::ServerState,
-    stats::{MessageStats, RemoteAddr, Rtt},
+    stats::{ConnectedAt, MessageStats, RemoteAddr, Rtt},
 };
 use aeronet_proto::session::{MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
-use web_time::Duration;
+use web_time::{Duration, Instant};
 use wtransport::error::ConnectionError;
 
 use crate::internal::{self, ConnectionMeta};
@@ -118,9 +118,6 @@ pub enum ServerError {
     /// Lost connection.
     #[error("connection lost")]
     ConnectionLost(#[source] <internal::Connection as xwt_core::session::datagram::Receive>::Error),
-    /// Failed to send a datagram along the connection.
-    #[error("failed to send datagram")]
-    SendDatagram(#[source] <internal::Connection as xwt_core::session::datagram::Send>::Error),
 }
 
 slotmap::new_key_type! {
@@ -202,6 +199,7 @@ pub struct Connecting {
 
 #[derive(Debug)]
 struct ToConnected {
+    connected_at: Instant,
     remote_addr: SocketAddr,
     initial_rtt: Duration,
     recv_meta: mpsc::Receiver<ConnectionMeta>,
@@ -214,14 +212,11 @@ struct ToConnected {
 /// [`ClientState::Connected`].
 #[derive(Debug)]
 pub struct Connected {
-    /// Address of the remote socket that our server is talking to this client
-    /// along.
+    /// See [`ConnectedAt`].
+    pub connected_at: Instant,
+    /// See [`RemoteAddr`].
     pub remote_addr: SocketAddr,
-    /// [Round-trip time] of the connection.
-    ///
-    /// [Round-trip time]: aeronet::stats::Rtt
-    #[doc(alias = "ping")]
-    #[doc(alias = "latency")]
+    /// See [`Rtt`].
     pub rtt: Duration,
     /// Protocol session state, used for reading more advanced info.
     pub session: Session,
@@ -229,6 +224,12 @@ pub struct Connected {
     recv_meta: mpsc::Receiver<ConnectionMeta>,
     recv_c2s: mpsc::Receiver<Bytes>,
     send_s2c: mpsc::UnboundedSender<Bytes>,
+}
+
+impl ConnectedAt for Connected {
+    fn connected_at(&self) -> Instant {
+        self.connected_at
+    }
 }
 
 impl Rtt for Connected {

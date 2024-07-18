@@ -1,17 +1,18 @@
 //! Server-side items.
 
-use std::{fmt::Display, time::Duration};
+use std::fmt::Display;
 
 use aeronet::{
     client::ClientState,
     lane::LaneIndex,
     server::{ServerEvent, ServerState, ServerTransport},
-    stats::MessageStats,
+    stats::{ConnectedAt, MessageStats},
 };
 use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use derivative::Derivative;
 use slotmap::SlotMap;
+use web_time::{Duration, Instant};
 
 slotmap::new_key_type! {
     /// Key identifying a unique client connected to a [`ChannelServer`].
@@ -40,6 +41,8 @@ pub struct ChannelServer {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Connected {
+    /// See [`ConnectedAt::connected_at`].
+    pub connected_at: Instant,
     /// See [`MessageStats::bytes_sent`].
     pub bytes_sent: usize,
     /// See [`MessageStats::bytes_recv`]
@@ -47,6 +50,12 @@ pub struct Connected {
     recv_c2s: Receiver<(Bytes, LaneIndex)>,
     send_s2c: Sender<(Bytes, LaneIndex)>,
     send_connected: bool,
+}
+
+impl ConnectedAt for Connected {
+    fn connected_at(&self) -> Instant {
+        self.connected_at
+    }
 }
 
 impl MessageStats for Connected {
@@ -90,6 +99,7 @@ impl ChannelServer {
         send_s2c: Sender<(Bytes, LaneIndex)>,
     ) -> ClientKey {
         self.clients.insert(Client::Connected(Connected {
+            connected_at: Instant::now(),
             bytes_sent: 0,
             bytes_recv: 0,
             recv_c2s,
