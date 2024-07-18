@@ -19,3 +19,4 @@ workspace = true
 bevy = { workspace = true }
 bevy_replicon = { workspace = true }
 serde = { workspace = true }
+aeronet_webtransport = { workspace = true }

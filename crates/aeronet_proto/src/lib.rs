@@ -10,3 +10,6 @@ pub mod packet;
 pub mod seq;
 pub mod session;
 mod util;
+
+#[cfg(feature = "replicon")]
+mod replicon;

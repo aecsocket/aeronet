@@ -168,12 +168,12 @@ pub struct SessionConfig {
     pub send_lanes: Vec<LaneConfig>,
     /// Configurations for the lanes which can be used to receive data.
     pub recv_lanes: Vec<LaneConfig>,
-    /// Maximum number of bytes of memory which can be used for receiving
-    /// fragments from the peer.
+    /// Maximum number of bytes of memory which can be used for buffering
+    /// messages.
     ///
     /// The default is 0. You **must** either use [`SessionConfig::new`] or
     /// override this value explicitly, otherwise your session will always
-    /// error with [`OutOfMemory`] when [`Session::recv`]'ing!
+    /// error with [`OutOfMemory`]!
     ///
     /// A malicious peer may send us an infinite amount of fragments which
     /// never get fully reassembled, leaving us having to buffer up all of their
@@ -185,7 +185,7 @@ pub struct SessionConfig {
     /// To avoid running out of memory, if we attempt to buffer more than this
     /// amount of bytes when receiving fragments, the connection will be
     /// forcibly reset by emitting an [`OutOfMemory`].
-    pub max_recv_memory_usage: usize,
+    pub max_memory_usage: usize,
     /// How many total bytes we can [`Session::flush`] out per second.
     ///
     /// This value is [`usize::MAX`] by default.
@@ -213,7 +213,7 @@ impl Default for SessionConfig {
         Self {
             send_lanes: Vec::new(),
             recv_lanes: Vec::new(),
-            max_recv_memory_usage: 0,
+            max_memory_usage: 0,
             send_bytes_per_sec: usize::MAX,
             keep_alive_interval: Duration::from_millis(500),
         }
@@ -222,12 +222,12 @@ impl Default for SessionConfig {
 
 impl SessionConfig {
     /// Creates a new configuration with the default values set, apart from
-    /// [`SessionConfig::max_recv_memory_usage`], which must be manually
+    /// [`SessionConfig::max_memory_usage`], which must be manually
     /// defined.
     #[must_use]
-    pub fn new(max_recv_memory_usage: usize) -> Self {
+    pub fn new(max_memory_usage: usize) -> Self {
         Self {
-            max_recv_memory_usage,
+            max_memory_usage,
             ..Default::default()
         }
     }
@@ -526,7 +526,7 @@ impl Session {
                 })
                 .collect(),
             recv_frags: FragmentReceiver::new(max_payload_len),
-            recv_frags_cap: config.max_recv_memory_usage,
+            recv_frags_cap: config.max_memory_usage,
             bytes_recv: 0,
         })
     }
