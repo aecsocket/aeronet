@@ -24,7 +24,11 @@ serde = { workspace = true }
 web-time = { workspace = true }
 
 aeronet = { workspace = true, features = ["bevy"] }
-aeronet_webtransport = { workspace = true, features = ["bevy", "serde", "dangerous-configuration"] }
+aeronet_webtransport = { workspace = true, features = [
+  "bevy",
+  "serde",
+  "dangerous-configuration",
+] }
 
 aeronet_replicon = { workspace = true, features = ["proto"] }
 bevy_replicon = { workspace = true }

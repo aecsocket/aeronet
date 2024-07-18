@@ -57,7 +57,9 @@ pub use {recv::*, send::*};
 ///
 /// [*Gaffer On Games*]: https://gafferongames.com/post/packet_fragmentation_and_reassembly/#fragment-packet-structure
 // TODO docs
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary, datasize::DataSize,
+)]
 pub struct FragmentMarker(pub(crate) u8);
 
 const LAST_MASK: u8 = 0b1000_0000;
@@ -144,7 +146,7 @@ impl FragmentMarker {
 
 /// Metadata for a packet produced by [`FragmentSender::fragment`] and read by
 /// [`FragmentReceiver::reassemble`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, arbitrary::Arbitrary)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, arbitrary::Arbitrary, datasize::DataSize)]
 pub struct FragmentHeader {
     /// Sequence number of the message that this fragment is a part of.
     pub msg_seq: MessageSeq,
@@ -179,13 +181,18 @@ impl Decode for FragmentHeader {
 }
 
 /// Fragment of a message as it is encoded inside a packet.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, datasize::DataSize)]
 pub struct Fragment {
     /// Metadata of this fragment, such as which message this fragment is a part
     /// of.
     pub header: FragmentHeader,
     /// Buffer storing the message payload of this fragment.
+    #[data_size(with = bytes_data_size)]
     pub payload: Bytes,
+}
+
+fn bytes_data_size(value: &Bytes) -> usize {
+    std::mem::size_of_val(value) + value.len()
 }
 
 impl EncodeLen for Fragment {

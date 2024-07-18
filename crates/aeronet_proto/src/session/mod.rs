@@ -3,12 +3,14 @@
 mod recv;
 mod send;
 
+use derivative::Derivative;
 pub use recv::*;
 
 use std::convert::Infallible;
 
 use aeronet::lane::{LaneIndex, LaneKind};
 use ahash::{AHashMap, AHashSet};
+use datasize::DataSize;
 use octs::{BufTooShortOr, Bytes, FixedEncodeLen, VarIntTooLarge};
 use web_time::{Duration, Instant};
 
@@ -66,7 +68,8 @@ potential attack vectors:
 /// - Both sides may have a different MTU
 /// - The MTU must always be greater than or equal to `min_mtu`, otherwise you
 ///   get [`MtuTooSmall`]
-#[derive(Debug)]
+#[derive(Derivative, datasize::DataSize)]
+#[derivative(Debug)]
 pub struct Session {
     /// Stores messages which have been sent using [`Session::send`], but still
     /// need to be flushed in [`Session::flush`].
@@ -86,6 +89,8 @@ pub struct Session {
     /// - if the message is reliable, the fragment is kept until the packet it
     ///   was flushed in was acked, at which point the fragment slot is set to
     ///   [`None`]
+    #[data_size(with = sent_msgs_data_size)]
+    #[derivative(Debug(format_with = "sent_msgs_fmt"))]
     sent_msgs: AHashMap<MessageSeq, SentMessage>,
     /// Tracks which packets have been flushed but not acknowledged by the peer
     /// yet, and what fragments those packets contained.
@@ -99,7 +104,11 @@ pub struct Session {
     /// In [`Session::recv`], when we get an ack for a packet sequence, its
     /// entry in this map is removed.
     ///
-    /// If a peer never sends acks, **TODO! This may OOM our side!**
+    /// If a peer never sends acks, our side will keep the fragments around in
+    /// memory forever, until `max_memory_usage` bytes are used up, and we end
+    /// the connection with an [`OutOfMemory`].
+    #[data_size(with = flushed_packets_data_size)]
+    #[derivative(Debug(format_with = "flushed_packets_fmt"))]
     flushed_packets: AHashMap<PacketSeq, FlushedPacket>,
     /// Tracks which packets we have acknowledged from the peer.
     acks: Acknowledge,
@@ -107,15 +116,16 @@ pub struct Session {
     ///
     /// This applies to:
     /// - how many bytes can be used by `recv_frags` to store incomplete
-    ///   messages
-    /// - TODO: send buffer
+    ///   messages received from our peer
+    /// - how many bytes can be used by `sent_msgs` and `flushed_packets` to
+    ///   store reliable message fragments which haven't been acked yet
     max_memory_usage: usize,
 
     // send
-    /// Allows splitting a message into smaller fragments.
-    send_frags: FragmentSender,
     /// Outgoing lane state.
     send_lanes: Box<[SendLane]>,
+    /// Allows splitting a message into smaller fragments.
+    send_frags: FragmentSender,
     /// Minimum MTU as defined in [`Session::new`].
     min_mtu: usize,
     /// Maximum length of a single flushed packet (maximum transmissible unit).
@@ -159,6 +169,40 @@ pub struct Session {
     recv_frags: FragmentReceiver,
     /// Total number of bytes received.
     bytes_recv: usize,
+}
+
+fn sent_msgs_data_size(value: &AHashMap<MessageSeq, SentMessage>) -> usize {
+    std::mem::size_of_val(value)
+        + value
+            .iter()
+            .map(|(_, msg)| std::mem::size_of_val(msg) + datasize::data_size(msg))
+            .sum::<usize>()
+}
+
+fn sent_msgs_fmt(
+    value: &AHashMap<MessageSeq, SentMessage>,
+    fmt: &mut std::fmt::Formatter,
+) -> Result<(), std::fmt::Error> {
+    fmt.debug_set()
+        .entries(value.iter().map(|(seq, _)| seq))
+        .finish()
+}
+
+fn flushed_packets_data_size(value: &AHashMap<PacketSeq, FlushedPacket>) -> usize {
+    std::mem::size_of_val(value)
+        + value
+            .iter()
+            .map(|(_, packet)| std::mem::size_of_val(packet) + datasize::data_size(packet))
+            .sum::<usize>()
+}
+
+fn flushed_packets_fmt(
+    value: &AHashMap<PacketSeq, FlushedPacket>,
+    fmt: &mut std::fmt::Formatter,
+) -> Result<(), std::fmt::Error> {
+    fmt.debug_set()
+        .entries(value.iter().map(|(seq, _)| seq))
+        .finish()
 }
 
 /// Configuration for a [`Session`].
@@ -283,6 +327,13 @@ impl SessionConfig {
         self.send_bytes_per_sec = send_bytes_per_sec;
         self
     }
+
+    /// Sets [`SessionConfig::keep_alive_interval`] on this value.
+    #[must_use]
+    pub const fn with_keep_alive_interval(mut self, keep_alive_interval: Duration) -> Self {
+        self.keep_alive_interval = keep_alive_interval;
+        self
+    }
 }
 
 /// Configuration for a lane in a [`Session`].
@@ -392,44 +443,46 @@ pub struct MtuTooSmall {
     pub mtu: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, datasize::DataSize)]
 struct FragmentPath {
     msg_seq: MessageSeq,
     index: u8,
 }
 
 /// State of a [`Session`] lane used for sending messages.
-#[derive(Debug)]
+#[derive(Debug, datasize::DataSize)]
 pub struct SendLane {
     /// Tracks how many bytes we have left for sending along this lane.
     pub bytes_left: ByteBucket,
     kind: SendLaneKind,
 }
 
-#[derive(Debug)]
+#[derive(Debug, datasize::DataSize)]
 enum SendLaneKind {
     Unreliable,
     Reliable { resend_after: Duration },
 }
 
-#[derive(Debug)]
+#[derive(Debug, datasize::DataSize)]
 struct SentMessage {
+    #[data_size(skip)]
     lane_index: LaneIndex,
     frags: Box<[Option<SentFragment>]>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, datasize::DataSize)]
 struct SentFragment {
     frag: Fragment,
     next_flush_at: Instant,
 }
 
-#[derive(Debug)]
+#[derive(Debug, datasize::DataSize)]
 struct FlushedPacket {
     frags: Box<[FragmentPath]>,
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 enum RecvLane {
     UnreliableUnordered,
     UnreliableSequenced {
@@ -441,8 +494,53 @@ enum RecvLane {
     },
     ReliableOrdered {
         pending_seq: MessageSeq,
+        #[derivative(Debug(format_with = "recv_buf_fmt"))]
         recv_buf: AHashMap<MessageSeq, Bytes>,
     },
+}
+
+fn recv_buf_fmt(
+    value: &AHashMap<MessageSeq, Bytes>,
+    fmt: &mut std::fmt::Formatter,
+) -> Result<(), std::fmt::Error> {
+    fmt.debug_set()
+        .entries(value.iter().map(|(seq, _)| seq))
+        .finish()
+}
+
+// TODO: datasize::DataSize derive is broken on enums
+impl datasize::DataSize for RecvLane {
+    const IS_DYNAMIC: bool = true;
+
+    const STATIC_HEAP_SIZE: usize = 0;
+
+    fn estimate_heap_size(&self) -> usize {
+        match self {
+            Self::UnreliableUnordered => 0,
+            Self::UnreliableSequenced { pending_seq } => datasize::data_size(pending_seq),
+            Self::ReliableUnordered {
+                pending_seq,
+                recv_seq_buf,
+            } => datasize::data_size(pending_seq) + recv_seq_buf_byte_size(recv_seq_buf),
+            Self::ReliableOrdered {
+                pending_seq,
+                recv_buf,
+            } => datasize::data_size(pending_seq) + recv_buf_byte_size(recv_buf),
+        }
+    }
+}
+// END
+
+fn recv_seq_buf_byte_size(value: &AHashSet<MessageSeq>) -> usize {
+    std::mem::size_of_val(value) + datasize::data_size(&value)
+}
+
+fn recv_buf_byte_size(value: &AHashMap<MessageSeq, Bytes>) -> usize {
+    std::mem::size_of_val(value)
+        + value
+            .iter()
+            .map(|(_, buf)| crate::util::bytes_data_size(buf))
+            .sum::<usize>()
 }
 
 /// Minimum number of bytes of overhead in a packet produced by
@@ -483,7 +581,6 @@ impl Session {
             acks: Acknowledge::new(),
 
             // send
-            send_frags: FragmentSender::new(max_payload_len),
             send_lanes: config
                 .send_lanes
                 .into_iter()
@@ -501,6 +598,7 @@ impl Session {
                     },
                 })
                 .collect(),
+            send_frags: FragmentSender::new(max_payload_len),
             min_mtu,
             mtu: initial_mtu,
             bytes_left: ByteBucket::new(config.send_bytes_per_sec),
@@ -607,27 +705,13 @@ impl Session {
         self.max_memory_usage
     }
 
-    /// Gets the number of bytes currently used for buffering incoming messages.
-    #[must_use]
-    pub const fn recv_memory_used(&self) -> usize {
-        self.recv_frags.bytes_used()
-    }
-
-    /// Gets the number of bytes currently used for buffering outgoing messages.
-    #[must_use]
-    pub const fn send_memory_used(&self) -> usize {
-        0
-    }
-
     /// Gets the total number of bytes used for buffering messages.
-    ///
-    /// This is equivalent to `recv_memory_used() + send_memory_used()`.
     ///
     /// If this value exceeds [`Session::max_memory_usage`], operations on this
     /// session will fail with [`OutOfMemory`].
     #[must_use]
-    pub const fn memory_used(&self) -> usize {
-        self.recv_memory_used() + self.send_memory_used()
+    pub fn memory_used(&self) -> usize {
+        datasize::data_size(self)
     }
 }
 

@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use futures::{channel::mpsc, never::Never, SinkExt, StreamExt};
+use tracing::debug;
 use web_time::Duration;
 use xwt_core::session::datagram;
 
@@ -30,6 +31,10 @@ cfg_if::cfg_if! {
         pub fn to_bytes(datagram: Datagram) -> Bytes {
             Bytes::from(datagram)
         }
+
+        async fn send_datagram(conn: &Connection, msg: Bytes) -> Result<(), Error> {
+            datagram::Send::send_datagram(conn, msg).await;
+        }
     } else {
         pub type Connection = xwt_wtransport::Connection;
         pub type ClientEndpoint = xwt_wtransport::Endpoint<xwt_wtransport::wtransport::endpoint::endpoint_side::Client>;
@@ -44,6 +49,33 @@ cfg_if::cfg_if! {
 
         pub fn to_bytes(datagram: Datagram) -> Bytes {
             datagram.0.payload()
+        }
+
+        async fn send_datagram(conn: &Connection, msg: Bytes) -> Result<(), Error> {
+            use wtransport::error::SendDatagramError;
+
+            let msg_len = msg.len();
+            match datagram::Send::send_datagram(conn, msg).await {
+                Ok(()) => Ok(()),
+                Err(SendDatagramError::NotConnected) => {
+                    // we'll pick up connection errors in the recv loop,
+                    // where we'll get a better error message
+                    Ok(())
+                }
+                Err(SendDatagramError::TooLarge) => {
+                    // the backend constantly informs the frontend about changes in the path MTU
+                    // so hopefully the frontend will realise its packets are exceeding MTU,
+                    // and shrink them accordingly; therefore this is just a one-off error
+                    let mtu = get_mtu(conn);
+                    debug!("Attempted to send datagram of size {msg_len} when connection only supports {mtu:?}");
+                    Ok(())
+                }
+                Err(SendDatagramError::UnsupportedByPeer) => {
+                    // this should be impossible, since we checked that the client does support datagrams
+                    // before connecting, but we'll error-case it anyway
+                    return Err(Error::DatagramsNotSupported);
+                }
+            }
         }
     }
 }
@@ -62,7 +94,6 @@ pub struct ConnectionMeta {
 pub enum Error {
     FrontendClosed,
     ConnectionLost(<Connection as datagram::Receive>::Error),
-    SendDatagram(<Connection as datagram::Send>::Error),
     DatagramsNotSupported,
 }
 
@@ -72,9 +103,7 @@ pub async fn send_loop(
 ) -> Result<Never, Error> {
     loop {
         let msg = recv_s.next().await.ok_or(Error::FrontendClosed)?;
-        datagram::Send::send_datagram(conn, msg)
-            .await
-            .map_err(Error::SendDatagram)?;
+        send_datagram(conn, msg).await?;
     }
 }
 

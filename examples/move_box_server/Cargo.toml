@@ -18,12 +18,13 @@ workspace = true
 [dependencies]
 move_box = { path = "../move_box" }
 
+ascii_table = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 web-time = { workspace = true }
-ascii_table = { workspace = true }
+size = { workspace = true }
 
 aeronet = { workspace = true, features = ["bevy"] }
 aeronet_webtransport = { workspace = true, features = ["bevy", "serde"] }

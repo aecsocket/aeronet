@@ -13,7 +13,16 @@
 
 use std::net::SocketAddr;
 
-use web_time::Duration;
+use web_time::{Duration, Instant};
+
+/// Gets the instant at which this client was considered connected, and messages
+/// could start being exchanged between the client and its peer.
+///
+/// See [`stats`](crate::stats) on how to get access to this info.
+pub trait ConnectedAt {
+    /// Gets the connection instant.
+    fn connected_at(&self) -> Instant;
+}
 
 /// Gets the round-trip time (RTT) of a connection.
 ///

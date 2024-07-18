@@ -142,6 +142,7 @@ async fn handle_session(
     let (send_s2c, recv_s2c) = mpsc::unbounded::<Bytes>();
     send_connected
         .send(ToConnected {
+            connected_at: Instant::now(),
             remote_addr: conn.remote_address(),
             initial_rtt: conn.rtt(),
             recv_meta,
@@ -164,7 +165,6 @@ async fn handle_session(
     .map_err(|err| match err {
         internal::Error::FrontendClosed => ServerError::FrontendClosed,
         internal::Error::ConnectionLost(err) => ServerError::ConnectionLost(err),
-        internal::Error::SendDatagram(err) => ServerError::SendDatagram(err),
         internal::Error::DatagramsNotSupported => ServerError::DatagramsNotSupported,
     })
 }

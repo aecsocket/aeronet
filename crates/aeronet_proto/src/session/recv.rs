@@ -168,6 +168,7 @@ impl RecvMessages<'_> {
         };
 
         // TODO: also count up the bytes used for storing send buffered frags
+        // this iterates through all received fragments, potential bottleneck?
         if recv_frags.bytes_used() > recv_frags_cap {
             return Err(OneOf::from(OutOfMemory).broaden());
         }

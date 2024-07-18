@@ -163,7 +163,7 @@ impl ConsumeBytes for ConsumeImpl<'_> {
 /// [token bucket]: https://en.wikipedia.org/wiki/Token_bucket
 /// [consuming]: ByteLimit::consume
 /// [refilling]: ByteBucket::refill_portion
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, datasize::DataSize)]
 pub struct ByteBucket {
     cap: usize,
     rem: usize,

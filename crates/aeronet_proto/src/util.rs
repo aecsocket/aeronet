@@ -3,7 +3,7 @@ use std::{
     ops::{Add, AddAssign, Deref, DerefMut, Sub, SubAssign},
 };
 
-use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
+use octs::{BufTooShortOr, Bytes, Decode, Encode, FixedEncodeLen, Read, Write};
 
 use crate::{
     frag::FragmentMarker,
@@ -113,3 +113,7 @@ forward_fixed_encode_len!(PacketSeq, Seq);
 
 forward_encode_decode!(FragmentMarker, u8);
 forward_fixed_encode_len!(FragmentMarker, u8);
+
+pub(crate) fn bytes_data_size(value: &Bytes) -> usize {
+    value.len()
+}

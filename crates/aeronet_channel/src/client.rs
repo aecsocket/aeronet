@@ -1,15 +1,14 @@
 //! Client-side items.
 
-use std::time::Duration;
-
 use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport},
     lane::LaneIndex,
-    stats::MessageStats,
+    stats::{ConnectedAt, MessageStats},
 };
 use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use either::Either;
+use web_time::{Duration, Instant};
 
 use crate::server::{ChannelServer, ClientKey};
 
@@ -36,6 +35,8 @@ pub struct Connected {
     ///
     /// Use this key to disconnect this client from the server side.
     pub key: ClientKey,
+    /// See [`ConnectedAt::connected_at`].
+    pub connected_at: Instant,
     /// See [`MessageStats::bytes_sent`].
     pub bytes_sent: usize,
     /// See [`MessageStats::bytes_recv`]
@@ -44,6 +45,12 @@ pub struct Connected {
     recv_s2c: Receiver<(Bytes, LaneIndex)>,
     #[allow(clippy::struct_field_names)]
     send_connected: bool,
+}
+
+impl ConnectedAt for Connected {
+    fn connected_at(&self) -> Instant {
+        self.connected_at
+    }
 }
 
 impl MessageStats for Connected {
@@ -106,6 +113,7 @@ impl ChannelClient {
         Self {
             inner: Inner::Connected(Connected {
                 key,
+                connected_at: Instant::now(),
                 bytes_sent: 0,
                 bytes_recv: 0,
                 send_c2s,

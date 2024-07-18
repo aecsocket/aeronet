@@ -2,6 +2,7 @@ use std::collections::hash_map::Entry;
 
 use ahash::AHashMap;
 use bitvec::{array::BitArray, bitarr};
+use derivative::Derivative;
 use octs::Bytes;
 use web_time::Instant;
 
@@ -21,14 +22,32 @@ use super::{Fragment, FragmentHeader};
 /// [`frag`](crate::frag) to learn about how to manage this.
 ///
 /// [`FragmentSender`]: crate::frag::FragmentSender
-#[derive(Debug, Clone)]
+#[derive(Derivative, Clone, datasize::DataSize)]
+#[derivative(Debug)]
 pub struct FragmentReceiver {
     max_payload_len: usize,
+    #[data_size(with = messages_data_size)]
+    #[derivative(Debug(format_with = "messages_fmt"))]
     messages: AHashMap<MessageSeq, MessageBuffer>,
-    bytes_used: usize,
 }
 
-#[derive(Debug, Clone)]
+fn messages_data_size(value: &AHashMap<MessageSeq, MessageBuffer>) -> usize {
+    value
+        .iter()
+        .map(|(_, msg)| std::mem::size_of_val(msg) + datasize::data_size(msg))
+        .sum()
+}
+
+fn messages_fmt(
+    value: &AHashMap<MessageSeq, MessageBuffer>,
+    fmt: &mut std::fmt::Formatter,
+) -> Result<(), std::fmt::Error> {
+    fmt.debug_set()
+        .entries(value.iter().map(|(seq, _)| seq))
+        .finish()
+}
+
+#[derive(Debug, Clone, datasize::DataSize)]
 struct MessageBuffer {
     /// Index number of the last fragment, given the fragments we have received
     /// so far.
@@ -47,6 +66,7 @@ struct MessageBuffer {
     /// efficiency - this way, we can copy payloads directly into the `Vec<u8>`
     /// and quickly turn that buffer into a `Bytes` once we're ready to give it
     /// to the user.
+    #[data_size(skip)]
     recv_frags: BitArray<[u8; 32]>,
     /// Combination of all fragment payloads reassembled into a single buffer.
     ///
@@ -93,14 +113,6 @@ impl MessageBuffer {
             last_recv_at: now,
         }
     }
-
-    fn byte_size(&self) -> usize {
-        // we have to also take into account how big the message buf itself is
-        // because if a peer sends us a ton of tiny 1-byte messages, then we'll
-        // think that we're using a lot less memory than we actually are
-        // because the MessageBuffer struct alloc also takes some memory
-        std::mem::size_of::<Self>() + self.payload.capacity()
-    }
 }
 
 impl FragmentReceiver {
@@ -119,15 +131,17 @@ impl FragmentReceiver {
         Self {
             max_payload_len,
             messages: AHashMap::new(),
-            bytes_used: 0,
         }
     }
 
     /// Gets the total number of bytes used for storing messages which have not
     /// been fully reassembled yet.
     #[must_use]
-    pub const fn bytes_used(&self) -> usize {
-        self.bytes_used
+    pub fn bytes_used(&self) -> usize {
+        self.messages
+            .iter()
+            .map(|(_, msg)| datasize::data_size(msg))
+            .sum::<usize>()
     }
 
     /// Receives a fragmented packet and attempts to reassemble this fragment
@@ -162,7 +176,6 @@ impl FragmentReceiver {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => {
                 let buf = MessageBuffer::new(now, self.max_payload_len, frag_index);
-                self.bytes_used += buf.byte_size();
                 entry.insert(buf)
             }
         };
@@ -177,7 +190,6 @@ impl FragmentReceiver {
         }
 
         // copy the payload data into the buffer
-        let cap_before = buf.byte_size();
         let start = usize::from(frag_index) * self.max_payload_len;
         let end = start + payload.len();
         if marker.is_last() {
@@ -207,7 +219,6 @@ impl FragmentReceiver {
             }
         }
         buf.payload[start..end].copy_from_slice(payload);
-        self.bytes_used += buf.byte_size() - cap_before;
 
         // only update the buffer meta once we know there are no more error paths
         buf.recv_frags.set(usize::from(frag_index), true);
@@ -222,8 +233,6 @@ impl FragmentReceiver {
                 .messages
                 .remove(&msg_seq)
                 .expect("`buf` is a mut ref to this buffer");
-            self.bytes_used -= buf.byte_size();
-            debug_assert!(!self.messages.is_empty() || self.bytes_used == 0);
             Ok(Some(Bytes::from(buf.payload)))
         } else {
             // this happens separately from the other buffer meta update
@@ -252,19 +261,12 @@ impl FragmentReceiver {
     /// Removes a message with the given sequence, dropping all its fragments,
     /// returning `true` if the message previously existed.
     pub fn remove(&mut self, msg_seq: MessageSeq) -> bool {
-        match self.messages.remove(&msg_seq) {
-            Some(buf) => {
-                self.bytes_used -= buf.byte_size();
-                true
-            }
-            None => false,
-        }
+        self.messages.remove(&msg_seq).is_some()
     }
 
     /// Drops all currently buffered messages.
     pub fn clear(&mut self) {
         self.messages.clear();
-        self.bytes_used = 0;
     }
 }
 
