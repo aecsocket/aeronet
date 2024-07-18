@@ -16,7 +16,13 @@ version.workspace = true
 workspace = true
 
 [dependencies]
+aeronet_webtransport = { workspace = true }
 bevy = { workspace = true }
 bevy_replicon = { workspace = true }
 serde = { workspace = true }
-aeronet_webtransport = { workspace = true }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+wasm-bindgen-futures = { workspace = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+tokio = { workspace = true, features = ["full"] }

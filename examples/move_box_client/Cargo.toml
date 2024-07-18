@@ -1,6 +1,6 @@
 [package]
-description = "move_box demo server"
-name = "move_box_server"
+description = "move_box demo client"
+name = "move_box_client"
 publish = false
 
 authors.workspace = true
@@ -20,13 +20,11 @@ move_box = { path = "../move_box" }
 
 bevy = { workspace = true }
 clap = { workspace = true }
-rand = { workspace = true }
 serde = { workspace = true }
 web-time = { workspace = true }
-ascii_table = { workspace = true }
 
 aeronet = { workspace = true, features = ["bevy"] }
-aeronet_webtransport = { workspace = true, features = ["bevy", "serde"] }
+aeronet_webtransport = { workspace = true, features = ["bevy", "serde", "dangerous-configuration"] }
 
 aeronet_replicon = { workspace = true, features = ["proto"] }
 bevy_replicon = { workspace = true }

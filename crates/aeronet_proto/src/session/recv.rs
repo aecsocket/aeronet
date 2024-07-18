@@ -61,7 +61,7 @@ impl Session {
                 now,
                 recv_lanes: &mut self.recv_lanes,
                 recv_frags: &mut self.recv_frags,
-                recv_frags_cap: self.recv_frags_cap,
+                recv_frags_cap: self.max_memory_usage,
                 packet,
             },
         ))
@@ -167,6 +167,7 @@ impl RecvMessages<'_> {
             return Ok(Either::Left(std::iter::empty()));
         };
 
+        // TODO: also count up the bytes used for storing send buffered frags
         if recv_frags.bytes_used() > recv_frags_cap {
             return Err(OneOf::from(OutOfMemory).broaden());
         }

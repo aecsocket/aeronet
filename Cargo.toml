@@ -57,6 +57,7 @@ terrors = "0.3.0"
 thiserror = "1.0.57"
 tracing = "0.1.40"
 web-time = "1.1.0"
+ascii_table = "4.0.3"
 
 # bevy
 

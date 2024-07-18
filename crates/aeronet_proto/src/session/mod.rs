@@ -103,6 +103,13 @@ pub struct Session {
     flushed_packets: AHashMap<PacketSeq, FlushedPacket>,
     /// Tracks which packets we have acknowledged from the peer.
     acks: Acknowledge,
+    /// Maximum number of bytes that this session can use to buffer messages.
+    ///
+    /// This applies to:
+    /// - how many bytes can be used by `recv_frags` to store incomplete
+    ///   messages
+    /// - TODO: send buffer
+    max_memory_usage: usize,
 
     // send
     /// Allows splitting a message into smaller fragments.
@@ -138,7 +145,7 @@ pub struct Session {
     /// In [`Session::recv`] when reading a fragment in a packet.
     ///
     /// The maximum number of bytes this receiver can hold is given by
-    /// `recv_frags_cap`. If we receive a fragment but do not have enough
+    /// `max_memory_usage`. If we receive a fragment but do not have enough
     /// capacity to insert it into the receiver, the connection is closed.
     ///
     /// Note that since this buffer has no concept of lanes or reliability, we
@@ -150,9 +157,6 @@ pub struct Session {
     /// In [`Session::recv`] when a message has been fully reassembled, by
     /// receiving all of its fragments.
     recv_frags: FragmentReceiver,
-    /// Maximum number of bytes that `recv_frags` is allowed to use to buffer
-    /// incomplete messages.
-    recv_frags_cap: usize,
     /// Total number of bytes received.
     bytes_recv: usize,
 }
@@ -526,7 +530,7 @@ impl Session {
                 })
                 .collect(),
             recv_frags: FragmentReceiver::new(max_payload_len),
-            recv_frags_cap: config.max_memory_usage,
+            max_memory_usage: config.max_memory_usage,
             bytes_recv: 0,
         })
     }
@@ -591,6 +595,39 @@ impl Session {
             self.mtu = mtu;
             Ok(())
         }
+    }
+
+    /// Gets the maximum number of bytes that this session can use to store
+    /// buffered messages.
+    ///
+    /// If this value is exceeded, operations on this session will fail with
+    /// [`OutOfMemory`].
+    #[must_use]
+    pub const fn max_memory_usage(&self) -> usize {
+        self.max_memory_usage
+    }
+
+    /// Gets the number of bytes currently used for buffering incoming messages.
+    #[must_use]
+    pub const fn recv_memory_used(&self) -> usize {
+        self.recv_frags.bytes_used()
+    }
+
+    /// Gets the number of bytes currently used for buffering outgoing messages.
+    #[must_use]
+    pub const fn send_memory_used(&self) -> usize {
+        0
+    }
+
+    /// Gets the total number of bytes used for buffering messages.
+    ///
+    /// This is equivalent to `recv_memory_used() + send_memory_used()`.
+    ///
+    /// If this value exceeds [`Session::max_memory_usage`], operations on this
+    /// session will fail with [`OutOfMemory`].
+    #[must_use]
+    pub const fn memory_used(&self) -> usize {
+        self.recv_memory_used() + self.send_memory_used()
     }
 }
 
