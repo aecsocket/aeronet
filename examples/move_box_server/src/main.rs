@@ -1,20 +1,29 @@
 #![doc = include_str!("../README.md")]
 
 use aeronet::{
+    client::ClientState,
     error::pretty_error,
-    server::{RemoteClientConnecting, ServerClosed, ServerOpened, ServerTransportSet},
+    server::{
+        RemoteClientConnecting, ServerClosed, ServerOpened, ServerTransport, ServerTransportSet,
+    },
 };
-use aeronet_replicon::server::RepliconServerPlugin;
+use aeronet_replicon::server::{ClientKeys, RepliconServerPlugin};
 use aeronet_webtransport::{
     server::{ConnectionResponse, WebTransportServer},
     wtransport,
 };
-use bevy::{log::LogPlugin, prelude::*};
+use ascii_table::AsciiTable;
+use bevy::{log::LogPlugin, prelude::*, time::common_conditions::on_timer};
 use bevy_replicon::{
-    core::Replicated, prelude::RepliconChannels, server::ServerEvent, RepliconPlugins,
+    client::ClientPlugin, core::Replicated, prelude::RepliconChannels, server::ServerEvent,
+    RepliconPlugins,
 };
-use move_box::{MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
+use move_box::{AsyncRuntime, MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
 use web_time::Duration;
+
+const DEFAULT_PORT: u16 = 25565;
+
+const PRINT_STATS_INTERVAL: Duration = Duration::from_millis(500);
 
 /// `move_box` demo server
 #[derive(Debug, Resource, clap::Parser)]
@@ -24,25 +33,9 @@ struct Args {
     port: u16,
 }
 
-const DEFAULT_PORT: u16 = 25565;
-
 impl FromWorld for Args {
     fn from_world(_: &mut World) -> Self {
         <Self as clap::Parser>::parse()
-    }
-}
-
-#[derive(Debug, Deref, DerefMut, Resource)]
-struct TokioRuntime(tokio::runtime::Runtime);
-
-impl FromWorld for TokioRuntime {
-    fn from_world(_: &mut World) -> Self {
-        Self(
-            tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .unwrap(),
-        )
     }
 }
 
@@ -52,23 +45,23 @@ fn main() {
         .add_plugins((
             MinimalPlugins,
             LogPlugin::default(),
-            RepliconPlugins,
+            RepliconPlugins.build().disable::<ClientPlugin>(),
             RepliconServerPlugin::<WebTransportServer>::default(),
             MoveBoxPlugin,
         ))
-        .init_resource::<TokioRuntime>()
         .init_resource::<WebTransportServer>()
         .add_systems(Startup, open_server)
         .add_systems(
             PreUpdate,
             (on_opened, on_closed, on_connecting, on_server_event).after(ServerTransportSet::Recv),
         )
+        .add_systems(Update, print_stats.run_if(on_timer(PRINT_STATS_INTERVAL)))
         .run();
 }
 
 fn open_server(
     mut server: ResMut<WebTransportServer>,
-    tasks: Res<TokioRuntime>,
+    tasks: Res<AsyncRuntime>,
     args: Res<Args>,
     channels: Res<RepliconChannels>,
 ) {
@@ -116,11 +109,17 @@ fn on_connecting(
     }
 }
 
-fn on_server_event(mut commands: Commands, mut events: EventReader<ServerEvent>) {
+fn on_server_event(
+    mut commands: Commands,
+    mut events: EventReader<ServerEvent>,
+    client_keys: Res<ClientKeys<WebTransportServer>>,
+    players: Query<(Entity, &Player)>,
+) {
     for event in events.read() {
         match event {
             ServerEvent::ClientConnected { client_id } => {
-                info!("{client_id:?} connected");
+                let client_key = client_keys.get_by_right(client_id).unwrap();
+                info!("{client_id:?} controlled by {client_key} connected");
                 let color = Color::rgb(rand::random(), rand::random(), rand::random());
                 commands.spawn((
                     Player(*client_id),
@@ -131,7 +130,48 @@ fn on_server_event(mut commands: Commands, mut events: EventReader<ServerEvent>)
             }
             ServerEvent::ClientDisconnected { client_id, reason } => {
                 info!("{client_id:?} disconnected: {reason}");
+                for (entity, Player(player)) in &players {
+                    if *player == *client_id {
+                        commands.entity(entity).despawn();
+                    }
+                }
             }
         }
     }
+}
+
+fn print_stats(server: Res<WebTransportServer>) {
+    let mut total_memory_used = 0usize;
+    let cells = server
+        .client_keys()
+        .filter_map(|client_key| match server.client_state(client_key) {
+            ClientState::Disconnected | ClientState::Connecting(_) => None,
+            ClientState::Connected(client) => {
+                total_memory_used += client.session.memory_used();
+                Some(vec![
+                    format!("{}", client_key),
+                    format!("{:?}", client.rtt),
+                    format!("{}", client.session.bytes_sent()),
+                    format!("{}", client.session.bytes_recv()),
+                    format!("{}", client.session.memory_used()),
+                ])
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if cells.is_empty() {
+        return;
+    }
+
+    let mut table = AsciiTable::default();
+    table.column(0).set_header("client");
+    table.column(1).set_header("rtt");
+    table.column(2).set_header("tx");
+    table.column(3).set_header("rx");
+    table.column(4).set_header("mem usage");
+
+    for line in table.format(&cells).lines() {
+        info!("{line}");
+    }
+    info!("{total_memory_used} bytes of memory used");
 }
