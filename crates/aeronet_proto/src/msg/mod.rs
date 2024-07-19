@@ -1,31 +1,5 @@
 //! Handles splitting and reassembling a single large message into multiple
 //! smaller packets for sending over a network.
-//!
-//! # Memory management
-//!
-//! The initial implementation used a fixed-size "sequence buffer" data
-//! structure as proposed by [*Gaffer On Games*], however this is an issue when
-//! we don't know how many fragments and messages we may be receiving, as this
-//! buffer is able to run out of space. This current implementation, instead,
-//! uses a map to store messages. This is able to grow infinitely, or at least
-//! up to how much memory the computer has.
-//!
-//! Due to the fact that fragments may be dropped in transport, and that old
-//! messages waiting for more fragments to be received may never get those
-//! fragments, you need a strategy to handle fragments which may never be fully
-//! reassembled. Some possible strategies are:
-//! * for unreliable lanes
-//!   * incomplete messages are removed if they have not received a new fragment
-//!     in X milliseconds
-//!   * if a new message comes in and it takes more memory than is available,
-//!     the oldest existing messages are removed until there is enough memory
-//! * for reliable lanes
-//!   * if we don't have enough memory to fit a new message in, the connection
-//!     is reset
-//!
-//! This is automatically handled in [`session`](crate::session).
-//!
-//! [*Gaffer On Games*]: https://gafferongames.com/post/packet_fragmentation_and_reassembly/#data-structure-on-receiver-side
 
 use std::convert::Infallible;
 
