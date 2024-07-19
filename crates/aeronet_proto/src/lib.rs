@@ -7,9 +7,13 @@ pub mod ack;
 pub mod byte_count;
 pub mod frag;
 pub mod packet;
+pub mod rtt;
 pub mod seq;
 pub mod session;
 mod util;
 
 #[cfg(feature = "replicon")]
 mod replicon;
+
+#[cfg(feature = "stats")]
+pub mod stats;

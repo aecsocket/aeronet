@@ -10,7 +10,7 @@ use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot;
 use replace_with::replace_with_or_abort_and_return;
-use tracing::debug;
+use tracing::{debug, trace};
 use web_time::{Duration, Instant};
 use xwt_core::utils::maybe;
 
@@ -148,10 +148,17 @@ impl ClientTransport for WebTransportClient {
             return Err(ClientError::NotConnected);
         };
 
+        let mut bytes_sent = 0usize;
         for packet in client.session.flush(Instant::now()) {
+            bytes_sent = bytes_sent.saturating_add(packet.len());
             // ignore errors here, pick them up in `poll`
             let _ = client.send_c2s.unbounded_send(packet);
         }
+
+        if bytes_sent > 0 {
+            trace!(bytes_sent, "Flushed packets");
+        }
+
         Ok(())
     }
 
@@ -190,7 +197,8 @@ impl WebTransportClient {
                     local_addr: next.local_addr,
                     #[cfg(not(target_family = "wasm"))]
                     remote_addr: next.remote_addr,
-                    rtt: next.initial_rtt,
+                    #[cfg(not(target_family = "wasm"))]
+                    raw_rtt: next.initial_rtt,
                     session: next.session,
                     recv_err: client.recv_err,
                     recv_meta: next.recv_meta,
@@ -222,7 +230,10 @@ impl WebTransportClient {
             }
 
             while let Ok(Some(meta)) = client.recv_meta.try_next() {
-                client.rtt = meta.rtt;
+                #[cfg(not(target_family = "wasm"))]
+                {
+                    client.raw_rtt = meta.rtt;
+                }
                 client
                     .session
                     .set_mtu(meta.mtu)
@@ -231,7 +242,9 @@ impl WebTransportClient {
 
             client.session.refill_bytes(delta_time);
 
+            let mut bytes_recv = 0usize;
             while let Ok(Some(packet)) = client.recv_s2c.try_next() {
+                bytes_recv = bytes_recv.saturating_add(packet.len());
                 let (acks, mut msgs) = match client.session.recv(Instant::now(), packet) {
                     Ok(x) => x,
                     Err(err) => {
@@ -262,6 +275,10 @@ impl WebTransportClient {
                 if let Err(err) = res {
                     return Err(ClientError::OutOfMemory(err));
                 }
+            }
+
+            if bytes_recv > 0 {
+                trace!(bytes_recv, "Received packets");
             }
 
             Ok(())

@@ -24,6 +24,9 @@ serde = ["dep:serde"]
 ## Enables [`bevy_replicon`](https://docs.rs/bevy_replicon) support.
 replicon = ["dep:bevy_replicon"]
 
+## Allows drawing network statistics in an [`egui`](https://docs.rs/egui) UI.
+stats = ["dep:egui", "dep:size"]
+
 [dependencies]
 aeronet = { workspace = true }
 
@@ -38,10 +41,14 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 web-time = { workspace = true }
 derivative = { workspace = true }
+circular-buffer = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
 bevy_replicon = { workspace = true, optional = true }
+
+egui = { workspace = true, optional = true }
+size = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

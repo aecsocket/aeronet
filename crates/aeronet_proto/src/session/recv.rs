@@ -8,6 +8,7 @@ use web_time::Instant;
 use crate::{
     frag::{Fragment, FragmentReceiver},
     packet::{MessageSeq, PacketHeader, PacketSeq},
+    rtt::RttEstimator,
 };
 
 use super::{FlushedPacket, OutOfMemory, RecvError, RecvLane, SentMessage, Session};
@@ -50,8 +51,10 @@ impl Session {
         }
 
         let acks = Self::recv_acks(
+            now,
             &mut self.flushed_packets,
             &mut self.sent_msgs,
+            &mut self.rtt,
             header.acks.seqs(),
         );
 
@@ -67,22 +70,28 @@ impl Session {
         ))
     }
 
-    fn recv_acks<'a>(
-        flushed_packets: &'a mut AHashMap<PacketSeq, FlushedPacket>,
-        sent_msgs: &'a mut AHashMap<MessageSeq, SentMessage>,
-        acked_seqs: impl Iterator<Item = PacketSeq> + 'a,
-    ) -> impl Iterator<Item = MessageSeq> + 'a {
+    fn recv_acks<'session>(
+        now: Instant,
+        flushed_packets: &'session mut AHashMap<PacketSeq, FlushedPacket>,
+        sent_msgs: &'session mut AHashMap<MessageSeq, SentMessage>,
+        rtt: &'session mut RttEstimator,
+        acked_seqs: impl Iterator<Item = PacketSeq> + 'session,
+    ) -> impl Iterator<Item = MessageSeq> + 'session {
         acked_seqs
             // we now know that our packet with sequence `seq` was acked by the peer
             // let's find what fragments that packet contained when we flushed it out
             .filter_map(|seq| flushed_packets.remove(&seq))
-            // TODO Rust 1.80: Box::into_iter - https://github.com/rust-lang/rust/issues/59878
-            .flat_map(|packet| packet.frags.into_vec().into_iter())
+            .flat_map(move |packet| {
+                let packet_rtt = now - packet.flushed_at;
+                rtt.update(packet_rtt);
+                // TODO Rust 1.80: Box::into_iter - https://github.com/rust-lang/rust/issues/59878
+                packet.frags.into_vec().into_iter()
+            })
             .filter_map(|frag_path| {
                 // for each of those fragments, we'll mark that fragment as acked
                 let msg = sent_msgs.get_mut(&frag_path.msg_seq)?;
                 let frag_opt = msg.frags.get_mut(usize::from(frag_path.index))?;
-                // mark this fragment as acked, and stop it from being resent
+                // take this fragment out so it stops being resent
                 *frag_opt = None;
 
                 // if all the fragments are now acked, then we report that

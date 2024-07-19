@@ -29,5 +29,5 @@ size = { workspace = true }
 aeronet = { workspace = true, features = ["bevy"] }
 aeronet_webtransport = { workspace = true, features = ["bevy", "serde"] }
 
-aeronet_replicon = { workspace = true, features = ["proto"] }
+aeronet_replicon = { workspace = true }
 bevy_replicon = { workspace = true }

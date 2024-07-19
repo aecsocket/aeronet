@@ -57,28 +57,53 @@ The aeronet protocol can be used on top of nearly any transport. The requirement
 ## Layout
 
 ```rust,ignore
+/// Layout for a single packet as sent and received at the API layer.
 struct Packet {
+    /// Monotonically increasing packet sequence number.
     packet_seq: u16,           // +2
+    /// Sequence number of the last packet we received.
     last_recv_packet_seq: u16, // +2
+    /// Bitfield of which packets before `last_recv_packet_seq` received - see
+    /// [`Acknowledge`].
     ack_bits: u32,             // +4
+    /// The rest of this packet is a list of fragments.
     fragments: [Fragment],     // rest of packet
 }
 
+/// Fragment of a sent message.
 struct Fragment {
+    /// Index of the lane on which this fragment should be received.
+    ///
+    /// This is the *receiver-side* lane index. For example, if we have the
+    /// following lanes:
+    /// - client: `[UnreliableUnordered 0, ReliableOrdered 0]`
+    /// - server: `[ReliableOrdered 1]`
+    ///
+    /// If the server sends a message and wants it to end up in the
+    /// `ReliableOrdered 0` lane, it must specify lane index `1`.
+    lane_index: VarInt<usize>,       // variable-length
+    /// Monotonically increasing message sequence number.
+    ///
+    /// This number is monotonically increasing *only relative to this specific
+    /// lane*.
+    ///
+    /// Multiple fragments may have the same message sequence number, in which
+    /// case they are different parts of the same message (see
+    /// `fragment_marker`).
     message_seq: u16,                // +2
+    /// See [`FragmentMarker`].
     fragment_marker: FragmentMarker, // +1
+    /// Length of `payload`.
     payload_len: VarInt<usize>,      // variable-length
+    /// User-defined message payload.
     payload: [u8],                   // +`payload_len`
 }
 
-// if MSB is set, this is the last fragment
-// remaining 7 bits mark fragment index
-struct FragmentMarker(u8)
-
-struct Payload {
-    lane_index: VarInt<usize>, // variable-length
-    user_message: [u8],        // user-defined variable-length message payload
-}
+/// Indicates the index and position of this fragment in the entire message.
+///
+/// If the MSB is set, this is the last fragment.
+/// The remaining 7 bits mark the fragment's index in the message.
+struct FragmentMarker(u8);
 ```
 
 ## Description
@@ -99,7 +124,7 @@ The message is given an incrementing *message sequence number*, which uniquely[^
 message. The fragments and metadata about them are stored in a mapping of *message sequence number*
 to *sent message data*. The message is now considered *sent* but not *flushed*.
 
-When a user calls [`Session::flush`], they get an 
+When a user calls [`Session::flush`], they get an
 
 [^1]: All *sequence numbers* are `u16`s which will wrap around quickly during the lifespan of a
 connection. However, we only ever consider a small amount of sequence numbers at a time, so this

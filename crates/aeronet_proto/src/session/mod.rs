@@ -1,16 +1,18 @@
 //! See [`Session`].
 
+mod config;
 mod recv;
 mod send;
 
-use derivative::Derivative;
-pub use recv::*;
+pub use {config::*, recv::*};
 
 use std::convert::Infallible;
 
 use aeronet::lane::{LaneIndex, LaneKind};
 use ahash::{AHashMap, AHashSet};
+use bevy_replicon::prelude::ClientDiagnosticsPlugin;
 use datasize::DataSize;
+use derivative::Derivative;
 use octs::{BufTooShortOr, Bytes, FixedEncodeLen, VarIntTooLarge};
 use web_time::{Duration, Instant};
 
@@ -21,21 +23,9 @@ use crate::{
         Fragment, FragmentHeader, FragmentReceiver, FragmentSender, MessageTooBig, ReassembleError,
     },
     packet::{MessageSeq, PacketHeader, PacketSeq},
+    rtt::{RttEstimator, INITIAL_RTT},
+    seq::Seq,
 };
-
-/*
-potential attack vectors:
-- peer sends us a lot of incomplete fragments, which we buffer forever, leading
-  to OOM
-  - we set a memory cap on the recv_frags buffer
-  - when we attempt to buffer a new message but we've hit the cap...
-    - for unreliable frags: the last message buf to receive a new frag is dropped
-    - for reliable frags: the connection is reset
-- peer never sends acks for our packets
-  - we keep reliable frags around forever constantly trying to resend them,
-    leading to OOM
-  - solution: ??? idk i need to figure this out
- */
 
 /// Manages the state of a data transport session between two peers.
 ///
@@ -140,8 +130,6 @@ pub struct Session {
     next_packet_seq: PacketSeq,
     /// When we should send the next keep-alive packet.
     next_keep_alive_at: Instant,
-    /// See [`SessionConfig::keep_alive_interval`].
-    keep_alive_interval: Duration,
     /// Total number of bytes sent.
     bytes_sent: usize,
 
@@ -169,6 +157,8 @@ pub struct Session {
     recv_frags: FragmentReceiver,
     /// Total number of bytes received.
     bytes_recv: usize,
+    /// Estimates RTT.
+    rtt: RttEstimator,
 }
 
 fn sent_msgs_data_size(value: &AHashMap<MessageSeq, SentMessage>) -> usize {
@@ -184,7 +174,7 @@ fn sent_msgs_fmt(
     fmt: &mut std::fmt::Formatter,
 ) -> Result<(), std::fmt::Error> {
     fmt.debug_set()
-        .entries(value.iter().map(|(seq, _)| seq))
+        .entries(value.iter().map(|(MessageSeq(Seq(seq)), _)| seq))
         .finish()
 }
 
@@ -201,182 +191,8 @@ fn flushed_packets_fmt(
     fmt: &mut std::fmt::Formatter,
 ) -> Result<(), std::fmt::Error> {
     fmt.debug_set()
-        .entries(value.iter().map(|(seq, _)| seq))
+        .entries(value.iter().map(|(PacketSeq(Seq(seq)), _)| seq))
         .finish()
-}
-
-/// Configuration for a [`Session`].
-///
-/// Not all session-specific configurations are exposed here. Transport-specific
-/// settings such as maximum packet length are not exposed to users, and are
-/// instead set directly when calling [`Session::new`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SessionConfig {
-    /// Configurations for the lanes which can be used to send out data.
-    pub send_lanes: Vec<LaneConfig>,
-    /// Configurations for the lanes which can be used to receive data.
-    pub recv_lanes: Vec<LaneConfig>,
-    /// Maximum number of bytes of memory which can be used for buffering
-    /// messages.
-    ///
-    /// The default is 0. You **must** either use [`SessionConfig::new`] or
-    /// override this value explicitly, otherwise your session will always
-    /// error with [`OutOfMemory`]!
-    ///
-    /// A malicious peer may send us an infinite amount of fragments which
-    /// never get fully reassembled, leaving us having to buffer up all of their
-    /// fragments. We are not allowed to drop any fragments since they may be
-    /// part of a reliable message, in which case dropping breaks the guarantees
-    /// of the lane (we don't know if a fragment is part of a reliable or
-    /// unreliable message until we fully reassemble it).
-    ///
-    /// To avoid running out of memory, if we attempt to buffer more than this
-    /// amount of bytes when receiving fragments, the connection will be
-    /// forcibly reset by emitting an [`OutOfMemory`].
-    pub max_memory_usage: usize,
-    /// How many total bytes we can [`Session::flush`] out per second.
-    ///
-    /// This value is [`usize::MAX`] by default.
-    ///
-    /// When flushing, if we do not have enough bytes to send out any more
-    /// packets, we will stop returning any packets. You must remember to call
-    /// [`Session::refill_bytes`] in your update loop to refill this!
-    pub send_bytes_per_sec: usize,
-    /// How long to wait since sending the last packet until we send an empty
-    /// keep-alive packet.
-    ///
-    /// Even if we've got no messages to transmit, we need to send packets to
-    /// the peer regularly because:
-    /// - we need to keep the underlying connection alive
-    /// - we need to transmit packet acknowledgements
-    ///
-    /// This means that any transport-specific keep-alive mechanism should be
-    /// disabled, since the [`Session`] will handle it.
-    // TODO can this interval be automated?
-    pub keep_alive_interval: Duration,
-}
-
-impl Default for SessionConfig {
-    fn default() -> Self {
-        Self {
-            send_lanes: Vec::new(),
-            recv_lanes: Vec::new(),
-            max_memory_usage: 0,
-            send_bytes_per_sec: usize::MAX,
-            keep_alive_interval: Duration::from_millis(500),
-        }
-    }
-}
-
-impl SessionConfig {
-    /// Creates a new configuration with the default values set, apart from
-    /// [`SessionConfig::max_memory_usage`], which must be manually
-    /// defined.
-    #[must_use]
-    pub fn new(max_memory_usage: usize) -> Self {
-        Self {
-            max_memory_usage,
-            ..Default::default()
-        }
-    }
-
-    /// Adds the given lanes to this configuration's
-    /// [`SessionConfig::send_lanes`].
-    ///
-    /// You can implement `From<LaneConfig> for [your own type]` to use it as
-    /// the item in this iterator.
-    #[must_use]
-    pub fn with_send_lanes(
-        mut self,
-        lanes: impl IntoIterator<Item = impl Into<LaneConfig>>,
-    ) -> Self {
-        self.send_lanes.extend(lanes.into_iter().map(Into::into));
-        self
-    }
-
-    /// Adds the given lanes to this configuration's
-    /// [`SessionConfig::recv_lanes`].
-    ///
-    /// You can implement `From<LaneConfig> for [your own type]` to use it as
-    /// the item in this iterator.
-    #[must_use]
-    pub fn with_recv_lanes(
-        mut self,
-        lanes: impl IntoIterator<Item = impl Into<LaneConfig>>,
-    ) -> Self {
-        self.recv_lanes.extend(lanes.into_iter().map(Into::into));
-        self
-    }
-
-    /// Adds the given lanes to this configuration's
-    /// [`SessionConfig::send_lanes`] and [`SessionConfig::recv_lanes`].
-    ///
-    /// You can implement `From<LaneConfig> for [your own type]` to use it as
-    /// the item in this iterator.
-    #[must_use]
-    pub fn with_lanes(mut self, lanes: impl IntoIterator<Item = impl Into<LaneConfig>>) -> Self {
-        let lanes = lanes.into_iter().map(Into::into).collect::<Vec<_>>();
-        self.send_lanes.extend(lanes.iter().cloned());
-        self.recv_lanes.extend(lanes.iter().cloned());
-        self
-    }
-
-    /// Sets [`SessionConfig::send_bytes_per_sec`] on this value.
-    #[must_use]
-    pub const fn with_send_bytes_per_sec(mut self, send_bytes_per_sec: usize) -> Self {
-        self.send_bytes_per_sec = send_bytes_per_sec;
-        self
-    }
-
-    /// Sets [`SessionConfig::keep_alive_interval`] on this value.
-    #[must_use]
-    pub const fn with_keep_alive_interval(mut self, keep_alive_interval: Duration) -> Self {
-        self.keep_alive_interval = keep_alive_interval;
-        self
-    }
-}
-
-/// Configuration for a lane in a [`Session`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LaneConfig {
-    /// Kind of lane that this creates.
-    pub kind: LaneKind,
-    /// For send lanes: how many total bytes we can [`Session::flush`] out on
-    /// this lane per second.
-    ///
-    /// See [`SessionConfig::send_bytes_per_sec`].
-    pub send_bytes_per_sec: usize,
-    /// For reliable send lanes: after flushing out a fragment, how long do we
-    /// wait until attempting to flush out this fragment again?
-    ///
-    /// If last update we flushed out a fragment of a reliable message, then it
-    /// would be pointless to flush out the same fragment on this update, since
-    /// [RTT] probably hasn't even elapsed yet, and there's no way the peer
-    /// could have acknowledged it yet.
-    ///
-    /// [RTT]: aeronet::stats::Rtt
-    // TODO: could we make this automatic and base it on RTT? i.e. if RTT is
-    // 100ms, then we set resend_after to 100ms by default, and if RTT changes,
-    // then we re-adjust it
-    pub resend_after: Duration,
-}
-
-impl Default for LaneConfig {
-    fn default() -> Self {
-        Self::new(LaneKind::UnreliableUnordered)
-    }
-}
-
-impl LaneConfig {
-    /// Creates a new default lane configuration for the given lane kind.
-    #[must_use]
-    pub const fn new(kind: LaneKind) -> Self {
-        Self {
-            kind,
-            send_bytes_per_sec: usize::MAX,
-            resend_after: Duration::from_millis(100),
-        }
-    }
 }
 
 /// Error when attempting to buffer a message for sending using
@@ -478,6 +294,7 @@ struct SentFragment {
 
 #[derive(Debug, datasize::DataSize)]
 struct FlushedPacket {
+    flushed_at: Instant,
     frags: Box<[FragmentPath]>,
 }
 
@@ -490,6 +307,7 @@ enum RecvLane {
     },
     ReliableUnordered {
         pending_seq: MessageSeq,
+        #[derivative(Debug(format_with = "recv_seq_buf_fmt"))]
         recv_seq_buf: AHashSet<MessageSeq>,
     },
     ReliableOrdered {
@@ -499,16 +317,25 @@ enum RecvLane {
     },
 }
 
+fn recv_seq_buf_fmt(
+    value: &AHashSet<MessageSeq>,
+    fmt: &mut std::fmt::Formatter,
+) -> Result<(), std::fmt::Error> {
+    fmt.debug_set()
+        .entries(value.iter().map(|MessageSeq(Seq(seq))| seq))
+        .finish()
+}
+
 fn recv_buf_fmt(
     value: &AHashMap<MessageSeq, Bytes>,
     fmt: &mut std::fmt::Formatter,
 ) -> Result<(), std::fmt::Error> {
     fmt.debug_set()
-        .entries(value.iter().map(|(seq, _)| seq))
+        .entries(value.iter().map(|(MessageSeq(Seq(seq)), _)| seq))
         .finish()
 }
 
-// TODO: datasize::DataSize derive is broken on enums
+// TODO: datasize::DataSize derive is broken on enums. PR a fix or switch dep?
 impl datasize::DataSize for RecvLane {
     const IS_DYNAMIC: bool = true;
 
@@ -550,11 +377,20 @@ pub const OVERHEAD: usize = PacketHeader::ENCODE_LEN + FragmentHeader::ENCODE_LE
 impl Session {
     /// Creates a new session from the given configuration.
     ///
+    /// See [`Session`] for an explanation of MTU.
+    ///
+    /// If you are unsure for the value of `min_mtu`, you should go for a
+    /// conservative estimate. [RFC 9000 Section 14.2], the specification behind
+    /// the QUIC transport, requires that a connection supports an MTU of at
+    /// least 1200.
+    ///
+    /// `initial_mtu` may be the same as `min_mtu` if you are unsure.
+    ///
     /// # Errors
     ///
     /// Errors if `min_mtu` or `initial_mtu` are too small.
     ///
-    /// See [`Session`].
+    /// [RFC 9000 Section 14.2]: https://www.rfc-editor.org/rfc/rfc9000.html#section-14-2
     pub fn new(
         now: Instant,
         config: SessionConfig,
@@ -579,6 +415,7 @@ impl Session {
             sent_msgs: AHashMap::new(),
             flushed_packets: AHashMap::new(),
             acks: Acknowledge::new(),
+            max_memory_usage: config.max_memory_usage,
 
             // send
             send_lanes: config
@@ -605,7 +442,6 @@ impl Session {
             next_msg_seq: MessageSeq::default(),
             next_packet_seq: PacketSeq::default(),
             next_keep_alive_at: now,
-            keep_alive_interval: config.keep_alive_interval,
             bytes_sent: 0,
 
             // recv
@@ -628,8 +464,8 @@ impl Session {
                 })
                 .collect(),
             recv_frags: FragmentReceiver::new(max_payload_len),
-            max_memory_usage: config.max_memory_usage,
             bytes_recv: 0,
+            rtt: RttEstimator::new(INITIAL_RTT),
         })
     }
 
@@ -649,6 +485,12 @@ impl Session {
     #[must_use]
     pub const fn bytes_recv(&self) -> usize {
         self.bytes_recv
+    }
+
+    /// Gets the state of the [`RttEstimator`], allowing you to read RTT values.
+    #[must_use]
+    pub const fn rtt(&self) -> &RttEstimator {
+        &self.rtt
     }
 
     /// Gets the [`ByteBucket`] used to track how many bytes we have left for
@@ -709,9 +551,33 @@ impl Session {
     ///
     /// If this value exceeds [`Session::max_memory_usage`], operations on this
     /// session will fail with [`OutOfMemory`].
+    ///
+    /// This function is not expensive to call, but do note that it will iterate
+    /// over all buffered incoming + outgoing messages, so try to avoid repeated
+    /// calls.
     #[must_use]
     pub fn memory_used(&self) -> usize {
         datasize::data_size(self)
+    }
+
+    pub fn sent_msgs_mem(&self) -> usize {
+        sent_msgs_data_size(&self.sent_msgs)
+    }
+
+    pub fn flushed_packets_mem(&self) -> usize {
+        flushed_packets_data_size(&self.flushed_packets)
+    }
+
+    pub fn recv_lanes_mem(&self) -> usize {
+        tracing::trace!("lanes:");
+        for lane in self.recv_lanes.iter() {
+            tracing::trace!("- {lane:?}");
+        }
+        datasize::data_size(&self.recv_lanes)
+    }
+
+    pub fn recv_frags_mem(&self) -> usize {
+        datasize::data_size(&self.recv_frags)
     }
 }
 

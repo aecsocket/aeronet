@@ -1,6 +1,6 @@
 //! Server-side traits and items.
 
-use std::{marker::PhantomData, ops::Deref};
+use std::{marker::PhantomData, ops::Deref, time::Duration};
 
 use aeronet::{
     error::pretty_error,
@@ -16,7 +16,7 @@ use bevy_replicon::{
     core::ClientId,
     server::{replicon_server::RepliconServer, ServerSet},
 };
-use bevy_time::prelude::*;
+use bevy_time::{common_conditions::on_real_timer, prelude::*};
 use bimap::{BiHashMap, Overwritten};
 use bytes::Bytes;
 use derivative::Derivative;
@@ -75,13 +75,10 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
                     Self::recv.run_if(
                         resource_exists::<T>
                             .and_then(resource_exists::<ClientKeys<T>>)
-                            .and_then(resource_exists::<RepliconServer>),
+                            .and_then(resource_exists::<RepliconServer>)
+                            .and_then(on_real_timer(Duration::from_millis(100))), // TODO remove this
                     ),
-                    Self::update_state
-                        .run_if(resource_exists::<T>.and_then(resource_exists::<RepliconServer>)),
-                    Self::on_removed.run_if(
-                        resource_removed::<T>().and_then(resource_exists::<RepliconServer>),
-                    ),
+                    Self::update_state.run_if(resource_exists::<RepliconServer>),
                 )
                     .chain()
                     .in_set(ServerSet::ReceivePackets),
@@ -89,7 +86,11 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
             .add_systems(
                 PostUpdate,
                 Self::send
-                    .run_if(server_open::<T>.and_then(resource_exists::<RepliconServer>))
+                    .run_if(
+                        server_open::<T>
+                            .and_then(resource_exists::<RepliconServer>)
+                            .and_then(on_real_timer(Duration::from_millis(100))), // TODO remove
+                    )
                     .in_set(ServerSet::SendPackets),
             );
     }
@@ -258,15 +259,19 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
         replicon_server.insert_received(*client_id, channel, msg);
     }
 
-    fn update_state(server: Res<T>, mut replicon: ResMut<RepliconServer>) {
-        replicon.set_running(match server.state() {
-            ServerState::Closed | ServerState::Opening(_) => false,
-            ServerState::Open(_) => true,
-        });
-    }
+    fn update_state(server: Option<Res<T>>, mut replicon: ResMut<RepliconServer>) {
+        let running = if let Some(server) = server {
+            match server.state() {
+                ServerState::Closed | ServerState::Opening(_) => false,
+                ServerState::Open(_) => true,
+            }
+        } else {
+            false
+        };
 
-    fn on_removed(mut replicon: ResMut<RepliconServer>) {
-        replicon.set_running(false);
+        if running != replicon.is_running() {
+            replicon.set_running(running);
+        }
     }
 
     fn send(

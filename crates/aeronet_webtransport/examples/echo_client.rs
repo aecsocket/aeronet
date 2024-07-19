@@ -5,7 +5,7 @@ use aeronet::{
     client::{client_connected, ClientEvent, ClientState, ClientTransport},
     error::pretty_error,
     lane::{LaneIndex, LaneKind},
-    stats::MessageStats,
+    stats::{MessageStats, Rtt},
 };
 use aeronet_proto::session::{LaneConfig, SessionConfig};
 use aeronet_webtransport::client::{ClientConfig, WebTransportClient};
@@ -213,7 +213,7 @@ fn ui(
                 ui.end_row();
 
                 ui.label("RTT");
-                ui.label(format!("{:?}", client.rtt));
+                ui.label(format!("{:?} ({:?} raw)", client.rtt(), client.raw_rtt));
                 ui.end_row();
 
                 ui.label("Bytes sent/recv");

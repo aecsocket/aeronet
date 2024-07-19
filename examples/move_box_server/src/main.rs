@@ -6,6 +6,7 @@ use aeronet::{
     server::{
         RemoteClientConnecting, ServerClosed, ServerOpened, ServerTransport, ServerTransportSet,
     },
+    stats::Rtt,
 };
 use aeronet_replicon::server::{ClientKeys, RepliconServerPlugin};
 use aeronet_webtransport::{
@@ -15,10 +16,14 @@ use aeronet_webtransport::{
 use ascii_table::AsciiTable;
 use bevy::{log::LogPlugin, prelude::*, time::common_conditions::on_timer};
 use bevy_replicon::{
-    client::ClientPlugin, core::Replicated, prelude::RepliconChannels, server::ServerEvent,
+    client::ClientPlugin,
+    core::Replicated,
+    prelude::RepliconChannels,
+    server::{ServerEvent, ServerPlugin, TickPolicy},
     RepliconPlugins,
 };
 use move_box::{AsyncRuntime, MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
+use size::Size;
 use web_time::{Duration, Instant};
 
 const DEFAULT_PORT: u16 = 25565;
@@ -45,7 +50,13 @@ fn main() {
         .add_plugins((
             MinimalPlugins,
             LogPlugin::default(),
-            RepliconPlugins.build().disable::<ClientPlugin>(),
+            RepliconPlugins
+                .build()
+                .disable::<ClientPlugin>()
+                .set(ServerPlugin {
+                    tick_policy: TickPolicy::MaxTickRate(10),
+                    ..Default::default()
+                }),
             RepliconServerPlugin::<WebTransportServer>::default(),
             MoveBoxPlugin,
         ))
@@ -75,6 +86,7 @@ fn open_server(
     let net_config = wtransport::ServerConfig::builder()
         .with_bind_default(args.port)
         .with_identity(&identity)
+        .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
         .unwrap()
         .build();
@@ -148,23 +160,28 @@ fn print_stats(server: Res<WebTransportServer>) {
         .filter_map(|client_key| match server.client_state(client_key) {
             ClientState::Disconnected | ClientState::Connecting(_) => None,
             ClientState::Connected(client) => {
-                dbg!(&client.session);
+                client.session.recv_lanes_mem();
                 let mem_used = client.session.memory_used();
                 total_mem_used += mem_used;
                 let time = now - client.connected_at;
                 Some(vec![
                     format!("{}", client_key),
                     format!("{:.1?}", time),
-                    format!("{:?}", client.rtt),
+                    format!("{:.1?}", client.rtt()),
+                    format!("{:.1?}", client.raw_rtt),
                     format!(
-                        "{:.1}",
-                        client.session.bytes_sent() as f64 / time.as_secs_f64()
+                        "{}",
+                        Size::from_bytes(
+                            (client.session.bytes_sent() as f64 / time.as_secs_f64()) as usize
+                        ),
                     ),
                     format!(
-                        "{:.1}",
-                        client.session.bytes_recv() as f64 / time.as_secs_f64()
+                        "{}",
+                        Size::from_bytes(
+                            (client.session.bytes_recv() as f64 / time.as_secs_f64()) as usize
+                        ),
                     ),
-                    format!("{}", mem_used),
+                    format!("{}", Size::from_bytes(mem_used)),
                 ])
             }
         })
@@ -175,17 +192,16 @@ fn print_stats(server: Res<WebTransportServer>) {
     }
 
     let mut table = AsciiTable::default();
-    table.column(0).set_header("client");
-    table.column(1).set_header("time");
-    table.column(2).set_header("rtt");
-    table.column(3).set_header("tx/s");
-    table.column(4).set_header("rx/s");
-    table.column(5).set_header("mem");
+    for (index, header) in ["client", "time", "rtt", "raw rtt", "tx/s", "rx/s", "mem"]
+        .iter()
+        .enumerate()
+    {
+        table.column(index).set_header(*header);
+    }
 
     for line in table.format(&cells).lines() {
         info!("{line}");
     }
 
-    let total_mem_used = size::Size::from_bytes(total_mem_used);
-    info!("{total_mem_used} used");
+    info!("{} of memory used", Size::from_bytes(total_mem_used));
 }
