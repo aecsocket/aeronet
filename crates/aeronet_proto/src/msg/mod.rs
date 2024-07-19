@@ -5,10 +5,11 @@ use std::convert::Infallible;
 
 use aeronet::lane::LaneIndex;
 use octs::{
-    BufError, BufTooShortOr, Decode, Encode, EncodeLen, Read, VarInt, VarIntTooLarge, Write,
+    BufError, BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt,
+    VarIntTooLarge, Write,
 };
 
-use crate::ty::{Fragment, FragmentHeader};
+use crate::ty::{Fragment, FragmentHeader, FragmentMarker, MessageSeq};
 
 mod marker;
 mod recv;
@@ -35,6 +36,14 @@ pub enum FragmentDecodeError {
 }
 
 impl BufError for FragmentDecodeError {}
+
+impl FixedEncodeLenHint for FragmentHeader {
+    const MIN_ENCODE_LEN: usize =
+        VarInt::<u64>::MIN_ENCODE_LEN + MessageSeq::MIN_ENCODE_LEN + FragmentMarker::MIN_ENCODE_LEN;
+
+    const MAX_ENCODE_LEN: usize =
+        VarInt::<u64>::MAX_ENCODE_LEN + MessageSeq::MAX_ENCODE_LEN + FragmentMarker::MAX_ENCODE_LEN;
+}
 
 impl EncodeLen for FragmentHeader {
     fn encode_len(&self) -> usize {
@@ -128,8 +137,13 @@ mod tests {
 
     #[test]
     fn encode_decode_header() {
-        round_trip(&FragmentHeader {
+        hint_round_trip(&FragmentHeader {
             lane_index: LaneIndex::from_raw(12),
+            msg_seq: MessageSeq::new(34),
+            marker: FragmentMarker::from_raw(56),
+        });
+        hint_round_trip(&FragmentHeader {
+            lane_index: LaneIndex::from_raw(123456789),
             msg_seq: MessageSeq::new(34),
             marker: FragmentMarker::from_raw(56),
         });
@@ -138,6 +152,8 @@ mod tests {
     fn now() -> Instant {
         Instant::now()
     }
+
+    // todo
 
     /*
     const PAYLOAD_LEN: usize = 64;

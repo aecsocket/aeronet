@@ -142,7 +142,6 @@ async fn handle_session(
     let (send_s2c, recv_s2c) = mpsc::unbounded::<Bytes>();
     send_connected
         .send(ToConnected {
-            connected_at: Instant::now(),
             remote_addr: conn.remote_address(),
             initial_rtt: conn.rtt(),
             recv_meta,

@@ -118,7 +118,6 @@ pub struct Connecting {
 
 #[derive(Debug)]
 struct ToConnected {
-    connected_at: Instant,
     #[cfg(not(target_family = "wasm"))]
     local_addr: SocketAddr,
     #[cfg(not(target_family = "wasm"))]
@@ -147,8 +146,6 @@ pub struct Connected {
     /// but less representative of RTT at the application level.
     #[cfg(not(target_family = "wasm"))]
     pub raw_rtt: Duration,
-    /// See [`ConnectedAt`].
-    pub connected_at: Instant,
     /// Protocol session state, used for reading more advanced info.
     pub session: Session,
     recv_err: oneshot::Receiver<ClientError>,
@@ -159,7 +156,7 @@ pub struct Connected {
 
 impl ConnectedAt for Connected {
     fn connected_at(&self) -> Instant {
-        self.connected_at
+        self.session.connected_at()
     }
 }
 

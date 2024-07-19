@@ -149,6 +149,12 @@ impl Decode for Seq {
 }
 
 impl PacketSeq {
+    /// Sequence number `0`.
+    pub const ZERO: Self = Self::new(0);
+
+    /// Sequence number `1`.
+    pub const ONE: Self = Self::new(1);
+
     /// Creates a new sequence number from a raw number.
     ///
     /// If you already have a [`Seq`], just wrap it in this type.
@@ -186,6 +192,12 @@ impl Decode for PacketSeq {
 }
 
 impl MessageSeq {
+    /// Sequence number `0`.
+    pub const ZERO: Self = Self::new(0);
+
+    /// Sequence number `1`.
+    pub const ONE: Self = Self::new(1);
+
     /// Creates a new sequence number from a raw number.
     ///
     /// If you already have a [`Seq`], just wrap it in this type.

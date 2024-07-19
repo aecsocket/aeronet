@@ -6,7 +6,7 @@ use aeronet::{
     server::{
         RemoteClientConnecting, ServerClosed, ServerOpened, ServerTransport, ServerTransportSet,
     },
-    stats::Rtt,
+    stats::{ConnectedAt, Rtt},
 };
 use aeronet_replicon::server::{ClientKeys, RepliconServerPlugin};
 use aeronet_webtransport::{
@@ -15,13 +15,7 @@ use aeronet_webtransport::{
 };
 use ascii_table::AsciiTable;
 use bevy::{log::LogPlugin, prelude::*, time::common_conditions::on_timer};
-use bevy_replicon::{
-    client::ClientPlugin,
-    core::Replicated,
-    prelude::RepliconChannels,
-    server::{ServerEvent, ServerPlugin, TickPolicy},
-    RepliconPlugins,
-};
+use bevy_replicon::{core::Replicated, prelude::RepliconChannels, server::ServerEvent};
 use move_box::{AsyncRuntime, MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
 use size::Size;
 use web_time::{Duration, Instant};
@@ -50,13 +44,6 @@ fn main() {
         .add_plugins((
             MinimalPlugins,
             LogPlugin::default(),
-            RepliconPlugins
-                .build()
-                .disable::<ClientPlugin>()
-                .set(ServerPlugin {
-                    tick_policy: TickPolicy::MaxTickRate(10),
-                    ..Default::default()
-                }),
             RepliconServerPlugin::<WebTransportServer>::default(),
             MoveBoxPlugin,
         ))
@@ -160,10 +147,9 @@ fn print_stats(server: Res<WebTransportServer>) {
         .filter_map(|client_key| match server.client_state(client_key) {
             ClientState::Disconnected | ClientState::Connecting(_) => None,
             ClientState::Connected(client) => {
-                client.session.recv_lanes_mem();
-                let mem_used = client.session.memory_used();
+                let mem_used = client.session.memory_usage();
                 total_mem_used += mem_used;
-                let time = now - client.connected_at;
+                let time = now - client.connected_at();
                 Some(vec![
                     format!("{}", client_key),
                     format!("{:.1?}", time),

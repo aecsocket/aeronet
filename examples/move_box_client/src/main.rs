@@ -9,7 +9,7 @@ use aeronet_replicon::client::RepliconClientPlugin;
 use aeronet_webtransport::{client::WebTransportClient, wtransport};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin};
-use bevy_replicon::{prelude::RepliconChannels, server::ServerPlugin, RepliconPlugins};
+use bevy_replicon::prelude::RepliconChannels;
 use move_box::{AsyncRuntime, MoveBoxPlugin, PlayerColor, PlayerMove, PlayerPosition};
 use web_time::Duration;
 
@@ -31,7 +31,6 @@ fn main() {
         .init_resource::<Args>()
         .add_plugins((
             DefaultPlugins,
-            RepliconPlugins.build().disable::<ServerPlugin>(),
             RepliconClientPlugin::<WebTransportClient>::default(),
             MoveBoxPlugin,
             EguiPlugin,
