@@ -3,7 +3,7 @@
 use std::{
     cmp::Ordering,
     convert::Infallible,
-    fmt::Debug,
+    fmt,
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
@@ -158,8 +158,8 @@ impl PacketSeq {
     }
 }
 
-impl Debug for PacketSeq {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Debug for PacketSeq {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let PacketSeq(Seq(seq)) = self;
         write!(f, "{seq}")
     }
@@ -195,8 +195,8 @@ impl MessageSeq {
     }
 }
 
-impl Debug for MessageSeq {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Debug for MessageSeq {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let MessageSeq(Seq(seq)) = self;
         write!(f, "{seq}")
     }

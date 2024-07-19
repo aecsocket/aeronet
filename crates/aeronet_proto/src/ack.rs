@@ -1,12 +1,12 @@
 //! See [`Acknowledge`].
 
-use std::convert::Infallible;
+use std::{convert::Infallible, fmt};
 
 use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
 
 use crate::ty::{Acknowledge, PacketSeq};
 
-pub(crate) fn fmt(value: &u32, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+pub(crate) fn fmt(value: &u32, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     write!(fmt, "{value:032b}")
 }
 

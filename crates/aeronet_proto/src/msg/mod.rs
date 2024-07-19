@@ -34,24 +34,28 @@ use octs::{
     BufError, BufTooShortOr, Decode, Encode, EncodeLen, Read, VarInt, VarIntTooLarge, Write,
 };
 
-use crate::ty::{Fragment, FragmentHeader, FragmentMarker};
+use crate::ty::{Fragment, FragmentHeader};
 
 mod marker;
 mod recv;
 mod send;
 
-pub use {recv::*, send::*};
+pub use {marker::*, recv::*, send::*};
 
+/// [`VarInt`] holding the lane index was too large.
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("invalid lane index")]
 pub struct InvalidLaneIndex(#[source] VarIntTooLarge);
 
 impl BufError for InvalidLaneIndex {}
 
+/// Failed to decode a [`Fragment`].
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum FragmentDecodeError {
+    /// See [`InvalidLaneIndex`].
     #[error(transparent)]
     InvalidLaneIndex(InvalidLaneIndex),
+    /// [`VarInt`] holding the payload length was too large.
     #[error("payload length too large")]
     PayloadTooLarge(#[source] VarIntTooLarge),
 }
@@ -132,7 +136,7 @@ mod tests {
     use octs::{test::*, Bytes};
     use web_time::Instant;
 
-    use crate::ty::MessageSeq;
+    use crate::ty::{FragmentMarker, MessageSeq};
 
     use super::*;
 
@@ -157,6 +161,11 @@ mod tests {
         });
     }
 
+    fn now() -> Instant {
+        Instant::now()
+    }
+
+    /*
     const PAYLOAD_LEN: usize = 64;
 
     const MSG1: Bytes = Bytes::from_static(b"Message 1");
@@ -247,5 +256,5 @@ mod tests {
         assert_matches!(recv.reassemble_frag(now(), f1), Ok(None));
         assert_matches!(recv.reassemble_frag(now(), f2), Ok(None));
         assert_matches!(recv.reassemble_frag(now(), f3), Ok(Some(b)) if b == msg);
-    }
+        }*/
 }

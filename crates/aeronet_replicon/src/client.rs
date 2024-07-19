@@ -147,7 +147,7 @@ impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
         let mut bytes_sent = 0usize;
         for (channel_id, payload) in replicon.drain_sent() {
             bytes_sent = bytes_sent.saturating_add(payload.len());
-            let _ = client.send(payload, LaneIndex::from_raw(usize::from(channel_id)));
+            let _ = client.send(payload, LaneIndex::from_raw(u64::from(channel_id)));
         }
 
         if let Err(error) = client.flush() {

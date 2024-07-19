@@ -231,5 +231,5 @@ pub struct FragmentHeader {
 /// 7 bits encode the index of this fragment in the message.
 ///
 /// [*Gaffer On Games*]: https://gafferongames.com/post/packet_fragmentation_and_reassembly/#fragment-packet-structure
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, DataSize)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, DataSize)]
 pub struct FragmentMarker(pub(crate) u8);
