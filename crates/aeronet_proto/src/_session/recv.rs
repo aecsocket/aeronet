@@ -1,32 +1,33 @@
-use std::convert::Infallible;
-
 use aeronet::lane::LaneIndex;
 use ahash::AHashMap;
 use either::Either;
-use octs::{Buf, BufTooShortOr, Bytes, Read};
+use octs::{Buf, Bytes, Read, VarInt};
+use terrors::OneOf;
 use web_time::Instant;
 
 use crate::{
-    msg::{FragmentDecodeError, ReassembleError},
+    frag::{Fragment, FragmentReceiver},
+    packet::{MessageSeq, PacketHeader, PacketSeq},
     rtt::RttEstimator,
-    ty::{Fragment, MessageSeq, PacketHeader, PacketSeq},
 };
 
-use super::{FlushedPacket, RecvLane, RecvLaneKind, SendLane, Session};
-
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum RecvError {
-    #[error("failed to decode header")]
-    DecodeHeader(#[source] BufTooShortOr<Infallible>),
-    #[error("failed to decode fragment")]
-    DecodeFragment(#[source] BufTooShortOr<FragmentDecodeError>),
-    #[error("invalid lane index {}", lane.into_raw())]
-    InvalidLaneIndex { lane: LaneIndex },
-    #[error("failed to reassemble message")]
-    Reassemble(#[source] ReassembleError),
-}
+use super::{FlushedPacket, OutOfMemory, RecvError, RecvLane, SentMessage, Session};
 
 impl Session {
+    /// Starts receiving a packet from the peer.
+    ///
+    /// If the packet header is valid, this will return:
+    /// - an iterator over all of our [`MessageSeq`]s that the peer has
+    ///   acknowledged
+    /// - a [`RecvMessages`], used to actually read the messages that we
+    ///   receive
+    ///
+    /// # Errors
+    ///
+    /// Errors if the packet has an invalid header.
+    ///
+    /// Even if this returns [`Ok`], you may still encounter errors when using
+    /// [`RecvMessages`].
     pub fn recv(
         &mut self,
         now: Instant,
@@ -36,8 +37,8 @@ impl Session {
 
         let header = packet
             .read::<PacketHeader>()
-            .map_err(RecvError::DecodeHeader)?;
-        self.acks.ack(header.seq);
+            .map_err(RecvError::ReadHeader)?;
+        self.acks.ack(header.packet_seq);
 
         if packet.has_remaining() {
             // this packet actually has some frags!
@@ -50,28 +51,30 @@ impl Session {
         }
 
         let acks = Self::recv_acks(
-            &mut self.flushed_packets,
-            &mut self.send_lanes,
-            &mut self.rtt,
             now,
+            &mut self.flushed_packets,
+            &mut self.sent_msgs,
+            &mut self.rtt,
             header.acks.seqs(),
         );
 
         Ok((
             acks,
             RecvMessages {
-                recv_lanes: &mut self.recv_lanes,
                 now,
+                recv_lanes: &mut self.recv_lanes,
+                recv_frags: &mut self.recv_frags,
+                recv_frags_cap: self.max_memory_usage,
                 packet,
             },
         ))
     }
 
     fn recv_acks<'session>(
-        flushed_packets: &'session mut AHashMap<PacketSeq, FlushedPacket>,
-        send_lanes: &'session mut [SendLane],
-        rtt: &'session mut RttEstimator,
         now: Instant,
+        flushed_packets: &'session mut AHashMap<PacketSeq, FlushedPacket>,
+        sent_msgs: &'session mut AHashMap<MessageSeq, SentMessage>,
+        rtt: &'session mut RttEstimator,
         acked_seqs: impl Iterator<Item = PacketSeq> + 'session,
     ) -> impl Iterator<Item = MessageSeq> + 'session {
         acked_seqs
@@ -86,10 +89,8 @@ impl Session {
             })
             .filter_map(|frag_path| {
                 // for each of those fragments, we'll mark that fragment as acked
-                let lane_index = usize::try_from(frag_path.lane_index.into_raw()).unwrap();
-                let lane = send_lanes.get_mut(lane_index).unwrap();
-                let msg = lane.sent_msgs.get_mut(&frag_path.msg_seq)?;
-                let frag_opt = msg.frags.get_mut(usize::from(frag_path.frag_index))?;
+                let msg = sent_msgs.get_mut(&frag_path.msg_seq)?;
+                let frag_opt = msg.frags.get_mut(usize::from(frag_path.index))?;
                 // take this fragment out so it stops being resent
                 *frag_opt = None;
 
@@ -104,51 +105,97 @@ impl Session {
     }
 }
 
+/// Allows reading the messages from a packet given to [`Session::recv`].
+///
+/// Use [`RecvMessages::for_each_msg`] to iterate through all the messages in
+/// the packet.
+///
+/// In a future version of the crate (when/if generators become stable), this
+/// may just become an `Iterator<Item = Bytes>`.
+// TODO: ideally this becomes an iterator like `recv_acks`
+// but the logic is really hard to make an iterator
+// this would be so much easier with coroutines...
 #[derive(Debug)]
 pub struct RecvMessages<'session> {
-    recv_lanes: &'session mut [RecvLane],
     now: Instant,
+    recv_lanes: &'session mut [RecvLane],
+    recv_frags: &'session mut FragmentReceiver,
+    recv_frags_cap: usize,
     packet: Bytes,
 }
 
 impl RecvMessages<'_> {
-    pub fn for_each_msg(&mut self, mut f: impl FnMut(Result<(Bytes, LaneIndex), RecvError>)) {
+    /// Iterates through all messages in this packet, passing each one to `f`.
+    ///
+    /// # Errors
+    ///
+    /// If we fail to read one of the messages for a recoverable reason,
+    /// [`RecvError`] is passed to `f`. However, if we fail for a fatal error
+    /// e.g. [`OutOfMemory`], this error is returned from this function itself,
+    /// and the connection must be closed.
+    pub fn for_each_msg(
+        &mut self,
+        mut f: impl FnMut(Result<(Bytes, LaneIndex), RecvError>),
+    ) -> Result<(), OutOfMemory> {
         while self.packet.has_remaining() {
-            match self.recv_next_frag() {
+            match Self::recv_next_frag(
+                self.now,
+                self.recv_lanes,
+                self.recv_frags,
+                self.recv_frags_cap,
+                &mut self.packet,
+            ) {
                 Ok(iter) => iter.map(Ok).for_each(&mut f),
-                Err(err) => f(Err(err)),
+                Err(err) => match err.narrow::<RecvError, _>() {
+                    Ok(err) => f(Err(err)),
+                    Err(err) => return Err(err.take()),
+                },
             }
         }
+        Ok(())
     }
 
-    fn recv_next_frag(
-        &mut self,
-    ) -> Result<impl Iterator<Item = (Bytes, LaneIndex)> + '_, RecvError> {
-        let frag = self
-            .packet
+    fn recv_next_frag<'session>(
+        now: Instant,
+        recv_lanes: &'session mut [RecvLane],
+        recv_frags: &'session mut FragmentReceiver,
+        recv_frags_cap: usize,
+        packet: &mut Bytes,
+    ) -> Result<impl Iterator<Item = (Bytes, LaneIndex)> + 'session, OneOf<(RecvError, OutOfMemory)>>
+    {
+        let frag = packet
             .read::<Fragment>()
-            .map_err(RecvError::DecodeFragment)?;
-        let lane_index = frag.header.lane_index;
-        let lane_index_u = usize::try_from(lane_index.into_raw())
-            .map_err(|_| RecvError::InvalidLaneIndex { lane: lane_index })?;
-        let lane = self
-            .recv_lanes
-            .get_mut(lane_index_u)
-            .ok_or(RecvError::InvalidLaneIndex { lane: lane_index })?;
-        Ok(lane
-            .frags
-            .reassemble(
-                self.now,
-                frag.header.msg_seq,
-                frag.header.marker,
-                frag.payload,
-            )
-            .map_err(RecvError::Reassemble)?
-            .map(|msg| {
-                Self::recv_on_lane(lane, msg, frag.header.msg_seq).map(move |msg| (msg, lane_index))
-            })
-            .into_iter()
-            .flatten())
+            .map_err(RecvError::ReadFragment)
+            .map_err(|err| OneOf::from(err).broaden())?;
+        let msg_seq = frag.header.msg_seq;
+        let Some(mut msg) = recv_frags
+            .reassemble_frag(now, frag)
+            .map_err(RecvError::Reassemble)
+            .map_err(|err| OneOf::from(err).broaden())?
+        else {
+            return Ok(Either::Left(std::iter::empty()));
+        };
+
+        // TODO: also count up the bytes used for storing send buffered frags
+        // this iterates through all received fragments, potential bottleneck?
+        if recv_frags.bytes_used() > recv_frags_cap {
+            return Err(OneOf::from(OutOfMemory).broaden());
+        }
+
+        let lane_index = msg
+            .read::<VarInt<usize>>()
+            .map_err(RecvError::ReadLaneIndex)
+            .map_err(|err| OneOf::from(err).broaden())?
+            .0;
+        let lane = recv_lanes
+            .get_mut(lane_index)
+            .ok_or(RecvError::InvalidLaneIndex { index: lane_index })
+            .map_err(|err| OneOf::from(err).broaden())?;
+
+        Ok(Either::Right(
+            Self::recv_on_lane(lane, msg, msg_seq)
+                .map(move |msg| (msg, LaneIndex::from_raw(lane_index))),
+        ))
     }
 
     fn recv_on_lane(
@@ -156,22 +203,22 @@ impl RecvMessages<'_> {
         msg: Bytes,
         msg_seq: MessageSeq,
     ) -> impl Iterator<Item = Bytes> + '_ {
-        match &mut lane.kind {
-            RecvLaneKind::UnreliableUnordered => {
+        match lane {
+            RecvLane::UnreliableUnordered => {
                 // always just return the message
                 Either::Left(Some(msg))
             }
-            RecvLaneKind::UnreliableSequenced { pending_seq } => {
+            RecvLane::UnreliableSequenced { pending_seq } => {
                 if msg_seq < *pending_seq {
                     // msg is older than the message we're expecting to get next, drop it
                     Either::Left(None)
                 } else {
                     // msg is the one we're expecting to get or newer, return it
-                    *pending_seq = msg_seq + MessageSeq::ONE;
+                    *pending_seq = msg_seq + MessageSeq::new(1);
                     Either::Left(Some(msg))
                 }
             }
-            RecvLaneKind::ReliableUnordered {
+            RecvLane::ReliableUnordered {
                 pending_seq,
                 recv_seq_buf,
             } => {
@@ -185,14 +232,14 @@ impl RecvMessages<'_> {
                     recv_seq_buf.insert(msg_seq);
                     // pending_seq: 40, recv_seq_buf: [40, 41, 45]
                     while recv_seq_buf.remove(pending_seq) {
-                        *pending_seq += MessageSeq::ONE;
+                        *pending_seq += MessageSeq::new(1);
                         // iter 1: pending_seq: 41, recv_seq_buf: [41, 45]
                         // iter 2: pending_seq: 42, recv_seq_buf: [45]
                     }
                     Either::Left(Some(msg))
                 }
             }
-            RecvLaneKind::ReliableOrdered {
+            RecvLane::ReliableOrdered {
                 pending_seq,
                 recv_buf,
             } => {
@@ -205,7 +252,7 @@ impl RecvMessages<'_> {
                     recv_buf.insert(msg_seq, msg);
                     Either::Right(std::iter::from_fn(move || {
                         let msg = recv_buf.remove(pending_seq)?;
-                        *pending_seq += MessageSeq::ONE;
+                        *pending_seq += MessageSeq::new(1);
                         Some(msg)
                     }))
                 }

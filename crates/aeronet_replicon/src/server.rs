@@ -76,7 +76,7 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
                         resource_exists::<T>
                             .and_then(resource_exists::<ClientKeys<T>>)
                             .and_then(resource_exists::<RepliconServer>)
-                            .and_then(on_real_timer(Duration::from_millis(100))), // TODO remove this
+                            .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove this
                     ),
                     Self::update_state.run_if(resource_exists::<RepliconServer>),
                 )
@@ -85,11 +85,11 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
             )
             .add_systems(
                 PostUpdate,
-                Self::send
+                Self::flush
                     .run_if(
                         server_open::<T>
                             .and_then(resource_exists::<RepliconServer>)
-                            .and_then(on_real_timer(Duration::from_millis(100))), // TODO remove
+                            .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove
                     )
                     .in_set(ServerSet::SendPackets),
             );
@@ -157,9 +157,7 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
         for event in server.poll(time.delta()) {
             match event {
                 ServerEvent::Opened => {
-                    opened.send(ServerOpened {
-                        _phantom: PhantomData,
-                    });
+                    opened.send(ServerOpened::default());
                 }
                 ServerEvent::Closed { error } => {
                     closed.send(ServerClosed { error });
@@ -274,7 +272,7 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
         }
     }
 
-    fn send(
+    fn flush(
         mut server: ResMut<T>,
         mut replicon: ResMut<RepliconServer>,
         client_keys: Res<ClientKeys<T>>,

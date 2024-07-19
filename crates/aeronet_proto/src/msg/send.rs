@@ -16,10 +16,10 @@ pub struct MessageSplitter {
 }
 
 /// Attempted to split a message using [`MessageSplitter`] but the message was
-/// too big to fit in [`MAX_FRAGS`] fragments.
+/// too large to fit in [`MAX_FRAGS`] fragments.
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("message too big - {len} / {max} bytes")]
-pub struct MessageTooBig {
+pub struct MessageTooLarge {
     /// Length of the message in bytes.
     len: usize,
     /// Maximum length of the message in bytes.
@@ -77,15 +77,17 @@ impl MessageSplitter {
     pub fn split(
         &self,
         msg: impl Into<Bytes>,
-    ) -> Result<impl ExactSizeIterator<Item = (FragmentMarker, Bytes)> + FusedIterator, MessageTooBig>
-    {
+    ) -> Result<
+        impl ExactSizeIterator<Item = (FragmentMarker, Bytes)> + FusedIterator,
+        MessageTooLarge,
+    > {
         let msg = msg.into();
         let msg_len = msg.len();
 
         let iter = msg.byte_chunks(self.max_payload_len);
         let max_len = MAX_FRAGS * self.max_payload_len;
         if iter.len() > MAX_FRAGS {
-            return Err(MessageTooBig {
+            return Err(MessageTooLarge {
                 len: msg_len,
                 max: max_len,
             });

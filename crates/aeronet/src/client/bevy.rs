@@ -85,7 +85,7 @@ pub fn client_disconnected<T: ClientTransport + Resource>(client: Option<Res<T>>
 /// [`ClientState::Connected`]: crate::client::ClientState::Connected
 /// [`ClientEvent::Connected`]: crate::client::ClientEvent::Connected
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = ""), Clone(bound = ""))]
+#[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct LocalClientConnected<T: ClientTransport> {
     #[derivative(Debug = "ignore")]
     #[doc(hidden)]

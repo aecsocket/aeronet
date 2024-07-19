@@ -18,6 +18,10 @@ pub struct MoveBoxPlugin;
 impl Plugin for MoveBoxPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AsyncRuntime>()
+            .add_plugins(RepliconPlugins.build().set(ServerPlugin {
+                tick_policy: TickPolicy::MaxTickRate(128),
+                ..Default::default()
+            }))
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
             .add_client_event::<PlayerMove>(ChannelKind::Ordered)

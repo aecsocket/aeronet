@@ -138,7 +138,7 @@ impl ClientTransport for WebTransportClient {
         let lane = lane.into();
         client
             .session
-            .send(Instant::now(), &msg, lane)
+            .send(Instant::now(), msg, lane)
             .map(MessageKey::from_raw)
             .map_err(ClientError::Send)
     }
@@ -192,7 +192,6 @@ impl WebTransportClient {
             Ok(Some(next)) => (
                 Some(ClientEvent::Connected),
                 State::Connected(Connected {
-                    connected_at: next.connected_at,
                     #[cfg(not(target_family = "wasm"))]
                     local_addr: next.local_addr,
                     #[cfg(not(target_family = "wasm"))]
@@ -260,7 +259,7 @@ impl WebTransportClient {
                     msg_key: MessageKey::from_raw(seq),
                 }));
 
-                let res = msgs.for_each_msg(|res| match res {
+                msgs.for_each_msg(|res| match res {
                     Ok((msg, lane)) => {
                         events.push(ClientEvent::Recv { msg, lane });
                     }
@@ -272,9 +271,7 @@ impl WebTransportClient {
                     }
                 });
 
-                if let Err(err) = res {
-                    return Err(ClientError::OutOfMemory(err));
-                }
+                // TODO OOM
             }
 
             if bytes_recv > 0 {

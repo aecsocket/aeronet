@@ -1,5 +1,4 @@
 use aeronet::lane::LaneKind;
-use web_time::Duration;
 
 /// Configuration for a [`Session`].
 ///
@@ -9,9 +8,9 @@ use web_time::Duration;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionConfig {
     /// Configurations for the lanes which can be used to send out data.
-    pub send_lanes: Vec<LaneConfig>,
+    pub send_lanes: Vec<LaneKind>,
     /// Configurations for the lanes which can be used to receive data.
-    pub recv_lanes: Vec<LaneConfig>,
+    pub recv_lanes: Vec<LaneKind>,
     /// Maximum number of bytes of memory which can be used for buffering
     /// messages.
     ///
@@ -57,9 +56,10 @@ impl Default for SessionConfig {
 }
 
 impl SessionConfig {
-    /// Creates a new configuration with the default values set, apart from
-    /// [`SessionConfig::max_memory_usage`], which must be manually
-    /// defined.
+    /// Creates a new configuration with the default values.
+    ///
+    /// [`SessionConfig::max_memory_usage`] must be manually defined by passing
+    /// it in here.
     #[must_use]
     pub fn new(max_memory_usage: usize) -> Self {
         Self {
@@ -71,13 +71,10 @@ impl SessionConfig {
     /// Adds the given lanes to this configuration's
     /// [`SessionConfig::send_lanes`].
     ///
-    /// You can implement `From<LaneConfig> for [your own type]` to use it as
+    /// You can implement `From<LaneKind> for [your own type]` to use it as
     /// the item in this iterator.
     #[must_use]
-    pub fn with_send_lanes(
-        mut self,
-        lanes: impl IntoIterator<Item = impl Into<LaneConfig>>,
-    ) -> Self {
+    pub fn with_send_lanes(mut self, lanes: impl IntoIterator<Item = impl Into<LaneKind>>) -> Self {
         self.send_lanes.extend(lanes.into_iter().map(Into::into));
         self
     }
@@ -85,13 +82,10 @@ impl SessionConfig {
     /// Adds the given lanes to this configuration's
     /// [`SessionConfig::recv_lanes`].
     ///
-    /// You can implement `From<LaneConfig> for [your own type]` to use it as
+    /// You can implement `From<LaneKind> for [your own type]` to use it as
     /// the item in this iterator.
     #[must_use]
-    pub fn with_recv_lanes(
-        mut self,
-        lanes: impl IntoIterator<Item = impl Into<LaneConfig>>,
-    ) -> Self {
+    pub fn with_recv_lanes(mut self, lanes: impl IntoIterator<Item = impl Into<LaneKind>>) -> Self {
         self.recv_lanes.extend(lanes.into_iter().map(Into::into));
         self
     }
@@ -99,10 +93,10 @@ impl SessionConfig {
     /// Adds the given lanes to this configuration's
     /// [`SessionConfig::send_lanes`] and [`SessionConfig::recv_lanes`].
     ///
-    /// You can implement `From<LaneConfig> for [your own type]` to use it as
+    /// You can implement `From<LaneKind> for [your own type]` to use it as
     /// the item in this iterator.
     #[must_use]
-    pub fn with_lanes(mut self, lanes: impl IntoIterator<Item = impl Into<LaneConfig>>) -> Self {
+    pub fn with_lanes(mut self, lanes: impl IntoIterator<Item = impl Into<LaneKind>>) -> Self {
         let lanes = lanes.into_iter().map(Into::into).collect::<Vec<_>>();
         self.send_lanes.extend(lanes.iter().cloned());
         self.recv_lanes.extend(lanes.iter().cloned());
@@ -114,48 +108,5 @@ impl SessionConfig {
     pub const fn with_send_bytes_per_sec(mut self, send_bytes_per_sec: usize) -> Self {
         self.send_bytes_per_sec = send_bytes_per_sec;
         self
-    }
-}
-
-/// Configuration for a lane in a [`Session`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LaneConfig {
-    /// Kind of lane that this creates.
-    pub kind: LaneKind,
-    /// For send lanes: how many total bytes we can [`Session::flush`] out on
-    /// this lane per second.
-    ///
-    /// See [`SessionConfig::send_bytes_per_sec`].
-    pub send_bytes_per_sec: usize,
-    /// For reliable send lanes: after flushing out a fragment, how long do we
-    /// wait until attempting to flush out this fragment again?
-    ///
-    /// If last update we flushed out a fragment of a reliable message, then it
-    /// would be pointless to flush out the same fragment on this update, since
-    /// [RTT] probably hasn't even elapsed yet, and there's no way the peer
-    /// could have acknowledged it yet.
-    ///
-    /// [RTT]: aeronet::stats::Rtt
-    // TODO: could we make this automatic and base it on RTT? i.e. if RTT is
-    // 100ms, then we set resend_after to 100ms by default, and if RTT changes,
-    // then we re-adjust it
-    pub resend_after: Duration,
-}
-
-impl Default for LaneConfig {
-    fn default() -> Self {
-        Self::new(LaneKind::UnreliableUnordered)
-    }
-}
-
-impl LaneConfig {
-    /// Creates a new default lane configuration for the given lane kind.
-    #[must_use]
-    pub const fn new(kind: LaneKind) -> Self {
-        Self {
-            kind,
-            send_bytes_per_sec: usize::MAX,
-            resend_after: Duration::from_millis(100),
-        }
     }
 }

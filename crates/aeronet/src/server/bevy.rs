@@ -82,7 +82,7 @@ pub fn server_closed<T: ServerTransport + Resource>(server: Option<Res<T>>) -> b
 /// [`ServerState::Open`]: crate::server::ServerState::Open
 /// [`ServerEvent::Opened`]: super::ServerEvent::Opened
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = ""), Clone(bound = ""))]
+#[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct ServerOpened<T: ServerTransport> {
     #[derivative(Debug = "ignore")]
     #[doc(hidden)]

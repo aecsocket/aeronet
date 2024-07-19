@@ -12,3 +12,6 @@ pub mod stats;
 
 #[cfg(feature = "condition")]
 pub mod condition;
+
+#[cfg(feature = "replicon")]
+mod replicon;

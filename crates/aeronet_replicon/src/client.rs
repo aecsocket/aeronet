@@ -69,7 +69,7 @@ impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
                     Self::recv.run_if(
                         resource_exists::<T>
                             .and_then(resource_exists::<RepliconClient>)
-                            .and_then(on_real_timer(Duration::from_millis(100))), // TODO remove this
+                            .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove this
                     ),
                     Self::update_state.run_if(resource_exists::<RepliconClient>),
                 )
@@ -78,11 +78,11 @@ impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
             )
             .add_systems(
                 PostUpdate,
-                Self::send
+                Self::flush
                     .run_if(
                         client_connected::<T>
                             .and_then(resource_exists::<RepliconClient>)
-                            .and_then(on_real_timer(Duration::from_millis(100))), // TODO remove
+                            .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove
                     )
                     .in_set(ServerSet::SendPackets),
             );
@@ -101,9 +101,7 @@ impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
         for event in client.poll(time.delta()) {
             match event {
                 ClientEvent::Connected => {
-                    connected.send(LocalClientConnected {
-                        _phantom: PhantomData,
-                    });
+                    connected.send(LocalClientConnected::default());
                 }
                 ClientEvent::Disconnected { error } => {
                     disconnected.send(LocalClientDisconnected { error });
@@ -143,7 +141,7 @@ impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
         }
     }
 
-    fn send(mut client: ResMut<T>, mut replicon: ResMut<RepliconClient>) {
+    fn flush(mut client: ResMut<T>, mut replicon: ResMut<RepliconClient>) {
         let mut bytes_sent = 0usize;
         for (channel_id, payload) in replicon.drain_sent() {
             bytes_sent = bytes_sent.saturating_add(payload.len());

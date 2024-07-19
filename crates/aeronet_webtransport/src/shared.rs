@@ -1,6 +1,6 @@
 //! Items shared between the client and server.
 
-use aeronet_proto::packet::MessageSeq;
+use aeronet_proto::ty::MessageSeq;
 
 /// Key identifying a message sent across a connection.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary)]

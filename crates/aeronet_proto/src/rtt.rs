@@ -64,11 +64,12 @@ impl RttEstimator {
         self.min
     }
 
-    /// PTO computed as described in [RFC 9002 Section 6.2.1].
+    /// Computes the probe timeout duration (PTO) as described in
+    /// [RFC 9002 Section 6.2.1].
     ///
     /// [RFC 9002 Section 6.2.1]: https://www.rfc-editor.org/rfc/rfc9002.html#section-6.2.1
     #[must_use]
-    pub fn pto_base(&self) -> Duration {
+    pub fn pto(&self) -> Duration {
         self.get() + cmp::max(4 * self.var, TIMER_GRANULARITY)
     }
 

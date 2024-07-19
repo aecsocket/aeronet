@@ -154,7 +154,7 @@ impl ServerTransport for WebTransportServer {
         let lane = lane.into();
         client
             .session
-            .send(Instant::now(), &msg, lane)
+            .send(Instant::now(), msg, lane)
             .map(MessageKey::from_raw)
             .map_err(ServerError::Send)
     }
@@ -340,7 +340,6 @@ impl WebTransportServer {
             if let Ok(Some(next)) = client.recv_connected.try_recv() {
                 events.push(ServerEvent::Connected { client_key });
                 Ok(Client::Connected(Connected {
-                    connected_at: next.connected_at,
                     remote_addr: next.remote_addr,
                     raw_rtt: next.initial_rtt,
                     session: next.session,
@@ -407,7 +406,7 @@ impl WebTransportServer {
                     msg_key: MessageKey::from_raw(seq),
                 }));
 
-                let res = msgs.for_each_msg(|res| match res {
+                msgs.for_each_msg(|res| match res {
                     Ok((msg, lane)) => {
                         events.push(ServerEvent::Recv {
                             client_key,
@@ -423,9 +422,7 @@ impl WebTransportServer {
                     }
                 });
 
-                if let Err(err) = res {
-                    return Err(ServerError::OutOfMemory(err));
-                }
+                // TODO OOM
             }
 
             if bytes_recv > 0 {

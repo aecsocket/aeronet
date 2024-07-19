@@ -199,7 +199,6 @@ pub struct Connecting {
 
 #[derive(Debug)]
 struct ToConnected {
-    connected_at: Instant,
     remote_addr: SocketAddr,
     initial_rtt: Duration,
     recv_meta: mpsc::Receiver<ConnectionMeta>,
@@ -212,8 +211,6 @@ struct ToConnected {
 /// [`ClientState::Connected`].
 #[derive(Debug)]
 pub struct Connected {
-    /// See [`ConnectedAt`].
-    pub connected_at: Instant,
     /// See [`RemoteAddr`].
     pub remote_addr: SocketAddr,
     /// Backing [`Rtt`] value provided by the [`wtransport`] connection.
@@ -232,7 +229,7 @@ pub struct Connected {
 
 impl ConnectedAt for Connected {
     fn connected_at(&self) -> Instant {
-        self.connected_at
+        self.session.connected_at()
     }
 }
 
