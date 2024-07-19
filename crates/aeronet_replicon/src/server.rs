@@ -290,7 +290,7 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
             let _ = server.send(
                 client_key.clone(),
                 payload,
-                LaneIndex::from_raw(usize::from(channel_id)),
+                LaneIndex::from_raw(u64::from(channel_id)),
             );
         }
 

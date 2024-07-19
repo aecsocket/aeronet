@@ -1,4 +1,4 @@
-use std::convert::Infallible;
+use std::{convert::Infallible, fmt};
 
 use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
 
@@ -6,11 +6,12 @@ use crate::ty::FragmentMarker;
 
 const LAST_MASK: u8 = 0b1000_0000;
 
+/// Maximum index of any given fragment with a [`FragmentMarker`].
+pub const MAX_FRAG_INDEX: u8 = u8::MAX & !LAST_MASK;
+
 /// Maximum number of fragments that a message can be split into using
 /// [`FragmentSender`].
-///
-/// See [`FragmentMarker`] for an explanation of how this value is determined.
-pub const MAX_FRAGS: u8 = u8::MAX & !LAST_MASK;
+pub const MAX_FRAGS: usize = MAX_FRAG_INDEX as usize + 1;
 
 impl FragmentMarker {
     /// Creates a new marker from a raw integer.
@@ -86,6 +87,17 @@ impl FragmentMarker {
     }
 }
 
+impl fmt::Debug for FragmentMarker {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let index = self.index();
+        if self.is_last() {
+            write!(f, "FragmentMarker({index} last)")
+        } else {
+            write!(f, "FragmentMarker({index} non-last)")
+        }
+    }
+}
+
 impl FixedEncodeLen for FragmentMarker {
     const ENCODE_LEN: usize = u8::ENCODE_LEN;
 }
@@ -125,9 +137,9 @@ mod tests {
         assert!(!marker.is_last());
         assert_eq!(0, marker.index());
 
-        let marker = FragmentMarker::non_last(MAX_FRAGS).unwrap();
+        let marker = FragmentMarker::non_last(MAX_FRAG_INDEX).unwrap();
         assert!(!marker.is_last());
-        assert_eq!(MAX_FRAGS, marker.index());
+        assert_eq!(MAX_FRAG_INDEX, marker.index());
     }
 
     #[test]
@@ -136,14 +148,14 @@ mod tests {
         assert!(marker.is_last());
         assert_eq!(0, marker.index());
 
-        let marker = FragmentMarker::last(MAX_FRAGS).unwrap();
+        let marker = FragmentMarker::last(MAX_FRAG_INDEX).unwrap();
         assert!(marker.is_last());
-        assert_eq!(MAX_FRAGS, marker.index());
+        assert_eq!(MAX_FRAG_INDEX, marker.index());
     }
 
     #[test]
     fn out_of_range() {
-        assert!(FragmentMarker::non_last(MAX_FRAGS + 1).is_none());
-        assert!(FragmentMarker::last(MAX_FRAGS + 1).is_none());
+        assert!(FragmentMarker::non_last(MAX_FRAG_INDEX + 1).is_none());
+        assert!(FragmentMarker::last(MAX_FRAG_INDEX + 1).is_none());
     }
 }
