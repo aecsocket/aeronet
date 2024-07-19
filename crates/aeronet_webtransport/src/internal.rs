@@ -22,12 +22,6 @@ cfg_if::cfg_if! {
             None
         }
 
-        pub fn get_rtt(_: &Connection) -> Duration {
-            // unsupported in most browsers
-            // https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/getStats
-            Duration::ZERO
-        }
-
         pub fn to_bytes(datagram: Datagram) -> Bytes {
             Bytes::from(datagram)
         }
@@ -41,10 +35,6 @@ cfg_if::cfg_if! {
 
         pub fn get_mtu(conn: &Connection) -> Option<usize> {
             conn.0.max_datagram_size()
-        }
-
-        pub fn get_rtt(conn: &Connection) -> Duration {
-            conn.0.rtt()
         }
 
         pub fn to_bytes(datagram: Datagram) -> Bytes {
@@ -84,6 +74,7 @@ pub type Datagram = <Connection as datagram::Receive>::Datagram;
 
 #[derive(Debug)]
 pub struct ConnectionMeta {
+    #[cfg(not(target_family = "wasm"))]
     pub rtt: Duration,
     pub mtu: usize,
 }
@@ -126,7 +117,8 @@ pub async fn update_meta(
     loop {
         sleep(STATS_UPDATE_INTERVAL).await;
         let meta = ConnectionMeta {
-            rtt: get_rtt(conn),
+            #[cfg(not(target_family = "wasm"))]
+            rtt: conn.0.rtt(),
             mtu: get_mtu(conn).ok_or(Error::DatagramsNotSupported)?,
         };
         send_meta

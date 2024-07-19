@@ -216,8 +216,12 @@ pub struct Connected {
     pub connected_at: Instant,
     /// See [`RemoteAddr`].
     pub remote_addr: SocketAddr,
-    /// See [`Rtt`].
-    pub rtt: Duration,
+    /// Backing [`Rtt`] value provided by the [`wtransport`] connection.
+    ///
+    /// The [`Rtt`] impl for this struct returns the [`Session`]'s RTT, *not*
+    /// this value. This value is more representative of RTT at a packet level,
+    /// but less representative of RTT at the application level.
+    pub raw_rtt: Duration,
     /// Protocol session state, used for reading more advanced info.
     pub session: Session,
     recv_err: oneshot::Receiver<ServerError>,
@@ -234,7 +238,7 @@ impl ConnectedAt for Connected {
 
 impl Rtt for Connected {
     fn rtt(&self) -> Duration {
-        self.rtt
+        self.session.rtt().get()
     }
 }
 

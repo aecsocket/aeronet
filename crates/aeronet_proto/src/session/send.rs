@@ -119,16 +119,31 @@ impl Session {
                         index: u8::try_from(frag_index).unwrap(),
                     })
             })
-            // wrap in an Option, since we're gonna be taking individual frags out
-            // once we've added them to a packet
-            .map(Some)
-            .collect::<Box<_>>();
-        // sort them by payload length, largest to smallest
+            .collect::<Vec<_>>();
+
+        // // sort them by payload length, largest to smallest
+        // frag_paths.sort_unstable_by(|a, b| {
+        //     let a = Self::get_frag(&self.sent_msgs, a.unwrap());
+        //     let b = Self::get_frag(&self.sent_msgs, b.unwrap());
+        //     b.frag.payload.len().cmp(&a.frag.payload.len())
+        // });
+
+        // sort them by oldest to newest
         frag_paths.sort_unstable_by(|a, b| {
-            let a = Self::get_frag(&self.sent_msgs, a.unwrap());
-            let b = Self::get_frag(&self.sent_msgs, b.unwrap());
-            b.frag.payload.len().cmp(&a.frag.payload.len())
+            let dist_a = a.msg_seq.dist_to(*self.next_msg_seq);
+            let dist_b = a.msg_seq.dist_to(*self.next_msg_seq);
+            dist_a.cmp(&dist_b)
         });
+
+        tracing::info!(
+            "!! sending out {:?}",
+            frag_paths
+                .iter()
+                .map(|path| path.msg_seq)
+                .collect::<Vec<_>>()
+        );
+
+        let mut frag_paths = frag_paths.into_iter().map(Some).collect::<Vec<_>>();
 
         std::iter::from_fn(move || {
             // this iteration, we want to build up one full packet
@@ -205,7 +220,7 @@ impl Session {
                 }
             }
 
-            let should_send_keep_alive = now >= self.next_keep_alive_at;
+            let should_send_keep_alive = false; //now >= self.next_keep_alive_at;
             if frags.is_empty() && !should_send_keep_alive {
                 None
             } else {
@@ -215,13 +230,17 @@ impl Session {
                 self.flushed_packets.insert(
                     packet_seq,
                     FlushedPacket {
+                        flushed_at: now,
                         frags: frags.into_boxed_slice(),
                     },
                 );
                 let packet = packet.freeze();
 
                 self.bytes_sent = self.bytes_sent.saturating_add(packet.len());
-                self.next_keep_alive_at = now + self.keep_alive_interval;
+                // instead of having the keep-alive interval be user-configurable,
+                // it's based on the RTT of the connection
+                // TODO: is this a bad idea?
+                self.next_keep_alive_at = now + self.rtt.get();
 
                 Some(packet)
             }

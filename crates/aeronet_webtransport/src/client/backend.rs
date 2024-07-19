@@ -64,7 +64,8 @@ pub async fn start(
             local_addr: endpoint.0.local_addr().map_err(ClientError::GetLocalAddr)?,
             #[cfg(not(target_family = "wasm"))]
             remote_addr: conn.0.remote_address(),
-            initial_rtt: internal::get_rtt(&conn),
+            #[cfg(not(target_family = "wasm"))]
+            initial_rtt: conn.0.rtt(),
             recv_meta,
             send_c2s,
             recv_s2c,

@@ -17,15 +17,6 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-[features]
-## Enables the `replicon` feature of [`aeronet_proto`].
-##
-## Enable this if using any transport implementation which relies on [`aeronet_proto`]. This will be
-## most networked transports.
-##
-## [`aeronet_proto`]: https://docs.rs/aeronet_proto
-proto = ["dep:aeronet_proto"]
-
 [dependencies]
 aeronet = { workspace = true, features = ["bevy"] }
 
@@ -40,8 +31,6 @@ bevy_ecs = { workspace = true }
 bevy_time = { workspace = true }
 
 bevy_replicon = { workspace = true }
-
-aeronet_proto = { workspace = true, features = ["replicon"], optional = true }
 
 [dev-dependencies]
 bevy = { workspace = true }

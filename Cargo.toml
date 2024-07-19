@@ -60,6 +60,8 @@ thiserror = "1.0.57"
 tracing = "0.1.40"
 web-time = "1.1.0"
 size = "0.4.1"
+egui = "0.27.2"
+circular-buffer = "0.1.7"
 
 # bevy
 

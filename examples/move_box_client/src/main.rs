@@ -1,13 +1,14 @@
 #![doc = include_str!("../README.md")]
 
 use aeronet::{
-    client::{LocalClientConnected, LocalClientDisconnected},
+    client::{ClientState, ClientTransport, LocalClientConnected, LocalClientDisconnected},
     error::pretty_error,
     server::ServerTransportSet,
 };
 use aeronet_replicon::client::RepliconClientPlugin;
 use aeronet_webtransport::{client::WebTransportClient, wtransport};
 use bevy::prelude::*;
+use bevy_egui::{EguiContexts, EguiPlugin};
 use bevy_replicon::{prelude::RepliconChannels, server::ServerPlugin, RepliconPlugins};
 use move_box::{AsyncRuntime, MoveBoxPlugin, PlayerColor, PlayerMove, PlayerPosition};
 use web_time::Duration;
@@ -33,6 +34,7 @@ fn main() {
             RepliconPlugins.build().disable::<ServerPlugin>(),
             RepliconClientPlugin::<WebTransportClient>::default(),
             MoveBoxPlugin,
+            EguiPlugin,
         ))
         .init_resource::<WebTransportClient>()
         .add_systems(Startup, (setup_level, connect_client).chain())
@@ -40,7 +42,7 @@ fn main() {
             PreUpdate,
             (on_connected, on_disconnected).after(ServerTransportSet::Recv),
         )
-        .add_systems(Update, (handle_inputs, draw_boxes).chain())
+        .add_systems(Update, (handle_inputs, draw_boxes, draw_stats).chain())
         .run();
 }
 
@@ -57,6 +59,7 @@ fn connect_client(
     let net_config = wtransport::ClientConfig::builder()
         .with_bind_default()
         .with_no_cert_validation()
+        .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
         .unwrap()
         .build();
@@ -107,5 +110,11 @@ fn handle_inputs(mut move_events: EventWriter<PlayerMove>, input: Res<ButtonInpu
 fn draw_boxes(mut gizmos: Gizmos, players: Query<(&PlayerPosition, &PlayerColor)>) {
     for (PlayerPosition(pos), PlayerColor(color)) in &players {
         gizmos.rect(pos.extend(0.0), Quat::IDENTITY, Vec2::ONE * 50.0, *color);
+    }
+}
+
+fn draw_stats(mut egui: EguiContexts, client: Res<WebTransportClient>) {
+    if let ClientState::Connected(client) = client.state() {
+        aeronet_proto::stats::draw(egui.ctx_mut(), &client.session);
     }
 }

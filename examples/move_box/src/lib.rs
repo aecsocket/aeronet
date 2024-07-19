@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use std::{future::Future, time::Duration};
+use std::future::Future;
 
 use aeronet_webtransport::proto::session::SessionConfig;
 use bevy::prelude::*;
@@ -20,7 +20,7 @@ impl Plugin for MoveBoxPlugin {
         app.init_resource::<AsyncRuntime>()
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
-            .add_client_event::<PlayerMove>(ChannelKind::Unreliable)
+            .add_client_event::<PlayerMove>(ChannelKind::Ordered)
             .add_systems(Update, apply_movement.run_if(has_authority));
     }
 }
@@ -88,7 +88,7 @@ pub struct PlayerMove(pub Vec2);
 
 /// Creates the base [`SessionConfig`] with no lanes registered.
 pub fn base_session_config() -> SessionConfig {
-    SessionConfig::new(MAX_MEMORY_USAGE).with_keep_alive_interval(Duration::from_secs(60))
+    SessionConfig::new(MAX_MEMORY_USAGE)
 }
 
 fn apply_movement(

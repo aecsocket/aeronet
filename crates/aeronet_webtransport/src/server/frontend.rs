@@ -12,7 +12,7 @@ use either::Either;
 use futures::channel::oneshot;
 use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
 use slotmap::SlotMap;
-use tracing::debug;
+use tracing::{debug, trace, trace_span};
 use web_time::{Duration, Instant};
 
 use crate::shared::MessageKey;
@@ -164,16 +164,28 @@ impl ServerTransport for WebTransportServer {
             return Err(ServerError::NotOpen);
         };
 
-        for (_, client) in &mut server.clients {
+        for (client_key, client) in &mut server.clients {
+            let span = trace_span!("Client", key = display(client_key));
+            let span = span.enter();
+
             let Client::Connected(client) = client else {
                 continue;
             };
 
+            let mut bytes_sent = 0usize;
             for packet in client.session.flush(Instant::now()) {
+                bytes_sent = bytes_sent.saturating_add(packet.len());
                 // ignore errors here, pick them up in `poll`
                 let _ = client.send_s2c.unbounded_send(packet);
             }
+
+            if bytes_sent > 0 {
+                trace!(bytes_sent, "Flushed packets");
+            }
+
+            drop(span);
         }
+
         Ok(())
     }
 
@@ -279,6 +291,9 @@ impl WebTransportServer {
             }
 
             for (client_key, client) in &mut server.clients {
+                let span = trace_span!("Client", key = display(client_key));
+                let span = span.enter();
+
                 replace_with_or_abort(client, |client_state| match client_state {
                     Client::Disconnected => ClientState::Disconnected,
                     Client::Connecting(client) => {
@@ -288,6 +303,8 @@ impl WebTransportServer {
                         Self::poll_connected(client_key, client, &mut events, delta_time)
                     }
                 });
+
+                drop(span);
             }
 
             server
@@ -325,7 +342,7 @@ impl WebTransportServer {
                 Ok(Client::Connected(Connected {
                     connected_at: next.connected_at,
                     remote_addr: next.remote_addr,
-                    rtt: next.initial_rtt,
+                    raw_rtt: next.initial_rtt,
                     session: next.session,
                     recv_err: client.recv_err,
                     recv_meta: next.recv_meta,
@@ -362,7 +379,7 @@ impl WebTransportServer {
             }
 
             while let Ok(Some(meta)) = client.recv_meta.try_next() {
-                client.rtt = meta.rtt;
+                client.raw_rtt = meta.rtt;
                 client
                     .session
                     .set_mtu(meta.mtu)
@@ -371,7 +388,9 @@ impl WebTransportServer {
 
             client.session.refill_bytes(delta_time);
 
+            let mut bytes_recv = 0usize;
             while let Ok(Some(packet)) = client.recv_c2s.try_next() {
+                bytes_recv = bytes_recv.saturating_add(packet.len());
                 let (acks, mut msgs) = match client.session.recv(Instant::now(), packet) {
                     Ok(x) => x,
                     Err(err) => {
@@ -407,6 +426,10 @@ impl WebTransportServer {
                 if let Err(err) = res {
                     return Err(ServerError::OutOfMemory(err));
                 }
+            }
+
+            if bytes_recv > 0 {
+                trace!(bytes_recv, "Received packets");
             }
 
             Ok(())

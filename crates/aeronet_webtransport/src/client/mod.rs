@@ -123,6 +123,7 @@ struct ToConnected {
     local_addr: SocketAddr,
     #[cfg(not(target_family = "wasm"))]
     remote_addr: SocketAddr,
+    #[cfg(not(target_family = "wasm"))]
     initial_rtt: Duration,
     recv_meta: mpsc::Receiver<ConnectionMeta>,
     send_c2s: mpsc::UnboundedSender<Bytes>,
@@ -139,10 +140,15 @@ pub struct Connected {
     /// See [`RemoteAddr`].
     #[cfg(not(target_family = "wasm"))]
     pub remote_addr: SocketAddr,
+    /// Backing [`Rtt`] value provided by the [`wtransport`] connection.
+    ///
+    /// The [`Rtt`] impl for this struct returns the [`Session`]'s RTT, *not*
+    /// this value. This value is more representative of RTT at a packet level,
+    /// but less representative of RTT at the application level.
+    #[cfg(not(target_family = "wasm"))]
+    pub raw_rtt: Duration,
     /// See [`ConnectedAt`].
     pub connected_at: Instant,
-    /// See [`Rtt`].
-    pub rtt: Duration,
     /// Protocol session state, used for reading more advanced info.
     pub session: Session,
     recv_err: oneshot::Receiver<ClientError>,
@@ -159,7 +165,7 @@ impl ConnectedAt for Connected {
 
 impl Rtt for Connected {
     fn rtt(&self) -> Duration {
-        self.rtt
+        self.session.rtt().get()
     }
 }
 
