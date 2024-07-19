@@ -3,48 +3,18 @@
 use std::{
     cmp::Ordering,
     convert::Infallible,
+    fmt::Debug,
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
-use derivative::Derivative;
-use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen};
+use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
 
-/// Sequence number uniquely identifying an item sent across a network.
-///
-/// Note that the sequence number may identify either a message or a packet
-/// sequence number.
-///
-/// The number is stored internally as a [`u16`], which means it will wrap
-/// around fairly quickly as many messages can be sent per second. Users of a
-/// sequence number should take this into account, and use the custom
-/// [`Seq::cmp`] implementation which takes wraparound into
-/// consideration.
-///
-/// # Wraparound
-///
-/// Operations on [`Seq`] must take into account wraparound, as it is inevitable
-/// that it will eventually occur in the program - a [`u16`] is relatively very
-/// small.
-///
-/// The sequence number can be visualized as an infinite number line, where
-/// [`u16::MAX`] is right before `0`, `0` is before `1`, etc.:
-///
-/// ```text
-///     65534  65535    0      1      2
-/// ... --|------|------|------|------|-- ...
-/// ```
-///
-/// [Addition](std::ops::Add) and [subtraction](std::ops::Sub) will always wrap.
-///
-/// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
-#[derive(
-    Derivative, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary, datasize::DataSize,
-)]
-#[derivative(Debug = "transparent")]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Seq(pub u16);
+use crate::ty::{MessageSeq, PacketSeq, Seq};
 
 impl Seq {
+    /// Sequence number with value `0`.
+    pub const ZERO: Self = Self(0);
+
     /// Sequence number with value [`u16::MAX`].
     pub const MAX: Self = Self(u16::MAX);
 
@@ -68,7 +38,7 @@ impl Seq {
     /// # Example
     ///
     /// ```
-    /// # use aeronet_proto::seq::Seq;
+    /// # use aeronet_proto::ty::Seq;
     /// assert_eq!(Seq(0).dist_to(Seq(0)), 0);
     /// assert_eq!(Seq(0).dist_to(Seq(5)), 5);
     /// assert_eq!(Seq(3).dist_to(Seq(5)), 2);
@@ -165,7 +135,7 @@ impl FixedEncodeLen for Seq {
 impl Encode for Seq {
     type Error = Infallible;
 
-    fn encode(&self, mut dst: impl octs::Write) -> Result<(), BufTooShortOr<Self::Error>> {
+    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
         dst.write(&self.0)
     }
 }
@@ -173,26 +143,96 @@ impl Encode for Seq {
 impl Decode for Seq {
     type Error = Infallible;
 
-    fn decode(mut src: impl octs::Read) -> Result<Self, BufTooShortOr<Self::Error>> {
+    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
         Ok(Self(src.read()?))
+    }
+}
+
+impl PacketSeq {
+    /// Creates a new sequence number from a raw number.
+    ///
+    /// If you already have a [`Seq`], just wrap it in this type.
+    #[must_use]
+    pub const fn new(n: u16) -> Self {
+        Self(Seq(n))
+    }
+}
+
+impl Debug for PacketSeq {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let PacketSeq(Seq(seq)) = self;
+        write!(f, "{seq}")
+    }
+}
+
+impl FixedEncodeLen for PacketSeq {
+    const ENCODE_LEN: usize = Seq::ENCODE_LEN;
+}
+
+impl Encode for PacketSeq {
+    type Error = <Seq as Encode>::Error;
+
+    fn encode(&self, dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+        self.0.encode(dst)
+    }
+}
+
+impl Decode for PacketSeq {
+    type Error = <Seq as Decode>::Error;
+
+    fn decode(src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
+        Seq::decode(src).map(Self)
+    }
+}
+
+impl MessageSeq {
+    /// Creates a new sequence number from a raw number.
+    ///
+    /// If you already have a [`Seq`], just wrap it in this type.
+    #[must_use]
+    pub const fn new(n: u16) -> Self {
+        Self(Seq(n))
+    }
+}
+
+impl Debug for MessageSeq {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let MessageSeq(Seq(seq)) = self;
+        write!(f, "{seq}")
+    }
+}
+
+impl FixedEncodeLen for MessageSeq {
+    const ENCODE_LEN: usize = Seq::ENCODE_LEN;
+}
+
+impl Encode for MessageSeq {
+    type Error = <Seq as Encode>::Error;
+
+    fn encode(&self, dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+        self.0.encode(dst)
+    }
+}
+
+impl Decode for MessageSeq {
+    type Error = <Seq as Decode>::Error;
+
+    fn decode(src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
+        Seq::decode(src).map(Self)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use octs::{BytesMut, Read, Write};
+    use octs::test::*;
 
     use super::*;
 
     #[test]
-    fn encode_decode() {
-        let v = Seq(1234);
-        let mut buf = BytesMut::with_capacity(Seq::ENCODE_LEN);
-
-        buf.write(&v).unwrap();
-        assert_eq!(Seq::ENCODE_LEN, buf.len());
-
-        assert_eq!(v, buf.freeze().read::<Seq>().unwrap());
+    fn encode_decode_all_seqs() {
+        for seq in 0..u16::MAX {
+            hint_round_trip(&Seq(seq));
+        }
     }
 
     #[test]

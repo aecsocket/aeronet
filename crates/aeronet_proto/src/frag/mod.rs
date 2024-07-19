@@ -29,140 +29,48 @@
 
 use std::convert::Infallible;
 
+use aeronet::lane::LaneIndex;
 use octs::{
-    BufTooShortOr, Bytes, Decode, Encode, EncodeLen, FixedEncodeLen, Read, VarInt, VarIntTooLarge,
-    Write,
+    BufError, BufTooShortOr, Decode, Encode, EncodeLen, Read, VarInt, VarIntTooLarge, Write,
 };
 
-use crate::packet::MessageSeq;
+use crate::ty::{Fragment, FragmentHeader, FragmentMarker};
 
+mod marker;
 mod recv;
 mod send;
 
 pub use {recv::*, send::*};
 
-/// Indicates what index a [`Fragment`] represents, and whether this fragment
-/// is the last fragment in a message.
-///
-/// When transmitting fragments to a peer, we need some way to tell if we have
-/// received all of the fragments for a specific message. [*Gaffer On Games*]
-/// uses two [`u8`]s, a `fragment id` and `num fragments`, to represent this
-/// data. However, we do something smarter and use the MSB to indicate if this
-/// fragment is the last one in the message. This leaves us with 128 possible
-/// fragments per message, which should still be enough for most reasonable
-/// use cases, but saves 1 byte of overhead per fragment per packet.
-///
-/// If the MSB is set, this fragment is the last one in this message. The other
-/// 7 bits encode the index of this fragment in the message.
-///
-/// [*Gaffer On Games*]: https://gafferongames.com/post/packet_fragmentation_and_reassembly/#fragment-packet-structure
-// TODO docs
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, arbitrary::Arbitrary, datasize::DataSize,
-)]
-pub struct FragmentMarker(pub(crate) u8);
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("invalid lane index")]
+pub struct InvalidLaneIndex(#[source] VarIntTooLarge);
 
-const LAST_MASK: u8 = 0b1000_0000;
+impl BufError for InvalidLaneIndex {}
 
-/// Maximum number of fragments that a message can be split into using
-/// [`FragmentSender`].
-///
-/// See [`FragmentMarker`] for an explanation of how this value is determined.
-pub const MAX_FRAGS: u8 = u8::MAX & !LAST_MASK;
-
-impl FragmentMarker {
-    /// Creates a new marker from a raw integer.
-    #[inline]
-    #[must_use]
-    pub const fn from_raw(raw: u8) -> Self {
-        Self(raw)
-    }
-
-    /// Gets the raw integer from this fragment marker.
-    ///
-    /// To get the fragment index, use [`FragmentMarker::index`].
-    #[inline]
-    #[must_use]
-    pub const fn into_raw(self) -> u8 {
-        self.0
-    }
-
-    /// Creates a new marker from an index indicating that this **is not** the
-    /// last fragment in the message.
-    ///
-    /// Returns [`None`] if the index is too large to be encoded properly.
-    #[inline]
-    #[must_use]
-    pub const fn non_last(index: u8) -> Option<Self> {
-        if index & LAST_MASK == 0 {
-            Some(Self(index))
-        } else {
-            None
-        }
-    }
-
-    /// Creates a new marker from an index indicating that this **is** the last
-    /// fragment in the message.
-    ///
-    /// Returns [`None`] if the index is too large to be encoded properly.
-    #[inline]
-    #[must_use]
-    pub const fn last(index: u8) -> Option<Self> {
-        if index & LAST_MASK == 0 {
-            Some(Self(index | LAST_MASK))
-        } else {
-            None
-        }
-    }
-
-    /// Creates a new marker.
-    ///
-    /// If you know whether the marker is last or non-last at compile-time,
-    /// prefer [`FragmentMarker::non_last`] or [`FragmentMarker::last`].
-    #[inline]
-    #[must_use]
-    pub const fn new(index: u8, is_last: bool) -> Option<Self> {
-        if is_last {
-            Self::last(index)
-        } else {
-            Self::non_last(index)
-        }
-    }
-
-    /// Gets the fragment index of this marker.
-    #[inline]
-    #[must_use]
-    pub const fn index(self) -> u8 {
-        self.0 & !LAST_MASK
-    }
-
-    /// Gets if this fragment is the last one in the message.
-    #[inline]
-    #[must_use]
-    pub const fn is_last(self) -> bool {
-        self.0 & LAST_MASK != 0
-    }
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum FragmentDecodeError {
+    #[error(transparent)]
+    InvalidLaneIndex(InvalidLaneIndex),
+    #[error("payload length too large")]
+    PayloadTooLarge(#[source] VarIntTooLarge),
 }
 
-/// Metadata for a packet produced by [`FragmentSender::fragment`] and read by
-/// [`FragmentReceiver::reassemble`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, arbitrary::Arbitrary, datasize::DataSize)]
-pub struct FragmentHeader {
-    /// Sequence number of the message that this fragment is a part of.
-    pub msg_seq: MessageSeq,
-    /// Marker of this fragment, indicating the fragment's index, and whether it
-    /// is the last fragment of this message or not.
-    pub marker: FragmentMarker,
-}
+impl BufError for FragmentDecodeError {}
 
-impl FixedEncodeLen for FragmentHeader {
-    const ENCODE_LEN: usize = MessageSeq::ENCODE_LEN + FragmentMarker::ENCODE_LEN;
+impl EncodeLen for FragmentHeader {
+    fn encode_len(&self) -> usize {
+        VarInt(self.lane_index.into_raw()).encode_len()
+            + self.msg_seq.encode_len()
+            + self.marker.encode_len()
+    }
 }
 
 impl Encode for FragmentHeader {
     type Error = Infallible;
 
     fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+        dst.write(&VarInt(self.lane_index.into_raw()))?;
         dst.write(&self.msg_seq)?;
         dst.write(&self.marker)?;
         Ok(())
@@ -170,29 +78,19 @@ impl Encode for FragmentHeader {
 }
 
 impl Decode for FragmentHeader {
-    type Error = Infallible;
+    type Error = InvalidLaneIndex;
 
     fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
         Ok(Self {
+            lane_index: LaneIndex::from_raw(
+                src.read::<VarInt<u64>>()
+                    .map_err(|e| e.map_or(InvalidLaneIndex))?
+                    .0,
+            ),
             msg_seq: src.read()?,
             marker: src.read()?,
         })
     }
-}
-
-/// Fragment of a message as it is encoded inside a packet.
-#[derive(Debug, Clone, PartialEq, Eq, datasize::DataSize)]
-pub struct Fragment {
-    /// Metadata of this fragment, such as which message this fragment is a part
-    /// of.
-    pub header: FragmentHeader,
-    /// Buffer storing the message payload of this fragment.
-    #[data_size(with = bytes_data_size)]
-    pub payload: Bytes,
-}
-
-fn bytes_data_size(value: &Bytes) -> usize {
-    std::mem::size_of_val(value) + value.len()
 }
 
 impl EncodeLen for Fragment {
@@ -205,7 +103,7 @@ impl Encode for Fragment {
     type Error = Infallible;
 
     fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
-        dst.write(&self.header)?;
+        dst.write(self.header)?;
         dst.write(VarInt(self.payload.len()))?;
         dst.write_from(self.payload.clone())?;
         Ok(())
@@ -213,11 +111,16 @@ impl Encode for Fragment {
 }
 
 impl Decode for Fragment {
-    type Error = VarIntTooLarge;
+    type Error = FragmentDecodeError;
 
     fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
-        let header = src.read()?;
-        let payload_len = src.read::<VarInt<usize>>()?.0;
+        let header = src
+            .read()
+            .map_err(|e| e.map_or(FragmentDecodeError::InvalidLaneIndex))?;
+        let payload_len = src
+            .read::<VarInt<usize>>()
+            .map_err(|e| e.map_or(FragmentDecodeError::PayloadTooLarge))?
+            .0;
         let payload = src.read_next(payload_len)?;
         Ok(Self { header, payload })
     }
@@ -226,23 +129,32 @@ impl Decode for Fragment {
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use octs::{Bytes, BytesMut};
+    use octs::{test::*, Bytes};
     use web_time::Instant;
+
+    use crate::ty::MessageSeq;
 
     use super::*;
 
     #[test]
-    fn round_trip_header() {
-        let v = FragmentHeader {
-            msg_seq: MessageSeq::new(12),
-            marker: FragmentMarker::from_raw(34),
-        };
-        let mut buf = BytesMut::with_capacity(FragmentHeader::ENCODE_LEN);
+    fn encode_decode_fragment() {
+        round_trip(&Fragment {
+            header: FragmentHeader {
+                lane_index: LaneIndex::from_raw(0),
+                msg_seq: MessageSeq::new(0),
+                marker: FragmentMarker::from_raw(0),
+            },
+            payload: vec![1, 2, 3, 4].into(),
+        });
+    }
 
-        buf.write(&v).unwrap();
-        assert_eq!(FragmentHeader::ENCODE_LEN, buf.len());
-
-        assert_eq!(v, buf.freeze().read::<FragmentHeader>().unwrap());
+    #[test]
+    fn encode_decode_header() {
+        round_trip(&FragmentHeader {
+            lane_index: LaneIndex::from_raw(12),
+            msg_seq: MessageSeq::new(34),
+            marker: FragmentMarker::from_raw(56),
+        });
     }
 
     const PAYLOAD_LEN: usize = 64;

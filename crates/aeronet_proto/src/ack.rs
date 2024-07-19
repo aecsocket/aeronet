@@ -2,49 +2,11 @@
 
 use std::convert::Infallible;
 
-use derivative::Derivative;
-use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen};
+use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
 
-use crate::{packet::PacketSeq, seq::Seq};
+use crate::ty::{Acknowledge, PacketSeq};
 
-/// Tracks which packets, that we have sent, have been successfully received by
-/// the peer (that the peer has *acknowledged* that they've received).
-///
-/// This uses a modification of the strategy described in [*Gaffer On Games*],
-/// where we store two pieces of info:
-/// * the last received packet sequence number (`last_recv`)
-/// * a bitfield of which packets before `last_recv` have been acked
-///   (`ack_bits`)
-///
-/// If a bit at index `N` is set in `ack_bits`, then the packet with sequence
-/// `last_recv - N` has been acked. For example,
-/// ```text
-/// last_recv: 40
-///  ack_bits: 0b0000..00001001
-///                    ^   ^  ^
-///                    |   |  +- seq 40 (40 - 0) has been acked
-///                    |   +---- seq 37 (40 - 3) has been acked
-///                    +-------- seq 33 (40 - 7) has NOT been acked
-/// ```
-///
-/// This info is sent with every packet, and the last 32 packet acknowledgements
-/// are sent, giving a lot of reliability and redundancy for acks.
-///
-/// [*Gaffer On Games*]: https://gafferongames.com/post/reliable_ordered_messages/#packet-levelacks
-#[derive(
-    Derivative, Clone, Copy, Default, PartialEq, Eq, arbitrary::Arbitrary, datasize::DataSize,
-)]
-#[derivative(Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Acknowledge {
-    /// Last received packet sequence number.
-    pub last_recv: PacketSeq,
-    /// Bitfield of which packets before `last_recv` have been acknowledged.
-    #[derivative(Debug(format_with = "ack_bits_fmt"))]
-    pub ack_bits: u32,
-}
-
-fn ack_bits_fmt(value: &u32, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+pub(crate) fn fmt(value: &u32, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
     write!(fmt, "{value:032b}")
 }
 
@@ -60,7 +22,7 @@ impl Acknowledge {
     /// # Example
     ///
     /// ```
-    /// # use aeronet_proto::{ack::Acknowledge, packet::PacketSeq};
+    /// # use aeronet_proto::ty::{Acknowledge, PacketSeq};
     /// let mut acks = Acknowledge::new();
     /// acks.ack(PacketSeq::new(0));
     /// assert!(acks.is_acked(PacketSeq::new(0)));
@@ -85,7 +47,7 @@ impl Acknowledge {
     /// ```
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn ack(&mut self, seq: PacketSeq) {
-        let dist = seq.dist_to(self.last_recv.0);
+        let dist = seq.dist_to(*self.last_recv);
         if let Ok(dist) = u32::try_from(dist) {
             // `seq` is before or equal to `last_recv`,
             // so we only set a bit in the bitfield
@@ -117,7 +79,7 @@ impl Acknowledge {
     /// # Example
     ///
     /// ```
-    /// # use aeronet_proto::{ack::Acknowledge, packet::PacketSeq};
+    /// # use aeronet_proto::ty::{Acknowledge, PacketSeq};
     /// let mut acks = Acknowledge::new();
     /// acks.ack(PacketSeq::new(1));
     /// assert!(acks.is_acked(PacketSeq::new(1)));
@@ -133,7 +95,7 @@ impl Acknowledge {
     /// ```
     #[must_use]
     pub fn is_acked(&self, seq: PacketSeq) -> bool {
-        let dist = seq.dist_to(self.last_recv.0);
+        let dist = seq.dist_to(*self.last_recv);
         #[allow(clippy::option_if_let_else)] // makes the code clearer
         match u32::try_from(dist) {
             Ok(delta) => {
@@ -155,7 +117,7 @@ impl Acknowledge {
     /// # Example
     ///
     /// ```
-    /// # use aeronet_proto::{packet::PacketSeq, ack::Acknowledge};
+    /// # use aeronet_proto::ty::{PacketSeq, Acknowledge};
     /// let acks = Acknowledge {
     ///     last_recv: PacketSeq::new(50),
     ///     ack_bits: 0b0010010,
@@ -182,13 +144,13 @@ impl Acknowledge {
 }
 
 impl FixedEncodeLen for Acknowledge {
-    const ENCODE_LEN: usize = Seq::ENCODE_LEN + u32::ENCODE_LEN;
+    const ENCODE_LEN: usize = PacketSeq::ENCODE_LEN + u32::ENCODE_LEN;
 }
 
 impl Encode for Acknowledge {
     type Error = Infallible;
 
-    fn encode(&self, mut dst: impl octs::Write) -> Result<(), BufTooShortOr<Self::Error>> {
+    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
         dst.write(&self.last_recv)?;
         dst.write(&self.ack_bits)?;
         Ok(())
@@ -198,7 +160,7 @@ impl Encode for Acknowledge {
 impl Decode for Acknowledge {
     type Error = Infallible;
 
-    fn decode(mut src: impl octs::Read) -> Result<Self, BufTooShortOr<Self::Error>> {
+    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
         Ok(Self {
             last_recv: src.read()?,
             ack_bits: src.read()?,
@@ -215,9 +177,27 @@ fn shl(n: u32, by: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use octs::{BytesMut, Read, Write};
+    use octs::test::*;
+
+    use crate::ty::Seq;
 
     use super::*;
+
+    #[test]
+    fn encode_decode() {
+        hint_round_trip(&Acknowledge {
+            last_recv: PacketSeq::new(0),
+            ack_bits: 0,
+        });
+        hint_round_trip(&Acknowledge {
+            last_recv: PacketSeq(Seq::MAX),
+            ack_bits: u32::MAX,
+        });
+        hint_round_trip(&Acknowledge {
+            last_recv: PacketSeq::new(12),
+            ack_bits: 0b010101,
+        });
+    }
 
     #[test]
     fn shl_in_range() {
@@ -235,19 +215,5 @@ mod tests {
 
         assert_eq!(0b0, shl(0b10101, 40));
         assert_eq!(0b0, shl(0b11111, 40));
-    }
-
-    #[test]
-    fn encode_decode_header() {
-        let v = Acknowledge {
-            last_recv: PacketSeq::new(12),
-            ack_bits: 0b010101,
-        };
-        let mut buf = BytesMut::with_capacity(Acknowledge::ENCODE_LEN);
-
-        buf.write(&v).unwrap();
-        assert_eq!(Acknowledge::ENCODE_LEN, buf.len());
-
-        assert_eq!(v, buf.freeze().read::<Acknowledge>().unwrap());
     }
 }
