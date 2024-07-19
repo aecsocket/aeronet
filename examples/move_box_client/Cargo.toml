@@ -21,7 +21,7 @@ move_box = { path = "../move_box" }
 # core
 
 bevy = { workspace = true }
-bevy_egui = { workspace = true}
+bevy_egui = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
 web-time = { workspace = true }

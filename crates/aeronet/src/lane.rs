@@ -193,7 +193,7 @@ impl LaneKind {
 ///
 /// [`ClientTransport::send`]: crate::client::ClientTransport::send
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, arbitrary::Arbitrary)]
-pub struct LaneIndex(usize);
+pub struct LaneIndex(u64);
 
 impl LaneIndex {
     /// Creates a new lane index from a raw index.
@@ -202,13 +202,13 @@ impl LaneIndex {
     ///
     /// See [`LaneIndex`].
     #[must_use]
-    pub const fn from_raw(raw: usize) -> Self {
+    pub const fn from_raw(raw: u64) -> Self {
         Self(raw)
     }
 
     /// Gets the raw index of this lane.
     #[must_use]
-    pub const fn into_raw(self) -> usize {
+    pub const fn into_raw(self) -> u64 {
         self.0
     }
 }

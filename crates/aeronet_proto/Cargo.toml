@@ -33,15 +33,16 @@ aeronet = { workspace = true }
 ahash = { workspace = true }
 arbitrary = { workspace = true }
 bitvec = { workspace = true }
+circular-buffer = { workspace = true }
 datasize = { workspace = true }
+derivative = { workspace = true }
+derive_more = { workspace = true }
 either = { workspace = true }
 octs = { workspace = true }
 terrors = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 web-time = { workspace = true }
-derivative = { workspace = true }
-circular-buffer = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
