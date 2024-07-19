@@ -12,6 +12,10 @@ use crate::{
     ty::{FragmentMarker, MessageSeq},
 };
 
+/// Handles receiving small message fragments produced by a [`MessageSplitter`]
+/// and reassembling them into a single larger message.
+///
+/// [`MessageSplitter`]: crate::msg::MessageSplitter
 #[derive(Derivative, Clone, DataSize)]
 #[derivative(Debug)]
 pub struct FragmentReceiver {
@@ -37,14 +41,21 @@ fn size_of_msgs(value: &AHashMap<MessageSeq, MessageBuf>) -> usize {
         .sum()
 }
 
+/// Failed to receive and reassemble a fragment in
+/// [`FragmentReceiver::reassemble`].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ReassembleError {
+    /// Already received a fragment with this index.
     #[error("already received this fragment")]
     AlreadyReceived,
+    /// Already received a fragment which was marked as the last fragment.
     #[error("already received the last fragment")]
     AlreadyReceivedLast,
-    #[error("last fragment has lower index than the number of fragments we've received")]
+    /// Received the last fragment, but it has a lower (or the same) index
+    /// number than one of the previous fragments that we've already received.
+    #[error("last fragment has lower index than one of the previous fragments we've received")]
     InvalidLastFragment,
+    /// Fragment does not have the correct payload length.
     #[error("invalid payload length of {len}, expected {expected}")]
     InvalidPayloadLength {
         /// Length of the payload received.
@@ -65,6 +76,8 @@ struct MessageBuf {
     ///
     /// When we have not received the last fragment yet, this is [`None`].
     last_frag_index: Option<u8>,
+    /// Largest index number of fragment we have received so far.
+    max_frag_index: u8,
     /// Number of fragments we have already received.
     num_frags_recv: u8,
     /// Bit array tracking which fragment indices we have already received.
@@ -92,6 +105,7 @@ impl MessageBuf {
     fn new(now: Instant, max_payload_len: usize, min_frag_index: u8) -> Self {
         Self {
             last_frag_index: None,
+            max_frag_index: min_frag_index,
             num_frags_recv: 0,
             recv_frags: BitArray::default(),
             payload: vec![0; (usize::from(min_frag_index) + 1) * max_payload_len],
@@ -101,6 +115,14 @@ impl MessageBuf {
 }
 
 impl FragmentReceiver {
+    /// Creates a new [`FragmentReceiver`].
+    ///
+    /// `max_payload_len` defines the maximum length, in bytes, that the payload
+    /// of a single fragment can be.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `max_payload_len` is 0.
     pub fn new(max_payload_len: usize) -> Self {
         assert!(max_payload_len > 0);
         Self {
@@ -109,6 +131,23 @@ impl FragmentReceiver {
         }
     }
 
+    /// Receives a fragment and attempts to reassemble a message from its data.
+    ///
+    /// `msg_seq` is a unique ID for the message that this fragment is a part
+    /// of.
+    ///
+    /// If this returns `Ok(None)`, then we know that this message has more than
+    /// one fragment in it, and we are awaiting more fragments.
+    ///
+    /// If this returns `Ok(Some(..))`, then we have fully reassembled this
+    /// message, and the caller gets the reassembled [`Bytes`] message.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the fragment was not valid for reassembly.
+    ///
+    /// Since transmission errors occur such as duplicated and dropped packets,
+    /// it is perfectly safe to ignore these errors.
     pub fn reassemble(
         &mut self,
         now: Instant,
@@ -140,12 +179,11 @@ impl FragmentReceiver {
             if buf.last_frag_index.is_some() {
                 return Err(ReassembleError::AlreadyReceivedLast);
             }
-            buf.last_frag_index = Some(frag_index);
-
-            if buf.num_frags_recv > frag_index {
+            if frag_index < buf.max_frag_index {
                 return Err(ReassembleError::InvalidLastFragment);
             }
 
+            buf.last_frag_index = Some(frag_index);
             buf.payload.resize(end, 0);
         } else {
             if payload.len() != self.max_payload_len {
@@ -163,6 +201,7 @@ impl FragmentReceiver {
 
         // only update the buffer meta once we know there are no more error paths
         buf.recv_frags.set(frag_index_u, true);
+        buf.max_frag_index = buf.max_frag_index.max(frag_index);
         buf.last_recv_at = now;
 
         // if we've fully reassembled the message, we can return it now
@@ -322,6 +361,19 @@ mod tests {
         assert_eq!(
             ReassembleError::InvalidLastFragment,
             r.reassemble(now(), SEQ, last(0), []).unwrap_err()
+        );
+    }
+
+    #[test]
+    fn lower_index_last_frag() {
+        let mut r = FragmentReceiver::new(2);
+        assert!(r
+            .reassemble(now(), SEQ, non_last(10), [1, 2])
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            ReassembleError::InvalidLastFragment,
+            r.reassemble(now(), SEQ, last(0), [3]).unwrap_err()
         );
     }
 
