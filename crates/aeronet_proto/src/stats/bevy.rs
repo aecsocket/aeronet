@@ -12,18 +12,27 @@ use crate::session::SessionBacked;
 
 use super::SessionStats;
 
+/// Provides the [`ClientSessionStats`] and automatically updates it by sampling
+/// the client transport `T`, which must implement [`SessionBacked`].
+///
+/// If you are using Bevy along with the visualizer, you can use this plugin to
+/// access the [`ClientSessionStats`] and pass it to the visualizer.
 #[derive(Debug, Clone)]
 pub struct ClientSessionStatsPlugin<T> {
+    /// How many times per second we sample the session and insert new samples
+    /// into the stats.
     pub sample_rate: u32,
+    /// How many seconds of sample history we should keep.
     pub history: usize,
     _phantom: PhantomData<T>,
 }
 
 impl<T> ClientSessionStatsPlugin<T> {
+    /// Creates a new plugin with the given parameters.
     #[must_use]
-    pub const fn new(update_freq: u32, history: usize) -> Self {
+    pub const fn new(sample_rate: u32, history: usize) -> Self {
         Self {
-            sample_rate: update_freq,
+            sample_rate,
             history,
             _phantom: PhantomData,
         }
@@ -36,13 +45,17 @@ impl<T> Default for ClientSessionStatsPlugin<T> {
     }
 }
 
+/// Stores [`SessionStats`] for the client transport `T`, to be used in
+/// conjunction with [`ClientSessionStatsPlugin`].
 #[derive(Resource)]
 pub struct ClientSessionStats<T> {
+    /// Session stats.
     pub stats: SessionStats,
     _phantom: PhantomData<T>,
 }
 
 impl<T> ClientSessionStats<T> {
+    /// See [`SessionStats::new`].
     pub fn new(sample_rate: u32, history: usize) -> Self {
         Self {
             stats: SessionStats::new(sample_rate, history),

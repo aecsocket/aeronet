@@ -85,9 +85,12 @@ impl Session {
                 lane.sent_msgs.iter().flat_map(move |(msg_seq, msg)| {
                     msg.frags
                         .iter()
-                        .filter_map(Option::as_ref)
-                        .filter(move |frag| now >= frag.next_flush_at)
+                        // we have to enumerate here specifically, since we use the index
+                        // when building up the FragmentPath, and that path has to point
+                        // back to this exact Option<..>
                         .enumerate()
+                        .filter_map(|(i, frag)| frag.as_ref().map(|frag| (i, frag)))
+                        .filter(move |(_, frag)| now >= frag.next_flush_at)
                         .map(move |(frag_index, frag)| {
                             (
                                 FragmentPath {
@@ -143,13 +146,26 @@ impl Session {
             for frag_path_opt in frag_paths.iter_mut() {
                 let res = (|| {
                     let path = frag_path_opt.ok_or(())?;
+
+                    let lane_index = usize::try_from(path.lane_index.into_raw())
+                        .expect("lane index should fit into a usize");
                     let lane = &mut self
                         .send_lanes
-                        .get_mut(usize::try_from(path.lane_index.into_raw()).unwrap())
-                        .unwrap();
-                    let msg = lane.sent_msgs.get_mut(&path.msg_seq).unwrap();
-                    let mut sent_frag = msg.frags.get_mut(usize::from(path.frag_index));
-                    let sent_frag = sent_frag.as_mut().unwrap().as_mut().unwrap();
+                        .get_mut(lane_index)
+                        .expect("frag path should point to a valid lane");
+
+                    let msg = lane
+                        .sent_msgs
+                        .get_mut(&path.msg_seq)
+                        .expect("frag path should point to a valid msg in this lane");
+
+                    let frag_index = usize::from(path.frag_index);
+                    let mut frag_slot = msg.frags.get_mut(frag_index);
+                    let sent_frag = frag_slot
+                        .as_mut()
+                        .expect("frag index should point to a valid frag slot")
+                        .as_mut()
+                        .expect("frag path should point to a frag slot which is still occupied");
 
                     let frag = Fragment {
                         header: FragmentHeader {
@@ -160,7 +176,9 @@ impl Session {
                         payload: sent_frag.payload.clone(),
                     };
                     bytes_left.consume(frag.encode_len()).map_err(|_| ())?;
-                    packet.write(frag).unwrap();
+                    packet
+                        .write(frag)
+                        .expect("BytesMut should grow the buffer when writing over capacity");
 
                     // what does the lane do with this after sending?
                     match &lane.kind {

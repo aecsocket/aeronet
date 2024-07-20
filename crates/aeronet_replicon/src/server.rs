@@ -75,8 +75,7 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
                     Self::recv.run_if(
                         resource_exists::<T>
                             .and_then(resource_exists::<ClientKeys<T>>)
-                            .and_then(resource_exists::<RepliconServer>)
-                            .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove this
+                            .and_then(resource_exists::<RepliconServer>), // .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove this
                     ),
                     Self::update_state.run_if(resource_exists::<RepliconServer>),
                 )
@@ -87,9 +86,7 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
                 PostUpdate,
                 Self::flush
                     .run_if(
-                        server_open::<T>
-                            .and_then(resource_exists::<RepliconServer>)
-                            .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove
+                        server_open::<T>.and_then(resource_exists::<RepliconServer>), // .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove
                     )
                     .in_set(ServerSet::SendPackets),
             );
