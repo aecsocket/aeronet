@@ -73,7 +73,8 @@ impl Session {
             .iter_mut()
             .enumerate()
             .flat_map(|(lane_index, lane)| {
-                let lane_index = u64::try_from(lane_index).unwrap();
+                let lane_index = u64::try_from(lane_index)
+                    .expect("there should be no more than `u64::MAX` lanes");
                 let lane_index = LaneIndex::from_raw(lane_index);
 
                 // drop any messages which have no frags to send
@@ -92,7 +93,10 @@ impl Session {
                                 FragmentPath {
                                     lane_index,
                                     msg_seq: *msg_seq,
-                                    frag_index: u8::try_from(frag_index).unwrap(),
+                                    frag_index: u8::try_from(frag_index).expect(
+                                        "there should be no more than `MAX_FRAG_INDEX` frags, \
+                                        so `frag_index` should fit into a u8",
+                                    ),
                                 },
                                 frag.sent_at,
                             )
@@ -131,7 +135,7 @@ impl Session {
                     seq: packet_seq,
                     acks: self.acks,
                 })
-                .unwrap();
+                .expect("BytesMut should grow the buffer when writing over capacity");
 
             // collect the paths of the frags we want to put into this packet
             // so that we can track which ones have been acked later

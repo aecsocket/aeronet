@@ -337,3 +337,8 @@ impl Session {
         data_size(self)
     }
 }
+
+/// Indicates that this client may be backed by a [`Session`].
+pub trait SessionBacked {
+    fn get_session(&self) -> Option<&Session>;
+}

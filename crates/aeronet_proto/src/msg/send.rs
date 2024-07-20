@@ -97,8 +97,13 @@ impl MessageSplitter {
         let last_index = iter.len() - 1;
         Ok(iter.enumerate().rev().map(move |(index, payload)| {
             let is_last = index == last_index;
-            let index = u8::try_from(index).unwrap();
-            let marker = FragmentMarker::new(index, is_last).unwrap();
+            let index = u8::try_from(index).expect(
+                "`iter` has no more than `MAX_FRAGS` items, \
+                so `index` should be no more than `MAX_FRAG_INDEX`, \
+                so `index` should fit into a u8",
+            );
+            let marker = FragmentMarker::new(index, is_last)
+                .expect("`index` should be no more than `MAX_FRAG_INDEX`");
             (marker, payload)
         }))
     }

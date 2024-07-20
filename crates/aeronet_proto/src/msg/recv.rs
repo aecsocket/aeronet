@@ -209,7 +209,10 @@ impl FragmentReceiver {
             .last_frag_index
             .is_some_and(|last| buf.num_frags_recv >= last)
         {
-            let buf = self.msgs.remove(&msg_seq).unwrap();
+            let buf = self.msgs.remove(&msg_seq).expect(
+                "we already have a mut ref to the buffer at this key, \
+                so we should be able to remove and take ownership of it",
+            );
             Ok(Some(Bytes::from(buf.payload)))
         } else {
             // this happens separately from the other buffer meta update

@@ -13,6 +13,7 @@ pub mod packet;
 pub mod rtt;
 pub mod seq;
 pub mod session;
-
-#[cfg(feature = "stats")]
 pub mod stats;
+
+#[cfg(feature = "visualizer")]
+pub mod visualizer;
