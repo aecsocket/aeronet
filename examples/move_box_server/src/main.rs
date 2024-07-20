@@ -17,7 +17,7 @@ use ascii_table::AsciiTable;
 use bevy::{log::LogPlugin, prelude::*, time::common_conditions::on_timer};
 use bevy_replicon::{core::Replicated, prelude::RepliconChannels, server::ServerEvent};
 use move_box::{AsyncRuntime, MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
-use size::Size;
+use size_format::{BinaryPrefixes, PointSeparated, SizeFormatter};
 use web_time::{Duration, Instant};
 
 const DEFAULT_PORT: u16 = 25565;
@@ -157,17 +157,17 @@ fn print_stats(server: Res<WebTransportServer>) {
                     format!("{:.1?}", client.raw_rtt),
                     format!(
                         "{}",
-                        Size::from_bytes(
+                        fmt_bytes(
                             (client.session.bytes_sent() as f64 / time.as_secs_f64()) as usize
                         ),
                     ),
                     format!(
                         "{}",
-                        Size::from_bytes(
+                        fmt_bytes(
                             (client.session.bytes_recv() as f64 / time.as_secs_f64()) as usize
                         ),
                     ),
-                    format!("{}", Size::from_bytes(mem_used)),
+                    format!("{}", fmt_bytes(mem_used)),
                 ])
             }
         })
@@ -189,5 +189,12 @@ fn print_stats(server: Res<WebTransportServer>) {
         info!("{line}");
     }
 
-    info!("{} of memory used", Size::from_bytes(total_mem_used));
+    info!("{}B of memory used", fmt_bytes(total_mem_used));
+}
+
+fn fmt_bytes(n: usize) -> String {
+    format!(
+        "{:.1}",
+        SizeFormatter::<usize, BinaryPrefixes, PointSeparated>::new(n)
+    )
 }

@@ -14,7 +14,7 @@ use super::SessionStats;
 
 #[derive(Debug, Clone)]
 pub struct ClientSessionStatsPlugin<T> {
-    pub update_freq: u32,
+    pub sample_rate: u32,
     pub history: usize,
     _phantom: PhantomData<T>,
 }
@@ -23,7 +23,7 @@ impl<T> ClientSessionStatsPlugin<T> {
     #[must_use]
     pub const fn new(update_freq: u32, history: usize) -> Self {
         Self {
-            update_freq,
+            sample_rate: update_freq,
             history,
             _phantom: PhantomData,
         }
@@ -32,7 +32,7 @@ impl<T> ClientSessionStatsPlugin<T> {
 
 impl<T> Default for ClientSessionStatsPlugin<T> {
     fn default() -> Self {
-        Self::new(60, 10)
+        Self::new(30, 15)
     }
 }
 
@@ -43,9 +43,9 @@ pub struct ClientSessionStats<T> {
 }
 
 impl<T> ClientSessionStats<T> {
-    pub fn new(update_freq: u32, history: usize) -> Self {
+    pub fn new(sample_rate: u32, history: usize) -> Self {
         Self {
-            stats: SessionStats::new(update_freq, history),
+            stats: SessionStats::new(sample_rate, history),
             _phantom: PhantomData,
         }
     }
@@ -53,13 +53,12 @@ impl<T> ClientSessionStats<T> {
 
 impl<T: SessionBacked + Resource> Plugin for ClientSessionStatsPlugin<T> {
     fn build(&self, app: &mut App) {
-        app //
-            .insert_resource(ClientSessionStats::<T>::new(self.update_freq, self.history))
+        app.insert_resource(ClientSessionStats::<T>::new(self.sample_rate, self.history))
             .add_systems(
                 Update,
                 Self::update_stats.run_if(
                     resource_exists::<ClientSessionStats<T>>
-                        .and_then(on_timer(Duration::from_secs(1) / self.update_freq)),
+                        .and_then(on_timer(Duration::from_secs(1) / self.sample_rate)),
                 ),
             );
     }

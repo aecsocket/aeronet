@@ -23,7 +23,7 @@ bevy = { workspace = true }
 clap = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
-size = { workspace = true }
+size_format = { workspace = true }
 web-time = { workspace = true }
 
 aeronet = { workspace = true, features = ["bevy"] }
