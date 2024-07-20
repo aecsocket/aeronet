@@ -88,10 +88,7 @@ fn client_config() -> ClientConfig {
 }
 
 fn session_config() -> SessionConfig {
-    // configure both the sending and receiving lanes
-    // we will buffer up to 4MB of the server's fragments at once
-    // TODO is 4MB a reasonable number?
-    SessionConfig::new(1024 * 1024 * 4).with_lanes([AppLane])
+    SessionConfig::default().with_lanes([AppLane])
 }
 
 fn poll_client(

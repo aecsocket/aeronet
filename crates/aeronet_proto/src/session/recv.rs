@@ -1,7 +1,6 @@
 use std::convert::Infallible;
 
 use aeronet::lane::LaneIndex;
-use ahash::AHashMap;
 use either::Either;
 use octs::{Buf, BufTooShortOr, Bytes, Read};
 use web_time::Instant;
@@ -9,24 +8,73 @@ use web_time::Instant;
 use crate::{
     msg::{FragmentDecodeError, ReassembleError},
     rtt::RttEstimator,
+    seq::SeqBuf,
     ty::{Fragment, MessageSeq, PacketHeader, PacketSeq},
 };
 
 use super::{FlushedPacket, RecvLane, RecvLaneKind, SendLane, Session};
 
+/// Failed to [`Session::recv`] a packet.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum RecvError {
+    /// Failed to decode packet header.
     #[error("failed to decode header")]
     DecodeHeader(#[source] BufTooShortOr<Infallible>),
+    /// Failed to decode fragment.
     #[error("failed to decode fragment")]
     DecodeFragment(#[source] BufTooShortOr<FragmentDecodeError>),
+    /// Decoded a lane index which we are not tracking.
     #[error("invalid lane index {}", lane.into_raw())]
-    InvalidLaneIndex { lane: LaneIndex },
+    InvalidLaneIndex {
+        /// Index of the invalid lane.
+        lane: LaneIndex,
+    },
+    /// Failed to reassemble a fragment into a message.
     #[error("failed to reassemble message")]
     Reassemble(#[source] ReassembleError),
 }
 
 impl Session {
+    /// Starts receiving a packet.
+    ///
+    /// If this is successful, this returns:
+    /// - an iterator over all of *our* sent messages which have been
+    ///   acknowledged by the peer, along with the lane on which the message
+    ///   was sent on
+    /// - a [`RecvMessages`], used to read the fragments (actual payload) of
+    ///   this packet
+    ///
+    /// Generally, you should use this like:
+    ///
+    /// ```
+    /// # use aeronet::lane::LaneIndex;
+    /// # use aeronet_proto::{session::Session, ty::MessageSeq};
+    /// # use octs::Bytes;
+    /// # fn recv(mut session: Session, packet: Bytes) -> Result<(), Box<dyn std::error::Error>> {
+    /// let (acks, msgs) = session.recv(packet)?;
+    /// for (lane_index, msg_seq) in acks {
+    ///     do_something_with_ack(lane_index, msg_seq);
+    /// }
+    /// msgs.for_each_msg(|result| {
+    ///     match result {
+    ///         Ok((msg, lane_index)) => {
+    ///             do_something_with_msg(lane_index, msg);
+    ///         }
+    ///         Err(err) => {
+    ///             eprintln!("{err:?}");
+    ///         }
+    ///     }
+    /// });
+    ///
+    /// fn do_something_with_ack(lane_index: LaneIndex, msg_seq: MessageSeq) { unimplemented!() }
+    ///
+    /// fn do_something_with_msg(msg: Bytes, lane_index: LaneIndex) { unimplemented!() }
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Errors if the packet header is invalid.
     pub fn recv(
         &mut self,
         now: Instant,
@@ -73,8 +121,8 @@ impl Session {
         ))
     }
 
-    fn recv_acks<'session>(
-        flushed_packets: &'session mut AHashMap<PacketSeq, FlushedPacket>,
+    fn recv_acks<'session, const N: usize>(
+        flushed_packets: &'session mut SeqBuf<FlushedPacket, N>,
         send_lanes: &'session mut [SendLane],
         rtt: &'session mut RttEstimator,
         now: Instant,
@@ -83,7 +131,7 @@ impl Session {
         acked_seqs
             // we now know that our packet with sequence `seq` was acked by the peer
             // let's find what fragments that packet contained when we flushed it out
-            .filter_map(|seq| flushed_packets.remove(&seq))
+            .filter_map(move |seq| flushed_packets.remove_with(seq.0 .0, FlushedPacket::new(now)))
             .flat_map(move |packet| {
                 let packet_rtt = now - packet.flushed_at;
                 rtt.update(packet_rtt);
@@ -97,6 +145,7 @@ impl Session {
                 let lane = send_lanes
                     .get_mut(lane_index)
                     .expect("frag path should point into a valid lane index");
+                // TODO: could these panic instead of returning None silently? is it valid?
                 let msg = lane.sent_msgs.get_mut(&frag_path.msg_seq)?;
                 let frag_opt = msg.frags.get_mut(usize::from(frag_path.frag_index))?;
                 // take this fragment out so it stops being resent
@@ -113,6 +162,10 @@ impl Session {
     }
 }
 
+/// Used to read the fragments in a packet and receive the messages reassembled
+/// from those fragments.
+///
+/// See [`Session::recv`].
 #[derive(Debug)]
 pub struct RecvMessages<'session> {
     recv_lanes: &'session mut [RecvLane],
@@ -121,6 +174,10 @@ pub struct RecvMessages<'session> {
 }
 
 impl RecvMessages<'_> {
+    /// Reads all messages reassembled from this packet and passes them to the
+    /// callback provided.
+    ///
+    /// [`RecvError`]s may be safely ignored.
     pub fn for_each_msg(&mut self, mut f: impl FnMut(Result<(Bytes, LaneIndex), RecvError>)) {
         while self.packet.has_remaining() {
             match self.recv_next_frag() {

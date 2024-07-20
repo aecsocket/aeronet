@@ -2,7 +2,7 @@ use std::{collections::hash_map::Entry, iter};
 
 use aeronet::lane::LaneIndex;
 use octs::{Bytes, BytesMut, EncodeLen, FixedEncodeLen, Write};
-use web_time::{Duration, Instant};
+use web_time::Instant;
 
 use crate::{
     limit::Limit,
@@ -12,22 +12,24 @@ use crate::{
 
 use super::{FlushedPacket, FragmentPath, SendLaneKind, SentFragment, SentMessage, Session};
 
+/// Failed to [`Session::send`] a message.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum SendError {
+    /// Lane index given is not tracked by this [`Session`].
     #[error("invalid lane")]
     InvalidLane,
+    /// Attempted to buffer a message for sending, but we have too many messages
+    /// buffered already, and cannot get a fresh [`MessageSeq`].
     #[error("too many buffered messages")]
     TooManyMessages,
+    /// See [`MessageTooLarge`].
     #[error(transparent)]
     MessageTooLarge(MessageTooLarge),
 }
 
 impl Session {
-    pub fn refill_bytes(&mut self, delta_time: Duration) {
-        let f = delta_time.as_secs_f32();
-        self.bytes_left.refill_portion(f);
-    }
-
+    // TODO: for unreliable lanes, maybe we shouldn't return Err and silently drop?
+    // this is renet's behavior
     pub fn send(
         &mut self,
         now: Instant,
@@ -66,6 +68,13 @@ impl Session {
         Ok(msg_seq)
     }
 
+    /// Constructs the next packets which should be sent out.
+    ///
+    /// Each [`Bytes`] is guaranteed to be no longer than `mtu`.
+    ///
+    /// Each message produced by this iterator must be immediately sent out
+    /// along the transport.
+    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn flush(&mut self, now: Instant) -> impl Iterator<Item = Bytes> + '_ {
         // collect the paths of the frags to send, along with how old they are
         let mut frag_paths = self
@@ -143,13 +152,13 @@ impl Session {
             // collect the paths of the frags we want to put into this packet
             // so that we can track which ones have been acked later
             let mut packet_frags = Vec::new();
-            for frag_path_opt in frag_paths.iter_mut() {
+            for frag_path_opt in &mut frag_paths {
                 let res = (|| {
                     let path = frag_path_opt.ok_or(())?;
 
                     let lane_index = usize::try_from(path.lane_index.into_raw())
                         .expect("lane index should fit into a usize");
-                    let lane = &mut self
+                    let lane = self
                         .send_lanes
                         .get_mut(lane_index)
                         .expect("frag path should point to a valid lane");
@@ -211,7 +220,7 @@ impl Session {
                 None
             } else {
                 self.flushed_packets.insert(
-                    packet_seq,
+                    packet_seq.0 .0,
                     FlushedPacket {
                         flushed_at: now,
                         frags: packet_frags.into_boxed_slice(),
@@ -220,10 +229,7 @@ impl Session {
 
                 let packet = packet.freeze();
                 self.bytes_sent = self.bytes_sent.saturating_add(packet.len());
-                // TODO keepalive
-                // without this placeholder code we loop infinitely
-                self.next_keep_alive_at = now + Duration::from_millis(100);
-                // END
+                self.next_keep_alive_at = now + self.rtt.pto();
                 self.next_packet_seq += PacketSeq::ONE;
                 Some(packet)
             }

@@ -108,9 +108,9 @@ pub struct PacketSeq(pub Seq);
 /// Sequence number of a message in transit.
 ///
 /// This is used in [`FragmentHeader`] for fragmentation and reassembly (see
-/// [`frag`]), and reliability and ordering (see [`session`]).
+/// [`msg`]), and reliability and ordering (see [`session`]).
 ///
-/// [`frag`]: crate::frag
+/// [`msg`]: crate::msg
 /// [`session`]: crate::session
 #[derive(
     Clone,
@@ -193,8 +193,8 @@ pub struct FragmentHeader {
     /// Index of the lane on which this fragment must be received.
     ///
     /// This is the *receiver-side* lane index. If we have the following lanes:
-    /// - client to server: [A, B]
-    /// - server to client: [C]
+    /// - client to server: \[A, B]
+    /// - server to client: \[C]
     ///
     /// If the server sends a message and wants it to end up in lane B, it must
     /// specify lane index 1.

@@ -1,6 +1,6 @@
 //! Client-side traits and items.
 
-use std::{marker::PhantomData, time::Duration};
+use std::marker::PhantomData;
 
 use aeronet::{
     client::{
@@ -11,7 +11,7 @@ use aeronet::{
     lane::LaneIndex,
 };
 use bevy_app::prelude::*;
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, system::SystemParam};
 use bevy_replicon::{
     client::{
         replicon_client::{RepliconClient, RepliconClientStatus},
@@ -19,7 +19,7 @@ use bevy_replicon::{
     },
     server::ServerSet,
 };
-use bevy_time::{common_conditions::on_real_timer, prelude::*};
+use bevy_time::prelude::*;
 use derivative::Derivative;
 use tracing::{trace, warn};
 
@@ -66,9 +66,8 @@ impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
             .add_systems(
                 PreUpdate,
                 (
-                    Self::recv.run_if(
-                        resource_exists::<T>.and_then(resource_exists::<RepliconClient>), // .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove this
-                    ),
+                    Self::recv
+                        .run_if(resource_exists::<T>.and_then(resource_exists::<RepliconClient>)),
                     Self::update_state.run_if(resource_exists::<RepliconClient>),
                 )
                     .chain()
@@ -77,12 +76,16 @@ impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
             .add_systems(
                 PostUpdate,
                 Self::flush
-                    .run_if(
-                        client_connected::<T>.and_then(resource_exists::<RepliconClient>), // .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove
-                    )
+                    .run_if(client_connected::<T>.and_then(resource_exists::<RepliconClient>))
                     .in_set(ServerSet::SendPackets),
             );
     }
+}
+
+#[derive(SystemParam)]
+struct Events<'w, T: ClientTransport + Resource> {
+    connected: EventWriter<'w, LocalClientConnected<T>>,
+    disconnected: EventWriter<'w, LocalClientDisconnected<T>>,
 }
 
 impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
@@ -90,17 +93,16 @@ impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
         time: Res<Time>,
         mut client: ResMut<T>,
         mut replicon: ResMut<RepliconClient>,
-        mut connected: EventWriter<LocalClientConnected<T>>,
-        mut disconnected: EventWriter<LocalClientDisconnected<T>>,
+        mut events: Events<T>,
     ) {
         let mut bytes_recv = 0usize;
         for event in client.poll(time.delta()) {
             match event {
                 ClientEvent::Connected => {
-                    connected.send(LocalClientConnected::default());
+                    events.connected.send(LocalClientConnected::default());
                 }
                 ClientEvent::Disconnected { error } => {
-                    disconnected.send(LocalClientDisconnected { error });
+                    events.disconnected.send(LocalClientDisconnected { error });
                 }
                 ClientEvent::Recv { msg, lane } => {
                     let Ok(channel) = u8::try_from(lane.into_raw()) else {
@@ -122,15 +124,13 @@ impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
     }
 
     fn update_state(client: Option<Res<T>>, mut replicon: ResMut<RepliconClient>) {
-        let status = if let Some(client) = client {
+        let status = client.map_or(RepliconClientStatus::Disconnected, |client| {
             match client.state() {
                 ClientState::Disconnected => RepliconClientStatus::Disconnected,
                 ClientState::Connecting(_) => RepliconClientStatus::Connecting,
                 ClientState::Connected(_) => RepliconClientStatus::Connected { client_id: None },
             }
-        } else {
-            RepliconClientStatus::Disconnected
-        };
+        });
 
         if status != replicon.status() {
             replicon.set_status(status);

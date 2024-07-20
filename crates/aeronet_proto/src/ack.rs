@@ -6,6 +6,7 @@ use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
 
 use crate::ty::{Acknowledge, PacketSeq};
 
+#[allow(clippy::trivially_copy_pass_by_ref)] // requires exact type sig
 pub(crate) fn fmt(value: &u32, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     write!(fmt, "{value:032b}")
 }

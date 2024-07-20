@@ -115,8 +115,7 @@ impl Decode for Fragment {
 
 #[cfg(test)]
 mod tests {
-    use assert_matches::assert_matches;
-    use octs::{test::*, Bytes};
+    use octs::test::*;
     use web_time::Instant;
 
     use crate::ty::{FragmentMarker, MessageSeq};

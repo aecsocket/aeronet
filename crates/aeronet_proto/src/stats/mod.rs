@@ -1,3 +1,5 @@
+//! See [`SessionStats`].
+
 #[cfg(feature = "bevy")]
 mod bevy;
 
@@ -48,6 +50,10 @@ impl SessionStats {
     ///
     /// `history` defines how many seconds of history this buffer should keep
     /// before overwriting old entries.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `sample_rate` cannot fit into a [`usize`].
     #[must_use]
     pub fn new(sample_rate: u32, history: usize) -> Self {
         let freq_u = usize::try_from(sample_rate).expect("`sample_rate` must fit into a usize");

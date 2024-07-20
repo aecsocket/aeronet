@@ -1,6 +1,6 @@
 //! Server-side traits and items.
 
-use std::{marker::PhantomData, ops::Deref, time::Duration};
+use std::{marker::PhantomData, ops::Deref};
 
 use aeronet::{
     error::pretty_error,
@@ -11,12 +11,12 @@ use aeronet::{
     },
 };
 use bevy_app::prelude::*;
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, system::SystemParam};
 use bevy_replicon::{
     core::ClientId,
     server::{replicon_server::RepliconServer, ServerSet},
 };
-use bevy_time::{common_conditions::on_real_timer, prelude::*};
+use bevy_time::prelude::*;
 use bimap::{BiHashMap, Overwritten};
 use bytes::Bytes;
 use derivative::Derivative;
@@ -75,7 +75,7 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
                     Self::recv.run_if(
                         resource_exists::<T>
                             .and_then(resource_exists::<ClientKeys<T>>)
-                            .and_then(resource_exists::<RepliconServer>), // .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove this
+                            .and_then(resource_exists::<RepliconServer>),
                     ),
                     Self::update_state.run_if(resource_exists::<RepliconServer>),
                 )
@@ -85,9 +85,7 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
             .add_systems(
                 PostUpdate,
                 Self::flush
-                    .run_if(
-                        server_open::<T>.and_then(resource_exists::<RepliconServer>), // .and_then(on_real_timer(Duration::from_millis(1))), // TODO remove
-                    )
+                    .run_if(server_open::<T>.and_then(resource_exists::<RepliconServer>))
                     .in_set(ServerSet::SendPackets),
             );
     }
@@ -138,43 +136,43 @@ impl<T: ServerTransport> Default for ClientKeys<T> {
 
 type RepliconEvent = bevy_replicon::server::ServerEvent;
 
+#[derive(SystemParam)]
+struct Events<'w, T: ServerTransport + Resource> {
+    replicon: EventWriter<'w, RepliconEvent>,
+    opened: EventWriter<'w, ServerOpened<T>>,
+    closed: EventWriter<'w, ServerClosed<T>>,
+    connecting: EventWriter<'w, RemoteClientConnecting<T>>,
+    connected: EventWriter<'w, RemoteClientConnected<T>>,
+    disconnected: EventWriter<'w, RemoteClientDisconnected<T>>,
+}
+
 impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
     fn recv(
         time: Res<Time>,
         mut server: ResMut<T>,
         mut replicon_server: ResMut<RepliconServer>,
         mut client_keys: ResMut<ClientKeys<T>>,
-        mut replicon_events: EventWriter<RepliconEvent>,
-        mut opened: EventWriter<ServerOpened<T>>,
-        mut closed: EventWriter<ServerClosed<T>>,
-        mut connecting: EventWriter<RemoteClientConnecting<T>>,
-        mut connected: EventWriter<RemoteClientConnected<T>>,
-        mut disconnected: EventWriter<RemoteClientDisconnected<T>>,
+        mut events: Events<T>,
     ) {
         for event in server.poll(time.delta()) {
             match event {
                 ServerEvent::Opened => {
-                    opened.send(ServerOpened::default());
+                    events.opened.send(ServerOpened::default());
                 }
                 ServerEvent::Closed { error } => {
-                    closed.send(ServerClosed { error });
+                    events.closed.send(ServerClosed { error });
                 }
                 ServerEvent::Connecting { client_key } => {
-                    connecting.send(RemoteClientConnecting { client_key });
+                    events
+                        .connecting
+                        .send(RemoteClientConnecting { client_key });
                 }
-                ServerEvent::Connected { client_key } => Self::on_connected(
-                    client_keys.as_mut(),
-                    &mut connected,
-                    &mut replicon_events,
-                    client_key,
-                ),
-                ServerEvent::Disconnected { client_key, error } => Self::on_disconnected(
-                    client_keys.as_mut(),
-                    &mut disconnected,
-                    &mut replicon_events,
-                    client_key,
-                    error,
-                ),
+                ServerEvent::Connected { client_key } => {
+                    Self::on_connected(client_keys.as_mut(), &mut events, client_key);
+                }
+                ServerEvent::Disconnected { client_key, error } => {
+                    Self::on_disconnected(client_keys.as_mut(), &mut events, client_key, error);
+                }
                 ServerEvent::Recv {
                     client_key,
                     msg,
@@ -193,11 +191,10 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
 
     fn on_connected(
         client_keys: &mut ClientKeys<T>,
-        connected: &mut EventWriter<RemoteClientConnected<T>>,
-        replicon_events: &mut EventWriter<RepliconEvent>,
+        events: &mut Events<T>,
         client_key: T::ClientKey,
     ) {
-        connected.send(RemoteClientConnected {
+        events.connected.send(RemoteClientConnected {
             client_key: client_key.clone(),
         });
 
@@ -209,18 +206,19 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
                 warn!("Inserted duplicate client key/ID pair: {overwritten:?}");
             }
         }
-        replicon_events.send(RepliconEvent::ClientConnected { client_id });
+        events
+            .replicon
+            .send(RepliconEvent::ClientConnected { client_id });
     }
 
     fn on_disconnected(
         client_keys: &mut ClientKeys<T>,
-        disconnected: &mut EventWriter<RemoteClientDisconnected<T>>,
-        replicon_events: &mut EventWriter<RepliconEvent>,
+        events: &mut Events<T>,
         client_key: T::ClientKey,
         error: T::Error,
     ) {
         let reason_str = format!("{:#}", aeronet::error::pretty_error(&error));
-        disconnected.send(RemoteClientDisconnected {
+        events.disconnected.send(RemoteClientDisconnected {
             client_key: client_key.clone(),
             error,
         });
@@ -230,7 +228,7 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
             return;
         };
         debug!("Removed {client_key:?} associated with {client_id:?}");
-        replicon_events.send(RepliconEvent::ClientDisconnected {
+        events.replicon.send(RepliconEvent::ClientDisconnected {
             client_id,
             reason: reason_str,
         });
@@ -255,14 +253,10 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
     }
 
     fn update_state(server: Option<Res<T>>, mut replicon: ResMut<RepliconServer>) {
-        let running = if let Some(server) = server {
-            match server.state() {
-                ServerState::Closed | ServerState::Opening(_) => false,
-                ServerState::Open(_) => true,
-            }
-        } else {
-            false
-        };
+        let running = server.map_or(false, |server| match server.state() {
+            ServerState::Closed | ServerState::Opening(_) => false,
+            ServerState::Open(_) => true,
+        });
 
         if running != replicon.is_running() {
             replicon.set_running(running);

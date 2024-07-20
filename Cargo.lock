@@ -3694,7 +3694,8 @@ checksum = "109983a091271ee8916076731ba5fdc9ee22fea871bc7c6ceab9bfd423eb1d99"
 [[package]]
 name = "octs"
 version = "0.4.2"
-source = "git+https://github.com/aecsocket/octs?branch=v0.4.2#bda6f6abb7a3342f836b1072a70447f396aa753a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "637bd07d1dfbcd610d33487da38d905f616732835df17e2c7dfa024e66f5b69a"
 dependencies = [
  "bytes",
 ]

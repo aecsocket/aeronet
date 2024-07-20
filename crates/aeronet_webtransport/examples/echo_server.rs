@@ -68,10 +68,7 @@ fn server_config(identity: &wtransport::Identity) -> ServerConfig {
 }
 
 fn session_config() -> SessionConfig {
-    // configure both the sending and receiving lanes
-    // we will buffer up to 4MB of the server's fragments at once
-    // TODO is 4MB a reasonable number?
-    SessionConfig::new(1024 * 1024 * 4).with_lanes([AppLane])
+    SessionConfig::default().with_lanes([AppLane])
 }
 
 fn setup_one_shot_systems(world: &mut World) {

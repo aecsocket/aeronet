@@ -1,5 +1,9 @@
 //! See [`Seq`].
 
+mod buf;
+
+pub use buf::*;
+
 use std::{
     cmp::Ordering,
     convert::Infallible,
@@ -166,7 +170,7 @@ impl PacketSeq {
 
 impl fmt::Debug for PacketSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let PacketSeq(Seq(seq)) = self;
+        let Self(Seq(seq)) = self;
         write!(f, "{seq}")
     }
 }
@@ -209,7 +213,7 @@ impl MessageSeq {
 
 impl fmt::Debug for MessageSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let MessageSeq(Seq(seq)) = self;
+        let Self(Seq(seq)) = self;
         write!(f, "{seq}")
     }
 }

@@ -2,14 +2,11 @@
 
 use std::future::Future;
 
-use aeronet_webtransport::proto::session::SessionConfig;
 use bevy::prelude::*;
 use bevy_replicon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 const MOVE_SPEED: f32 = 2500.0;
-
-const MAX_MEMORY_USAGE: usize = 1024 * 1024 * 4;
 
 /// Sets up replication and basic game systems.
 #[derive(Debug)]
@@ -89,11 +86,6 @@ pub struct PlayerColor(pub Color);
 /// Player sent an input to move their box.
 #[derive(Debug, Clone, Event, Serialize, Deserialize)]
 pub struct PlayerMove(pub Vec2);
-
-/// Creates the base [`SessionConfig`] with no lanes registered.
-pub fn base_session_config() -> SessionConfig {
-    SessionConfig::new(MAX_MEMORY_USAGE)
-}
 
 fn apply_movement(
     time: Res<Time>,

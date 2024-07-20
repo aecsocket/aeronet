@@ -73,12 +73,13 @@ const fn color(h: f32) -> Hsva {
 
 impl SessionStatsVisualizer {
     /// Draws the session stats window.
-    pub fn draw(&mut self, ctx: &mut egui::Context, session: &Session, stats: &SessionStats) {
+    pub fn draw(&mut self, ctx: &egui::Context, session: &Session, stats: &SessionStats) {
         let now = Instant::now();
         egui::Window::new("Network Stats").show(ctx, |ui| {
             let samples = stats.capacity().get();
-            let history = samples as f64 / stats.sample_rate() as f64;
+            let history = samples as f64 / f64::from(stats.sample_rate());
 
+            // TODO I kinda want to clean this up
             let mut rtt = Vec::with_capacity(samples);
             let mut crtt = Vec::with_capacity(samples);
             let mut buf_mem = Vec::with_capacity(samples);
@@ -86,13 +87,13 @@ impl SessionStatsVisualizer {
             let mut tx = Vec::with_capacity(samples);
             let mut rx = Vec::with_capacity(samples);
             for (index, sample) in stats.iter().rev().enumerate() {
-                let x = -(index as f64 / stats.sample_rate() as f64);
+                let x = -(index as f64 / f64::from(stats.sample_rate()));
                 rtt.push([x, sample.rtt.as_secs_f64() * 1000.0]);
                 crtt.push([x, sample.conservative_rtt.as_secs_f64() * 1000.0]);
                 buf_mem.push([x, sample.memory_usage as f64]);
                 bytes_used.push([x, sample.bytes_used as f64]);
-                tx.push([x, sample.tx as f64 * stats.sample_rate() as f64]);
-                rx.push([x, sample.rx as f64 * stats.sample_rate() as f64]);
+                tx.push([x, sample.tx as f64 * f64::from(stats.sample_rate())]);
+                rx.push([x, sample.rx as f64 * f64::from(stats.sample_rate())]);
             }
 
             ui.horizontal(|ui| {
@@ -135,6 +136,9 @@ impl SessionStatsVisualizer {
                 ui.label(format!("{:.1?}", now - session.connected_at()));
                 ui.separator();
 
+                ui.label(format!("{:?} ms", session.rtt().get()));
+                ui.separator();
+
                 ui.label(format!(
                     "{}B tx / {}B rx",
                     fmt_bytes(session.bytes_sent()),
@@ -147,6 +151,7 @@ impl SessionStatsVisualizer {
                     fmt_bytes(session.memory_usage()),
                     fmt_bytes(session.max_memory_usage())
                 ));
+                ui.separator();
 
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.add_enabled_ui(false, |ui| {
