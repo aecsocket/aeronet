@@ -126,6 +126,6 @@ fn draw_stats(
     mut stats_visualizer: ResMut<SessionStatsVisualizer>,
 ) {
     if let ClientState::Connected(client) = client.state() {
-        stats_visualizer.draw(egui.ctx_mut(), &client.session, &stats);
+        stats_visualizer.draw(egui.ctx_mut(), client.session(), &stats);
     }
 }

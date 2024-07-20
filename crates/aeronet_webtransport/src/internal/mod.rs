@@ -1,5 +1,11 @@
+mod backend;
+mod frontend;
+
+pub use {backend::*, frontend::*};
+
+use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
-use futures::{channel::mpsc, never::Never, SinkExt, StreamExt};
+use futures::channel::{mpsc, oneshot};
 use tracing::debug;
 use web_time::Duration;
 use xwt_core::session::datagram;
@@ -9,8 +15,6 @@ pub const MSG_BUF_CAP: usize = 256;
 // conservative estimate based on
 // https://blog.cloudflare.com/increasing-ipv6-mtu/
 pub const MIN_MTU: usize = 1024;
-
-const STATS_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
@@ -26,10 +30,12 @@ cfg_if::cfg_if! {
             Bytes::from(datagram)
         }
 
-        async fn send_datagram(conn: &Connection, msg: Bytes) -> Result<(), Error> {
+        async fn send_datagram(conn: &Connection, msg: Bytes) -> Result<(), InternalError> {
             datagram::Send::send_datagram(conn, msg).await;
         }
     } else {
+        use std::net::SocketAddr;
+
         pub type Connection = xwt_wtransport::Connection;
         pub type ClientEndpoint = xwt_wtransport::Endpoint<xwt_wtransport::wtransport::endpoint::endpoint_side::Client>;
 
@@ -41,7 +47,7 @@ cfg_if::cfg_if! {
             datagram.0.payload()
         }
 
-        async fn send_datagram(conn: &Connection, msg: Bytes) -> Result<(), Error> {
+        async fn send_datagram<E>(conn: &Connection, msg: Bytes) -> Result<(), InternalError<E>> {
             use wtransport::error::SendDatagramError;
 
             let msg_len = msg.len();
@@ -57,13 +63,13 @@ cfg_if::cfg_if! {
                     // so hopefully the frontend will realise its packets are exceeding MTU,
                     // and shrink them accordingly; therefore this is just a one-off error
                     let mtu = get_mtu(conn);
-                    debug!("Attempted to send datagram of size {msg_len} when connection only supports {mtu:?}");
+                    debug!(msg_len, mtu, "Attempted to send datagram larger than MTU");
                     Ok(())
                 }
                 Err(SendDatagramError::UnsupportedByPeer) => {
                     // this should be impossible, since we checked that the client does support datagrams
                     // before connecting, but we'll error-case it anyway
-                    Err(Error::DatagramsNotSupported)
+                    Err(InternalError::DatagramsNotSupported)
                 }
             }
         }
@@ -79,61 +85,37 @@ pub struct ConnectionMeta {
     pub mtu: usize,
 }
 
+#[derive(Debug)]
+pub struct ConnectionInner<E> {
+    #[cfg(not(target_family = "wasm"))]
+    pub remote_addr: SocketAddr,
+    #[cfg(not(target_family = "wasm"))]
+    pub raw_rtt: Duration,
+    pub session: Session,
+    pub recv_err: oneshot::Receiver<E>,
+    pub recv_meta: mpsc::Receiver<ConnectionMeta>,
+    pub send_msgs: mpsc::UnboundedSender<Bytes>,
+    pub recv_msgs: mpsc::Receiver<Bytes>,
+    pub fatal_error: Option<FatalSendError>,
+}
+
 // intentionally don't derive Error so that consumers are forced to map each
 // variant to their own error variant
 #[derive(Debug)]
-pub enum Error {
+pub enum InternalError<E> {
+    Spec(E),
+
+    // frontend
+    BackendClosed,
+    MtuTooSmall(MtuTooSmall),
+    OutOfMemory(OutOfMemory),
+    Send(SendError),
+    FatalSend(FatalSendError),
+
+    // backend
     FrontendClosed,
-    ConnectionLost(<Connection as datagram::Receive>::Error),
     DatagramsNotSupported,
-}
 
-pub async fn send_loop(
-    conn: &Connection,
-    mut recv_s: mpsc::UnboundedReceiver<Bytes>,
-) -> Result<Never, Error> {
-    loop {
-        let msg = recv_s.next().await.ok_or(Error::FrontendClosed)?;
-        send_datagram(conn, msg).await?;
-    }
-}
-
-pub async fn recv_loop(conn: &Connection, mut send_r: mpsc::Sender<Bytes>) -> Result<Never, Error> {
-    loop {
-        let msg = datagram::Receive::receive_datagram(conn)
-            .await
-            .map_err(Error::ConnectionLost)?;
-        send_r
-            .send(to_bytes(msg))
-            .await
-            .map_err(|_| Error::FrontendClosed)?;
-    }
-}
-
-pub async fn update_meta(
-    conn: &Connection,
-    mut send_meta: mpsc::Sender<ConnectionMeta>,
-) -> Result<Never, Error> {
-    loop {
-        sleep(STATS_UPDATE_INTERVAL).await;
-        let meta = ConnectionMeta {
-            #[cfg(not(target_family = "wasm"))]
-            rtt: conn.0.rtt(),
-            mtu: get_mtu(conn).ok_or(Error::DatagramsNotSupported)?,
-        };
-        send_meta
-            .send(meta)
-            .await
-            .map_err(|_| Error::FrontendClosed)?;
-    }
-}
-
-#[cfg(target_family = "wasm")]
-async fn sleep(duration: Duration) {
-    gloo_timers::future::sleep(duration).await
-}
-
-#[cfg(not(target_family = "wasm"))]
-async fn sleep(duration: Duration) {
-    tokio::time::sleep(duration).await;
+    // connection
+    ConnectionLost(<Connection as datagram::Receive>::Error),
 }

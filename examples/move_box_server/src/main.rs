@@ -12,6 +12,7 @@ use aeronet_replicon::server::{ClientKeys, RepliconServerPlugin};
 use aeronet_webtransport::{
     proto::session::SessionConfig,
     server::{ConnectionResponse, WebTransportServer},
+    shared::RawRtt,
     wtransport,
 };
 use ascii_table::AsciiTable;
@@ -148,24 +149,24 @@ fn print_stats(server: Res<WebTransportServer>) {
         .filter_map(|client_key| match server.client_state(client_key) {
             ClientState::Disconnected | ClientState::Connecting(_) => None,
             ClientState::Connected(client) => {
-                let mem_used = client.session.memory_usage();
+                let mem_used = client.session().memory_usage();
                 total_mem_used += mem_used;
                 let time = now - client.connected_at();
                 Some(vec![
                     format!("{}", client_key),
                     format!("{:.1?}", time),
                     format!("{:.1?}", client.rtt()),
-                    format!("{:.1?}", client.raw_rtt),
+                    format!("{:.1?}", client.raw_rtt()),
                     format!(
                         "{}",
                         fmt_bytes(
-                            (client.session.bytes_sent() as f64 / time.as_secs_f64()) as usize
+                            (client.session().bytes_sent() as f64 / time.as_secs_f64()) as usize
                         ),
                     ),
                     format!(
                         "{}",
                         fmt_bytes(
-                            (client.session.bytes_recv() as f64 / time.as_secs_f64()) as usize
+                            (client.session().bytes_recv() as f64 / time.as_secs_f64()) as usize
                         ),
                     ),
                     format!("{}", fmt_bytes(mem_used)),

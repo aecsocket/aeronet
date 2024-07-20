@@ -34,7 +34,7 @@ pub async fn start(
         {
             let raw =
                 wtransport::Endpoint::client(net_config).map_err(ClientError::CreateEndpoint)?;
-            Ok(xwt_wtransport::Endpoint(raw))
+            Ok::<_, ClientError>(xwt_wtransport::Endpoint(raw))
         }
     }?;
 
@@ -84,9 +84,5 @@ pub async fn start(
         r = recv_loop.fuse() => r,
         r = update_rtt_loop.fuse() => r,
     }
-    .map_err(|err| match err {
-        internal::Error::FrontendClosed => ClientError::FrontendClosed,
-        internal::Error::ConnectionLost(err) => ClientError::ConnectionLost(err.into()),
-        internal::Error::DatagramsNotSupported => ClientError::DatagramsNotSupported,
-    })
+    .map_err(From::from)
 }

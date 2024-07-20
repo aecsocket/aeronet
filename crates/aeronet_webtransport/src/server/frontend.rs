@@ -2,7 +2,6 @@ use std::future::Future;
 
 use aeronet::{
     client::ClientState,
-    error::pretty_error,
     lane::LaneIndex,
     server::{ServerEvent, ServerState, ServerTransport},
 };
@@ -12,10 +11,13 @@ use either::Either;
 use futures::channel::oneshot;
 use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
 use slotmap::SlotMap;
-use tracing::{debug, trace, trace_span};
-use web_time::{Duration, Instant};
+use tracing::trace_span;
+use web_time::Duration;
 
-use crate::shared::MessageKey;
+use crate::{
+    internal::{ConnectionInner, PollEvent},
+    shared::MessageKey,
+};
 
 use super::{
     backend, Client, ClientKey, Connected, Connecting, ConnectionResponse, Open, Opening,
@@ -152,11 +154,7 @@ impl ServerTransport for WebTransportServer {
 
         let msg = msg.into();
         let lane = lane.into();
-        client
-            .session
-            .send(Instant::now(), msg, lane)
-            .map(|seq| MessageKey::from_raw(lane, seq))
-            .map_err(ServerError::Send)
+        client.inner.send(msg, lane).map_err(From::from)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -171,18 +169,7 @@ impl ServerTransport for WebTransportServer {
             let Client::Connected(client) = client else {
                 continue;
             };
-
-            let mut bytes_sent = 0usize;
-            for packet in client.session.flush(Instant::now()) {
-                bytes_sent = bytes_sent.saturating_add(packet.len());
-                // ignore errors here, pick them up in `poll`
-                let _ = client.send_s2c.unbounded_send(packet);
-            }
-
-            if bytes_sent > 0 {
-                trace!(bytes_sent, "Flushed packets");
-            }
-
+            client.inner.flush();
             drop(span);
         }
 
@@ -340,13 +327,16 @@ impl WebTransportServer {
             if let Ok(Some(next)) = client.recv_connected.try_recv() {
                 events.push(ServerEvent::Connected { client_key });
                 Ok(Client::Connected(Connected {
-                    remote_addr: next.remote_addr,
-                    raw_rtt: next.initial_rtt,
-                    session: next.session,
-                    recv_err: client.recv_err,
-                    recv_meta: next.recv_meta,
-                    recv_c2s: next.recv_c2s,
-                    send_s2c: next.send_s2c,
+                    inner: ConnectionInner {
+                        remote_addr: next.remote_addr,
+                        raw_rtt: next.initial_rtt,
+                        session: next.session,
+                        recv_err: client.recv_err,
+                        recv_meta: next.recv_meta,
+                        recv_msgs: next.recv_c2s,
+                        send_msgs: next.send_s2c,
+                        fatal_error: None,
+                    },
                 }))
             } else {
                 Ok(Client::Connecting(client))
@@ -368,75 +358,27 @@ impl WebTransportServer {
         events: &mut Vec<ServerEvent<Self>>,
         delta_time: Duration,
     ) -> Client {
-        let res = (|| {
-            if let Some(err) = client
-                .recv_err
-                .try_recv()
-                .map_err(|_| ServerError::BackendClosed)?
-            {
-                return Err(err);
-            }
-
-            while let Ok(Some(meta)) = client.recv_meta.try_next() {
-                client.raw_rtt = meta.rtt;
-                client
-                    .session
-                    .set_mtu(meta.mtu)
-                    .map_err(ServerError::MtuTooSmall)?;
-            }
-
-            let mut bytes_recv = 0usize;
-            while let Ok(Some(packet)) = client.recv_c2s.try_next() {
-                bytes_recv = bytes_recv.saturating_add(packet.len());
-                let (acks, mut msgs) = match client.session.recv(Instant::now(), packet) {
-                    Ok(x) => x,
-                    Err(err) => {
-                        debug!(
-                            "Error while reading packet from server: {:#}",
-                            pretty_error(&err)
-                        );
-                        continue;
-                    }
-                };
-
-                events.extend(acks.map(|(lane, seq)| ServerEvent::Ack {
+        let res = client.inner.poll(delta_time, |event| {
+            events.push(match event {
+                PollEvent::Ack { msg_key } => ServerEvent::Ack {
                     client_key,
-                    msg_key: MessageKey::from_raw(lane, seq),
-                }));
-
-                msgs.for_each_msg(|res| match res {
-                    Ok((msg, lane)) => {
-                        events.push(ServerEvent::Recv {
-                            client_key,
-                            msg,
-                            lane,
-                        });
-                    }
-                    Err(err) => {
-                        debug!(
-                            "Error while reading packet from server: {:#}",
-                            pretty_error(&err)
-                        );
-                    }
-                });
-            }
-
-            client
-                .session
-                .update(delta_time)
-                .map_err(ServerError::OutOfMemory)?;
-
-            if bytes_recv > 0 {
-                trace!(bytes_recv, "Received packets");
-            }
-
-            Ok(())
-        })();
+                    msg_key,
+                },
+                PollEvent::Recv { msg, lane } => ServerEvent::Recv {
+                    client_key,
+                    msg,
+                    lane,
+                },
+            })
+        });
 
         match res {
             Ok(()) => Client::Connected(client),
-            Err(error) => {
-                events.push(ServerEvent::Disconnected { client_key, error });
+            Err(err) => {
+                events.push(ServerEvent::Disconnected {
+                    client_key,
+                    error: err.into(),
+                });
                 Client::Disconnected
             }
         }
