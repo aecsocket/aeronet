@@ -31,7 +31,13 @@ impl Session {
         &mut self,
         now: Instant,
         mut packet: Bytes,
-    ) -> Result<(impl Iterator<Item = MessageSeq> + '_, RecvMessages<'_>), RecvError> {
+    ) -> Result<
+        (
+            impl Iterator<Item = (LaneIndex, MessageSeq)> + '_,
+            RecvMessages<'_>,
+        ),
+        RecvError,
+    > {
         self.bytes_recv = self.bytes_recv.saturating_add(packet.len());
 
         let header = packet
@@ -73,7 +79,7 @@ impl Session {
         rtt: &'session mut RttEstimator,
         now: Instant,
         acked_seqs: impl Iterator<Item = PacketSeq> + 'session,
-    ) -> impl Iterator<Item = MessageSeq> + 'session {
+    ) -> impl Iterator<Item = (LaneIndex, MessageSeq)> + 'session {
         acked_seqs
             // we now know that our packet with sequence `seq` was acked by the peer
             // let's find what fragments that packet contained when we flushed it out
@@ -86,8 +92,11 @@ impl Session {
             })
             .filter_map(|frag_path| {
                 // for each of those fragments, we'll mark that fragment as acked
-                let lane_index = usize::try_from(frag_path.lane_index.into_raw()).unwrap();
-                let lane = send_lanes.get_mut(lane_index).unwrap();
+                let lane_index = usize::try_from(frag_path.lane_index.into_raw())
+                    .expect("lane index should fit into a usize");
+                let lane = send_lanes
+                    .get_mut(lane_index)
+                    .expect("frag path should point into a valid lane index");
                 let msg = lane.sent_msgs.get_mut(&frag_path.msg_seq)?;
                 let frag_opt = msg.frags.get_mut(usize::from(frag_path.frag_index))?;
                 // take this fragment out so it stops being resent
@@ -96,7 +105,7 @@ impl Session {
                 // if all the fragments are now acked, then we report that
                 // the entire message is now acked
                 if msg.frags.iter().all(Option::is_none) {
-                    Some(frag_path.msg_seq)
+                    Some((frag_path.lane_index, frag_path.msg_seq))
                 } else {
                     None
                 }

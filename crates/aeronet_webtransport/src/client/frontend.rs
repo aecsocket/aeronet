@@ -5,7 +5,7 @@ use aeronet::{
     error::pretty_error,
     lane::LaneIndex,
 };
-use aeronet_proto::session::SessionConfig;
+use aeronet_proto::session::{Session, SessionBacked, SessionConfig};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot;
@@ -139,7 +139,7 @@ impl ClientTransport for WebTransportClient {
         client
             .session
             .send(Instant::now(), msg, lane)
-            .map(MessageKey::from_raw)
+            .map(|seq| MessageKey::from_raw(lane, seq))
             .map_err(ClientError::Send)
     }
 
@@ -255,8 +255,8 @@ impl WebTransportClient {
                     }
                 };
 
-                events.extend(acks.map(|seq| ClientEvent::Ack {
-                    msg_key: MessageKey::from_raw(seq),
+                events.extend(acks.map(|(lane, seq)| ClientEvent::Ack {
+                    msg_key: MessageKey::from_raw(lane, seq),
                 }));
 
                 msgs.for_each_msg(|res| match res {
@@ -287,6 +287,16 @@ impl WebTransportClient {
                 events.push(ClientEvent::Disconnected { error });
                 (events, State::Disconnected)
             }
+        }
+    }
+}
+
+impl SessionBacked for WebTransportClient {
+    fn get_session(&self) -> Option<&Session> {
+        if let ClientState::Connected(client) = &self.state {
+            Some(&client.session)
+        } else {
+            None
         }
     }
 }

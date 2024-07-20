@@ -6,7 +6,7 @@ use aeronet::{
     lane::{LaneIndex, LaneKind},
     server::{server_open, ServerEvent, ServerTransport},
 };
-use aeronet_proto::session::{LaneConfig, SessionConfig};
+use aeronet_proto::session::SessionConfig;
 use aeronet_webtransport::{
     server::{ClientKey, ConnectionResponse, ServerConfig, WebTransportServer},
     wtransport,
@@ -32,15 +32,15 @@ impl FromWorld for TokioRuntime {
 #[derive(Debug, Clone, Copy)]
 struct AppLane;
 
-impl From<AppLane> for LaneIndex {
+impl From<AppLane> for LaneKind {
     fn from(_: AppLane) -> Self {
-        Self::from_raw(0)
+        LaneKind::ReliableOrdered
     }
 }
 
-impl From<AppLane> for LaneConfig {
+impl From<AppLane> for LaneIndex {
     fn from(_: AppLane) -> Self {
-        Self::new(LaneKind::ReliableOrdered)
+        Self::from_raw(0)
     }
 }
 

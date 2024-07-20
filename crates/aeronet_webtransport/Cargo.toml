@@ -19,15 +19,15 @@ all-features = true
 rustflags = ["--cfg=web_sys_unstable_apis"]
 
 [features]
-## Enables [`bevy`](https://docs.rs/bevy) support by deriving `Resource` on certain types.
-bevy = ["dep:bevy_ecs", "aeronet/bevy"]
-
 ## Allows serializing types using [`serde`](https://docs.rs/serde).
 serde = ["dep:serde", "aeronet_proto/serde", "slotmap/serde"]
 
 ## Enables [`rustls/dangerous-configuration`](https://docs.rs/rustls/latest/rustls/#crate-features)
 ## on targets building against native `wtransport`.
 dangerous-configuration = ["wtransport/dangerous-configuration"]
+
+## Enables [`bevy`](https://docs.rs/bevy) support by deriving `Resource` on certain types.
+bevy = ["dep:bevy_ecs", "aeronet/bevy", "aeronet_proto/bevy"]
 
 [dependencies]
 aeronet = { workspace = true }
@@ -45,11 +45,13 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 web-time = { workspace = true }
 
-xwt-core = { workspace = true }
+serde = { workspace = true, optional = true }
 
 bevy_ecs = { workspace = true, optional = true }
 
-serde = { workspace = true, optional = true }
+# xwt
+
+xwt-core = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gloo-timers = { workspace = true }

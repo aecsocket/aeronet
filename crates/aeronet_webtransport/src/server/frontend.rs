@@ -155,7 +155,7 @@ impl ServerTransport for WebTransportServer {
         client
             .session
             .send(Instant::now(), msg, lane)
-            .map(MessageKey::from_raw)
+            .map(|seq| MessageKey::from_raw(lane, seq))
             .map_err(ServerError::Send)
     }
 
@@ -401,9 +401,9 @@ impl WebTransportServer {
                     }
                 };
 
-                events.extend(acks.map(|seq| ServerEvent::Ack {
+                events.extend(acks.map(|(lane, seq)| ServerEvent::Ack {
                     client_key,
-                    msg_key: MessageKey::from_raw(seq),
+                    msg_key: MessageKey::from_raw(lane, seq),
                 }));
 
                 msgs.for_each_msg(|res| match res {

@@ -7,7 +7,7 @@ use aeronet::{
     lane::{LaneIndex, LaneKind},
     stats::{MessageStats, Rtt},
 };
-use aeronet_proto::session::{LaneConfig, SessionConfig};
+use aeronet_proto::session::SessionConfig;
 use aeronet_webtransport::client::{ClientConfig, WebTransportClient};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
@@ -31,15 +31,15 @@ impl FromWorld for TokioRuntime {
 #[derive(Debug, Clone, Copy)]
 struct AppLane;
 
-impl From<AppLane> for LaneIndex {
+impl From<AppLane> for LaneKind {
     fn from(_: AppLane) -> Self {
-        Self::from_raw(0)
+        LaneKind::ReliableOrdered
     }
 }
 
-impl From<AppLane> for LaneConfig {
+impl From<AppLane> for LaneIndex {
     fn from(_: AppLane) -> Self {
-        Self::new(LaneKind::ReliableOrdered)
+        Self::from_raw(0)
     }
 }
 

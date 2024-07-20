@@ -21,8 +21,11 @@ all-features = true
 ## Allows serializing types using [`serde`](https://docs.rs/serde).
 serde = ["dep:serde"]
 
+## Enables [`bevy`](https://docs.rs/bevy) support.
+bevy = ["dep:bevy_ecs", "dep:bevy_app", "dep:bevy_time"]
+
 ## Allows drawing network statistics in an [`egui`](https://docs.rs/egui) UI.
-stats = ["dep:egui", "dep:size"]
+visualizer = ["dep:egui", "dep:egui_plot", "dep:size"]
 
 [dependencies]
 aeronet = { workspace = true }
@@ -30,12 +33,12 @@ aeronet = { workspace = true }
 ahash = { workspace = true }
 arbitrary = { workspace = true }
 bitvec = { workspace = true }
-circular-buffer = { workspace = true }
 datasize = { workspace = true }
 derivative = { workspace = true }
 derive_more = { workspace = true }
 either = { workspace = true }
 octs = { workspace = true }
+ringbuf = { workspace = true }
 terrors = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -43,7 +46,12 @@ web-time = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
+bevy_app = { workspace = true, optional = true }
+bevy_ecs = { workspace = true, optional = true }
+bevy_time = { workspace = true, optional = true }
+
 egui = { workspace = true, optional = true }
+egui_plot = { workspace = true, optional = true }
 size = { workspace = true, optional = true }
 
 [dev-dependencies]

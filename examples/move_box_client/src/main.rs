@@ -5,6 +5,7 @@ use aeronet::{
     error::pretty_error,
     server::ServerTransportSet,
 };
+use aeronet_proto::stats::{ClientSessionStats, ClientSessionStatsPlugin};
 use aeronet_replicon::client::RepliconClientPlugin;
 use aeronet_webtransport::{client::WebTransportClient, wtransport};
 use bevy::prelude::*;
@@ -33,6 +34,7 @@ fn main() {
             DefaultPlugins,
             RepliconClientPlugin::<WebTransportClient>::default(),
             MoveBoxPlugin,
+            ClientSessionStatsPlugin::<WebTransportClient>::default(),
             EguiPlugin,
         ))
         .init_resource::<WebTransportClient>()
@@ -112,8 +114,12 @@ fn draw_boxes(mut gizmos: Gizmos, players: Query<(&PlayerPosition, &PlayerColor)
     }
 }
 
-fn draw_stats(mut egui: EguiContexts, client: Res<WebTransportClient>) {
+fn draw_stats(
+    mut egui: EguiContexts,
+    client: Res<WebTransportClient>,
+    stats: Res<ClientSessionStats<WebTransportClient>>,
+) {
     if let ClientState::Connected(client) = client.state() {
-        aeronet_proto::stats::draw(egui.ctx_mut(), &client.session);
+        aeronet_proto::visualizer::draw(egui.ctx_mut(), &client.session, &*stats);
     }
 }
