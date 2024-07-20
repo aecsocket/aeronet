@@ -10,11 +10,14 @@ use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot;
 use replace_with::replace_with_or_abort_and_return;
-use tracing::{debug, trace};
-use web_time::{Duration, Instant};
+use tracing::debug;
+use web_time::Duration;
 use xwt_core::utils::maybe;
 
-use crate::shared::MessageKey;
+use crate::{
+    internal::{ConnectionInner, PollEvent},
+    shared::MessageKey,
+};
 
 use super::{
     backend, ClientConfig, ClientError, Connected, Connecting, State, ToConnected,
@@ -136,29 +139,14 @@ impl ClientTransport for WebTransportClient {
 
         let msg = msg.into();
         let lane = lane.into();
-        client
-            .session
-            .send(Instant::now(), msg, lane)
-            .map(|seq| MessageKey::from_raw(lane, seq))
-            .map_err(ClientError::Send)
+        client.inner.send(msg, lane).map_err(From::from)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
         let State::Connected(client) = &mut self.state else {
             return Err(ClientError::NotConnected);
         };
-
-        let mut bytes_sent = 0usize;
-        for packet in client.session.flush(Instant::now()) {
-            bytes_sent = bytes_sent.saturating_add(packet.len());
-            // ignore errors here, pick them up in `poll`
-            let _ = client.send_c2s.unbounded_send(packet);
-        }
-
-        if bytes_sent > 0 {
-            trace!(bytes_sent, "Flushed packets");
-        }
-
+        client.inner.flush();
         Ok(())
     }
 
@@ -180,9 +168,9 @@ impl ClientTransport for WebTransportClient {
 
 impl WebTransportClient {
     fn poll_connecting(mut client: Connecting) -> (Option<ClientEvent<Self>>, State) {
-        if let Ok(Some(error)) = client.recv_err.try_recv() {
+        if let Ok(Some(err)) = client.recv_err.try_recv() {
             return (
-                Some(ClientEvent::Disconnected { error }),
+                Some(ClientEvent::Disconnected { error: err.into() }),
                 State::Disconnected,
             );
         }
@@ -194,15 +182,18 @@ impl WebTransportClient {
                 State::Connected(Connected {
                     #[cfg(not(target_family = "wasm"))]
                     local_addr: next.local_addr,
-                    #[cfg(not(target_family = "wasm"))]
-                    remote_addr: next.remote_addr,
-                    #[cfg(not(target_family = "wasm"))]
-                    raw_rtt: next.initial_rtt,
-                    session: next.session,
-                    recv_err: client.recv_err,
-                    recv_meta: next.recv_meta,
-                    send_c2s: next.send_c2s,
-                    recv_s2c: next.recv_s2c,
+                    inner: ConnectionInner {
+                        #[cfg(not(target_family = "wasm"))]
+                        remote_addr: next.remote_addr,
+                        #[cfg(not(target_family = "wasm"))]
+                        raw_rtt: next.initial_rtt,
+                        session: next.session,
+                        recv_err: client.recv_err,
+                        recv_meta: next.recv_meta,
+                        send_msgs: next.send_c2s,
+                        recv_msgs: next.recv_s2c,
+                        fatal_error: None,
+                    },
                 }),
             ),
             Err(_) => (
@@ -219,73 +210,17 @@ impl WebTransportClient {
         delta_time: Duration,
     ) -> (Vec<ClientEvent<Self>>, State) {
         let mut events = Vec::new();
-        let res = (|| {
-            if let Some(err) = client
-                .recv_err
-                .try_recv()
-                .map_err(|_| ClientError::BackendClosed)?
-            {
-                return Err(err);
-            }
-
-            while let Ok(Some(meta)) = client.recv_meta.try_next() {
-                #[cfg(not(target_family = "wasm"))]
-                {
-                    client.raw_rtt = meta.rtt;
-                }
-                client
-                    .session
-                    .set_mtu(meta.mtu)
-                    .map_err(ClientError::MtuTooSmall)?;
-            }
-
-            let mut bytes_recv = 0usize;
-            while let Ok(Some(packet)) = client.recv_s2c.try_next() {
-                bytes_recv = bytes_recv.saturating_add(packet.len());
-                let (acks, mut msgs) = match client.session.recv(Instant::now(), packet) {
-                    Ok(x) => x,
-                    Err(err) => {
-                        debug!(
-                            "Error while reading packet from server: {:#}",
-                            pretty_error(&err)
-                        );
-                        continue;
-                    }
-                };
-
-                events.extend(acks.map(|(lane, seq)| ClientEvent::Ack {
-                    msg_key: MessageKey::from_raw(lane, seq),
-                }));
-
-                msgs.for_each_msg(|res| match res {
-                    Ok((msg, lane)) => {
-                        events.push(ClientEvent::Recv { msg, lane });
-                    }
-                    Err(err) => {
-                        debug!(
-                            "Error while reading packet from server: {:#}",
-                            pretty_error(&err)
-                        );
-                    }
-                });
-            }
-
-            client
-                .session
-                .update(delta_time)
-                .map_err(ClientError::OutOfMemory)?;
-
-            if bytes_recv > 0 {
-                trace!(bytes_recv, "Received packets");
-            }
-
-            Ok(())
-        })();
+        let res = client.inner.poll(delta_time, |event| {
+            events.push(match event {
+                PollEvent::Ack { msg_key } => ClientEvent::Ack { msg_key },
+                PollEvent::Recv { msg, lane } => ClientEvent::Recv { msg, lane },
+            })
+        });
 
         match res {
             Ok(()) => (events, State::Connected(client)),
-            Err(error) => {
-                events.push(ClientEvent::Disconnected { error });
+            Err(err) => {
+                events.push(ClientEvent::Disconnected { error: err.into() });
                 (events, State::Disconnected)
             }
         }
@@ -295,7 +230,7 @@ impl WebTransportClient {
 impl SessionBacked for WebTransportClient {
     fn get_session(&self) -> Option<&Session> {
         if let ClientState::Connected(client) = &self.state {
-            Some(&client.session)
+            Some(&client.inner.session)
         } else {
             None
         }

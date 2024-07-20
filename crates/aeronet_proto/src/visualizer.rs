@@ -99,6 +99,7 @@ impl SessionStatsVisualizer {
             ui.horizontal(|ui| {
                 if self.show_rtt {
                     plot(history, "rtt")
+                        .y_grid_spacer(uniform_grid_spacer(|_| [500.0, 200.0, 50.0]))
                         .custom_y_axes(vec![axis_hints("ms").max_digits(4)])
                         .show(ui, |ui| {
                             ui.line(Line::new(rtt).name("RTT").color(MAIN_COLOR));
@@ -136,7 +137,7 @@ impl SessionStatsVisualizer {
                 ui.label(format!("{:.1?}", now - session.connected_at()));
                 ui.separator();
 
-                ui.label(format!("{:?} ms", session.rtt().get()));
+                ui.label(format!("{:.1?} ms", session.rtt().get()));
                 ui.separator();
 
                 ui.label(format!(

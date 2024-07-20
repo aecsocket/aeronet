@@ -15,7 +15,7 @@ use aeronet::{
     server::ServerState,
     stats::{ConnectedAt, MessageStats, RemoteAddr, Rtt},
 };
-use aeronet_proto::session::{MtuTooSmall, OutOfMemory, SendError, Session};
+use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
 use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
@@ -23,7 +23,10 @@ use slotmap::SlotMap;
 use web_time::{Duration, Instant};
 use wtransport::error::ConnectionError;
 
-use crate::internal::{self, ConnectionMeta};
+use crate::{
+    internal::{self, ConnectionInner, ConnectionMeta, InternalError},
+    shared::RawRtt,
+};
 
 /// Server network configuration.
 pub type ServerConfig = wtransport::ServerConfig;
@@ -82,6 +85,9 @@ pub enum ServerError {
     /// See [`SendError`].
     #[error(transparent)]
     Send(SendError),
+    /// See [`FatalSendError`].
+    #[error(transparent)]
+    FatalSend(FatalSendError),
     /// See [`OutOfMemory`].
     #[error(transparent)]
     OutOfMemory(OutOfMemory),
@@ -118,6 +124,22 @@ pub enum ServerError {
     /// Lost connection.
     #[error("connection lost")]
     ConnectionLost(#[source] <internal::Connection as xwt_core::session::datagram::Receive>::Error),
+}
+
+impl From<InternalError<ServerError>> for ServerError {
+    fn from(value: InternalError<ServerError>) -> Self {
+        match value {
+            InternalError::Spec(err) => err,
+            InternalError::BackendClosed => Self::BackendClosed,
+            InternalError::MtuTooSmall(err) => Self::MtuTooSmall(err),
+            InternalError::OutOfMemory(err) => Self::OutOfMemory(err),
+            InternalError::Send(err) => Self::Send(err),
+            InternalError::FatalSend(err) => Self::FatalSend(err),
+            InternalError::FrontendClosed => Self::FrontendClosed,
+            InternalError::DatagramsNotSupported => Self::DatagramsNotSupported,
+            InternalError::ConnectionLost(err) => Self::ConnectionLost(err),
+        }
+    }
 }
 
 slotmap::new_key_type! {
@@ -211,46 +233,49 @@ struct ToConnected {
 /// [`ClientState::Connected`].
 #[derive(Debug)]
 pub struct Connected {
-    /// See [`RemoteAddr`].
-    pub remote_addr: SocketAddr,
-    /// Backing [`Rtt`] value provided by the [`wtransport`] connection.
-    ///
-    /// The [`Rtt`] impl for this struct returns the [`Session`]'s RTT, *not*
-    /// this value. This value is more representative of RTT at a packet level,
-    /// but less representative of RTT at the application level.
-    pub raw_rtt: Duration,
-    /// Protocol session state, used for reading more advanced info.
-    pub session: Session,
-    recv_err: oneshot::Receiver<ServerError>,
-    recv_meta: mpsc::Receiver<ConnectionMeta>,
-    recv_c2s: mpsc::Receiver<Bytes>,
-    send_s2c: mpsc::UnboundedSender<Bytes>,
+    inner: ConnectionInner<ServerError>,
+}
+
+impl Connected {
+    /// Provides access to the underlying [`Session`] for reading more detailed
+    /// network statistics.
+    pub fn session(&self) -> &Session {
+        &self.inner.session
+    }
 }
 
 impl ConnectedAt for Connected {
     fn connected_at(&self) -> Instant {
-        self.session.connected_at()
+        self.session().connected_at()
     }
 }
 
 impl Rtt for Connected {
     fn rtt(&self) -> Duration {
-        self.session.rtt().get()
+        self.session().rtt().get()
     }
 }
 
 impl MessageStats for Connected {
     fn bytes_sent(&self) -> usize {
-        self.session.bytes_sent()
+        self.session().bytes_sent()
     }
 
     fn bytes_recv(&self) -> usize {
-        self.session.bytes_recv()
+        self.session().bytes_recv()
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl RemoteAddr for Connected {
     fn remote_addr(&self) -> SocketAddr {
-        self.remote_addr
+        self.inner.remote_addr
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl RawRtt for Connected {
+    fn raw_rtt(&self) -> Duration {
+        self.inner.raw_rtt
     }
 }

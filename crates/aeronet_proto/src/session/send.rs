@@ -2,6 +2,7 @@ use std::{collections::hash_map::Entry, iter};
 
 use aeronet::lane::LaneIndex;
 use octs::{Bytes, BytesMut, EncodeLen, FixedEncodeLen, Write};
+use terrors::OneOf;
 use web_time::Instant;
 
 use crate::{
@@ -12,12 +13,30 @@ use crate::{
 
 use super::{FlushedPacket, FragmentPath, SendLaneKind, SentFragment, SentMessage, Session};
 
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum FatalSendError {
+    /// Attempted to [`Session::send`] a message along a lane which is not
+    /// tracked by this [`Session`].
+    ///
+    /// This must be treated as a fatal error because it indicates an error i
+    /// the app's logic.
+    #[error("invalid lane {lane:?}")]
+    InvalidLane {
+        /// Index of the invalid lane.
+        lane: LaneIndex,
+    },
+    /// Error while attempting to send a message along a reliable lane.
+    ///
+    /// This must be treated as a fatal error because the guarantees of a
+    /// reliable lane state that all messages MUST be delivered to the peer
+    /// successfully.
+    #[error(transparent)]
+    Reliable(SendError),
+}
+
 /// Failed to [`Session::send`] a message.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum SendError {
-    /// Lane index given is not tracked by this [`Session`].
-    #[error("invalid lane")]
-    InvalidLane,
     /// Attempted to buffer a message for sending, but we have too many messages
     /// buffered already, and cannot get a fresh [`MessageSeq`].
     #[error("too many buffered messages")]
@@ -28,44 +47,83 @@ pub enum SendError {
 }
 
 impl Session {
-    // TODO: for unreliable lanes, maybe we shouldn't return Err and silently drop?
-    // this is renet's behavior
+    /// Buffers up a message for sending on this session.
+    ///
+    /// This will not construct any packets until the next [`Session::flush`]
+    /// call, at which point this message *may* be sent out.
+    ///
+    /// This returns the sequence number of the message, which uniquely[^1]
+    /// identifies this sent message. When combined with the lane index along
+    /// which the message was sent, you can identify this message when it gets
+    /// acknowledged by the peer in [`Session::recv`].
+    ///
+    /// # Errors
+    ///
+    /// Errors if the message could not be buffered up for sending.
+    ///
+    /// [`SendError`] indicates a non-fatal error which should probably be
+    /// logged, but otherwise can be safely ignored. This error may occur if
+    /// sending along an unreliable lane, since these lanes have no guarantees
+    /// about messages getting to the peer.
+    ///
+    /// [`FatalSendError`] indicates a fatal error which must immediately
+    /// terminate the connection because either there was an app-level logic
+    /// error ([`FatalSendError::InvalidLane`]), or we attempted to send along
+    /// a reliable lane but failed, breaking the reliable lane's guarantee.
+    ///
+    /// [^1]: [`MessageSeq`]s are monotonically increasing [`u16`], so they will
+    /// wrap around quickly. However, hopefully you aren't sending out
+    /// [`u16::MAX`] messages in the span of a single RTT. If you are, consider
+    /// redesigning your networking architecture?
     pub fn send(
         &mut self,
         now: Instant,
         msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
-    ) -> Result<MessageSeq, SendError> {
-        let lane_index =
-            usize::try_from(lane.into().into_raw()).map_err(|_| SendError::InvalidLane)?;
+    ) -> Result<MessageSeq, OneOf<(SendError, FatalSendError)>> {
+        let lane: LaneIndex = lane.into();
+        let lane_index = usize::try_from(lane.into_raw())
+            .map_err(|_| FatalSendError::InvalidLane { lane })
+            .map_err(|err| OneOf::from(err).broaden())?;
 
         let Some(lane) = self.send_lanes.get_mut(lane_index) else {
-            return Err(SendError::InvalidLane);
+            return Err(OneOf::from(FatalSendError::InvalidLane { lane }).broaden());
         };
-        let msg_seq = lane.next_msg_seq;
-        let Entry::Vacant(entry) = lane.sent_msgs.entry(msg_seq) else {
-            return Err(SendError::TooManyMessages);
-        };
+        let is_reliable = matches!(lane.kind, SendLaneKind::Reliable);
 
-        let frags = self
-            .splitter
-            .split(msg)
-            .map_err(SendError::MessageTooLarge)?;
-        entry.insert(SentMessage {
-            frags: frags
-                .map(|(marker, payload)| {
-                    Some(SentFragment {
-                        marker,
-                        payload,
-                        sent_at: now,
-                        next_flush_at: now,
+        let res = (|| {
+            let msg_seq = lane.next_msg_seq;
+            let Entry::Vacant(entry) = lane.sent_msgs.entry(msg_seq) else {
+                return Err(SendError::TooManyMessages);
+            };
+
+            let frags = self
+                .splitter
+                .split(msg)
+                .map_err(SendError::MessageTooLarge)?;
+            entry.insert(SentMessage {
+                frags: frags
+                    .map(|(marker, payload)| {
+                        Some(SentFragment {
+                            marker,
+                            payload,
+                            sent_at: now,
+                            next_flush_at: now,
+                        })
                     })
-                })
-                .collect(),
-        });
+                    .collect(),
+            });
 
-        lane.next_msg_seq += MessageSeq::ONE;
-        Ok(msg_seq)
+            lane.next_msg_seq += MessageSeq::ONE;
+            Ok(msg_seq)
+        })();
+
+        if is_reliable {
+            res.map_err(FatalSendError::Reliable)
+                .map_err(|err| OneOf::from(err).broaden())
+        } else {
+            res.map_err(|err| OneOf::from(err).broaden())
+        }
     }
 
     /// Constructs the next packets which should be sent out.

@@ -5,10 +5,13 @@ use aeronet::{
     client::{client_connected, ClientEvent, ClientState, ClientTransport},
     error::pretty_error,
     lane::{LaneIndex, LaneKind},
-    stats::{MessageStats, Rtt},
+    stats::{LocalAddr, MessageStats, RemoteAddr, Rtt},
 };
 use aeronet_proto::session::SessionConfig;
-use aeronet_webtransport::client::{ClientConfig, WebTransportClient};
+use aeronet_webtransport::{
+    client::{ClientConfig, WebTransportClient},
+    shared::RawRtt,
+};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
@@ -206,11 +209,15 @@ fn ui(
         if let ClientState::Connected(client) = client.state() {
             egui::Grid::new("meta").num_columns(2).show(ui, |ui| {
                 ui.label("Local/remote addr");
-                ui.label(format!("{} / {}", client.local_addr, client.remote_addr));
+                ui.label(format!(
+                    "{} / {}",
+                    client.local_addr(),
+                    client.remote_addr()
+                ));
                 ui.end_row();
 
                 ui.label("RTT");
-                ui.label(format!("{:?} ({:?} raw)", client.rtt(), client.raw_rtt));
+                ui.label(format!("{:?} ({:?} raw)", client.rtt(), client.raw_rtt()));
                 ui.end_row();
 
                 ui.label("Bytes sent/recv");
@@ -220,16 +227,16 @@ fn ui(
                 ui.label("Bytes left / cap");
                 ui.label(format!(
                     "{} / {}",
-                    client.session.bytes_left().get(),
-                    client.session.bytes_left().cap()
+                    client.session().bytes_left().get(),
+                    client.session().bytes_left().cap()
                 ));
                 ui.end_row();
 
                 ui.label("MTU min / current");
                 ui.label(format!(
                     "{} / {}",
-                    client.session.min_mtu(),
-                    client.session.mtu()
+                    client.session().min_mtu(),
+                    client.session().mtu()
                 ));
                 ui.end_row();
             });

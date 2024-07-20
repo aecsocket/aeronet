@@ -161,9 +161,5 @@ async fn handle_session(
         r = recv_loop.fuse() => r,
         r = update_rtt_loop.fuse() => r,
     }
-    .map_err(|err| match err {
-        internal::Error::FrontendClosed => ServerError::FrontendClosed,
-        internal::Error::ConnectionLost(err) => ServerError::ConnectionLost(err),
-        internal::Error::DatagramsNotSupported => ServerError::DatagramsNotSupported,
-    })
+    .map_err(From::from)
 }
