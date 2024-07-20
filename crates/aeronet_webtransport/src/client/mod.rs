@@ -29,6 +29,7 @@ cfg_if::cfg_if! {
     } else {
         use std::net::SocketAddr;
 
+        use aeronet::stats::{LocalAddr, RemoteAddr};
         use xwt_core::endpoint::Connect;
 
         use crate::internal;
@@ -154,6 +155,20 @@ pub struct Connected {
     recv_s2c: mpsc::Receiver<Bytes>,
 }
 
+#[cfg(not(target_family = "wasm"))]
+impl LocalAddr for Connected {
+    fn local_addr(&self) -> SocketAddr {
+        self.local_addr
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl RemoteAddr for Connected {
+    fn remote_addr(&self) -> SocketAddr {
+        self.remote_addr
+    }
+}
+
 impl ConnectedAt for Connected {
     fn connected_at(&self) -> Instant {
         self.session.connected_at()
@@ -173,19 +188,5 @@ impl MessageStats for Connected {
 
     fn bytes_recv(&self) -> usize {
         self.session.bytes_recv()
-    }
-}
-
-#[cfg(not(target_family = "wasm"))]
-impl aeronet::stats::LocalAddr for Connected {
-    fn local_addr(&self) -> SocketAddr {
-        self.local_addr
-    }
-}
-
-#[cfg(not(target_family = "wasm"))]
-impl aeronet::stats::RemoteAddr for Connected {
-    fn remote_addr(&self) -> SocketAddr {
-        self.remote_addr
     }
 }

@@ -123,6 +123,7 @@ impl FragmentReceiver {
     /// # Panics
     ///
     /// Panics if `max_payload_len` is 0.
+    #[must_use]
     pub fn new(max_payload_len: usize) -> Self {
         assert!(max_payload_len > 0);
         Self {
@@ -148,6 +149,7 @@ impl FragmentReceiver {
     ///
     /// Since transmission errors occur such as duplicated and dropped packets,
     /// it is perfectly safe to ignore these errors.
+    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn reassemble(
         &mut self,
         now: Instant,

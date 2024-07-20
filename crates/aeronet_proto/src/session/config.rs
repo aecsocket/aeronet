@@ -5,6 +5,9 @@ use aeronet::lane::LaneKind;
 /// Not all session-specific configurations are exposed here. Transport-specific
 /// settings such as maximum packet length are not exposed to users, and are
 /// instead set directly when calling [`Session::new`].
+///
+/// [`Session`]: crate::session::Session
+/// [`Session::new`]: crate::session::Session::new
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionConfig {
     /// Configurations for the lanes which can be used to send out data.
@@ -14,9 +17,8 @@ pub struct SessionConfig {
     /// Maximum number of bytes of memory which can be used for buffering
     /// messages.
     ///
-    /// The default is 0. You **must** either use [`SessionConfig::new`] or
-    /// override this value explicitly, otherwise your session will always
-    /// error with [`OutOfMemory`]!
+    /// The default is 4MiB (`4 * 1024 * 1024`). Consider tuning this number
+    /// if you see connections fail with an out-of-memory error.
     ///
     /// A malicious peer may send us an infinite amount of fragments which
     /// never get fully reassembled, leaving us having to buffer up all of their
@@ -31,16 +33,20 @@ pub struct SessionConfig {
     ///
     /// To avoid running out of memory in these situations, if the total memory
     /// usage of this struct exceeds this maximum value, operations on this
-    /// session will fail with an [`OutOfMemory`].
+    /// session will fail with an out-of-memory error.
     pub max_memory_usage: usize,
     /// How many total bytes we can [`Session::flush`] out per second.
     ///
     /// When flushing, if we do not have enough bytes to send out any more
-    /// packets, we will stop returning any packets. You must remember to call
-    /// [`Session::refill_bytes`] in your update loop to refill this!
+    /// packets, we will stop returning any packets. The session accumulates
+    /// its byte budget back up in [`Session::update`].
     ///
     /// By default, this is set to [`usize::MAX`] so there is effectively no
     /// limit.
+    ///
+    /// [`Session`]: crate::session::Session
+    /// [`Session::flush`]: crate::session::Session::flush
+    /// [`Session::update`]: crate::session::Session::update
     pub send_bytes_per_sec: usize,
 }
 
@@ -49,25 +55,13 @@ impl Default for SessionConfig {
         Self {
             send_lanes: Vec::new(),
             recv_lanes: Vec::new(),
-            max_memory_usage: 0,
+            max_memory_usage: 4 * 1024 * 1024,
             send_bytes_per_sec: usize::MAX,
         }
     }
 }
 
 impl SessionConfig {
-    /// Creates a new configuration with the default values.
-    ///
-    /// [`SessionConfig::max_memory_usage`] must be manually defined by passing
-    /// it in here.
-    #[must_use]
-    pub fn new(max_memory_usage: usize) -> Self {
-        Self {
-            max_memory_usage,
-            ..Default::default()
-        }
-    }
-
     /// Adds the given lanes to this configuration's
     /// [`SessionConfig::send_lanes`].
     ///
@@ -98,8 +92,15 @@ impl SessionConfig {
     #[must_use]
     pub fn with_lanes(mut self, lanes: impl IntoIterator<Item = impl Into<LaneKind>>) -> Self {
         let lanes = lanes.into_iter().map(Into::into).collect::<Vec<_>>();
-        self.send_lanes.extend(lanes.iter().cloned());
-        self.recv_lanes.extend(lanes.iter().cloned());
+        self.send_lanes.extend(lanes.iter().copied());
+        self.recv_lanes.extend(lanes.iter().copied());
+        self
+    }
+
+    /// Sets [`SessionConfig::max_memory_usage`] on this value.
+    #[must_use]
+    pub const fn with_max_memory_usage(mut self, max_memory_usage: usize) -> Self {
+        self.max_memory_usage = max_memory_usage;
         self
     }
 

@@ -1,3 +1,5 @@
+//! See [`Session`].
+
 mod config;
 mod recv;
 mod send;
@@ -11,22 +13,23 @@ use ahash::{AHashMap, AHashSet};
 use datasize::{data_size, DataSize};
 use derivative::Derivative;
 use octs::{Bytes, FixedEncodeLenHint};
-use web_time::Instant;
+use web_time::{Duration, Instant};
 
 use crate::{
     limit::TokenBucket,
     msg::{FragmentReceiver, MessageSplitter},
     rtt::{RttEstimator, INITIAL_RTT},
+    seq::SeqBuf,
     ty::{Acknowledge, FragmentHeader, FragmentMarker, MessageSeq, PacketHeader, PacketSeq},
 };
 
+// TODO # Memory management
+// TODO # MTU
 #[derive(Derivative, DataSize)]
 #[derivative(Debug)]
 pub struct Session {
     connected_at: Instant,
-    #[derivative(Debug(format_with = "fmt_flushed_packets"))]
-    #[data_size(with = size_of_flushed_packets)]
-    flushed_packets: AHashMap<PacketSeq, FlushedPacket>,
+    flushed_packets: SeqBuf<FlushedPacket, 1024>,
     acks: Acknowledge,
     max_memory_usage: usize,
 
@@ -44,22 +47,6 @@ pub struct Session {
     recv_lanes: Box<[RecvLane]>,
     bytes_recv: usize,
     rtt: RttEstimator,
-}
-
-fn fmt_flushed_packets(
-    value: &AHashMap<PacketSeq, FlushedPacket>,
-    fmt: &mut fmt::Formatter,
-) -> Result<(), fmt::Error> {
-    fmt.debug_set()
-        .entries(value.iter().map(|(seq, _)| seq))
-        .finish()
-}
-
-fn size_of_flushed_packets(value: &AHashMap<PacketSeq, FlushedPacket>) -> usize {
-    value
-        .iter()
-        .map(|(_, packet)| mem::size_of_val(packet) + data_size(packet))
-        .sum()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DataSize)]
@@ -90,6 +77,15 @@ struct SentFragment {
 struct FlushedPacket {
     flushed_at: Instant,
     frags: Box<[FragmentPath]>,
+}
+
+impl FlushedPacket {
+    fn new(flushed_at: Instant) -> Self {
+        Self {
+            flushed_at,
+            frags: Box::new([]),
+        }
+    }
 }
 
 #[derive(Derivative, DataSize)]
@@ -182,7 +178,7 @@ fn size_of_recv_buf(value: &AHashMap<MessageSeq, Bytes>) -> usize {
 
 /// Attempted to set the [`Session`]'s MTU to a value below the minimum MTU.
 ///
-/// See [`Session`] for an explanation of how MTU works.
+/// See [`Session`], *MTU*.
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("MTU of {mtu} is too small (min {min})")]
 pub struct MtuTooSmall {
@@ -192,13 +188,38 @@ pub struct MtuTooSmall {
     pub mtu: usize,
 }
 
+/// This [`Session`] is occupying too many bytes in memory for buffering
+/// messages, and the session can no longer be used.
+///
+/// See [`Session`], *Memory management*.
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("out of memory")]
 pub struct OutOfMemory;
 
-const OVERHEAD: usize = PacketHeader::MAX_ENCODE_LEN + FragmentHeader::MAX_ENCODE_LEN + 1;
+/// How many bytes of overhead a packet requires to encode the header and at
+/// least one fragment.
+pub const OVERHEAD: usize = PacketHeader::MAX_ENCODE_LEN + FragmentHeader::MAX_ENCODE_LEN + 1;
 
 impl Session {
+    /// Creates a new session.
+    ///
+    /// See [`Session`] for an explanation of what the `min_mtu` and
+    /// `initial_mtu` values mean.
+    ///
+    /// If you are unsure what to use for `min_mtu`, see if your underlying
+    /// transport has a minimum packet size that it supports. If not, consider
+    /// using what [RFC 9000 Section 14.2] (the spec behind QUIC) uses, which
+    /// is `1200`.
+    ///
+    /// `initial_mtu` should be an initial path MTU estimate if you have one,
+    /// otherwise it may be the same as `min_mtu`.
+    ///
+    /// # Errors
+    ///
+    /// Errors if `min_mtu` is smaller than [`OVERHEAD`], or if
+    /// `initial_mtu < min_mtu`.
+    ///
+    /// [RFC 9000 Section 14.2]: https://www.rfc-editor.org/rfc/rfc9000.html#section-14-2
     pub fn new(
         now: Instant,
         config: SessionConfig,
@@ -221,7 +242,7 @@ impl Session {
         let max_payload_len = min_mtu - OVERHEAD;
         Ok(Self {
             connected_at: now,
-            flushed_packets: AHashMap::new(),
+            flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
             acks: Acknowledge::new(),
             max_memory_usage: config.max_memory_usage,
 
@@ -275,21 +296,29 @@ impl Session {
         })
     }
 
+    /// Gets when this session was created.
     #[must_use]
     pub const fn connected_at(&self) -> Instant {
         self.connected_at
     }
 
+    /// Gets the minimum MTU.
     #[must_use]
     pub const fn min_mtu(&self) -> usize {
         self.min_mtu
     }
 
+    /// Gets the current MTU.
     #[must_use]
     pub const fn mtu(&self) -> usize {
         self.mtu
     }
 
+    /// Sets the current MTU.
+    ///
+    /// # Errors
+    ///
+    /// Errors if `mtu < min_mtu`.
     pub fn set_mtu(&mut self, mtu: usize) -> Result<(), MtuTooSmall> {
         if mtu < self.min_mtu {
             Err(MtuTooSmall {
@@ -302,31 +331,42 @@ impl Session {
         }
     }
 
+    /// Gets the current RTT estimation state.
     #[must_use]
     pub const fn rtt(&self) -> &RttEstimator {
         &self.rtt
     }
 
+    /// Gets how many bytes this session have sent out in total through
+    /// [`Session::flush`].
     #[must_use]
     pub const fn bytes_sent(&self) -> usize {
         self.bytes_sent
     }
 
+    /// Gets how many bytes this session has received through [`Session::recv`].
     #[must_use]
     pub const fn bytes_recv(&self) -> usize {
         self.bytes_recv
     }
 
+    /// Gets how many bytes this session can still send out until its byte
+    /// send bucket gets refilled.
     #[must_use]
     pub const fn bytes_left(&self) -> &TokenBucket {
         &self.bytes_left
     }
 
+    /// Gets the maximum amount of bytes this session may occupy in memory until
+    /// operations fail with [`OutOfMemory`].
     #[must_use]
     pub const fn max_memory_usage(&self) -> usize {
         self.max_memory_usage
     }
 
+    /// Gets the total number of bytes this session occupies in memory.
+    ///
+    /// This includes both on the stack and on the heap.
     #[must_use]
     pub fn memory_usage(&self) -> usize {
         // TODO proper tools for debugging usage
@@ -334,11 +374,34 @@ impl Session {
         // dbg!(self.flushed_packets.len());
         // dbg!(data_size(&self.send_lanes));
         // dbg!(data_size(&self.recv_lanes));
-        data_size(self)
+        mem::size_of_val(self) + data_size(self)
+    }
+
+    /// Updates the internal state of this session, accepting the time delta
+    /// between this update and the last.
+    ///
+    /// This should be called once per update.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the session is using too much memory. If this return an error,
+    /// the session must be dropped and the connection must be immediately
+    /// closed.
+    pub fn update(&mut self, delta_time: Duration) -> Result<(), OutOfMemory> {
+        if self.memory_usage() > self.max_memory_usage {
+            return Err(OutOfMemory);
+        }
+
+        let f = delta_time.as_secs_f32();
+        self.bytes_left.refill_portion(f);
+
+        Ok(())
     }
 }
 
-/// Indicates that this client may be backed by a [`Session`].
+/// Indicates that this client transport may be backed by a [`Session`].
 pub trait SessionBacked {
+    /// Gets the [`Session`] that this client transport is currently using to
+    /// manage its connection.
     fn get_session(&self) -> Option<&Session>;
 }

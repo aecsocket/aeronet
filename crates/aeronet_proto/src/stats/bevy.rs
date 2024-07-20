@@ -56,6 +56,7 @@ pub struct ClientSessionStats<T> {
 
 impl<T> ClientSessionStats<T> {
     /// See [`SessionStats::new`].
+    #[must_use]
     pub fn new(sample_rate: u32, history: usize) -> Self {
         Self {
             stats: SessionStats::new(sample_rate, history),

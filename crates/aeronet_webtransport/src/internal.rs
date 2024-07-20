@@ -63,7 +63,7 @@ cfg_if::cfg_if! {
                 Err(SendDatagramError::UnsupportedByPeer) => {
                     // this should be impossible, since we checked that the client does support datagrams
                     // before connecting, but we'll error-case it anyway
-                    return Err(Error::DatagramsNotSupported);
+                    Err(Error::DatagramsNotSupported)
                 }
             }
         }

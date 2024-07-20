@@ -10,7 +10,9 @@ const LAST_MASK: u8 = 0b1000_0000;
 pub const MAX_FRAG_INDEX: u8 = u8::MAX & !LAST_MASK;
 
 /// Maximum number of fragments that a message can be split into using
-/// [`FragmentSender`].
+/// [`MessageSplitter`].
+///
+/// [`MessageSplitter`]: crate::msg::MessageSplitter
 pub const MAX_FRAGS: usize = MAX_FRAG_INDEX as usize + 1;
 
 impl FragmentMarker {

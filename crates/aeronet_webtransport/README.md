@@ -73,12 +73,12 @@ fn connect(mut client: ResMut<WebTransportClient>) {
 }
 
 // this will change depending on whether you target native or WASM
-fn create_net_config() -> ClientConfig { todo!() }
+fn create_net_config() -> ClientConfig { unimplemented!() }
 
-fn create_session_config() -> SessionConfig { todo!() }
+fn create_session_config() -> SessionConfig { unimplemented!() }
 
 // use an async runtime like tokio or wasm_bindgen_futures for this
-fn run_async_task(f: impl Future) { todo!() }
+fn run_async_task(f: impl Future) { unimplemented!() }
 ```
 
 ## Server
@@ -119,12 +119,12 @@ fn open(mut server: ResMut<WebTransportServer>) {
     run_async_task(backend);
 }
 
-fn create_net_config() -> ServerConfig { todo!() }
+fn create_net_config() -> ServerConfig { unimplemented!() }
 
-fn create_session_config() -> SessionConfig { todo!() }
+fn create_session_config() -> SessionConfig { unimplemented!() }
 
 // use an async runtime like tokio for this
-fn run_async_task(f: impl Future) { todo!() }
+fn run_async_task(f: impl Future) { unimplemented!() }
 ```
 
 [`aeronet_proto`]: https://docs.rs/aeronet_proto

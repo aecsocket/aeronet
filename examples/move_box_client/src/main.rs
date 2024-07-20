@@ -6,6 +6,7 @@ use aeronet::{
     server::ServerTransportSet,
 };
 use aeronet_proto::{
+    session::SessionConfig,
     stats::{ClientSessionStats, ClientSessionStatsPlugin},
     visualizer::SessionStatsVisualizer,
 };
@@ -69,7 +70,7 @@ fn connect_client(
         .unwrap()
         .build();
 
-    let session_config = move_box::base_session_config()
+    let session_config = SessionConfig::default()
         .with_send_lanes(channels.client_channels())
         .with_recv_lanes(channels.server_channels());
 
@@ -125,6 +126,6 @@ fn draw_stats(
     mut stats_visualizer: ResMut<SessionStatsVisualizer>,
 ) {
     if let ClientState::Connected(client) = client.state() {
-        stats_visualizer.draw(egui.ctx_mut(), &client.session, &*stats);
+        stats_visualizer.draw(egui.ctx_mut(), &client.session, &stats);
     }
 }

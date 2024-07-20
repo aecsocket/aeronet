@@ -239,8 +239,6 @@ impl WebTransportClient {
                     .map_err(ClientError::MtuTooSmall)?;
             }
 
-            client.session.refill_bytes(delta_time);
-
             let mut bytes_recv = 0usize;
             while let Ok(Some(packet)) = client.recv_s2c.try_next() {
                 bytes_recv = bytes_recv.saturating_add(packet.len());
@@ -270,9 +268,12 @@ impl WebTransportClient {
                         );
                     }
                 });
-
-                // TODO OOM
             }
+
+            client
+                .session
+                .update(delta_time)
+                .map_err(ClientError::OutOfMemory)?;
 
             if bytes_recv > 0 {
                 trace!(bytes_recv, "Received packets");

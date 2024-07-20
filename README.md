@@ -197,7 +197,7 @@ for event in client.poll(delta_time) {
             let msg = String::from_utf8(Vec::from(msg)).unwrap();
             println!("Received on {lane:?}: {msg}");
         }
-        _ => todo!()
+        _ => unimplemented!()
     }
 }
 # }

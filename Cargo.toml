@@ -24,7 +24,10 @@ pedantic = { level = "warn", priority = -1 }
 module_name_repetitions = "allow"
 needless_pass_by_value = "allow"
 similar_names = "allow"
-too_many_arguments = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+struct_excessive_bools = "allow"
 
 [workspace.dependencies]
 aeronet = { version = "0.6.0", path = "crates/aeronet" }
@@ -52,7 +55,7 @@ derive_more = "0.99.18"
 egui = "0.27.2"
 egui_plot = "0.27.2"
 either = "1.9.0"
-octs = { git = "https://github.com/aecsocket/octs", branch = "v0.4.2" } # "0.4.2"
+octs = "0.4.2"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 replace_with = "0.1.7"
