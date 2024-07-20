@@ -13,6 +13,50 @@ use web_time::Instant;
 
 use crate::{session::Session, stats::SessionStats};
 
+/// Allows visualizing the samples stored in a [`SessionStats`] by drawing an
+/// [`egui`] window with plots and text.
+///
+/// If writing a client app using Bevy, you can use this together with
+/// `ClientSessionStatsPlugin` to easily visualize network statistics.
+/// Use this as a resource in your app, and draw the visualizer using
+/// `bevy_egui` by defining a system like:
+///
+/// ```rust,ignore
+/// fn draw_stats(
+///     mut egui: EguiContexts,
+///     client: Res<MyClient>,
+///     stats: Res<ClientSessionStats<MyClient>>,
+///     mut stats_visualizer: ResMut<SessionStatsVisualizer>,
+/// ) {
+///     if let ClientState::Connected(client) = client.state() {
+///         stats_visualizer.draw(egui.ctx_mut(), &client.session, &*stats);
+///     }
+/// }
+/// ```
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
+pub struct SessionStatsVisualizer {
+    /// Whether to draw the RTT graph.
+    pub show_rtt: bool,
+    /// Whether to draw the memory usage graph.
+    pub show_mem: bool,
+    /// Whether to draw the bytes sent/received per second graph.
+    pub show_tx_rx: bool,
+    /// Whether to draw the packet loss graph.
+    pub show_loss: bool, // . .. .. ._
+}
+
+impl Default for SessionStatsVisualizer {
+    fn default() -> Self {
+        Self {
+            show_rtt: true,
+            show_mem: true,
+            show_tx_rx: true,
+            show_loss: false,
+        }
+    }
+}
+
 const MAIN_COLOR: Color32 = Color32::GRAY;
 const FAINT_COLOR: Color32 = Color32::DARK_GRAY;
 const IN_COLOR: Hsva = color(0.60);
@@ -27,27 +71,8 @@ const fn color(h: f32) -> Hsva {
     }
 }
 
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct SessionStatsVisualizer {
-    pub show_rtt: bool,
-    pub show_mem: bool,
-    pub show_tx_rx: bool,
-    pub show_loss: bool,
-}
-
-impl Default for SessionStatsVisualizer {
-    fn default() -> Self {
-        Self {
-            show_rtt: true,
-            show_mem: true,
-            show_tx_rx: true,
-            show_loss: false,
-        }
-    }
-}
-
 impl SessionStatsVisualizer {
+    /// Draws the session stats window.
     pub fn draw(&mut self, ctx: &mut egui::Context, session: &Session, stats: &SessionStats) {
         let now = Instant::now();
         egui::Window::new("Network Stats").show(ctx, |ui| {
