@@ -58,7 +58,7 @@ rand_distr = "0.4.3"
 replace_with = "0.1.7"
 ringbuf = "0.4.1"
 serde = { version = "1.0.197", features = ["derive"] }
-size = "0.4.1"
+size_format = "1.0.2"
 slotmap = "1.0.7"
 terrors = "0.3.0"
 thiserror = "1.0.57"

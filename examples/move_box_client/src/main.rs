@@ -5,7 +5,10 @@ use aeronet::{
     error::pretty_error,
     server::ServerTransportSet,
 };
-use aeronet_proto::stats::{ClientSessionStats, ClientSessionStatsPlugin};
+use aeronet_proto::{
+    stats::{ClientSessionStats, ClientSessionStatsPlugin},
+    visualizer::SessionStatsVisualizer,
+};
 use aeronet_replicon::client::RepliconClientPlugin;
 use aeronet_webtransport::{client::WebTransportClient, wtransport};
 use bevy::prelude::*;
@@ -38,6 +41,7 @@ fn main() {
             EguiPlugin,
         ))
         .init_resource::<WebTransportClient>()
+        .init_resource::<SessionStatsVisualizer>()
         .add_systems(Startup, (setup_level, connect_client).chain())
         .add_systems(
             PreUpdate,
@@ -118,8 +122,9 @@ fn draw_stats(
     mut egui: EguiContexts,
     client: Res<WebTransportClient>,
     stats: Res<ClientSessionStats<WebTransportClient>>,
+    mut stats_visualizer: ResMut<SessionStatsVisualizer>,
 ) {
     if let ClientState::Connected(client) = client.state() {
-        aeronet_proto::visualizer::draw(egui.ctx_mut(), &client.session, &*stats);
+        stats_visualizer.draw(egui.ctx_mut(), &client.session, &*stats);
     }
 }

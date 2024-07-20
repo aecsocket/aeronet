@@ -25,7 +25,7 @@ serde = ["dep:serde"]
 bevy = ["dep:bevy_ecs", "dep:bevy_app", "dep:bevy_time"]
 
 ## Allows drawing network statistics in an [`egui`](https://docs.rs/egui) UI.
-visualizer = ["dep:egui", "dep:egui_plot", "dep:size"]
+visualizer = ["dep:egui", "dep:egui_plot", "dep:size_format"]
 
 [dependencies]
 aeronet = { workspace = true }
@@ -52,7 +52,7 @@ bevy_time = { workspace = true, optional = true }
 
 egui = { workspace = true, optional = true }
 egui_plot = { workspace = true, optional = true }
-size = { workspace = true, optional = true }
+size_format = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
