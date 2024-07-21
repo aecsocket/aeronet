@@ -32,8 +32,8 @@ aeronet = { workspace = true, features = ["bevy"] }
 aeronet_proto = { workspace = true, features = ["bevy", "visualizer"] }
 aeronet_replicon = { workspace = true }
 aeronet_webtransport = { workspace = true, features = [
-    "serde",
-    "dangerous-configuration",
-    "bevy",
+  "serde",
+  "dangerous-configuration",
+  "bevy",
 ] }
 bevy_replicon = { workspace = true }
