@@ -152,98 +152,103 @@ mod tests {
         Instant::now()
     }
 
-    // todo
-
-    /*
-    const PAYLOAD_LEN: usize = 64;
-
-    const MSG1: Bytes = Bytes::from_static(b"Message 1");
-    const MSG2: Bytes = Bytes::from_static(b"Message 2");
-    const MSG3: Bytes = Bytes::from_static(b"Message 3");
-
-    fn frag() -> (FragmentSender, FragmentReceiver) {
+    fn new(max_payload_len: usize) -> (MessageSplitter, FragmentReceiver) {
         (
-            FragmentSender::new(PAYLOAD_LEN),
-            FragmentReceiver::new(PAYLOAD_LEN),
+            MessageSplitter::new(max_payload_len),
+            FragmentReceiver::new(max_payload_len),
         )
     }
 
-    fn now() -> Instant {
-        Instant::now()
+    const SEQ: MessageSeq = MessageSeq::ZERO;
+    const SEQ_A: MessageSeq = MessageSeq::new(1);
+    const SEQ_B: MessageSeq = MessageSeq::new(2);
+
+    #[test]
+    fn smaller_than_max_len() {
+        const MSG: &[u8] = b"12";
+
+        let (s, mut r) = new(4);
+        let mut fs = s.split(MSG).unwrap();
+        let (f1m, f1p) = fs.next().unwrap();
+        assert!(fs.next().is_none());
+        assert_eq!(MSG, r.reassemble(now(), SEQ, f1m, f1p).unwrap().unwrap());
     }
 
     #[test]
-    fn single_in_order() {
-        let (send, mut recv) = frag();
-        let f1 = send
-            .fragment(MessageSeq::new(0), MSG1)
-            .unwrap()
-            .next()
-            .unwrap();
-        let f2 = send
-            .fragment(MessageSeq::new(1), MSG2)
-            .unwrap()
-            .next()
-            .unwrap();
-        let f3 = send
-            .fragment(MessageSeq::new(2), MSG3)
-            .unwrap()
-            .next()
-            .unwrap();
-        assert_eq!(MSG1, recv.reassemble_frag(now(), f1).unwrap().unwrap());
-        assert_eq!(MSG2, recv.reassemble_frag(now(), f2).unwrap().unwrap());
-        assert_eq!(MSG3, recv.reassemble_frag(now(), f3).unwrap().unwrap());
+    fn same_len_as_max() {
+        const MSG: &[u8] = b"1234";
+
+        let (s, mut r) = new(4);
+        let mut fs = s.split(MSG).unwrap();
+        let (f1m, f1p) = fs.next().unwrap();
+        assert!(fs.next().is_none());
+        assert_eq!(MSG, r.reassemble(now(), SEQ, f1m, f1p).unwrap().unwrap());
     }
 
     #[test]
-    fn single_out_of_order() {
-        let (send, mut recv) = frag();
-        let f1 = send
-            .fragment(MessageSeq::new(0), MSG1)
-            .unwrap()
-            .next()
-            .unwrap();
-        let f2 = send
-            .fragment(MessageSeq::new(1), MSG2)
-            .unwrap()
-            .next()
-            .unwrap();
-        let f3 = send
-            .fragment(MessageSeq::new(2), MSG3)
-            .unwrap()
-            .next()
-            .unwrap();
-        assert_eq!(MSG3, recv.reassemble_frag(now(), f3).unwrap().unwrap());
-        assert_eq!(MSG1, recv.reassemble_frag(now(), f1).unwrap().unwrap());
-        assert_eq!(MSG2, recv.reassemble_frag(now(), f2).unwrap().unwrap());
+    fn larger_than_max_len() {
+        const MSG: &[u8] = b"123456";
+
+        let (s, mut r) = new(4);
+        let mut fs = s.split(MSG).unwrap();
+        let (f1m, f1p) = fs.next().unwrap();
+        let (f2m, f2p) = fs.next().unwrap();
+        assert!(fs.next().is_none());
+        assert!(r.reassemble(now(), SEQ, f1m, f1p).unwrap().is_none());
+        assert_eq!(MSG, r.reassemble(now(), SEQ, f2m, f2p).unwrap().unwrap());
     }
 
     #[test]
-    fn large1() {
-        let (send, mut recv) = frag();
-        let msg = Bytes::from(b"x".repeat(PAYLOAD_LEN + 10));
-        let [f1, f2] = send
-            .fragment(MessageSeq::new(0), msg.clone())
-            .unwrap()
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
-        assert_matches!(recv.reassemble_frag(now(), f1), Ok(None));
-        assert_matches!(recv.reassemble_frag(now(), f2), Ok(Some(b)) if b == msg);
+    fn multiple_msgs_one_frag() {
+        const MSG_A: &[u8] = b"12";
+        const MSG_B: &[u8] = b"34";
+
+        let (s, mut r) = new(4);
+
+        let mut fs = s.split(MSG_A).unwrap();
+        let (fa1m, fa1p) = fs.next().unwrap();
+        assert!(fs.next().is_none());
+
+        let mut fs = s.split(MSG_B).unwrap();
+        let (fb1m, fb1p) = fs.next().unwrap();
+        assert!(fs.next().is_none());
+
+        assert_eq!(
+            MSG_A,
+            r.reassemble(now(), SEQ, fa1m, fa1p).unwrap().unwrap()
+        );
+        assert_eq!(
+            MSG_B,
+            r.reassemble(now(), SEQ, fb1m, fb1p).unwrap().unwrap()
+        );
     }
 
     #[test]
-    fn large2() {
-        let (send, mut recv) = frag();
-        let msg = Bytes::from(b"x".repeat(PAYLOAD_LEN * 2 + 10));
-        let [f1, f2, f3] = send
-            .fragment(MessageSeq::new(0), msg.clone())
-            .unwrap()
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
-        assert_matches!(recv.reassemble_frag(now(), f1), Ok(None));
-        assert_matches!(recv.reassemble_frag(now(), f2), Ok(None));
-        assert_matches!(recv.reassemble_frag(now(), f3), Ok(Some(b)) if b == msg);
-        }*/
+    fn multiple_msgs_multiple_frags() {
+        const MSG_A: &[u8] = b"12345678";
+        const MSG_B: &[u8] = b"abcdefgh";
+
+        let (s, mut r) = new(4);
+
+        let mut fs = s.split(MSG_A).unwrap();
+        let (fa1m, fa1p) = fs.next().unwrap();
+        let (fa2m, fa2p) = fs.next().unwrap();
+        assert!(fs.next().is_none());
+
+        let mut fs = s.split(MSG_B).unwrap();
+        let (fb1m, fb1p) = fs.next().unwrap();
+        let (fb2m, fb2p) = fs.next().unwrap();
+        assert!(fs.next().is_none());
+
+        assert!(r.reassemble(now(), SEQ_A, fa1m, fa1p).unwrap().is_none());
+        assert!(r.reassemble(now(), SEQ_B, fb1m, fb1p).unwrap().is_none());
+        assert_eq!(
+            MSG_A,
+            r.reassemble(now(), SEQ_A, fa2m, fa2p).unwrap().unwrap()
+        );
+        assert_eq!(
+            MSG_B,
+            r.reassemble(now(), SEQ_B, fb2m, fb2p).unwrap().unwrap()
+        );
+    }
 }

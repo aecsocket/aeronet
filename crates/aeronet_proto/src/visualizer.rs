@@ -7,6 +7,7 @@ use egui_plot::{
     log_grid_spacer, uniform_grid_spacer, AxisHints, Corner, GridMark, Legend, Line, Placement,
     Plot,
 };
+use itertools::Itertools;
 use ringbuf::traits::{Consumer, Observer};
 use size_format::{BinaryPrefixes, PointSeparated, SizeFormatter};
 use web_time::Instant;
@@ -77,24 +78,32 @@ impl SessionStatsVisualizer {
         let now = Instant::now();
         egui::Window::new("Network Stats").show(ctx, |ui| {
             let samples = stats.capacity().get();
-            let history = samples as f64 / f64::from(stats.sample_rate());
+            let sample_rate = f64::from(stats.sample_rate());
+            let history = samples as f64 / sample_rate;
 
-            // TODO I kinda want to clean this up
-            let mut rtt = Vec::with_capacity(samples);
-            let mut crtt = Vec::with_capacity(samples);
-            let mut buf_mem = Vec::with_capacity(samples);
-            let mut bytes_used = Vec::with_capacity(samples);
-            let mut tx = Vec::with_capacity(samples);
-            let mut rx = Vec::with_capacity(samples);
-            for (index, sample) in stats.iter().rev().enumerate() {
-                let x = -(index as f64 / f64::from(stats.sample_rate()));
-                rtt.push([x, sample.rtt.as_secs_f64() * 1000.0]);
-                crtt.push([x, sample.conservative_rtt.as_secs_f64() * 1000.0]);
-                buf_mem.push([x, sample.memory_usage as f64]);
-                bytes_used.push([x, sample.bytes_used as f64]);
-                tx.push([x, sample.tx as f64 * f64::from(stats.sample_rate())]);
-                rx.push([x, sample.rx as f64 * f64::from(stats.sample_rate())]);
-            }
+            let (rtt, crtt, buf_mem, bytes_used, tx, rx): (
+                Vec<_>,
+                Vec<_>,
+                Vec<_>,
+                Vec<_>,
+                Vec<_>,
+                Vec<_>,
+            ) = stats
+                .iter()
+                .rev()
+                .enumerate()
+                .map(|(index, sample)| {
+                    let x = -(index as f64 / sample_rate);
+                    (
+                        [x, (sample.rtt.as_millis() * 1000) as f64],
+                        [x, (sample.conservative_rtt.as_millis() * 1000) as f64],
+                        [x, sample.memory_usage as f64],
+                        [x, sample.bytes_used as f64],
+                        [x, sample.tx as f64 * sample_rate],
+                        [x, sample.rx as f64 * sample_rate],
+                    )
+                })
+                .multiunzip();
 
             ui.horizontal(|ui| {
                 if self.show_rtt {
@@ -131,13 +140,13 @@ impl SessionStatsVisualizer {
             });
 
             ui.horizontal(|ui| {
-                ui.label(format!("sampled @ {} Hz", stats.sample_rate()));
+                ui.label(format!("{} Hz", stats.sample_rate()));
                 ui.separator();
 
-                ui.label(format!("{:.1?}", now - session.connected_at()));
+                ui.label(format!("{:.1?} time", now - session.connected_at()));
                 ui.separator();
 
-                ui.label(format!("{:.1?} ms", session.rtt().get()));
+                ui.label(format!("{:.1?} rtt", session.rtt().get()));
                 ui.separator();
 
                 ui.label(format!(

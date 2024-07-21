@@ -23,6 +23,10 @@ use crate::{
     ty::{Acknowledge, FragmentHeader, FragmentMarker, MessageSeq, PacketHeader, PacketSeq},
 };
 
+/// Manages the messages sent and received over a transport's connection without
+/// performing any I/O.
+///
+/// This is the entry point to the aeronet protocol.
 // TODO # Memory management
 // TODO # MTU
 #[derive(Derivative, DataSize)]
@@ -369,11 +373,6 @@ impl Session {
     /// This includes both on the stack and on the heap.
     #[must_use]
     pub fn memory_usage(&self) -> usize {
-        // TODO proper tools for debugging usage
-        // dbg!(size_of_flushed_packets(&self.flushed_packets));
-        // dbg!(self.flushed_packets.len());
-        // dbg!(data_size(&self.send_lanes));
-        // dbg!(data_size(&self.recv_lanes));
         mem::size_of_val(self) + data_size(self)
     }
 

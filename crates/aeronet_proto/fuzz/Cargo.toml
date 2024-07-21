@@ -22,8 +22,8 @@ debug = 1
 
 [[bin]]
 doc = false
-name = "frag"
-path = "fuzz_targets/frag.rs"
+name = "msg"
+path = "fuzz_targets/msg.rs"
 test = false
 
 [[bin]]
