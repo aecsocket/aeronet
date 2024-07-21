@@ -31,7 +31,7 @@ aeronet = { workspace = true, features = ["bevy"] }
 aeronet_webtransport = { workspace = true, features = [
   "dangerous-configuration",
   "bevy",
-  "visualizer"
+  "visualizer",
 ] }
 
 # replication
