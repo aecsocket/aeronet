@@ -10,13 +10,13 @@ Based on <https://github.com/projectharmonia/bevy_replicon_renet/blob/master/exa
 
 ## Server
 
-```
+```sh
 cargo run --bin move_box_server -- --help
 ```
 
 ## Client
 
-```
+```sh
 cargo run --bin move_box_client -- --help
 ```
 

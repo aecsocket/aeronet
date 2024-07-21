@@ -13,12 +13,14 @@ use crate::{
 
 use super::{FlushedPacket, FragmentPath, SendLaneKind, SentFragment, SentMessage, Session};
 
+/// Failed to [`Session::send`] a message in a way that forces this session to
+/// be terminated.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum FatalSendError {
     /// Attempted to [`Session::send`] a message along a lane which is not
     /// tracked by this [`Session`].
     ///
-    /// This must be treated as a fatal error because it indicates an error i
+    /// This must be treated as a fatal error because it indicates an error in
     /// the app's logic.
     #[error("invalid lane {lane:?}")]
     InvalidLane {

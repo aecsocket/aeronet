@@ -71,7 +71,7 @@ impl<E> ConnectionInner<E> {
         let mut bytes_recv = 0usize;
         while let Ok(Some(packet)) = self.recv_msgs.try_next() {
             bytes_recv = bytes_recv.saturating_add(packet.len());
-            let (acks, mut msgs) = match self.session.recv(Instant::now(), packet) {
+            let (acks, msgs) = match self.session.recv(Instant::now(), packet) {
                 Ok(x) => x,
                 Err(err) => {
                     debug!(
