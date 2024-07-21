@@ -24,8 +24,7 @@
             ];
             buildInputs = with pkgs; [
               rustToolchain
-              llvmPackages.clangUseLLVM
-              mold
+              cargo-machete
               udev
               alsa-lib
               vulkan-loader

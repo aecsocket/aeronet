@@ -22,12 +22,11 @@ ascii_table = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
 rand = { workspace = true }
-serde = { workspace = true }
 size_format = { workspace = true }
 web-time = { workspace = true }
 
 aeronet = { workspace = true, features = ["bevy"] }
-aeronet_webtransport = { workspace = true, features = ["bevy", "serde"] }
+aeronet_webtransport = { workspace = true, features = ["bevy"] }
 
 aeronet_replicon = { workspace = true }
 bevy_replicon = { workspace = true }
