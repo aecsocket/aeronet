@@ -1,0 +1,14 @@
+name: Install Bevy dependencies
+description: Installs Bevy dependencies required for compiling certain dependency crates
+runs:
+  steps:
+    - shell: bash
+      if: ${{ runner.os == 'linux' }}
+      run: >
+        sudo apt-get update
+
+        sudo apt-get install --yes
+          libasound2-dev
+          libudev-dev
+          libwayland-dev
+          libxkbcommon-dev
