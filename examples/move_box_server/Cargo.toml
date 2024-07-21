@@ -18,6 +18,8 @@ workspace = true
 [dependencies]
 move_box = { path = "../move_box" }
 
+# core
+
 ascii_table = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
@@ -25,8 +27,12 @@ rand = { workspace = true }
 size_format = { workspace = true }
 web-time = { workspace = true }
 
+# transport
+
 aeronet = { workspace = true, features = ["bevy"] }
 aeronet_webtransport = { workspace = true, features = ["bevy"] }
+
+# replication
 
 aeronet_replicon = { workspace = true }
 bevy_replicon = { workspace = true }

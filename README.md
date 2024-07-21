@@ -6,6 +6,13 @@
 A *light-as-air* client/server transport library with first-class support for Bevy, providing a
 consistent API which can be implemented by different transport mechanisms.
 
+# Try the example!
+
+```sh
+cargo run --bin move_box_server
+cargo run --bin move_box_client -- "https://[::1]:25565"
+```
+
 # Transport
 
 The main purpose of this crate is to provide an API for transmitting messages between a client and
@@ -22,10 +29,10 @@ The current transport implementations available are:
   [WebTransport](https://www.w3.org/TR/webtransport/) protocol, based on QUIC
   * Good choice for a general transport implementation
   * Targets: **Native (client + server) + WASM (client)**
-  * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration aeronet/bevy-tokio-rt"`
+  * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration"`
   * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration" --target wasm32-unknown-unknown`
     * Requires `wasm-server-runner` to be installed
-  * `cargo run --package aeronet_webtransport --example echo_server --features "bevy aeronet/bevy-tokio-rt"`
+  * `cargo run --package aeronet_webtransport --example echo_server --features "bevy"`
 * [`aeronet_steam`](https://docs.rs/aeronet_steam) - using Steam's
   [NetworkingSockets](https://partner.steamgames.com/doc/api/ISteamNetworkingSockets) API
   * **STILL WIP**

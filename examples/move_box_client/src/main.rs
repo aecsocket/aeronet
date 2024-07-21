@@ -5,13 +5,16 @@ use aeronet::{
     error::pretty_error,
     server::ServerTransportSet,
 };
-use aeronet_proto::{
-    session::SessionConfig,
-    stats::{ClientSessionStats, ClientSessionStatsPlugin},
-    visualizer::SessionStatsVisualizer,
-};
 use aeronet_replicon::client::RepliconClientPlugin;
-use aeronet_webtransport::{client::WebTransportClient, wtransport};
+use aeronet_webtransport::{
+    client::WebTransportClient,
+    proto::{
+        session::SessionConfig,
+        stats::{ClientSessionStats, ClientSessionStatsPlugin},
+        visualizer::SessionStatsVisualizer,
+    },
+    wtransport,
+};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin};
 use bevy_replicon::prelude::RepliconChannels;

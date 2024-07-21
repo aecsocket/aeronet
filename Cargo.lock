@@ -3223,7 +3223,6 @@ name = "move_box_client"
 version = "0.6.0"
 dependencies = [
  "aeronet",
- "aeronet_proto",
  "aeronet_replicon",
  "aeronet_webtransport",
  "bevy",

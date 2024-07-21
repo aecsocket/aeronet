@@ -26,6 +26,9 @@ dangerous-configuration = ["wtransport/dangerous-configuration"]
 ## Enables [`bevy`](https://docs.rs/bevy) support by deriving `Resource` on certain types.
 bevy = ["dep:bevy_ecs", "aeronet/bevy", "aeronet_proto/bevy"]
 
+## Enables [`aeronet_proto`]'s [`egui`](https://docs.rs/egui) network statistics visualizer.
+visualizer = ["aeronet_proto/visualizer"]
+
 [dependencies]
 aeronet = { workspace = true }
 aeronet_proto = { workspace = true }
