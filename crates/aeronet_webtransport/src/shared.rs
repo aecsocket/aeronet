@@ -32,6 +32,7 @@ impl MessageKey {
 /// but less representative of RTT at the application level.
 ///
 /// [`Rtt`]: aeronet::stats::Rtt
+/// [`Session`]: aeronet_proto::session::Session
 pub trait RawRtt {
     /// Gets the low-level RTT value.
     fn raw_rtt(&self) -> Duration;
