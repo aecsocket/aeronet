@@ -1,8 +1,10 @@
 name: Install Bevy dependencies
 description: Installs Bevy dependencies required for compiling certain dependency crates
 runs:
+  using: composite
   steps:
-    - shell: bash
+    - name: Install dependencies
+      shell: bash
       if: ${{ runner.os == 'linux' }}
       run: >
         sudo apt-get update
