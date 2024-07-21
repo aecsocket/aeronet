@@ -10,7 +10,7 @@ runs:
         sudo apt-get update
 
         sudo apt-get install --yes
-          libasound2-dev
-          libudev-dev
-          libwayland-dev
-          libxkbcommon-dev
+        libasound2-dev
+        libudev-dev
+        libwayland-dev
+        libxkbcommon-dev
