@@ -168,9 +168,9 @@ impl ClientTransport for WebTransportClient {
 
 impl WebTransportClient {
     fn poll_connecting(mut client: Connecting) -> (Option<ClientEvent<Self>>, State) {
-        if let Ok(Some(err)) = client.recv_err.try_recv() {
+        if let Ok(Some(error)) = client.recv_err.try_recv() {
             return (
-                Some(ClientEvent::Disconnected { error: err.into() }),
+                Some(ClientEvent::Disconnected { error }),
                 State::Disconnected,
             );
         }
@@ -214,7 +214,7 @@ impl WebTransportClient {
             events.push(match event {
                 PollEvent::Ack { msg_key } => ClientEvent::Ack { msg_key },
                 PollEvent::Recv { msg, lane } => ClientEvent::Recv { msg, lane },
-            })
+            });
         });
 
         match res {
