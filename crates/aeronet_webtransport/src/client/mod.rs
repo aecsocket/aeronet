@@ -113,8 +113,8 @@ pub enum ClientError {
     ConnectionLost(#[source] ConnectionLostError),
 }
 
-impl From<InternalError<ClientError>> for ClientError {
-    fn from(value: InternalError<ClientError>) -> Self {
+impl From<InternalError<Self>> for ClientError {
+    fn from(value: InternalError<Self>) -> Self {
         match value {
             InternalError::Spec(err) => err,
             InternalError::BackendClosed => Self::BackendClosed,
@@ -168,7 +168,8 @@ impl LocalAddr for Connected {
 impl Connected {
     /// Provides access to the underlying [`Session`] for reading more detailed
     /// network statistics.
-    pub fn session(&self) -> &Session {
+    #[must_use]
+    pub const fn session(&self) -> &Session {
         &self.inner.session
     }
 }

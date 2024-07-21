@@ -126,8 +126,8 @@ pub enum ServerError {
     ConnectionLost(#[source] <internal::Connection as xwt_core::session::datagram::Receive>::Error),
 }
 
-impl From<InternalError<ServerError>> for ServerError {
-    fn from(value: InternalError<ServerError>) -> Self {
+impl From<InternalError<Self>> for ServerError {
+    fn from(value: InternalError<Self>) -> Self {
         match value {
             InternalError::Spec(err) => err,
             InternalError::BackendClosed => Self::BackendClosed,
@@ -239,7 +239,8 @@ pub struct Connected {
 impl Connected {
     /// Provides access to the underlying [`Session`] for reading more detailed
     /// network statistics.
-    pub fn session(&self) -> &Session {
+    #[must_use]
+    pub const fn session(&self) -> &Session {
         &self.inner.session
     }
 }
