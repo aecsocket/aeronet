@@ -24,7 +24,8 @@
             ];
             buildInputs = with pkgs; [
               rustToolchain
-              llvmPackages.clangUseLLVM
+              cargo-fuzz
+              cargo-binutils
             ];
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
           };

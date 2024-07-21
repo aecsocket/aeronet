@@ -50,15 +50,16 @@ impl Session {
     /// # use aeronet::lane::LaneIndex;
     /// # use aeronet_proto::{session::Session, ty::MessageSeq};
     /// # use octs::Bytes;
+    /// # use web_time::Instant;
     /// # fn recv(mut session: Session, packet: Bytes) -> Result<(), Box<dyn std::error::Error>> {
-    /// let (acks, msgs) = session.recv(packet)?;
+    /// let (acks, msgs) = session.recv(Instant::now(), packet)?;
     /// for (lane_index, msg_seq) in acks {
     ///     do_something_with_ack(lane_index, msg_seq);
     /// }
     /// msgs.for_each_msg(|result| {
     ///     match result {
     ///         Ok((msg, lane_index)) => {
-    ///             do_something_with_msg(lane_index, msg);
+    ///             do_something_with_msg(msg, lane_index);
     ///         }
     ///         Err(err) => {
     ///             eprintln!("{err:?}");
@@ -69,6 +70,7 @@ impl Session {
     /// fn do_something_with_ack(lane_index: LaneIndex, msg_seq: MessageSeq) { unimplemented!() }
     ///
     /// fn do_something_with_msg(msg: Bytes, lane_index: LaneIndex) { unimplemented!() }
+    /// # Ok(())
     /// # }
     /// ```
     ///
@@ -78,7 +80,7 @@ impl Session {
     pub fn recv(
         &mut self,
         now: Instant,
-        mut packet: Bytes,
+        packet: impl Into<Bytes>,
     ) -> Result<
         (
             impl Iterator<Item = (LaneIndex, MessageSeq)> + '_,
@@ -86,6 +88,7 @@ impl Session {
         ),
         RecvError,
     > {
+        let mut packet: Bytes = packet.into();
         self.bytes_recv = self.bytes_recv.saturating_add(packet.len());
 
         let header = packet
@@ -178,7 +181,7 @@ impl RecvMessages<'_> {
     /// callback provided.
     ///
     /// [`RecvError`]s may be safely ignored.
-    pub fn for_each_msg(&mut self, mut f: impl FnMut(Result<(Bytes, LaneIndex), RecvError>)) {
+    pub fn for_each_msg(mut self, mut f: impl FnMut(Result<(Bytes, LaneIndex), RecvError>)) {
         while self.packet.has_remaining() {
             match self.recv_next_frag() {
                 Ok(iter) => iter.map(Ok).for_each(&mut f),

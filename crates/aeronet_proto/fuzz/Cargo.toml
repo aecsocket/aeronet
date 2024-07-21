@@ -21,25 +21,22 @@ members = ["."]
 debug = 1
 
 [[bin]]
+name = "msg_recv"
+path = "fuzz_targets/msg_recv.rs"
+
 doc = false
-name = "msg"
-path = "fuzz_targets/msg.rs"
 test = false
 
 [[bin]]
+name = "msg_send"
+path = "fuzz_targets/msg_send.rs"
+
 doc = false
-name = "messages"
-path = "fuzz_targets/messages.rs"
 test = false
 
 [[bin]]
-doc = false
-name = "negotiate_req"
-path = "fuzz_targets/negotiate_req.rs"
-test = false
+name = "session_recv"
+path = "fuzz_targets/session_recv.rs"
 
-[[bin]]
 doc = false
-name = "negotiate_resp"
-path = "fuzz_targets/negotiate_resp.rs"
 test = false

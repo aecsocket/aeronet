@@ -8,14 +8,15 @@ use aeronet_proto::{
 };
 use libfuzzer_sys::fuzz_target;
 
-const MAX_PAYLOAD_LEN: usize = 1024;
+fuzz_target!(|input: (usize, &[u8])| {
+    let (max_payload_len, msg) = input;
+    let max_payload_len = (max_payload_len % 1024).max(1);
 
-fuzz_target!(|msg: &[u8]| {
-    let s = MessageSplitter::new(MAX_PAYLOAD_LEN);
-    let mut r = FragmentReceiver::new(MAX_PAYLOAD_LEN);
+    let s = MessageSplitter::new(max_payload_len);
+    let mut r = FragmentReceiver::new(max_payload_len);
 
     let fs = s.split(msg.to_vec());
-    if msg.len() > MAX_PAYLOAD_LEN * MAX_FRAGS {
+    if msg.len() > max_payload_len * MAX_FRAGS {
         assert!(fs.is_err());
         return;
     }
