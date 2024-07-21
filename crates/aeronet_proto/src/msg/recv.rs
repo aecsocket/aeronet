@@ -231,7 +231,7 @@ mod tests {
 
     use super::*;
 
-    const SEQ: MessageSeq = MessageSeq::new(0);
+    const SEQ: MessageSeq = MessageSeq::ZERO;
     const SEQ1: MessageSeq = MessageSeq::new(1);
     const SEQ2: MessageSeq = MessageSeq::new(2);
 

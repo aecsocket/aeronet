@@ -21,12 +21,12 @@ all = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
 module_name_repetitions = "allow"
 needless_pass_by_value = "allow"
 similar_names = "allow"
-cast_possible_truncation = "allow"
-cast_sign_loss = "allow"
-cast_precision_loss = "allow"
 struct_excessive_bools = "allow"
 
 [workspace.dependencies]
@@ -55,6 +55,7 @@ derive_more = "0.99.18"
 egui = "0.27.2"
 egui_plot = "0.27.2"
 either = "1.9.0"
+itertools = "0.13.0"
 octs = "0.4.2"
 rand = "0.8.5"
 rand_distr = "0.4.3"

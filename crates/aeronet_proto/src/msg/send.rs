@@ -95,8 +95,13 @@ impl MessageSplitter {
         }
         debug_assert!(msg_len <= max_len);
 
-        let last_index = iter.len() - 1;
+        let iter_len = iter.len();
         Ok(iter.enumerate().rev().map(move |(index, payload)| {
+            // do this inside the iterator, since we now know
+            // that we have at least at least 1 item in this iterator
+            // and otherwise, `iter_len` would be 0, so `iter_len - 1`
+            // would underflow
+            let last_index = iter_len - 1;
             let is_last = index == last_index;
             let index = u8::try_from(index).expect(
                 "`iter` has no more than `MAX_FRAGS` items, \
@@ -129,64 +134,71 @@ mod tests {
     }
 
     #[test]
+    fn zero_msg_len() {
+        let s = MessageSplitter::new(2);
+        let mut fs = s.split(&[][..]).unwrap();
+        assert!(fs.next().is_none());
+    }
+
+    #[test]
     fn half_frag() {
         let s = MessageSplitter::new(2);
-        let mut frags = s.split(&[1][..]).unwrap();
-        assert_eq!((last(0), vec![1].into()), frags.next().unwrap());
-        assert!(frags.next().is_none());
+        let mut fs = s.split(&[1][..]).unwrap();
+        assert_eq!((last(0), vec![1].into()), fs.next().unwrap());
+        assert!(fs.next().is_none());
     }
 
     #[test]
     fn one_frag() {
         let s = MessageSplitter::new(2);
-        let mut frags = s.split(&[1, 2][..]).unwrap();
-        assert_eq!((last(0), vec![1, 2].into()), frags.next().unwrap());
-        assert!(frags.next().is_none());
+        let mut fs = s.split(&[1, 2][..]).unwrap();
+        assert_eq!((last(0), vec![1, 2].into()), fs.next().unwrap());
+        assert!(fs.next().is_none());
     }
 
     #[test]
     fn one_and_half_frags() {
         let s = MessageSplitter::new(2);
-        let mut frags = s.split(&[1, 2, 3][..]).unwrap();
-        assert_eq!((last(1), vec![3].into()), frags.next().unwrap());
-        assert_eq!((non_last(0), vec![1, 2].into()), frags.next().unwrap());
-        assert!(frags.next().is_none());
+        let mut fs = s.split(&[1, 2, 3][..]).unwrap();
+        assert_eq!((last(1), vec![3].into()), fs.next().unwrap());
+        assert_eq!((non_last(0), vec![1, 2].into()), fs.next().unwrap());
+        assert!(fs.next().is_none());
     }
 
     #[test]
     fn two_frags() {
         let s = MessageSplitter::new(2);
-        let mut frags = s.split(&[1, 2, 3, 4][..]).unwrap();
-        assert_eq!((last(1), vec![3, 4].into()), frags.next().unwrap());
-        assert_eq!((non_last(0), vec![1, 2].into()), frags.next().unwrap());
-        assert!(frags.next().is_none());
+        let mut fs = s.split(&[1, 2, 3, 4][..]).unwrap();
+        assert_eq!((last(1), vec![3, 4].into()), fs.next().unwrap());
+        assert_eq!((non_last(0), vec![1, 2].into()), fs.next().unwrap());
+        assert!(fs.next().is_none());
     }
 
     #[test]
     fn two_half_frags() {
         let s = MessageSplitter::new(2);
-        let mut frags = s.split(&[1, 2, 3, 4, 5][..]).unwrap();
-        assert_eq!((last(2), vec![5].into()), frags.next().unwrap());
-        assert_eq!((non_last(1), vec![3, 4].into()), frags.next().unwrap());
-        assert_eq!((non_last(0), vec![1, 2].into()), frags.next().unwrap());
-        assert!(frags.next().is_none());
+        let mut fs = s.split(&[1, 2, 3, 4, 5][..]).unwrap();
+        assert_eq!((last(2), vec![5].into()), fs.next().unwrap());
+        assert_eq!((non_last(1), vec![3, 4].into()), fs.next().unwrap());
+        assert_eq!((non_last(0), vec![1, 2].into()), fs.next().unwrap());
+        assert!(fs.next().is_none());
     }
 
     #[test]
     fn three_frags() {
         let s = MessageSplitter::new(2);
-        let mut frags = s.split(&[1, 2, 3, 4, 5, 6][..]).unwrap();
-        assert_eq!((last(2), vec![5, 6].into()), frags.next().unwrap());
-        assert_eq!((non_last(1), vec![3, 4].into()), frags.next().unwrap());
-        assert_eq!((non_last(0), vec![1, 2].into()), frags.next().unwrap());
-        assert!(frags.next().is_none());
+        let mut fs = s.split(&[1, 2, 3, 4, 5, 6][..]).unwrap();
+        assert_eq!((last(2), vec![5, 6].into()), fs.next().unwrap());
+        assert_eq!((non_last(1), vec![3, 4].into()), fs.next().unwrap());
+        assert_eq!((non_last(0), vec![1, 2].into()), fs.next().unwrap());
+        assert!(fs.next().is_none());
     }
 
     #[test]
     fn too_large() {
         let s = MessageSplitter::new(1);
-        let frags = s.split(&[1; MAX_FRAGS][..]).unwrap();
-        assert_eq!(MAX_FRAGS, frags.len());
+        let fs = s.split(&[1; MAX_FRAGS][..]).unwrap();
+        assert_eq!(MAX_FRAGS, fs.len());
 
         assert!(s.split(&[1; MAX_FRAGS + 1][..]).is_err());
     }
