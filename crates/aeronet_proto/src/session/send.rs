@@ -3,7 +3,7 @@ use std::{collections::hash_map::Entry, iter};
 use aeronet::lane::LaneIndex;
 use octs::{Bytes, BytesMut, EncodeLen, FixedEncodeLen, Write};
 use terrors::OneOf;
-use web_time::Instant;
+use web_time::{Duration, Instant};
 
 use crate::{
     limit::Limit,
@@ -219,8 +219,10 @@ impl Session {
                 );
 
                 let packet = packet.freeze();
+                self.packets_sent = self.packets_sent.saturating_add(1);
                 self.bytes_sent = self.bytes_sent.saturating_add(packet.len());
-                self.next_keep_alive_at = now + self.rtt.pto();
+                // TODO: this makes the RTT inconsistent if we don't constantly send updates
+                self.next_keep_alive_at = now + Duration::from_millis(100); // self.rtt.pto();
                 self.next_packet_seq += PacketSeq::ONE;
                 Some(packet)
             }

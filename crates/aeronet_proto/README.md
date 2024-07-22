@@ -7,7 +7,7 @@ Provides implementations of protocol-level features for aeronet transports.
 
 Since not all underlying transports will offer the same guarantees of what features they provide,
 this crate offers its own implementation of certain features which are agnostic to the underlying
-protocol, sans-IO.
+protocol, sans-I/O.
 
 # Features
 
@@ -27,7 +27,30 @@ protocol, sans-IO.
 
 The client always acts as the initiator, sending the first message.
 
+Features which are not marked as provided by this crate must be implemented at the transport
+implementation level. For example, WebTransport encrypts connections by default, so there is no
+point in implementing encryption at the `aeronet_proto` level.
+
+If a transport already supports a feature which is provided by the protocol, it is recommended to
+use the protocol's implementation instead, as it makes the API more consistent across transport
+implementations. For example, QUIC/WebTransport provides reliability and ordering through its
+stream mechanism, however these do not support the exact same feature set as `aeronet_proto`, so
+are not used.
+
+# Visualizer
+
+*Feature flag: `visualizer`*
+
+The visualizer is a debugging tool built into the crate, which displays plots of network statistics
+over time using `egui` and `egui_plot`. It is compatible with any client transport which uses a
+[`Session`] (see [`SessionBacked`]), and may be used in Bevy as well.
+
+See [`SessionStatsVisualizer`] for a description of how to use the visualizer.
+
 # Protocol
+
+The protocol is heavily inspired by [*Building a Game Network Protocol*], with some adjustments in
+terminology and implementation.
 
 ## Terminology
 
@@ -49,97 +72,80 @@ The aeronet protocol can be used on top of nearly any transport. The requirement
 - Packets MUST be guaranteed to be kept intact while being transported
   - If data is corrupted, the packet MUST be dropped or resent
   - The packet MUST NOT be truncated or extended in transit
-  - If we send a packet P to a peer, then if the packet transport is successful (i.e. the packet was
-    not lost in transit or corrupted), the peer MUST be able to read a byte-for-byte copy of the
-    original packet P
-- Reliability, ordering, or deduplication do not have to be guaranteed
+  - If we send a packet *P* to a peer, then if the packet transport is successful (i.e. the packet
+    was not lost in transit or corrupted), the peer MUST be able to read a byte-for-byte copy of the
+    original packet *P*
+- Neither reliability, ordering, nor deduplication have to be guaranteed
 
 ## Layout
 
 See [`ty`] for a full description of the encoded packet layout.
 
-## Description
+## Session
 
-The protocol is heavily inspired by [*Building a Game Network Protocol*], which is a great
-high-level overview of how to build your own protocol. However, the aeronet protocol is adapted
-for a more specific use-case.
+The entry point to the API is the [`Session`], which manages incoming and outgoing messages without
+performing any I/O itself. One can be created using [`Session::new`] and providing a configuration
+which determines parameters such as maximum packet length, lanes for sending/receiving, and how
+many bytes can be sent out per second.
 
-A user is able to create a [`Session`], which manages the state of a connection between two peers.
-When creating the session, the user can configure certain properties such as:
-- `max_packet_len`: maximum length of packets sent out
-- TBD etc...
+The API exposes these main functions:
+- [`Session::send`] to buffer up a message for sending later
+- [`Session::flush`] to build up the packets which should be sent now
+- [`Session::recv`] to accept an incoming packet and read its data
+- [`Session::update`] to update the internal state of the session, and testing if we are using too
+  much memory (see *Memory management*)
 
-When a user wants to send out a message, they call [`Session::send`] to enqueue their message. The
-message is split up into smaller *fragments*, each one being up to `max_packet_len - OVERHEAD`
-bytes, where `OVERHEAD` is some minimum packet length that allows storing the packet headers.
-The message is given an incrementing *message sequence number*, which uniquely[^1] identifies this
-message. The fragments and metadata about them are stored in a mapping of *message sequence number*
-to *sent message data*. The message is now considered *sent* but not *flushed*.
+## Memory management
 
-When a user calls [`Session::flush`], they get an
+If we do not bound the maximum amount of memory that a session uses, a malicious peer may cause
+a denial-of-service by exhausting all of our memory. Therefore, we define a maximum amount of memory
+that the session can use, and [`Session::update`] will terminate the connection if we are using too
+much.
 
-[^1]: All *sequence numbers* are `u16`s which will wrap around quickly during the lifespan of a
-connection. However, we only ever consider a small amount of sequence numbers at a time, so this
-is not a problem. See [*Sequence Buffers*].
+A session may use too much memory if:
+- the peer sends us many message fragments which never receive their final fragment
+  - our side will be forced to keep all fragments until they are fully reassembled
+  - in theory, we may drop fragments which are part of an unreliable lane (this may be implemented
+    later) but we are never allowed to drop fragments which are sent over a reliable lane
+- the peer never acknowledges our packets
+  - our side will be forced to keep fragments of reliable messages forever, since it must resend
+    them until the peer does acknowledge them
 
-**Notes**:
-- is using a `VarInt<usize>` really that bad?
-- lane-stateful vs. non-lane-stateful connection?
-  - stateful: we keep track of the last lane ID, and to switch lanes, we send an explicit "change lane" packet
-    - pro: if we only send on one lane all the time, it's more efficient
-    - con: we need the concept of explicit packet types, i.e. "change lane" vs "payload" packet
-  - non-stateful: the lane ID is always included as part of the fragment
-    - pro: no need for extra packet types
-    - pro: switching between lanes is simpler logic and is more network efficient
-    - con: if only ever sending on one lane, you get a constant 1-byte overhead for the lane id
-  - overall, non-stateful is probably better
-- clever fragment encoding idea
-  - fragment header holds `msg_seq: u16, frag_id: u8`
-  - fragments are sent in *reverse frag id order* i.e. if a message is split into fragments (0, 1, 2), then they are sent out as (2, 1, 0)
-  - MSB determines if this is the last frag
-  - on the receiver side, when we receive a fragment:
-    - if we don't have this message tracked yet, make a buffer with space for `max_frag_len * (frag_id + 1)` bytes
-    - this is why we send it out in reverse largest order - since we get frag id `2` first, we know that the msg is at least `max_frag_len * 3` big
-    - if we already are tracking the message, and `frag_id` is within the existing capacity for the message buf, copy it in
-    - if we get a fragment for an *existing message* but the `frag_id` is *greater* than our existing capacity, then we allocate a new buffer for the larger message
-      - this can happen if we lose one of the earlier fragments i.e. we send (2, 1, 0) but get them in the order (1, 0, 2)
-      - this is worst-case, since we have to reallocate, but on a good connection hopefully we usually get the packets in the order they're sent
-    - this means we can send 256 total fragments, as opposed to 255 fragments, which is cool
-    - worst-case only in terms of reallocs and CPU usage
-    - best-case in terms of minimal network overhead
+## MTU
 
-MSB in frag id indicates if this is the last fragment
-let's walk through an example receiver:
-- I get a message with `frag_index: 0b1000_0000` -> this is fragment 0, and is the last one
-  - this message consists of only 1 fragment, and we've already got it, cool
-- ...
-- I get `frag_index: 0b0000_0000` -> I know this message has at least 2 fragments, and I got the 1st one, waiting for the next ones
-- I get `frag_index: 0b1000_0001` -> I know this message has exactly 2 fragments and I've already got both
-- ...
-- I get `frag_index: 0b0000_0001` -> message has at least 2 fragments, we just got the 2nd one
-- `0b0111_1111` is impossible, since that implies that frag 127 isn't the last one, but it can't be any higher
+The maximum transmissible unit, or MTU, defines how large a single packet may be, in bytes. If the
+packet is longer than the MTU, then routers along the network path may drop the packet. To avoid
+this, the session will never produce a packet which is larger than the user-specified MTU. Messages
+which are larger than the MTU are split up into smaller fragments and reassembled on the receiving
+side (with some extra overhead for packet and fragment headers).
 
-<!--
+When creating the session, you define a minimum MTU and an initial MTU. Fragments will never be
+larger than `initial_mtu - overhead`, however a packet will never be larger than `mtu` (it is not
+possible to change how large fragments are during the connection due to how the receiver logic
+works).
+
+However, the MTU may change over the lifetime of a connection, and we may be able to take advantage
+of a higher path MTU when it is available, and reduce the MTU when it is no longer viable. To
+account for this, the session allows you to change the MTU via [`Session::set_mtu`]. The MTU may
+never be lower than `min_mtu`.
 
 # Fuzzing
 
-TODO update
+To ensure that protocol code works correctly in all situations, we make use of both unit testing and
+fuzz tests. Fuzz tests must be run on Rust nightly (add `+nightly` to the command line).
 
-To ensure that protocol code works correctly in all situations, the code
-makes use of both unit testing and fuzzing.
-
-To fuzz a particular component, run this from the `/aeronet_proto` directory:
-* [`Negotiation`]
-  * `cargo +nightly fuzz run negotiate_req`
-  * `cargo +nightly fuzz run negotiate_resp`
-* [`Fragmentation`]
-  * `cargo +nightly fuzz run frag`
-* [`Lanes`]
-  * `cargo +nightly fuzz run lanes`
--->
+To start a fuzz test, run this from the `aeronet_proto/fuzz` directory:
+```sh
+cargo fuzz run <fuzz_target>
+```
 
 [*Building a Game Network Protocol*]: https://gafferongames.com/categories/building-a-game-network-protocol/
 [*Sequence Buffers*]: https://gafferongames.com/post/reliable_ordered_messages/#sequence-buffers
 [`Session`]: session::Session
+[`Session::new`]: session::Session::new
 [`Session::send`]: session::Session::send
 [`Session::flush`]: session::Session::flush
+[`Session::recv`]: session::Session::recv
+[`Session::update`]: session::Session::update
+[`Session::set_mtu`]: session::Session::set_mtu
+[`SessionBacked`]: session::SessionBacked

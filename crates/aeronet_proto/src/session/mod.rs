@@ -26,9 +26,7 @@ use crate::{
 /// Manages the messages sent and received over a transport's connection without
 /// performing any I/O.
 ///
-/// This is the entry point to the aeronet protocol.
-// TODO # Memory management
-// TODO # MTU
+/// See the [crate-level documentation](crate).
 #[derive(Derivative, DataSize)]
 #[derivative(Debug)]
 pub struct Session {
@@ -45,10 +43,13 @@ pub struct Session {
     bytes_left: TokenBucket,
     next_packet_seq: PacketSeq,
     next_keep_alive_at: Instant,
+    packets_sent: usize,
     bytes_sent: usize,
 
     // recv
     recv_lanes: Box<[RecvLane]>,
+    packets_recv: usize,
+    packets_acked: usize,
     bytes_recv: usize,
     rtt: RttEstimator,
 }
@@ -272,6 +273,7 @@ impl Session {
             bytes_left: TokenBucket::new(config.send_bytes_per_sec),
             next_packet_seq: PacketSeq::default(),
             next_keep_alive_at: now,
+            packets_sent: 0,
             bytes_sent: 0,
 
             recv_lanes: config
@@ -295,6 +297,8 @@ impl Session {
                     },
                 })
                 .collect(),
+            packets_recv: 0,
+            packets_acked: 0,
             bytes_recv: 0,
             rtt: RttEstimator::new(INITIAL_RTT),
         })
@@ -341,14 +345,35 @@ impl Session {
         &self.rtt
     }
 
-    /// Gets how many bytes this session have sent out in total through
+    /// Gets how many packets have been sent out in total through
+    /// [`Session::flush`].
+    #[must_use]
+    pub const fn packets_sent(&self) -> usize {
+        self.packets_sent
+    }
+
+    /// Gets how many packets have been received in total through
+    /// [`Session::recv`].
+    #[must_use]
+    pub const fn packets_recv(&self) -> usize {
+        self.packets_recv
+    }
+
+    /// Gets how many of our packets the peer has acknowledged as received.
+    #[must_use]
+    pub const fn packets_acked(&self) -> usize {
+        self.packets_acked
+    }
+
+    /// Gets how many bytes this session have been sent out in total through
     /// [`Session::flush`].
     #[must_use]
     pub const fn bytes_sent(&self) -> usize {
         self.bytes_sent
     }
 
-    /// Gets how many bytes this session has received through [`Session::recv`].
+    /// Gets how many bytes this session has received in total through
+    /// [`Session::recv`].
     #[must_use]
     pub const fn bytes_recv(&self) -> usize {
         self.bytes_recv

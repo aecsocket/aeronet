@@ -89,6 +89,7 @@ impl Session {
         RecvError,
     > {
         let mut packet: Bytes = packet.into();
+        self.packets_recv = self.packets_recv.saturating_add(1);
         self.bytes_recv = self.bytes_recv.saturating_add(packet.len());
 
         let header = packet
@@ -110,6 +111,7 @@ impl Session {
             &mut self.flushed_packets,
             &mut self.send_lanes,
             &mut self.rtt,
+            &mut self.packets_acked,
             now,
             header.acks.seqs(),
         );
@@ -128,6 +130,7 @@ impl Session {
         flushed_packets: &'session mut SeqBuf<FlushedPacket, N>,
         send_lanes: &'session mut [SendLane],
         rtt: &'session mut RttEstimator,
+        packets_acked: &'session mut usize,
         now: Instant,
         acked_seqs: impl Iterator<Item = PacketSeq> + 'session,
     ) -> impl Iterator<Item = (LaneIndex, MessageSeq)> + 'session {
@@ -136,6 +139,7 @@ impl Session {
             // let's find what fragments that packet contained when we flushed it out
             .filter_map(move |seq| flushed_packets.remove_with(seq.0 .0, FlushedPacket::new(now)))
             .flat_map(move |packet| {
+                *packets_acked = packets_acked.saturating_add(1);
                 let packet_rtt = now - packet.flushed_at;
                 rtt.update(packet_rtt);
                 // TODO Rust 1.80: Box::into_iter - https://github.com/rust-lang/rust/issues/59878

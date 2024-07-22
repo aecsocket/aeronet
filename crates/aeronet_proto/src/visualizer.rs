@@ -17,6 +17,10 @@ use crate::{session::Session, stats::SessionStats};
 /// Allows visualizing the samples stored in a [`SessionStats`] by drawing an
 /// [`egui`] window with plots and text.
 ///
+/// To draw the visualizer window, use [`SessionStatsVisualizer::draw`] and pass
+/// in the session that you want to draw, along with a [`SessionStats`] storing
+/// the previous stats history of this session.
+///
 /// If writing a client app using Bevy, you can use this together with
 /// `ClientSessionStatsPlugin` to easily visualize network statistics.
 /// Use this as a resource in your app, and draw the visualizer using
@@ -39,21 +43,21 @@ use crate::{session::Session, stats::SessionStats};
 pub struct SessionStatsVisualizer {
     /// Whether to draw the RTT graph.
     pub show_rtt: bool,
-    /// Whether to draw the memory usage graph.
-    pub show_mem: bool,
     /// Whether to draw the bytes sent/received per second graph.
     pub show_tx_rx: bool,
     /// Whether to draw the packet loss graph.
     pub show_loss: bool, // . .. .. ._
+    /// Whether to draw the memory usage graph.
+    pub show_mem: bool,
 }
 
 impl Default for SessionStatsVisualizer {
     fn default() -> Self {
         Self {
             show_rtt: true,
-            show_mem: true,
             show_tx_rx: true,
-            show_loss: false,
+            show_loss: true,
+            show_mem: false,
         }
     }
 }
@@ -81,7 +85,8 @@ impl SessionStatsVisualizer {
             let sample_rate = f64::from(stats.sample_rate());
             let history = samples as f64 / sample_rate;
 
-            let (rtt, crtt, buf_mem, bytes_used, tx, rx): (
+            let (rtt, crtt, buf_mem, bytes_used, tx, rx, loss): (
+                Vec<_>,
                 Vec<_>,
                 Vec<_>,
                 Vec<_>,
@@ -101,6 +106,7 @@ impl SessionStatsVisualizer {
                         [x, sample.bytes_used as f64],
                         [x, sample.tx as f64 * sample_rate],
                         [x, sample.rx as f64 * sample_rate],
+                        [x, sample.loss * 100.0],
                     )
                 })
                 .multiunzip();
@@ -116,17 +122,6 @@ impl SessionStatsVisualizer {
                         });
                 }
 
-                if self.show_mem {
-                    plot(history, "mem")
-                        .y_grid_spacer(log_grid_spacer(2))
-                        .custom_y_axes(vec![axis_hints("bytes")])
-                        .y_axis_formatter(fmt_bytes_y_axis)
-                        .show(ui, |ui| {
-                            ui.line(Line::new(buf_mem).name("Buf Mem").color(MAIN_COLOR));
-                            ui.line(Line::new(bytes_used).name("Bytes Used").color(FAINT_COLOR));
-                        });
-                }
-
                 if self.show_tx_rx {
                     plot(history, "tx_rx")
                         .y_grid_spacer(log_grid_spacer(2))
@@ -137,13 +132,33 @@ impl SessionStatsVisualizer {
                             ui.line(Line::new(rx).name("Rx").color(IN_COLOR));
                         });
                 }
+
+                if self.show_loss {
+                    plot(history, "loss")
+                        .include_y(100.0)
+                        .custom_y_axes(vec![axis_hints("%")])
+                        .show(ui, |ui| {
+                            ui.line(Line::new(loss).name("Pkt Loss").color(MAIN_COLOR))
+                        });
+                }
+
+                if self.show_mem {
+                    plot(history, "mem")
+                        .y_grid_spacer(log_grid_spacer(2))
+                        .custom_y_axes(vec![axis_hints("bytes")])
+                        .y_axis_formatter(fmt_bytes_y_axis)
+                        .show(ui, |ui| {
+                            ui.line(Line::new(buf_mem).name("Buf Mem").color(MAIN_COLOR));
+                            ui.line(Line::new(bytes_used).name("Bytes Used").color(FAINT_COLOR));
+                        });
+                }
             });
 
             ui.horizontal(|ui| {
                 ui.label(format!("{} Hz", stats.sample_rate()));
                 ui.separator();
 
-                ui.label(format!("{:.1?} time", now - session.connected_at()));
+                ui.label(format!("{:.1?}", now - session.connected_at()));
                 ui.separator();
 
                 ui.label(format!("{:.1?} rtt", session.rtt().get()));
@@ -164,11 +179,9 @@ impl SessionStatsVisualizer {
                 ui.separator();
 
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.add_enabled_ui(false, |ui| {
-                        ui.checkbox(&mut self.show_loss, "Loss");
-                    });
-                    ui.checkbox(&mut self.show_tx_rx, "Tx/Rx");
                     ui.checkbox(&mut self.show_mem, "Mem");
+                    ui.checkbox(&mut self.show_loss, "Loss");
+                    ui.checkbox(&mut self.show_tx_rx, "Tx/Rx");
                     ui.checkbox(&mut self.show_rtt, "RTT");
                 });
             });
