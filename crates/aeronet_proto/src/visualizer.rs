@@ -138,7 +138,7 @@ impl SessionStatsVisualizer {
                         .include_y(100.0)
                         .custom_y_axes(vec![axis_hints("%")])
                         .show(ui, |ui| {
-                            ui.line(Line::new(loss).name("Pkt Loss").color(MAIN_COLOR))
+                            ui.line(Line::new(loss).name("Pkt Loss").color(MAIN_COLOR));
                         });
                 }
 

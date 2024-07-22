@@ -139,6 +139,7 @@ To start a fuzz test, run this from the `aeronet_proto/fuzz` directory:
 cargo fuzz run <fuzz_target>
 ```
 
+[`SessionStatsVisualizer`]: visualizer::SessionStatsVisualizer
 [*Building a Game Network Protocol*]: https://gafferongames.com/categories/building-a-game-network-protocol/
 [*Sequence Buffers*]: https://gafferongames.com/post/reliable_ordered_messages/#sequence-buffers
 [`Session`]: session::Session

@@ -96,8 +96,7 @@ impl SessionStats {
         let (last_bytes_sent, last_bytes_recv) = self
             .samples
             .iter()
-            .rev()
-            .next()
+            .next_back()
             .map(|sample| (sample.bytes_sent, sample.bytes_recv))
             .unwrap_or_default();
         let (tx, rx) = (
