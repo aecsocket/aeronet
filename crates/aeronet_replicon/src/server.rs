@@ -37,6 +37,7 @@ use tracing::{debug, warn};
 /// * [`ServerClosed`]
 /// * [`RemoteClientConnecting`]
 /// * [`RemoteClientConnected`]
+/// * [`RemoteRepliconClientConnected`]
 /// * [`RemoteClientDisconnected`]
 ///
 /// [`ServerPlugin`]: bevy_replicon::server::ServerPlugin
@@ -53,6 +54,7 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
             .add_event::<ServerClosed<T>>()
             .add_event::<RemoteClientConnecting<T>>()
             .add_event::<RemoteClientConnected<T>>()
+            .add_event::<RemoteRepliconClientConnected<T>>()
             .add_event::<RemoteClientDisconnected<T>>()
             .init_resource::<ClientKeys<T>>()
             .configure_sets(
@@ -89,6 +91,20 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
                     .in_set(ServerSet::SendPackets),
             );
     }
+}
+
+/// Variant of [`RemoteClientConnected`] which also provides what [`ClientId`]
+/// this `T::ClientKey` maps to.
+///
+/// This is called *in addition to* [`RemoteClientConnected`], so you should
+/// listen for one or the other, not both.
+#[derive(Derivative, Event)]
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct RemoteRepliconClientConnected<T: ServerTransport> {
+    /// Key of the client on the [`aeronet`] side.
+    pub client_key: T::ClientKey,
+    /// Key of the client on the [`bevy_replicon`] side.
+    pub client_id: ClientId,
 }
 
 type ClientMap<K> = BiHashMap<K, ClientId, ahash::RandomState, ahash::RandomState>;
@@ -143,6 +159,7 @@ struct Events<'w, T: ServerTransport + Resource> {
     closed: EventWriter<'w, ServerClosed<T>>,
     connecting: EventWriter<'w, RemoteClientConnecting<T>>,
     connected: EventWriter<'w, RemoteClientConnected<T>>,
+    replicon_connected: EventWriter<'w, RemoteRepliconClientConnected<T>>,
     disconnected: EventWriter<'w, RemoteClientDisconnected<T>>,
 }
 
@@ -200,7 +217,7 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
 
         let client_id = client_keys.next_id();
         debug!("Associating {client_key:?} with {client_id:?}");
-        match client_keys.id_map.insert(client_key, client_id) {
+        match client_keys.id_map.insert(client_key.clone(), client_id) {
             Overwritten::Neither => {}
             overwritten => {
                 warn!("Inserted duplicate client key/ID pair: {overwritten:?}");
@@ -209,6 +226,12 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
         events
             .replicon
             .send(RepliconEvent::ClientConnected { client_id });
+        events
+            .replicon_connected
+            .send(RemoteRepliconClientConnected {
+                client_key,
+                client_id,
+            });
     }
 
     fn on_disconnected(
