@@ -89,6 +89,7 @@ enum Client {
 /// Error type for operations on a [`ChannelServer`].
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ServerError {
+    /// Attempted to open a server which is already open.
     #[error("already open")]
     AlreadyOpen,
     /// Server is not open.
@@ -106,7 +107,9 @@ pub enum ServerError {
 }
 
 impl ChannelServer {
-    /// Creates a server which starts closed.
+    /// Creates a server which is not open for connections.
+    ///
+    /// Use [`ChannelServer::open`] to open this server for clients.
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -224,7 +227,6 @@ impl ServerTransport for ChannelServer {
             .send((msg, lane))
             .map_err(|_| ServerError::Disconnected)?;
         client.bytes_sent = client.bytes_sent.saturating_add(msg_len);
-
         Ok(())
     }
 
@@ -250,7 +252,6 @@ impl ServerTransport for ChannelServer {
         }
 
         self.state = State::Closed;
-
         Ok(())
     }
 }

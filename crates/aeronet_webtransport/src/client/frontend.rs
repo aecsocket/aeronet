@@ -25,70 +25,17 @@ use super::{
 };
 
 impl WebTransportClient {
-    /// Creates a new client which starts [`ClientState::Disconnected`].
+    /// Creates a new client which is not connected to a server.
+    ///
+    /// Use [`WebTransportClient::connect`] to start connecting to a server.
     #[must_use]
-    pub const fn disconnected() -> Self {
+    pub const fn new() -> Self {
         Self {
             state: State::Disconnected,
         }
     }
 
-    /// Disconnects this client from its currently connected server, putting it
-    /// into [`ClientState::Disconnected`].
-    ///
-    /// # Errors
-    ///
-    /// Errors if the client is already disconnected.
-    pub fn disconnect(&mut self) -> Result<(), ClientError> {
-        match self.state {
-            State::Disconnected => Err(ClientError::AlreadyDisconnected),
-            State::Connecting(_) | State::Connected(_) => {
-                *self = Self::disconnected();
-                Ok(())
-            }
-        }
-    }
-
-    /// Creates a new client which starts [`ClientState::Connecting`].
-    ///
-    /// `target` must be given in the form of a URL, i.e. `https://[::1]:1234`.
-    ///
-    /// This returns both:
-    /// - the frontend, [`WebTransportClient`], used to interact with...
-    /// - the backend, which you should spawn on an async task runtime
-    pub fn connect_new(
-        net_config: ClientConfig,
-        session_config: SessionConfig,
-        target: impl Into<String>,
-    ) -> (Self, impl Future<Output = ()> + maybe::Send) {
-        let (send_connected, recv_connected) = oneshot::channel::<ToConnected>();
-        let (send_err, recv_err) = oneshot::channel::<ClientError>();
-        let target = target.into();
-
-        let frontend = Self {
-            state: State::Connecting(Connecting {
-                recv_connected,
-                recv_err,
-            }),
-        };
-        let backend = async move {
-            match backend::start(net_config, session_config, target, send_connected).await {
-                Err(ClientError::FrontendClosed) => {
-                    debug!("Client disconnected");
-                }
-                Err(err) => {
-                    debug!("Client disconnected: {:#}", pretty_error(&err));
-                    let _ = send_err.send(err);
-                }
-                Ok(_) => unreachable!(),
-            }
-        };
-
-        (frontend, backend)
-    }
-
-    /// Starts connecting this client to a server, putting it into
-    /// [`ClientState::Connecting`].
+    /// Starts connecting this client to a server.
     ///
     /// `target` must be given in the form of a URL, i.e. `https://[::1]:1234`.
     ///
@@ -104,14 +51,32 @@ impl WebTransportClient {
         session_config: SessionConfig,
         target: impl Into<String>,
     ) -> Result<impl Future<Output = ()> + maybe::Send, ClientError> {
-        match self.state {
-            State::Disconnected => {
-                let (frontend, backend) = Self::connect_new(net_config, session_config, target);
-                *self = frontend;
-                Ok(backend)
-            }
-            State::Connecting(_) | State::Connected(_) => Err(ClientError::AlreadyConnected),
+        if !matches!(self.state, State::Disconnected) {
+            return Err(ClientError::AlreadyConnected);
         }
+
+        let (send_connected, recv_connected) = oneshot::channel::<ToConnected>();
+        let (send_err, recv_err) = oneshot::channel::<ClientError>();
+        let target = target.into();
+
+        self.state = State::Connecting(Connecting {
+            recv_connected,
+            recv_err,
+        });
+        let backend = async move {
+            match backend::start(net_config, session_config, target, send_connected).await {
+                Err(ClientError::FrontendClosed) => {
+                    debug!("Client disconnected");
+                }
+                Err(err) => {
+                    debug!("Client disconnected: {:#}", pretty_error(&err));
+                    let _ = send_err.send(err);
+                }
+                Ok(_) => unreachable!(),
+            }
+        };
+
+        Ok(backend)
     }
 }
 
@@ -161,7 +126,17 @@ impl ClientTransport for WebTransportClient {
         let State::Connected(client) = &mut self.state else {
             return Err(ClientError::NotConnected);
         };
+
         client.inner.flush();
+        Ok(())
+    }
+
+    fn disconnect(&mut self) -> Result<(), Self::Error> {
+        if matches!(self.state, State::Disconnected) {
+            return Err(ClientError::AlreadyDisconnected);
+        }
+
+        self.state = State::Disconnected;
         Ok(())
     }
 }

@@ -38,8 +38,10 @@ impl From<AppLane> for LaneIndex {
     }
 }
 
-let mut server = ChannelServer::open();
-let mut client = ChannelClient::connect_new(&mut server);
+let mut server = ChannelServer::new();
+server.open().unwrap();
+let mut client = ChannelClient::new();
+client.connect(&mut server).unwrap();
 
 let msg = Bytes::from_static(b"hi!");
 client.send(msg, AppLane).unwrap();

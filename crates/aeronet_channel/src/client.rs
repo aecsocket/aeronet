@@ -87,7 +87,9 @@ pub enum ClientError {
 }
 
 impl ChannelClient {
-    /// Creates a new client which starts not connected to a server.
+    /// Creates a new client which is not connected to a server.
+    ///
+    /// Use [`ChannelClient::connect`] to connect this client to a server.
     #[must_use]
     pub const fn new() -> Self {
         Self {

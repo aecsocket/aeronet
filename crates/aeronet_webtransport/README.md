@@ -37,17 +37,12 @@ feature.
 
 ## Client
 
-Create a [`WebTransportClient`] using:
-- [`WebTransportClient::disconnected`] to create a disconnected client, which must be manually
-  connected later
-- [`WebTransportClient::connect_new`] to create a client which is already establishing a connection
-  to a server
+Create a disconnected [`WebTransportClient`] using [`WebTransportClient::new`], and use
+[`WebTransportClient::connect`] to start establishing a connection to a server, passing in your
+connection configuration (i.e. what URL to connect to, timeout duration, lanes).
 
 In Bevy, you can use `App::init_resource::<WebTransportClient>()` to automatically insert a
 disconnected client into your app.
-
-To start establishing a connection, use `connect` or `connect_new` and pass your connection
-configuration (i.e. what URL to connect to, timeout duration).
 
 ```rust
 use std::future::Future;
@@ -77,22 +72,18 @@ fn create_net_config() -> ClientConfig { unimplemented!() }
 
 fn create_session_config() -> SessionConfig { unimplemented!() }
 
-// use an async runtime like tokio or wasm_bindgen_futures for this
+// use an async runtime like tokio or wasm-bindgen-futures for this
 fn run_async_task(f: impl Future) { unimplemented!() }
 ```
 
 ## Server
 
-Create a [`WebTransportServer`] using:
-- [`WebTransportServer::closed`] to create a closed server, which must be manually opened later
-- [`WebTransportServer::open_new`] to create a server which is already opening up for client
-  connections
+Create a closed [`WebTransportServer`] using [`WebTransportServer::new`], and use
+[`WebTransportServer::open`] to start opening this server and have it listen for client connections,
+passing in your server configuration (i.e. what port to bind to).
 
 In Bevy, you can use `App::init_resource::<WebTransportServer>()` to automatically insert a
 closed server into your app.
-
-To start opening up your server, use `open` or `open_new` and pass your server configuration (i.e.
-what port to bind to).
 
 **Important:** after receiving a [`ServerEvent::Connecting`], you must manually decide whether to
 accept or reject the client.
@@ -130,9 +121,9 @@ fn run_async_task(f: impl Future) { unimplemented!() }
 [`aeronet_proto`]: https://docs.rs/aeronet_proto
 [`ServerEvent::Connecting`]: aeronet::server::ServerEvent::Connecting
 [`WebTransportClient`]: client::WebTransportClient
-[`WebTransportClient::disconnected`]: client::WebTransportClient::disconnected
-[`WebTransportClient::connect_new`]: client::WebTransportClient::connect_new
+[`WebTransportClient::new`]: client::WebTransportClient::new
+[`WebTransportClient::connect`]: client::WebTransportClient::connect
 [`WebTransportServer`]: server::WebTransportServer
-[`WebTransportServer::closed`]: server::WebTransportServer::closed
-[`WebTransportServer::open_new`]: server::WebTransportServer::open_new
+[`WebTransportServer::new`]: server::WebTransportServer::new
+[`WebTransportServer::open`]: server::WebTransportServer::open
 [`WebTransportServer::respond_to_request`]: server::WebTransportServer::respond_to_request

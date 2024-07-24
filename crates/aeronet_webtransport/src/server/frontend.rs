@@ -25,56 +25,17 @@ use super::{
 };
 
 impl WebTransportServer {
-    /// Creates a new server which starts [`ServerState::Closed`].
+    /// Creates a new server which is not open for connections.
+    ///
+    /// Use [`WebTransportServer::open`] to open this server for clients.
     #[must_use]
-    pub const fn closed() -> Self {
+    pub const fn new() -> Self {
         Self {
             state: State::Closed,
         }
     }
 
-    /// Closes this server, putting it into [`ServerState::Closed`].
-    ///
-    /// # Errors
-    ///
-    /// Errors if the server is already closed.
-    pub fn close(&mut self) -> Result<(), ServerError> {
-        match self.state {
-            State::Closed => Err(ServerError::AlreadyClosed),
-            State::Opening(_) | State::Open(_) => {
-                *self = Self::closed();
-                Ok(())
-            }
-        }
-    }
-
-    /// Creates a new server which starts [`ServerState::Opening`].
-    ///
-    /// This returns both:
-    /// - the frontend, [`WebTransportServer`], used to interact with...
-    /// - the backend, which you should spawn on an async task runtime
-    pub fn open_new(
-        net_config: ServerConfig,
-        session_config: SessionConfig,
-    ) -> (Self, impl Future<Output = ()> + Send) {
-        let (send_open, recv_open) = oneshot::channel::<ToOpen>();
-        let (send_err, recv_err) = oneshot::channel::<ServerError>();
-
-        let frontend = Self {
-            state: State::Opening(Opening {
-                recv_open,
-                recv_err,
-            }),
-        };
-        let backend = async move {
-            if let Err(err) = backend::start(net_config, session_config, send_open).await {
-                let _ = send_err.send(err);
-            }
-        };
-        (frontend, backend)
-    }
-
-    /// Starts opening this server, putting it into [`ServerState::Opening`].
+    /// Starts opening this server for client connections.
     ///
     /// This returns the backend, which you should spawn on an async task
     /// runtime.
@@ -87,14 +48,23 @@ impl WebTransportServer {
         net_config: ServerConfig,
         session_config: SessionConfig,
     ) -> Result<impl Future<Output = ()> + Send, ServerError> {
-        match self.state {
-            State::Closed => {
-                let (frontend, backend) = Self::open_new(net_config, session_config);
-                *self = frontend;
-                Ok(backend)
-            }
-            State::Opening(_) | State::Open(_) => Err(ServerError::AlreadyOpen),
+        if !matches!(self.state, State::Closed) {
+            return Err(ServerError::AlreadyOpen);
         }
+
+        let (send_open, recv_open) = oneshot::channel::<ToOpen>();
+        let (send_err, recv_err) = oneshot::channel::<ServerError>();
+
+        self.state = State::Opening(Opening {
+            recv_open,
+            recv_err,
+        });
+        let backend = async move {
+            if let Err(err) = backend::start(net_config, session_config, send_open).await {
+                let _ = send_err.send(err);
+            }
+        };
+        Ok(backend)
     }
 }
 
@@ -139,6 +109,21 @@ impl ServerTransport for WebTransportServer {
         .flatten()
     }
 
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<Self>> {
+        replace_with_or_abort_and_return(&mut self.state, |state| match state {
+            State::Closed => (Either::Left(None), State::Closed),
+            State::Opening(server) => {
+                let (res, state) = Self::poll_opening(server);
+                (Either::Left(res), state)
+            }
+            State::Open(server) => {
+                let (res, state) = Self::poll_open(server, delta_time);
+                (Either::Right(res), state)
+            }
+        })
+        .into_iter()
+    }
+
     fn send(
         &mut self,
         client_key: Self::ClientKey,
@@ -172,7 +157,6 @@ impl ServerTransport for WebTransportServer {
             client.inner.flush();
             drop(span);
         }
-
         Ok(())
     }
 
@@ -188,19 +172,13 @@ impl ServerTransport for WebTransportServer {
             .ok_or(ServerError::ClientNotConnected)
     }
 
-    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<Self>> {
-        replace_with_or_abort_and_return(&mut self.state, |state| match state {
-            State::Closed => (Either::Left(None), State::Closed),
-            State::Opening(server) => {
-                let (res, state) = Self::poll_opening(server);
-                (Either::Left(res), state)
-            }
-            State::Open(server) => {
-                let (res, state) = Self::poll_open(server, delta_time);
-                (Either::Right(res), state)
-            }
-        })
-        .into_iter()
+    fn close(&mut self) -> Result<(), Self::Error> {
+        if matches!(self.state, State::Closed) {
+            return Err(ServerError::AlreadyClosed);
+        }
+
+        self.state = State::Closed;
+        Ok(())
     }
 }
 
