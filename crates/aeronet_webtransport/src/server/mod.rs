@@ -17,7 +17,6 @@ use aeronet::{
 };
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
-use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use slotmap::SlotMap;
 use web_time::{Duration, Instant};
@@ -36,8 +35,7 @@ pub type ServerConfig = wtransport::ServerConfig;
 /// See the [crate-level documentation](crate).
 ///
 /// [`ServerTransport`]: aeronet::server::ServerTransport
-#[derive(Derivative, Default)]
-#[derivative(Debug = "transparent")]
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportServer {
     state: State,

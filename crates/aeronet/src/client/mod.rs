@@ -45,6 +45,17 @@ pub trait ClientTransport {
     /// See [`ClientState`].
     fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>>;
 
+    /// Updates the internal state of this transport by receiving messages from
+    /// peers, returning the events that it emitted while updating.
+    ///
+    /// This should be called in your app's main update loop, passing in the
+    /// time elapsed since the last `poll` call.
+    ///
+    /// If this emits an event which changes the transport's state, then after
+    /// this function, the transport is guaranteed to be in this new state. The
+    /// transport may emit an arbitrary number of state-changing events.
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>>;
+
     /// Attempts to send a message along a specific lane to the currently
     /// connected server.
     ///
@@ -85,16 +96,17 @@ pub trait ClientTransport {
     /// finished, then this will still return [`Ok`].
     fn flush(&mut self) -> Result<(), Self::Error>;
 
-    /// Updates the internal state of this transport by receiving messages from
-    /// peers, returning the events that it emitted while updating.
+    /// Disconnects this client from its currently connected server.
     ///
-    /// This should be called in your app's main update loop, passing in the
-    /// time elapsed since the last `poll` call.
+    /// This does *not* guarantee any graceful shutdown of connections. If you
+    /// want this to be handled gracefully, you must implement a mechanism for
+    /// this yourself.
     ///
-    /// If this emits an event which changes the transport's state, then after
-    /// this function, the transport is guaranteed to be in this new state. The
-    /// transport may emit an arbitrary number of state-changing events.
-    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>>;
+    /// # Errors
+    ///
+    /// Errors if the transport failed to *attempt to* disconnect, e.g. if the
+    /// transport has not been connected yet.
+    fn disconnect(&mut self) -> Result<(), Self::Error>;
 }
 
 /// Implementation-specific state details of a [`ClientTransport`].

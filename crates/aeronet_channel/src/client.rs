@@ -1,5 +1,7 @@
 //! Client-side items.
 
+use std::convert::Infallible;
+
 use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport},
     lane::LaneIndex,
@@ -18,11 +20,11 @@ use crate::server::{ChannelServer, ClientKey};
 #[derive(Debug, Default)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ChannelClient {
-    inner: Inner,
+    state: State,
 }
 
 #[derive(Debug, Default)]
-enum Inner {
+enum State {
     #[default]
     Disconnected,
     Connected(Connected),
@@ -75,6 +77,9 @@ pub enum ClientError {
     /// Attempted to perform an operation on a client which was not connected.
     #[error("not connected")]
     NotConnected,
+    /// Attempted to connect to a server which is closed.
+    #[error("server closed")]
+    ServerClosed,
     /// Attempted to perform an operation, but the channel to the peer was
     /// unexpectedly closed.
     #[error("disconnected")]
@@ -82,58 +87,39 @@ pub enum ClientError {
 }
 
 impl ChannelClient {
-    /// Creates a new client which is not connected to a server.
+    /// Creates a new client which starts not connected to a server.
     #[must_use]
-    pub const fn disconnected() -> Self {
+    pub const fn new() -> Self {
         Self {
-            inner: Inner::Disconnected,
+            state: State::Disconnected,
         }
     }
 
-    /// Disconnects this client from its connected server.
+    /// Connects this client to an existing server.
     ///
     /// # Errors
     ///
-    /// Errors if this is not [`ClientState::Connected`].
-    pub fn disconnect(&mut self) -> Result<(), ClientError> {
-        if matches!(self.inner, Inner::Disconnected) {
-            return Err(ClientError::AlreadyDisconnected);
+    /// Errors if this client is already connected to a server, or if the server
+    /// is closed.
+    pub fn connect(&mut self, server: &mut ChannelServer) -> Result<(), ClientError> {
+        if !matches!(self.state, State::Disconnected) {
+            return Err(ClientError::AlreadyConnected);
         }
 
-        self.inner = Inner::Disconnected;
-        Ok(())
-    }
-
-    /// Creates and connects a new client to an existing server.
-    #[must_use]
-    pub fn connect_new(server: &mut ChannelServer) -> Self {
         let (send_c2s, recv_c2s) = crossbeam_channel::unbounded();
         let (send_s2c, recv_s2c) = crossbeam_channel::unbounded();
-        let key = server.insert_client(recv_c2s, send_s2c);
-        Self {
-            inner: Inner::Connected(Connected {
-                key,
-                connected_at: Instant::now(),
-                bytes_sent: 0,
-                bytes_recv: 0,
-                send_c2s,
-                recv_s2c,
-                send_connected: true,
-            }),
-        }
-    }
-
-    /// Creates and connects this client to an existing server.
-    ///
-    /// # Errors
-    ///
-    /// Errors if this is not [`ClientState::Disconnected`].
-    pub fn connect(&mut self, server: &mut ChannelServer) -> Result<(), ClientError> {
-        let Inner::Disconnected = self.inner else {
-            return Err(ClientError::AlreadyConnected);
-        };
-
-        *self = Self::connect_new(server);
+        let key = server
+            .insert_client(recv_c2s, send_s2c)
+            .ok_or(ClientError::ServerClosed)?;
+        self.state = State::Connected(Connected {
+            key,
+            connected_at: Instant::now(),
+            bytes_sent: 0,
+            bytes_recv: 0,
+            send_c2s,
+            recv_s2c,
+            send_connected: true,
+        });
         Ok(())
     }
 }
@@ -141,7 +127,7 @@ impl ChannelClient {
 impl ClientTransport for ChannelClient {
     type Error = ClientError;
 
-    type Connecting<'this> = ();
+    type Connecting<'this> = Infallible;
 
     type Connected<'this> = &'this Connected;
 
@@ -149,10 +135,21 @@ impl ClientTransport for ChannelClient {
 
     #[must_use]
     fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
-        match &self.inner {
-            Inner::Disconnected => ClientState::Disconnected,
-            Inner::Connected(client) => ClientState::Connected(client),
+        match &self.state {
+            State::Disconnected => ClientState::Disconnected,
+            State::Connected(client) => ClientState::Connected(client),
         }
+    }
+
+    fn poll(&mut self, _: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
+        replace_with::replace_with_or_abort_and_return(&mut self.state, |inner| match inner {
+            State::Disconnected => (Either::Left(std::iter::empty()), inner),
+            State::Connected(client) => {
+                let (res, new) = Self::poll_connected(client);
+                (Either::Right(res), new)
+            }
+        })
+        .into_iter()
     }
 
     fn send(
@@ -160,7 +157,7 @@ impl ClientTransport for ChannelClient {
         msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::Error> {
-        let Inner::Connected(client) = &mut self.inner else {
+        let State::Connected(client) = &mut self.state else {
             return Err(ClientError::NotConnected);
         };
 
@@ -177,26 +174,25 @@ impl ClientTransport for ChannelClient {
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        match self.inner {
-            Inner::Disconnected => Err(ClientError::NotConnected),
-            Inner::Connected(_) => Ok(()),
+        if !matches!(self.state, State::Connected(_)) {
+            return Err(ClientError::NotConnected);
         }
+
+        Ok(())
     }
 
-    fn poll(&mut self, _: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
-        replace_with::replace_with_or_abort_and_return(&mut self.inner, |inner| match inner {
-            Inner::Disconnected => (Either::Left(std::iter::empty()), inner),
-            Inner::Connected(client) => {
-                let (res, new) = Self::poll_connected(client);
-                (Either::Right(res), new)
-            }
-        })
-        .into_iter()
+    fn disconnect(&mut self) -> Result<(), Self::Error> {
+        if matches!(self.state, State::Disconnected) {
+            return Err(ClientError::AlreadyDisconnected);
+        }
+
+        self.state = State::Disconnected;
+        Ok(())
     }
 }
 
 impl ChannelClient {
-    fn poll_connected(mut client: Connected) -> (Vec<ClientEvent<Self>>, Inner) {
+    fn poll_connected(mut client: Connected) -> (Vec<ClientEvent<Self>>, State) {
         let mut events = Vec::new();
 
         if client.send_connected {
@@ -216,10 +212,10 @@ impl ChannelClient {
         })();
 
         match res {
-            Ok(()) => (events, Inner::Connected(client)),
+            Ok(()) => (events, State::Connected(client)),
             Err(error) => {
                 events.push(ClientEvent::Disconnected { error });
-                (events, Inner::Disconnected)
+                (events, State::Disconnected)
             }
         }
     }

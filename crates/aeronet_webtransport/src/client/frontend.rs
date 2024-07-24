@@ -128,6 +128,21 @@ impl ClientTransport for WebTransportClient {
         self.state.as_ref()
     }
 
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
+        replace_with_or_abort_and_return(&mut self.state, |state| match state {
+            State::Disconnected => (Either::Left(None), State::Disconnected),
+            State::Connecting(client) => {
+                let (res, state) = Self::poll_connecting(client);
+                (Either::Left(res), state)
+            }
+            State::Connected(client) => {
+                let (res, state) = Self::poll_connected(client, delta_time);
+                (Either::Right(res), state)
+            }
+        })
+        .into_iter()
+    }
+
     fn send(
         &mut self,
         msg: impl Into<Bytes>,
@@ -148,21 +163,6 @@ impl ClientTransport for WebTransportClient {
         };
         client.inner.flush();
         Ok(())
-    }
-
-    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
-        replace_with_or_abort_and_return(&mut self.state, |state| match state {
-            State::Disconnected => (Either::Left(None), State::Disconnected),
-            State::Connecting(client) => {
-                let (res, state) = Self::poll_connecting(client);
-                (Either::Left(res), state)
-            }
-            State::Connected(client) => {
-                let (res, state) = Self::poll_connected(client, delta_time);
-                (Either::Right(res), state)
-            }
-        })
-        .into_iter()
     }
 }
 

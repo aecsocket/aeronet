@@ -11,7 +11,6 @@ use aeronet::{
 };
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
-use derivative::Derivative;
 use futures::channel::{mpsc, oneshot};
 use web_time::{Duration, Instant};
 
@@ -47,8 +46,7 @@ cfg_if::cfg_if! {
 /// See the [crate-level documentation](crate).
 ///
 /// [`ClientTransport`]: aeronet::client::ClientTransport
-#[derive(Derivative, Default)]
-#[derivative(Debug = "transparent")]
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportClient {
     state: State,

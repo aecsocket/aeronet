@@ -184,7 +184,7 @@ impl ServerTransport for WebTransportServer {
         server
             .clients
             .remove(client_key)
-            .map(|_| ())
+            .map(drop)
             .ok_or(ServerError::ClientNotConnected)
     }
 

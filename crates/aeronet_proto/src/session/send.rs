@@ -304,7 +304,7 @@ impl Session {
             },
             payload: sent_frag.payload.clone(),
         };
-        bytes_left.consume(frag.encode_len()).map_err(|_| ())?;
+        bytes_left.consume(frag.encode_len()).map_err(drop)?;
         packet
             .write(frag)
             .expect("BytesMut should grow the buffer when writing over capacity");

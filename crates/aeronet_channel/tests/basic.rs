@@ -25,8 +25,10 @@ fn send_recv() {
         );
 
     fn setup(mut commands: Commands) {
-        let mut server = ChannelServer::open();
-        let client = ChannelClient::connect_new(&mut server);
+        let mut server = ChannelServer::new();
+        server.open().unwrap();
+        let mut client = ChannelClient::new();
+        client.connect(&mut server).unwrap();
         commands.insert_resource(server);
         commands.insert_resource(client);
     }

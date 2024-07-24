@@ -80,6 +80,17 @@ pub trait ServerTransport {
     /// about it.
     fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_;
 
+    /// Updates the internal state of this transport by receiving messages from
+    /// peers, returning the events that it emitted while updating.
+    ///
+    /// This should be called in your app's main update loop, passing in the
+    /// time elapsed since the last `poll` call.
+    ///
+    /// If this emits an event which changes the transport's state, then after
+    /// this function, the transport is guaranteed to be in this new state. The
+    /// transport may emit an arbitrary number of state-changing events.
+    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<Self>>;
+
     /// Attempts to send a message along a specific lane to a connected client.
     ///
     /// This returns a key uniquely identifying the sent message. This can be
@@ -122,9 +133,9 @@ pub trait ServerTransport {
 
     /// Forces a client to disconnect from this server.
     ///
-    /// This does *not* guarantee any graceful shutdown of the connection. If
-    /// you want this to be handled gracefully, you must implement a mechanism
-    /// for this yourself.
+    /// This does *not* guarantee any graceful shutdown of connections. If you
+    /// want this to be handled gracefully, you must implement a mechanism for
+    /// this yourself.
     ///
     /// # Errors
     ///
@@ -132,16 +143,17 @@ pub trait ServerTransport {
     /// e.g. if the server already knows that the client is disconnected.
     fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error>;
 
-    /// Updates the internal state of this transport by receiving messages from
-    /// peers, returning the events that it emitted while updating.
+    /// Closes this server, stopping all current connections and disallowing any
+    /// new connections.
     ///
-    /// This should be called in your app's main update loop, passing in the
-    /// time elapsed since the last `poll` call.
+    /// This does *not* guarantee any graceful shutdown of connections. If you
+    /// want this to be handled gracefully, you must implement a mechanism for
+    /// this yourself.
     ///
-    /// If this emits an event which changes the transport's state, then after
-    /// this function, the transport is guaranteed to be in this new state. The
-    /// transport may emit an arbitrary number of state-changing events.
-    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<Self>>;
+    /// # Errors
+    ///
+    /// Errors if the transport is already closed.
+    fn close(&mut self) -> Result<(), Self::Error>;
 }
 
 /// Implementation-specific state details of a [`ServerTransport`].
