@@ -36,7 +36,6 @@ aeronet_proto = { workspace = true }
 arbitrary = { workspace = true }
 bytes = { workspace = true }
 cfg-if = { workspace = true }
-derivative = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
 replace_with = { workspace = true }

@@ -113,7 +113,6 @@ dependencies = [
  "bevy_egui",
  "bytes",
  "crossbeam-channel",
- "derivative",
  "either",
  "replace_with",
  "slotmap",
