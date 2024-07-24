@@ -72,6 +72,7 @@ impl<T: SessionBacked + Resource> Plugin for ClientSessionStatsPlugin<T> {
                 Update,
                 Self::update_stats.run_if(
                     resource_exists::<ClientSessionStats<T>>
+                        .and_then(resource_exists::<T>)
                         .and_then(on_timer(Duration::from_secs(1) / self.sample_rate)),
                 ),
             );
