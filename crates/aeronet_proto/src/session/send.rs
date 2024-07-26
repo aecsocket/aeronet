@@ -3,7 +3,7 @@ use std::{collections::hash_map::Entry, iter};
 use aeronet::lane::LaneIndex;
 use octs::{Bytes, BytesMut, EncodeLen, FixedEncodeLen, Write};
 use terrors::OneOf;
-use web_time::{Duration, Instant};
+use web_time::Instant;
 
 use crate::{
     limit::Limit,
@@ -155,6 +155,7 @@ impl Session {
             .map(|(path, _)| Some(path))
             .collect::<Vec<_>>();
 
+        let mut sent_packet = false;
         iter::from_fn(move || {
             // this iteration, we want to build up one full packet
 
@@ -206,10 +207,9 @@ impl Session {
                 }
             }
 
-            let send_keep_alive = now >= self.next_keep_alive_at;
-            if packet_frags.is_empty() && !send_keep_alive {
-                None
-            } else {
+            // instead of a keep-alive, we will always send at least 1 packet per flush
+            // so that we can accurately track RTT
+            if !packet_frags.is_empty() || !sent_packet {
                 self.flushed_packets.insert(
                     packet_seq.0 .0,
                     FlushedPacket {
@@ -221,10 +221,11 @@ impl Session {
                 let packet = packet.freeze();
                 self.packets_sent = self.packets_sent.saturating_add(1);
                 self.bytes_sent = self.bytes_sent.saturating_add(packet.len());
-                // TODO: this makes the RTT inconsistent if we don't constantly send updates
-                self.next_keep_alive_at = now + Duration::from_millis(100); // self.rtt.pto();
                 self.next_packet_seq += PacketSeq::ONE;
+                sent_packet = true;
                 Some(packet)
+            } else {
+                None
             }
         })
     }

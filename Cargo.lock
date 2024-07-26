@@ -180,7 +180,6 @@ dependencies = [
  "bevy_replicon",
  "bytes",
  "cfg-if",
- "derivative",
  "either",
  "futures",
  "gloo-timers",

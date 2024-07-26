@@ -97,16 +97,6 @@ impl Session {
             .map_err(RecvError::DecodeHeader)?;
         self.acks.ack(header.seq);
 
-        if packet.has_remaining() {
-            // this packet actually has some frags!
-            // we should send back an ack ASAP, even if we have no frags to send
-            // otherwise, if we don't have any frags queued to send,
-            // we would only send the ack on the next keep-alive,
-            // and our peer would resend the same frag like a billion more times
-            // because it thinks we haven't received it yet
-            self.next_keep_alive_at = now;
-        }
-
         let acks = Self::recv_acks(
             &mut self.flushed_packets,
             &mut self.send_lanes,
