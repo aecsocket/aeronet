@@ -116,6 +116,9 @@ impl SessionStats {
         - we expect to have 960 packets acked
         */
 
+        // TODO: this code produces a really inaccurate packet loss estimate
+        // I need a better algo
+
         // Gaffer on Games uses the smoothed RTT
         // I find this too strict and use PTO instead
         let lost_thresh = session.rtt().pto();
