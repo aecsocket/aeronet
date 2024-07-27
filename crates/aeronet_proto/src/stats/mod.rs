@@ -17,6 +17,8 @@ use web_time::Duration;
 use crate::session::Session;
 
 /// Stores network statistics collected from a [`Session`].
+///
+/// See [`Sample`] for a description of what network statistics are tracked.
 pub struct SessionStats {
     sample_rate: u32,
     samples: HeapRb<Sample>,
@@ -67,6 +69,34 @@ pub struct Sample {
     /// If the receiver has not acknowledged a packet within a variable time
     /// threshold (which is a function of the RTT), then they have probably lost
     /// that packet.
+    ///
+    /// # Algorithm
+    ///
+    /// We want to figure out how many packets have been lost during this
+    /// sample. To do this, we find out how many packets, that we sent out
+    /// earlier, should have been acknowledged by our peer by now; and how many
+    /// of those have actually been acknowledged. "By now" is defined as a
+    /// function of the current RTT estimate. Currently it is just [the PTO],
+    /// however the implementation may change this in the future.
+    ///
+    /// Let's assume that we are calculating sample 100, and our RTT is such
+    /// that we expect to have received acknowledgements for all packets sent
+    /// out in sample 90 by now.
+    /// In sample 90 (between samples 89 and 90) we sent out 10 packets, and up
+    /// to that point we had received 950 total acknowledgements from our peer.
+    /// Therefore, at sample 100, we expect to have received 950 + 10 = 960
+    /// total acknowledgements.
+    ///
+    /// - If by now we have received 960 acknowledgements, then we have 0%
+    ///   packet loss, and our RTT estimate is very accurate.
+    /// - If we have more than 960 acknowledgements, our packet loss is still
+    ///   0%, but our RTT estimate is too high, and the peer actually
+    ///   acknowledges packets faster than we think.
+    /// - If we have between 950 and 960 acknowledgements, we have some
+    ///   percentage of packet loss i.e. 959 acks means 10% packet loss.
+    /// - If we still only have 950 acks, we have 100% packet loss.
+    ///
+    /// [the PTO]: crate::rtt::RttEstimator::pto
     pub loss: f64,
 }
 
@@ -161,25 +191,7 @@ impl SessionStats {
             packets_acked_total - packets_acked_last,
         );
 
-        /*
-        threshold is RTT
-        we are computing sample 100
-        sample 90 was one threshold ago
-        between samples 89 and 90:
-        - we sent out 10 packets
-        - making a total of 1000 packets sent
-        - we had 950 packets acked
-        at sample 100, we expect to have 10 more acks than there were in sample 90
-        - we expect to have 960 packets acked
-        */
-
-        // TODO: this code produces a really inaccurate packet loss estimate
-        // I need a better algo
-
-        // Gaffer on Games uses the smoothed RTT
-        // I find this too strict and use PTO instead
-
-        let thresh = session.rtt().get();
+        let thresh = session.rtt().pto();
         let thresh_index = f64::ceil(thresh.as_secs_f64() * f64::from(self.sample_rate()));
         let thresh_index = thresh_index as usize;
 
