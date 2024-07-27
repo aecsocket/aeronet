@@ -16,7 +16,7 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-bevy = { workspace = true }
+bevy = { workspace = true, features = ["dynamic_linking", "wayland"] }
 serde = { workspace = true }
 
 bevy_replicon = { workspace = true }

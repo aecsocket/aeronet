@@ -104,12 +104,14 @@ impl SessionStatsVisualizer {
                         [x, (sample.conservative_rtt.as_millis() * 1000) as f64],
                         [x, sample.memory_usage as f64],
                         [x, sample.bytes_used as f64],
-                        [x, sample.tx as f64 * sample_rate],
-                        [x, sample.rx as f64 * sample_rate],
+                        [x, sample.bytes_sent_delta as f64 * sample_rate],
+                        [x, sample.bytes_recv_delta as f64 * sample_rate],
                         [x, sample.loss * 100.0],
                     )
                 })
                 .multiunzip();
+            let avg_loss =
+                stats.iter().map(|sample| sample.loss).sum::<f64>() / stats.occupied_len() as f64;
 
             ui.horizontal(|ui| {
                 if self.show_rtt {
@@ -177,6 +179,8 @@ impl SessionStatsVisualizer {
                     fmt_bytes(session.max_memory_usage())
                 ));
                 ui.separator();
+
+                ui.label(format!("{:.1}% loss", avg_loss * 100.0));
 
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.checkbox(&mut self.show_mem, "Mem");
