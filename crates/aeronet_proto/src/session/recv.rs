@@ -142,7 +142,8 @@ impl Session {
                 let lane = send_lanes
                     .get_mut(lane_index)
                     .expect("frag path should point into a valid lane index");
-                // TODO: could these panic instead of returning None silently? is it valid?
+                // fallible instead of panicking, because these messages may have already been removed
+                // by a previous ack that we received
                 let msg = lane.sent_msgs.get_mut(&frag_path.msg_seq)?;
                 let frag_opt = msg.frags.get_mut(usize::from(frag_path.frag_index))?;
                 // take this fragment out so it stops being resent
