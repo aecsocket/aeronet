@@ -46,6 +46,7 @@ mod server;
 
 pub use client::*;
 pub use server::*;
+
 use web_time::{Duration, Instant};
 
 use std::fmt::Debug;
@@ -53,7 +54,7 @@ use std::fmt::Debug;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
-/// Configuration for a [`ClientConditioner`] or [`ServerConditioner`].
+/// Configuration for a [`ConditionedClient`] or [`ConditionedServer`].
 ///
 /// The randomness of how long messages are delayed for is based on a normal
 /// distribution with mean `delay_mean` and standard deviation `delay_std_dev`.
