@@ -1,5 +1,6 @@
 [target.'cfg(target_family = "wasm")']
 # we still need this for bevy_egui :(
+rustdocflags = ["--cfg=web_sys_unstable_apis"]
 rustflags = ["--cfg=web_sys_unstable_apis"]
 
 [target.wasm32-unknown-unknown]

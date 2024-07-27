@@ -10,5 +10,5 @@ mod server;
 
 #[cfg(not(target_family = "wasm"))]
 fn main() {
-    server::main()
+    server::main();
 }
