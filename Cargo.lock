@@ -3236,7 +3236,6 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "bevy_replicon",
- "clap",
  "move_box",
  "web-time 1.1.0",
 ]
