@@ -22,7 +22,7 @@ use xwt_core::utils::maybe;
 /// If using Bevy, you can use this as a resource in your systems.
 ///
 /// [`WebTransportClient::connect`]: crate::client::WebTransportClient::connect
-/// [`WebTransportServer::open`]: crate::client::WebTransportServer::open
+/// [`WebTransportServer::open`]: crate::server::WebTransportServer::open
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportRuntime {
