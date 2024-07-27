@@ -22,9 +22,10 @@ pub async fn recv_loop<E>(
     mut send_r: mpsc::Sender<Bytes>,
 ) -> Result<Never, InternalError<E>> {
     loop {
+        #[allow(clippy::useless_conversion)] // WASM needs the .into()
         let msg = datagram::Receive::receive_datagram(conn)
             .await
-            .map_err(InternalError::ConnectionLost)?;
+            .map_err(|err| InternalError::ConnectionLost(err.into()))?;
         send_r
             .send(to_bytes(msg))
             .await
@@ -52,7 +53,7 @@ pub async fn update_meta<E>(
 
 #[cfg(target_family = "wasm")]
 async fn sleep(duration: Duration) {
-    gloo_timers::future::sleep(duration).await
+    gloo_timers::future::sleep(duration).await;
 }
 
 #[cfg(not(target_family = "wasm"))]

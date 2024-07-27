@@ -16,13 +16,15 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-bevy = { workspace = true, features = ["dynamic_linking", "wayland"] }
+bevy = { workspace = true }
 serde = { workspace = true }
 
+aeronet_webtransport = { workspace = true }
 bevy_replicon = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 wasm-bindgen-futures = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+bevy = { workspace = true, features = ["dynamic_linking", "wayland"] }
 tokio = { workspace = true, features = ["full"] }

@@ -1,5 +1,6 @@
 //! Example server using WebTransport which listens for clients sending strings
 //! and sends back a string reply.
+#![cfg(not(target_family = "wasm"))]
 
 use aeronet::{
     error::pretty_error,
@@ -8,26 +9,13 @@ use aeronet::{
 };
 use aeronet_proto::session::SessionConfig;
 use aeronet_webtransport::{
+    runtime::WebTransportRuntime,
     server::{ClientKey, ConnectionResponse, ServerConfig, WebTransportServer},
     wtransport,
 };
 use bevy::{log::LogPlugin, prelude::*};
 use bevy_ecs::system::SystemId;
 use web_time::Duration;
-
-#[derive(Debug, Resource)]
-struct TokioRuntime(tokio::runtime::Runtime);
-
-impl FromWorld for TokioRuntime {
-    fn from_world(_: &mut World) -> Self {
-        Self(
-            tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .unwrap(),
-        )
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 struct AppLane;
@@ -47,7 +35,7 @@ impl From<AppLane> for LaneIndex {
 fn main() {
     App::new()
         .add_plugins((MinimalPlugins, LogPlugin::default()))
-        .init_resource::<TokioRuntime>()
+        .init_resource::<WebTransportRuntime>()
         .init_resource::<WebTransportServer>()
         .add_systems(Startup, (setup_one_shot_systems, setup_server).chain())
         .add_systems(PreUpdate, poll_server)
@@ -79,7 +67,7 @@ fn setup_one_shot_systems(world: &mut World) {
     world.insert_resource(SendMessage(send_message));
 }
 
-fn setup_server(mut server: ResMut<WebTransportServer>, rt: Res<TokioRuntime>) {
+fn setup_server(mut server: ResMut<WebTransportServer>, rt: Res<WebTransportRuntime>) {
     let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
     let cert = &identity.certificate_chain().as_slice()[0];
     let spki_fingerprint = aeronet_webtransport::cert::spki_fingerprint_base64(cert).unwrap();
@@ -90,7 +78,7 @@ fn setup_server(mut server: ResMut<WebTransportServer>, rt: Res<TokioRuntime>) {
     let backend = server
         .open(server_config(&identity), session_config())
         .unwrap();
-    rt.0.spawn(backend);
+    rt.spawn(backend);
 }
 
 fn poll_server(

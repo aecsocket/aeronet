@@ -1,7 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use std::future::Future;
-
+use aeronet_webtransport::runtime::WebTransportRuntime;
 use bevy::prelude::*;
 use bevy_replicon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -14,7 +13,7 @@ pub struct MoveBoxPlugin;
 
 impl Plugin for MoveBoxPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<AsyncRuntime>()
+        app.init_resource::<WebTransportRuntime>()
             .add_plugins(RepliconPlugins.build().set(ServerPlugin {
                 tick_policy: TickPolicy::MaxTickRate(128),
                 ..Default::default()
@@ -23,51 +22,6 @@ impl Plugin for MoveBoxPlugin {
             .replicate::<PlayerColor>()
             .add_client_event::<PlayerMove>(ChannelKind::Ordered)
             .add_systems(Update, apply_movement.run_if(has_authority));
-    }
-}
-
-/// Platform-agnostic async task runtime.
-#[derive(Debug, Deref, DerefMut, Resource)]
-pub struct AsyncRuntime {
-    #[cfg(target_family = "wasm")]
-    _priv: (),
-    #[cfg(not(target_family = "wasm"))]
-    runtime: tokio::runtime::Runtime,
-}
-
-impl FromWorld for AsyncRuntime {
-    fn from_world(_: &mut World) -> Self {
-        #[cfg(target_family = "wasm")]
-        {
-            Self { _priv: () }
-        }
-        #[cfg(not(target_family = "wasm"))]
-        {
-            Self {
-                runtime: tokio::runtime::Builder::new_multi_thread()
-                    .enable_all()
-                    .build()
-                    .unwrap(),
-            }
-        }
-    }
-}
-
-impl AsyncRuntime {
-    /// Spawns a future on this runtime.
-    pub fn spawn<F>(&self, future: F)
-    where
-        F: Future + Send + 'static,
-        F::Output: Send,
-    {
-        #[cfg(target_family = "wasm")]
-        {
-            wasm_bindgen_futures::spawn_local(future);
-        }
-        #[cfg(not(target_family = "wasm"))]
-        {
-            self.runtime.spawn(future);
-        }
     }
 }
 

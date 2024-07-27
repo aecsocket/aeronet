@@ -5,31 +5,15 @@ use aeronet::{
     client::{client_connected, ClientEvent, ClientState, ClientTransport},
     error::pretty_error,
     lane::{LaneIndex, LaneKind},
-    stats::{LocalAddr, MessageStats, RemoteAddr, Rtt},
+    stats::{MessageStats, Rtt},
 };
 use aeronet_proto::session::SessionConfig;
 use aeronet_webtransport::{
     client::{ClientConfig, WebTransportClient},
-    shared::RawRtt,
+    runtime::WebTransportRuntime,
 };
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-
-#[cfg(not(target_family = "wasm"))]
-#[derive(Debug, Resource)]
-struct TokioRuntime(tokio::runtime::Runtime);
-
-#[cfg(not(target_family = "wasm"))]
-impl FromWorld for TokioRuntime {
-    fn from_world(_: &mut World) -> Self {
-        Self(
-            tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .unwrap(),
-        )
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 struct AppLane;
@@ -54,8 +38,9 @@ struct UiState {
 }
 
 fn main() {
-    let mut app = App::new();
-    app.add_plugins((DefaultPlugins, EguiPlugin))
+    App::new()
+        .add_plugins((DefaultPlugins, EguiPlugin))
+        .init_resource::<WebTransportRuntime>()
         .init_resource::<UiState>()
         .init_resource::<WebTransportClient>()
         .add_systems(PreUpdate, poll_client)
@@ -63,23 +48,17 @@ fn main() {
         .add_systems(
             PostUpdate,
             flush_client.run_if(client_connected::<WebTransportClient>),
-        );
-
-    #[cfg(not(target_family = "wasm"))]
-    {
-        app.init_resource::<TokioRuntime>();
-    }
-
-    app.run();
+        )
+        .run();
 }
 
 #[cfg(target_family = "wasm")]
-fn client_config() -> ClientConfig {
+fn net_config() -> ClientConfig {
     ClientConfig::default()
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn client_config() -> ClientConfig {
+fn net_config() -> ClientConfig {
     use web_time::Duration;
 
     ClientConfig::builder()
@@ -132,7 +111,7 @@ fn ui(
     mut egui: EguiContexts,
     mut ui_state: ResMut<UiState>,
     mut client: ResMut<WebTransportClient>,
-    #[cfg(not(target_family = "wasm"))] rt: Res<TokioRuntime>,
+    rt: Res<WebTransportRuntime>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -172,16 +151,9 @@ fn ui(
             ui.memory_mut(|m| m.request_focus(msg_resp.id));
             let target = ui_state.target.clone();
             ui_state.log.push(format!("Connecting to {target}"));
-            match client.connect(client_config(), session_config(), target) {
+            match client.connect(net_config(), session_config(), target) {
                 Ok(backend) => {
-                    #[cfg(target_family = "wasm")]
-                    {
-                        wasm_bindgen_futures::spawn_local(backend);
-                    }
-                    #[cfg(not(target_family = "wasm"))]
-                    {
-                        rt.0.spawn(backend);
-                    }
+                    rt.spawn(backend);
                 }
                 Err(err) => {
                     ui_state.log.push(format!(
@@ -208,16 +180,8 @@ fn ui(
 
         if let ClientState::Connected(client) = client.state() {
             egui::Grid::new("meta").num_columns(2).show(ui, |ui| {
-                ui.label("Local/remote addr");
-                ui.label(format!(
-                    "{} / {}",
-                    client.local_addr(),
-                    client.remote_addr()
-                ));
-                ui.end_row();
-
                 ui.label("RTT");
-                ui.label(format!("{:?} ({:?} raw)", client.rtt(), client.raw_rtt()));
+                ui.label(format!("{:?}", client.rtt()));
                 ui.end_row();
 
                 ui.label("Bytes sent/recv");
@@ -239,6 +203,17 @@ fn ui(
                     client.session().mtu()
                 ));
                 ui.end_row();
+
+                #[cfg(not(target_family = "wasm"))]
+                {
+                    ui.label("Local/remote addr");
+                    ui.label(format!(
+                        "{} / {}",
+                        aeronet::stats::LocalAddr::local_addr(client),
+                        aeronet::stats::RemoteAddr::remote_addr(client),
+                    ));
+                    ui.end_row();
+                }
             });
         }
 

@@ -11,7 +11,7 @@ use xwt_core::prelude::*;
 
 use crate::{
     client::ToConnected,
-    internal::{self, ConnectionMeta, MIN_MTU},
+    internal::{self, ClientEndpoint, ConnectionMeta, MIN_MTU},
 };
 
 use super::{ClientConfig, ClientError};
@@ -22,7 +22,7 @@ pub async fn start(
     target: String,
     send_connected: oneshot::Sender<ToConnected>,
 ) -> Result<Never, ClientError> {
-    let endpoint = {
+    let endpoint: Result<ClientEndpoint, ClientError> = {
         #[cfg(target_family = "wasm")]
         {
             Ok(xwt_web_sys::Endpoint {
@@ -34,9 +34,10 @@ pub async fn start(
         {
             let raw =
                 wtransport::Endpoint::client(net_config).map_err(ClientError::CreateEndpoint)?;
-            Ok::<_, ClientError>(xwt_wtransport::Endpoint(raw))
+            Ok(xwt_wtransport::Endpoint(raw))
         }
-    }?;
+    };
+    let endpoint = endpoint?;
 
     debug!("Created endpoint, connecting to {target:?}");
     #[allow(clippy::useless_conversion)] // multi-target support

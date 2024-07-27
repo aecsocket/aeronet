@@ -36,26 +36,35 @@ jobs:
       - uses: bnjbvr/cargo-machete@main
   clippy:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: ./.github/actions/install-bevy-deps
-      - run: cargo clippy --workspace --all-features -- -Dwarnings
+      - run: cargo clippy --target '${{ matrix.target }}' --workspace --all-features -- -Dwarnings
   doc:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
     env:
       RUSTDOCFLAGS: "-Dwarnings"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
-      - run: cargo doc --workspace --all-features
+      - run: cargo doc --target '${{ matrix.target }}' --workspace --all-features
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
-      - run: cargo test --workspace --all-features
+      - run: cargo test --target '${{ matrix.target }}' --workspace --all-features

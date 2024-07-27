@@ -7,36 +7,29 @@ use aeronet::{
 };
 use aeronet_replicon::client::RepliconClientPlugin;
 use aeronet_webtransport::{
-    client::WebTransportClient,
+    client::{ClientConfig, WebTransportClient},
     proto::{
         session::SessionConfig,
         stats::{ClientSessionStats, ClientSessionStatsPlugin},
         visualizer::SessionStatsVisualizer,
     },
-    wtransport,
+    runtime::WebTransportRuntime,
 };
-use bevy::prelude::*;
-use bevy_egui::{EguiContexts, EguiPlugin};
+use bevy::{ecs::system::SystemId, prelude::*};
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_replicon::prelude::RepliconChannels;
-use move_box::{AsyncRuntime, MoveBoxPlugin, PlayerColor, PlayerMove, PlayerPosition};
-use web_time::Duration;
+use move_box::{MoveBoxPlugin, PlayerColor, PlayerMove, PlayerPosition};
 
-/// `move_box` demo client
-#[derive(Debug, Resource, clap::Parser)]
-struct Args {
-    /// URL of the server to connect to
+#[derive(Debug, Default, Resource)]
+struct UiState {
     target: String,
 }
 
-impl FromWorld for Args {
-    fn from_world(_: &mut World) -> Self {
-        <Self as clap::Parser>::parse()
-    }
-}
+#[derive(Debug, Clone, Copy, Deref, Resource)]
+struct ConnectToRemote(SystemId<String>);
 
 fn main() {
     App::new()
-        .init_resource::<Args>()
         .add_plugins((
             DefaultPlugins,
             RepliconClientPlugin::<WebTransportClient>::default(),
@@ -46,12 +39,13 @@ fn main() {
         ))
         .init_resource::<WebTransportClient>()
         .init_resource::<SessionStatsVisualizer>()
-        .add_systems(Startup, (setup_level, connect_client).chain())
+        .init_resource::<UiState>()
+        .add_systems(Startup, (setup_level, setup_systems))
         .add_systems(
             PreUpdate,
             (on_connected, on_disconnected).after(ServerTransportSet::Recv),
         )
-        .add_systems(Update, (handle_inputs, draw_boxes, draw_stats).chain())
+        .add_systems(Update, (ui, handle_inputs, draw_boxes, draw_stats).chain())
         .run();
 }
 
@@ -59,28 +53,87 @@ fn setup_level(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
 }
 
-fn connect_client(
+fn setup_systems(world: &mut World) {
+    let connect_to_remote = world.register_system(connect_to_remote);
+    world.insert_resource(ConnectToRemote(connect_to_remote));
+}
+
+fn connect_to_remote(
+    In(target): In<String>,
     mut client: ResMut<WebTransportClient>,
-    tasks: Res<AsyncRuntime>,
-    args: Res<Args>,
     channels: Res<RepliconChannels>,
+    runtime: Res<WebTransportRuntime>,
 ) {
-    let net_config = wtransport::ClientConfig::builder()
+    let net_config = net_config();
+    let session_config = SessionConfig::default()
+        .with_send_lanes(channels.client_channels())
+        .with_recv_lanes(channels.server_channels());
+
+    match client.connect(net_config, session_config, target) {
+        Ok(backend) => {
+            runtime.spawn(backend);
+        }
+        Err(err) => {
+            warn!("Failed to start connecting: {:#}", pretty_error(&err));
+        }
+    }
+}
+
+#[cfg(target_family = "wasm")]
+fn net_config() -> ClientConfig {
+    use aeronet_webtransport::WebTransportOptions;
+
+    WebTransportOptions::default()
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn net_config() -> ClientConfig {
+    use web_time::Duration;
+
+    ClientConfig::builder()
         .with_bind_default()
         .with_no_cert_validation()
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
         .unwrap()
-        .build();
+        .build()
+}
 
-    let session_config = SessionConfig::default()
-        .with_send_lanes(channels.client_channels())
-        .with_recv_lanes(channels.server_channels());
+fn ui(
+    mut commands: Commands,
+    mut egui: EguiContexts,
+    mut ui_state: ResMut<UiState>,
+    mut client: ResMut<WebTransportClient>,
+    connect_to_remote: Res<ConnectToRemote>,
+) {
+    egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
+        let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
-    let backend = client
-        .connect(net_config, session_config, args.target.clone())
-        .unwrap();
-    tasks.spawn(backend);
+        let mut do_connect = false;
+        let mut do_disconnect = false;
+        ui.horizontal(|ui| {
+            let target_resp = ui.add_enabled(
+                client.state().is_disconnected(),
+                egui::TextEdit::singleline(&mut ui_state.target).hint_text("https://[::1]:25565"),
+            );
+
+            if client.state().is_disconnected() {
+                do_connect |= target_resp.lost_focus() && pressed_enter;
+                do_connect |= ui.button("Connect").clicked();
+            } else {
+                do_disconnect |= ui.button("Disconnect").clicked();
+            }
+        });
+
+        if do_connect {
+            let target = ui_state.target.clone();
+            commands.run_system_with_input(**connect_to_remote, target);
+        }
+
+        if do_disconnect {
+            let _ = client.disconnect();
+        }
+    });
 }
 
 fn on_connected(mut events: EventReader<LocalClientConnected<WebTransportClient>>) {

@@ -8,10 +8,26 @@ consistent API which can be implemented by different transport mechanisms.
 
 # Try the example!
 
+Start the server:
+
 ```sh
 cargo run --bin move_box_server
-cargo run --bin move_box_client -- "https://[::1]:25565"
 ```
+
+Run a native desktop client:
+
+```sh
+cargo run --bin move_box_client
+```
+
+Run the client in a browser:
+
+```sh
+cargo install wasm-server-runner
+cargo run --bin move_box_client --target wasm32-unknown-unknown
+```
+
+And connect to `http://[::1]:25565`
 
 # Transport
 

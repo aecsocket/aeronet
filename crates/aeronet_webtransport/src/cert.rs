@@ -25,8 +25,9 @@ pub fn spki_fingerprint(cert: &wtransport::tls::Certificate) -> Option<spki::Fin
 /// certificate's public key.
 ///
 /// To launch a Chromium-based browser which can connect to a server with this
-/// self-signed certificate, use the flag:
+/// self-signed certificate, use the flags:
 /// ```text
+/// --webtransport-developer-mode \
 /// --ignore-certificate-errors-spki-list=[output of this function]
 /// ```
 #[must_use]

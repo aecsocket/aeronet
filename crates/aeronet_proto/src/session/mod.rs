@@ -30,6 +30,7 @@ use crate::{
 #[derive(Derivative, DataSize)]
 #[derivative(Debug)]
 pub struct Session {
+    #[data_size(with = mem::size_of_val)]
     connected_at: Instant,
     flushed_packets: SeqBuf<FlushedPacket, 1024>,
     acks: Acknowledge,
@@ -73,12 +74,15 @@ struct SentFragment {
     #[derivative(Debug = "ignore")]
     #[data_size(with = Bytes::len)]
     payload: Bytes,
+    #[data_size(with = mem::size_of_val)]
     sent_at: Instant,
+    #[data_size(with = mem::size_of_val)]
     next_flush_at: Instant,
 }
 
 #[derive(Debug, DataSize)]
 struct FlushedPacket {
+    #[data_size(with = mem::size_of_val)]
     flushed_at: Instant,
     frags: Box<[FragmentPath]>,
 }

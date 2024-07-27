@@ -98,6 +98,7 @@ struct MessageBuf {
     /// resize the buffer and increase the capacity.
     payload: Vec<u8>,
     /// Last instant at which we received a new fragment for this message.
+    #[data_size(with = mem::size_of_val)]
     last_recv_at: Instant,
 }
 

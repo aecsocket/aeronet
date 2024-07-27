@@ -177,7 +177,6 @@ dependencies = [
  "bevy",
  "bevy_ecs",
  "bevy_egui",
- "bevy_replicon",
  "bytes",
  "cfg-if",
  "either",
@@ -3219,6 +3218,7 @@ dependencies = [
 name = "move_box"
 version = "0.6.0"
 dependencies = [
+ "aeronet_webtransport",
  "bevy",
  "bevy_replicon",
  "serde",

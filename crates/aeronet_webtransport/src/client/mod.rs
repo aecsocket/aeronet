@@ -34,7 +34,7 @@ cfg_if::cfg_if! {
         use crate::{internal, shared::RawRtt};
 
         /// Client network configuration.
-        pub type ClientConfig = xwt_wtransport::wtransport::ClientConfig;
+        pub type ClientConfig = wtransport::ClientConfig;
         type ConnectError = <internal::ClientEndpoint as Connect>::Error;
         type AwaitConnectError = <<internal::ClientEndpoint as Connect>::Connecting as xwt_core::endpoint::connect::Connecting>::Error;
         type ConnectionLostError = <internal::Connection as xwt_core::session::datagram::Receive>::Error;

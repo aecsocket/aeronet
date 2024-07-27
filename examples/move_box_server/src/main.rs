@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![cfg(not(target_family = "wasm"))]
 
 use aeronet::{
     client::ClientState,
@@ -11,6 +12,7 @@ use aeronet::{
 use aeronet_replicon::server::{ClientKeys, RepliconServerPlugin};
 use aeronet_webtransport::{
     proto::session::SessionConfig,
+    runtime::WebTransportRuntime,
     server::{ConnectionResponse, WebTransportServer},
     shared::RawRtt,
     wtransport,
@@ -18,7 +20,7 @@ use aeronet_webtransport::{
 use ascii_table::AsciiTable;
 use bevy::{log::LogPlugin, prelude::*, time::common_conditions::on_timer};
 use bevy_replicon::{core::Replicated, prelude::RepliconChannels, server::ServerEvent};
-use move_box::{AsyncRuntime, MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
+use move_box::{MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
 use size_format::{BinaryPrefixes, PointSeparated, SizeFormatter};
 use web_time::{Duration, Instant};
 
@@ -61,7 +63,7 @@ fn main() {
 
 fn open_server(
     mut server: ResMut<WebTransportServer>,
-    tasks: Res<AsyncRuntime>,
+    runtime: Res<WebTransportRuntime>,
     args: Res<Args>,
     channels: Res<RepliconChannels>,
 ) {
@@ -85,7 +87,7 @@ fn open_server(
         .with_recv_lanes(channels.client_channels());
 
     let backend = server.open(net_config, session_config).unwrap();
-    tasks.spawn(backend);
+    runtime.spawn(backend);
 }
 
 fn on_opened(mut events: EventReader<ServerOpened<WebTransportServer>>) {

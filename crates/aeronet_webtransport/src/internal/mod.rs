@@ -6,8 +6,6 @@ pub use {backend::*, frontend::*};
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
-use tracing::debug;
-use web_time::Duration;
 use xwt_core::session::datagram;
 
 pub const MSG_BUF_CAP: usize = 256;
@@ -20,24 +18,30 @@ cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         pub type Connection = xwt_web_sys::Session;
         pub type ClientEndpoint = xwt_web_sys::Endpoint;
+        pub type ConnectionError = crate::JsError;
 
-        pub fn get_mtu(_: &Connection) -> Option<usize> {
-            // TODO this MUST be done
-            None
+        #[allow(clippy::unnecessary_wraps)] // must match fn sig
+        pub fn get_mtu(conn: &Connection) -> Option<usize> {
+            let mtu = usize::try_from(conn.transport.datagrams().max_datagram_size())
+                .expect("should be able to fit u32 into usize");
+            Some(mtu)
         }
 
         pub fn to_bytes(datagram: Datagram) -> Bytes {
             Bytes::from(datagram)
         }
 
-        async fn send_datagram(conn: &Connection, msg: Bytes) -> Result<(), InternalError> {
-            datagram::Send::send_datagram(conn, msg).await;
+        async fn send_datagram<E>(conn: &Connection, msg: Bytes) -> Result<(), InternalError<E>> {
+            datagram::Send::send_datagram(conn, msg).await.map_err(|err| InternalError::ConnectionLost(err.into()))
         }
     } else {
         use std::net::SocketAddr;
 
+        use web_time::Duration;
+
         pub type Connection = xwt_wtransport::Connection;
-        pub type ClientEndpoint = xwt_wtransport::Endpoint<xwt_wtransport::wtransport::endpoint::endpoint_side::Client>;
+        pub type ClientEndpoint = xwt_wtransport::Endpoint<wtransport::endpoint::endpoint_side::Client>;
+        pub type ConnectionError = <Connection as datagram::Receive>::Error;
 
         pub fn get_mtu(conn: &Connection) -> Option<usize> {
             conn.0.max_datagram_size()
@@ -63,7 +67,7 @@ cfg_if::cfg_if! {
                     // so hopefully the frontend will realise its packets are exceeding MTU,
                     // and shrink them accordingly; therefore this is just a one-off error
                     let mtu = get_mtu(conn);
-                    debug!(msg_len, mtu, "Attempted to send datagram larger than MTU");
+                    tracing::debug!(msg_len, mtu, "Attempted to send datagram larger than MTU");
                     Ok(())
                 }
                 Err(SendDatagramError::UnsupportedByPeer) => {
@@ -117,5 +121,5 @@ pub enum InternalError<E> {
     DatagramsNotSupported,
 
     // connection
-    ConnectionLost(<Connection as datagram::Receive>::Error),
+    ConnectionLost(ConnectionError),
 }
