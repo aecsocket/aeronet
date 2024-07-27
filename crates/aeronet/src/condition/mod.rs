@@ -24,7 +24,8 @@
 //! ```
 //! # use aeronet::client::ClientTransport;
 //! # use aeronet::condition::{ConditionedClient, ConditionerConfig};
-//! # fn run<T: ClientTransport>(backing_transport: T) {
+//! # use web_time::Duration;
+//! # fn run<T: ClientTransport>(backing_transport: T, dt: Duration) {
 //! // create your configuration
 //! let config = ConditionerConfig {
 //!     loss_rate: 0.2,
@@ -33,10 +34,10 @@
 //! };
 //!
 //! // create your client or server
-//! let client = ConditionedClient::new(backing_transport, &config);
+//! let mut client = ConditionedClient::new(backing_transport, &config);
 //!
 //! // use it like normal
-//! for event in client.poll() { /* .. */ }
+//! for event in client.poll(dt) { /* .. */ }
 //! # }
 //! ```
 
