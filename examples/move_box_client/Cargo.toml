@@ -15,9 +15,6 @@ version.workspace = true
 [lints]
 workspace = true
 
-[features]
-dev = ["bevy/dynamic_linking"]
-
 [dependencies]
 move_box = { path = "../move_box" }
 
