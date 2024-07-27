@@ -4,6 +4,8 @@
 //! **This is for testing purposes only!** You should never be using a
 //! conditioner in the release build of your app.
 //!
+//! # Conditioning
+//!
 //! A useful strategy for testing networking code is to induce artificial packet
 //! loss and delays, and see how your app copes with it.
 //!
@@ -16,6 +18,27 @@
 //! Note that conditioners work on individual messages, rather than bytes or
 //! packets. They only affect incoming messages received from `poll`, and do not
 //! affect outgoing messages (`send`).
+//!
+//! # Usage
+//!
+//! ```
+//! # use aeronet::client::ClientTransport;
+//! # use aeronet::condition::{ConditionedClient, ConditionerConfig};
+//! # fn run<T: ClientTransport>(backing_transport: T) {
+//! // create your configuration
+//! let config = ConditionerConfig {
+//!     loss_rate: 0.2,
+//!     delay_mean: 0.3,
+//!     delay_std_dev: 0.05,
+//! };
+//!
+//! // create your client or server
+//! let client = ConditionedClient::new(backing_transport, &config);
+//!
+//! // use it like normal
+//! for event in client.poll() { /* .. */ }
+//! # }
+//! ```
 
 mod client;
 mod server;

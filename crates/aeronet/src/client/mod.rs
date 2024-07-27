@@ -221,3 +221,24 @@ pub enum ClientEvent<T: ClientTransport + ?Sized> {
         msg_key: T::MessageKey,
     },
 }
+
+impl<Error, MessageKey, T> ClientEvent<T>
+where
+    T: ClientTransport<Error = Error, MessageKey = MessageKey>,
+{
+    /// Remaps this `ClientEvent<T>` into a `ClientEvent<R>` where `T` and `R`
+    /// are [`ClientTransport`]s which share the same `Error` and `MessageKey`
+    /// types.
+    pub fn remap<R>(self) -> ClientEvent<R>
+    where
+        R: ClientTransport<Error = Error, MessageKey = MessageKey>,
+    {
+        match self {
+            Self::Connected => ClientEvent::Connected,
+            Self::Disconnected { error } => ClientEvent::Disconnected { error },
+            Self::Recv { msg, lane } => ClientEvent::Recv { msg, lane },
+            Self::Ack { msg_key } => ClientEvent::Ack { msg_key },
+            Self::Nack { msg_key } => ClientEvent::Nack { msg_key },
+        }
+    }
+}

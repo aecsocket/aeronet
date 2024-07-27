@@ -18,6 +18,9 @@ workspace = true
 all-features = true
 
 [features]
+## Enables support for `aeronet/condition` types.
+condition = ["aeronet/condition"]
+
 ## Allows serializing types using [`serde`](https://docs.rs/serde).
 serde = ["dep:serde"]
 
