@@ -44,7 +44,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: .github/actions/install-bevy-deps
+      - uses: ./.github/actions/install-bevy-deps
       - run: cargo clippy --target '${{ matrix.target }}' --workspace --all-features -- -Dwarnings
   doc:
     runs-on: ubuntu-latest
@@ -56,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: .github/actions/install-bevy-deps
+      - uses: ./.github/actions/install-bevy-deps
       - run: cargo doc --target '${{ matrix.target }}' --workspace --all-features
   test:
     runs-on: ubuntu-latest
@@ -66,5 +66,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: .github/actions/install-bevy-deps
+      - uses: ./.github/actions/install-bevy-deps
       - run: cargo test --target '${{ matrix.target }}' --workspace --all-features
