@@ -158,7 +158,6 @@ fn fmt_recv_buf(value: &AHashMap<MessageSeq, Bytes>, fmt: &mut fmt::Formatter) -
         .finish()
 }
 
-// TODO: DataSize derive is broken on enums. PR a fix or switch dep?
 impl DataSize for RecvLaneKind {
     const IS_DYNAMIC: bool = true;
 

@@ -70,7 +70,7 @@ fn setup_one_shot_systems(world: &mut World) {
 fn setup_server(mut server: ResMut<WebTransportServer>, rt: Res<WebTransportRuntime>) {
     let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
     let cert = &identity.certificate_chain().as_slice()[0];
-    let spki_fingerprint = aeronet_webtransport::cert::spki_fingerprint_base64(cert).unwrap();
+    let spki_fingerprint = aeronet_webtransport::cert::spki_fingerprint_b64(cert).unwrap();
     info!("*** SPKI FINGERPRINT ***");
     info!("{spki_fingerprint}");
     info!("************************");

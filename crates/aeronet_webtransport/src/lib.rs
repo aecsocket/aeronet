@@ -4,6 +4,7 @@
 
 pub use aeronet_proto as proto;
 
+pub mod cert;
 pub mod client;
 pub mod runtime;
 pub mod shared;
@@ -12,14 +13,13 @@ mod internal;
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
-        pub use xwt_web_sys::WebTransportOptions;
+        pub use xwt_web_sys;
 
         mod js_error;
         pub use js_error::JsError;
     } else {
         pub use wtransport;
 
-        pub mod cert;
         pub mod server;
     }
 }

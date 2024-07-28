@@ -11,14 +11,65 @@ Based on <https://github.com/projectharmonia/bevy_replicon_renet/blob/master/exa
 ## Server
 
 ```sh
-cargo run --bin move_box_server -- --help
+cargo run --bin move_box_server
 ```
 
 ## Client
 
+Native:
+
 ```sh
-cargo run --bin move_box_client -- --help
+cargo run --bin move_box_client
 ```
+
+WASM:
+
+```sh
+cargo install wasm-server-runner
+cargo run --bin move_box_client --target wasm32-unknown-unknown
+```
+
+## Connecting
+
+The server binds to `0.0.0.0:25565` by default. To connect to the server from the client, you must
+specify an HTTPS address. For a local server, this will be `https://[::1]:25565`.
+
+By default, you will not be able to connect to the server, because it uses a self-signed certificate
+which your client (native or browser) will treat as invalid. To get around this, you can:
+
+1. Enter the SHA-256 of the certificate's DER
+
+When starting the server, it outputs the certificate hash as a base 64 string. Copy this string and
+enter it into the "certificate hash" field of the client before connecting. The client will then
+ignore certificate validation errors for this specific certificate, and allow a connection to be
+established.
+
+**The certificate hash is not the same thing as the SPKI fingerprint!**
+
+In the browser, egui may not let you paste in the hash. You can get around this by:
+1. clicking into the certificate hash text box
+2. clicking outside of the bevy window (i.e. into the white space)
+3. pressing Ctrl+V
+
+In the native client, if you leave the certificate hash field blank, the client will simply not
+validate certificates. **This is dangerous** and should not be done in your actual app, which is why
+it's locked behind the `dangerous-configuration` flag, but is done for convenience in this example.
+
+2. Configure your client to ignore errors with this certificate's SPKI fingerprint
+
+When starting the server, it also outputs an SPKI fingerprint which is different to the certificate
+hash.
+
+When opening the WASM client through a Chromium browser, you can launch the browser with the
+following flags to allow the connection:
+
+```sh
+chromium \
+--webtransport-developer-mode \
+--ignore-certificate-errors-spki-list=[SPKI fingerprint]
+```
+
+I don't know what the equivalent flags are for Firefox.
 
 [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport
 [`bevy_replicon`]: https://docs.rs/bevy_replicon

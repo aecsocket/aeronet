@@ -7,6 +7,7 @@ use aeronet::{
 };
 use aeronet_replicon::client::RepliconClientPlugin;
 use aeronet_webtransport::{
+    cert,
     client::{ClientConfig, WebTransportClient},
     proto::{
         session::SessionConfig,
@@ -23,10 +24,11 @@ use move_box::{MoveBoxPlugin, PlayerColor, PlayerMove, PlayerPosition};
 #[derive(Debug, Default, Resource)]
 struct UiState {
     target: String,
+    cert_hash: String,
 }
 
 #[derive(Debug, Clone, Copy, Deref, Resource)]
-struct ConnectToRemote(SystemId<String>);
+struct ConnectToRemote(SystemId<(String, String)>);
 
 fn main() {
     App::new()
@@ -59,12 +61,12 @@ fn setup_systems(world: &mut World) {
 }
 
 fn connect_to_remote(
-    In(target): In<String>,
+    In((target, spki_hash)): In<(String, String)>,
     mut client: ResMut<WebTransportClient>,
     channels: Res<RepliconChannels>,
     runtime: Res<WebTransportRuntime>,
 ) {
-    let net_config = net_config();
+    let net_config = net_config(spki_hash);
     let session_config = SessionConfig::default()
         .with_send_lanes(channels.client_channels())
         .with_recv_lanes(channels.server_channels());
@@ -80,19 +82,53 @@ fn connect_to_remote(
 }
 
 #[cfg(target_family = "wasm")]
-fn net_config() -> ClientConfig {
-    use aeronet_webtransport::WebTransportOptions;
+fn net_config(cert_hash: String) -> ClientConfig {
+    use aeronet_webtransport::xwt_web_sys::{CertificateHash, HashAlgorithm, WebTransportOptions};
 
-    WebTransportOptions::default()
+    let server_certificate_hashes = match cert::hash_from_b64(&cert_hash) {
+        Ok(hash) => vec![CertificateHash {
+            algorithm: HashAlgorithm::Sha256,
+            value: Vec::from(hash),
+        }],
+        Err(err) => {
+            warn!(
+                "Failed to read certificate hash from string: {:#}",
+                pretty_error(&err)
+            );
+            Vec::new()
+        }
+    };
+
+    WebTransportOptions {
+        server_certificate_hashes,
+        ..Default::default()
+    }
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn net_config() -> ClientConfig {
+fn net_config(cert_hash: String) -> ClientConfig {
+    use aeronet_webtransport::wtransport::tls::Sha256Digest;
     use web_time::Duration;
 
-    ClientConfig::builder()
-        .with_bind_default()
-        .with_no_cert_validation()
+    let config = ClientConfig::builder().with_bind_default();
+
+    let config = if cert_hash.is_empty() {
+        info!("*** Connecting with no certificate validation! ***");
+        config.with_no_cert_validation()
+    } else {
+        match cert::hash_from_b64(&cert_hash) {
+            Ok(hash) => config.with_server_certificate_hashes([Sha256Digest::new(hash)]),
+            Err(err) => {
+                warn!(
+                    "Failed to read certificate hash from string: {:#}",
+                    pretty_error(&err)
+                );
+                config.with_server_certificate_hashes([])
+            }
+        }
+    };
+
+    config
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
         .unwrap()
@@ -125,9 +161,18 @@ fn ui(
             }
         });
 
+        ui.horizontal(|ui| {
+            ui.add_enabled(
+                client.state().is_disconnected(),
+                egui::TextEdit::singleline(&mut ui_state.cert_hash)
+                    .hint_text("Certificate hash (optional)"),
+            );
+        });
+
         if do_connect {
             let target = ui_state.target.clone();
-            commands.run_system_with_input(**connect_to_remote, target);
+            let cert_hash = ui_state.cert_hash.clone();
+            commands.run_system_with_input(**connect_to_remote, (target, cert_hash));
         }
 
         if do_disconnect {
