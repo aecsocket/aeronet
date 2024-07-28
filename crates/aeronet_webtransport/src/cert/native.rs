@@ -14,7 +14,7 @@ pub fn hash_to_b64(hash: impl AsRef<CertificateHash>) -> String {
 /// Calculates the fingerprint bytes of a certificate's public key.
 ///
 /// This gets the raw bytes of the public key fingerprint - you may find that
-/// [`spki_fingerprint_base64`] is typically more useful.
+/// [`spki_fingerprint_b64`] is typically more useful.
 ///
 /// Returns [`None`] if the certificate cannot be converted to an
 /// [`x509_cert::Certificate`].
