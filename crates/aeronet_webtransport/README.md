@@ -35,6 +35,8 @@ aeronet_webtransport = "version"
 disable certificate authentication **for testing purposes only** via the `dangerous-configuration`
 feature.
 
+See the *Certificates* section to learn how to properly manage certificates.
+
 ## Client
 
 Create a disconnected [`WebTransportClient`] using [`WebTransportClient::new`], and use
@@ -117,6 +119,53 @@ fn create_session_config() -> SessionConfig { unimplemented!() }
 // use an async runtime like tokio for this
 fn run_async_task(f: impl Future) { unimplemented!() }
 ```
+
+# Certificates
+
+Since WebTransport uses TLS, and therefore SSL certificates, for encrypting the connection, you must
+manage these certificates to make sure clients can connect to your server.
+
+## Signed by a certificate authority
+
+If you already have an SSL certificate which is signed by a certificate authority, you can configure
+your server to use that certificate. Clients which trust that CA (either native or WASM) will be
+able to connect to your server without any extra configuration.
+
+## Self-signed
+
+*Module: [`cert`]*
+
+If you wish to generate your own self-signed certificates, unconfigured clients will not be able to
+connect to your server by default, since the certificates are not signed by a CA that the client
+trusts (since you're self-signing, it doesn't trust your server).
+
+Once you generate the certificates, you can get from them:
+- the *certificate hash* - a SHA-256 digest of the DER of the certificate
+- the *SPKI fingerprint* - a SHA-256 digest of the certificate's public key
+
+WebTransport provides a mechanism specifically for connecting to servers which are ephemeral or
+cannot easily be routed to (e.g. virtual machines or virtual servers which can be spun up/down on
+demand). You can specify a list of *certificate hashes* which the client will implicitly trust
+(some restrictions on these certificates apply - see the [WebTransport documentation]).
+
+On the server side, use [`cert::hash_to_b64`] on your server's certificate to generate a base 64
+encoded version of the certificate hash.
+On the client side, use [`cert::hash_from_b64`] to decode the base 64 string into bytes of the
+certificate hash. You can use this certificate hash value in either the `ClientConfigBuilder`
+(on native) or `WebTransportOptions` (on WASM) to have the client trust this certificate.
+
+Alternatively, you can configure your browser to trust all certificates signed with a given public
+key. This is what the *SPKI fingerprint* is used for.
+
+On Chromium, use the flags:
+
+```sh
+chromium \
+--webtransport-developer-mode \
+--ignore-certificate-errors-spki-list=[SPKI fingerprint]
+```
+
+On Firefox, I don't know what the equivalent flags are. PRs open!
 
 [`aeronet_proto`]: https://docs.rs/aeronet_proto
 [`ServerEvent::Connecting`]: aeronet::server::ServerEvent::Connecting

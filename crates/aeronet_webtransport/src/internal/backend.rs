@@ -26,8 +26,9 @@ pub async fn recv_loop<E>(
         let msg = datagram::Receive::receive_datagram(conn)
             .await
             .map_err(|err| InternalError::ConnectionLost(err.into()))?;
+        let msg = to_bytes(msg);
         send_r
-            .send(to_bytes(msg))
+            .send(msg)
             .await
             .map_err(|_| InternalError::FrontendClosed)?;
     }

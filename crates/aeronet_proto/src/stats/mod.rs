@@ -162,6 +162,7 @@ impl SessionStats {
             packets_sent_last,
             packets_recv_last,
             packets_acked_last,
+            loss_last,
         ) = self
             .samples
             .iter()
@@ -173,6 +174,7 @@ impl SessionStats {
                     sample.packets_sent_total,
                     sample.packets_recv_total,
                     sample.packets_acked_total,
+                    sample.loss,
                 )
             })
             .unwrap_or_default();
@@ -207,7 +209,8 @@ impl SessionStats {
         let acks_since_then = packets_acked_now - packets_acked_then;
 
         let loss = if expected_extra_acks == 0 {
-            0.0
+            // reuse the previous sample (or 0.0)
+            loss_last
         } else {
             let acked_frac = acks_since_then as f64 / expected_extra_acks as f64;
             1.0 - acked_frac.clamp(0.0, 1.0)

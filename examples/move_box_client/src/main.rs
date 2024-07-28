@@ -162,11 +162,15 @@ fn ui(
         });
 
         ui.horizontal(|ui| {
-            ui.add_enabled(
+            let cert_hash_resp = ui.add_enabled(
                 client.state().is_disconnected(),
                 egui::TextEdit::singleline(&mut ui_state.cert_hash)
                     .hint_text("Certificate hash (optional)"),
             );
+
+            if client.state().is_disconnected() {
+                do_connect |= cert_hash_resp.lost_focus() && pressed_enter;
+            }
         });
 
         if do_connect {

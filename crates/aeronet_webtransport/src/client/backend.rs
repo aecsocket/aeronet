@@ -78,12 +78,12 @@ pub async fn start(
     // which loop infinitely independently, and wait for the first one to fail
     let send_loop = internal::send_loop(&conn, recv_c2s);
     let recv_loop = internal::recv_loop(&conn, send_s2c);
-    let update_rtt_loop = internal::update_meta(&conn, send_meta);
+    let update_meta_loop = internal::update_meta(&conn, send_meta);
     #[allow(clippy::useless_conversion)] // multi-target support
     futures::select! {
         r = send_loop.fuse() => r,
         r = recv_loop.fuse() => r,
-        r = update_rtt_loop.fuse() => r,
+        r = update_meta_loop.fuse() => r,
     }
     .map_err(From::from)
 }
