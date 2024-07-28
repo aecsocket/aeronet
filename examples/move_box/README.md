@@ -33,7 +33,7 @@ If you have problems running the client in Firefox (especially LibreWolf), check
 - `privacy.resistFingerprinting` is disabled, or Enhanced Tracking Protection is disabled for the
   website (see winit #3345)
 - `webgl.disabled` is set to `false`, so that Bevy can use the GPU
-- todo: current bug in xwt_web_sys: something to do with ReadableStream.getReader with BYOB
+- todo: current bug in `xwt_web_sys`: something to do with ReadableStream.getReader with BYOB
 
 ## Connecting
 
