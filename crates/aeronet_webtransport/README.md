@@ -105,7 +105,7 @@ accept or reject the client.
 ```rust
 use bevy::prelude::*;
 use aeronet_webtransport::{
-    server::{WebTransportServer, ServerConfig}
+    server::{WebTransportServer, ServerConfig},
     runtime::WebTransportRuntime,
 };
 use aeronet_webtransport::proto::session::SessionConfig;
@@ -180,6 +180,7 @@ On Firefox, I don't know what the equivalent flags are. PRs open!
 
 [`aeronet_proto`]: https://docs.rs/aeronet_proto
 [`ServerEvent::Connecting`]: aeronet::server::ServerEvent::Connecting
+[`WebTransportRuntime`]: runtime::WebTransportRuntime
 [`WebTransportClient`]: client::WebTransportClient
 [`WebTransportClient::new`]: client::WebTransportClient::new
 [`WebTransportClient::connect`]: client::WebTransportClient::connect

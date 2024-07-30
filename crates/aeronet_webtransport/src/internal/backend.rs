@@ -1,14 +1,39 @@
+#![allow(unused_imports)] // todo wasm
+
 use bytes::Bytes;
 use futures::{channel::mpsc, never::Never, FutureExt, SinkExt, StreamExt};
 use web_time::Duration;
 use xwt_core::session::datagram;
 
-use crate::runtime::WebTransportRuntime;
+use crate::{
+    client::{ClientConfig, ClientError},
+    runtime::WebTransportRuntime,
+};
 
-use super::{get_mtu, Connection, ConnectionMeta, InternalError};
+use super::{get_mtu, ClientEndpoint, Connection, ConnectionMeta, InternalError};
 
+#[allow(dead_code)] // todo wasm
 const STATS_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
 
+#[allow(clippy::unnecessary_wraps)] // on WASM, must match fn sig
+pub fn create_client_endpoint(config: ClientConfig) -> Result<ClientEndpoint, ClientError> {
+    #[cfg(target_family = "wasm")]
+    {
+        Ok(xwt_web_sys::Endpoint {
+            options: config.to_js(),
+        })
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let raw = wtransport::Endpoint::client(config).map_err(ClientError::CreateEndpoint)?;
+        Ok(xwt_wtransport::Endpoint(raw))
+    }
+}
+
+#[allow(clippy::unused_async)] // todo wasm
+#[allow(unused_mut)] // todo wasm
+#[allow(unused_variables)] // todo wasm
 pub async fn handle_connection<E>(
     runtime: WebTransportRuntime,
     conn: Connection,
