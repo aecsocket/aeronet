@@ -65,7 +65,7 @@ This crate aims to be:
   * You should be able to plug nearly anything in as the underlying transport layer, and have things
     work
   * To achieve this, aeronet provides its own implementation of certain protocol elements such as
-    fragmentation and reliable packets - see [`aeronet_proto`](https://docs.rs/aeronet_proto)
+    fragmentation and reliable messages - see [`aeronet_proto`](https://docs.rs/aeronet_proto)
 * Integrated with Bevy
   * Built with apps and games in mind, the abstractions chosen closely suit Bevy's app model, and
     likely other similar frameworks
@@ -232,6 +232,7 @@ for event in client.poll(delta_time) {
 
 | `bevy` | `aeronet` |
 |--------|-----------|
+| 0.14   | 0.7       |
 | 0.13   | 0.6       |
 
 [`Bytes`]: bytes::Bytes

@@ -69,12 +69,11 @@ terminology and implementation.
 The aeronet protocol can be used on top of nearly any transport. The requirements are:
 - The transport MUST be able to send packets between peers, where a packet is defined as a
   variable-sized byte buffer
-- Packets MUST be guaranteed to be kept intact while being transported
-  - If data is corrupted, the packet MUST be dropped or resent
-  - The packet MUST NOT be truncated or extended in transit
-  - If we send a packet *P* to a peer, then if the packet transport is successful (i.e. the packet
-    was not lost in transit or corrupted), the peer MUST be able to read a byte-for-byte copy of the
-    original packet *P*
+- Packets MUST be guaranteed to have the same contents after being transported, although they may
+  be truncated or extended
+  - If the packet is truncated or extended, this is caught as an error by the protocol, and is
+    handled safely
+  - The transport MUST guarantee that the same bytes were sent via e.g. a checksum or encryption
 - Neither reliability, ordering, nor deduplication have to be guaranteed
 
 ## Layout

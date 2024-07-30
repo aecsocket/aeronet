@@ -37,6 +37,15 @@ feature.
 
 See the *Certificates* section to learn how to properly manage certificates.
 
+## Runtime
+
+The WebTransport client and server use a specific runtime, the [`WebTransportRuntime`], to run the
+async task which manages the actual connections and endpoints. To connect or open any client or
+server, you will first need one of these runtimes.
+
+You can use the [`Default`] impl to create one of these runtimes, or in Bevy, insert the runtime as
+a resource using `App::init_resource::<WebTransportRuntime>()`.
+
 ## Client
 
 Create a disconnected [`WebTransportClient`] using [`WebTransportClient::new`], and use
@@ -47,35 +56,34 @@ In Bevy, you can use `App::init_resource::<WebTransportClient>()` to automatical
 disconnected client into your app.
 
 ```rust
-use std::future::Future;
-
 use bevy::prelude::*;
-use aeronet_webtransport::client::{WebTransportClient, ClientConfig};
+use aeronet_webtransport::{
+    client::{WebTransportClient, ClientConfig},
+    runtime::WebTransportRuntime,
+};
 use aeronet_webtransport::proto::session::SessionConfig;
 
 App::new()
+    .init_resource::<WebTransportRuntime>()
     .init_resource::<WebTransportClient>()
     .add_systems(Startup, connect);
 
-fn connect(mut client: ResMut<WebTransportClient>) {
+fn connect(mut client: ResMut<WebTransportClient>, runtime: Res<WebTransportRuntime>) {
     let net_config = create_net_config();
     let session_config = create_session_config();
-    let backend = client.connect(
-      net_config,
-      session_config,
-      "https://[::1]:1234",
+    client.connect(
+        runtime.as_ref(),
+        net_config,
+        session_config,
+        "https://[::1]:1234",
     )
-    .unwrap();
-    run_async_task(backend);
+    .expect("failed to connect client");
 }
 
 // this will change depending on whether you target native or WASM
 fn create_net_config() -> ClientConfig { unimplemented!() }
 
 fn create_session_config() -> SessionConfig { unimplemented!() }
-
-// use an async runtime like tokio or wasm-bindgen-futures for this
-fn run_async_task(f: impl Future) { unimplemented!() }
 ```
 
 ## Server
@@ -95,29 +103,32 @@ accept or reject the client.
   or not.
 
 ```rust
-use std::future::Future;
-
 use bevy::prelude::*;
-use aeronet_webtransport::server::{WebTransportServer, ServerConfig};
+use aeronet_webtransport::{
+    server::{WebTransportServer, ServerConfig}
+    runtime::WebTransportRuntime,
+};
 use aeronet_webtransport::proto::session::SessionConfig;
 
 App::new()
+    .init_resource::<WebTransportRuntime>()
     .init_resource::<WebTransportServer>()
     .add_systems(Startup, open);
 
-fn open(mut server: ResMut<WebTransportServer>) {
+fn open(mut server: ResMut<WebTransportServer>, runtime: Res<WebTransportRuntime>) {
     let net_config = create_net_config();
     let session_config = create_session_config();
-    let backend = server.open(net_config, session_config).unwrap();
-    run_async_task(backend);
+    server.open(
+        runtime.as_ref(),
+        net_config,
+        session_config,
+    )
+    .expect("failed to open server");
 }
 
 fn create_net_config() -> ServerConfig { unimplemented!() }
 
 fn create_session_config() -> SessionConfig { unimplemented!() }
-
-// use an async runtime like tokio for this
-fn run_async_task(f: impl Future) { unimplemented!() }
 ```
 
 # Certificates
