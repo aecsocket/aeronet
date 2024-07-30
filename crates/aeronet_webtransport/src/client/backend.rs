@@ -74,8 +74,17 @@ pub async fn start(
         .map_err(|_| ClientError::FrontendClosed)?;
 
     debug!("Starting connection loop");
-    // `receive_datagram` may not be cancel-safe, so we create multiple futures
-    // which loop infinitely independently, and wait for the first one to fail
+    /*
+    TODO: BROKEN ON WASM:
+      We can't actually poll for sending and receiving at the same time in the same future.
+      These 3 loops should be split into separately spawned tasks.
+      But, with xwt, we can't split this single Connection into its sending and receiving halves,
+      making it really annoying to split this into separate tasks.
+
+      So for now, WASM clients will be practically useless.
+
+    BLOCKING ISSUE!!
+    */
     let send_loop = internal::send_loop(&conn, recv_c2s);
     let recv_loop = internal::recv_loop(&conn, send_s2c);
     let update_meta_loop = internal::update_meta(&conn, send_meta);
