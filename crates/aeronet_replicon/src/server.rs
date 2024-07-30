@@ -12,10 +12,7 @@ use aeronet::{
 };
 use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, system::SystemParam};
-use bevy_replicon::{
-    core::ClientId,
-    server::{replicon_server::RepliconServer, ServerSet},
-};
+use bevy_replicon::{core::ClientId, prelude::RepliconServer, server::ServerSet};
 use bevy_time::prelude::*;
 use bimap::{BiHashMap, Overwritten};
 use bytes::Bytes;

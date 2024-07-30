@@ -1,3 +1,7 @@
+# 0.7.0
+
+* Updated to Bevy 0.14.0
+
 # 0.6.0
 
 * Removed the concept of protocols

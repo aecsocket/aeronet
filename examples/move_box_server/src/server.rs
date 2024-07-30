@@ -126,7 +126,7 @@ fn on_server_event(
             ServerEvent::ClientConnected { client_id } => {
                 let client_key = client_keys.get_by_right(client_id).unwrap();
                 info!("{client_id:?} controlled by {client_key} connected");
-                let color = Color::rgb(rand::random(), rand::random(), rand::random());
+                let color = Color::srgb(rand::random(), rand::random(), rand::random());
                 commands.spawn((
                     Player(*client_id),
                     PlayerPosition(Vec2::ZERO),
