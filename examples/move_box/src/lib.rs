@@ -12,11 +12,23 @@ const MOVE_SPEED: f32 = 2500.0;
 #[derive(Debug)]
 pub struct MoveBoxPlugin;
 
+/// Whether the game is currently being simulated or not.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, States)]
+pub enum GameState {
+    /// Game is not being simulated.
+    #[default]
+    None,
+    /// Game is being simulated.
+    Playing,
+}
+
 impl Plugin for MoveBoxPlugin {
     fn build(&self, app: &mut App) {
         // use the convenience resource WebTransportRuntime for spawning tasks
         // platform-independently (native using tokio, or WASM using wasm-bindgen-futures)
-        app.init_resource::<WebTransportRuntime>()
+        app.init_state::<GameState>()
+            .enable_state_scoped_entities::<GameState>()
+            .init_resource::<WebTransportRuntime>()
             .add_plugins(RepliconPlugins.build().set(ServerPlugin {
                 tick_policy: TickPolicy::MaxTickRate(128),
                 ..Default::default()

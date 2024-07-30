@@ -3,7 +3,6 @@
 use aeronet::{
     client::{ClientState, ClientTransport, LocalClientConnected, LocalClientDisconnected},
     error::pretty_error,
-    server::ServerTransportSet,
 };
 use aeronet_replicon::client::RepliconClientPlugin;
 use aeronet_webtransport::{
@@ -18,8 +17,8 @@ use aeronet_webtransport::{
 };
 use bevy::{ecs::system::SystemId, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-use bevy_replicon::prelude::RepliconChannels;
-use move_box::{MoveBoxPlugin, PlayerColor, PlayerMove, PlayerPosition};
+use bevy_replicon::{client::ClientSet, prelude::*};
+use move_box::{GameState, MoveBoxPlugin, Player, PlayerColor, PlayerMove, PlayerPosition};
 
 /// State of the [`egui`] interface used for connecting and disconnecting.
 #[derive(Debug, Default, Resource)]
@@ -53,9 +52,16 @@ fn main() {
         .add_systems(Startup, (setup_level, setup_systems))
         .add_systems(
             PreUpdate,
-            (on_connected, on_disconnected).after(ServerTransportSet::Recv),
+            (on_connected, on_disconnected, init_player).after(ClientSet::Receive),
         )
-        .add_systems(Update, (ui, handle_inputs, draw_boxes, draw_stats).chain())
+        .add_systems(
+            Update,
+            (
+                ui,
+                draw_stats,
+                (handle_inputs, draw_boxes).run_if(in_state(GameState::Playing)),
+            ),
+        )
         .run();
 }
 
@@ -150,6 +156,7 @@ fn ui(
     mut ui_state: ResMut<UiState>,
     mut client: ResMut<WebTransportClient>,
     connect_to_remote: Res<ConnectToRemote>,
+    mut game_state: ResMut<NextState<GameState>>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -190,19 +197,39 @@ fn ui(
 
         if do_disconnect {
             let _ = client.disconnect();
+            game_state.set(GameState::None);
         }
     });
 }
 
-fn on_connected(mut events: EventReader<LocalClientConnected<WebTransportClient>>) {
+fn on_connected(
+    mut events: EventReader<LocalClientConnected<WebTransportClient>>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
     for LocalClientConnected { .. } in events.read() {
         info!("Client connected");
+        game_state.set(GameState::Playing);
     }
 }
 
-fn on_disconnected(mut events: EventReader<LocalClientDisconnected<WebTransportClient>>) {
+fn on_disconnected(
+    mut events: EventReader<LocalClientDisconnected<WebTransportClient>>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
     for LocalClientDisconnected { error } in events.read() {
         info!("Client disconnected: {:#}", pretty_error(&error));
+        game_state.set(GameState::None);
+    }
+}
+
+fn init_player(
+    mut commands: Commands,
+    query: Query<Entity, (With<Player>, Without<StateScoped<GameState>>)>,
+) {
+    for entity in &query {
+        commands
+            .entity(entity)
+            .insert(StateScoped(GameState::Playing));
     }
 }
 

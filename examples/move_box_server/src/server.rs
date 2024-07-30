@@ -16,9 +16,11 @@ use aeronet_webtransport::{
     wtransport,
 };
 use ascii_table::AsciiTable;
-use bevy::{log::LogPlugin, prelude::*, time::common_conditions::on_timer};
+use bevy::{
+    log::LogPlugin, prelude::*, state::app::StatesPlugin, time::common_conditions::on_timer,
+};
 use bevy_replicon::{core::Replicated, prelude::RepliconChannels, server::ServerEvent};
-use move_box::{MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
+use move_box::{GameState, MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
 use size_format::{BinaryPrefixes, PointSeparated, SizeFormatter};
 use web_time::{Duration, Instant};
 
@@ -44,8 +46,9 @@ pub fn main() {
     App::new()
         .init_resource::<Args>()
         .add_plugins((
-            MinimalPlugins,
             LogPlugin::default(),
+            MinimalPlugins,
+            StatesPlugin,
             RepliconServerPlugin::<WebTransportServer>::default(),
             MoveBoxPlugin,
         ))
@@ -93,9 +96,13 @@ fn open_server(
     runtime.spawn(backend);
 }
 
-fn on_opened(mut events: EventReader<ServerOpened<WebTransportServer>>) {
+fn on_opened(
+    mut events: EventReader<ServerOpened<WebTransportServer>>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
     for ServerOpened { .. } in events.read() {
         info!("Server opened");
+        game_state.set(GameState::Playing);
     }
 }
 

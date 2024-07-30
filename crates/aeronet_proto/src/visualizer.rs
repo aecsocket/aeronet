@@ -138,6 +138,7 @@ impl SessionStatsVisualizer {
                 if self.show_loss {
                     plot(history, "loss")
                         .include_y(100.0)
+                        .y_grid_spacer(uniform_grid_spacer(|_| [100.0, 25.0, 10.0]))
                         .custom_y_axes(vec![axis_hints("%")])
                         .show(ui, |ui| {
                             ui.line(Line::new(loss).name("Pkt Loss").color(MAIN_COLOR));
@@ -214,6 +215,7 @@ fn axis_hints(label: impl Into<WidgetText>) -> AxisHints<'static> {
     AxisHints::new_y()
         .label(label)
         .placement(Placement::RightTop)
+        .min_thickness(48.0)
 }
 
 fn fmt_bytes(bytes: usize) -> String {
