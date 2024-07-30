@@ -1,14 +1,11 @@
 mod backend;
 mod frontend;
 
-use crate::client::{ClientConfig, ClientError};
-
 pub use {backend::*, frontend::*};
 
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
-use xwt_core::session::datagram;
 
 pub const MSG_BUF_CAP: usize = 256;
 
@@ -22,12 +19,6 @@ cfg_if::cfg_if! {
         pub type ClientEndpoint = xwt_web_sys::Endpoint;
         pub type ConnectionError = crate::JsError;
 
-        pub fn create_client_endpoint(config: ClientConfig) -> Result<ClientEndpoint, ClientError> {
-            Ok(xwt_web_sys::Endpoint {
-                options: config.to_js(),
-            })
-        }
-
         // TODO upstreamed to xwt
         #[allow(clippy::unnecessary_wraps)] // must match fn sig
         pub fn get_mtu(conn: &Connection) -> Option<usize> {
@@ -39,15 +30,11 @@ cfg_if::cfg_if! {
         use std::net::SocketAddr;
 
         use web_time::Duration;
+        use xwt_core::session::datagram;
 
         pub type Connection = xwt_wtransport::Connection;
         pub type ClientEndpoint = xwt_wtransport::Endpoint<wtransport::endpoint::endpoint_side::Client>;
         pub type ConnectionError = <Connection as datagram::Receive>::Error;
-
-        pub fn create_client_endpoint(config: ClientConfig) -> Result<ClientEndpoint, ClientError> {
-            let raw = wtransport::Endpoint::client(config).map_err(ClientError::CreateEndpoint)?;
-            Ok(xwt_wtransport::Endpoint(raw))
-        }
 
         // TODO upstreamed to xwt
         pub fn get_mtu(conn: &Connection) -> Option<usize> {
