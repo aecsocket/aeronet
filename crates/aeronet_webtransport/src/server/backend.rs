@@ -10,13 +10,17 @@ use tracing::{debug, debug_span, Instrument};
 use web_time::Instant;
 use wtransport::endpoint::{IncomingSession, SessionRequest};
 
-use crate::internal::{self, ConnectionMeta, MIN_MTU};
+use crate::{
+    internal::{self, ConnectionMeta, MIN_MTU},
+    runtime::WebTransportRuntime,
+};
 
 use super::{
     ClientKey, ConnectionResponse, ServerConfig, ServerError, ToConnected, ToConnecting, ToOpen,
 };
 
 pub async fn start(
+    runtime: WebTransportRuntime,
     net_config: ServerConfig,
     session_config: SessionConfig,
     send_open: oneshot::Sender<ToOpen>,
@@ -39,10 +43,13 @@ pub async fn start(
             _ = recv_closed => return Err(ServerError::FrontendClosed),
             x = endpoint.accept().fuse() => x,
         };
+        let runtime_clone = runtime.clone();
         let send_connecting = send_connecting.clone();
         let session_config = session_config.clone();
-        tokio::spawn(async move {
-            if let Err(err) = start_handle_session(session_config, send_connecting, session).await {
+        runtime.spawn(async move {
+            if let Err(err) =
+                start_handle_session(runtime_clone, session_config, send_connecting, session).await
+            {
                 debug!("Failed to start handling session: {:#}", pretty_error(&err));
             }
         });
@@ -50,6 +57,7 @@ pub async fn start(
 }
 
 async fn start_handle_session(
+    runtime: WebTransportRuntime,
     session_config: SessionConfig,
     mut send_connecting: mpsc::Sender<ToConnecting>,
     session: IncomingSession,
@@ -77,7 +85,8 @@ async fn start_handle_session(
     let client_key = recv_key.await.map_err(|_| ServerError::FrontendClosed)?;
 
     let err = async move {
-        let Err(err) = handle_session(session_config, req, recv_conn_resp, send_connected).await
+        let Err(err) =
+            handle_session(runtime, session_config, req, recv_conn_resp, send_connected).await
         else {
             unreachable!()
         };
@@ -101,6 +110,7 @@ async fn start_handle_session(
 }
 
 async fn handle_session(
+    runtime: WebTransportRuntime,
     session_config: SessionConfig,
     req: SessionRequest,
     recv_conn_resp: oneshot::Receiver<ConnectionResponse>,
@@ -150,16 +160,10 @@ async fn handle_session(
             session,
         })
         .map_err(|_| ServerError::FrontendClosed)?;
+    let conn = xwt_wtransport::Connection(conn);
 
     debug!("Starting connection loop");
-    let conn = xwt_wtransport::Connection(conn);
-    let send_loop = internal::send_loop(&conn, recv_s2c);
-    let recv_loop = internal::recv_loop(&conn, send_c2s);
-    let update_rtt_loop = internal::update_meta(&conn, send_meta);
-    futures::select! {
-        r = send_loop.fuse() => r,
-        r = recv_loop.fuse() => r,
-        r = update_rtt_loop.fuse() => r,
-    }
-    .map_err(From::from)
+    internal::handle_connection(runtime, conn, recv_s2c, send_c2s, send_meta)
+        .await
+        .map_err(From::from)
 }

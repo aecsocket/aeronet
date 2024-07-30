@@ -111,7 +111,7 @@ fn ui(
     mut egui: EguiContexts,
     mut ui_state: ResMut<UiState>,
     mut client: ResMut<WebTransportClient>,
-    rt: Res<WebTransportRuntime>,
+    runtime: Res<WebTransportRuntime>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -151,16 +151,13 @@ fn ui(
             ui.memory_mut(|m| m.request_focus(msg_resp.id));
             let target = ui_state.target.clone();
             ui_state.log.push(format!("Connecting to {target}"));
-            match client.connect(net_config(), session_config(), target) {
-                Ok(backend) => {
-                    rt.spawn(backend);
-                }
-                Err(err) => {
-                    ui_state.log.push(format!(
-                        "Failed to start connecting: {:#}",
-                        pretty_error(&err)
-                    ));
-                }
+            if let Err(err) =
+                client.connect(runtime.as_ref(), net_config(), session_config(), target)
+            {
+                ui_state.log.push(format!(
+                    "Failed to start connecting: {:#}",
+                    pretty_error(&err)
+                ));
             }
         }
 

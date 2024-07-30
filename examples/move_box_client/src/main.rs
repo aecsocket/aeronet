@@ -87,13 +87,8 @@ fn connect_to_remote(
         .with_send_lanes(channels.client_channels())
         .with_recv_lanes(channels.server_channels());
 
-    match client.connect(net_config, session_config, target) {
-        Ok(backend) => {
-            runtime.spawn(backend);
-        }
-        Err(err) => {
-            warn!("Failed to start connecting: {:#}", pretty_error(&err));
-        }
+    if let Err(err) = client.connect(runtime.as_ref(), net_config, session_config, target) {
+        warn!("Failed to start connecting: {:#}", pretty_error(&err));
     }
 }
 
