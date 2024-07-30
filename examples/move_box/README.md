@@ -31,7 +31,7 @@ cargo run --bin move_box_client --target wasm32-unknown-unknown
 
 If you have problems running the client in Firefox (especially LibreWolf), check:
 - `privacy.resistFingerprinting` is disabled, or Enhanced Tracking Protection is disabled for the
-  website (see winit #3345)
+  website (see [winit #3345](https://github.com/rust-windowing/winit/issues/3345))
 - `webgl.disabled` is set to `false`, so that Bevy can use the GPU
 - todo: current bug in `xwt_web_sys`: something to do with ReadableStream.getReader with BYOB
 
@@ -47,7 +47,7 @@ which your client (native or browser) will treat as invalid. To get around this,
 provide SHA-256 digest of the certificate's DER as a base 64 string.
 
 When starting the server, it outputs the *certificate hash* as a base 64 string (it also outputs the
-*SPKI fingerprint*, which is different and is not necessary here). Copy this string and enter it
+*SPKI fingerprint*, which is different and is not necessary h)ere). Copy this string and enter it
 into the "certificate hash" field of the client before connecting. The client will then ignore
 certificate validation errors for this specific certificate, and allow a connection to be
 established.

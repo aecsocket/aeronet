@@ -27,7 +27,9 @@ cargo install wasm-server-runner
 cargo run --bin move_box_client --target wasm32-unknown-unknown
 ```
 
-And connect to `http://[::1]:25565`
+And connect to `http://[::1]:25565`.
+
+See the [examples](./examples) folder for the source code.
 
 # Transport
 

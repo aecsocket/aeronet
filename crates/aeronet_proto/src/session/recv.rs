@@ -132,8 +132,7 @@ impl Session {
                 *packets_acked = packets_acked.saturating_add(1);
                 let packet_rtt = now - packet.flushed_at;
                 rtt.update(packet_rtt);
-                // TODO Rust 1.80: Box::into_iter - https://github.com/rust-lang/rust/issues/59878
-                packet.frags.into_vec().into_iter()
+                Box::into_iter(packet.frags)
             })
             .filter_map(|frag_path| {
                 // for each of those fragments, we'll mark that fragment as acked

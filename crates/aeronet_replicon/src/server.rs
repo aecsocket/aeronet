@@ -247,7 +247,10 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
         });
 
         let Some((_, client_id)) = client_keys.id_map.remove_by_left(&client_key) else {
-            warn!("Disconnected client {client_key:?} which does not have a client ID");
+            // this may happen if the client started connecting,
+            // but disconnected before fully connecting,
+            // leaving behind no replicon client ID
+            debug!("Disconnected client {client_key:?} which does not have a client ID");
             return;
         };
         debug!("Removed {client_key:?} associated with {client_id:?}");

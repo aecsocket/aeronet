@@ -21,12 +21,20 @@ use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_replicon::prelude::RepliconChannels;
 use move_box::{MoveBoxPlugin, PlayerColor, PlayerMove, PlayerPosition};
 
+/// State of the [`egui`] interface used for connecting and disconnecting.
 #[derive(Debug, Default, Resource)]
 struct UiState {
+    /// HTTPS URL of the server to connect to.
     target: String,
+    /// Optional hash of a certificate that we want to ignore validation for.
+    ///
+    /// See the readme for why this is necessary.
     cert_hash: String,
 }
 
+/// One-shot system for connecting to a remote server.
+///
+/// Accepts a tuple of `(target, cert_hash)`.
 #[derive(Debug, Clone, Copy, Deref, Resource)]
 struct ConnectToRemote(SystemId<(String, String)>);
 
@@ -67,6 +75,7 @@ fn connect_to_remote(
     runtime: Res<WebTransportRuntime>,
 ) {
     let net_config = net_config(spki_hash);
+    // since we're using replicon, we map each replicon channel to a lane, 1 to 1
     let session_config = SessionConfig::default()
         .with_send_lanes(channels.client_channels())
         .with_recv_lanes(channels.server_channels());

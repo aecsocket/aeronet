@@ -11,7 +11,7 @@ use aeronet_webtransport::{
     cert,
     proto::session::SessionConfig,
     runtime::WebTransportRuntime,
-    server::{ConnectionResponse, WebTransportServer},
+    server::{ConnectionResponse, ServerConfig, WebTransportServer},
     shared::RawRtt,
     wtransport,
 };
@@ -77,7 +77,7 @@ fn open_server(
     info!("  {cert_hash}");
     info!("************************");
 
-    let net_config = wtransport::ServerConfig::builder()
+    let net_config = ServerConfig::builder()
         .with_bind_default(args.port)
         .with_identity(&identity)
         .keep_alive_interval(Some(Duration::from_secs(1)))
