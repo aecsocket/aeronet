@@ -16,6 +16,11 @@ pub async fn handle_connection<E>(
     mut send_r: mpsc::Sender<Bytes>,
     mut send_meta: mpsc::Sender<ConnectionMeta>,
 ) -> Result<Never, InternalError<E>> {
+    #[cfg(target_family = "wasm")]
+    {
+        todo!("connections on WASM are not supported yet")
+    }
+
     #[cfg(not(target_family = "wasm"))]
     {
         use wtransport::error::SendDatagramError;
@@ -71,7 +76,7 @@ pub async fn handle_connection<E>(
 
         let meta = async move {
             loop {
-                sleep(STATS_UPDATE_INTERVAL).await;
+                runtime.sleep(STATS_UPDATE_INTERVAL).await;
                 let meta = ConnectionMeta {
                     rtt: conn.0.rtt(),
                     mtu: get_mtu(conn).ok_or(InternalError::DatagramsNotSupported)?,
@@ -89,14 +94,4 @@ pub async fn handle_connection<E>(
             r = meta.fuse() => r,
         }
     }
-}
-
-#[cfg(target_family = "wasm")]
-async fn sleep(duration: Duration) {
-    gloo_timers::future::sleep(duration).await;
-}
-
-#[cfg(not(target_family = "wasm"))]
-async fn sleep(duration: Duration) {
-    tokio::time::sleep(duration).await;
 }

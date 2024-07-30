@@ -1,6 +1,6 @@
 //! See [`WebTransportRuntime`].
 
-use std::future::Future;
+use std::{future::Future, time::Duration};
 
 use xwt_core::utils::maybe;
 
@@ -71,6 +71,18 @@ impl WebTransportRuntime {
         #[cfg(not(target_family = "wasm"))]
         {
             self.runtime.spawn(future);
+        }
+    }
+
+    /// Pauses execution for the given duration.
+    pub async fn sleep(&self, duration: Duration) {
+        #[cfg(target_family = "wasm")]
+        {
+            gloo_timers::future::sleep(duration).await;
+        }
+        #[cfg(not(target_family = "wasm"))]
+        {
+            tokio::time::sleep(duration).await;
         }
     }
 }

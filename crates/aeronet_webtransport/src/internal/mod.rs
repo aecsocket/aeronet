@@ -28,6 +28,7 @@ cfg_if::cfg_if! {
             })
         }
 
+        // TODO upstreamed to xwt
         #[allow(clippy::unnecessary_wraps)] // must match fn sig
         pub fn get_mtu(conn: &Connection) -> Option<usize> {
             let mtu = usize::try_from(conn.transport.datagrams().max_datagram_size())
@@ -48,6 +49,7 @@ cfg_if::cfg_if! {
             Ok(xwt_wtransport::Endpoint(raw))
         }
 
+        // TODO upstreamed to xwt
         pub fn get_mtu(conn: &Connection) -> Option<usize> {
             conn.0.max_datagram_size()
         }
