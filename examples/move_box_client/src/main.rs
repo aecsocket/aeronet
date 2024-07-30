@@ -231,7 +231,6 @@ fn init_player(
         commands
             .entity(entity)
             .insert(StateScoped(GameState::Playing));
-        info!("!!! INSERTED state scoped");
     }
 }
 
