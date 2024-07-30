@@ -20,7 +20,7 @@ use bevy::{
     log::LogPlugin, prelude::*, state::app::StatesPlugin, time::common_conditions::on_timer,
 };
 use bevy_replicon::{core::Replicated, prelude::RepliconChannels, server::ServerEvent};
-use move_box::{GameState, MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
+use move_box::{ClientPlayer, GameState, MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
 use size_format::{BinaryPrefixes, PointSeparated, SizeFormatter};
 use web_time::{Duration, Instant};
 
@@ -126,7 +126,7 @@ fn on_server_event(
     mut commands: Commands,
     mut events: EventReader<ServerEvent>,
     client_keys: Res<ClientKeys<WebTransportServer>>,
-    players: Query<(Entity, &Player)>,
+    players: Query<(Entity, &ClientPlayer)>,
 ) {
     for event in events.read() {
         match event {
@@ -135,7 +135,8 @@ fn on_server_event(
                 info!("{client_id:?} controlled by {client_key} connected");
                 let color = Color::srgb(rand::random(), rand::random(), rand::random());
                 commands.spawn((
-                    Player(*client_id),
+                    Player,
+                    ClientPlayer(*client_id),
                     PlayerPosition(Vec2::ZERO),
                     PlayerColor(color),
                     Replicated,
@@ -143,8 +144,8 @@ fn on_server_event(
             }
             ServerEvent::ClientDisconnected { client_id, reason } => {
                 info!("{client_id:?} disconnected: {reason}");
-                for (entity, Player(player)) in &players {
-                    if *player == *client_id {
+                for (entity, ClientPlayer(test_id)) in &players {
+                    if *test_id == *client_id {
                         commands.entity(entity).despawn();
                     }
                 }
