@@ -33,6 +33,7 @@ impl Plugin for MoveBoxPlugin {
                 tick_policy: TickPolicy::MaxTickRate(128),
                 ..Default::default()
             }))
+            .replicate::<Player>()
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
             .add_client_event::<PlayerMove>(ChannelKind::Ordered)
