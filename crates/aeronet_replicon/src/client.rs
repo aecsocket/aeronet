@@ -13,10 +13,8 @@ use aeronet::{
 use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, system::SystemParam};
 use bevy_replicon::{
-    client::{
-        replicon_client::{RepliconClient, RepliconClientStatus},
-        ClientSet,
-    },
+    client::ClientSet,
+    prelude::{RepliconClient, RepliconClientStatus},
     server::ServerSet,
 };
 use bevy_time::prelude::*;

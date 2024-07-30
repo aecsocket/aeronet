@@ -117,7 +117,7 @@ impl SessionStatsVisualizer {
                 if self.show_rtt {
                     plot(history, "rtt")
                         .y_grid_spacer(uniform_grid_spacer(|_| [500.0, 200.0, 50.0]))
-                        .custom_y_axes(vec![axis_hints("ms").max_digits(4)])
+                        .custom_y_axes(vec![axis_hints("ms")])
                         .show(ui, |ui| {
                             ui.line(Line::new(rtt).name("RTT").color(MAIN_COLOR));
                             ui.line(Line::new(crtt).name("cRTT").color(FAINT_COLOR));
@@ -193,7 +193,7 @@ impl SessionStatsVisualizer {
     }
 }
 
-fn plot(history: f64, id_source: impl Hash) -> Plot {
+fn plot(history: f64, id_source: impl Hash) -> Plot<'static> {
     egui_plot::Plot::new(id_source)
         .height(150.0)
         .view_aspect(2.5)
@@ -206,11 +206,11 @@ fn plot(history: f64, id_source: impl Hash) -> Plot {
         .include_y(0.0)
         .x_axis_label("sec")
         .x_grid_spacer(uniform_grid_spacer(|_| [10.0, 5.0, 1.0]))
-        .y_axis_width(4)
+        .y_axis_min_width(48.0)
         .legend(Legend::default().position(Corner::LeftTop))
 }
 
-fn axis_hints(label: impl Into<WidgetText>) -> AxisHints {
+fn axis_hints(label: impl Into<WidgetText>) -> AxisHints<'static> {
     AxisHints::new_y()
         .label(label)
         .placement(Placement::RightTop)
@@ -223,6 +223,6 @@ fn fmt_bytes(bytes: usize) -> String {
     )
 }
 
-fn fmt_bytes_y_axis(mark: GridMark, _max_digits: usize, _range: &RangeInclusive<f64>) -> String {
+fn fmt_bytes_y_axis(mark: GridMark, _range: &RangeInclusive<f64>) -> String {
     fmt_bytes(mark.value as usize)
 }
