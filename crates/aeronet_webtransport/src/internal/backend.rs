@@ -69,7 +69,7 @@ pub async fn handle_connection<E>(
                         // the backend constantly informs the frontend about changes in the path MTU
                         // so hopefully the frontend will realise its packets are exceeding MTU,
                         // and shrink them accordingly; therefore this is just a one-off error
-                        let mtu = get_mtu(&conn);
+                        let mtu = get_mtu(conn);
                         tracing::debug!(
                             packet_len,
                             mtu,
@@ -88,6 +88,7 @@ pub async fn handle_connection<E>(
 
         let recv = async move {
             loop {
+                #[allow(clippy::useless_conversion)] // multi-target support
                 let packet = datagram::Receive::receive_datagram(conn)
                     .await
                     .map_err(|err| InternalError::ConnectionLost(err.into()))?;
