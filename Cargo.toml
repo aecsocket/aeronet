@@ -10,11 +10,10 @@ keywords = ["gamedev", "network", "bevy"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aecsocket/aeronet"
 rust-version = "1.80.0"
-version = "0.6.0"
+version = "0.7.0"
 
 [workspace.lints.rust]
 missing_docs = "warn"
-# unused_crate_dependencies = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -30,11 +29,11 @@ similar_names = "allow"
 struct_excessive_bools = "allow"
 
 [workspace.dependencies]
-aeronet = { version = "0.6.0", path = "crates/aeronet" }
-aeronet_channel = { version = "0.6.0", path = "crates/aeronet_channel" }
-aeronet_proto = { version = "0.6.0", path = "crates/aeronet_proto" }
-aeronet_replicon = { version = "0.6.0", path = "crates/aeronet_replicon" }
-aeronet_webtransport = { version = "0.6.0", path = "crates/aeronet_webtransport" }
+aeronet = { version = "0.7.0", path = "crates/aeronet" }
+aeronet_channel = { version = "0.7.0", path = "crates/aeronet_channel" }
+aeronet_proto = { version = "0.7.0", path = "crates/aeronet_proto" }
+aeronet_replicon = { version = "0.7.0", path = "crates/aeronet_replicon" }
+aeronet_webtransport = { version = "0.7.0", path = "crates/aeronet_webtransport" }
 
 ahash = { version = "0.8.11", default-features = false, features = [
   "std",
@@ -46,59 +45,59 @@ ascii_table = "4.0.3"
 assert_matches = "1.5.0"
 bimap = "0.6.3"
 bitvec = "1.0.1"
-bytes = "1.6.0"
+bytes = "1.6.1"
 cfg-if = "1.0.0"
-clap = { version = "4.5.4", features = ["derive"] }
+clap = { version = "4.5.11", features = ["derive"] }
 datasize = "0.2.15"
 derivative = "2.2.0"
 derive_more = "0.99.18"
-egui = "0.27.2"
-egui_plot = "0.27.2"
-either = "1.9.0"
+egui = "0.28.1"
+egui_plot = "0.28.1"
+either = "1.13.0"
 itertools = "0.13.0"
 octs = "0.4.2"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 replace_with = "0.1.7"
 ringbuf = "0.4.1"
-serde = { version = "1.0.197", features = ["derive"] }
+serde = { version = "1.0.204", features = ["derive"] }
 size_format = "1.0.2"
 slotmap = "1.0.7"
 terrors = "0.3.0"
-thiserror = "1.0.57"
+thiserror = "1.0.63"
 tracing = "0.1.40"
 web-time = "1.1.0"
 
 # bevy
 
-bevy = "0.13.2"
-bevy_app = { version = "0.13.2", default-features = false }
-bevy_ecs = { version = "0.13.2", default-features = false }
-bevy_time = { version = "0.13.2", default-features = false }
+bevy = "0.14.0"
+bevy_app = { version = "0.14.0", default-features = false }
+bevy_ecs = { version = "0.14.0", default-features = false }
+bevy_time = { version = "0.14.0", default-features = false }
 
-bevy_egui = "0.27.1"
-bevy_replicon = "0.26.3"
+bevy_egui = "0.28.0"
+bevy_replicon = "0.27.0"
 
 # aeronet_channel
 
-crossbeam-channel = "0.5.11"
+crossbeam-channel = "0.5.13"
 futures = "0.3.30"
-tokio = { version = "1.36.0", default-features = false }
+tokio = { version = "1.39.2", default-features = false }
 
 # aeronet_webtransport
 
 xwt-core = "0.4.2"
 
-base64 = "0.22.0"
+base64 = "0.22.1"
 spki = { version = "0.7.3", features = ["fingerprint"] }
-wtransport = "0.1.12"
+wtransport = "0.1.13"
 x509-cert = "0.2.5"
 xwt-wtransport = "0.7.1"
 
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 js-sys = "0.3.69"
 wasm-bindgen = "0.2.92"
-wasm-bindgen-futures = "0.4.41"
+wasm-bindgen-futures = "0.4.42"
 xwt-web-sys = "0.11.0"
 
 # aeronet_steam
