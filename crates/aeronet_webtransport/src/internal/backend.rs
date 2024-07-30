@@ -1,54 +1,93 @@
 use bytes::Bytes;
-use futures::{channel::mpsc, never::Never, SinkExt, StreamExt};
+use futures::{channel::mpsc, never::Never, FutureExt, SinkExt, StreamExt};
 use web_time::Duration;
 use xwt_core::session::datagram;
 
-use super::{get_mtu, send_datagram, to_bytes, Connection, ConnectionMeta, InternalError};
+use crate::runtime::WebTransportRuntime;
+
+use super::{get_mtu, Connection, ConnectionMeta, InternalError};
 
 const STATS_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
 
-pub async fn send_loop<E>(
-    conn: &Connection,
+pub async fn handle_connection<E>(
+    runtime: WebTransportRuntime,
+    conn: Connection,
     mut recv_s: mpsc::UnboundedReceiver<Bytes>,
-) -> Result<Never, InternalError<E>> {
-    loop {
-        let msg = recv_s.next().await.ok_or(InternalError::FrontendClosed)?;
-        send_datagram(conn, msg).await?;
-    }
-}
-
-pub async fn recv_loop<E>(
-    conn: &Connection,
     mut send_r: mpsc::Sender<Bytes>,
-) -> Result<Never, InternalError<E>> {
-    loop {
-        #[allow(clippy::useless_conversion)] // WASM needs the .into()
-        let msg = datagram::Receive::receive_datagram(conn)
-            .await
-            .map_err(|err| InternalError::ConnectionLost(err.into()))?;
-        let msg = to_bytes(msg);
-        send_r
-            .send(msg)
-            .await
-            .map_err(|_| InternalError::FrontendClosed)?;
-    }
-}
-
-pub async fn update_meta<E>(
-    conn: &Connection,
     mut send_meta: mpsc::Sender<ConnectionMeta>,
 ) -> Result<Never, InternalError<E>> {
-    loop {
-        sleep(STATS_UPDATE_INTERVAL).await;
-        let meta = ConnectionMeta {
-            #[cfg(not(target_family = "wasm"))]
-            rtt: conn.0.rtt(),
-            mtu: get_mtu(conn).ok_or(InternalError::DatagramsNotSupported)?,
+    #[cfg(not(target_family = "wasm"))]
+    {
+        use wtransport::error::SendDatagramError;
+
+        let conn = &conn;
+        let send = async move {
+            loop {
+                let packet = recv_s
+                    .next()
+                    .await
+                    .ok_or(InternalError::<E>::FrontendClosed)?;
+                let packet_len = packet.len();
+                match datagram::Send::send_datagram(conn, packet).await {
+                    Ok(()) => Ok(()),
+                    Err(SendDatagramError::NotConnected) => {
+                        // we'll pick up connection errors in the recv loop,
+                        // where we'll get a better error message
+                        Ok(())
+                    }
+                    Err(SendDatagramError::TooLarge) => {
+                        // the backend constantly informs the frontend about changes in the path MTU
+                        // so hopefully the frontend will realise its packets are exceeding MTU,
+                        // and shrink them accordingly; therefore this is just a one-off error
+                        let mtu = get_mtu(&conn);
+                        tracing::debug!(
+                            packet_len,
+                            mtu,
+                            "Attempted to send datagram larger than MTU"
+                        );
+                        Ok(())
+                    }
+                    Err(SendDatagramError::UnsupportedByPeer) => {
+                        // this should be impossible, since we checked that the client does support datagrams
+                        // before connecting, but we'll error-case it anyway
+                        Err(InternalError::<E>::DatagramsNotSupported)
+                    }
+                }?;
+            }
         };
-        send_meta
-            .send(meta)
-            .await
-            .map_err(|_| InternalError::FrontendClosed)?;
+
+        let recv = async move {
+            loop {
+                let packet = datagram::Receive::receive_datagram(conn)
+                    .await
+                    .map_err(|err| InternalError::ConnectionLost(err.into()))?;
+                let packet = packet.0.payload();
+                send_r
+                    .send(packet)
+                    .await
+                    .map_err(|_| InternalError::FrontendClosed)?;
+            }
+        };
+
+        let meta = async move {
+            loop {
+                sleep(STATS_UPDATE_INTERVAL).await;
+                let meta = ConnectionMeta {
+                    rtt: conn.0.rtt(),
+                    mtu: get_mtu(conn).ok_or(InternalError::DatagramsNotSupported)?,
+                };
+                send_meta
+                    .send(meta)
+                    .await
+                    .map_err(|_| InternalError::FrontendClosed)?;
+            }
+        };
+
+        futures::select! {
+            r = send.fuse() => r,
+            r = recv.fuse() => r,
+            r = meta.fuse() => r,
+        }
     }
 }
 

@@ -92,8 +92,9 @@ fn open_server(
         .with_send_lanes(channels.server_channels())
         .with_recv_lanes(channels.client_channels());
 
-    let backend = server.open(net_config, session_config).unwrap();
-    runtime.spawn(backend);
+    server
+        .open(runtime.as_ref(), net_config, session_config)
+        .unwrap();
 }
 
 fn on_opened(

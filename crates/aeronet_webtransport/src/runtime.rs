@@ -17,7 +17,9 @@ use xwt_core::utils::maybe;
 /// own tasks for e.g. the sending and receiving halves of a session.
 ///
 /// On a native target, this holds a handle to a `tokio` runtime, because
-/// `wtransport` currently only supports this async runtime.
+/// `wtransport` currently only supports this async runtime. The [`Default`]
+/// impl will create and leak a new `tokio` runtime, and store a handle to this
+/// leaked runtime.
 ///
 /// On a WASM target, this uses `wasm-bindgen-futures` to spawn the future via
 /// `wasm-bindgen`.
@@ -26,7 +28,7 @@ use xwt_core::utils::maybe;
 ///
 /// [`WebTransportClient::connect`]: crate::client::WebTransportClient::connect
 /// [`WebTransportServer::open`]: crate::server::WebTransportServer::open
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportRuntime {
     #[cfg(target_family = "wasm")]
@@ -48,6 +50,7 @@ impl Default for WebTransportRuntime {
                 .enable_all()
                 .build()
                 .expect("failed to create tokio runtime");
+            let runtime = Box::leak(Box::new(runtime));
             Self {
                 runtime: runtime.handle().clone(),
             }

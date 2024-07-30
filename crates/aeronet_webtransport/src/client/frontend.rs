@@ -1,5 +1,3 @@
-use std::future::Future;
-
 use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport},
     error::pretty_error,
@@ -12,10 +10,10 @@ use futures::channel::oneshot;
 use replace_with::replace_with_or_abort_and_return;
 use tracing::debug;
 use web_time::Duration;
-use xwt_core::utils::maybe;
 
 use crate::{
     internal::{ConnectionInner, PollEvent},
+    runtime::WebTransportRuntime,
     shared::MessageKey,
 };
 
@@ -39,18 +37,18 @@ impl WebTransportClient {
     ///
     /// `target` must be given in the form of a URL, i.e. `https://[::1]:1234`.
     ///
-    /// This returns the backend, which you should spawn on an async task
-    /// runtime.
+    /// This automatically spawns the backend task on the runtime provided.
     ///
     /// # Errors
     ///
     /// Errors if the client is already connecting or connected.
     pub fn connect(
         &mut self,
+        runtime: &WebTransportRuntime,
         net_config: ClientConfig,
         session_config: SessionConfig,
         target: impl Into<String>,
-    ) -> Result<impl Future<Output = ()> + maybe::Send, ClientError> {
+    ) -> Result<(), ClientError> {
         if !matches!(self.state, State::Disconnected) {
             return Err(ClientError::AlreadyConnected);
         }
@@ -59,14 +57,20 @@ impl WebTransportClient {
         let (send_err, recv_err) = oneshot::channel::<ClientError>();
         let target = target.into();
 
-        self.state = State::Connecting(Connecting {
-            recv_connected,
-            recv_err,
-        });
-        let backend = async move {
-            match backend::start(net_config, session_config, target, send_connected).await {
+        let runtime_clone = runtime.clone();
+        runtime.spawn(async move {
+            debug!("Started client backend");
+            match backend::start(
+                runtime_clone,
+                net_config,
+                session_config,
+                target,
+                send_connected,
+            )
+            .await
+            {
                 Err(ClientError::FrontendClosed) => {
-                    debug!("Client disconnected");
+                    debug!("Client disconnected by frontend");
                 }
                 Err(err) => {
                     debug!("Client disconnected: {:#}", pretty_error(&err));
@@ -74,9 +78,14 @@ impl WebTransportClient {
                 }
                 Ok(_) => unreachable!(),
             }
-        };
+        });
 
-        Ok(backend)
+        self.state = State::Connecting(Connecting {
+            recv_connected,
+            recv_err,
+        });
+
+        Ok(())
     }
 }
 

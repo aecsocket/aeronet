@@ -3,7 +3,6 @@ use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
     never::Never,
-    FutureExt,
 };
 use tracing::debug;
 use web_time::Instant;
@@ -11,33 +10,20 @@ use xwt_core::prelude::*;
 
 use crate::{
     client::ToConnected,
-    internal::{self, ClientEndpoint, ConnectionMeta, MIN_MTU},
+    internal::{self, ConnectionMeta, MIN_MTU},
+    runtime::WebTransportRuntime,
 };
 
 use super::{ClientConfig, ClientError};
 
 pub async fn start(
+    runtime: WebTransportRuntime,
     net_config: ClientConfig,
     session_config: SessionConfig,
     target: String,
     send_connected: oneshot::Sender<ToConnected>,
 ) -> Result<Never, ClientError> {
-    let endpoint: Result<ClientEndpoint, ClientError> = {
-        #[cfg(target_family = "wasm")]
-        {
-            Ok(xwt_web_sys::Endpoint {
-                options: net_config.to_js(),
-            })
-        }
-
-        #[cfg(not(target_family = "wasm"))]
-        {
-            let raw =
-                wtransport::Endpoint::client(net_config).map_err(ClientError::CreateEndpoint)?;
-            Ok(xwt_wtransport::Endpoint(raw))
-        }
-    };
-    let endpoint = endpoint?;
+    let endpoint = internal::create_client_endpoint(net_config)?;
 
     debug!("Created endpoint, connecting to {target:?}");
     #[allow(clippy::useless_conversion)] // multi-target support
@@ -74,25 +60,7 @@ pub async fn start(
         .map_err(|_| ClientError::FrontendClosed)?;
 
     debug!("Starting connection loop");
-    /*
-    TODO: BROKEN ON WASM:
-      We can't actually poll for sending and receiving at the same time in the same future.
-      These 3 loops should be split into separately spawned tasks.
-      But, with xwt, we can't split this single Connection into its sending and receiving halves,
-      making it really annoying to split this into separate tasks.
-
-      So for now, WASM clients will be practically useless.
-
-    BLOCKING ISSUE!!
-    */
-    let send_loop = internal::send_loop(&conn, recv_c2s);
-    let recv_loop = internal::recv_loop(&conn, send_s2c);
-    let update_meta_loop = internal::update_meta(&conn, send_meta);
-    #[allow(clippy::useless_conversion)] // multi-target support
-    futures::select! {
-        r = send_loop.fuse() => r,
-        r = recv_loop.fuse() => r,
-        r = update_meta_loop.fuse() => r,
-    }
-    .map_err(From::from)
+    internal::handle_connection(runtime, conn, recv_c2s, send_s2c, send_meta)
+        .await
+        .map_err(From::from)
 }

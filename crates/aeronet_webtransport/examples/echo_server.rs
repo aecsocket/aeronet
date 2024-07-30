@@ -9,6 +9,7 @@ use aeronet::{
 };
 use aeronet_proto::session::SessionConfig;
 use aeronet_webtransport::{
+    cert,
     runtime::WebTransportRuntime,
     server::{ClientKey, ConnectionResponse, ServerConfig, WebTransportServer},
     wtransport,
@@ -67,18 +68,21 @@ fn setup_one_shot_systems(world: &mut World) {
     world.insert_resource(SendMessage(send_message));
 }
 
-fn setup_server(mut server: ResMut<WebTransportServer>, rt: Res<WebTransportRuntime>) {
+fn setup_server(mut server: ResMut<WebTransportServer>, runtime: Res<WebTransportRuntime>) {
     let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
     let cert = &identity.certificate_chain().as_slice()[0];
-    let spki_fingerprint = aeronet_webtransport::cert::spki_fingerprint_b64(cert).unwrap();
-    info!("*** SPKI FINGERPRINT ***");
-    info!("{spki_fingerprint}");
+    let spki_fingerprint = cert::spki_fingerprint_b64(cert).unwrap();
+    let cert_hash = cert::hash_to_b64(cert.hash());
+    info!("************************");
+    info!("SPKI FINGERPRINT");
+    info!("  {spki_fingerprint}");
+    info!("CERTIFICATE HASH");
+    info!("  {cert_hash}");
     info!("************************");
 
-    let backend = server
-        .open(server_config(&identity), session_config())
+    server
+        .open(runtime.as_ref(), server_config(&identity), session_config())
         .unwrap();
-    rt.spawn(backend);
 }
 
 fn poll_server(

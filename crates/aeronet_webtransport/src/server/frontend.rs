@@ -1,7 +1,6 @@
-use std::future::Future;
-
 use aeronet::{
     client::ClientState,
+    error::pretty_error,
     lane::LaneIndex,
     server::{ServerEvent, ServerState, ServerTransport},
 };
@@ -11,11 +10,12 @@ use either::Either;
 use futures::channel::oneshot;
 use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
 use slotmap::SlotMap;
-use tracing::trace_span;
+use tracing::{debug, trace_span};
 use web_time::Duration;
 
 use crate::{
     internal::{ConnectionInner, PollEvent},
+    runtime::WebTransportRuntime,
     shared::MessageKey,
 };
 
@@ -37,17 +37,17 @@ impl WebTransportServer {
 
     /// Starts opening this server for client connections.
     ///
-    /// This returns the backend, which you should spawn on an async task
-    /// runtime.
+    /// This automatically spawns the backend task on the runtime provided.
     ///
     /// # Errors
     ///
     /// Errors if the server is already opening or open.
     pub fn open(
         &mut self,
+        runtime: &WebTransportRuntime,
         net_config: ServerConfig,
         session_config: SessionConfig,
-    ) -> Result<impl Future<Output = ()> + Send, ServerError> {
+    ) -> Result<(), ServerError> {
         if !matches!(self.state, State::Closed) {
             return Err(ServerError::AlreadyOpen);
         }
@@ -55,16 +55,28 @@ impl WebTransportServer {
         let (send_open, recv_open) = oneshot::channel::<ToOpen>();
         let (send_err, recv_err) = oneshot::channel::<ServerError>();
 
+        let runtime_clone = runtime.clone();
+        runtime.spawn(async move {
+            debug!("Started server backend");
+            match backend::start(runtime_clone, net_config, session_config, send_open).await {
+                Err(ServerError::FrontendClosed) => {
+                    debug!("Server closed by frontend");
+                }
+                Err(err) => {
+                    debug!("Server closed: {:#}", pretty_error(&err));
+                    let _ = send_err.send(err);
+                }
+                Ok(_) => unreachable!(),
+            }
+        });
+
         self.state = State::Opening(Opening {
             recv_open,
             recv_err,
         });
-        let backend = async move {
-            if let Err(err) = backend::start(net_config, session_config, send_open).await {
-                let _ = send_err.send(err);
-            }
-        };
-        Ok(backend)
+
+        debug!("Opened server");
+        Ok(())
     }
 }
 
