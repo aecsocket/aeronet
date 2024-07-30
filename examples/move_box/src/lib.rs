@@ -40,9 +40,14 @@ impl Plugin for MoveBoxPlugin {
     }
 }
 
-/// ID of the player this entity represents.
+/// Marker component for a player in the game.
 #[derive(Debug, Clone, Component, Serialize, Deserialize)]
-pub struct Player(pub ClientId);
+pub struct Player;
+
+/// Player who is being controlled by a specific [`ClientId`] connected to our
+/// server.
+#[derive(Debug, Clone, Component, Serialize, Deserialize)]
+pub struct ClientPlayer(pub ClientId);
 
 /// Player's box position.
 #[derive(Debug, Clone, Component, Deref, DerefMut, Serialize, Deserialize)]
@@ -59,7 +64,7 @@ pub struct PlayerMove(pub Vec2);
 fn apply_movement(
     time: Res<Time>,
     mut move_events: EventReader<FromClient<PlayerMove>>,
-    mut players: Query<(&Player, &mut PlayerPosition)>,
+    mut players: Query<(&ClientPlayer, &mut PlayerPosition)>,
 ) {
     for FromClient {
         client_id,

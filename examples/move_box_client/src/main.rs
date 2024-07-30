@@ -59,7 +59,8 @@ fn main() {
             (
                 ui,
                 draw_stats,
-                (handle_inputs, draw_boxes).run_if(in_state(GameState::Playing)),
+                draw_boxes,
+                handle_inputs.run_if(in_state(GameState::Playing)),
             ),
         )
         .run();
@@ -230,6 +231,7 @@ fn init_player(
         commands
             .entity(entity)
             .insert(StateScoped(GameState::Playing));
+        info!("!!! INSERTED state scoped");
     }
 }
 
