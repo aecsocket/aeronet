@@ -1,0 +1,40 @@
+[package]
+description = "Steam networking sockets transport implementation for aeronet"
+name = "aeronet_steam"
+
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+## Enables [`bevy`](https://docs.rs/bevy) support by deriving `Resource` on certain types.
+bevy = ["dep:bevy_ecs", "aeronet/bevy", "aeronet_proto/bevy"]
+
+## Enables [`aeronet_proto`]'s [`egui`](https://docs.rs/egui) network statistics visualizer.
+visualizer = ["aeronet_proto/visualizer"]
+
+[dependencies]
+aeronet = { workspace = true }
+aeronet_proto = { workspace = true }
+
+steamworks = { workspace = true }
+
+bevy_ecs = { workspace = true, optional = true }
+
+[[example]]
+name = "echo_client"
+path = "examples/echo_client.rs"
+required-features = ["bevy", "dangerous-configuration"]
+
+[[example]]
+name = "echo_server"
+path = "examples/echo_server.rs"
+required-features = ["bevy"]

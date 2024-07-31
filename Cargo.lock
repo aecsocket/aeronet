@@ -91,7 +91,7 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 
 [[package]]
 name = "aeronet"
-version = "0.7.0-alpha.1"
+version = "0.7.0-alpha.2"
 dependencies = [
  "arbitrary",
  "bevy_app",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_channel"
-version = "0.7.0-alpha.1"
+version = "0.7.0-alpha.2"
 dependencies = [
  "aeronet",
  "assert_matches",
@@ -124,7 +124,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_proto"
-version = "0.7.0-alpha.1"
+version = "0.7.0-alpha.2"
 dependencies = [
  "aeronet",
  "ahash",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_replicon"
-version = "0.7.0-alpha.1"
+version = "0.7.0-alpha.2"
 dependencies = [
  "aeronet",
  "ahash",
@@ -169,8 +169,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "aeronet_steam"
+version = "0.7.0-alpha.2"
+dependencies = [
+ "aeronet",
+ "aeronet_proto",
+ "bevy_ecs",
+ "steamworks",
+]
+
+[[package]]
 name = "aeronet_webtransport"
-version = "0.7.0-alpha.1"
+version = "0.7.0-alpha.2"
 dependencies = [
  "aeronet",
  "aeronet_proto",
@@ -1183,6 +1193,28 @@ dependencies = [
  "ordered-multimap",
  "serde",
  "varint-rs",
+]
+
+[[package]]
+name = "bevy_replicon_snap"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b154463dd8aaccce7a3cea94634d3c854279c4f3bad073890e1cd8cb57c8fb2c"
+dependencies = [
+ "bevy",
+ "bevy_replicon",
+ "bevy_replicon_snap_macros",
+ "serde",
+]
+
+[[package]]
+name = "bevy_replicon_snap_macros"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b7f2ca7e3ca55177621bf8e19648ca7639b6cd9d31c6ec9a541860b663b3bac"
+dependencies = [
+ "quote",
+ "syn 2.0.71",
 ]
 
 [[package]]
@@ -3260,11 +3292,12 @@ dependencies = [
 
 [[package]]
 name = "move_box"
-version = "0.7.0-alpha.1"
+version = "0.7.0-alpha.2"
 dependencies = [
  "aeronet_webtransport",
  "bevy",
  "bevy_replicon",
+ "bevy_replicon_snap",
  "serde",
  "tokio",
  "wasm-bindgen-futures",
@@ -3272,7 +3305,7 @@ dependencies = [
 
 [[package]]
 name = "move_box_client"
-version = "0.7.0-alpha.1"
+version = "0.7.0-alpha.2"
 dependencies = [
  "aeronet",
  "aeronet_replicon",
@@ -3286,7 +3319,7 @@ dependencies = [
 
 [[package]]
 name = "move_box_server"
-version = "0.7.0-alpha.1"
+version = "0.7.0-alpha.2"
 dependencies = [
  "aeronet",
  "aeronet_replicon",
@@ -3294,6 +3327,7 @@ dependencies = [
  "ascii_table",
  "bevy",
  "bevy_replicon",
+ "bevy_replicon_snap",
  "clap",
  "move_box",
  "rand",
@@ -4765,6 +4799,24 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "steamworks"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a79d6f059322f73a4586cc2d0ca595ce1583104b2b1574ae1bb87f2c05bf4c67"
+dependencies = [
+ "bitflags 1.3.2",
+ "lazy_static",
+ "steamworks-sys",
+ "thiserror",
+]
+
+[[package]]
+name = "steamworks-sys"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ef6b00f8fe8eaaaff22cb9b70822a48c1a5d772bc682c202a57c0b438175845"
 
 [[package]]
 name = "strict-num"

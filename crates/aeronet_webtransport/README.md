@@ -188,3 +188,4 @@ On Firefox, I don't know what the equivalent flags are. PRs open!
 [`WebTransportServer::new`]: server::WebTransportServer::new
 [`WebTransportServer::open`]: server::WebTransportServer::open
 [`WebTransportServer::respond_to_request`]: server::WebTransportServer::respond_to_request
+[WebTransport documentation]: https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport#servercertificatehashes

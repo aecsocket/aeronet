@@ -21,6 +21,7 @@ serde = { workspace = true }
 
 aeronet_webtransport = { workspace = true }
 bevy_replicon = { workspace = true }
+bevy_replicon_snap = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 wasm-bindgen-futures = { workspace = true }

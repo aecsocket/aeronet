@@ -101,7 +101,7 @@ async fn start_handle_session(
         err
     }
     .instrument(debug_span!(
-        "Session",
+        "session",
         client = tracing::field::display(client_key)
     ))
     .await;

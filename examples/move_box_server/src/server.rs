@@ -20,6 +20,7 @@ use bevy::{
     log::LogPlugin, prelude::*, state::app::StatesPlugin, time::common_conditions::on_timer,
 };
 use bevy_replicon::{core::Replicated, prelude::RepliconChannels, server::ServerEvent};
+use bevy_replicon_snap::interpolation::Interpolated;
 use move_box::{ClientPlayer, GameState, MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
 use size_format::{BinaryPrefixes, PointSeparated, SizeFormatter};
 use web_time::{Duration, Instant};
@@ -141,6 +142,7 @@ fn on_server_event(
                     PlayerPosition(Vec2::ZERO),
                     PlayerColor(color),
                     Replicated,
+                    Interpolated,
                 ));
             }
             ServerEvent::ClientDisconnected { client_id, reason } => {

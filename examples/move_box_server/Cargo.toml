@@ -36,3 +36,4 @@ aeronet_webtransport = { workspace = true, features = ["bevy"] }
 
 aeronet_replicon = { workspace = true }
 bevy_replicon = { workspace = true }
+bevy_replicon_snap = { workspace = true }

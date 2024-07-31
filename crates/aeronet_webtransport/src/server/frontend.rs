@@ -160,14 +160,13 @@ impl ServerTransport for WebTransportServer {
         };
 
         for (client_key, client) in &mut server.clients {
-            let span = trace_span!("Client", key = display(client_key));
-            let span = span.enter();
+            let span = trace_span!("client", key = display(client_key));
+            let _ = span.enter();
 
             let Client::Connected(client) = client else {
                 continue;
             };
             client.inner.flush();
-            drop(span);
         }
         Ok(())
     }
@@ -268,7 +267,7 @@ impl WebTransportServer {
             }
 
             for (client_key, client) in &mut server.clients {
-                let span = trace_span!("Client", key = display(client_key));
+                let span = trace_span!("client", key = display(client_key));
                 let span = span.enter();
 
                 replace_with_or_abort(client, |client_state| match client_state {
