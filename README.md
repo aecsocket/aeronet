@@ -31,7 +31,7 @@ And connect to `http://[::1]:25565`.
 
 See the [examples](./examples) folder for the source code.
 
-![Screenshot of the move_box example, showing some server log output in the console, and two connected clients represented as boxes controlled by the user](https://github.com/user-attachments/assets/01a62e38-f541-441f-b11f-87e92cae32b8)
+![Screenshot of the `move_box` example, showing some server log output in the console, and two connected clients represented as boxes controlled by the user](https://github.com/user-attachments/assets/01a62e38-f541-441f-b11f-87e92cae32b8)
 
 # Transport
 

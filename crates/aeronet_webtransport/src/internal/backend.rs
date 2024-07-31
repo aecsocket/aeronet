@@ -183,11 +183,13 @@ async fn meta_loop<E>(
     mut send_meta: mpsc::Sender<ConnectionMeta>,
 ) -> Result<(), InternalError<E>> {
     loop {
-        futures::select! {
-            _ = runtime.sleep(STATS_UPDATE_INTERVAL).fuse() => {},
-            _ = recv_closed => return Ok(()),
-        };
-
+        #[allow(clippy::ignored_unit_patterns)] // breaks the select! macro
+        {
+            futures::select! {
+                _ = runtime.sleep(STATS_UPDATE_INTERVAL).fuse() => {},
+                _ = recv_closed => return Ok(()),
+            };
+        }
         let meta = ConnectionMeta {
             #[cfg(not(target_family = "wasm"))]
             rtt: conn.0.rtt(),

@@ -1,6 +1,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(target_family = "wasm", allow(clippy::future_not_send))]
+#![cfg_attr(
+    target_family = "wasm",
+    allow(clippy::future_not_send, clippy::arc_with_non_send_sync)
+)]
 
 pub use aeronet_proto as proto;
 
