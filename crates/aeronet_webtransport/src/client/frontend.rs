@@ -1,3 +1,5 @@
+use std::mem;
+
 use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport},
     error::pretty_error,
@@ -27,10 +29,8 @@ impl WebTransportClient {
     ///
     /// Use [`WebTransportClient::connect`] to start connecting to a server.
     #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            state: State::Disconnected,
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Starts connecting this client to a server.
@@ -140,13 +140,28 @@ impl ClientTransport for WebTransportClient {
         Ok(())
     }
 
-    fn disconnect(&mut self) -> Result<(), Self::Error> {
-        if matches!(self.state, State::Disconnected) {
-            return Err(ClientError::AlreadyDisconnected);
+    fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
+        match mem::take(&mut self.state) {
+            State::Connected(client) => {
+                let reason = reason.into();
+                let _ = client.inner.send_dc.send(reason);
+                Ok(())
+            }
+            State::Connecting(_) => Ok(()),
+            State::Disconnected => Err(ClientError::AlreadyDisconnected),
         }
+    }
 
-        self.state = State::Disconnected;
-        Ok(())
+    fn default_disconnect_reason(&self) -> Option<&str> {
+        self.default_disconnect_reason.as_ref().map(|s| s.as_str())
+    }
+
+    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
+        self.default_disconnect_reason = Some(reason.into());
+    }
+
+    fn unset_default_disconnect_reason(&mut self) {
+        self.default_disconnect_reason = None;
     }
 }
 
@@ -154,7 +169,7 @@ impl WebTransportClient {
     fn poll_connecting(mut client: Connecting) -> (Option<ClientEvent<Self>>, State) {
         if let Ok(Some(error)) = client.recv_err.try_recv() {
             return (
-                Some(ClientEvent::Disconnected { error }),
+                Some(ClientEvent::DisconnectedByError { error }),
                 State::Disconnected,
             );
         }
@@ -168,7 +183,7 @@ impl WebTransportClient {
                     local_addr: next.local_addr,
                     inner: ConnectionInner {
                         #[cfg(not(target_family = "wasm"))]
-                        remote_addr: next.remote_addr,
+                        remote_addr: next.initial_remote_addr,
                         #[cfg(not(target_family = "wasm"))]
                         raw_rtt: next.initial_rtt,
                         session: next.session,
@@ -181,7 +196,7 @@ impl WebTransportClient {
                 }),
             ),
             Err(_) => (
-                Some(ClientEvent::Disconnected {
+                Some(ClientEvent::DisconnectedByError {
                     error: ClientError::BackendClosed,
                 }),
                 State::Disconnected,
@@ -217,6 +232,15 @@ impl SessionBacked for WebTransportClient {
             Some(&client.inner.session)
         } else {
             None
+        }
+    }
+}
+
+impl Drop for WebTransportClient {
+    fn drop(&mut self) {
+        if let Some(reason) = &self.default_disconnect_reason {
+            let reason = reason.clone();
+            let _ = self.disconnect(reason);
         }
     }
 }

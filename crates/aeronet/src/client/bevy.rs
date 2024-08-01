@@ -9,7 +9,7 @@ use std::{fmt::Debug, marker::PhantomData};
 use bevy_ecs::prelude::*;
 use derivative::Derivative;
 
-use super::ClientTransport;
+use super::{ClientTransport, DisconnectReason};
 
 /// System set for client-side networking systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
@@ -93,9 +93,11 @@ pub struct LocalClientConnected<T: ClientTransport> {
 }
 
 /// The client has unrecoverably lost connection from its previously
-/// connected server.
+/// connected server changing state to [`ClientState::Disconnected`].
 ///
-/// This event is not raised when the app invokes a disconnect.
+/// This is emitted for *any* reason that the client may be disconnected,
+/// including user code calling [`ClientTransport::disconnect`], therefore
+/// this may be used as a signal to tear down the app state.
 ///
 /// See [`ClientEvent::Disconnected`].
 ///
@@ -104,7 +106,7 @@ pub struct LocalClientConnected<T: ClientTransport> {
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
 pub struct LocalClientDisconnected<T: ClientTransport> {
     /// Why the client lost connection.
-    pub error: T::Error,
+    pub reason: DisconnectReason<T::Error>,
 }
 
 /// The peer acknowledged that they have fully received a message sent by

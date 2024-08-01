@@ -219,29 +219,14 @@ pub enum ClientEvent<T: ClientTransport + ?Sized> {
     /// receiving the initial world state and e.g. showing a spawn screen.
     Connected,
     /// The client has unrecoverably lost connection from its previously
-    /// connected server due to a transport-level error, changing state to
-    /// [`ClientState::Disconnected`].
+    /// connected server changing state to [`ClientState::Disconnected`].
     ///
-    /// If the server forced us to disconnect (and told us that it specifically
-    /// wanted to disconnect us, rather than trying to pretend it was an error),
-    /// [`ClientEvent::DisconnectedByServer`] will be emitted instead.
-    ///
-    /// This event is not raised when the client side forces a disconnect.
-    DisconnectedByError {
+    /// This is emitted for *any* reason that the client may be disconnected,
+    /// including user code calling [`ClientTransport::disconnect`], therefore
+    /// this may be used as a signal to tear down the app state.
+    Disconnected {
         /// Why the client lost connection.
-        error: T::Error,
-    },
-    /// The server told us that it has forcefully disconnected us, changing our
-    /// state to [`ClientState::Disconnected`].
-    ///
-    /// If there was a transport error (or if the server doesn't want to make it
-    /// known that it specifically wanted to disconnect us),
-    /// [`ClientEvent::DisconnectedByError`] will be emitted instead.
-    ///
-    /// This event is not raised when the client side forces a disconnect.
-    DisconnectedByServer {
-        /// Server-provided reason on why they decided to disconnect us.
-        reason: String,
+        reason: DisconnectReason<T::Error>,
     },
 
     /// The client received a message from the server.
@@ -281,11 +266,36 @@ where
     {
         match self {
             Self::Connected => ClientEvent::Connected,
-            Self::DisconnectedByError { error } => ClientEvent::DisconnectedByError { error },
-            Self::DisconnectedByServer { reason } => ClientEvent::DisconnectedByServer { reason },
+            Self::Disconnected { reason } => ClientEvent::Disconnected { reason },
             Self::Recv { msg, lane } => ClientEvent::Recv { msg, lane },
             Self::Ack { msg_key } => ClientEvent::Ack { msg_key },
             Self::Nack { msg_key } => ClientEvent::Nack { msg_key },
         }
     }
+}
+
+/// Why a [`ClientTransport`], or a client connected to a [`ServerTransport`]
+/// was disconnected.
+///
+/// [`ServerTransport`]: crate::server::ServerTransport
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DisconnectReason<E> {
+    /// Client was disconnected by user code on this side, via a call to
+    /// [`ClientTransport::disconnect`] or [`ServerTransport::disconnect`].
+    ///
+    /// The disconnection reason is provided.
+    ///
+    /// [`ServerTransport::disconnect`]: crate::server::ServerTransport::disconnect
+    Local(String),
+    /// Encountered a fatal connection error.
+    ///
+    /// This may also be raised if the other side wanted to discreetly end the
+    /// connection, pretending that an error caused it instead of a deliberate
+    /// disconnect with a reason.
+    Error(E),
+    /// Server decided to disconnect our client, and has provided a reason as to
+    /// why it disconnected us.
+    ///
+    /// This is only raised on the client side.
+    Remote(String),
 }

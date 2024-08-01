@@ -9,7 +9,9 @@ use std::{fmt::Debug, marker::PhantomData};
 use bevy_ecs::prelude::*;
 use derivative::Derivative;
 
-use super::ServerTransport;
+use crate::client::DisconnectReason;
+
+use super::{CloseReason, ServerTransport};
 
 /// System set for server-side networking systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
@@ -100,7 +102,7 @@ pub struct ServerOpened<T: ServerTransport> {
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
 pub struct ServerClosed<T: ServerTransport> {
     /// Why the server closed.
-    pub error: T::Error,
+    pub error: CloseReason<T::Error>,
 }
 
 /// A remote client has requested to connect to this server.
@@ -123,19 +125,15 @@ pub struct RemoteClientConnecting<T: ServerTransport> {
     pub client_key: T::ClientKey,
 }
 
-/// A remote client has fully established a connection to this server.
+/// A remote client has fully established a connection to this server,
+/// changing the client's state to [`ClientState::Connected`].
 ///
-/// This event can be followed by [`ServerEvent::Recv`] or
-/// [`ServerEvent::Disconnected`].
-///
-/// After this event, you can run your player initialization logic such as
-/// spawning the player's model in the world.
+/// After this event, you can start sending messages to and receiving
+/// messages from the client.
 ///
 /// See [`ServerEvent::Connected`].
 ///
-/// [`ServerEvent::Recv`]: super::ServerEvent::Recv
 /// [`ServerEvent::Connected`]: super::ServerEvent::Connected
-/// [`ServerEvent::Disconnected`]: super::ServerEvent::Disconnected
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct RemoteClientConnected<T: ServerTransport> {
@@ -145,7 +143,9 @@ pub struct RemoteClientConnected<T: ServerTransport> {
 
 /// A remote client has unrecoverably lost connection from this server.
 ///
-/// This event is not raised when the server forces a client to disconnect.
+/// This is emitted for *any* reason that the client may be disconnected,
+/// including user code calling [`ServerTransport::disconnect`], therefore
+/// this may be used as a signal to tear down the client's state.
 ///
 /// See [`ServerEvent::Disconnected`].
 ///
@@ -156,7 +156,7 @@ pub struct RemoteClientDisconnected<T: ServerTransport> {
     /// Key of the client.
     pub client_key: T::ClientKey,
     /// Why the client lost connection.
-    pub error: T::Error,
+    pub reason: DisconnectReason<T::Error>,
 }
 
 /// A client acknowledged that they have fully received a message sent by

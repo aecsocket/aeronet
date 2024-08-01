@@ -173,7 +173,7 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
                 ServerEvent::Opened => {
                     events.opened.send(ServerOpened::default());
                 }
-                ServerEvent::Closed { error } => {
+                ServerEvent::Closed { reason: error } => {
                     events.closed.send(ServerClosed { error });
                 }
                 ServerEvent::Connecting { client_key } => {

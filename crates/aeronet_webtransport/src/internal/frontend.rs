@@ -61,6 +61,7 @@ impl<E> ConnectionInner<E> {
         while let Ok(Some(meta)) = self.recv_meta.try_next() {
             #[cfg(not(target_family = "wasm"))]
             {
+                self.remote_addr = meta.remote_addr;
                 self.raw_rtt = meta.rtt;
             }
             self.session

@@ -1,3 +1,5 @@
+use std::mem;
+
 use aeronet::{
     client::ClientState,
     error::pretty_error,
@@ -29,10 +31,8 @@ impl WebTransportServer {
     ///
     /// Use [`WebTransportServer::open`] to open this server for clients.
     #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            state: State::Closed,
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Starts opening this server for client connections.
@@ -171,25 +171,52 @@ impl ServerTransport for WebTransportServer {
         Ok(())
     }
 
-    fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error> {
+    fn disconnect(
+        &mut self,
+        client_key: Self::ClientKey,
+        reason: impl Into<String>,
+    ) -> Result<(), Self::Error> {
         let State::Open(server) = &mut self.state else {
             return Err(ServerError::NotOpen);
         };
 
-        server
+        let client = server
             .clients
             .remove(client_key)
-            .map(drop)
-            .ok_or(ServerError::ClientNotConnected)
+            .ok_or(ServerError::ClientNotConnected)?;
+        if let Client::Connected(client) = client {
+            let reason = reason.into();
+            let _ = client.inner.send_dc.send(reason);
+        }
+        Ok(())
     }
 
-    fn close(&mut self) -> Result<(), Self::Error> {
-        if matches!(self.state, State::Closed) {
-            return Err(ServerError::AlreadyClosed);
+    fn close(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
+        match mem::take(&mut self.state) {
+            State::Open(server) => {
+                let reason = reason.into();
+                for (_, client) in server.clients {
+                    if let Client::Connected(client) = client {
+                        let _ = client.inner.send_dc.send(reason.clone());
+                    }
+                }
+                Ok(())
+            }
+            State::Opening(_) => Ok(()),
+            State::Closed => Err(ServerError::AlreadyClosed),
         }
+    }
 
-        self.state = State::Closed;
-        Ok(())
+    fn default_disconnect_reason(&self) -> Option<&str> {
+        self.default_disconnect_reason.as_ref().map(|s| s.as_str())
+    }
+
+    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
+        self.default_disconnect_reason = Some(reason.into());
+    }
+
+    fn unset_default_disconnect_reason(&mut self) {
+        self.default_disconnect_reason = None;
     }
 }
 
@@ -224,7 +251,7 @@ impl WebTransportServer {
 
     fn poll_opening(mut server: Opening) -> (Option<ServerEvent<Self>>, State) {
         if let Ok(Some(error)) = server.recv_err.try_recv() {
-            return (Some(ServerEvent::Closed { error }), State::Closed);
+            return (Some(ServerEvent::Closed { reason: error }), State::Closed);
         }
 
         match server.recv_open.try_recv() {
@@ -240,7 +267,7 @@ impl WebTransportServer {
             ),
             Err(_) => (
                 Some(ServerEvent::Closed {
-                    error: ServerError::BackendClosed,
+                    reason: ServerError::BackendClosed,
                 }),
                 State::Closed,
             ),
@@ -293,7 +320,7 @@ impl WebTransportServer {
         match res {
             Ok(()) => (events, State::Open(server)),
             Err(error) => {
-                events.push(ServerEvent::Closed { error });
+                events.push(ServerEvent::Closed { reason: error });
                 (events, State::Closed)
             }
         }
@@ -324,6 +351,8 @@ impl WebTransportServer {
                         recv_meta: next.recv_meta,
                         recv_msgs: next.recv_c2s,
                         send_msgs: next.send_s2c,
+                        send_dc: next.send_dc,
+                        recv_dc: next.recv_dc,
                         fatal_error: None,
                     },
                 }))
@@ -335,7 +364,7 @@ impl WebTransportServer {
         match res {
             Ok(client) => client,
             Err(error) => {
-                events.push(ServerEvent::Disconnected { client_key, error });
+                events.push(ServerEvent::DisconnectedByError { client_key, error });
                 Client::Disconnected
             }
         }
@@ -364,7 +393,7 @@ impl WebTransportServer {
         match res {
             Ok(()) => Client::Connected(client),
             Err(err) => {
-                events.push(ServerEvent::Disconnected {
+                events.push(ServerEvent::DisconnectedByError {
                     client_key,
                     error: err.into(),
                 });

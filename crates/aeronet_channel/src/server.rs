@@ -3,7 +3,7 @@
 use std::{convert::Infallible, fmt::Display, iter, mem};
 
 use aeronet::{
-    client::ClientState,
+    client::{ClientState, DisconnectReason},
     lane::LaneIndex,
     server::{ServerEvent, ServerState, ServerTransport},
     stats::{ConnectedAt, MessageStats},
@@ -35,15 +35,7 @@ impl Display for ClientKey {
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ChannelServer {
     state: State,
-    /// When this transport is dropped, it will attempt to automatically
-    /// disconnect its connected clients with the given reason.
-    ///
-    /// If this is [`None`] (the default), connections will be closed without a
-    /// reason.
-    ///
-    /// If you [`ServerTransport::close`] this transport or
-    /// [`ServerTransport::disconnect`] a client, this field will have no
-    /// effect.
+    /// See [`ClientTransport::default_disconnect_reason`].
     pub default_disconnect_reason: Option<String>,
 }
 
@@ -94,8 +86,8 @@ impl MessageStats for Connected {
 
 #[derive(Debug)]
 enum Client {
-    Disconnected,
     Connected(Connected),
+    Disconnected { reason: String },
 }
 
 /// Error type for operations on a [`ChannelServer`].
@@ -198,7 +190,7 @@ impl ServerTransport for ChannelServer {
         };
 
         match server.clients.get(client_key) {
-            None | Some(Client::Disconnected) => ClientState::Disconnected,
+            None | Some(Client::Disconnected { .. }) => ClientState::Disconnected,
             Some(Client::Connected(client)) => ClientState::Connected(client),
         }
     }
@@ -258,30 +250,39 @@ impl ServerTransport for ChannelServer {
         };
 
         let reason = reason.into();
-
         let client = server
             .clients
-            .remove(client_key)
+            .get_mut(client_key)
             .ok_or(ServerError::NotConnected)?;
-        let Client::Connected(client) = client else {
-            return Err(ServerError::NotConnected);
-        };
-        let _ = client.send_dc_s2c.try_send(reason);
-        Ok(())
+        match mem::replace(
+            client,
+            Client::Disconnected {
+                reason: reason.clone(),
+            },
+        ) {
+            Client::Connected(client) => {
+                client.send_dc_s2c.send(reason);
+                Ok(())
+            }
+            Client::Disconnected { .. } => {
+                return Err(ServerError::NotConnected);
+            }
+        }
     }
 
     fn close(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
-        let State::Open(server) = mem::take(&mut self.state) else {
-            return Err(ServerError::AlreadyClosed);
-        };
-
-        let reason = reason.into();
-        for (_, client) in server.clients {
-            if let Client::Connected(client) = client {
-                let _ = client.send_dc_s2c.try_send(reason.clone());
+        match mem::take(&mut self.state) {
+            State::Open(server) => {
+                let reason = reason.into();
+                for (_, client) in server.clients {
+                    if let Client::Connected(client) = client {
+                        let _ = client.send_dc_s2c.try_send(reason.clone());
+                    }
+                }
+                Ok(())
             }
+            State::Closed => Err(ServerError::AlreadyClosed),
         }
-        Ok(())
     }
 
     fn default_disconnect_reason(&self) -> Option<&str> {
@@ -302,14 +303,22 @@ impl ChannelServer {
         let mut events = Vec::new();
         for (client_key, client) in &mut server.clients {
             replace_with::replace_with_or_abort(client, |client| match client {
-                Client::Disconnected => client,
+                Client::Disconnected { reason } => {
+                    events.push(ServerEvent::Disconnected {
+                        client_key,
+                        reason: DisconnectReason::Local(reason),
+                    });
+                    Client::Disconnected {
+                        reason: String::new(),
+                    }
+                }
                 Client::Connected(client) => Self::poll_connected(&mut events, client_key, client),
             });
         }
 
         server
             .clients
-            .retain(|_, client| !matches!(client, Client::Disconnected));
+            .retain(|_, client| !matches!(client, Client::Disconnected { .. }));
 
         events
     }
@@ -326,7 +335,10 @@ impl ChannelServer {
         }
 
         if let Ok(reason) = client.recv_dc_c2s.try_recv() {
-            events.push(ServerEvent::DisconnectedByClient { client_key, reason });
+            events.push(ServerEvent::Disconnected {
+                client_key,
+                reason: DisconnectReason::Remote(reason),
+            });
             return Client::Disconnected;
         }
 
@@ -347,8 +359,11 @@ impl ChannelServer {
 
         match res {
             Ok(()) => Client::Connected(client),
-            Err(error) => {
-                events.push(ServerEvent::DisconnectedByError { client_key, error });
+            Err(err) => {
+                events.push(ServerEvent::Disconnected {
+                    client_key,
+                    reason: DisconnectReason::Error(err),
+                });
                 Client::Disconnected
             }
         }

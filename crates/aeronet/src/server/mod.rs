@@ -12,7 +12,10 @@ use std::{error::Error, fmt::Debug, hash::Hash};
 use bytes::Bytes;
 use derivative::Derivative;
 
-use crate::{client::ClientState, lane::LaneIndex};
+use crate::{
+    client::{ClientState, DisconnectReason},
+    lane::LaneIndex,
+};
 
 /// Allows listening to client connections and transporting data between this
 /// server and connected clients.
@@ -274,7 +277,7 @@ pub enum ServerEvent<T: ServerTransport + ?Sized> {
     /// [`ServerState::Closed`].
     Closed {
         /// Why the server closed.
-        error: T::Error,
+        reason: CloseReason<T::Error>,
     },
 
     // client state
@@ -300,20 +303,14 @@ pub enum ServerEvent<T: ServerTransport + ?Sized> {
     },
     /// A remote client has unrecoverably lost connection from this server.
     ///
-    /// This event is not raised when the server forces a client to disconnect.
-    // todo docs
-    DisconnectedByError {
+    /// This is emitted for *any* reason that the client may be disconnected,
+    /// including user code calling [`ServerTransport::disconnect`], therefore
+    /// this may be used as a signal to tear down the client's state.
+    Disconnected {
         /// Key of the client.
         client_key: T::ClientKey,
         /// Why the client lost connection.
-        error: T::Error,
-    },
-    // todo docs
-    DisconnectedByClient {
-        /// Key of the client.
-        client_key: T::ClientKey,
-        /// Client-provided reason on why they decided to disconnect from us.
-        reason: String,
+        reason: DisconnectReason<T::Error>,
     },
 
     // messages
@@ -360,14 +357,11 @@ where
     {
         match self {
             Self::Opened => ServerEvent::Opened,
-            Self::Closed { error } => ServerEvent::Closed { error },
+            Self::Closed { reason } => ServerEvent::Closed { reason },
             Self::Connecting { client_key } => ServerEvent::Connecting { client_key },
             Self::Connected { client_key } => ServerEvent::Connected { client_key },
-            Self::DisconnectedByError { client_key, error } => {
-                ServerEvent::DisconnectedByError { client_key, error }
-            }
-            Self::DisconnectedByClient { client_key, reason } => {
-                ServerEvent::DisconnectedByClient { client_key, reason }
+            Self::Disconnected { client_key, reason } => {
+                ServerEvent::Disconnected { client_key, reason }
             }
             Self::Recv {
                 client_key,
@@ -394,4 +388,23 @@ where
             },
         }
     }
+}
+
+/// Why a [`ServerTransport`] was closed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CloseReason<E> {
+    /// Server was closed by user code, via a call to
+    /// [`ServerTransport::close`].
+    ///
+    /// The closing reason is provided.
+    Local(String),
+    /// Encountered a fatal error.
+    ///
+    /// This is mostly raised while the server is still opening if there is an
+    /// error preventing the server from receiving client connections, e.g. a
+    /// port that the server wanted to use is already in use by another process.
+    ///
+    /// While the server is open, errors usually should not tear down the entire
+    /// server, just the connection of the specific client who caused the error.
+    Error(E),
 }
