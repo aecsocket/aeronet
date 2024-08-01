@@ -98,15 +98,19 @@ pub trait ClientTransport {
 
     /// Disconnects this client from its currently connected server.
     ///
-    /// This does *not* guarantee any graceful shutdown of connections. If you
-    /// want this to be handled gracefully, you must implement a mechanism for
-    /// this yourself.
+    /// This is guaranteed to disconnect the client as quickly as possible, and
+    /// will make a best-effort attempt to inform the other side of the
+    /// user-provided disconnection reason, however it is not guaranteed that
+    /// this reason will be communicated.
+    ///
+    /// The implementation may place limitations on the `reason`, e.g. a maximum
+    /// byte length.
     ///
     /// # Errors
     ///
     /// Errors if the transport failed to *attempt to* disconnect, e.g. if the
     /// transport has not been connected yet.
-    fn disconnect(&mut self) -> Result<(), Self::Error>;
+    fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error>;
 }
 
 /// Implementation-specific state details of a [`ClientTransport`].
@@ -190,12 +194,29 @@ pub enum ClientEvent<T: ClientTransport + ?Sized> {
     /// receiving the initial world state and e.g. showing a spawn screen.
     Connected,
     /// The client has unrecoverably lost connection from its previously
-    /// connected server, changing state to [`ClientState::Disconnected`].
+    /// connected server due to a transport-level error, changing state to
+    /// [`ClientState::Disconnected`].
+    ///
+    /// If the server forced us to disconnect (and told us that it specifically
+    /// wanted to disconnect us, rather than trying to pretend it was an error),
+    /// [`ClientEvent::DisconnectedByServer`] will be emitted instead.
     ///
     /// This event is not raised when the client side forces a disconnect.
-    Disconnected {
+    DisconnectedByError {
         /// Why the client lost connection.
         error: T::Error,
+    },
+    /// The server told us that it has forcefully disconnected us, changing our
+    /// state to [`ClientState::Disconnected`].
+    ///
+    /// If there was a transport error (or if the server doesn't want to make it
+    /// known that it specifically wanted to disconnect us),
+    /// [`ClientEvent::DisconnectedByError`] will be emitted instead.
+    ///
+    /// This event is not raised when the client side forces a disconnect.
+    DisconnectedByServer {
+        /// Server-provided reason on why they decided to disconnect us.
+        reason: String,
     },
 
     /// The client received a message from the server.
@@ -235,7 +256,8 @@ where
     {
         match self {
             Self::Connected => ClientEvent::Connected,
-            Self::Disconnected { error } => ClientEvent::Disconnected { error },
+            Self::DisconnectedByError { error } => ClientEvent::DisconnectedByError { error },
+            Self::DisconnectedByServer { reason } => ClientEvent::DisconnectedByServer { reason },
             Self::Recv { msg, lane } => ClientEvent::Recv { msg, lane },
             Self::Ack { msg_key } => ClientEvent::Ack { msg_key },
             Self::Nack { msg_key } => ClientEvent::Nack { msg_key },

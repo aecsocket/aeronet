@@ -133,27 +133,35 @@ pub trait ServerTransport {
 
     /// Forces a client to disconnect from this server.
     ///
-    /// This does *not* guarantee any graceful shutdown of connections. If you
-    /// want this to be handled gracefully, you must implement a mechanism for
-    /// this yourself.
+    /// This is guaranteed to disconnect the client as quickly as possible, and
+    /// will make a best-effort attempt to inform the other side of the
+    /// user-provided disconnection reason, however it is not guaranteed that
+    /// this reason will be communicated.
+    ///
+    /// The implementation may place limitations on the `reason`, e.g. a maximum
+    /// byte length.
     ///
     /// # Errors
     ///
     /// Errors if the transport failed to *attempt to* disconnect the client,
     /// e.g. if the server already knows that the client is disconnected.
-    fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error>;
+    fn disconnect(
+        &mut self,
+        client_key: Self::ClientKey,
+        reason: impl Into<String>,
+    ) -> Result<(), Self::Error>;
 
     /// Closes this server, stopping all current connections and disallowing any
     /// new connections.
     ///
-    /// This does *not* guarantee any graceful shutdown of connections. If you
-    /// want this to be handled gracefully, you must implement a mechanism for
-    /// this yourself.
+    /// All clients currently connected will be disconnected with the given
+    /// reason. See [`ServerTransport::disconnect`] on how this reason will be
+    /// handled.
     ///
     /// # Errors
     ///
     /// Errors if the transport is already closed.
-    fn close(&mut self) -> Result<(), Self::Error>;
+    fn close(&mut self, reason: impl Into<String>) -> Result<(), Self::Error>;
 }
 
 /// Implementation-specific state details of a [`ServerTransport`].
@@ -268,11 +276,19 @@ pub enum ServerEvent<T: ServerTransport + ?Sized> {
     /// A remote client has unrecoverably lost connection from this server.
     ///
     /// This event is not raised when the server forces a client to disconnect.
-    Disconnected {
+    // todo docs
+    DisconnectedByError {
         /// Key of the client.
         client_key: T::ClientKey,
         /// Why the client lost connection.
         error: T::Error,
+    },
+    // todo docs
+    DisconnectedByClient {
+        /// Key of the client.
+        client_key: T::ClientKey,
+        /// Client-provided reason on why they decided to disconnect from us.
+        reason: String,
     },
 
     // messages
@@ -322,8 +338,11 @@ where
             Self::Closed { error } => ServerEvent::Closed { error },
             Self::Connecting { client_key } => ServerEvent::Connecting { client_key },
             Self::Connected { client_key } => ServerEvent::Connected { client_key },
-            Self::Disconnected { client_key, error } => {
-                ServerEvent::Disconnected { client_key, error }
+            Self::DisconnectedByError { client_key, error } => {
+                ServerEvent::DisconnectedByError { client_key, error }
+            }
+            Self::DisconnectedByClient { client_key, reason } => {
+                ServerEvent::DisconnectedByClient { client_key, reason }
             }
             Self::Recv {
                 client_key,

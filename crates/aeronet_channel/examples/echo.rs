@@ -72,10 +72,13 @@ fn client_poll(
             ClientEvent::Connected => {
                 ui_state.log.push(format!("Connected"));
             }
-            ClientEvent::Disconnected { error } => {
+            ClientEvent::DisconnectedByError { error } => {
                 ui_state
                     .log
-                    .push(format!("Disconnected: {:#}", pretty_error(&error)));
+                    .push(format!("Connection error: {:#}", pretty_error(&error)));
+            }
+            ClientEvent::DisconnectedByServer { reason } => {
+                ui_state.log.push(format!("Disconnected: {reason}"));
             }
             ClientEvent::Recv { msg, .. } => {
                 let msg = String::from_utf8(msg.into()).unwrap();
@@ -108,7 +111,7 @@ fn client_ui(
 
         if do_disconnect {
             ui_state.log.push(format!("Disconnected by user"));
-            let _ = client.disconnect();
+            let _ = client.disconnect("disconnected by user");
         }
 
         let mut do_send = false;
@@ -173,11 +176,16 @@ fn server_poll(
             ServerEvent::Connected { client_key } => {
                 ui_state.log.push(format!("Client {client_key} connected"));
             }
-            ServerEvent::Disconnected { client_key, error } => {
+            ServerEvent::DisconnectedByError { client_key, error } => {
                 ui_state.log.push(format!(
-                    "Client {client_key} disconnected: {:#}",
+                    "Client {client_key} disconnected due to error: {:#}",
                     pretty_error(&error)
                 ));
+            }
+            ServerEvent::DisconnectedByClient { client_key, reason } => {
+                ui_state
+                    .log
+                    .push(format!("Client {client_key} disconnected: {reason}"));
             }
             ServerEvent::Recv {
                 client_key, msg, ..
