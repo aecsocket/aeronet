@@ -21,6 +21,15 @@ use crate::server::{ChannelServer, ClientKey};
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ChannelClient {
     state: State,
+    /// When this transport is dropped, it will attempt to automatically
+    /// disconnect with the given reason.
+    ///
+    /// If this is [`None`] (the default), the transport will be disconnected
+    /// without a reason.
+    ///
+    /// If you [`ClientTransport::disconnect`] this transport, this field will
+    /// have no effect.
+    pub default_disconnect_reason: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -92,10 +101,8 @@ impl ChannelClient {
     ///
     /// Use [`ChannelClient::connect`] to connect this client to a server.
     #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            state: State::Disconnected,
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Connects this client to an existing server.
@@ -197,6 +204,18 @@ impl ClientTransport for ChannelClient {
         let _ = client.send_dc_c2s.try_send(reason);
         Ok(())
     }
+
+    fn default_disconnect_reason(&self) -> Option<&str> {
+        self.default_disconnect_reason.as_ref().map(|s| s.as_str())
+    }
+
+    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
+        self.default_disconnect_reason = Some(reason.into());
+    }
+
+    fn unset_default_disconnect_reason(&mut self) {
+        self.default_disconnect_reason = None;
+    }
 }
 
 impl ChannelClient {
@@ -230,6 +249,15 @@ impl ChannelClient {
                 events.push(ClientEvent::DisconnectedByError { error });
                 (events, State::Disconnected)
             }
+        }
+    }
+}
+
+impl Drop for ChannelClient {
+    fn drop(&mut self) {
+        if let Some(reason) = &self.default_disconnect_reason {
+            let reason = reason.clone();
+            let _ = self.disconnect(reason);
         }
     }
 }

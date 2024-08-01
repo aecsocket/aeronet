@@ -35,6 +35,16 @@ impl Display for ClientKey {
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ChannelServer {
     state: State,
+    /// When this transport is dropped, it will attempt to automatically
+    /// disconnect its connected clients with the given reason.
+    ///
+    /// If this is [`None`] (the default), connections will be closed without a
+    /// reason.
+    ///
+    /// If you [`ServerTransport::close`] this transport or
+    /// [`ServerTransport::disconnect`] a client, this field will have no
+    /// effect.
+    pub default_disconnect_reason: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -113,10 +123,8 @@ impl ChannelServer {
     ///
     /// Use [`ChannelServer::open`] to open this server for clients.
     #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            state: State::Closed,
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Allows accepting connections on this server.
@@ -275,6 +283,18 @@ impl ServerTransport for ChannelServer {
         }
         Ok(())
     }
+
+    fn default_disconnect_reason(&self) -> Option<&str> {
+        self.default_disconnect_reason.as_ref().map(|s| s.as_str())
+    }
+
+    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
+        self.default_disconnect_reason = Some(reason.into());
+    }
+
+    fn unset_default_disconnect_reason(&mut self) {
+        self.default_disconnect_reason = None;
+    }
 }
 
 impl ChannelServer {
@@ -331,6 +351,15 @@ impl ChannelServer {
                 events.push(ServerEvent::DisconnectedByError { client_key, error });
                 Client::Disconnected
             }
+        }
+    }
+}
+
+impl Drop for ChannelServer {
+    fn drop(&mut self) {
+        if let Some(reason) = &self.default_disconnect_reason {
+            let reason = reason.clone();
+            let _ = self.close(reason);
         }
     }
 }

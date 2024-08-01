@@ -111,6 +111,31 @@ pub trait ClientTransport {
     /// Errors if the transport failed to *attempt to* disconnect, e.g. if the
     /// transport has not been connected yet.
     fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error>;
+
+    /// Gets the default disconnect-on-drop reason if one is set.
+    ///
+    /// When this client is dropped without being explicitly disconnected, and
+    /// the default disconnect reason is [`Some`], this client will attempt to
+    /// [`ClientTransport::disconnect`] itself with this reason.
+    ///
+    /// See [`ClientTransport::disconnect`] for how the disconnect reason is
+    /// handled.
+    fn default_disconnect_reason(&self) -> Option<&str>;
+
+    /// Sets the default disconnect-on-drop reason.
+    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>);
+
+    /// Unsets the default disconnect-on-drop reason.
+    fn unset_default_disconnect_reason(&mut self);
+
+    /// Returns `self` with a modified disconnect-on-drop reason.
+    fn with_default_disconnect_reason(mut self, reason: impl Into<String>) -> Self
+    where
+        Self: Sized,
+    {
+        self.set_default_disconnect_reason(reason);
+        self
+    }
 }
 
 /// Implementation-specific state details of a [`ClientTransport`].
