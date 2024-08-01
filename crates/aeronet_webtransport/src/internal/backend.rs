@@ -7,6 +7,7 @@ use futures::{
     FutureExt, SinkExt, StreamExt,
 };
 use web_time::Duration;
+use wtransport::VarInt;
 use xwt_core::{
     session::datagram::{Receive, Send},
     utils::maybe,
@@ -89,6 +90,11 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
         .next()
         .await
         .unwrap_or(InternalError::BackendClosed);
+    #[cfg(not(target_family = "wasm"))]
+    {
+        conn.0.close(VarInt::from_u32(123), b"lol"); // TODO testing
+        conn.0.closed().await;
+    }
     Err(err)
 }
 
