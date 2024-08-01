@@ -2,10 +2,10 @@
 //! message, and the server just echoes back that message to the client.
 
 use aeronet::{
-    client::{ClientEvent, ClientState, ClientTransport},
+    client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
     error::pretty_error,
     lane::LaneIndex,
-    server::{ServerEvent, ServerTransport},
+    server::{CloseReason, ServerEvent, ServerTransport},
     stats::MessageStats,
 };
 use aeronet_channel::{client::ChannelClient, server::ChannelServer};
@@ -85,13 +85,15 @@ fn client_poll(
             ClientEvent::Connected => {
                 ui_state.log.push(format!("Connected"));
             }
-            ClientEvent::DisconnectedByError { error } => {
-                ui_state
-                    .log
-                    .push(format!("Connection error: {:#}", pretty_error(&error)));
-            }
-            ClientEvent::DisconnectedByServer { reason } => {
-                ui_state.log.push(format!("Disconnected: {reason}"));
+            ClientEvent::Disconnected { reason } => {
+                ui_state.log.push(match reason {
+                    DisconnectReason::Local(reason) | DisconnectReason::Remote(reason) => {
+                        format!("Disconnected: {reason}")
+                    }
+                    DisconnectReason::Error(err) => {
+                        format!("Connection error: {:#}", pretty_error(&err))
+                    }
+                });
             }
             ClientEvent::Recv { msg, .. } => {
                 let msg = String::from_utf8(msg.into()).unwrap();
@@ -124,6 +126,11 @@ fn client_ui(
 
         if do_disconnect {
             ui_state.log.push(format!("Disconnected by user"));
+            // Instead of dropping the client, we call `client.disconnect` here
+            // to show how your user-defined disconnection reason will be sent to the server.
+            // If you had dropped the client instead (e.g. by removing it as a resource),
+            // this would have different behavior
+            // (see how we handle the server's Close button below...)
             let _ = client.disconnect("disconnected by user");
         }
 
@@ -178,10 +185,11 @@ fn server_poll(
             ServerEvent::Opened => {
                 ui_state.log.push(format!("Server opened"));
             }
-            ServerEvent::Closed { error } => {
-                ui_state
-                    .log
-                    .push(format!("Server closed: {:#}", pretty_error(&error)));
+            ServerEvent::Closed { reason } => {
+                ui_state.log.push(match reason {
+                    CloseReason::Local(reason) => format!("Server closed: {reason}"),
+                    CloseReason::Error(err) => format!("Server error: {:#}", pretty_error(&err)),
+                });
             }
             ServerEvent::Connecting { client_key } => {
                 ui_state.log.push(format!("Client {client_key} connecting"));

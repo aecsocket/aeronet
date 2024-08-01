@@ -190,6 +190,7 @@ async fn meta_loop<E>(
 ) -> Result<(), InternalError<E>> {
     loop {
         #[allow(clippy::ignored_unit_patterns)] // breaks the select! macro
+        // todo does it? need to test
         {
             futures::select! {
                 _ = runtime.sleep(STATS_UPDATE_INTERVAL).fuse() => {},
@@ -199,6 +200,8 @@ async fn meta_loop<E>(
         let meta = ConnectionMeta {
             #[cfg(not(target_family = "wasm"))]
             rtt: conn.0.rtt(),
+            #[cfg(not(target_family = "wasm"))]
+            remote_addr: conn.0.remote_address(),
             mtu: get_mtu(&conn).ok_or(InternalError::DatagramsNotSupported)?,
         };
         send_meta

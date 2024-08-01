@@ -97,7 +97,7 @@ fn poll_server(
             ServerEvent::Opened => {
                 info!("Server opened");
             }
-            ServerEvent::Closed { error } => {
+            ServerEvent::Closed { reason: error } => {
                 info!("Server closed: {:#}", pretty_error(&error));
             }
             ServerEvent::Connecting { client_key } => {

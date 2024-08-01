@@ -3,7 +3,7 @@
 use std::{convert::Infallible, mem};
 
 use aeronet::{
-    client::{ClientEvent, ClientState, ClientTransport},
+    client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
     lane::LaneIndex,
     stats::{ConnectedAt, MessageStats},
 };
@@ -21,22 +21,20 @@ use crate::server::{ChannelServer, ClientKey};
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ChannelClient {
     state: State,
-    /// When this transport is dropped, it will attempt to automatically
-    /// disconnect with the given reason.
-    ///
-    /// If this is [`None`] (the default), the transport will be disconnected
-    /// without a reason.
-    ///
-    /// If you [`ClientTransport::disconnect`] this transport, this field will
-    /// have no effect.
+    /// See [`ClientTransport::default_disconnect_reason`].
     pub default_disconnect_reason: Option<String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 enum State {
-    #[default]
-    Disconnected,
+    Disconnected { local_reason: Option<String> },
     Connected(Connected),
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self::Disconnected { local_reason: None }
+    }
 }
 
 /// State of a [`ChannelClient`] when it is [`ClientState::Connected`].
@@ -112,7 +110,7 @@ impl ChannelClient {
     /// Errors if this client is already connected to a server, or if the server
     /// is closed.
     pub fn connect(&mut self, server: &mut ChannelServer) -> Result<(), ClientError> {
-        if !matches!(self.state, State::Disconnected) {
+        if matches!(self.state, State::Connected(..)) {
             return Err(ClientError::AlreadyConnected);
         }
 
@@ -150,14 +148,22 @@ impl ClientTransport for ChannelClient {
     #[must_use]
     fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
         match &self.state {
-            State::Disconnected => ClientState::Disconnected,
+            State::Disconnected { .. } => ClientState::Disconnected,
             State::Connected(client) => ClientState::Connected(client),
         }
     }
 
     fn poll(&mut self, _: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
         replace_with::replace_with_or_abort_and_return(&mut self.state, |inner| match inner {
-            State::Disconnected => (Either::Left(std::iter::empty()), inner),
+            State::Disconnected { local_reason } => {
+                let event = local_reason.map(|reason| ClientEvent::Disconnected {
+                    reason: DisconnectReason::Local(reason),
+                });
+                (
+                    Either::Left(event),
+                    State::Disconnected { local_reason: None },
+                )
+            }
             State::Connected(client) => {
                 let (res, new) = Self::poll_connected(client);
                 (Either::Right(res), new)
@@ -196,13 +202,19 @@ impl ClientTransport for ChannelClient {
     }
 
     fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
-        let State::Connected(client) = mem::take(&mut self.state) else {
-            return Err(ClientError::AlreadyDisconnected);
-        };
-
         let reason = reason.into();
-        let _ = client.send_dc_c2s.try_send(reason);
-        Ok(())
+        match mem::replace(
+            &mut self.state,
+            State::Disconnected {
+                local_reason: Some(reason.clone()),
+            },
+        ) {
+            State::Connected(client) => {
+                let _ = client.send_dc_c2s.try_send(reason);
+                Ok(())
+            }
+            State::Disconnected { .. } => Err(ClientError::AlreadyDisconnected),
+        }
     }
 
     fn default_disconnect_reason(&self) -> Option<&str> {
@@ -228,8 +240,10 @@ impl ChannelClient {
         }
 
         if let Ok(reason) = client.recv_dc_s2c.try_recv() {
-            events.push(ClientEvent::DisconnectedByServer { reason });
-            return (events, State::Disconnected);
+            events.push(ClientEvent::Disconnected {
+                reason: DisconnectReason::Remote(reason),
+            });
+            return (events, State::Disconnected { local_reason: None });
         }
 
         let res = (|| loop {
@@ -245,9 +259,11 @@ impl ChannelClient {
 
         match res {
             Ok(()) => (events, State::Connected(client)),
-            Err(error) => {
-                events.push(ClientEvent::DisconnectedByError { error });
-                (events, State::Disconnected)
+            Err(err) => {
+                events.push(ClientEvent::Disconnected {
+                    reason: DisconnectReason::Error(err),
+                });
+                (events, State::Disconnected { local_reason: None })
             }
         }
     }

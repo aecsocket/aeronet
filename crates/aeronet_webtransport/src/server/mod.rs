@@ -39,6 +39,8 @@ pub type ServerConfig = wtransport::ServerConfig;
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportServer {
     state: State,
+    /// See [`ClientTransport::default_disconnect_reason`].
+    pub default_disconnect_reason: Option<String>,
 }
 
 type State = ServerState<Opening, Open>;
@@ -224,6 +226,8 @@ struct ToConnected {
     recv_meta: mpsc::Receiver<ConnectionMeta>,
     recv_c2s: mpsc::Receiver<Bytes>,
     send_s2c: mpsc::UnboundedSender<Bytes>,
+    send_dc: oneshot::Sender<String>,
+    recv_dc: oneshot::Receiver<String>,
     session: Session,
 }
 

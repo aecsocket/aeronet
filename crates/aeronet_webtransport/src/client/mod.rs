@@ -50,6 +50,8 @@ cfg_if::cfg_if! {
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportClient {
     state: State,
+    /// See [`ClientTransport::default_disconnect_reason`].
+    pub default_disconnect_reason: Option<String>,
 }
 
 type State = ClientState<Connecting, Connected>;
@@ -139,7 +141,7 @@ struct ToConnected {
     #[cfg(not(target_family = "wasm"))]
     local_addr: SocketAddr,
     #[cfg(not(target_family = "wasm"))]
-    remote_addr: SocketAddr,
+    initial_remote_addr: SocketAddr,
     #[cfg(not(target_family = "wasm"))]
     initial_rtt: Duration,
     recv_meta: mpsc::Receiver<ConnectionMeta>,
