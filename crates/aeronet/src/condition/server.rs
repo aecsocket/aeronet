@@ -100,12 +100,16 @@ impl<T: ServerTransport> ServerTransport for ConditionedServer<T> {
         self.inner.flush()
     }
 
-    fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error> {
-        self.inner.disconnect(client_key)
+    fn disconnect(
+        &mut self,
+        client_key: Self::ClientKey,
+        reason: impl Into<String>,
+    ) -> Result<(), Self::Error> {
+        self.inner.disconnect(client_key, reason)
     }
 
-    fn close(&mut self) -> Result<(), Self::Error> {
-        self.inner.close()
+    fn close(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
+        self.inner.close(reason)
     }
 
     fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<Self>> {

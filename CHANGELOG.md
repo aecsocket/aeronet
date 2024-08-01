@@ -1,6 +1,9 @@
 # 0.7.0
 
 * Updated to Bevy 0.14.0
+* Added disconnection reasons to API
+  * `ClientTransport::disconnect`, `ServerTransport::{disconnect, close}` now take a `reason: String` parameter
+  * `{Client, Server}Event::Disconnected` has been split into `DisconnectedByError` and `DisconnectedBy{Server, Client}`
 
 # 0.6.0
 

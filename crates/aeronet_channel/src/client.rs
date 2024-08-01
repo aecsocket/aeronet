@@ -1,6 +1,6 @@
 //! Client-side items.
 
-use std::convert::Infallible;
+use std::{convert::Infallible, mem};
 
 use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport},
@@ -45,8 +45,9 @@ pub struct Connected {
     pub bytes_recv: usize,
     send_c2s: Sender<(Bytes, LaneIndex)>,
     recv_s2c: Receiver<(Bytes, LaneIndex)>,
-    #[allow(clippy::struct_field_names)]
-    send_connected: bool,
+    send_dc_c2s: Sender<String>,
+    recv_dc_s2c: Receiver<String>,
+    send_initial: bool,
 }
 
 impl ConnectedAt for Connected {
@@ -110,8 +111,10 @@ impl ChannelClient {
 
         let (send_c2s, recv_c2s) = crossbeam_channel::unbounded();
         let (send_s2c, recv_s2c) = crossbeam_channel::unbounded();
+        let (send_dc_c2s, recv_dc_c2s) = crossbeam_channel::bounded(1);
+        let (send_dc_s2c, recv_dc_s2c) = crossbeam_channel::bounded(1);
         let key = server
-            .insert_client(recv_c2s, send_s2c)
+            .insert_client(recv_c2s, send_s2c, recv_dc_c2s, send_dc_s2c)
             .ok_or(ClientError::ServerClosed)?;
         self.state = State::Connected(Connected {
             key,
@@ -120,7 +123,9 @@ impl ChannelClient {
             bytes_recv: 0,
             send_c2s,
             recv_s2c,
-            send_connected: true,
+            send_dc_c2s,
+            recv_dc_s2c,
+            send_initial: true,
         });
         Ok(())
     }
@@ -176,19 +181,20 @@ impl ClientTransport for ChannelClient {
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        if !matches!(self.state, State::Connected(_)) {
+        let State::Connected(_) = self.state else {
             return Err(ClientError::NotConnected);
-        }
+        };
 
         Ok(())
     }
 
-    fn disconnect(&mut self) -> Result<(), Self::Error> {
-        if matches!(self.state, State::Disconnected) {
+    fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
+        let State::Connected(client) = mem::take(&mut self.state) else {
             return Err(ClientError::AlreadyDisconnected);
-        }
+        };
 
-        self.state = State::Disconnected;
+        let reason = reason.into();
+        let _ = client.send_dc_c2s.try_send(reason);
         Ok(())
     }
 }
@@ -197,9 +203,14 @@ impl ChannelClient {
     fn poll_connected(mut client: Connected) -> (Vec<ClientEvent<Self>>, State) {
         let mut events = Vec::new();
 
-        if client.send_connected {
+        if client.send_initial {
             events.push(ClientEvent::Connected);
-            client.send_connected = false;
+            client.send_initial = false;
+        }
+
+        if let Ok(reason) = client.recv_dc_s2c.try_recv() {
+            events.push(ClientEvent::DisconnectedByServer { reason });
+            return (events, State::Disconnected);
         }
 
         let res = (|| loop {
@@ -216,7 +227,7 @@ impl ChannelClient {
         match res {
             Ok(()) => (events, State::Connected(client)),
             Err(error) => {
-                events.push(ClientEvent::Disconnected { error });
+                events.push(ClientEvent::DisconnectedByError { error });
                 (events, State::Disconnected)
             }
         }

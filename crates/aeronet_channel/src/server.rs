@@ -1,6 +1,6 @@
 //! Server-side items.
 
-use std::{convert::Infallible, fmt::Display, iter};
+use std::{convert::Infallible, fmt::Display, iter, mem};
 
 use aeronet::{
     client::ClientState,
@@ -61,7 +61,9 @@ pub struct Connected {
     pub bytes_recv: usize,
     recv_c2s: Receiver<(Bytes, LaneIndex)>,
     send_s2c: Sender<(Bytes, LaneIndex)>,
-    send_connected: bool,
+    recv_dc_c2s: Receiver<String>,
+    send_dc_s2c: Sender<String>,
+    send_initial: bool,
 }
 
 impl ConnectedAt for Connected {
@@ -137,6 +139,8 @@ impl ChannelServer {
         &mut self,
         recv_c2s: Receiver<(Bytes, LaneIndex)>,
         send_s2c: Sender<(Bytes, LaneIndex)>,
+        recv_dc_c2s: Receiver<String>,
+        send_dc_s2c: Sender<String>,
     ) -> Option<ClientKey> {
         let State::Open(server) = &mut self.state else {
             return None;
@@ -148,7 +152,9 @@ impl ChannelServer {
             bytes_recv: 0,
             recv_c2s,
             send_s2c,
-            send_connected: true,
+            recv_dc_c2s,
+            send_dc_s2c,
+            send_initial: true,
         })))
     }
 }
@@ -234,24 +240,39 @@ impl ServerTransport for ChannelServer {
         Ok(())
     }
 
-    fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error> {
+    fn disconnect(
+        &mut self,
+        client_key: Self::ClientKey,
+        reason: impl Into<String>,
+    ) -> Result<(), Self::Error> {
         let State::Open(server) = &mut self.state else {
             return Err(ServerError::NotOpen);
         };
 
-        server
+        let reason = reason.into();
+
+        let client = server
             .clients
             .remove(client_key)
-            .ok_or(ServerError::NotConnected)
-            .map(drop)
+            .ok_or(ServerError::NotConnected)?;
+        let Client::Connected(client) = client else {
+            return Err(ServerError::NotConnected);
+        };
+        let _ = client.send_dc_s2c.try_send(reason);
+        Ok(())
     }
 
-    fn close(&mut self) -> Result<(), Self::Error> {
-        if matches!(self.state, State::Closed) {
+    fn close(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
+        let State::Open(server) = mem::take(&mut self.state) else {
             return Err(ServerError::AlreadyClosed);
-        }
+        };
 
-        self.state = State::Closed;
+        let reason = reason.into();
+        for (_, client) in server.clients {
+            if let Client::Connected(client) = client {
+                let _ = client.send_dc_s2c.try_send(reason.clone());
+            }
+        }
         Ok(())
     }
 }
@@ -278,13 +299,18 @@ impl ChannelServer {
         client_key: ClientKey,
         mut client: Connected,
     ) -> Client {
-        if client.send_connected {
+        if client.send_initial {
             events.push(ServerEvent::Connecting { client_key });
             events.push(ServerEvent::Connected { client_key });
-            client.send_connected = false;
+            client.send_initial = false;
         }
 
-        loop {
+        if let Ok(reason) = client.recv_dc_c2s.try_recv() {
+            events.push(ServerEvent::DisconnectedByClient { client_key, reason });
+            return Client::Disconnected;
+        }
+
+        let res = (|| loop {
             match client.recv_c2s.try_recv() {
                 Ok((msg, lane)) => {
                     client.bytes_recv = client.bytes_recv.saturating_add(msg.len());
@@ -294,17 +320,17 @@ impl ChannelServer {
                         lane,
                     });
                 }
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => {
-                    events.push(ServerEvent::Disconnected {
-                        client_key,
-                        error: ServerError::Disconnected,
-                    });
-                    return Client::Disconnected;
-                }
+                Err(TryRecvError::Empty) => return Ok(()),
+                Err(TryRecvError::Disconnected) => return Err(ServerError::Disconnected),
+            }
+        })();
+
+        match res {
+            Ok(()) => Client::Connected(client),
+            Err(error) => {
+                events.push(ServerEvent::DisconnectedByError { client_key, error });
+                Client::Disconnected
             }
         }
-
-        Client::Connected(client)
     }
 }
