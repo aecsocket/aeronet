@@ -112,6 +112,18 @@ impl<T: ServerTransport> ServerTransport for ConditionedServer<T> {
         self.inner.close(reason)
     }
 
+    fn default_disconnect_reason(&self) -> Option<&str> {
+        self.inner.default_disconnect_reason()
+    }
+
+    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
+        self.inner.set_default_disconnect_reason(reason);
+    }
+
+    fn unset_default_disconnect_reason(&mut self) {
+        self.inner.unset_default_disconnect_reason();
+    }
+
     fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<Self>> {
         let mut events = Vec::<ServerEvent<Self>>::new();
 
