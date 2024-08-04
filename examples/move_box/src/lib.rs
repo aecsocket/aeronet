@@ -3,6 +3,7 @@
 use aeronet_webtransport::runtime::WebTransportRuntime;
 use bevy::prelude::*;
 use bevy_replicon::prelude::*;
+use bevy_replicon_snap::SnapshotInterpolationPlugin;
 // TODO
 // use bevy_replicon_snap::{
 //     bevy_replicon_snap_macros::Interpolate, interpolation::AppInterpolationExt,
@@ -42,10 +43,9 @@ impl Plugin for MoveBoxPlugin {
                     tick_policy: TickPolicy::MaxTickRate(TICK_RATE),
                     ..Default::default()
                 }),
-                // TODO
-                // SnapshotInterpolationPlugin {
-                //     max_tick_rate: TICK_RATE,
-                // },
+                SnapshotInterpolationPlugin {
+                    max_tick_rate: TICK_RATE,
+                },
             ))
             .replicate::<Player>()
             // TODO
