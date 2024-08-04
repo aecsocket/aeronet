@@ -152,7 +152,6 @@ fn ui(
     mut ui_state: ResMut<UiState>,
     mut client: ResMut<WebTransportClient>,
     connect_to_remote: Res<ConnectToRemote>,
-    mut game_state: ResMut<NextState<GameState>>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));

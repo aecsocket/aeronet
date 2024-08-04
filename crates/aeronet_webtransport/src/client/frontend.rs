@@ -1,7 +1,7 @@
 use std::mem;
 
 use aeronet::{
-    client::{ClientEvent, ClientState, ClientTransport},
+    client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
     error::pretty_error,
     lane::LaneIndex,
 };
@@ -52,7 +52,7 @@ impl WebTransportClient {
         }
 
         let (send_connected, recv_connected) = oneshot::channel::<ToConnected>();
-        let (send_err, recv_err) = oneshot::channel::<ClientError>();
+        let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
         let target = target.into();
 
         let runtime_clone = runtime.clone();
@@ -67,12 +67,12 @@ impl WebTransportClient {
             )
             .await
             {
-                Err(ClientError::FrontendClosed) => {
+                Err(DisconnectReason::Error(ClientError::FrontendClosed)) => {
                     debug!("Client disconnected by frontend");
                 }
-                Err(err) => {
-                    debug!("Client disconnected: {:#}", pretty_error(&err));
-                    let _ = send_err.send(err);
+                Err(reason) => {
+                    debug!("Client disconnected: {:#}", pretty_error(&reason));
+                    let _ = send_dc.send(reason);
                 }
                 Ok(_) => unreachable!(),
             }
@@ -80,7 +80,7 @@ impl WebTransportClient {
 
         self.state = State::Connecting(Connecting {
             recv_connected,
-            recv_err,
+            recv_dc,
         });
 
         Ok(())
@@ -160,7 +160,7 @@ impl ClientTransport for WebTransportClient {
 
 impl WebTransportClient {
     fn poll_connecting(events: &mut Vec<ClientEvent<Self>>, mut client: Connecting) -> State {
-        if let Ok(Some(err)) = client.recv_err.try_recv() {
+        if let Ok(Some(err)) = client.recv_dc.try_recv() {
             events.push(ClientEvent::Disconnected { reason: err.into() });
             return State::Disconnected;
         }
@@ -178,7 +178,7 @@ impl WebTransportClient {
                         #[cfg(not(target_family = "wasm"))]
                         raw_rtt: next.initial_rtt,
                         session: next.session,
-                        recv_err: client.recv_err,
+                        recv_dc: client.recv_dc,
                         recv_meta: next.recv_meta,
                         send_msgs: next.send_c2s,
                         recv_msgs: next.recv_s2c,

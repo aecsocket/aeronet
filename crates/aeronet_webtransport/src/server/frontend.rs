@@ -340,12 +340,11 @@ impl WebTransportServer {
                         remote_addr: next.remote_addr,
                         raw_rtt: next.initial_rtt,
                         session: next.session,
-                        recv_err: client.recv_err,
+                        recv_dc: client.recv_err,
                         recv_meta: next.recv_meta,
                         recv_msgs: next.recv_c2s,
                         send_msgs: next.send_s2c,
                         send_local_dc: next.send_local_dc,
-                        recv_remote_dc: next.recv_remote_dc,
                         fatal_error: None,
                     },
                 }))

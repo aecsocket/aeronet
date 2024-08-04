@@ -124,8 +124,8 @@ fn poll_server(
                 let resp = format!("You sent: {msg}");
                 commands.run_system_with_input(send_message.0, (client_key, resp));
             }
-            ServerEvent::Disconnected { client_key, error } => {
-                info!("{client_key} disconnected: {:#}", pretty_error(&error));
+            ServerEvent::Disconnected { client_key, reason } => {
+                info!("{client_key} disconnected: {:#}", pretty_error(&reason));
             }
             ServerEvent::Ack { .. } | ServerEvent::Nack { .. } => {}
         }
