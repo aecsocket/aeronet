@@ -88,7 +88,7 @@ impl<T: ClientTransport> ClientTransport for ConditionedClient<T> {
     }
 
     fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
-        self.inner.set_default_disconnect_reason(reason)
+        self.inner.set_default_disconnect_reason(reason);
     }
 
     fn unset_default_disconnect_reason(&mut self) {
