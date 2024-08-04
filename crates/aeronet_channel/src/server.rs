@@ -86,8 +86,9 @@ impl MessageStats for Connected {
 
 #[derive(Debug)]
 enum Client {
+    Disconnected,
     Connected(Connected),
-    Disconnected { reason: String },
+    Disconnecting { reason: String },
 }
 
 /// Error type for operations on a [`ChannelServer`].
@@ -190,7 +191,9 @@ impl ServerTransport for ChannelServer {
         };
 
         match server.clients.get(client_key) {
-            None | Some(Client::Disconnected { .. }) => ClientState::Disconnected,
+            None | Some(Client::Disconnected | Client::Disconnecting { .. }) => {
+                ClientState::Disconnected
+            }
             Some(Client::Connected(client)) => ClientState::Connected(client),
         }
     }
@@ -256,17 +259,15 @@ impl ServerTransport for ChannelServer {
             .ok_or(ServerError::NotConnected)?;
         match mem::replace(
             client,
-            Client::Disconnected {
+            Client::Disconnecting {
                 reason: reason.clone(),
             },
         ) {
             Client::Connected(client) => {
-                client.send_dc_s2c.send(reason);
+                let _ = client.send_dc_s2c.try_send(reason);
                 Ok(())
             }
-            Client::Disconnected { .. } => {
-                return Err(ServerError::NotConnected);
-            }
+            Client::Disconnected | Client::Disconnecting { .. } => Err(ServerError::NotConnected),
         }
     }
 
@@ -286,7 +287,7 @@ impl ServerTransport for ChannelServer {
     }
 
     fn default_disconnect_reason(&self) -> Option<&str> {
-        self.default_disconnect_reason.as_ref().map(|s| s.as_str())
+        self.default_disconnect_reason.as_deref()
     }
 
     fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
@@ -303,22 +304,21 @@ impl ChannelServer {
         let mut events = Vec::new();
         for (client_key, client) in &mut server.clients {
             replace_with::replace_with_or_abort(client, |client| match client {
-                Client::Disconnected { reason } => {
+                Client::Disconnected => client,
+                Client::Connected(client) => Self::poll_connected(&mut events, client_key, client),
+                Client::Disconnecting { reason } => {
                     events.push(ServerEvent::Disconnected {
                         client_key,
                         reason: DisconnectReason::Local(reason),
                     });
-                    Client::Disconnected {
-                        reason: String::new(),
-                    }
+                    Client::Disconnected
                 }
-                Client::Connected(client) => Self::poll_connected(&mut events, client_key, client),
             });
         }
 
         server
             .clients
-            .retain(|_, client| !matches!(client, Client::Disconnected { .. }));
+            .retain(|_, client| !matches!(client, Client::Disconnected));
 
         events
     }

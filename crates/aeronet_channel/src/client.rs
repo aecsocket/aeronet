@@ -27,13 +27,14 @@ pub struct ChannelClient {
 
 #[derive(Debug)]
 enum State {
-    Disconnected { local_reason: Option<String> },
+    Disconnected,
     Connected(Connected),
+    Disconnecting { reason: String },
 }
 
 impl Default for State {
     fn default() -> Self {
-        Self::Disconnected { local_reason: None }
+        Self::Disconnected
     }
 }
 
@@ -148,25 +149,24 @@ impl ClientTransport for ChannelClient {
     #[must_use]
     fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
         match &self.state {
-            State::Disconnected { .. } => ClientState::Disconnected,
+            State::Disconnected | State::Disconnecting { .. } => ClientState::Disconnected,
             State::Connected(client) => ClientState::Connected(client),
         }
     }
 
     fn poll(&mut self, _: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
         replace_with::replace_with_or_abort_and_return(&mut self.state, |inner| match inner {
-            State::Disconnected { local_reason } => {
-                let event = local_reason.map(|reason| ClientEvent::Disconnected {
+            State::Disconnected => (Either::Left(None), inner),
+            State::Disconnecting { reason } => {
+                let event = ClientEvent::Disconnected {
                     reason: DisconnectReason::Local(reason),
-                });
-                (
-                    Either::Left(event),
-                    State::Disconnected { local_reason: None },
-                )
+                };
+                (Either::Left(Some(event)), State::Disconnected)
             }
             State::Connected(client) => {
-                let (res, new) = Self::poll_connected(client);
-                (Either::Right(res), new)
+                let mut events = Vec::new();
+                let state = Self::poll_connected(client, &mut events);
+                (Either::Right(events), state)
             }
         })
         .into_iter()
@@ -205,20 +205,22 @@ impl ClientTransport for ChannelClient {
         let reason = reason.into();
         match mem::replace(
             &mut self.state,
-            State::Disconnected {
-                local_reason: Some(reason.clone()),
+            State::Disconnecting {
+                reason: reason.clone(),
             },
         ) {
             State::Connected(client) => {
                 let _ = client.send_dc_c2s.try_send(reason);
                 Ok(())
             }
-            State::Disconnected { .. } => Err(ClientError::AlreadyDisconnected),
+            State::Disconnected | State::Disconnecting { .. } => {
+                Err(ClientError::AlreadyDisconnected)
+            }
         }
     }
 
     fn default_disconnect_reason(&self) -> Option<&str> {
-        self.default_disconnect_reason.as_ref().map(|s| s.as_str())
+        self.default_disconnect_reason.as_deref()
     }
 
     fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
@@ -231,9 +233,7 @@ impl ClientTransport for ChannelClient {
 }
 
 impl ChannelClient {
-    fn poll_connected(mut client: Connected) -> (Vec<ClientEvent<Self>>, State) {
-        let mut events = Vec::new();
-
+    fn poll_connected(mut client: Connected, events: &mut Vec<ClientEvent<Self>>) -> State {
         if client.send_initial {
             events.push(ClientEvent::Connected);
             client.send_initial = false;
@@ -243,7 +243,7 @@ impl ChannelClient {
             events.push(ClientEvent::Disconnected {
                 reason: DisconnectReason::Remote(reason),
             });
-            return (events, State::Disconnected { local_reason: None });
+            return State::Disconnected;
         }
 
         let res = (|| loop {
@@ -258,12 +258,12 @@ impl ChannelClient {
         })();
 
         match res {
-            Ok(()) => (events, State::Connected(client)),
+            Ok(()) => State::Connected(client),
             Err(err) => {
                 events.push(ClientEvent::Disconnected {
                     reason: DisconnectReason::Error(err),
                 });
-                (events, State::Disconnected { local_reason: None })
+                State::Disconnected
             }
         }
     }

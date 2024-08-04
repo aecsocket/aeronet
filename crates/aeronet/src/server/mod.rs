@@ -183,6 +183,7 @@ pub trait ServerTransport {
     fn unset_default_disconnect_reason(&mut self);
 
     /// Returns `self` with a modified disconnect-on-drop reason.
+    #[must_use]
     fn with_default_disconnect_reason(mut self, reason: impl Into<String>) -> Self
     where
         Self: Sized,
@@ -391,12 +392,13 @@ where
 }
 
 /// Why a [`ServerTransport`] was closed.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CloseReason<E> {
     /// Server was closed by user code, via a call to
     /// [`ServerTransport::close`].
     ///
     /// The closing reason is provided.
+    #[error("disconnected locally: {0}")]
     Local(String),
     /// Encountered a fatal error.
     ///
@@ -406,5 +408,6 @@ pub enum CloseReason<E> {
     ///
     /// While the server is open, errors usually should not tear down the entire
     /// server, just the connection of the specific client who caused the error.
-    Error(E),
+    #[error("connection error")]
+    Error(#[source] E),
 }

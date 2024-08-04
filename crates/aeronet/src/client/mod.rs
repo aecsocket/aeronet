@@ -129,6 +129,7 @@ pub trait ClientTransport {
     fn unset_default_disconnect_reason(&mut self);
 
     /// Returns `self` with a modified disconnect-on-drop reason.
+    #[must_use]
     fn with_default_disconnect_reason(mut self, reason: impl Into<String>) -> Self
     where
         Self: Sized,
@@ -278,7 +279,7 @@ where
 /// was disconnected.
 ///
 /// [`ServerTransport`]: crate::server::ServerTransport
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DisconnectReason<E> {
     /// Client was disconnected by user code on this side, via a call to
     /// [`ClientTransport::disconnect`] or [`ServerTransport::disconnect`].
@@ -286,16 +287,19 @@ pub enum DisconnectReason<E> {
     /// The disconnection reason is provided.
     ///
     /// [`ServerTransport::disconnect`]: crate::server::ServerTransport::disconnect
+    #[error("disconnected locally: {0}")]
     Local(String),
     /// Encountered a fatal connection error.
     ///
     /// This may also be raised if the other side wanted to discreetly end the
     /// connection, pretending that an error caused it instead of a deliberate
     /// disconnect with a reason.
-    Error(E),
+    #[error("connection error")]
+    Error(#[source] E),
     /// Server decided to disconnect our client, and has provided a reason as to
     /// why it disconnected us.
     ///
     /// This is only raised on the client side.
+    #[error("disconnected remotely: {0}")]
     Remote(String),
 }
