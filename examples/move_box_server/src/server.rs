@@ -2,7 +2,8 @@ use aeronet::{
     client::ClientState,
     error::pretty_error,
     server::{
-        RemoteClientConnecting, ServerClosed, ServerOpened, ServerTransport, ServerTransportSet,
+        RemoteClientConnecting, RemoteClientDisconnected, ServerClosed, ServerOpened,
+        ServerTransport, ServerTransportSet,
     },
     stats::{ConnectedAt, Rtt},
 };
@@ -56,7 +57,14 @@ pub fn main() {
         .add_systems(Startup, open_server)
         .add_systems(
             PreUpdate,
-            (on_opened, on_closed, on_connecting, on_server_event).after(ServerTransportSet::Recv),
+            (
+                on_opened,
+                on_closed,
+                on_connecting,
+                on_disconnected,
+                on_server_event,
+            )
+                .after(ServerTransportSet::Recv),
         )
         .add_systems(Update, print_stats.run_if(on_timer(PRINT_STATS_INTERVAL)))
         .run();
@@ -119,7 +127,13 @@ fn on_connecting(
 ) {
     for RemoteClientConnecting { client_key } in events.read() {
         info!("{client_key} connecting");
-        let _ = server.respond_to_request(*client_key, ConnectionResponse::Accept);
+        let _ = server.respond_to_request(*client_key, ConnectionResponse::Accepted);
+    }
+}
+
+fn on_disconnected(mut events: EventReader<RemoteClientDisconnected<WebTransportServer>>) {
+    for RemoteClientDisconnected { client_key, reason } in events.read() {
+        info!("{client_key} disconnected: {:#}", pretty_error(&reason));
     }
 }
 

@@ -183,7 +183,6 @@ impl WebTransportClient {
                         send_msgs: next.send_c2s,
                         recv_msgs: next.recv_s2c,
                         send_local_dc: next.send_local_dc,
-                        recv_remote_dc: next.recv_remote_dc,
                         fatal_error: None,
                     },
                 })
@@ -211,9 +210,9 @@ impl WebTransportClient {
 
         match res {
             Ok(()) => State::Connected(client),
-            Err(err) => {
+            Err(reason) => {
                 events.push(ClientEvent::Disconnected {
-                    reason: ClientError::from(err).into(),
+                    reason: reason.map_err(From::from),
                 });
                 State::Disconnected
             }

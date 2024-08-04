@@ -37,7 +37,7 @@ pub async fn start(
         .map_err(|err| ClientError::AwaitConnect(err.into()))?;
 
     let Some(mtu) = internal::get_mtu(&conn) else {
-        return Err(ClientError::DatagramsNotSupported);
+        return Err(ClientError::DatagramsNotSupported.into());
     };
     let session = Session::new(Instant::now(), session_config, MIN_MTU, mtu)
         .map_err(ClientError::MtuTooSmall)?;
@@ -65,5 +65,5 @@ pub async fn start(
     debug!("Starting connection loop");
     internal::handle_connection(runtime, conn, recv_c2s, send_s2c, send_meta, recv_local_dc)
         .await
-        .map_err(From::from)
+        .map_err(|reason| reason.map_err(From::from))
 }

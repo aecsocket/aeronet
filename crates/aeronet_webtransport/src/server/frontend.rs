@@ -282,7 +282,7 @@ impl WebTransportServer {
                     origin: client.origin,
                     user_agent: client.user_agent,
                     headers: client.headers,
-                    recv_err: client.recv_err,
+                    recv_dc: client.recv_dc,
                     send_conn_resp: Some(client.send_conn_resp),
                     recv_connected: client.recv_connected,
                 }));
@@ -326,7 +326,7 @@ impl WebTransportServer {
     ) -> Client {
         let res = (|| {
             if let Some(err) = client
-                .recv_err
+                .recv_dc
                 .try_recv()
                 .map_err(|_| ServerError::BackendClosed)?
             {
@@ -340,7 +340,7 @@ impl WebTransportServer {
                         remote_addr: next.remote_addr,
                         raw_rtt: next.initial_rtt,
                         session: next.session,
-                        recv_dc: client.recv_err,
+                        recv_dc: client.recv_dc,
                         recv_meta: next.recv_meta,
                         recv_msgs: next.recv_c2s,
                         send_msgs: next.send_s2c,
@@ -355,11 +355,8 @@ impl WebTransportServer {
 
         match res {
             Ok(client) => client,
-            Err(err) => {
-                events.push(ServerEvent::Disconnected {
-                    client_key,
-                    reason: ServerError::from(err).into(),
-                });
+            Err(reason) => {
+                events.push(ServerEvent::Disconnected { client_key, reason });
                 Client::Disconnected
             }
         }
@@ -387,10 +384,10 @@ impl WebTransportServer {
 
         match res {
             Ok(()) => Client::Connected(client),
-            Err(err) => {
+            Err(reason) => {
                 events.push(ServerEvent::Disconnected {
                     client_key,
-                    reason: ServerError::from(err).into(),
+                    reason: reason.map_err(From::from),
                 });
                 Client::Disconnected
             }

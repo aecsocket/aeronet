@@ -11,7 +11,7 @@ use std::{
 };
 
 use aeronet::{
-    client::ClientState,
+    client::{ClientState, DisconnectReason},
     server::ServerState,
     stats::{ConnectedAt, MessageStats, RemoteAddr, Rtt},
 };
@@ -50,7 +50,7 @@ type State = ServerState<Opening, Open>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConnectionResponse {
     /// Allow the client to connect.
-    Accept,
+    Accepted,
     /// 403 Forbidden.
     Forbidden,
     /// 404 Not Found.
@@ -116,9 +116,9 @@ pub enum ServerError {
     /// too small for us.
     #[error("connection MTU too small")]
     MtuTooSmall(#[source] MtuTooSmall),
-    /// Frontend forced this client to disconnect.
-    #[error("server forced disconnect")]
-    ForceDisconnect,
+    /// Frontend did not allow this client to complete the connection.
+    #[error("rejected by server")]
+    Rejected,
 
     // connection
     /// Lost connection.
@@ -146,7 +146,7 @@ slotmap::new_key_type! {
     /// Key uniquely identifying a client in a [`WebTransportServer`].
     ///
     /// If the same physical client disconnects and reconnects (i.e. the same
-    /// computer), this counts as a new client.
+    /// process), this counts as a new client.
     pub struct ClientKey;
 }
 
@@ -189,7 +189,7 @@ struct ToConnecting {
     origin: Option<String>,
     user_agent: Option<String>,
     headers: HashMap<String, String>,
-    recv_err: oneshot::Receiver<ServerError>,
+    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
     send_key: oneshot::Sender<ClientKey>,
     send_conn_resp: oneshot::Sender<ConnectionResponse>,
     recv_connected: oneshot::Receiver<ToConnected>,
@@ -214,7 +214,7 @@ pub struct Connecting {
     pub user_agent: Option<String>,
     /// All headers present in the request.
     pub headers: HashMap<String, String>,
-    recv_err: oneshot::Receiver<ServerError>,
+    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
     send_conn_resp: Option<oneshot::Sender<ConnectionResponse>>,
     recv_connected: oneshot::Receiver<ToConnected>,
 }
