@@ -99,8 +99,8 @@ impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
                 ClientEvent::Connected => {
                     events.connected.send(LocalClientConnected::default());
                 }
-                ClientEvent::Disconnected { error } => {
-                    events.disconnected.send(LocalClientDisconnected { error });
+                ClientEvent::Disconnected { reason } => {
+                    events.disconnected.send(LocalClientDisconnected { reason });
                 }
                 ClientEvent::Recv { msg, lane } => {
                     let Ok(channel) = u8::try_from(lane.into_raw()) else {
