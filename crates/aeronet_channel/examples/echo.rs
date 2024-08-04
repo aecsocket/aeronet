@@ -5,7 +5,7 @@ use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport},
     error::pretty_error,
     lane::LaneIndex,
-    server::{CloseReason, ServerEvent, ServerTransport},
+    server::{ServerEvent, ServerTransport},
     stats::MessageStats,
 };
 use aeronet_channel::{client::ChannelClient, server::ChannelServer};
@@ -120,7 +120,6 @@ fn client_ui(
         });
 
         if do_disconnect {
-            ui_state.log.push(format!("Disconnected by user"));
             // Instead of dropping the client, we call `client.disconnect` here
             // to show how your user-defined disconnection reason will be sent to the server.
             // If you had dropped the client instead (e.g. by removing it as a resource),
@@ -181,10 +180,9 @@ fn server_poll(
                 ui_state.log.push(format!("Server opened"));
             }
             ServerEvent::Closed { reason } => {
-                ui_state.log.push(match reason {
-                    CloseReason::Local(reason) => format!("Server closed: {reason}"),
-                    CloseReason::Error(err) => format!("Server error: {:#}", pretty_error(&err)),
-                });
+                ui_state
+                    .log
+                    .push(format!("Server closed: {:#}", pretty_error(&reason)));
             }
             ServerEvent::Connecting { client_key } => {
                 ui_state.log.push(format!("Client {client_key} connecting"));

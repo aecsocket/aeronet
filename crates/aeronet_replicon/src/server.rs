@@ -3,6 +3,7 @@
 use std::{marker::PhantomData, ops::Deref};
 
 use aeronet::{
+    client::DisconnectReason,
     error::pretty_error,
     lane::LaneIndex,
     server::{
@@ -184,8 +185,8 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
                 ServerEvent::Connected { client_key } => {
                     Self::on_connected(client_keys.as_mut(), &mut events, client_key);
                 }
-                ServerEvent::Disconnected { client_key, error } => {
-                    Self::on_disconnected(client_keys.as_mut(), &mut events, client_key, error);
+                ServerEvent::Disconnected { client_key, reason } => {
+                    Self::on_disconnected(client_keys.as_mut(), &mut events, client_key, reason);
                 }
                 ServerEvent::Recv {
                     client_key,
@@ -235,12 +236,12 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
         client_keys: &mut ClientKeys<T>,
         events: &mut Events<T>,
         client_key: T::ClientKey,
-        error: T::Error,
+        reason: DisconnectReason<T::Error>,
     ) {
-        let reason_str = format!("{:#}", aeronet::error::pretty_error(&error));
+        let reason_str = format!("{:#}", aeronet::error::pretty_error(&reason));
         events.disconnected.send(RemoteClientDisconnected {
             client_key: client_key.clone(),
-            error,
+            reason,
         });
 
         let Some((_, client_id)) = client_keys.id_map.remove_by_left(&client_key) else {
