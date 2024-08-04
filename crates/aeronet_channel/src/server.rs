@@ -1,6 +1,6 @@
 //! Server-side items.
 
-use std::{convert::Infallible, fmt::Display, iter, mem};
+use std::{convert::Infallible, fmt::Display, mem};
 
 use aeronet::{
     client::{ClientState, DisconnectReason},
@@ -10,7 +10,6 @@ use aeronet::{
 };
 use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
-use either::Either;
 use slotmap::SlotMap;
 use web_time::{Duration, Instant};
 
@@ -203,10 +202,11 @@ impl ServerTransport for ChannelServer {
 
     fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_ {
         match &self.state {
-            State::Closed | State::Closing { .. } => Either::Left(iter::empty()),
-            State::Open(server) => Either::Right(server.clients.keys()),
+            State::Closed | State::Closing { .. } => None,
+            State::Open(server) => Some(server.clients.keys()),
         }
         .into_iter()
+        .flatten()
     }
 
     fn poll(&mut self, _: Duration) -> impl Iterator<Item = ServerEvent<Self>> {

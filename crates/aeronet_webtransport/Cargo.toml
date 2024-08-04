@@ -37,7 +37,6 @@ arbitrary = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 cfg-if = { workspace = true }
-either = { workspace = true }
 futures = { workspace = true }
 replace_with = { workspace = true }
 slotmap = { workspace = true }
