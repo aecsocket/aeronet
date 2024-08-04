@@ -6,7 +6,7 @@ mod frontend;
 use std::io;
 
 use aeronet::{
-    client::ClientState,
+    client::{ClientState, DisconnectReason},
     stats::{ConnectedAt, MessageStats, Rtt},
 };
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
@@ -113,18 +113,19 @@ pub enum ClientError {
     ConnectionLost(#[source] ConnectionLostError),
 }
 
-impl From<InternalError<Self>> for ClientError {
+impl From<InternalError<Self>> for DisconnectReason<ClientError> {
     fn from(value: InternalError<Self>) -> Self {
         match value {
-            InternalError::Spec(err) => err,
-            InternalError::BackendClosed => Self::BackendClosed,
-            InternalError::MtuTooSmall(err) => Self::MtuTooSmall(err),
-            InternalError::OutOfMemory(err) => Self::OutOfMemory(err),
-            InternalError::Send(err) => Self::Send(err),
-            InternalError::FatalSend(err) => Self::FatalSend(err),
-            InternalError::FrontendClosed => Self::FrontendClosed,
-            InternalError::DatagramsNotSupported => Self::DatagramsNotSupported,
-            InternalError::ConnectionLost(err) => Self::ConnectionLost(err),
+            InternalError::Spec(e) => e,
+            InternalError::BackendClosed => Self::Error(ClientError::BackendClosed),
+            InternalError::MtuTooSmall(err) => Self::Error(ClientError::MtuTooSmall(err)),
+            InternalError::OutOfMemory(err) => Self::Error(ClientError::OutOfMemory(err)),
+            InternalError::Send(err) => Self::Error(ClientError::Send(err)),
+            InternalError::FatalSend(err) => Self::Error(ClientError::FatalSend(err)),
+            InternalError::FrontendClosed => Self::Error(ClientError::FrontendClosed),
+            InternalError::DatagramsNotSupported => Self::Error(ClientError::DatagramsNotSupported),
+            InternalError::ConnectionLost(err) => Self::Error(ClientError::ConnectionLost(err)),
+            InternalError::RemoteDisconnected(reason) => Self::Remote(reason),
         }
     }
 }
@@ -133,7 +134,7 @@ impl From<InternalError<Self>> for ClientError {
 #[derive(Debug)]
 pub struct Connecting {
     recv_connected: oneshot::Receiver<ToConnected>,
-    recv_err: oneshot::Receiver<ClientError>,
+    recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
 }
 
 #[derive(Debug)]
@@ -148,7 +149,6 @@ struct ToConnected {
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
     send_local_dc: oneshot::Sender<String>,
-    recv_remote_dc: oneshot::Receiver<String>,
     session: Session,
 }
 

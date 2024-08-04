@@ -47,7 +47,6 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
     send_r: mpsc::Sender<Bytes>,
     send_meta: mpsc::Sender<ConnectionMeta>,
     mut recv_local_dc: oneshot::Receiver<String>,
-    send_remote_dc: oneshot::Sender<String>,
 ) -> Result<Never, InternalError<E>> {
     let conn = Arc::new(conn);
     let (send_err, mut recv_err) = mpsc::channel::<InternalError<E>>(1);

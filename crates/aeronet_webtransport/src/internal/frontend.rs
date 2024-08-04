@@ -50,12 +50,12 @@ impl<E> ConnectionInner<E> {
         delta_time: Duration,
         mut cb: impl FnMut(PollEvent),
     ) -> Result<(), InternalError<E>> {
-        if let Some(err) = self
-            .recv_err
+        if let Some(reason) = self
+            .recv_dc
             .try_recv()
             .map_err(|_| InternalError::BackendClosed)?
         {
-            return Err(InternalError::Spec(err));
+            return Err(InternalError::Spec(reason));
         }
 
         while let Ok(Some(meta)) = self.recv_meta.try_next() {
