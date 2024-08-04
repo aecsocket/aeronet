@@ -295,7 +295,11 @@ pub enum DisconnectReason<E> {
     /// connection, pretending that an error caused it instead of a deliberate
     /// disconnect with a reason.
     #[error("connection error")]
-    Error(#[source] E),
+    Error(
+        #[source]
+        #[from]
+        E,
+    ),
     /// Server decided to disconnect our client, and has provided a reason as to
     /// why it disconnected us.
     ///

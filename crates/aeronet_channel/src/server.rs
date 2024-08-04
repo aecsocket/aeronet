@@ -207,11 +207,12 @@ impl ServerTransport for ChannelServer {
     }
 
     fn poll(&mut self, _: Duration) -> impl Iterator<Item = ServerEvent<Self>> {
+        let mut events = Vec::new();
         match &mut self.state {
-            State::Closed => Either::Left(iter::empty()),
-            State::Open(server) => Either::Right(Self::poll_open(server)),
-        }
-        .into_iter()
+            State::Closed => {}
+            State::Open(server) => Self::poll_open(server, &mut events),
+        };
+        events.into_iter()
     }
 
     fn send(
@@ -300,12 +301,11 @@ impl ServerTransport for ChannelServer {
 }
 
 impl ChannelServer {
-    fn poll_open(server: &mut Open) -> Vec<ServerEvent<Self>> {
-        let mut events = Vec::new();
+    fn poll_open(server: &mut Open, events: &mut Vec<ServerEvent<Self>>) {
         for (client_key, client) in &mut server.clients {
             replace_with::replace_with_or_abort(client, |client| match client {
                 Client::Disconnected => client,
-                Client::Connected(client) => Self::poll_connected(&mut events, client_key, client),
+                Client::Connected(client) => Self::poll_connected(events, client_key, client),
                 Client::Disconnecting { reason } => {
                     events.push(ServerEvent::Disconnected {
                         client_key,
@@ -319,8 +319,6 @@ impl ChannelServer {
         server
             .clients
             .retain(|_, client| !matches!(client, Client::Disconnected));
-
-        events
     }
 
     fn poll_connected(

@@ -65,8 +65,8 @@ pub struct ConnectionInner<E> {
     pub recv_meta: mpsc::Receiver<ConnectionMeta>,
     pub send_msgs: mpsc::UnboundedSender<Bytes>,
     pub recv_msgs: mpsc::Receiver<Bytes>,
-    pub send_dc: oneshot::Sender<String>,
-    pub recv_dc: oneshot::Receiver<String>,
+    pub send_local_dc: oneshot::Sender<String>,
+    pub recv_remote_dc: oneshot::Receiver<String>,
     pub fatal_error: Option<FatalSendError>,
 }
 

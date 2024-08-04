@@ -1197,28 +1197,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_replicon_snap"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b154463dd8aaccce7a3cea94634d3c854279c4f3bad073890e1cd8cb57c8fb2c"
-dependencies = [
- "bevy",
- "bevy_replicon",
- "bevy_replicon_snap_macros",
- "serde",
-]
-
-[[package]]
-name = "bevy_replicon_snap_macros"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b7f2ca7e3ca55177621bf8e19648ca7639b6cd9d31c6ec9a541860b663b3bac"
-dependencies = [
- "quote",
- "syn 2.0.71",
-]
-
-[[package]]
 name = "bevy_scene"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3298,7 +3276,6 @@ dependencies = [
  "aeronet_webtransport",
  "bevy",
  "bevy_replicon",
- "bevy_replicon_snap",
  "serde",
  "tokio",
  "wasm-bindgen-futures",
@@ -3328,7 +3305,6 @@ dependencies = [
  "ascii_table",
  "bevy",
  "bevy_replicon",
- "bevy_replicon_snap",
  "clap",
  "move_box",
  "rand",

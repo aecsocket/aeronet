@@ -192,8 +192,7 @@ fn ui(
         }
 
         if do_disconnect {
-            let _ = client.disconnect();
-            game_state.set(GameState::None);
+            let _ = client.disconnect("pressed disconnect button");
         }
     });
 }
@@ -212,8 +211,8 @@ fn on_disconnected(
     mut events: EventReader<LocalClientDisconnected<WebTransportClient>>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
-    for LocalClientDisconnected { error } in events.read() {
-        info!("Client disconnected: {:#}", pretty_error(&error));
+    for LocalClientDisconnected { reason } in events.read() {
+        info!("Client disconnected: {:#}", pretty_error(&reason));
         game_state.set(GameState::None);
     }
 }

@@ -147,6 +147,8 @@ struct ToConnected {
     recv_meta: mpsc::Receiver<ConnectionMeta>,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
+    send_local_dc: oneshot::Sender<String>,
+    recv_remote_dc: oneshot::Receiver<String>,
     session: Session,
 }
 

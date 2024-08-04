@@ -44,6 +44,8 @@ pub async fn start(
     let (send_meta, recv_meta) = mpsc::channel::<ConnectionMeta>(1);
     let (send_c2s, recv_c2s) = mpsc::unbounded::<Bytes>();
     let (send_s2c, recv_s2c) = mpsc::channel::<Bytes>(internal::MSG_BUF_CAP);
+    let (send_local_dc, recv_local_dc) = oneshot::channel::<String>();
+    let (send_remote_dc, recv_remote_dc) = oneshot::channel::<String>();
     send_connected
         .send(ToConnected {
             #[cfg(not(target_family = "wasm"))]
@@ -55,12 +57,22 @@ pub async fn start(
             recv_meta,
             send_c2s,
             recv_s2c,
+            send_local_dc,
+            recv_remote_dc,
             session,
         })
         .map_err(|_| ClientError::FrontendClosed)?;
 
     debug!("Starting connection loop");
-    internal::handle_connection(runtime, conn, recv_c2s, send_s2c, send_meta)
-        .await
-        .map_err(From::from)
+    internal::handle_connection(
+        runtime,
+        conn,
+        recv_c2s,
+        send_s2c,
+        send_meta,
+        recv_local_dc,
+        send_remote_dc,
+    )
+    .await
+    .map_err(From::from)
 }
