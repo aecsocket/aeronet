@@ -22,6 +22,8 @@ use super::{get_mtu, ClientEndpoint, Connection, ConnectionMeta, InternalError};
 
 const STATS_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
 
+const DC_ERROR_CODE: u32 = 0;
+
 #[allow(clippy::unnecessary_wraps)] // on WASM, must match fn sig
 pub fn create_client_endpoint(config: ClientConfig) -> Result<ClientEndpoint, ClientError> {
     #[cfg(target_family = "wasm")]
@@ -92,14 +94,25 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
         }
         reason = recv_local_dc => {
             if let Ok(reason) = reason {
-                // TODO WASM
+                #[cfg(target_family = "wasm")]
+                {
+                    use xwt_web_sys::sys::WebTransportCloseInfo;
+                    use wasm_bindgen_futures::JsFuture;
+
+                    let mut close_info = WebTransportCloseInfo::new();
+                    close_info.close_code(DC_ERROR_CODE);
+                    close_info.reason(&reason);
+
+                    // TODO: This seems to not close the connection properly
+                    conn.transport.close_with_close_info(&close_info);
+                    let _ = JsFuture::from(conn.transport.closed()).await;
+                }
+
                 #[cfg(not(target_family = "wasm"))]
                 {
                     use wtransport::VarInt;
 
-                    const DC_ERROR_CODE: VarInt = VarInt::from_u32(0);
-
-                    conn.0.close(DC_ERROR_CODE, reason.as_bytes());
+                    conn.0.close(VarInt::from_u32(DC_ERROR_CODE), reason.as_bytes());
                     conn.0.closed().await;
                 }
             }

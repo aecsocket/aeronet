@@ -4,7 +4,7 @@ use aeronet::{
     client::ClientState,
     error::pretty_error,
     lane::LaneIndex,
-    server::{ServerEvent, ServerState, ServerTransport},
+    server::{CloseReason, ServerEvent, ServerState, ServerTransport},
 };
 use aeronet_proto::session::SessionConfig;
 use bytes::Bytes;
@@ -94,7 +94,11 @@ impl ServerTransport for WebTransportServer {
     type MessageKey = MessageKey;
 
     fn state(&self) -> ServerState<Self::Opening<'_>, Self::Open<'_>> {
-        self.state.as_ref()
+        match &self.state {
+            State::Closed | State::Closing { .. } => ServerState::Closed,
+            State::Opening(server) => ServerState::Opening(server),
+            State::Open(server) => ServerState::Open(server),
+        }
     }
 
     fn client_state(
@@ -112,7 +116,7 @@ impl ServerTransport for WebTransportServer {
 
     fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_ {
         match &self.state {
-            State::Closed | State::Opening(_) => None,
+            State::Closed | State::Closing { .. } | State::Opening(_) => None,
             State::Open(server) => Some(server.clients.keys()),
         }
         .into_iter()
@@ -125,6 +129,12 @@ impl ServerTransport for WebTransportServer {
             State::Closed => State::Closed,
             State::Opening(server) => Self::poll_opening(&mut events, server),
             State::Open(server) => Self::poll_open(&mut events, server, delta_time),
+            State::Closing { reason } => {
+                events.push(ServerEvent::Closed {
+                    reason: CloseReason::Local(reason),
+                });
+                State::Closed
+            }
         });
         events.into_iter()
     }
@@ -185,9 +195,14 @@ impl ServerTransport for WebTransportServer {
     }
 
     fn close(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
-        match mem::take(&mut self.state) {
+        let reason = reason.into();
+        match mem::replace(
+            &mut self.state,
+            State::Closing {
+                reason: reason.clone(),
+            },
+        ) {
             State::Open(server) => {
-                let reason = reason.into();
                 for (_, client) in server.clients {
                     if let Client::Connected(client) = client {
                         let _ = client.inner.send_local_dc.send(reason.clone());
@@ -196,7 +211,7 @@ impl ServerTransport for WebTransportServer {
                 Ok(())
             }
             State::Opening(_) => Ok(()),
-            State::Closed => Err(ServerError::AlreadyClosed),
+            State::Closed | State::Closing { .. } => Err(ServerError::AlreadyClosed),
         }
     }
 

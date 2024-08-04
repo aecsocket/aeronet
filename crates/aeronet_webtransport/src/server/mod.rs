@@ -12,7 +12,6 @@ use std::{
 
 use aeronet::{
     client::{ClientState, DisconnectReason},
-    server::ServerState,
     stats::{ConnectedAt, MessageStats, RemoteAddr, Rtt},
 };
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
@@ -43,7 +42,16 @@ pub struct WebTransportServer {
     pub default_disconnect_reason: Option<String>,
 }
 
-type State = ServerState<Opening, Open>;
+#[derive(Debug, Default)]
+enum State {
+    #[default]
+    Closed,
+    Opening(Opening),
+    Open(Open),
+    Closing {
+        reason: String,
+    },
+}
 
 /// How a [`WebTransportServer`] should respond to a client attempting to
 /// connect to it.

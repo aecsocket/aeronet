@@ -6,7 +6,7 @@ mod frontend;
 use std::io;
 
 use aeronet::{
-    client::{ClientState, DisconnectReason},
+    client::DisconnectReason,
     stats::{ConnectedAt, MessageStats, Rtt},
 };
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
@@ -54,7 +54,16 @@ pub struct WebTransportClient {
     pub default_disconnect_reason: Option<String>,
 }
 
-type State = ClientState<Connecting, Connected>;
+#[derive(Debug, Default)]
+enum State {
+    #[default]
+    Disconnected,
+    Connecting(Connecting),
+    Connected(Connected),
+    Disconnecting {
+        reason: String,
+    },
+}
 
 /// Error type for operations on a [`WebTransportClient`].
 #[derive(Debug, thiserror::Error)]
