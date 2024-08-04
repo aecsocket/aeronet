@@ -133,6 +133,7 @@ pub struct RemoteClientConnecting<T: ServerTransport> {
 ///
 /// See [`ServerEvent::Connected`].
 ///
+/// [`ClientState::Connected`]: crate::client::ClientState::Connected
 /// [`ServerEvent::Connected`]: super::ServerEvent::Connected
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = ""), Clone(bound = ""))]
