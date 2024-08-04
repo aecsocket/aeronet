@@ -101,6 +101,7 @@ dependencies = [
  "derivative",
  "rand",
  "rand_distr",
+ "thiserror",
  "web-time",
 ]
 

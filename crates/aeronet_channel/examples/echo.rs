@@ -2,7 +2,7 @@
 //! message, and the server just echoes back that message to the client.
 
 use aeronet::{
-    client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
+    client::{ClientEvent, ClientState, ClientTransport},
     error::pretty_error,
     lane::LaneIndex,
     server::{CloseReason, ServerEvent, ServerTransport},
@@ -86,14 +86,9 @@ fn client_poll(
                 ui_state.log.push(format!("Connected"));
             }
             ClientEvent::Disconnected { reason } => {
-                ui_state.log.push(match reason {
-                    DisconnectReason::Local(reason) | DisconnectReason::Remote(reason) => {
-                        format!("Disconnected: {reason}")
-                    }
-                    DisconnectReason::Error(err) => {
-                        format!("Connection error: {:#}", pretty_error(&err))
-                    }
-                });
+                ui_state
+                    .log
+                    .push(format!("Disconnected: {:#}", pretty_error(&reason)));
             }
             ClientEvent::Recv { msg, .. } => {
                 let msg = String::from_utf8(msg.into()).unwrap();
@@ -197,16 +192,11 @@ fn server_poll(
             ServerEvent::Connected { client_key } => {
                 ui_state.log.push(format!("Client {client_key} connected"));
             }
-            ServerEvent::DisconnectedByError { client_key, error } => {
+            ServerEvent::Disconnected { client_key, reason } => {
                 ui_state.log.push(format!(
-                    "Client {client_key} disconnected due to error: {:#}",
-                    pretty_error(&error)
+                    "Client {client_key} disconnected: {:#}",
+                    pretty_error(&reason)
                 ));
-            }
-            ServerEvent::DisconnectedByClient { client_key, reason } => {
-                ui_state
-                    .log
-                    .push(format!("Client {client_key} disconnected: {reason}"));
             }
             ServerEvent::Recv {
                 client_key, msg, ..
