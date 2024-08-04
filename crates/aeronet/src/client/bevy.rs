@@ -101,6 +101,7 @@ pub struct LocalClientConnected<T: ClientTransport> {
 ///
 /// See [`ClientEvent::Disconnected`].
 ///
+/// [`ClientState::Disconnected`]: crate::client::ClientState::Disconnected
 /// [`ClientEvent::Disconnected`]: crate::client::ClientEvent::Disconnected
 #[derive(Derivative, Event)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
