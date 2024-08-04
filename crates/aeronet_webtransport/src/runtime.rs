@@ -16,10 +16,19 @@ use xwt_core::utils::maybe;
 /// This is also used internally, as clients and servers may need to spawn their
 /// own tasks for e.g. the sending and receiving halves of a session.
 ///
+/// # Platforms
+///
+/// ## Native
+///
 /// On a native target, this holds a handle to a `tokio` runtime, because
 /// `wtransport` currently only supports this async runtime. The [`Default`]
 /// impl will create and leak a new `tokio` runtime, and store a handle to this
 /// leaked runtime.
+///
+/// If you already have a runtime handle, you can use
+/// `WebTransportRuntime::from(handle)` to create a runtime from that handle.
+///
+/// ## WASM
 ///
 /// On a WASM target, this uses `wasm-bindgen-futures` to spawn the future via
 /// `wasm-bindgen`.
@@ -55,6 +64,13 @@ impl Default for WebTransportRuntime {
                 runtime: runtime.handle().clone(),
             }
         }
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl From<tokio::runtime::Handle> for WebTransportRuntime {
+    fn from(value: tokio::runtime::Handle) -> Self {
+        Self { runtime: value }
     }
 }
 
