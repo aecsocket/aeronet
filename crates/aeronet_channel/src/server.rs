@@ -5,7 +5,7 @@ use std::{convert::Infallible, fmt::Display, iter, mem};
 use aeronet::{
     client::{ClientState, DisconnectReason},
     lane::LaneIndex,
-    server::{ServerEvent, ServerState, ServerTransport},
+    server::{CloseReason, ServerEvent, ServerState, ServerTransport},
     stats::{ConnectedAt, MessageStats},
 };
 use bytes::Bytes;
@@ -44,6 +44,9 @@ enum State {
     #[default]
     Closed,
     Open(Open),
+    Closing {
+        reason: String,
+    },
 }
 
 /// State of a [`ChannelServer`] when it is [`ServerState::Open`].
@@ -177,7 +180,7 @@ impl ServerTransport for ChannelServer {
 
     fn state(&self) -> ServerState<Self::Opening<'_>, Self::Open<'_>> {
         match &self.state {
-            State::Closed => ServerState::Closed,
+            State::Closed | State::Closing { .. } => ServerState::Closed,
             State::Open(server) => ServerState::Open(server),
         }
     }
@@ -200,7 +203,7 @@ impl ServerTransport for ChannelServer {
 
     fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_ {
         match &self.state {
-            State::Closed => Either::Left(iter::empty()),
+            State::Closed | State::Closing { .. } => Either::Left(iter::empty()),
             State::Open(server) => Either::Right(server.clients.keys()),
         }
         .into_iter()
@@ -208,10 +211,16 @@ impl ServerTransport for ChannelServer {
 
     fn poll(&mut self, _: Duration) -> impl Iterator<Item = ServerEvent<Self>> {
         let mut events = Vec::new();
-        match &mut self.state {
-            State::Closed => {}
+        replace_with::replace_with_or_abort(&mut self.state, |state| match state {
+            State::Closed => state,
             State::Open(server) => Self::poll_open(server, &mut events),
-        };
+            State::Closing { reason } => {
+                events.push(ServerEvent::Closed {
+                    reason: CloseReason::Local(reason),
+                });
+                State::Closed
+            }
+        });
         events.into_iter()
     }
 
@@ -273,9 +282,14 @@ impl ServerTransport for ChannelServer {
     }
 
     fn close(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
-        match mem::take(&mut self.state) {
+        let reason = reason.into();
+        match mem::replace(
+            &mut self.state,
+            State::Closing {
+                reason: reason.clone(),
+            },
+        ) {
             State::Open(server) => {
-                let reason = reason.into();
                 for (_, client) in server.clients {
                     if let Client::Connected(client) = client {
                         let _ = client.send_dc_s2c.try_send(reason.clone());
@@ -283,7 +297,7 @@ impl ServerTransport for ChannelServer {
                 }
                 Ok(())
             }
-            State::Closed => Err(ServerError::AlreadyClosed),
+            State::Closed | State::Closing { .. } => Err(ServerError::AlreadyClosed),
         }
     }
 
@@ -301,7 +315,7 @@ impl ServerTransport for ChannelServer {
 }
 
 impl ChannelServer {
-    fn poll_open(server: &mut Open, events: &mut Vec<ServerEvent<Self>>) {
+    fn poll_open(mut server: Open, events: &mut Vec<ServerEvent<Self>>) -> State {
         for (client_key, client) in &mut server.clients {
             replace_with::replace_with_or_abort(client, |client| match client {
                 Client::Disconnected => client,
@@ -319,6 +333,8 @@ impl ChannelServer {
         server
             .clients
             .retain(|_, client| !matches!(client, Client::Disconnected));
+
+        State::Open(server)
     }
 
     fn poll_connected(

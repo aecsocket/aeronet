@@ -51,7 +51,7 @@ let ClientState::Connected(client_state) = client.state() else {
 };
 let client_key = client_state.key;
 
-server.disconnect(client_key);
+server.disconnect(client_key, "app closing");
 ```
 
 [`ChannelClient`]: client::ChannelClient
