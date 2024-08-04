@@ -37,8 +37,8 @@ aeronet_steam = { version = "0.7.0-alpha.2", path = "crates/aeronet_steam" }
 aeronet_webtransport = { version = "0.7.0-alpha.2", path = "crates/aeronet_webtransport" }
 
 ahash = { version = "0.8.11", default-features = false, features = [
-    "std",
-    "compile-time-rng",
+  "std",
+  "compile-time-rng",
 ] }
 anyhow = "1.0.86"
 arbitrary = { version = "1.3.2", features = ["derive"] }
