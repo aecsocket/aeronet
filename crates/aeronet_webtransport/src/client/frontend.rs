@@ -97,7 +97,11 @@ impl ClientTransport for WebTransportClient {
     type MessageKey = MessageKey;
 
     fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
-        self.state.as_ref()
+        match &self.state {
+            State::Disconnected | State::Disconnecting { .. } => ClientState::Disconnected,
+            State::Connecting(client) => ClientState::Connecting(client),
+            State::Connected(client) => ClientState::Connected(client),
+        }
     }
 
     fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
@@ -106,6 +110,12 @@ impl ClientTransport for WebTransportClient {
             State::Disconnected => state,
             State::Connecting(client) => Self::poll_connecting(&mut events, client),
             State::Connected(client) => Self::poll_connected(&mut events, client, delta_time),
+            State::Disconnecting { reason } => {
+                events.push(ClientEvent::Disconnected {
+                    reason: DisconnectReason::Local(reason),
+                });
+                State::Disconnected
+            }
         });
         events.into_iter()
     }
@@ -134,14 +144,21 @@ impl ClientTransport for WebTransportClient {
     }
 
     fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
-        match mem::take(&mut self.state) {
+        let reason = reason.into();
+        match mem::replace(
+            &mut self.state,
+            State::Disconnecting {
+                reason: reason.clone(),
+            },
+        ) {
             State::Connected(client) => {
-                let reason = reason.into();
                 let _ = client.inner.send_local_dc.send(reason);
                 Ok(())
             }
             State::Connecting(_) => Ok(()),
-            State::Disconnected => Err(ClientError::AlreadyDisconnected),
+            State::Disconnected | State::Disconnecting { .. } => {
+                Err(ClientError::AlreadyDisconnected)
+            }
         }
     }
 
@@ -222,7 +239,7 @@ impl WebTransportClient {
 
 impl SessionBacked for WebTransportClient {
     fn get_session(&self) -> Option<&Session> {
-        if let ClientState::Connected(client) = &self.state {
+        if let State::Connected(client) = &self.state {
             Some(&client.inner.session)
         } else {
             None
