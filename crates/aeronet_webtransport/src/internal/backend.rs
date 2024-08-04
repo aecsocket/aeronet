@@ -236,11 +236,9 @@ async fn meta_loop<E>(
     mut send_meta: mpsc::Sender<ConnectionMeta>,
 ) -> Result<(), InternalError<E>> {
     loop {
-        #[allow(clippy::ignored_unit_patterns)] // breaks the select! macro
-        // todo does it? need to test
         {
             futures::select! {
-                _ = runtime.sleep(STATS_UPDATE_INTERVAL).fuse() => {},
+                () = runtime.sleep(STATS_UPDATE_INTERVAL).fuse() => {},
                 _ = recv_closed => return Ok(()),
             };
         }

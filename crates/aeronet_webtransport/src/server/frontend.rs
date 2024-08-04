@@ -216,7 +216,7 @@ impl ServerTransport for WebTransportServer {
     }
 
     fn default_disconnect_reason(&self) -> Option<&str> {
-        self.default_disconnect_reason.as_ref().map(|s| s.as_str())
+        self.default_disconnect_reason.as_deref()
     }
 
     fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
