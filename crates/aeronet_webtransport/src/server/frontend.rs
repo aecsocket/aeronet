@@ -8,9 +8,7 @@ use aeronet::{
 };
 use aeronet_proto::session::SessionConfig;
 use bytes::Bytes;
-use either::Either;
 use futures::channel::oneshot;
-use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
 use slotmap::SlotMap;
 use tracing::{debug, trace_span};
 use web_time::Duration;
@@ -122,18 +120,13 @@ impl ServerTransport for WebTransportServer {
     }
 
     fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<Self>> {
-        replace_with_or_abort_and_return(&mut self.state, |state| match state {
-            State::Closed => (Either::Left(None), State::Closed),
-            State::Opening(server) => {
-                let (res, state) = Self::poll_opening(server);
-                (Either::Left(res), state)
-            }
-            State::Open(server) => {
-                let (res, state) = Self::poll_open(server, delta_time);
-                (Either::Right(res), state)
-            }
-        })
-        .into_iter()
+        let mut events = Vec::new();
+        replace_with::replace_with_or_abort(&mut self.state, |state| match state {
+            State::Closed => State::Closed,
+            State::Opening(server) => Self::poll_opening(&mut events, server),
+            State::Open(server) => Self::poll_open(&mut events, server, delta_time),
+        });
+        events.into_iter()
     }
 
     fn send(
@@ -186,7 +179,7 @@ impl ServerTransport for WebTransportServer {
             .ok_or(ServerError::ClientNotConnected)?;
         if let Client::Connected(client) = client {
             let reason = reason.into();
-            let _ = client.inner.send_dc.send(reason);
+            let _ = client.inner.send_local_dc.send(reason);
         }
         Ok(())
     }
@@ -197,7 +190,7 @@ impl ServerTransport for WebTransportServer {
                 let reason = reason.into();
                 for (_, client) in server.clients {
                     if let Client::Connected(client) = client {
-                        let _ = client.inner.send_dc.send(reason.clone());
+                        let _ = client.inner.send_local_dc.send(reason.clone());
                     }
                 }
                 Ok(())
@@ -249,33 +242,37 @@ impl WebTransportServer {
         Ok(())
     }
 
-    fn poll_opening(mut server: Opening) -> (Option<ServerEvent<Self>>, State) {
-        if let Ok(Some(error)) = server.recv_err.try_recv() {
-            return (Some(ServerEvent::Closed { reason: error }), State::Closed);
+    fn poll_opening(events: &mut Vec<ServerEvent<Self>>, mut server: Opening) -> State {
+        if let Ok(Some(err)) = server.recv_err.try_recv() {
+            events.push(ServerEvent::Closed { reason: err.into() });
+            return State::Closed;
         }
 
         match server.recv_open.try_recv() {
-            Ok(None) => (None, State::Opening(server)),
-            Ok(Some(next)) => (
-                Some(ServerEvent::Opened),
+            Ok(None) => State::Opening(server),
+            Ok(Some(next)) => {
+                events.push(ServerEvent::Opened);
                 State::Open(Open {
                     local_addr: next.local_addr,
                     recv_connecting: next.recv_connecting,
                     clients: SlotMap::default(),
                     _send_closed: next.send_closed,
-                }),
-            ),
-            Err(_) => (
-                Some(ServerEvent::Closed {
-                    reason: ServerError::BackendClosed,
-                }),
-                State::Closed,
-            ),
+                })
+            }
+            Err(_) => {
+                events.push(ServerEvent::Closed {
+                    reason: ServerError::BackendClosed.into(),
+                });
+                State::Closed
+            }
         }
     }
 
-    fn poll_open(mut server: Open, delta_time: Duration) -> (Vec<ServerEvent<Self>>, State) {
-        let mut events = Vec::new();
+    fn poll_open(
+        events: &mut Vec<ServerEvent<Self>>,
+        mut server: Open,
+        delta_time: Duration,
+    ) -> State {
         let res = (|| {
             while let Ok(client) = server.recv_connecting.try_next() {
                 let client = client.ok_or(ServerError::BackendClosed)?;
@@ -295,41 +292,37 @@ impl WebTransportServer {
 
             for (client_key, client) in &mut server.clients {
                 let span = trace_span!("client", key = display(client_key));
-                let span = span.enter();
+                let _span = span.enter();
 
-                replace_with_or_abort(client, |client_state| match client_state {
+                replace_with::replace_with_or_abort(client, |client_state| match client_state {
                     Client::Disconnected => ClientState::Disconnected,
-                    Client::Connecting(client) => {
-                        Self::poll_connecting(client_key, client, &mut events)
-                    }
+                    Client::Connecting(client) => Self::poll_connecting(events, client_key, client),
                     Client::Connected(client) => {
-                        Self::poll_connected(client_key, client, &mut events, delta_time)
+                        Self::poll_connected(events, client_key, client, delta_time)
                     }
                 });
-
-                drop(span);
             }
 
             server
                 .clients
                 .retain(|_, client| !matches!(client, Client::Disconnected));
 
-            Ok(())
+            Ok::<_, ServerError>(())
         })();
 
         match res {
-            Ok(()) => (events, State::Open(server)),
-            Err(error) => {
-                events.push(ServerEvent::Closed { reason: error });
-                (events, State::Closed)
+            Ok(()) => State::Open(server),
+            Err(err) => {
+                events.push(ServerEvent::Closed { reason: err.into() });
+                State::Closed
             }
         }
     }
 
     fn poll_connecting(
+        events: &mut Vec<ServerEvent<Self>>,
         client_key: ClientKey,
         mut client: Connecting,
-        events: &mut Vec<ServerEvent<Self>>,
     ) -> Client {
         let res = (|| {
             if let Some(err) = client
@@ -351,8 +344,8 @@ impl WebTransportServer {
                         recv_meta: next.recv_meta,
                         recv_msgs: next.recv_c2s,
                         send_msgs: next.send_s2c,
-                        send_dc: next.send_dc,
-                        recv_dc: next.recv_dc,
+                        send_local_dc: next.send_local_dc,
+                        recv_remote_dc: next.recv_remote_dc,
                         fatal_error: None,
                     },
                 }))
@@ -363,17 +356,20 @@ impl WebTransportServer {
 
         match res {
             Ok(client) => client,
-            Err(error) => {
-                events.push(ServerEvent::DisconnectedByError { client_key, error });
+            Err(err) => {
+                events.push(ServerEvent::Disconnected {
+                    client_key,
+                    reason: ServerError::from(err).into(),
+                });
                 Client::Disconnected
             }
         }
     }
 
     fn poll_connected(
+        events: &mut Vec<ServerEvent<Self>>,
         client_key: ClientKey,
         mut client: Connected,
-        events: &mut Vec<ServerEvent<Self>>,
         delta_time: Duration,
     ) -> Client {
         let res = client.inner.poll(delta_time, |event| {
@@ -393,9 +389,9 @@ impl WebTransportServer {
         match res {
             Ok(()) => Client::Connected(client),
             Err(err) => {
-                events.push(ServerEvent::DisconnectedByError {
+                events.push(ServerEvent::Disconnected {
                     client_key,
-                    error: err.into(),
+                    reason: ServerError::from(err).into(),
                 });
                 Client::Disconnected
             }

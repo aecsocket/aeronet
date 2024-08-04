@@ -20,8 +20,9 @@ use crate::{
 
 use super::{get_mtu, ClientEndpoint, Connection, ConnectionMeta, InternalError};
 
-#[allow(dead_code)]
 const STATS_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
+
+const DC_ERROR_CODE: VarInt = VarInt::from_u32(0);
 
 #[allow(clippy::unnecessary_wraps)] // on WASM, must match fn sig
 pub fn create_client_endpoint(config: ClientConfig) -> Result<ClientEndpoint, ClientError> {
@@ -45,6 +46,8 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
     recv_s: mpsc::UnboundedReceiver<Bytes>,
     send_r: mpsc::Sender<Bytes>,
     send_meta: mpsc::Sender<ConnectionMeta>,
+    mut recv_local_dc: oneshot::Receiver<String>,
+    send_remote_dc: oneshot::Sender<String>,
 ) -> Result<Never, InternalError<E>> {
     let conn = Arc::new(conn);
     let (send_err, mut recv_err) = mpsc::channel::<InternalError<E>>(1);
@@ -57,7 +60,7 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
             let err = send_loop(conn, recv_sending_closed, recv_s)
                 .await
                 .unwrap_err();
-            let _ = send_err.send(err).await;
+            let _ = send_err.try_send(err);
         }
     });
 
@@ -69,7 +72,7 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
             let err = recv_loop(conn, recv_receiving_closed, send_r)
                 .await
                 .unwrap_err();
-            let _ = send_err.send(err).await;
+            let _ = send_err.try_send(err);
         }
     });
 
@@ -82,19 +85,26 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
             let err = meta_loop(runtime, conn, recv_meta_closed, send_meta)
                 .await
                 .unwrap_err();
-            let _ = send_err.send(err).await;
+            let _ = send_err.try_send(err);
         }
     });
 
-    let err = recv_err
-        .next()
-        .await
-        .unwrap_or(InternalError::BackendClosed);
-    #[cfg(not(target_family = "wasm"))]
-    {
-        conn.0.close(VarInt::from_u32(123), b"lol"); // TODO testing
-        conn.0.closed().await;
-    }
+    let err = futures::select! {
+        err = recv_err.next() => {
+            err.unwrap_or(InternalError::BackendClosed)
+        }
+        reason = recv_local_dc => {
+            if let Ok(reason) = reason {
+                // TODO WASM
+                #[cfg(not(target_family = "wasm"))]
+                {
+                    conn.0.close(DC_ERROR_CODE, reason.as_bytes());
+                    conn.0.closed().await;
+                }
+            }
+            InternalError::BackendClosed
+        }
+    };
     Err(err)
 }
 

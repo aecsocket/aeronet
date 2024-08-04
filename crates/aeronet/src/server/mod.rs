@@ -409,5 +409,9 @@ pub enum CloseReason<E> {
     /// While the server is open, errors usually should not tear down the entire
     /// server, just the connection of the specific client who caused the error.
     #[error("connection error")]
-    Error(#[source] E),
+    Error(
+        #[source]
+        #[from]
+        E,
+    ),
 }

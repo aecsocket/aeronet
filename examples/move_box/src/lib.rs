@@ -3,7 +3,6 @@
 use aeronet_webtransport::runtime::WebTransportRuntime;
 use bevy::prelude::*;
 use bevy_replicon::prelude::*;
-use bevy_replicon_snap::SnapshotInterpolationPlugin;
 // TODO
 // use bevy_replicon_snap::{
 //     bevy_replicon_snap_macros::Interpolate, interpolation::AppInterpolationExt,
@@ -38,15 +37,10 @@ impl Plugin for MoveBoxPlugin {
         app.init_state::<GameState>()
             .enable_state_scoped_entities::<GameState>()
             .init_resource::<WebTransportRuntime>()
-            .add_plugins((
-                RepliconPlugins.build().set(ServerPlugin {
-                    tick_policy: TickPolicy::MaxTickRate(TICK_RATE),
-                    ..Default::default()
-                }),
-                SnapshotInterpolationPlugin {
-                    max_tick_rate: TICK_RATE,
-                },
-            ))
+            .add_plugins((RepliconPlugins.build().set(ServerPlugin {
+                tick_policy: TickPolicy::MaxTickRate(TICK_RATE),
+                ..Default::default()
+            }),))
             .replicate::<Player>()
             // TODO
             .replicate::<PlayerPosition>()

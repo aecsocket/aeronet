@@ -9,7 +9,6 @@ use aeronet::{
 };
 use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
-use either::Either;
 use web_time::{Duration, Instant};
 
 use crate::server::{ChannelServer, ClientKey};
@@ -25,17 +24,14 @@ pub struct ChannelClient {
     pub default_disconnect_reason: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 enum State {
+    #[default]
     Disconnected,
     Connected(Connected),
-    Disconnecting { reason: String },
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self::Disconnected
-    }
+    Disconnecting {
+        reason: String,
+    },
 }
 
 /// State of a [`ChannelClient`] when it is [`ClientState::Connected`].
@@ -155,21 +151,18 @@ impl ClientTransport for ChannelClient {
     }
 
     fn poll(&mut self, _: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
-        replace_with::replace_with_or_abort_and_return(&mut self.state, |inner| match inner {
-            State::Disconnected => (Either::Left(None), inner),
+        let mut events = Vec::new();
+        replace_with::replace_with_or_abort(&mut self.state, |state| match state {
+            State::Disconnected => state,
             State::Disconnecting { reason } => {
-                let event = ClientEvent::Disconnected {
+                events.push(ClientEvent::Disconnected {
                     reason: DisconnectReason::Local(reason),
-                };
-                (Either::Left(Some(event)), State::Disconnected)
+                });
+                State::Disconnected
             }
-            State::Connected(client) => {
-                let mut events = Vec::new();
-                let state = Self::poll_connected(client, &mut events);
-                (Either::Right(events), state)
-            }
-        })
-        .into_iter()
+            State::Connected(client) => Self::poll_connected(&mut events, client),
+        });
+        events.into_iter()
     }
 
     fn send(
@@ -233,7 +226,7 @@ impl ClientTransport for ChannelClient {
 }
 
 impl ChannelClient {
-    fn poll_connected(mut client: Connected, events: &mut Vec<ClientEvent<Self>>) -> State {
+    fn poll_connected(events: &mut Vec<ClientEvent<Self>>, mut client: Connected) -> State {
         if client.send_initial {
             events.push(ClientEvent::Connected);
             client.send_initial = false;
