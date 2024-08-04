@@ -29,12 +29,12 @@ steamworks = { workspace = true }
 
 bevy_ecs = { workspace = true, optional = true }
 
-[[example]]
-name = "echo_client"
-path = "examples/echo_client.rs"
-required-features = ["bevy", "dangerous-configuration"]
+# [[example]]
+# name = "echo_client"
+# path = "examples/echo_client.rs"
+# required-features = ["bevy", "dangerous-configuration"]
 
-[[example]]
-name = "echo_server"
-path = "examples/echo_server.rs"
-required-features = ["bevy"]
+# [[example]]
+# name = "echo_server"
+# path = "examples/echo_server.rs"
+# required-features = ["bevy"]
