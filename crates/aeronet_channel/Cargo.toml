@@ -25,7 +25,6 @@ aeronet = { workspace = true }
 
 bytes = { workspace = true }
 crossbeam-channel = { workspace = true }
-either = { workspace = true }
 replace_with = { workspace = true }
 slotmap = { workspace = true }
 thiserror = { workspace = true }

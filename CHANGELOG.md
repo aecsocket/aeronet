@@ -4,6 +4,7 @@
 * Added disconnection reasons to API
   * `ClientTransport::disconnect`, `ServerTransport::{disconnect, close}` now take a `reason: String` parameter
   * `{Client, Server}Event::Disconnected` has been split into `DisconnectedByError` and `DisconnectedBy{Server, Client}`
+* Fixed WASM transport
 
 # 0.6.0
 
