@@ -415,3 +415,14 @@ pub enum CloseReason<E> {
         E,
     ),
 }
+
+impl<E> CloseReason<E> {
+    /// Maps a `CloseReason<E>` to a `CloseReason<F>` by applying a function to
+    /// the [`CloseReason::Error`] variant.
+    pub fn map_err<F>(self, f: impl FnOnce(E) -> F) -> CloseReason<F> {
+        match self {
+            Self::Local(reason) => CloseReason::Local(reason),
+            Self::Error(err) => CloseReason::Error(f(err)),
+        }
+    }
+}

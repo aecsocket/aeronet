@@ -307,3 +307,15 @@ pub enum DisconnectReason<E> {
     #[error("disconnected remotely: {0}")]
     Remote(String),
 }
+
+impl<E> DisconnectReason<E> {
+    /// Maps a `DisconnectReason<E>` to a `DisconnectReason<F>` by applying a
+    /// function to the [`DisconnectReason::Error`] variant.
+    pub fn map_err<F>(self, f: impl FnOnce(E) -> F) -> DisconnectReason<F> {
+        match self {
+            Self::Local(reason) => DisconnectReason::Local(reason),
+            Self::Error(err) => DisconnectReason::Error(f(err)),
+            Self::Remote(reason) => DisconnectReason::Remote(reason),
+        }
+    }
+}

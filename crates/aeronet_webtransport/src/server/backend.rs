@@ -1,4 +1,4 @@
-use aeronet::error::pretty_error;
+use aeronet::{client::DisconnectReason, error::pretty_error};
 use aeronet_proto::session::{Session, SessionConfig};
 use bytes::Bytes;
 use futures::{
@@ -66,7 +66,7 @@ async fn start_handle_session(
 
     let (send_key, recv_key) = oneshot::channel::<ClientKey>();
     let (send_conn_resp, recv_conn_resp) = oneshot::channel::<ConnectionResponse>();
-    let (send_err, recv_err) = oneshot::channel::<ServerError>();
+    let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ServerError>>();
     let (send_connected, recv_connected) = oneshot::channel::<ToConnected>();
     send_connecting
         .send(ToConnecting {
@@ -77,7 +77,7 @@ async fn start_handle_session(
             headers: req.headers().clone(),
             send_key,
             send_conn_resp,
-            recv_err,
+            recv_dc,
             recv_connected,
         })
         .await
@@ -91,7 +91,7 @@ async fn start_handle_session(
             unreachable!()
         };
         match &err {
-            ServerError::FrontendClosed => {
+            DisconnectReason::Error(ServerError::FrontendClosed) => {
                 debug!("Session closed");
             }
             err => {
@@ -105,7 +105,7 @@ async fn start_handle_session(
         client = tracing::field::display(client_key)
     ))
     .await;
-    let _ = send_err.send(err);
+    let _ = send_dc.send(err);
     Ok(())
 }
 
@@ -115,7 +115,7 @@ async fn handle_session(
     req: SessionRequest,
     recv_conn_resp: oneshot::Receiver<ConnectionResponse>,
     send_connected: oneshot::Sender<ToConnected>,
-) -> Result<Never, ServerError> {
+) -> Result<Never, DisconnectReason<ServerError>> {
     debug!("New session request from {}{}", req.authority(), req.path());
 
     let conn_resp = recv_conn_resp
@@ -124,14 +124,14 @@ async fn handle_session(
     debug!("Frontend responded to this request with {conn_resp:?}");
 
     let conn = match conn_resp {
-        ConnectionResponse::Accept => req.accept(),
+        ConnectionResponse::Accepted => req.accept(),
         ConnectionResponse::Forbidden => {
             req.forbidden().await;
-            return Err(ServerError::ForceDisconnect);
+            return Err(ServerError::Rejected.into());
         }
         ConnectionResponse::NotFound => {
             req.not_found().await;
-            return Err(ServerError::ForceDisconnect);
+            return Err(ServerError::Rejected.into());
         }
     }
     .await
@@ -139,7 +139,7 @@ async fn handle_session(
 
     let conn = xwt_wtransport::Connection(conn);
     let Some(mtu) = internal::get_mtu(&conn) else {
-        return Err(ServerError::DatagramsNotSupported);
+        return Err(ServerError::DatagramsNotSupported.into());
     };
     let conn = conn.0;
     let session = Session::new(Instant::now(), session_config, MIN_MTU, mtu)
@@ -167,5 +167,5 @@ async fn handle_session(
     debug!("Starting connection loop");
     internal::handle_connection(runtime, conn, recv_s2c, send_c2s, send_meta, recv_local_dc)
         .await
-        .map_err(From::from)
+        .map_err(|err| err.map_err(From::from))
 }

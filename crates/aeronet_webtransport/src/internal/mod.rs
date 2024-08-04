@@ -89,5 +89,4 @@ pub enum InternalError<E> {
 
     // connection
     ConnectionLost(ConnectionError),
-    RemoteDisconnected(String),
 }

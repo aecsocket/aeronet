@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aeronet::client::DisconnectReason;
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
@@ -7,7 +8,6 @@ use futures::{
     FutureExt, SinkExt, StreamExt,
 };
 use web_time::Duration;
-use wtransport::VarInt;
 use xwt_core::{
     session::datagram::{Receive, Send},
     utils::maybe,
@@ -21,8 +21,6 @@ use crate::{
 use super::{get_mtu, ClientEndpoint, Connection, ConnectionMeta, InternalError};
 
 const STATS_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
-
-const DC_ERROR_CODE: VarInt = VarInt::from_u32(0);
 
 #[allow(clippy::unnecessary_wraps)] // on WASM, must match fn sig
 pub fn create_client_endpoint(config: ClientConfig) -> Result<ClientEndpoint, ClientError> {
@@ -47,7 +45,7 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
     send_r: mpsc::Sender<Bytes>,
     send_meta: mpsc::Sender<ConnectionMeta>,
     mut recv_local_dc: oneshot::Receiver<String>,
-) -> Result<Never, InternalError<E>> {
+) -> Result<Never, DisconnectReason<InternalError<E>>> {
     let conn = Arc::new(conn);
     let (send_err, mut recv_err) = mpsc::channel::<InternalError<E>>(1);
 
@@ -97,6 +95,10 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
                 // TODO WASM
                 #[cfg(not(target_family = "wasm"))]
                 {
+                    use wtransport::VarInt;
+
+                    const DC_ERROR_CODE: VarInt = VarInt::from_u32(0);
+
                     conn.0.close(DC_ERROR_CODE, reason.as_bytes());
                     conn.0.closed().await;
                 }
@@ -104,7 +106,30 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
             InternalError::BackendClosed
         }
     };
-    Err(err)
+
+    let reason = {
+        #[cfg(target_family = "wasm")]
+        {
+            // TODO
+            DisconnectReason::Error(err)
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            use wtransport::error::ConnectionError;
+
+            match err {
+                InternalError::ConnectionLost(ConnectionError::ApplicationClosed(err)) => {
+                    // TODO: wtransport doesn't expose the disconnect reason message
+                    // https://github.com/BiagioFesta/wtransport/issues/193
+                    DisconnectReason::Remote(err.to_string())
+                }
+                err => DisconnectReason::Error(err),
+            }
+        }
+    };
+
+    Err(reason)
 }
 
 async fn send_loop<E>(

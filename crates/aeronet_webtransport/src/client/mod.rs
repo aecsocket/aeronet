@@ -113,19 +113,18 @@ pub enum ClientError {
     ConnectionLost(#[source] ConnectionLostError),
 }
 
-impl From<InternalError<Self>> for DisconnectReason<ClientError> {
+impl From<InternalError<Self>> for ClientError {
     fn from(value: InternalError<Self>) -> Self {
         match value {
             InternalError::Spec(e) => e,
-            InternalError::BackendClosed => Self::Error(ClientError::BackendClosed),
-            InternalError::MtuTooSmall(err) => Self::Error(ClientError::MtuTooSmall(err)),
-            InternalError::OutOfMemory(err) => Self::Error(ClientError::OutOfMemory(err)),
-            InternalError::Send(err) => Self::Error(ClientError::Send(err)),
-            InternalError::FatalSend(err) => Self::Error(ClientError::FatalSend(err)),
-            InternalError::FrontendClosed => Self::Error(ClientError::FrontendClosed),
-            InternalError::DatagramsNotSupported => Self::Error(ClientError::DatagramsNotSupported),
-            InternalError::ConnectionLost(err) => Self::Error(ClientError::ConnectionLost(err)),
-            InternalError::RemoteDisconnected(reason) => Self::Remote(reason),
+            InternalError::BackendClosed => Self::BackendClosed,
+            InternalError::MtuTooSmall(err) => Self::MtuTooSmall(err),
+            InternalError::OutOfMemory(err) => Self::OutOfMemory(err),
+            InternalError::Send(err) => Self::Send(err),
+            InternalError::FatalSend(err) => Self::FatalSend(err),
+            InternalError::FrontendClosed => Self::FrontendClosed,
+            InternalError::DatagramsNotSupported => Self::DatagramsNotSupported,
+            InternalError::ConnectionLost(err) => Self::ConnectionLost(err),
         }
     }
 }
