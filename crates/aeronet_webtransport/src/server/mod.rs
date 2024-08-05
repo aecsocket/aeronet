@@ -165,6 +165,8 @@ impl Display for ClientKey {
 }
 
 /// State of a [`WebTransportServer`] when it is [`ServerState::Opening`].
+///
+/// [`ServerState::Opening`]: aeronet::server::ServerState::Opening
 #[derive(Debug)]
 pub struct Opening {
     recv_open: oneshot::Receiver<ToOpen>,
@@ -179,6 +181,8 @@ struct ToOpen {
 }
 
 /// State of a [`WebTransportServer`] when it is [`ServerState::Open`].
+///
+/// [`ServerState::Open`]: aeronet::server::ServerState::Open
 #[derive(Debug)]
 pub struct Open {
     /// Address of the local socket that this server's endpoint is bound to.
