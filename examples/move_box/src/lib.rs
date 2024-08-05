@@ -3,11 +3,6 @@
 use aeronet_webtransport::runtime::WebTransportRuntime;
 use bevy::prelude::*;
 use bevy_replicon::prelude::*;
-// TODO
-// use bevy_replicon_snap::{
-//     bevy_replicon_snap_macros::Interpolate, interpolation::AppInterpolationExt,
-//     SnapshotInterpolationPlugin,
-// };
 use serde::{Deserialize, Serialize};
 
 /// How many units a player may move in a single second.
@@ -42,9 +37,7 @@ impl Plugin for MoveBoxPlugin {
                 ..Default::default()
             }),))
             .replicate::<Player>()
-            // TODO
             .replicate::<PlayerPosition>()
-            // .replicate_interpolated::<PlayerPosition>()
             .replicate::<PlayerColor>()
             .add_client_event::<PlayerMove>(ChannelKind::Ordered)
             .add_systems(Update, apply_movement.run_if(has_authority));

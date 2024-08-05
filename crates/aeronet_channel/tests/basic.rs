@@ -25,24 +25,29 @@ fn open() -> (ChannelClient, ChannelServer, ClientKey) {
     let mut client = ChannelClient::new();
     client.connect(&mut server).unwrap();
 
-    let mut events = client.poll(DT);
-    assert_matches!(events.next().unwrap(), ClientEvent::Connected);
-    assert!(events.next().is_none());
-    drop(events);
+    {
+        let mut events = client.poll(DT);
+        assert_matches!(events.next().unwrap(), ClientEvent::Connected);
+        assert!(events.next().is_none());
+    }
 
-    let mut events = server.poll(DT);
-    let ServerEvent::Connecting {
-        client_key: target_key,
-    } = events.next().unwrap()
-    else {
-        panic!("expected Connecting");
+    let target_key = {
+        let mut events = server.poll(DT);
+
+        let ServerEvent::Connecting {
+            client_key: target_key,
+        } = events.next().unwrap()
+        else {
+            panic!("expected Connecting");
+        };
+        assert_matches!(
+            events.next().unwrap(),
+            ServerEvent::Connected { client_key } if client_key == target_key
+        );
+        assert!(events.next().is_none());
+
+        target_key
     };
-    assert_matches!(
-        events.next().unwrap(),
-        ServerEvent::Connected { client_key } if client_key == target_key
-    );
-    assert!(events.next().is_none());
-    drop(events);
 
     (client, server, target_key)
 }
@@ -55,24 +60,26 @@ fn send_recv() {
 
     assert!(client.poll(DT).next().is_none());
 
-    let mut events = server.poll(DT);
-    assert_matches!(
-        events.next().unwrap(),
-        ServerEvent::Recv { client_key, msg, lane } if client_key == target_key && msg == C2S && lane == LANE
-    );
-    assert!(events.next().is_none());
-    drop(events);
+    {
+        let mut events = server.poll(DT);
+        assert_matches!(
+            events.next().unwrap(),
+            ServerEvent::Recv { client_key, msg, lane } if client_key == target_key && msg == C2S && lane == LANE
+        );
+        assert!(events.next().is_none());
+    }
 
     server.send(target_key, S2C, LANE).unwrap();
 
-    let mut events = client.poll(DT);
-    assert_matches!(
-        events.next().unwrap(),
-        ClientEvent::Recv { msg, lane }
-        if msg == S2C && lane == LANE
-    );
-    assert!(events.next().is_none());
-    drop(events);
+    {
+        let mut events = client.poll(DT);
+        assert_matches!(
+            events.next().unwrap(),
+            ClientEvent::Recv { msg, lane }
+            if msg == S2C && lane == LANE
+        );
+        assert!(events.next().is_none());
+    }
 }
 
 #[test]
@@ -81,14 +88,15 @@ fn client_disconnect() {
 
     client.disconnect(REASON).unwrap();
 
-    let mut events = client.poll(DT);
-    assert_matches!(
-        events.next().unwrap(),
-        ClientEvent::Disconnected { reason: DisconnectReason::Local(reason) }
-        if reason == REASON
-    );
-    assert!(events.next().is_none());
-    drop(events);
+    {
+        let mut events = client.poll(DT);
+        assert_matches!(
+            events.next().unwrap(),
+            ClientEvent::Disconnected { reason: DisconnectReason::Local(reason) }
+            if reason == REASON
+        );
+        assert!(events.next().is_none());
+    }
 
     let mut events = server.poll(DT);
     assert_matches!(

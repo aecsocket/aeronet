@@ -209,7 +209,7 @@ impl<A, B> ClientState<A, B> {
 }
 
 /// Event emitted by a [`ClientTransport`].
-#[derive(Derivative)]
+#[derive(Derivative, PartialEq, Eq)]
 #[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
 pub enum ClientEvent<T: ClientTransport + ?Sized> {
     // state
