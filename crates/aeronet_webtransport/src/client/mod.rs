@@ -51,6 +51,8 @@ cfg_if::cfg_if! {
 pub struct WebTransportClient {
     state: State,
     /// See [`ClientTransport::default_disconnect_reason`].
+    ///
+    /// [`ClientTransport`]: aeronet::client::ClientTransport
     pub default_disconnect_reason: Option<String>,
 }
 
@@ -139,6 +141,8 @@ impl From<InternalError<Self>> for ClientError {
 }
 
 /// State of a [`WebTransportClient`] when it is [`ClientState::Connecting`].
+///
+/// [`ClientState::Connecting`]: aeronet::client::ClientState::Connecting
 #[derive(Debug)]
 pub struct Connecting {
     recv_connected: oneshot::Receiver<ToConnected>,
@@ -161,6 +165,8 @@ struct ToConnected {
 }
 
 /// State of a [`WebTransportClient`] when it is [`ClientState::Connected`].
+///
+/// [`ClientState::Connected`]: aeronet::client::ClientState::Connected
 #[derive(Debug)]
 pub struct Connected {
     #[cfg(not(target_family = "wasm"))]
