@@ -52,7 +52,7 @@ pub struct WebTransportClient {
     state: State,
     /// See [`ClientTransport::default_disconnect_reason`].
     ///
-    /// [`ClientTransport`]: aeronet::client::ClientTransport
+    /// [`ClientTransport::default_disconnect_reason`]: aeronet::client::ClientTransport::default_disconnect_reason
     pub default_disconnect_reason: Option<String>,
 }
 

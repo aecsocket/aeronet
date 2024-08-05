@@ -29,11 +29,17 @@ cargo install wasm-server-runner
 cargo run --bin move_box_client --target wasm32-unknown-unknown
 ```
 
-If you have problems running the client in Firefox (especially LibreWolf), check:
+You must use a Chromium browser to try the demo:
+- Currently, the WASM client demo doesn't run on Firefox, due to an issue with how `xwt` handles
+  getting the reader for the incoming datagram stream. This results in the backend task erroring
+  whenever a connection starts.
+- WebTransport is not supported on Safari.
+
+Eventually, when Firefox is supported but you still have problems running the client under Firefox
+(especially LibreWolf), check:
 - `privacy.resistFingerprinting` is disabled, or Enhanced Tracking Protection is disabled for the
   website (see [winit #3345](https://github.com/rust-windowing/winit/issues/3345))
 - `webgl.disabled` is set to `false`, so that Bevy can use the GPU
-- todo: current bug in `xwt_web_sys`: something to do with ReadableStream.getReader with BYOB
 
 ## Connecting
 
