@@ -17,8 +17,8 @@ pub enum PollEvent {
 impl<E> ConnectionInner<E> {
     pub fn send(&mut self, msg: Bytes, lane: LaneIndex) -> Result<MessageKey, InternalError<E>> {
         let err = match self.session.send(Instant::now(), msg, lane) {
-            Ok(seq) => {
-                return Ok(MessageKey::from_raw(lane, seq));
+            Ok(key) => {
+                return Ok(key);
             }
             Err(err) => err,
         };

@@ -5,7 +5,7 @@ use aeronet::{
     error::pretty_error,
     lane::LaneIndex,
 };
-use aeronet_proto::session::{Session, SessionBacked, SessionConfig};
+use aeronet_proto::session::{MessageKey, Session, SessionBacked, SessionConfig};
 use bytes::Bytes;
 use futures::channel::oneshot;
 use tracing::debug;
@@ -14,7 +14,6 @@ use web_time::Duration;
 use crate::{
     internal::{ConnectionInner, PollEvent},
     runtime::WebTransportRuntime,
-    shared::MessageKey,
 };
 
 use super::{
@@ -22,13 +21,22 @@ use super::{
     WebTransportClient,
 };
 
+impl Default for WebTransportClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WebTransportClient {
     /// Creates a new client which is not connected to a server.
     ///
     /// Use [`WebTransportClient::connect`] to start connecting to a server.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Self {
+            state: State::Disconnected,
+            default_disconnect_reason: None,
+        }
     }
 
     /// Starts connecting this client to a server.

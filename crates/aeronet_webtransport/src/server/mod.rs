@@ -3,12 +3,8 @@
 mod backend;
 mod frontend;
 
-use std::{
-    collections::HashMap,
-    fmt::{Debug, Display},
-    io,
-    net::SocketAddr,
-};
+use core::fmt;
+use std::{collections::HashMap, io, net::SocketAddr};
 
 use aeronet::{
     client::{ClientState, DisconnectReason},
@@ -34,7 +30,7 @@ pub type ServerConfig = wtransport::ServerConfig;
 /// See the [crate-level documentation](crate).
 ///
 /// [`ServerTransport`]: aeronet::server::ServerTransport
-#[derive(Debug, Default)]
+#[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportServer {
     state: State,
@@ -44,15 +40,12 @@ pub struct WebTransportServer {
     pub default_disconnect_reason: Option<String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 enum State {
-    #[default]
     Closed,
     Opening(Opening),
     Open(Open),
-    Closing {
-        reason: String,
-    },
+    Closing { reason: String },
 }
 
 /// How a [`WebTransportServer`] should respond to a client attempting to
@@ -160,9 +153,9 @@ slotmap::new_key_type! {
     pub struct ClientKey;
 }
 
-impl Display for ClientKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+impl fmt::Display for ClientKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.0)
     }
 }
 

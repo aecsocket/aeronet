@@ -175,7 +175,9 @@ dependencies = [
  "aeronet",
  "aeronet_proto",
  "bevy_ecs",
+ "slotmap",
  "steamworks",
+ "thiserror",
 ]
 
 [[package]]

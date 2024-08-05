@@ -46,7 +46,7 @@ cfg_if::cfg_if! {
 /// See the [crate-level documentation](crate).
 ///
 /// [`ClientTransport`]: aeronet::client::ClientTransport
-#[derive(Debug, Default)]
+#[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportClient {
     state: State,
@@ -56,15 +56,12 @@ pub struct WebTransportClient {
     pub default_disconnect_reason: Option<String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 enum State {
-    #[default]
     Disconnected,
     Connecting(Connecting),
     Connected(Connected),
-    Disconnecting {
-        reason: String,
-    },
+    Disconnecting { reason: String },
 }
 
 /// Error type for operations on a [`WebTransportClient`].

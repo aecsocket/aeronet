@@ -6,7 +6,7 @@ use aeronet::{
     lane::LaneIndex,
     server::{CloseReason, ServerEvent, ServerState, ServerTransport},
 };
-use aeronet_proto::session::SessionConfig;
+use aeronet_proto::session::{MessageKey, SessionConfig};
 use bytes::Bytes;
 use futures::channel::oneshot;
 use slotmap::SlotMap;
@@ -16,7 +16,6 @@ use web_time::Duration;
 use crate::{
     internal::{ConnectionInner, PollEvent},
     runtime::WebTransportRuntime,
-    shared::MessageKey,
 };
 
 use super::{
@@ -24,13 +23,22 @@ use super::{
     ServerConfig, ServerError, State, ToOpen, WebTransportServer,
 };
 
+impl Default for WebTransportServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WebTransportServer {
     /// Creates a new server which is not open for connections.
     ///
     /// Use [`WebTransportServer::open`] to open this server for clients.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Self {
+            state: State::Closed,
+            default_disconnect_reason: None,
+        }
     }
 
     /// Starts opening this server for client connections.

@@ -16,7 +16,7 @@ use crate::server::{ChannelServer, ClientKey};
 /// Implementation of [`ClientTransport`] using in-memory MPSC channels.
 ///
 /// See the [crate-level documentation](crate).
-#[derive(Debug, Default)]
+#[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ChannelClient {
     state: State,
@@ -24,14 +24,11 @@ pub struct ChannelClient {
     pub default_disconnect_reason: Option<String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 enum State {
-    #[default]
     Disconnected,
     Connected(Connected),
-    Disconnecting {
-        reason: String,
-    },
+    Disconnecting { reason: String },
 }
 
 /// State of a [`ChannelClient`] when it is [`ClientState::Connected`].
@@ -91,13 +88,22 @@ pub enum ClientError {
     Disconnected,
 }
 
+impl Default for ChannelClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChannelClient {
     /// Creates a new client which is not connected to a server.
     ///
     /// Use [`ChannelClient::connect`] to connect this client to a server.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Self {
+            state: State::Disconnected,
+            default_disconnect_reason: None,
+        }
     }
 
     /// Connects this client to an existing server.
