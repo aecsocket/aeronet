@@ -83,10 +83,10 @@ fn poll_client(
             ClientEvent::Connected => {
                 ui_state.log.push(format!("Connected"));
             }
-            ClientEvent::Disconnected { error } => {
+            ClientEvent::Disconnected { reason } => {
                 ui_state
                     .log
-                    .push(format!("Disconnected: {:#}", pretty_error(&error)));
+                    .push(format!("Disconnected: {:#}", pretty_error(&reason)));
             }
             ClientEvent::Recv { msg, .. } => {
                 let msg =
@@ -163,7 +163,7 @@ fn ui(
 
         if do_disconnect {
             ui_state.log.push(format!("Disconnected by user"));
-            let _ = client.disconnect();
+            let _ = client.disconnect("user pressed disconnect button");
         }
 
         if do_send {

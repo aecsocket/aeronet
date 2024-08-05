@@ -152,7 +152,6 @@ fn ui(
     mut ui_state: ResMut<UiState>,
     mut client: ResMut<WebTransportClient>,
     connect_to_remote: Res<ConnectToRemote>,
-    mut game_state: ResMut<NextState<GameState>>,
 ) {
     egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
         let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -192,8 +191,7 @@ fn ui(
         }
 
         if do_disconnect {
-            let _ = client.disconnect();
-            game_state.set(GameState::None);
+            let _ = client.disconnect("pressed disconnect button");
         }
     });
 }
@@ -212,8 +210,8 @@ fn on_disconnected(
     mut events: EventReader<LocalClientDisconnected<WebTransportClient>>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
-    for LocalClientDisconnected { error } in events.read() {
-        info!("Client disconnected: {:#}", pretty_error(&error));
+    for LocalClientDisconnected { reason } in events.read() {
+        info!("Client disconnected: {:#}", pretty_error(&reason));
         game_state.set(GameState::None);
     }
 }

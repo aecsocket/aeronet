@@ -12,7 +12,10 @@ use std::{error::Error, fmt::Debug, hash::Hash};
 use bytes::Bytes;
 use derivative::Derivative;
 
-use crate::{client::ClientState, lane::LaneIndex};
+use crate::{
+    client::{ClientState, DisconnectReason},
+    lane::LaneIndex,
+};
 
 /// Allows listening to client connections and transporting data between this
 /// server and connected clients.
@@ -133,27 +136,61 @@ pub trait ServerTransport {
 
     /// Forces a client to disconnect from this server.
     ///
-    /// This does *not* guarantee any graceful shutdown of connections. If you
-    /// want this to be handled gracefully, you must implement a mechanism for
-    /// this yourself.
+    /// This is guaranteed to disconnect the client as quickly as possible, and
+    /// will make a best-effort attempt to inform the other side of the
+    /// user-provided disconnection reason, however it is not guaranteed that
+    /// this reason will be communicated.
+    ///
+    /// The implementation may place limitations on the `reason`, e.g. a maximum
+    /// byte length.
     ///
     /// # Errors
     ///
     /// Errors if the transport failed to *attempt to* disconnect the client,
     /// e.g. if the server already knows that the client is disconnected.
-    fn disconnect(&mut self, client_key: Self::ClientKey) -> Result<(), Self::Error>;
+    fn disconnect(
+        &mut self,
+        client_key: Self::ClientKey,
+        reason: impl Into<String>,
+    ) -> Result<(), Self::Error>;
 
     /// Closes this server, stopping all current connections and disallowing any
     /// new connections.
     ///
-    /// This does *not* guarantee any graceful shutdown of connections. If you
-    /// want this to be handled gracefully, you must implement a mechanism for
-    /// this yourself.
+    /// All clients currently connected will be disconnected with the given
+    /// reason. See [`ServerTransport::disconnect`] on how this reason will be
+    /// handled.
     ///
     /// # Errors
     ///
     /// Errors if the transport is already closed.
-    fn close(&mut self) -> Result<(), Self::Error>;
+    fn close(&mut self, reason: impl Into<String>) -> Result<(), Self::Error>;
+
+    /// Gets the default disconnect-on-drop reason if one is set.
+    ///
+    /// When this server is dropped without being explicitly closed, and the
+    /// default disconnect reason is [`Some`], this server will disconnect all
+    /// of its currently connected clients with this reason.
+    ///
+    /// See [`ServerTransport::disconnect`] for how the disconnect reason is
+    /// handled.
+    fn default_disconnect_reason(&self) -> Option<&str>;
+
+    /// Sets the default disconnect-on-drop reason.
+    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>);
+
+    /// Unsets the default disconnect-on-drop reason.
+    fn unset_default_disconnect_reason(&mut self);
+
+    /// Returns `self` with a modified disconnect-on-drop reason.
+    #[must_use]
+    fn with_default_disconnect_reason(mut self, reason: impl Into<String>) -> Self
+    where
+        Self: Sized,
+    {
+        self.set_default_disconnect_reason(reason);
+        self
+    }
 }
 
 /// Implementation-specific state details of a [`ServerTransport`].
@@ -241,7 +278,7 @@ pub enum ServerEvent<T: ServerTransport + ?Sized> {
     /// [`ServerState::Closed`].
     Closed {
         /// Why the server closed.
-        error: T::Error,
+        reason: CloseReason<T::Error>,
     },
 
     // client state
@@ -267,12 +304,14 @@ pub enum ServerEvent<T: ServerTransport + ?Sized> {
     },
     /// A remote client has unrecoverably lost connection from this server.
     ///
-    /// This event is not raised when the server forces a client to disconnect.
+    /// This is emitted for *any* reason that the client may be disconnected,
+    /// including user code calling [`ServerTransport::disconnect`], therefore
+    /// this may be used as a signal to tear down the client's state.
     Disconnected {
         /// Key of the client.
         client_key: T::ClientKey,
         /// Why the client lost connection.
-        error: T::Error,
+        reason: DisconnectReason<T::Error>,
     },
 
     // messages
@@ -319,11 +358,11 @@ where
     {
         match self {
             Self::Opened => ServerEvent::Opened,
-            Self::Closed { error } => ServerEvent::Closed { error },
+            Self::Closed { reason } => ServerEvent::Closed { reason },
             Self::Connecting { client_key } => ServerEvent::Connecting { client_key },
             Self::Connected { client_key } => ServerEvent::Connected { client_key },
-            Self::Disconnected { client_key, error } => {
-                ServerEvent::Disconnected { client_key, error }
+            Self::Disconnected { client_key, reason } => {
+                ServerEvent::Disconnected { client_key, reason }
             }
             Self::Recv {
                 client_key,
@@ -348,6 +387,42 @@ where
                 client_key,
                 msg_key,
             },
+        }
+    }
+}
+
+/// Why a [`ServerTransport`] was closed.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum CloseReason<E> {
+    /// Server was closed by user code, via a call to
+    /// [`ServerTransport::close`].
+    ///
+    /// The closing reason is provided.
+    #[error("disconnected locally: {0}")]
+    Local(String),
+    /// Encountered a fatal error.
+    ///
+    /// This is mostly raised while the server is still opening if there is an
+    /// error preventing the server from receiving client connections, e.g. a
+    /// port that the server wanted to use is already in use by another process.
+    ///
+    /// While the server is open, errors usually should not tear down the entire
+    /// server, just the connection of the specific client who caused the error.
+    #[error("connection error")]
+    Error(
+        #[source]
+        #[from]
+        E,
+    ),
+}
+
+impl<E> CloseReason<E> {
+    /// Maps a `CloseReason<E>` to a `CloseReason<F>` by applying a function to
+    /// the [`CloseReason::Error`] variant.
+    pub fn map_err<F>(self, f: impl FnOnce(E) -> F) -> CloseReason<F> {
+        match self {
+            Self::Local(reason) => CloseReason::Local(reason),
+            Self::Error(err) => CloseReason::Error(f(err)),
         }
     }
 }

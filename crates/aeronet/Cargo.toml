@@ -31,6 +31,7 @@ replicon = ["dep:bevy_replicon"]
 arbitrary = { workspace = true }
 bytes = { workspace = true }
 derivative = { workspace = true }
+thiserror = { workspace = true }
 web-time = { workspace = true }
 
 rand = { workspace = true, optional = true }

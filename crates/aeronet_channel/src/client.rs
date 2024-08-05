@@ -1,15 +1,14 @@
 //! Client-side items.
 
-use std::convert::Infallible;
+use std::{convert::Infallible, mem};
 
 use aeronet::{
-    client::{ClientEvent, ClientState, ClientTransport},
+    client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
     lane::LaneIndex,
     stats::{ConnectedAt, MessageStats},
 };
 use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
-use either::Either;
 use web_time::{Duration, Instant};
 
 use crate::server::{ChannelServer, ClientKey};
@@ -21,6 +20,8 @@ use crate::server::{ChannelServer, ClientKey};
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ChannelClient {
     state: State,
+    /// See [`ClientTransport::default_disconnect_reason`].
+    pub default_disconnect_reason: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -28,6 +29,9 @@ enum State {
     #[default]
     Disconnected,
     Connected(Connected),
+    Disconnecting {
+        reason: String,
+    },
 }
 
 /// State of a [`ChannelClient`] when it is [`ClientState::Connected`].
@@ -45,8 +49,9 @@ pub struct Connected {
     pub bytes_recv: usize,
     send_c2s: Sender<(Bytes, LaneIndex)>,
     recv_s2c: Receiver<(Bytes, LaneIndex)>,
-    #[allow(clippy::struct_field_names)]
-    send_connected: bool,
+    send_dc_c2s: Sender<String>,
+    recv_dc_s2c: Receiver<String>,
+    send_initial: bool,
 }
 
 impl ConnectedAt for Connected {
@@ -91,10 +96,8 @@ impl ChannelClient {
     ///
     /// Use [`ChannelClient::connect`] to connect this client to a server.
     #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            state: State::Disconnected,
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Connects this client to an existing server.
@@ -104,14 +107,16 @@ impl ChannelClient {
     /// Errors if this client is already connected to a server, or if the server
     /// is closed.
     pub fn connect(&mut self, server: &mut ChannelServer) -> Result<(), ClientError> {
-        if !matches!(self.state, State::Disconnected) {
+        if matches!(self.state, State::Connected(..)) {
             return Err(ClientError::AlreadyConnected);
         }
 
         let (send_c2s, recv_c2s) = crossbeam_channel::unbounded();
         let (send_s2c, recv_s2c) = crossbeam_channel::unbounded();
+        let (send_dc_c2s, recv_dc_c2s) = crossbeam_channel::bounded(1);
+        let (send_dc_s2c, recv_dc_s2c) = crossbeam_channel::bounded(1);
         let key = server
-            .insert_client(recv_c2s, send_s2c)
+            .insert_client(recv_c2s, send_s2c, recv_dc_c2s, send_dc_s2c)
             .ok_or(ClientError::ServerClosed)?;
         self.state = State::Connected(Connected {
             key,
@@ -120,7 +125,9 @@ impl ChannelClient {
             bytes_recv: 0,
             send_c2s,
             recv_s2c,
-            send_connected: true,
+            send_dc_c2s,
+            recv_dc_s2c,
+            send_initial: true,
         });
         Ok(())
     }
@@ -138,20 +145,24 @@ impl ClientTransport for ChannelClient {
     #[must_use]
     fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
         match &self.state {
-            State::Disconnected => ClientState::Disconnected,
+            State::Disconnected | State::Disconnecting { .. } => ClientState::Disconnected,
             State::Connected(client) => ClientState::Connected(client),
         }
     }
 
     fn poll(&mut self, _: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
-        replace_with::replace_with_or_abort_and_return(&mut self.state, |inner| match inner {
-            State::Disconnected => (Either::Left(std::iter::empty()), inner),
-            State::Connected(client) => {
-                let (res, new) = Self::poll_connected(client);
-                (Either::Right(res), new)
+        let mut events = Vec::new();
+        replace_with::replace_with_or_abort(&mut self.state, |state| match state {
+            State::Disconnected => state,
+            State::Disconnecting { reason } => {
+                events.push(ClientEvent::Disconnected {
+                    reason: DisconnectReason::Local(reason),
+                });
+                State::Disconnected
             }
-        })
-        .into_iter()
+            State::Connected(client) => Self::poll_connected(&mut events, client),
+        });
+        events.into_iter()
     }
 
     fn send(
@@ -176,30 +187,56 @@ impl ClientTransport for ChannelClient {
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        if !matches!(self.state, State::Connected(_)) {
+        let State::Connected(_) = self.state else {
             return Err(ClientError::NotConnected);
-        }
+        };
 
         Ok(())
     }
 
-    fn disconnect(&mut self) -> Result<(), Self::Error> {
-        if matches!(self.state, State::Disconnected) {
-            return Err(ClientError::AlreadyDisconnected);
+    fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
+        let reason = reason.into();
+        match mem::replace(
+            &mut self.state,
+            State::Disconnecting {
+                reason: reason.clone(),
+            },
+        ) {
+            State::Connected(client) => {
+                let _ = client.send_dc_c2s.try_send(reason);
+                Ok(())
+            }
+            State::Disconnected | State::Disconnecting { .. } => {
+                Err(ClientError::AlreadyDisconnected)
+            }
         }
+    }
 
-        self.state = State::Disconnected;
-        Ok(())
+    fn default_disconnect_reason(&self) -> Option<&str> {
+        self.default_disconnect_reason.as_deref()
+    }
+
+    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
+        self.default_disconnect_reason = Some(reason.into());
+    }
+
+    fn unset_default_disconnect_reason(&mut self) {
+        self.default_disconnect_reason = None;
     }
 }
 
 impl ChannelClient {
-    fn poll_connected(mut client: Connected) -> (Vec<ClientEvent<Self>>, State) {
-        let mut events = Vec::new();
-
-        if client.send_connected {
+    fn poll_connected(events: &mut Vec<ClientEvent<Self>>, mut client: Connected) -> State {
+        if client.send_initial {
             events.push(ClientEvent::Connected);
-            client.send_connected = false;
+            client.send_initial = false;
+        }
+
+        if let Ok(reason) = client.recv_dc_s2c.try_recv() {
+            events.push(ClientEvent::Disconnected {
+                reason: DisconnectReason::Remote(reason),
+            });
+            return State::Disconnected;
         }
 
         let res = (|| loop {
@@ -214,11 +251,22 @@ impl ChannelClient {
         })();
 
         match res {
-            Ok(()) => (events, State::Connected(client)),
-            Err(error) => {
-                events.push(ClientEvent::Disconnected { error });
-                (events, State::Disconnected)
+            Ok(()) => State::Connected(client),
+            Err(err) => {
+                events.push(ClientEvent::Disconnected {
+                    reason: DisconnectReason::Error(err),
+                });
+                State::Disconnected
             }
+        }
+    }
+}
+
+impl Drop for ChannelClient {
+    fn drop(&mut self) {
+        if let Some(reason) = &self.default_disconnect_reason {
+            let reason = reason.clone();
+            let _ = self.disconnect(reason);
         }
     }
 }

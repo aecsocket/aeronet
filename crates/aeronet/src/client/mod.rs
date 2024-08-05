@@ -98,15 +98,45 @@ pub trait ClientTransport {
 
     /// Disconnects this client from its currently connected server.
     ///
-    /// This does *not* guarantee any graceful shutdown of connections. If you
-    /// want this to be handled gracefully, you must implement a mechanism for
-    /// this yourself.
+    /// This is guaranteed to disconnect the client as quickly as possible, and
+    /// will make a best-effort attempt to inform the other side of the
+    /// user-provided disconnection reason, however it is not guaranteed that
+    /// this reason will be communicated.
+    ///
+    /// The implementation may place limitations on the `reason`, e.g. a maximum
+    /// byte length.
     ///
     /// # Errors
     ///
     /// Errors if the transport failed to *attempt to* disconnect, e.g. if the
     /// transport has not been connected yet.
-    fn disconnect(&mut self) -> Result<(), Self::Error>;
+    fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error>;
+
+    /// Gets the default disconnect-on-drop reason if one is set.
+    ///
+    /// When this client is dropped without being explicitly disconnected, and
+    /// the default disconnect reason is [`Some`], this client will attempt to
+    /// [`ClientTransport::disconnect`] itself with this reason.
+    ///
+    /// See [`ClientTransport::disconnect`] for how the disconnect reason is
+    /// handled.
+    fn default_disconnect_reason(&self) -> Option<&str>;
+
+    /// Sets the default disconnect-on-drop reason.
+    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>);
+
+    /// Unsets the default disconnect-on-drop reason.
+    fn unset_default_disconnect_reason(&mut self);
+
+    /// Returns `self` with a modified disconnect-on-drop reason.
+    #[must_use]
+    fn with_default_disconnect_reason(mut self, reason: impl Into<String>) -> Self
+    where
+        Self: Sized,
+    {
+        self.set_default_disconnect_reason(reason);
+        self
+    }
 }
 
 /// Implementation-specific state details of a [`ClientTransport`].
@@ -190,12 +220,14 @@ pub enum ClientEvent<T: ClientTransport + ?Sized> {
     /// receiving the initial world state and e.g. showing a spawn screen.
     Connected,
     /// The client has unrecoverably lost connection from its previously
-    /// connected server, changing state to [`ClientState::Disconnected`].
+    /// connected server changing state to [`ClientState::Disconnected`].
     ///
-    /// This event is not raised when the client side forces a disconnect.
+    /// This is emitted for *any* reason that the client may be disconnected,
+    /// including user code calling [`ClientTransport::disconnect`], therefore
+    /// this may be used as a signal to tear down the app state.
     Disconnected {
         /// Why the client lost connection.
-        error: T::Error,
+        reason: DisconnectReason<T::Error>,
     },
 
     /// The client received a message from the server.
@@ -235,10 +267,55 @@ where
     {
         match self {
             Self::Connected => ClientEvent::Connected,
-            Self::Disconnected { error } => ClientEvent::Disconnected { error },
+            Self::Disconnected { reason } => ClientEvent::Disconnected { reason },
             Self::Recv { msg, lane } => ClientEvent::Recv { msg, lane },
             Self::Ack { msg_key } => ClientEvent::Ack { msg_key },
             Self::Nack { msg_key } => ClientEvent::Nack { msg_key },
+        }
+    }
+}
+
+/// Why a [`ClientTransport`], or a client connected to a [`ServerTransport`]
+/// was disconnected.
+///
+/// [`ServerTransport`]: crate::server::ServerTransport
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum DisconnectReason<E> {
+    /// Client was disconnected by user code on this side, via a call to
+    /// [`ClientTransport::disconnect`] or [`ServerTransport::disconnect`].
+    ///
+    /// The disconnection reason is provided.
+    ///
+    /// [`ServerTransport::disconnect`]: crate::server::ServerTransport::disconnect
+    #[error("disconnected locally: {0}")]
+    Local(String),
+    /// Encountered a fatal connection error.
+    ///
+    /// This may also be raised if the other side wanted to discreetly end the
+    /// connection, pretending that an error caused it instead of a deliberate
+    /// disconnect with a reason.
+    #[error("connection error")]
+    Error(
+        #[source]
+        #[from]
+        E,
+    ),
+    /// Server decided to disconnect our client, and has provided a reason as to
+    /// why it disconnected us.
+    ///
+    /// This is only raised on the client side.
+    #[error("disconnected remotely: {0}")]
+    Remote(String),
+}
+
+impl<E> DisconnectReason<E> {
+    /// Maps a `DisconnectReason<E>` to a `DisconnectReason<F>` by applying a
+    /// function to the [`DisconnectReason::Error`] variant.
+    pub fn map_err<F>(self, f: impl FnOnce(E) -> F) -> DisconnectReason<F> {
+        match self {
+            Self::Local(reason) => DisconnectReason::Local(reason),
+            Self::Error(err) => DisconnectReason::Error(f(err)),
+            Self::Remote(reason) => DisconnectReason::Remote(reason),
         }
     }
 }

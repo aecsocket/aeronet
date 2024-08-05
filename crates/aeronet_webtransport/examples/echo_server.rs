@@ -97,7 +97,7 @@ fn poll_server(
             ServerEvent::Opened => {
                 info!("Server opened");
             }
-            ServerEvent::Closed { error } => {
+            ServerEvent::Closed { reason: error } => {
                 info!("Server closed: {:#}", pretty_error(&error));
             }
             ServerEvent::Connecting { client_key } => {
@@ -124,8 +124,8 @@ fn poll_server(
                 let resp = format!("You sent: {msg}");
                 commands.run_system_with_input(send_message.0, (client_key, resp));
             }
-            ServerEvent::Disconnected { client_key, error } => {
-                info!("{client_key} disconnected: {:#}", pretty_error(&error));
+            ServerEvent::Disconnected { client_key, reason } => {
+                info!("{client_key} disconnected: {:#}", pretty_error(&reason));
             }
             ServerEvent::Ack { .. } | ServerEvent::Nack { .. } => {}
         }
@@ -136,7 +136,7 @@ fn poll_server(
 struct AcceptClient(SystemId<ClientKey>);
 
 fn accept_client(In(client_key): In<ClientKey>, mut server: ResMut<WebTransportServer>) {
-    match server.respond_to_request(client_key, ConnectionResponse::Accept) {
+    match server.respond_to_request(client_key, ConnectionResponse::Accepted) {
         Ok(()) => info!("Accepted {client_key}"),
         Err(err) => warn!("Failed to accept {client_key}: {:#}", pretty_error(&err)),
     }

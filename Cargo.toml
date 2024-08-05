@@ -74,14 +74,13 @@ web-time = "1.1.0"
 
 # bevy
 
-bevy = "0.14.0"
+bevy = { version = "0.14.0", features = ["wayland"] }
 bevy_app = { version = "0.14.0", default-features = false }
 bevy_ecs = { version = "0.14.0", default-features = false }
 bevy_time = { version = "0.14.0", default-features = false }
 
 bevy_egui = "0.28.0"
 bevy_replicon = "0.27.0"
-bevy_replicon_snap = "0.2.4"
 
 # aeronet_channel
 

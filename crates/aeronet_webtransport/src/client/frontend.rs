@@ -1,13 +1,13 @@
+use std::mem;
+
 use aeronet::{
-    client::{ClientEvent, ClientState, ClientTransport},
+    client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
     error::pretty_error,
     lane::LaneIndex,
 };
 use aeronet_proto::session::{Session, SessionBacked, SessionConfig};
 use bytes::Bytes;
-use either::Either;
 use futures::channel::oneshot;
-use replace_with::replace_with_or_abort_and_return;
 use tracing::debug;
 use web_time::Duration;
 
@@ -27,10 +27,8 @@ impl WebTransportClient {
     ///
     /// Use [`WebTransportClient::connect`] to start connecting to a server.
     #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            state: State::Disconnected,
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Starts connecting this client to a server.
@@ -54,7 +52,7 @@ impl WebTransportClient {
         }
 
         let (send_connected, recv_connected) = oneshot::channel::<ToConnected>();
-        let (send_err, recv_err) = oneshot::channel::<ClientError>();
+        let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
         let target = target.into();
 
         let runtime_clone = runtime.clone();
@@ -69,12 +67,12 @@ impl WebTransportClient {
             )
             .await
             {
-                Err(ClientError::FrontendClosed) => {
+                Err(DisconnectReason::Error(ClientError::FrontendClosed)) => {
                     debug!("Client disconnected by frontend");
                 }
-                Err(err) => {
-                    debug!("Client disconnected: {:#}", pretty_error(&err));
-                    let _ = send_err.send(err);
+                Err(reason) => {
+                    debug!("Client disconnected: {:#}", pretty_error(&reason));
+                    let _ = send_dc.send(reason);
                 }
                 Ok(_) => unreachable!(),
             }
@@ -82,7 +80,7 @@ impl WebTransportClient {
 
         self.state = State::Connecting(Connecting {
             recv_connected,
-            recv_err,
+            recv_dc,
         });
 
         Ok(())
@@ -99,22 +97,27 @@ impl ClientTransport for WebTransportClient {
     type MessageKey = MessageKey;
 
     fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
-        self.state.as_ref()
+        match &self.state {
+            State::Disconnected | State::Disconnecting { .. } => ClientState::Disconnected,
+            State::Connecting(client) => ClientState::Connecting(client),
+            State::Connected(client) => ClientState::Connected(client),
+        }
     }
 
     fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
-        replace_with_or_abort_and_return(&mut self.state, |state| match state {
-            State::Disconnected => (Either::Left(None), State::Disconnected),
-            State::Connecting(client) => {
-                let (res, state) = Self::poll_connecting(client);
-                (Either::Left(res), state)
+        let mut events = Vec::new();
+        replace_with::replace_with_or_abort(&mut self.state, |state| match state {
+            State::Disconnected => state,
+            State::Connecting(client) => Self::poll_connecting(&mut events, client),
+            State::Connected(client) => Self::poll_connected(&mut events, client, delta_time),
+            State::Disconnecting { reason } => {
+                events.push(ClientEvent::Disconnected {
+                    reason: DisconnectReason::Local(reason),
+                });
+                State::Disconnected
             }
-            State::Connected(client) => {
-                let (res, state) = Self::poll_connected(client, delta_time);
-                (Either::Right(res), state)
-            }
-        })
-        .into_iter()
+        });
+        events.into_iter()
     }
 
     fn send(
@@ -140,60 +143,81 @@ impl ClientTransport for WebTransportClient {
         Ok(())
     }
 
-    fn disconnect(&mut self) -> Result<(), Self::Error> {
-        if matches!(self.state, State::Disconnected) {
-            return Err(ClientError::AlreadyDisconnected);
+    fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
+        let reason = reason.into();
+        match mem::replace(
+            &mut self.state,
+            State::Disconnecting {
+                reason: reason.clone(),
+            },
+        ) {
+            State::Connected(client) => {
+                let _ = client.inner.send_local_dc.send(reason);
+                Ok(())
+            }
+            State::Connecting(_) => Ok(()),
+            State::Disconnected | State::Disconnecting { .. } => {
+                Err(ClientError::AlreadyDisconnected)
+            }
         }
+    }
 
-        self.state = State::Disconnected;
-        Ok(())
+    fn default_disconnect_reason(&self) -> Option<&str> {
+        self.default_disconnect_reason.as_deref()
+    }
+
+    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
+        self.default_disconnect_reason = Some(reason.into());
+    }
+
+    fn unset_default_disconnect_reason(&mut self) {
+        self.default_disconnect_reason = None;
     }
 }
 
 impl WebTransportClient {
-    fn poll_connecting(mut client: Connecting) -> (Option<ClientEvent<Self>>, State) {
-        if let Ok(Some(error)) = client.recv_err.try_recv() {
-            return (
-                Some(ClientEvent::Disconnected { error }),
-                State::Disconnected,
-            );
+    fn poll_connecting(events: &mut Vec<ClientEvent<Self>>, mut client: Connecting) -> State {
+        if let Ok(Some(reason)) = client.recv_dc.try_recv() {
+            events.push(ClientEvent::Disconnected { reason });
+            return State::Disconnected;
         }
 
         match client.recv_connected.try_recv() {
-            Ok(None) => (None, State::Connecting(client)),
-            Ok(Some(next)) => (
-                Some(ClientEvent::Connected),
+            Ok(None) => State::Connecting(client),
+            Ok(Some(next)) => {
+                events.push(ClientEvent::Connected);
                 State::Connected(Connected {
                     #[cfg(not(target_family = "wasm"))]
                     local_addr: next.local_addr,
                     inner: ConnectionInner {
                         #[cfg(not(target_family = "wasm"))]
-                        remote_addr: next.remote_addr,
+                        remote_addr: next.initial_remote_addr,
                         #[cfg(not(target_family = "wasm"))]
                         raw_rtt: next.initial_rtt,
                         session: next.session,
-                        recv_err: client.recv_err,
+                        recv_dc: client.recv_dc,
                         recv_meta: next.recv_meta,
                         send_msgs: next.send_c2s,
                         recv_msgs: next.recv_s2c,
+                        send_local_dc: next.send_local_dc,
                         fatal_error: None,
                     },
-                }),
-            ),
-            Err(_) => (
-                Some(ClientEvent::Disconnected {
-                    error: ClientError::BackendClosed,
-                }),
-                State::Disconnected,
-            ),
+                })
+            }
+            Err(_) => {
+                events.push(ClientEvent::Disconnected {
+                    reason: ClientError::BackendClosed.into(),
+                });
+                State::Disconnected
+            }
         }
     }
 
     fn poll_connected(
+        events: &mut Vec<ClientEvent<Self>>,
         mut client: Connected,
         delta_time: Duration,
-    ) -> (Vec<ClientEvent<Self>>, State) {
-        let mut events = Vec::new();
+    ) -> State {
         let res = client.inner.poll(delta_time, |event| {
             events.push(match event {
                 PollEvent::Ack { msg_key } => ClientEvent::Ack { msg_key },
@@ -202,10 +226,12 @@ impl WebTransportClient {
         });
 
         match res {
-            Ok(()) => (events, State::Connected(client)),
-            Err(err) => {
-                events.push(ClientEvent::Disconnected { error: err.into() });
-                (events, State::Disconnected)
+            Ok(()) => State::Connected(client),
+            Err(reason) => {
+                events.push(ClientEvent::Disconnected {
+                    reason: reason.map_err(From::from),
+                });
+                State::Disconnected
             }
         }
     }
@@ -213,10 +239,19 @@ impl WebTransportClient {
 
 impl SessionBacked for WebTransportClient {
     fn get_session(&self) -> Option<&Session> {
-        if let ClientState::Connected(client) = &self.state {
+        if let State::Connected(client) = &self.state {
             Some(&client.inner.session)
         } else {
             None
+        }
+    }
+}
+
+impl Drop for WebTransportClient {
+    fn drop(&mut self) {
+        if let Some(reason) = &self.default_disconnect_reason {
+            let reason = reason.clone();
+            let _ = self.disconnect(reason);
         }
     }
 }

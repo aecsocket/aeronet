@@ -3,6 +3,7 @@ mod frontend;
 
 pub use {backend::*, frontend::*};
 
+use aeronet::client::DisconnectReason;
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
@@ -45,6 +46,10 @@ cfg_if::cfg_if! {
 
 #[derive(Debug)]
 pub struct ConnectionMeta {
+    // remote addr may change over the lifetime of a connection
+    // since QUIC is designed to allow underlying network changes
+    #[cfg(not(target_family = "wasm"))]
+    pub remote_addr: SocketAddr,
     #[cfg(not(target_family = "wasm"))]
     pub rtt: Duration,
     pub mtu: usize,
@@ -57,10 +62,11 @@ pub struct ConnectionInner<E> {
     #[cfg(not(target_family = "wasm"))]
     pub raw_rtt: Duration,
     pub session: Session,
-    pub recv_err: oneshot::Receiver<E>,
+    pub recv_dc: oneshot::Receiver<DisconnectReason<E>>,
     pub recv_meta: mpsc::Receiver<ConnectionMeta>,
     pub send_msgs: mpsc::UnboundedSender<Bytes>,
     pub recv_msgs: mpsc::Receiver<Bytes>,
+    pub send_local_dc: oneshot::Sender<String>,
     pub fatal_error: Option<FatalSendError>,
 }
 

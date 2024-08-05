@@ -11,8 +11,7 @@ use std::{
 };
 
 use aeronet::{
-    client::ClientState,
-    server::ServerState,
+    client::{ClientState, DisconnectReason},
     stats::{ConnectedAt, MessageStats, RemoteAddr, Rtt},
 };
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
@@ -39,16 +38,27 @@ pub type ServerConfig = wtransport::ServerConfig;
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportServer {
     state: State,
+    /// See [`ClientTransport::default_disconnect_reason`].
+    pub default_disconnect_reason: Option<String>,
 }
 
-type State = ServerState<Opening, Open>;
+#[derive(Debug, Default)]
+enum State {
+    #[default]
+    Closed,
+    Opening(Opening),
+    Open(Open),
+    Closing {
+        reason: String,
+    },
+}
 
 /// How a [`WebTransportServer`] should respond to a client attempting to
 /// connect to it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConnectionResponse {
     /// Allow the client to connect.
-    Accept,
+    Accepted,
     /// 403 Forbidden.
     Forbidden,
     /// 404 Not Found.
@@ -114,9 +124,9 @@ pub enum ServerError {
     /// too small for us.
     #[error("connection MTU too small")]
     MtuTooSmall(#[source] MtuTooSmall),
-    /// Frontend forced this client to disconnect.
-    #[error("server forced disconnect")]
-    ForceDisconnect,
+    /// Frontend did not allow this client to complete the connection.
+    #[error("rejected by server")]
+    Rejected,
 
     // connection
     /// Lost connection.
@@ -144,7 +154,7 @@ slotmap::new_key_type! {
     /// Key uniquely identifying a client in a [`WebTransportServer`].
     ///
     /// If the same physical client disconnects and reconnects (i.e. the same
-    /// computer), this counts as a new client.
+    /// process), this counts as a new client.
     pub struct ClientKey;
 }
 
@@ -155,6 +165,8 @@ impl Display for ClientKey {
 }
 
 /// State of a [`WebTransportServer`] when it is [`ServerState::Opening`].
+///
+/// [`ServerState::Opening`]: aeronet::server::ServerState::Opening
 #[derive(Debug)]
 pub struct Opening {
     recv_open: oneshot::Receiver<ToOpen>,
@@ -169,6 +181,8 @@ struct ToOpen {
 }
 
 /// State of a [`WebTransportServer`] when it is [`ServerState::Open`].
+///
+/// [`ServerState::Open`]: aeronet::server::ServerState::Open
 #[derive(Debug)]
 pub struct Open {
     /// Address of the local socket that this server's endpoint is bound to.
@@ -187,7 +201,7 @@ struct ToConnecting {
     origin: Option<String>,
     user_agent: Option<String>,
     headers: HashMap<String, String>,
-    recv_err: oneshot::Receiver<ServerError>,
+    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
     send_key: oneshot::Sender<ClientKey>,
     send_conn_resp: oneshot::Sender<ConnectionResponse>,
     recv_connected: oneshot::Receiver<ToConnected>,
@@ -212,7 +226,7 @@ pub struct Connecting {
     pub user_agent: Option<String>,
     /// All headers present in the request.
     pub headers: HashMap<String, String>,
-    recv_err: oneshot::Receiver<ServerError>,
+    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
     send_conn_resp: Option<oneshot::Sender<ConnectionResponse>>,
     recv_connected: oneshot::Receiver<ToConnected>,
 }
@@ -224,6 +238,7 @@ struct ToConnected {
     recv_meta: mpsc::Receiver<ConnectionMeta>,
     recv_c2s: mpsc::Receiver<Bytes>,
     send_s2c: mpsc::UnboundedSender<Bytes>,
+    send_local_dc: oneshot::Sender<String>,
     session: Session,
 }
 

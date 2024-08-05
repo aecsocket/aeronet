@@ -1,4 +1,4 @@
-use aeronet::{error::pretty_error, lane::LaneIndex};
+use aeronet::{client::DisconnectReason, error::pretty_error, lane::LaneIndex};
 use aeronet_proto::session::FatalSendError;
 use bytes::Bytes;
 use tracing::{debug, trace};
@@ -49,18 +49,19 @@ impl<E> ConnectionInner<E> {
         &mut self,
         delta_time: Duration,
         mut cb: impl FnMut(PollEvent),
-    ) -> Result<(), InternalError<E>> {
-        if let Some(err) = self
-            .recv_err
+    ) -> Result<(), DisconnectReason<InternalError<E>>> {
+        if let Some(reason) = self
+            .recv_dc
             .try_recv()
             .map_err(|_| InternalError::BackendClosed)?
         {
-            return Err(InternalError::Spec(err));
+            return Err(reason.map_err(InternalError::Spec));
         }
 
         while let Ok(Some(meta)) = self.recv_meta.try_next() {
             #[cfg(not(target_family = "wasm"))]
             {
+                self.remote_addr = meta.remote_addr;
                 self.raw_rtt = meta.rtt;
             }
             self.session

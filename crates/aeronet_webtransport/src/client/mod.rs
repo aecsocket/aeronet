@@ -6,7 +6,7 @@ mod frontend;
 use std::io;
 
 use aeronet::{
-    client::ClientState,
+    client::DisconnectReason,
     stats::{ConnectedAt, MessageStats, Rtt},
 };
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
@@ -50,9 +50,22 @@ cfg_if::cfg_if! {
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportClient {
     state: State,
+    /// See [`ClientTransport::default_disconnect_reason`].
+    ///
+    /// [`ClientTransport`]: aeronet::client::ClientTransport
+    pub default_disconnect_reason: Option<String>,
 }
 
-type State = ClientState<Connecting, Connected>;
+#[derive(Debug, Default)]
+enum State {
+    #[default]
+    Disconnected,
+    Connecting(Connecting),
+    Connected(Connected),
+    Disconnecting {
+        reason: String,
+    },
+}
 
 /// Error type for operations on a [`WebTransportClient`].
 #[derive(Debug, thiserror::Error)]
@@ -114,7 +127,7 @@ pub enum ClientError {
 impl From<InternalError<Self>> for ClientError {
     fn from(value: InternalError<Self>) -> Self {
         match value {
-            InternalError::Spec(err) => err,
+            InternalError::Spec(e) => e,
             InternalError::BackendClosed => Self::BackendClosed,
             InternalError::MtuTooSmall(err) => Self::MtuTooSmall(err),
             InternalError::OutOfMemory(err) => Self::OutOfMemory(err),
@@ -128,10 +141,12 @@ impl From<InternalError<Self>> for ClientError {
 }
 
 /// State of a [`WebTransportClient`] when it is [`ClientState::Connecting`].
+///
+/// [`ClientState::Connecting`]: aeronet::client::ClientState::Connecting
 #[derive(Debug)]
 pub struct Connecting {
     recv_connected: oneshot::Receiver<ToConnected>,
-    recv_err: oneshot::Receiver<ClientError>,
+    recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
 }
 
 #[derive(Debug)]
@@ -139,16 +154,19 @@ struct ToConnected {
     #[cfg(not(target_family = "wasm"))]
     local_addr: SocketAddr,
     #[cfg(not(target_family = "wasm"))]
-    remote_addr: SocketAddr,
+    initial_remote_addr: SocketAddr,
     #[cfg(not(target_family = "wasm"))]
     initial_rtt: Duration,
     recv_meta: mpsc::Receiver<ConnectionMeta>,
     send_c2s: mpsc::UnboundedSender<Bytes>,
     recv_s2c: mpsc::Receiver<Bytes>,
+    send_local_dc: oneshot::Sender<String>,
     session: Session,
 }
 
 /// State of a [`WebTransportClient`] when it is [`ClientState::Connected`].
+///
+/// [`ClientState::Connected`]: aeronet::client::ClientState::Connected
 #[derive(Debug)]
 pub struct Connected {
     #[cfg(not(target_family = "wasm"))]

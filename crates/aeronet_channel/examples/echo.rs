@@ -47,15 +47,28 @@ fn main() {
         .init_resource::<ClientUiState>()
         .init_resource::<ServerUiState>()
         .add_systems(Startup, setup)
-        .add_systems(PreUpdate, (client_poll, server_poll))
-        .add_systems(PostUpdate, (client_flush, server_flush))
+        .add_systems(
+            PreUpdate,
+            (
+                client_poll,
+                server_poll.run_if(resource_exists::<ChannelServer>),
+            ),
+        )
+        .add_systems(
+            PostUpdate,
+            (
+                client_flush,
+                server_flush.run_if(resource_exists::<ChannelServer>),
+            ),
+        )
         .add_systems(Update, (client_ui, server_ui))
         .run();
 }
 
 fn setup(mut commands: Commands) {
-    let mut server = ChannelServer::new();
+    let mut server = ChannelServer::new().with_default_disconnect_reason("server dropped");
     server.open().unwrap();
+
     let mut client = ChannelClient::new();
     client.connect(&mut server).unwrap();
     commands.insert_resource(server);
@@ -72,10 +85,10 @@ fn client_poll(
             ClientEvent::Connected => {
                 ui_state.log.push(format!("Connected"));
             }
-            ClientEvent::Disconnected { error } => {
+            ClientEvent::Disconnected { reason } => {
                 ui_state
                     .log
-                    .push(format!("Disconnected: {:#}", pretty_error(&error)));
+                    .push(format!("Disconnected: {:#}", pretty_error(&reason)));
             }
             ClientEvent::Recv { msg, .. } => {
                 let msg = String::from_utf8(msg.into()).unwrap();
@@ -107,8 +120,12 @@ fn client_ui(
         });
 
         if do_disconnect {
-            ui_state.log.push(format!("Disconnected by user"));
-            let _ = client.disconnect();
+            // Instead of dropping the client, we call `client.disconnect` here
+            // to show how your user-defined disconnection reason will be sent to the server.
+            // If you had dropped the client instead (e.g. by removing it as a resource),
+            // this would have different behavior
+            // (see how we handle the server's Close button below...)
+            let _ = client.disconnect("disconnected by user");
         }
 
         let mut do_send = false;
@@ -162,10 +179,10 @@ fn server_poll(
             ServerEvent::Opened => {
                 ui_state.log.push(format!("Server opened"));
             }
-            ServerEvent::Closed { error } => {
+            ServerEvent::Closed { reason } => {
                 ui_state
                     .log
-                    .push(format!("Server closed: {:#}", pretty_error(&error)));
+                    .push(format!("Server closed: {:#}", pretty_error(&reason)));
             }
             ServerEvent::Connecting { client_key } => {
                 ui_state.log.push(format!("Client {client_key} connecting"));
@@ -173,10 +190,10 @@ fn server_poll(
             ServerEvent::Connected { client_key } => {
                 ui_state.log.push(format!("Client {client_key} connected"));
             }
-            ServerEvent::Disconnected { client_key, error } => {
+            ServerEvent::Disconnected { client_key, reason } => {
                 ui_state.log.push(format!(
                     "Client {client_key} disconnected: {:#}",
-                    pretty_error(&error)
+                    pretty_error(&reason)
                 ));
             }
             ServerEvent::Recv {
@@ -205,8 +222,28 @@ fn server_flush(mut server: ResMut<ChannelServer>) {
     let _ = server.flush();
 }
 
-fn server_ui(mut egui: EguiContexts, ui_state: Res<ServerUiState>) {
+fn server_ui(
+    mut commands: Commands,
+    mut egui: EguiContexts,
+    ui_state: Res<ServerUiState>,
+    server: Option<Res<ChannelServer>>,
+) {
     egui::Window::new("Server").show(egui.ctx_mut(), |ui| {
+        let is_open = server.map_or(false, |server| server.state().is_open());
+
+        let mut do_close = false;
+        ui.add_enabled_ui(is_open, |ui| {
+            do_close |= ui.button("Close").clicked();
+        });
+
+        if do_close {
+            // Instead of `server.close`, we'll remove the resource entirely,
+            // causing the server to be dropped.
+            // This demonstrates how, on drop, the transport will send the default disconnect reason
+            // that we set up when we created the server.
+            commands.remove_resource::<ChannelServer>();
+        }
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             for line in &ui_state.log {
                 ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));

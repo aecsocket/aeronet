@@ -79,8 +79,20 @@ impl<T: ClientTransport> ClientTransport for ConditionedClient<T> {
         self.inner.flush()
     }
 
-    fn disconnect(&mut self) -> Result<(), Self::Error> {
-        self.inner.disconnect()
+    fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
+        self.inner.disconnect(reason)
+    }
+
+    fn default_disconnect_reason(&self) -> Option<&str> {
+        self.inner.default_disconnect_reason()
+    }
+
+    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
+        self.inner.set_default_disconnect_reason(reason);
+    }
+
+    fn unset_default_disconnect_reason(&mut self) {
+        self.inner.unset_default_disconnect_reason();
     }
 
     fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>> {

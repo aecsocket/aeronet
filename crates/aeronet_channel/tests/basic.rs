@@ -1,61 +1,167 @@
 use std::time::Duration;
 
 use aeronet::{
-    client::{ClientEvent, ClientTransport},
+    client::{ClientEvent, ClientTransport, DisconnectReason},
     lane::LaneIndex,
-    server::{ServerEvent, ServerTransport},
+    server::{CloseReason, ServerEvent, ServerTransport},
 };
-use aeronet_channel::{client::ChannelClient, server::ChannelServer};
+use aeronet_channel::{
+    client::ChannelClient,
+    server::{ChannelServer, ClientKey},
+};
 use assert_matches::assert_matches;
-use bevy::prelude::*;
-use bytes::Bytes;
+
+const C2S: &[u8] = b"hello server";
+const S2C: &[u8] = b"hello client";
+
+const LANE: LaneIndex = LaneIndex::from_raw(0);
+const DT: Duration = Duration::ZERO;
+
+const REASON: &str = "disconnection reason here";
+
+fn open() -> (ChannelClient, ChannelServer, ClientKey) {
+    let mut server = ChannelServer::new();
+    server.open().unwrap();
+    let mut client = ChannelClient::new();
+    client.connect(&mut server).unwrap();
+
+    let mut events = client.poll(DT);
+    assert_matches!(events.next().unwrap(), ClientEvent::Connected);
+    assert!(events.next().is_none());
+    drop(events);
+
+    let mut events = server.poll(DT);
+    let ServerEvent::Connecting {
+        client_key: target_key,
+    } = events.next().unwrap()
+    else {
+        panic!("expected Connecting");
+    };
+    assert_matches!(
+        events.next().unwrap(),
+        ServerEvent::Connected { client_key } if client_key == target_key
+    );
+    assert!(events.next().is_none());
+    drop(events);
+
+    (client, server, target_key)
+}
 
 #[test]
 fn send_recv() {
-    const MSG1: Bytes = Bytes::from_static(b"hello 1");
-    const MSG2: Bytes = Bytes::from_static(b"hello two");
-    const LANE: LaneIndex = LaneIndex::from_raw(0);
+    let (mut client, mut server, target_key) = open();
 
-    let mut app = App::new();
-    app.add_plugins(MinimalPlugins)
-        .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            (client_send_msg, server_recv_msg, client_recv_msg).chain(),
-        );
+    client.send(C2S, LANE).unwrap();
 
-    fn setup(mut commands: Commands) {
-        let mut server = ChannelServer::new();
-        server.open().unwrap();
-        let mut client = ChannelClient::new();
-        client.connect(&mut server).unwrap();
-        commands.insert_resource(server);
-        commands.insert_resource(client);
-    }
+    assert!(client.poll(DT).next().is_none());
 
-    fn client_send_msg(mut client: ResMut<ChannelClient>) {
-        client.send(MSG1, LANE).unwrap();
-    }
+    let mut events = server.poll(DT);
+    assert_matches!(
+        events.next().unwrap(),
+        ServerEvent::Recv { client_key, msg, lane } if client_key == target_key && msg == C2S && lane == LANE
+    );
+    assert!(events.next().is_none());
+    drop(events);
 
-    fn server_recv_msg(mut server: ResMut<ChannelServer>) {
-        let mut events = server.poll(Duration::ZERO);
-        let ServerEvent::Connecting { client_key: ck } = events.next().unwrap() else {
-            panic!("expected Connecting");
-        };
-        assert_matches!(events.next().unwrap(), ServerEvent::Connected { client_key } if client_key == ck);
-        assert_matches!(events.next().unwrap(), ServerEvent::Recv { client_key, msg, lane } if client_key == ck && msg == MSG1 && lane == LANE);
-        assert!(events.next().is_none());
+    server.send(target_key, S2C, LANE).unwrap();
 
-        drop(events);
-        server.send(ck, MSG2, LANE).unwrap();
-    }
+    let mut events = client.poll(DT);
+    assert_matches!(
+        events.next().unwrap(),
+        ClientEvent::Recv { msg, lane }
+        if msg == S2C && lane == LANE
+    );
+    assert!(events.next().is_none());
+    drop(events);
+}
 
-    fn client_recv_msg(mut client: ResMut<ChannelClient>) {
-        let mut events = client.poll(Duration::ZERO);
-        assert_matches!(events.next().unwrap(), ClientEvent::Connected);
-        assert_matches!(events.next().unwrap(), ClientEvent::Recv { msg, lane } if msg == MSG2 && lane == LANE);
-        assert!(events.next().is_none());
-    }
+#[test]
+fn client_disconnect() {
+    let (mut client, mut server, target_key) = open();
 
-    app.update();
+    client.disconnect(REASON).unwrap();
+
+    let mut events = client.poll(DT);
+    assert_matches!(
+        events.next().unwrap(),
+        ClientEvent::Disconnected { reason: DisconnectReason::Local(reason) }
+        if reason == REASON
+    );
+    assert!(events.next().is_none());
+    drop(events);
+
+    let mut events = server.poll(DT);
+    assert_matches!(
+        events.next().unwrap(),
+        ServerEvent::Disconnected { client_key, reason: DisconnectReason::Remote(reason), .. }
+        if client_key == target_key && reason == REASON
+    );
+    assert!(events.next().is_none());
+    drop(events);
+}
+
+#[test]
+fn server_disconnect() {
+    let (mut client, mut server, target_key) = open();
+
+    server.disconnect(target_key, REASON).unwrap();
+
+    let mut events = client.poll(DT);
+    assert_matches!(
+        events.next().unwrap(),
+        ClientEvent::Disconnected { reason: DisconnectReason::Remote(reason) }
+        if reason == REASON
+    );
+    assert!(events.next().is_none());
+    drop(events);
+
+    let mut events = server.poll(DT);
+    assert_matches!(
+        events.next().unwrap(),
+        ServerEvent::Disconnected { client_key, reason: DisconnectReason::Local(reason) }
+        if client_key == target_key && reason == REASON
+    );
+    assert!(events.next().is_none());
+    drop(events);
+}
+
+#[test]
+fn server_close() {
+    let (mut client, mut server, _) = open();
+
+    server.close(REASON).unwrap();
+
+    let mut events = client.poll(DT);
+    assert_matches!(
+        events.next().unwrap(),
+        ClientEvent::Disconnected { reason: DisconnectReason::Remote(reason) }
+        if reason == REASON
+    );
+    assert!(events.next().is_none());
+    drop(events);
+
+    let mut events = server.poll(DT);
+    assert_matches!(
+        events.next().unwrap(),
+        ServerEvent::Closed { reason: CloseReason::Local(reason) }
+        if reason == REASON
+    );
+    drop(events);
+}
+
+#[test]
+fn server_drop() {
+    let (mut client, mut server, _) = open();
+
+    server.set_default_disconnect_reason(REASON);
+    drop(server);
+
+    let mut events = client.poll(DT);
+    assert_matches!(
+        events.next().unwrap(),
+        ClientEvent::Disconnected { reason: DisconnectReason::Remote(reason) }
+        if reason == REASON
+    );
+    assert!(events.next().is_none());
+    drop(events);
 }
