@@ -34,7 +34,7 @@ impl Display for ClientKey {
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ChannelServer {
     state: State,
-    /// See [`ClientTransport::default_disconnect_reason`].
+    /// See [`ServerTransport::default_disconnect_reason`].
     pub default_disconnect_reason: Option<String>,
 }
 
