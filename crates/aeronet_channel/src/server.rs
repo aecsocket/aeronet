@@ -1,6 +1,7 @@
 //! Server-side items.
 
-use std::{convert::Infallible, fmt::Display, mem};
+use core::fmt;
+use std::{convert::Infallible, mem};
 
 use aeronet::{
     client::{ClientState, DisconnectReason},
@@ -21,8 +22,8 @@ slotmap::new_key_type! {
     pub struct ClientKey;
 }
 
-impl Display for ClientKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ClientKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.0)
     }
 }
@@ -30,7 +31,7 @@ impl Display for ClientKey {
 /// Implementation of [`ServerTransport`] using in-memory MPSC channels.
 ///
 /// See the [crate-level documentation](crate).
-#[derive(Debug, Default)]
+#[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ChannelServer {
     state: State,
@@ -38,14 +39,11 @@ pub struct ChannelServer {
     pub default_disconnect_reason: Option<String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 enum State {
-    #[default]
     Closed,
     Open(Open),
-    Closing {
-        reason: String,
-    },
+    Closing { reason: String },
 }
 
 /// State of a [`ChannelServer`] when it is [`ServerState::Open`].
@@ -113,13 +111,22 @@ pub enum ServerError {
     Disconnected,
 }
 
+impl Default for ChannelServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChannelServer {
     /// Creates a server which is not open for connections.
     ///
     /// Use [`ChannelServer::open`] to open this server for clients.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Self {
+            state: State::Closed,
+            default_disconnect_reason: None,
+        }
     }
 
     /// Allows accepting connections on this server.

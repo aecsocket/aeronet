@@ -16,6 +16,46 @@ use super::{
     FlushedPacket, FragmentPath, SendLane, SendLaneKind, SentFragment, SentMessage, Session,
 };
 
+/// Key identifying a message sent across a [`Session`].
+///
+/// This is a pseudo-unique key, since it is unique up until the point where the
+/// session's message sequence number wraps around - see [`Seq`] for wraparound
+/// details.
+///
+/// If your implementation uses [`Session`], you should re-export this type and
+/// return values of this type from `send` calls.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    arbitrary::Arbitrary,
+    datasize::DataSize,
+)]
+pub struct MessageKey {
+    #[data_size(with = std::mem::size_of_val)]
+    lane: LaneIndex,
+    seq: MessageSeq,
+}
+
+impl MessageKey {
+    /// Creates a new key from its raw parts.
+    #[must_use]
+    pub const fn from_raw(lane: LaneIndex, seq: MessageSeq) -> Self {
+        Self { lane, seq }
+    }
+
+    /// Gets the raw parts of this key.
+    #[must_use]
+    pub const fn into_raw(self) -> (LaneIndex, MessageSeq) {
+        (self.lane, self.seq)
+    }
+}
+
 /// Failed to [`Session::send`] a message in a way that forces this session to
 /// be terminated.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -85,14 +125,14 @@ impl Session {
         now: Instant,
         msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
-    ) -> Result<MessageSeq, OneOf<(SendError, FatalSendError)>> {
-        let lane: LaneIndex = lane.into();
-        let lane_index = usize::try_from(lane.into_raw())
-            .map_err(|_| FatalSendError::InvalidLane { lane })
+    ) -> Result<MessageKey, OneOf<(SendError, FatalSendError)>> {
+        let lane_index: LaneIndex = lane.into();
+        let lane_index_u = usize::try_from(lane_index.into_raw())
+            .map_err(|_| FatalSendError::InvalidLane { lane: lane_index })
             .map_err(|err| OneOf::from(err).broaden())?;
 
-        let Some(lane) = self.send_lanes.get_mut(lane_index) else {
-            return Err(OneOf::from(FatalSendError::InvalidLane { lane }).broaden());
+        let Some(lane) = self.send_lanes.get_mut(lane_index_u) else {
+            return Err(OneOf::from(FatalSendError::InvalidLane { lane: lane_index }).broaden());
         };
         let is_reliable = matches!(lane.kind, SendLaneKind::Reliable);
 
@@ -120,7 +160,7 @@ impl Session {
             });
 
             lane.next_msg_seq += MessageSeq::ONE;
-            Ok(msg_seq)
+            Ok(MessageKey::from_raw(lane_index, msg_seq))
         })();
 
         if is_reliable {
