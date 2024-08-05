@@ -104,6 +104,8 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
                     close_info.reason(&reason);
 
                     // TODO: This seems to not close the connection properly
+                    // Could it be because of this?
+                    // https://github.com/BiagioFesta/wtransport/issues/182
                     conn.transport.close_with_close_info(&close_info);
                     let _ = JsFuture::from(conn.transport.closed()).await;
                 }
@@ -123,7 +125,9 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
     let reason = {
         #[cfg(target_family = "wasm")]
         {
-            // TODO
+            // TODO I don't know how the app-initiated disconnect message looks
+            // I suspect we need this fixed first
+            // https://github.com/BiagioFesta/wtransport/issues/182
             DisconnectReason::Error(err)
         }
 
