@@ -4133,7 +4133,7 @@ dependencies = [
  "ring 0.16.20",
  "rustc-hash",
  "rustls",
- "rustls-native-certs",
+ "rustls-native-certs 0.6.3",
  "slab",
  "thiserror",
  "tinyvec",
@@ -4444,6 +4444,19 @@ checksum = "a9aace74cb666635c918e9c12bc0d348266037aa8eb599b5cba565709a8dff00"
 dependencies = [
  "openssl-probe",
  "rustls-pemfile 1.0.4",
+ "schannel",
+ "security-framework",
+]
+
+[[package]]
+name = "rustls-native-certs"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a88d6d420651b496bdd98684116959239430022a115c1240e6c3993be0b15fba"
+dependencies = [
+ "openssl-probe",
+ "rustls-pemfile 2.1.2",
+ "rustls-pki-types",
  "schannel",
  "security-framework",
 ]
@@ -6116,16 +6129,16 @@ dependencies = [
 
 [[package]]
 name = "wtransport"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3367f124e6272c52b83a8e7c9aaea274782b3f32a8997ed0b33776b540a9a1d2"
+checksum = "f3715af45f0227dc92d6ce409126450c09f4aec305b899c9bdc9b0aefb4da538"
 dependencies = [
  "bytes",
  "pem",
  "quinn",
  "rcgen",
  "rustls",
- "rustls-native-certs",
+ "rustls-native-certs 0.7.1",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
  "sha2",
@@ -6141,9 +6154,9 @@ dependencies = [
 
 [[package]]
 name = "wtransport-proto"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78ac9905446911e950a38598640b63c4a6b401e704b6273935dff33f560977c6"
+checksum = "d7bc3b7ced4e99f0ccdaeaa8d51b3ee844fd1b77f9104cf1a46e7afc6e996fd4"
 dependencies = [
  "httlib-huffman",
  "octets",
@@ -6260,15 +6273,15 @@ checksum = "791978798f0597cfc70478424c2b4fdc2b7a8024aaff78497ef00f24ef674193"
 
 [[package]]
 name = "xwt-core"
-version = "0.4.2"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1f98acac2f9398db512d6cc2d1fd12ce5e896192e9c961a83dd48d32c7fed8c"
+checksum = "e003285401374e0eb07a563d78bc4d79402482df5228c304829c36888a54aaed"
 
 [[package]]
 name = "xwt-web-sys"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1e028f18e310bc2e8e3650ba9cbbf3b7a5b13277e8c0ded6a0d81b510ccc1a6"
+checksum = "a2dcac32667f471216ce3003742f67e2e0f33bff76c8fec09ecd34e98690ad16"
 dependencies = [
  "js-sys",
  "tokio",
@@ -6282,9 +6295,9 @@ dependencies = [
 
 [[package]]
 name = "xwt-wtransport"
-version = "0.7.1"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f2dbaad8856f65bee36cab11271a4662ed9659986b161bab22d2d1cef16dd87"
+checksum = "53b3046d14abe01628459cf9104a024a5c1af50143135a4a75159c6694494d4f"
 dependencies = [
  "wtransport",
  "xwt-core",

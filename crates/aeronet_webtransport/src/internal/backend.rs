@@ -248,7 +248,9 @@ async fn meta_loop<E>(
             rtt: conn.0.rtt(),
             #[cfg(not(target_family = "wasm"))]
             remote_addr: conn.0.remote_address(),
-            mtu: get_mtu(&conn).ok_or(InternalError::DatagramsNotSupported)?,
+            mtu: conn
+                .max_datagram_size()
+                .ok_or(InternalError::DatagramsNotSupported)?,
         };
         send_meta
             .send(meta)

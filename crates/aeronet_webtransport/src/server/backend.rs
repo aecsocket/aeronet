@@ -9,6 +9,7 @@ use futures::{
 use tracing::{debug, debug_span, Instrument};
 use web_time::Instant;
 use wtransport::endpoint::{IncomingSession, SessionRequest};
+use xwt_core::prelude::*;
 
 use crate::{
     internal::{self, ConnectionMeta, MIN_MTU},
@@ -138,7 +139,7 @@ async fn handle_session(
     .map_err(ServerError::AcceptSessionRequest)?;
 
     let conn = xwt_wtransport::Connection(conn);
-    let Some(mtu) = internal::get_mtu(&conn) else {
+    let Some(mtu) = conn.max_datagram_size() else {
         return Err(ServerError::DatagramsNotSupported.into());
     };
     let conn = conn.0;
