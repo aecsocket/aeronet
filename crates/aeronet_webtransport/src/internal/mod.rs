@@ -19,14 +19,6 @@ cfg_if::cfg_if! {
         pub type Connection = xwt_web_sys::Session;
         pub type ClientEndpoint = xwt_web_sys::Endpoint;
         pub type ConnectionError = crate::JsError;
-
-        // TODO upstreamed to xwt
-        #[allow(clippy::unnecessary_wraps)] // must match fn sig
-        pub fn get_mtu(conn: &Connection) -> Option<usize> {
-            let mtu = usize::try_from(conn.transport.datagrams().max_datagram_size())
-                .expect("should be able to fit u32 into usize");
-            Some(mtu)
-        }
     } else {
         use std::net::SocketAddr;
 
@@ -36,11 +28,6 @@ cfg_if::cfg_if! {
         pub type Connection = xwt_wtransport::Connection;
         pub type ClientEndpoint = xwt_wtransport::Endpoint<wtransport::endpoint::endpoint_side::Client>;
         pub type ConnectionError = <Connection as datagram::Receive>::Error;
-
-        // TODO upstreamed to xwt
-        pub fn get_mtu(conn: &Connection) -> Option<usize> {
-            conn.0.max_datagram_size()
-        }
     }
 }
 

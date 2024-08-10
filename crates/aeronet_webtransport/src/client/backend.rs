@@ -36,7 +36,7 @@ pub async fn start(
         .await
         .map_err(|err| ClientError::AwaitConnect(err.into()))?;
 
-    let Some(mtu) = internal::get_mtu(&conn) else {
+    let Some(mtu) = conn.max_datagram_size() else {
         return Err(ClientError::DatagramsNotSupported.into());
     };
     let session = Session::new(Instant::now(), session_config, MIN_MTU, mtu)

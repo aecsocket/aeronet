@@ -8,17 +8,14 @@ use futures::{
     FutureExt, SinkExt, StreamExt,
 };
 use web_time::Duration;
-use xwt_core::{
-    session::datagram::{Receive, Send},
-    utils::maybe,
-};
+use xwt_core::{prelude::*, utils::maybe};
 
 use crate::{
     client::{ClientConfig, ClientError},
     runtime::WebTransportRuntime,
 };
 
-use super::{get_mtu, ClientEndpoint, Connection, ConnectionMeta, InternalError};
+use super::{ClientEndpoint, Connection, ConnectionMeta, InternalError};
 
 const STATS_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -184,7 +181,7 @@ async fn send_loop<E>(
                     // the backend constantly informs the frontend about changes in the path MTU
                     // so hopefully the frontend will realise its packets are exceeding MTU,
                     // and shrink them accordingly; therefore this is just a one-off error
-                    let mtu = get_mtu(&conn);
+                    let mtu = conn.max_datagram_size();
                     tracing::debug!(
                         packet_len,
                         mtu,
