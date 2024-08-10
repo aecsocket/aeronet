@@ -24,6 +24,8 @@ use super::{
 ///
 /// If your implementation uses [`Session`], you should re-export this type and
 /// return values of this type from `send` calls.
+///
+/// [`Seq`]: crate::ty::Seq
 #[derive(
     Debug,
     Clone,
