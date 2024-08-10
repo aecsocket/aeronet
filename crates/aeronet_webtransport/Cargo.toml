@@ -33,7 +33,6 @@ visualizer = ["aeronet_proto/visualizer"]
 aeronet = { workspace = true }
 aeronet_proto = { workspace = true }
 
-arbitrary = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 cfg-if = { workspace = true }
