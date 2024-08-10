@@ -1,6 +1,6 @@
 use core::fmt;
 
-use aeronet::server::{ServerState, ServerTransport};
+use aeronet::server::ServerTransport;
 use aeronet_proto::session::MessageKey;
 
 #[derive(Debug)]
@@ -74,6 +74,4 @@ impl ServerTransport for SteamServer {
     type ClientKey = ClientKey;
 
     type MessageKey = MessageKey;
-
-    fn state(&self) -> ServerState<Self::Opening<'_>, Self::Open<'_>> {}
 }
