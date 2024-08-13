@@ -68,7 +68,7 @@ terminology and implementation.
 
 The aeronet protocol can be used on top of nearly any transport. The requirements are:
 - The transport MUST be able to send packets between peers, where a packet is defined as a
-  variable-sized byte buffer
+  variable-sized sequence of bytes
 - Packets MUST be guaranteed to have the same contents after being transported, although they may
   be truncated or extended
   - If the packet is truncated or extended, this is caught as an error by the protocol, and is
@@ -107,7 +107,7 @@ A session may use too much memory if:
   - in theory, we may drop fragments which are part of an unreliable lane (this may be implemented
     later) but we are never allowed to drop fragments which are sent over a reliable lane
 - the peer never acknowledges our packets
-  - our side will be forced to keep fragments of reliable messages forever, since it must resend
+  - our side will be forced to keep fragments of reliable messages forever, since we must resend
     them until the peer does acknowledge them
 
 ## MTU
@@ -119,7 +119,7 @@ which are larger than the MTU are split up into smaller fragments and reassemble
 side (with some extra overhead for packet and fragment headers).
 
 When creating the session, you define a minimum MTU and an initial MTU. Fragments will never be
-larger than `initial_mtu - overhead`, however a packet will never be larger than `mtu` (it is not
+larger than `min_mtu - OVERHEAD`, however a packet will never be larger than `mtu` (it is not
 possible to change how large fragments are during the connection due to how the receiver logic
 works).
 

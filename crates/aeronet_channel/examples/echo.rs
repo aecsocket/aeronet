@@ -180,14 +180,18 @@ fn server_poll(
                     .push(format!("Server closed: {:#}", pretty_error(&reason)));
             }
             ServerEvent::Connecting { client_key } => {
-                ui_state.log.push(format!("Client {client_key} connecting"));
+                ui_state
+                    .log
+                    .push(format!("Client {client_key:?} connecting"));
             }
             ServerEvent::Connected { client_key } => {
-                ui_state.log.push(format!("Client {client_key} connected"));
+                ui_state
+                    .log
+                    .push(format!("Client {client_key:?} connected"));
             }
             ServerEvent::Disconnected { client_key, reason } => {
                 ui_state.log.push(format!(
-                    "Client {client_key} disconnected: {:#}",
+                    "Client {client_key:?} disconnected: {:#}",
                     pretty_error(&reason)
                 ));
             }
@@ -195,10 +199,14 @@ fn server_poll(
                 client_key, msg, ..
             } => {
                 let msg = String::from_utf8(msg.to_vec()).unwrap();
-                ui_state.log.push(format!("{client_key} > {}", msg));
+                ui_state
+                    .log
+                    .push(format!("{:?} > {msg}", slotmap::Key::data(&client_key)));
 
                 let resp = format!("You sent: {}", msg);
-                ui_state.log.push(format!("{client_key} < {resp}"));
+                ui_state
+                    .log
+                    .push(format!("{:?} < {resp}", slotmap::Key::data(&client_key)));
                 to_send.push((client_key, resp));
             }
             ServerEvent::Ack { .. } | ServerEvent::Nack { .. } => {}

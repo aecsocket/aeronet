@@ -26,6 +26,7 @@ clap = { workspace = true }
 rand = { workspace = true }
 size_format = { workspace = true }
 web-time = { workspace = true }
+slotmap = { workspace = true }
 
 # transport
 

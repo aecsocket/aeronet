@@ -1,4 +1,4 @@
-//! Allows drawing network statistics in an [`egui`] window.
+//! Draws plots of network statistics in an [`egui`] window.
 
 use std::{hash::Hash, ops::RangeInclusive};
 
@@ -174,14 +174,14 @@ impl SessionStatsVisualizer {
                 ));
                 ui.separator();
 
+                ui.label(format!("{:.1}% loss", avg_loss * 100.0));
+                ui.separator();
+
                 ui.label(format!(
                     "{}B used / {}B max",
                     fmt_bytes(session.memory_usage()),
                     fmt_bytes(session.max_memory_usage())
                 ));
-                ui.separator();
-
-                ui.label(format!("{:.1}% loss", avg_loss * 100.0));
 
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.checkbox(&mut self.show_mem, "Mem");

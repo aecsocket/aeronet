@@ -43,12 +43,6 @@ slotmap::new_key_type! {
     pub struct ClientKey;
 }
 
-impl fmt::Display for ClientKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
-}
-
 #[derive(Debug)]
 pub struct Opening {}
 

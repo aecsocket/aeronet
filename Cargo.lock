@@ -3312,6 +3312,7 @@ dependencies = [
  "move_box",
  "rand",
  "size_format",
+ "slotmap",
  "web-time",
 ]
 

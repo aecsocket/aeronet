@@ -102,11 +102,11 @@ fn poll_server(
                 info!("Server closed: {:#}", pretty_error(&error));
             }
             ServerEvent::Connecting { client_key } => {
-                info!("Client {client_key} connecting");
+                info!("{client_key:?} connecting");
                 commands.run_system_with_input(accept_client.0, client_key);
             }
             ServerEvent::Connected { client_key } => {
-                info!("Client {client_key} connected");
+                info!("{client_key:?} connected");
                 commands.run_system_with_input(
                     send_message.0,
                     (
@@ -120,13 +120,13 @@ fn poll_server(
             } => {
                 let msg =
                     String::from_utf8(msg.into()).unwrap_or_else(|_| format!("<invalid UTF-8>"));
-                info!("{client_key} > {msg}");
+                info!("{:?} > {msg}", slotmap::Key::data(&client_key));
 
                 let resp = format!("You sent: {msg}");
                 commands.run_system_with_input(send_message.0, (client_key, resp));
             }
             ServerEvent::Disconnected { client_key, reason } => {
-                info!("{client_key} disconnected: {:#}", pretty_error(&reason));
+                info!("{client_key:?} disconnected: {:#}", pretty_error(&reason));
             }
             ServerEvent::Ack { .. } | ServerEvent::Nack { .. } => {}
         }
@@ -138,8 +138,8 @@ struct AcceptClient(SystemId<ClientKey>);
 
 fn accept_client(In(client_key): In<ClientKey>, mut server: ResMut<WebTransportServer>) {
     match server.respond_to_request(client_key, ConnectionResponse::Accepted) {
-        Ok(()) => info!("Accepted {client_key}"),
-        Err(err) => warn!("Failed to accept {client_key}: {:#}", pretty_error(&err)),
+        Ok(()) => info!("Accepted {client_key:?}"),
+        Err(err) => warn!("Failed to accept {client_key:?}: {:#}", pretty_error(&err)),
     }
 }
 
@@ -151,9 +151,9 @@ fn send_message(
     mut server: ResMut<WebTransportServer>,
 ) {
     match server.send(client_key, msg.clone(), AppLane) {
-        Ok(_) => info!("{client_key} < {msg}"),
+        Ok(_) => info!("{:?} < {msg}", slotmap::Key::data(&client_key)),
         Err(err) => warn!(
-            "Failed to send message to {client_key}: {:#}",
+            "Failed to send message to {client_key:?}: {:#}",
             pretty_error(&err)
         ),
     }

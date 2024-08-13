@@ -3,7 +3,6 @@
 mod backend;
 mod frontend;
 
-use core::fmt;
 use std::{collections::HashMap, io, net::SocketAddr};
 
 use aeronet::{
@@ -147,12 +146,6 @@ slotmap::new_key_type! {
     /// If the same physical client disconnects and reconnects (i.e. the same
     /// process), this counts as a new client.
     pub struct ClientKey;
-}
-
-impl fmt::Display for ClientKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
 }
 
 /// State of a [`WebTransportServer`] when it is [`ServerState::Opening`].

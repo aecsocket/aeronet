@@ -126,14 +126,14 @@ fn on_connecting(
     mut server: ResMut<WebTransportServer>,
 ) {
     for RemoteClientConnecting { client_key } in events.read() {
-        info!("{client_key} connecting");
+        info!("{client_key:?} connecting");
         let _ = server.respond_to_request(*client_key, ConnectionResponse::Accepted);
     }
 }
 
 fn on_disconnected(mut events: EventReader<RemoteClientDisconnected<WebTransportServer>>) {
     for RemoteClientDisconnected { client_key, reason } in events.read() {
-        info!("{client_key} disconnected: {:#}", pretty_error(&reason));
+        info!("{client_key:?} disconnected: {:#}", pretty_error(&reason));
     }
 }
 
@@ -147,7 +147,7 @@ fn on_server_event(
         match event {
             ServerEvent::ClientConnected { client_id } => {
                 let client_key = client_keys.get_by_right(client_id).unwrap();
-                info!("{client_id:?} controlled by {client_key} connected");
+                info!("{client_id:?} controlled by {client_key:?} connected");
                 let color = Color::srgb(rand::random(), rand::random(), rand::random());
                 commands.spawn((
                     Player,
@@ -181,7 +181,7 @@ fn print_stats(server: Res<WebTransportServer>) {
                 total_mem_used += mem_used;
                 let time = now - client.connected_at();
                 Some(vec![
-                    format!("{}", client_key),
+                    format!("{:?}", slotmap::Key::data(&client_key)),
                     format!("{:.1?}", time),
                     format!("{:.1?}", client.rtt()),
                     format!("{:.1?}", client.raw_rtt()),

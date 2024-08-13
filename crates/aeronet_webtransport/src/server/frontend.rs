@@ -11,7 +11,7 @@ use aeronet_proto::session::{MessageKey, SessionConfig};
 use bytes::Bytes;
 use futures::channel::oneshot;
 use slotmap::SlotMap;
-use tracing::{debug, trace_span};
+use tracing::{debug, field, trace_span};
 use web_time::Duration;
 
 use crate::{
@@ -171,7 +171,10 @@ impl ServerTransport for WebTransportServer {
         };
 
         for (client_key, client) in &mut server.clients {
-            let span = trace_span!("client", key = display(client_key));
+            let span = trace_span!(
+                "client",
+                key = field::debug(slotmap::Key::data(&client_key))
+            );
             let _ = span.enter();
 
             let Client::Connected(client) = client else {
@@ -302,7 +305,10 @@ impl WebTransportServer {
             }
 
             for (client_key, client) in &mut server.clients {
-                let span = trace_span!("client", key = display(client_key));
+                let span = trace_span!(
+                    "client",
+                    key = field::debug(slotmap::Key::data(&client_key))
+                );
                 let _span = span.enter();
 
                 replace_with::replace_with_or_abort(client, |client_state| match client_state {

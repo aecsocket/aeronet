@@ -1,6 +1,5 @@
 //! Server-side items.
 
-use core::fmt;
 use std::{convert::Infallible, mem};
 
 use aeronet::{
@@ -21,12 +20,6 @@ slotmap::new_key_type! {
     /// If a client is connected, disconnected, and reconnected to the same
     /// server, it will have a different client key.
     pub struct ClientKey;
-}
-
-impl fmt::Display for ClientKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
 }
 
 /// Implementation of [`ServerTransport`] using in-memory MPSC channels.

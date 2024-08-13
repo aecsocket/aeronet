@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use aeronet::lane::LaneIndex;
 use either::Either;
 use octs::{Buf, BufTooShortOr, Bytes, Read};
-use tracing::{trace, trace_span};
+use tracing::{field, trace, trace_span};
 use web_time::Instant;
 
 use crate::{
@@ -148,17 +148,10 @@ impl Session {
                 let span = trace_span!("ack", packet = seq.0 .0);
                 let _span = span.enter();
 
-                trace!("Received ack");
-
                 *packets_acked = packets_acked.saturating_add(1);
-                // sending a packet with no fragments doesn't elicit an ack,
-                // so we can't use them in RTT estimations,
-                // since the peer may wait arbitrarily long to ack them
-                if !packet.frags.is_empty() {
-                    let packet_rtt = now.saturating_duration_since(packet.flushed_at);
-                    trace!("We claim an RTT of {packet_rtt:?}");
-                    rtt.update(packet_rtt);
-                }
+                let packet_rtt = now.saturating_duration_since(packet.flushed_at);
+                trace!(packet_rtt = field::debug(packet_rtt), "Received ack");
+                rtt.update(packet_rtt);
 
                 Box::into_iter(packet.frags)
             })

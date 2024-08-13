@@ -79,7 +79,7 @@ impl Default for SessionConfig {
             recv_lanes: Vec::new(),
             max_memory_usage: 4 * 1024 * 1024,
             send_bytes_per_sec: usize::MAX,
-            max_ack_delay: Duration::from_millis(100),
+            max_ack_delay: Duration::from_millis(10),
         }
     }
 }
@@ -88,8 +88,8 @@ impl SessionConfig {
     /// Adds the given lanes to this configuration's
     /// [`SessionConfig::send_lanes`].
     ///
-    /// You can implement `From<LaneKind> for [your own type]` to use it as
-    /// the item in this iterator.
+    /// You can `impl From<LaneKind> for [your own type]` to use it as the item
+    /// in this iterator.
     #[must_use]
     pub fn with_send_lanes(mut self, lanes: impl IntoIterator<Item = impl Into<LaneKind>>) -> Self {
         self.send_lanes.extend(lanes.into_iter().map(Into::into));
