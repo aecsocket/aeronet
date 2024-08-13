@@ -164,7 +164,7 @@ impl ClientTransport for ChannelClient {
                 });
                 State::Disconnected
             }
-            State::Connected(client) => Self::poll_connected(&mut events, client),
+            State::Connected(client) => Self::poll_connected(client, &mut events),
         });
         events.into_iter()
     }
@@ -218,7 +218,7 @@ impl ClientTransport for ChannelClient {
 }
 
 impl ChannelClient {
-    fn poll_connected(events: &mut Vec<ClientEvent<Self>>, mut client: Connected) -> State {
+    fn poll_connected(mut client: Connected, events: &mut Vec<ClientEvent<Self>>) -> State {
         if client.send_initial {
             events.push(ClientEvent::Connected);
             client.send_initial = false;

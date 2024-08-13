@@ -176,6 +176,7 @@ dependencies = [
  "aeronet",
  "aeronet_proto",
  "bevy_ecs",
+ "replace_with",
  "slotmap",
  "steamworks",
  "thiserror",

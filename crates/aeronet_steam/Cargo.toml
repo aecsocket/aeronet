@@ -25,6 +25,7 @@ visualizer = ["aeronet_proto/visualizer"]
 aeronet = { workspace = true }
 aeronet_proto = { workspace = true }
 
+replace_with = { workspace = true }
 slotmap = { workspace = true }
 steamworks = { workspace = true }
 thiserror = { workspace = true }

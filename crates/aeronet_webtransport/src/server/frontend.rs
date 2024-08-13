@@ -135,8 +135,8 @@ impl ServerTransport for WebTransportServer {
         let mut events = Vec::new();
         replace_with::replace_with_or_abort(&mut self.state, |state| match state {
             State::Closed => State::Closed,
-            State::Opening(server) => Self::poll_opening(&mut events, server),
-            State::Open(server) => Self::poll_open(&mut events, server, delta_time),
+            State::Opening(server) => Self::poll_opening(server, &mut events),
+            State::Open(server) => Self::poll_open(server, &mut events, delta_time),
             State::Closing { reason } => {
                 events.push(ServerEvent::Closed {
                     reason: CloseReason::Local(reason),
@@ -253,7 +253,7 @@ impl WebTransportServer {
         Ok(())
     }
 
-    fn poll_opening(events: &mut Vec<ServerEvent<Self>>, mut server: Opening) -> State {
+    fn poll_opening(mut server: Opening, events: &mut Vec<ServerEvent<Self>>) -> State {
         if let Ok(Some(err)) = server.recv_err.try_recv() {
             events.push(ServerEvent::Closed { reason: err.into() });
             return State::Closed;
@@ -280,8 +280,8 @@ impl WebTransportServer {
     }
 
     fn poll_open(
-        events: &mut Vec<ServerEvent<Self>>,
         mut server: Open,
+        events: &mut Vec<ServerEvent<Self>>,
         delta_time: Duration,
     ) -> State {
         let res = (|| {

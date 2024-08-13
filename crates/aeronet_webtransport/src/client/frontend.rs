@@ -116,8 +116,8 @@ impl ClientTransport for WebTransportClient {
         let mut events = Vec::new();
         replace_with::replace_with_or_abort(&mut self.state, |state| match state {
             State::Disconnected => state,
-            State::Connecting(client) => Self::poll_connecting(&mut events, client),
-            State::Connected(client) => Self::poll_connected(&mut events, client, delta_time),
+            State::Connecting(client) => Self::poll_connecting(client, &mut events),
+            State::Connected(client) => Self::poll_connected(client, &mut events, delta_time),
             State::Disconnecting { reason } => {
                 events.push(ClientEvent::Disconnected {
                     reason: DisconnectReason::Local(reason),
@@ -172,7 +172,7 @@ impl ClientTransport for WebTransportClient {
 }
 
 impl WebTransportClient {
-    fn poll_connecting(events: &mut Vec<ClientEvent<Self>>, mut client: Connecting) -> State {
+    fn poll_connecting(mut client: Connecting, events: &mut Vec<ClientEvent<Self>>) -> State {
         if let Ok(Some(reason)) = client.recv_dc.try_recv() {
             events.push(ClientEvent::Disconnected { reason });
             return State::Disconnected;
@@ -210,8 +210,8 @@ impl WebTransportClient {
     }
 
     fn poll_connected(
-        events: &mut Vec<ClientEvent<Self>>,
         mut client: Connected,
+        events: &mut Vec<ClientEvent<Self>>,
         delta_time: Duration,
     ) -> State {
         let res = client.inner.poll(delta_time, |event| {

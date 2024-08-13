@@ -3,6 +3,6 @@
 // #![cfg(not(target_family = "wasm"))]
 #![cfg(any())] // TODO
 
-// pub mod client;
+pub mod client;
 pub mod server;
 pub mod shared;
