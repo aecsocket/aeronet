@@ -1,4 +1,5 @@
 use aeronet::lane::LaneKind;
+use web_time::Duration;
 
 /// Configuration for a [`Session`].
 ///
@@ -49,6 +50,26 @@ pub struct SessionConfig {
     /// [`Session::flush`]: crate::session::Session::flush
     /// [`Session::update`]: crate::session::Session::update
     pub send_bytes_per_sec: usize,
+    /// If we haven't sent a packet to the peer in a while, how long should we
+    /// wait until sending an empty acknowledgement/keep-alive packet?
+    ///
+    /// Even if your user code doesn't send out any packets, we still need to
+    /// periodically exchange some data with the peer to ensure that:
+    /// - the connection is still active and that we can still successfully
+    ///   send data (keep-alive/timeout)
+    /// - we send any outstanding packet acknowledgements to the peer, in case
+    ///   they didn't receive some of our earlier acknowledgements
+    /// - we have an accurate RTT estimate
+    ///
+    /// If we haven't sent a packet with any actual message fragment within
+    /// `max_ack_delay`, the transport will automatically send out an empty ack
+    /// packet. The delay is to avoid flooding the connection with ack packets,
+    /// since although they are small they are not free. Note that this means
+    /// that RTT estimates may not be accurate below `max_ack_delay` - even if
+    /// the real RTT is smaller than the ack delay, we won't be able to observe
+    /// it unless the user code sends packets in a shorter period of time than
+    /// this delay.
+    pub max_ack_delay: Duration,
 }
 
 impl Default for SessionConfig {
@@ -58,6 +79,7 @@ impl Default for SessionConfig {
             recv_lanes: Vec::new(),
             max_memory_usage: 4 * 1024 * 1024,
             send_bytes_per_sec: usize::MAX,
+            max_ack_delay: Duration::from_millis(100),
         }
     }
 }
@@ -109,6 +131,13 @@ impl SessionConfig {
     #[must_use]
     pub const fn with_send_bytes_per_sec(mut self, send_bytes_per_sec: usize) -> Self {
         self.send_bytes_per_sec = send_bytes_per_sec;
+        self
+    }
+
+    /// Sets [`SessionConfig::max_ack_delay`] on this value.
+    #[must_use]
+    pub const fn with_max_ack_delay(mut self, max_ack_delay: Duration) -> Self {
+        self.max_ack_delay = max_ack_delay;
         self
     }
 }

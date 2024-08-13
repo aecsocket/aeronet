@@ -3,6 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use aeronet::client::ClientTransportSet;
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_time::common_conditions::on_timer;
@@ -16,11 +17,18 @@ use super::SessionStats;
 /// the client transport `T`, which must implement [`SessionBacked`].
 ///
 /// If you are using Bevy along with the visualizer, you can use this plugin to
-/// access the [`ClientSessionStats`] and pass it to the visualizer.
+/// inject the [`ClientSessionStats`] into your system and pass it to the
+/// visualizer.
 #[derive(Debug, Clone)]
 pub struct ClientSessionStatsPlugin<T> {
     /// How many times per second we sample the session and insert new samples
     /// into the stats.
+    ///
+    /// Increasing this value increases the precision of the sampling, but the
+    /// samples will be less smooth, and it will take more memory to store the
+    /// same amount of sample history. In general, smoothness is preferable to
+    /// precision when drawing the sample plots, so this value should be kept
+    /// low (around 10 Hz).
     pub sample_rate: u32,
     /// How many seconds of sample history we should keep.
     pub history: usize,
@@ -41,7 +49,7 @@ impl<T> ClientSessionStatsPlugin<T> {
 
 impl<T> Default for ClientSessionStatsPlugin<T> {
     fn default() -> Self {
-        Self::new(30, 15)
+        Self::new(10, 15)
     }
 }
 
@@ -69,8 +77,8 @@ impl<T: SessionBacked + Resource> Plugin for ClientSessionStatsPlugin<T> {
     fn build(&self, app: &mut App) {
         app.insert_resource(ClientSessionStats::<T>::new(self.sample_rate, self.history))
             .add_systems(
-                Update,
-                Self::update_stats.run_if(
+                PostUpdate,
+                Self::update_stats.after(ClientTransportSet::Send).run_if(
                     resource_exists::<ClientSessionStats<T>>
                         .and_then(resource_exists::<T>)
                         .and_then(on_timer(Duration::from_secs(1) / self.sample_rate)),

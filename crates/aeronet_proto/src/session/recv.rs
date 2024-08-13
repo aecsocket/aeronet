@@ -103,7 +103,7 @@ impl Session {
                 trace!("Received fragment packet");
                 // this packet contains actual fragment payloads, so we need to
                 // inform the peer that we've received these frags ASAP
-                self.next_ack_at = Some(now);
+                self.next_ack_at = now;
             } else {
                 trace!("Received ack packet");
             }

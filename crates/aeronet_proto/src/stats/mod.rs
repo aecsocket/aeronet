@@ -194,7 +194,7 @@ impl SessionStats {
         );
 
         let thresh = session.rtt().pto();
-        let thresh_index = f64::ceil(thresh.as_secs_f64() * f64::from(self.sample_rate()));
+        let thresh_index = (thresh.as_secs_f64() * f64::from(self.sample_rate())).ceil();
         let thresh_index = thresh_index as usize;
 
         // number of packets sent `thresh` ago = how many extra acks we should have now

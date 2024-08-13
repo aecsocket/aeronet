@@ -37,6 +37,8 @@ struct UiState {
 #[derive(Debug, Clone, Copy, Deref, Resource)]
 struct ConnectToRemote(SystemId<(String, String)>);
 
+const DEFAULT_TARGET: &str = "https://[::1]:25565";
+
 fn main() {
     App::new()
         .add_plugins((
@@ -161,7 +163,7 @@ fn ui(
         ui.horizontal(|ui| {
             let target_resp = ui.add_enabled(
                 client.state().is_disconnected(),
-                egui::TextEdit::singleline(&mut ui_state.target).hint_text("https://[::1]:25565"),
+                egui::TextEdit::singleline(&mut ui_state.target).hint_text(DEFAULT_TARGET),
             );
 
             if client.state().is_disconnected() {
@@ -185,7 +187,11 @@ fn ui(
         });
 
         if do_connect {
-            let target = ui_state.target.clone();
+            let target = if ui_state.target.is_empty() {
+                DEFAULT_TARGET.to_owned()
+            } else {
+                ui_state.target.clone()
+            };
             let cert_hash = ui_state.cert_hash.clone();
             commands.run_system_with_input(**connect_to_remote, (target, cert_hash));
         }

@@ -43,7 +43,8 @@ pub struct Session {
     mtu: usize,
     bytes_left: TokenBucket,
     next_packet_seq: PacketSeq,
-    next_ack_at: Option<Instant>,
+    max_ack_delay: Duration,
+    next_ack_at: Instant,
     packets_sent: usize,
     bytes_sent: usize,
 
@@ -275,7 +276,8 @@ impl Session {
             mtu: initial_mtu,
             bytes_left: TokenBucket::new(config.send_bytes_per_sec),
             next_packet_seq: PacketSeq::default(),
-            next_ack_at: None,
+            max_ack_delay: config.max_ack_delay,
+            next_ack_at: now + config.max_ack_delay,
             packets_sent: 0,
             bytes_sent: 0,
 

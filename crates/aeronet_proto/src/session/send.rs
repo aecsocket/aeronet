@@ -250,7 +250,7 @@ impl Session {
                 }
             }
 
-            let ack_pending = self.next_ack_at.is_some_and(|at| now >= at);
+            let ack_pending = now >= self.next_ack_at;
             if !packet_frags.is_empty() || (!sent_packet && ack_pending) {
                 trace!("Flushed {packet_seq:?} with {} frags", packet_frags.len());
                 self.flushed_packets.insert(
@@ -265,7 +265,7 @@ impl Session {
                 self.packets_sent = self.packets_sent.saturating_add(1);
                 self.bytes_sent = self.bytes_sent.saturating_add(packet.len());
                 self.next_packet_seq += PacketSeq::ONE;
-                self.next_ack_at = None;
+                self.next_ack_at = now + self.max_ack_delay; // web_time::Duration::from_secs(10000); // todo
                 sent_packet = true;
                 Some(packet)
             } else {
