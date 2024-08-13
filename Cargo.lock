@@ -147,6 +147,7 @@ dependencies = [
  "size_format",
  "terrors",
  "thiserror",
+ "tracing",
  "web-time",
 ]
 

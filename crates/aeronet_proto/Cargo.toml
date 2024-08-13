@@ -44,6 +44,7 @@ octs = { workspace = true }
 ringbuf = { workspace = true }
 terrors = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 web-time = { workspace = true }
 
 serde = { workspace = true, optional = true }

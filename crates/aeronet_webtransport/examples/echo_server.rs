@@ -51,6 +51,7 @@ fn server_config(identity: &wtransport::Identity) -> ServerConfig {
     wtransport::ServerConfig::builder()
         .with_bind_default(25565)
         .with_identity(&identity)
+        .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
         .unwrap()
         .build()

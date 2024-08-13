@@ -171,7 +171,7 @@ impl PacketSeq {
 impl fmt::Debug for PacketSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Self(Seq(seq)) = self;
-        write!(f, "{seq}")
+        write!(f, "PacketSeq({seq})")
     }
 }
 
@@ -214,7 +214,7 @@ impl MessageSeq {
 impl fmt::Debug for MessageSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Self(Seq(seq)) = self;
-        write!(f, "{seq}")
+        write!(f, "MessageSeq({seq})")
     }
 }
 

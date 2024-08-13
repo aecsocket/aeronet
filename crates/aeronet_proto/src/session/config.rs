@@ -17,8 +17,9 @@ pub struct SessionConfig {
     /// Maximum number of bytes of memory which can be used for buffering
     /// messages.
     ///
-    /// The default is 4MiB (`4 * 1024 * 1024`). Consider tuning this number
-    /// if you see connections fail with an out-of-memory error.
+    /// By default, this is 4MiB (`4 * 1024 * 1024`). Consider tuning this
+    /// number if you see connections fail with an out-of-memory error, or you
+    /// see memory usage is too high in your app.
     ///
     /// A malicious peer may send us an infinite amount of fragments which
     /// never get fully reassembled, leaving us having to buffer up all of their

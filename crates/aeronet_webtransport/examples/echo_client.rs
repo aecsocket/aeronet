@@ -64,6 +64,7 @@ fn net_config() -> ClientConfig {
     ClientConfig::builder()
         .with_bind_default()
         .with_no_cert_validation()
+        .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
         .unwrap()
         .build()

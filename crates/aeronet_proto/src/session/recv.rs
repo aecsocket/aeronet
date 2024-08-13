@@ -3,6 +3,7 @@ use std::convert::Infallible;
 use aeronet::lane::LaneIndex;
 use either::Either;
 use octs::{Buf, BufTooShortOr, Bytes, Read};
+use tracing::{trace, trace_span};
 use web_time::Instant;
 
 use crate::{
@@ -97,23 +98,34 @@ impl Session {
             .map_err(RecvError::DecodeHeader)?;
         self.acks.ack(header.seq);
 
-        let acks = Self::recv_acks(
-            &mut self.flushed_packets,
-            &mut self.send_lanes,
-            &mut self.rtt,
-            &mut self.packets_acked,
-            now,
-            header.acks.seqs(),
-        );
+        trace_span!("recv", packet = header.seq.0 .0).in_scope(|| {
+            if !packet.is_empty() {
+                trace!("Received fragment packet");
+                // this packet contains actual fragment payloads, so we need to
+                // inform the peer that we've received these frags ASAP
+                self.next_ack_at = Some(now);
+            } else {
+                trace!("Received ack packet");
+            }
 
-        Ok((
-            acks,
-            RecvMessages {
-                recv_lanes: &mut self.recv_lanes,
+            let acks = Self::recv_acks(
+                &mut self.flushed_packets,
+                &mut self.send_lanes,
+                &mut self.rtt,
+                &mut self.packets_acked,
                 now,
-                packet,
-            },
-        ))
+                header.acks.seqs(),
+            );
+
+            Ok((
+                acks,
+                RecvMessages {
+                    recv_lanes: &mut self.recv_lanes,
+                    now,
+                    packet,
+                },
+            ))
+        })
     }
 
     fn recv_acks<'session, const N: usize>(
@@ -127,11 +139,27 @@ impl Session {
         acked_seqs
             // we now know that our packet with sequence `seq` was acked by the peer
             // let's find what fragments that packet contained when we flushed it out
-            .filter_map(move |seq| flushed_packets.remove_with(seq.0 .0, FlushedPacket::new(now)))
-            .flat_map(move |packet| {
+            .filter_map(move |seq| {
+                flushed_packets
+                    .remove_with(seq.0 .0, FlushedPacket::new(now))
+                    .map(|packet| (seq, packet))
+            })
+            .flat_map(move |(seq, packet)| {
+                let span = trace_span!("ack", packet = seq.0 .0);
+                let _span = span.enter();
+
+                trace!("Received ack");
+
                 *packets_acked = packets_acked.saturating_add(1);
-                let packet_rtt = now - packet.flushed_at;
-                rtt.update(packet_rtt);
+                // sending a packet with no fragments doesn't elicit an ack,
+                // so we can't use them in RTT estimations,
+                // since the peer may wait arbitrarily long to ack them
+                if !packet.frags.is_empty() {
+                    let packet_rtt = now.saturating_duration_since(packet.flushed_at);
+                    trace!("We claim an RTT of {packet_rtt:?}");
+                    rtt.update(packet_rtt);
+                }
+
                 Box::into_iter(packet.frags)
             })
             .filter_map(|frag_path| {

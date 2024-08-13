@@ -3,6 +3,7 @@ use std::{collections::hash_map::Entry, iter};
 use aeronet::lane::LaneIndex;
 use octs::{Bytes, BytesMut, EncodeLen, FixedEncodeLen, Write};
 use terrors::OneOf;
+use tracing::trace;
 use web_time::Instant;
 
 use crate::{
@@ -249,9 +250,9 @@ impl Session {
                 }
             }
 
-            // instead of a keep-alive, we will always send at least 1 packet per flush
-            // so that we can accurately track RTT
-            if !packet_frags.is_empty() || !sent_packet {
+            let ack_pending = self.next_ack_at.is_some_and(|at| now >= at);
+            if !packet_frags.is_empty() || (!sent_packet && ack_pending) {
+                trace!("Flushed {packet_seq:?} with {} frags", packet_frags.len());
                 self.flushed_packets.insert(
                     packet_seq.0 .0,
                     FlushedPacket {
@@ -264,6 +265,7 @@ impl Session {
                 self.packets_sent = self.packets_sent.saturating_add(1);
                 self.bytes_sent = self.bytes_sent.saturating_add(packet.len());
                 self.next_packet_seq += PacketSeq::ONE;
+                self.next_ack_at = None;
                 sent_packet = true;
                 Some(packet)
             } else {
