@@ -4,6 +4,7 @@ use aeronet::{
     client::{ClientEvent, ClientTransport, DisconnectReason},
     lane::LaneIndex,
     server::{CloseReason, ServerEvent, ServerTransport},
+    shared::DROP_DISCONNECT_REASON,
 };
 use aeronet_channel::{
     client::ChannelClient,
@@ -159,16 +160,15 @@ fn server_close() {
 
 #[test]
 fn server_drop() {
-    let (mut client, mut server, _) = open();
+    let (mut client, server, _) = open();
 
-    server.set_default_disconnect_reason(REASON);
     drop(server);
 
     let mut events = client.poll(DT);
     assert_matches!(
         events.next().unwrap(),
         ClientEvent::Disconnected { reason: DisconnectReason::Remote(reason) }
-        if reason == REASON
+        if reason == DROP_DISCONNECT_REASON
     );
     assert!(events.next().is_none());
     drop(events);

@@ -5,6 +5,7 @@ use std::{convert::Infallible, mem};
 use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
     lane::LaneIndex,
+    shared::DROP_DISCONNECT_REASON,
     stats::{ConnectedAt, MessageStats},
 };
 use bytes::Bytes;
@@ -20,8 +21,6 @@ use crate::server::{ChannelServer, ClientKey};
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct ChannelClient {
     state: State,
-    /// See [`ClientTransport::default_disconnect_reason`].
-    pub default_disconnect_reason: Option<String>,
 }
 
 #[derive(Debug)]
@@ -102,7 +101,6 @@ impl ChannelClient {
     pub const fn new() -> Self {
         Self {
             state: State::Disconnected,
-            default_disconnect_reason: None,
         }
     }
 
@@ -217,18 +215,6 @@ impl ClientTransport for ChannelClient {
             }
         }
     }
-
-    fn default_disconnect_reason(&self) -> Option<&str> {
-        self.default_disconnect_reason.as_deref()
-    }
-
-    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
-        self.default_disconnect_reason = Some(reason.into());
-    }
-
-    fn unset_default_disconnect_reason(&mut self) {
-        self.default_disconnect_reason = None;
-    }
 }
 
 impl ChannelClient {
@@ -270,9 +256,6 @@ impl ChannelClient {
 
 impl Drop for ChannelClient {
     fn drop(&mut self) {
-        if let Some(reason) = &self.default_disconnect_reason {
-            let reason = reason.clone();
-            let _ = self.disconnect(reason);
-        }
+        let _ = self.disconnect(DROP_DISCONNECT_REASON);
     }
 }

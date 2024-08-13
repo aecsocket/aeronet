@@ -66,7 +66,7 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    let mut server = ChannelServer::new().with_default_disconnect_reason("server dropped");
+    let mut server = ChannelServer::new();
     server.open().unwrap();
 
     let mut client = ChannelClient::new();
@@ -120,11 +120,6 @@ fn client_ui(
         });
 
         if do_disconnect {
-            // Instead of dropping the client, we call `client.disconnect` here
-            // to show how your user-defined disconnection reason will be sent to the server.
-            // If you had dropped the client instead (e.g. by removing it as a resource),
-            // this would have different behavior
-            // (see how we handle the server's Close button below...)
             let _ = client.disconnect("disconnected by user");
         }
 
@@ -237,10 +232,7 @@ fn server_ui(
         });
 
         if do_close {
-            // Instead of `server.close`, we'll remove the resource entirely,
-            // causing the server to be dropped.
-            // This demonstrates how, on drop, the transport will send the default disconnect reason
-            // that we set up when we created the server.
+            // Dropping the server will close it with a default reason.
             commands.remove_resource::<ChannelServer>();
         }
 

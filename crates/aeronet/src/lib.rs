@@ -8,6 +8,7 @@ pub mod client;
 pub mod error;
 pub mod lane;
 pub mod server;
+pub mod shared;
 pub mod stats;
 
 #[cfg(feature = "condition")]

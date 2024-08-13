@@ -34,10 +34,6 @@ pub type ServerConfig = wtransport::ServerConfig;
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportServer {
     state: State,
-    /// See [`ServerTransport::default_disconnect_reason`].
-    ///
-    /// [`ServerTransport::default_disconnect_reason`]: aeronet::server::ServerTransport::default_disconnect_reason
-    pub default_disconnect_reason: Option<String>,
 }
 
 #[derive(Debug)]

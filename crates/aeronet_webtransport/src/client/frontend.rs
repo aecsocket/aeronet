@@ -4,6 +4,7 @@ use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
     error::pretty_error,
     lane::LaneIndex,
+    shared::DROP_DISCONNECT_REASON,
 };
 use aeronet_proto::session::{MessageKey, Session, SessionBacked, SessionConfig};
 use bytes::Bytes;
@@ -35,7 +36,6 @@ impl WebTransportClient {
     pub const fn new() -> Self {
         Self {
             state: State::Disconnected,
-            default_disconnect_reason: None,
         }
     }
 
@@ -169,18 +169,6 @@ impl ClientTransport for WebTransportClient {
             }
         }
     }
-
-    fn default_disconnect_reason(&self) -> Option<&str> {
-        self.default_disconnect_reason.as_deref()
-    }
-
-    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
-        self.default_disconnect_reason = Some(reason.into());
-    }
-
-    fn unset_default_disconnect_reason(&mut self) {
-        self.default_disconnect_reason = None;
-    }
 }
 
 impl WebTransportClient {
@@ -257,9 +245,6 @@ impl SessionBacked for WebTransportClient {
 
 impl Drop for WebTransportClient {
     fn drop(&mut self) {
-        if let Some(reason) = &self.default_disconnect_reason {
-            let reason = reason.clone();
-            let _ = self.disconnect(reason);
-        }
+        let _ = self.disconnect(DROP_DISCONNECT_REASON);
     }
 }

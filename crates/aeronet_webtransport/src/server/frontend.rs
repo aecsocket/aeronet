@@ -5,6 +5,7 @@ use aeronet::{
     error::pretty_error,
     lane::LaneIndex,
     server::{CloseReason, ServerEvent, ServerState, ServerTransport},
+    shared::DROP_DISCONNECT_REASON,
 };
 use aeronet_proto::session::{MessageKey, SessionConfig};
 use bytes::Bytes;
@@ -37,7 +38,6 @@ impl WebTransportServer {
     pub const fn new() -> Self {
         Self {
             state: State::Closed,
-            default_disconnect_reason: None,
         }
     }
 
@@ -222,18 +222,6 @@ impl ServerTransport for WebTransportServer {
             State::Closed | State::Closing { .. } => Err(ServerError::AlreadyClosed),
         }
     }
-
-    fn default_disconnect_reason(&self) -> Option<&str> {
-        self.default_disconnect_reason.as_deref()
-    }
-
-    fn set_default_disconnect_reason(&mut self, reason: impl Into<String>) {
-        self.default_disconnect_reason = Some(reason.into());
-    }
-
-    fn unset_default_disconnect_reason(&mut self) {
-        self.default_disconnect_reason = None;
-    }
 }
 
 impl WebTransportServer {
@@ -415,5 +403,11 @@ impl WebTransportServer {
                 Client::Disconnected
             }
         }
+    }
+}
+
+impl Drop for WebTransportServer {
+    fn drop(&mut self) {
+        let _ = self.close(DROP_DISCONNECT_REASON);
     }
 }
