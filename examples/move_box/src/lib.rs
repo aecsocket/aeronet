@@ -54,9 +54,7 @@ pub struct Player;
 pub struct ClientPlayer(pub ClientId);
 
 /// Player's box position.
-#[derive(
-    Debug, Clone, Component, Deref, DerefMut, Serialize, Deserialize /* TODO   Interpolate */,
-)]
+#[derive(Debug, Clone, Component, Deref, DerefMut, Serialize, Deserialize)]
 pub struct PlayerPosition(pub Vec2);
 
 /// Player's box color.
