@@ -106,6 +106,8 @@ pub trait ClientTransport {
     /// The implementation may place limitations on the `reason`, e.g. a maximum
     /// byte length.
     ///
+    /// If this is called twice in a row, the second call must be a no-op.
+    ///
     /// # Errors
     ///
     /// Errors if the transport failed to *attempt to* disconnect, e.g. if the

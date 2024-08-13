@@ -1,6 +1,6 @@
 //! Client-side items.
 
-use std::{convert::Infallible, mem};
+use std::convert::Infallible;
 
 use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
@@ -199,21 +199,16 @@ impl ClientTransport for ChannelClient {
     }
 
     fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
-        let reason = reason.into();
-        match mem::replace(
-            &mut self.state,
-            State::Disconnecting {
-                reason: reason.clone(),
-            },
-        ) {
+        replace_with::replace_with_or_abort_and_return(&mut self.state, |state| match state {
             State::Connected(client) => {
-                let _ = client.send_dc_c2s.try_send(reason);
-                Ok(())
+                let reason = reason.into();
+                let _ = client.send_dc_c2s.try_send(reason.clone());
+                (Ok(()), State::Disconnecting { reason })
             }
             State::Disconnected | State::Disconnecting { .. } => {
-                Err(ClientError::AlreadyDisconnected)
+                (Err(ClientError::AlreadyDisconnected), state)
             }
-        }
+        })
     }
 }
 

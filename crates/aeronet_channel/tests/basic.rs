@@ -99,14 +99,15 @@ fn client_disconnect() {
         assert!(events.next().is_none());
     }
 
-    let mut events = server.poll(DT);
-    assert_matches!(
-        events.next().unwrap(),
-        ServerEvent::Disconnected { client_key, reason: DisconnectReason::Remote(reason), .. }
-        if client_key == target_key && reason == REASON
-    );
-    assert!(events.next().is_none());
-    drop(events);
+    {
+        let mut events = server.poll(DT);
+        assert_matches!(
+            events.next().unwrap(),
+            ServerEvent::Disconnected { client_key, reason: DisconnectReason::Remote(reason), .. }
+            if client_key == target_key && reason == REASON
+        );
+        assert!(events.next().is_none());
+    }
 }
 
 #[test]
@@ -115,23 +116,25 @@ fn server_disconnect() {
 
     server.disconnect(target_key, REASON).unwrap();
 
-    let mut events = client.poll(DT);
-    assert_matches!(
-        events.next().unwrap(),
-        ClientEvent::Disconnected { reason: DisconnectReason::Remote(reason) }
-        if reason == REASON
-    );
-    assert!(events.next().is_none());
-    drop(events);
+    {
+        let mut events = client.poll(DT);
+        assert_matches!(
+            events.next().unwrap(),
+            ClientEvent::Disconnected { reason: DisconnectReason::Remote(reason) }
+            if reason == REASON
+        );
+        assert!(events.next().is_none());
+    }
 
-    let mut events = server.poll(DT);
-    assert_matches!(
-        events.next().unwrap(),
-        ServerEvent::Disconnected { client_key, reason: DisconnectReason::Local(reason) }
-        if client_key == target_key && reason == REASON
-    );
-    assert!(events.next().is_none());
-    drop(events);
+    {
+        let mut events = server.poll(DT);
+        assert_matches!(
+            events.next().unwrap(),
+            ServerEvent::Disconnected { client_key, reason: DisconnectReason::Local(reason) }
+            if client_key == target_key && reason == REASON
+        );
+        assert!(events.next().is_none());
+    }
 }
 
 #[test]
@@ -140,22 +143,23 @@ fn server_close() {
 
     server.close(REASON).unwrap();
 
-    let mut events = client.poll(DT);
-    assert_matches!(
-        events.next().unwrap(),
-        ClientEvent::Disconnected { reason: DisconnectReason::Remote(reason) }
-        if reason == REASON
-    );
-    assert!(events.next().is_none());
-    drop(events);
-
-    let mut events = server.poll(DT);
-    assert_matches!(
-        events.next().unwrap(),
-        ServerEvent::Closed { reason: CloseReason::Local(reason) }
-        if reason == REASON
-    );
-    drop(events);
+    {
+        let mut events = client.poll(DT);
+        assert_matches!(
+            events.next().unwrap(),
+            ClientEvent::Disconnected { reason: DisconnectReason::Remote(reason) }
+            if reason == REASON
+        );
+        assert!(events.next().is_none());
+    }
+    {
+        let mut events = server.poll(DT);
+        assert_matches!(
+            events.next().unwrap(),
+            ServerEvent::Closed { reason: CloseReason::Local(reason) }
+            if reason == REASON
+        );
+    }
 }
 
 #[test]
@@ -163,13 +167,13 @@ fn server_drop() {
     let (mut client, server, _) = open();
 
     drop(server);
-
-    let mut events = client.poll(DT);
-    assert_matches!(
-        events.next().unwrap(),
-        ClientEvent::Disconnected { reason: DisconnectReason::Remote(reason) }
-        if reason == DROP_DISCONNECT_REASON
-    );
-    assert!(events.next().is_none());
-    drop(events);
+    {
+        let mut events = client.poll(DT);
+        assert_matches!(
+            events.next().unwrap(),
+            ClientEvent::Disconnected { reason: DisconnectReason::Remote(reason) }
+            if reason == DROP_DISCONNECT_REASON
+        );
+        assert!(events.next().is_none());
+    }
 }

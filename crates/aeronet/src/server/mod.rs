@@ -144,6 +144,8 @@ pub trait ServerTransport {
     /// The implementation may place limitations on the `reason`, e.g. a maximum
     /// byte length.
     ///
+    /// If this is called twice in a row, the second call must be a no-op.
+    ///
     /// # Errors
     ///
     /// Errors if the transport failed to *attempt to* disconnect the client,
@@ -160,6 +162,8 @@ pub trait ServerTransport {
     /// All clients currently connected will be disconnected with the given
     /// reason. See [`ServerTransport::disconnect`] on how this reason will be
     /// handled.
+    ///
+    /// If this is called twice in a row, the second call must be a no-op.
     ///
     /// # Errors
     ///
