@@ -2,60 +2,19 @@
 
 use std::cmp;
 
-use datasize::DataSize;
 use web_time::Duration;
-
-const TIMER_GRANULARITY: Duration = Duration::from_millis(1);
 
 /// Default initial RTT to use before any RTT samples have been provided.
 ///
-/// This value is based on [RFC 9002 Section 6.2.2.1].
+/// This value is based on [RFC 9002 Section 6.2.2].
 ///
-/// [RFC 9002 Section 6.2.2.1]: https://www.rfc-editor.org/rfc/rfc9002.html#section-6.2.2-1
+/// [RFC 9002 Section 6.2.2]: https://www.rfc-editor.org/rfc/rfc9002.html#section-6.2.2-1
 pub const INITIAL_RTT: Duration = Duration::from_millis(333);
-
-/// Sample of round-trip time estimate values.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, DataSize)]
-pub struct RttSample {
-    /// Exponentially weighted moving average of RTT samples as described in
-    /// [RFC 9002 Section 5.3].
-    ///
-    /// If you just need a display RTT value, this is the one you should use.
-    ///
-    /// [RFC 9002 Section 5.3]: https://www.rfc-editor.org/rfc/rfc9002.html#section-5.3
-    pub smoothed: Duration,
-    /// Raw RTT value of the latest sample.
-    pub latest: Duration,
-    /// RTT variance, computed as described in RFC 6298.
-    pub var: Duration,
-    /// Minimum recorded RTT over all samples.
-    pub min: Duration,
-}
-
-impl RttSample {
-    /// Conservative estimate of RTT, taking the maximum of [`Rtt::smoothed`]
-    /// and [`Rtt::latest`].
-    #[must_use]
-    #[inline]
-    pub fn conservative(&self) -> Duration {
-        self.smoothed.max(self.latest)
-    }
-
-    /// Computes the probe timeout duration (PTO) as described in
-    /// [RFC 9002 Section 6.2.1].
-    ///
-    /// [RFC 9002 Section 6.2.1]: https://www.rfc-editor.org/rfc/rfc9002.html#section-6.2.1
-    #[must_use]
-    #[inline]
-    pub fn pto(&self) -> Duration {
-        self.smoothed + (4 * self.var).max(TIMER_GRANULARITY)
-    }
-}
 
 /// Computes an RTT estimation for a particular network path.
 ///
 /// This is based on [`quinn-proto`'s `RttEstimator`](https://github.com/quinn-rs/quinn/blob/411abe9/quinn-proto/src/connection/paths.rs#L151).
-#[derive(Debug, Clone, DataSize)]
+#[derive(Debug, Clone, datasize::DataSize)]
 pub struct RttEstimator {
     /// Most recent RTT measurement made when receiving an ack for a
     /// previously unacked packet.
@@ -67,6 +26,8 @@ pub struct RttEstimator {
     /// Minimum RTT seen in the connection, ignoring ack delay.
     min: Duration,
 }
+
+const TIMER_GRANULARITY: Duration = Duration::from_millis(1);
 
 impl RttEstimator {
     /// Creates a new estimator from a given initial RTT.
@@ -88,6 +49,10 @@ impl RttEstimator {
         self.smoothed.unwrap_or(self.latest)
     }
 
+    /// Conservative estimate of RTT.
+    ///
+    /// Takes the maximum of smoothed and latest RTT, as recommended
+    /// in 6.1.2 of the recovery spec (draft 29).
     #[must_use]
     pub fn conservative(&self) -> Duration {
         self.get().max(self.latest)
@@ -99,8 +64,14 @@ impl RttEstimator {
         self.min
     }
 
+    /// Computes the probe timeout duration (PTO) as described in
+    /// [RFC 9002 Section 6.2.1].
+    ///
+    /// [RFC 9002 Section 6.2.1]: https://www.rfc-editor.org/rfc/rfc9002.html#section-6.2.1
     #[must_use]
-    pub fn pto(&self) -> Duration {}
+    pub fn pto(&self) -> Duration {
+        self.get() + cmp::max(4 * self.var, TIMER_GRANULARITY)
+    }
 
     /// Adds an RTT sample to this estimation.
     pub fn update(&mut self, rtt: Duration) {

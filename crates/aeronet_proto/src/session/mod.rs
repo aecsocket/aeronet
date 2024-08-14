@@ -18,7 +18,7 @@ use web_time::{Duration, Instant};
 use crate::{
     limit::TokenBucket,
     msg::{FragmentReceiver, MessageSplitter},
-    rtt::{RttEstimator, RttSample, INITIAL_RTT},
+    rtt::{RttEstimator, INITIAL_RTT},
     seq::SeqBuf,
     ty::{Acknowledge, FragmentHeader, FragmentMarker, MessageSeq, PacketHeader, PacketSeq},
 };
@@ -26,12 +26,10 @@ use crate::{
 /// Manages the messages sent and received over a transport's connection without
 /// performing any I/O.
 ///
-/// `R` is the [`RttStrategy`].
-///
 /// See the [crate-level documentation](crate).
 #[derive(Derivative, DataSize)]
 #[derivative(Debug)]
-pub struct Session<R> {
+pub struct Session {
     #[data_size(with = mem::size_of_val)]
     connected_at: Instant,
     flushed_packets: SeqBuf<FlushedPacket, 1024>,
@@ -55,79 +53,7 @@ pub struct Session<R> {
     packets_recv: usize,
     packets_acked: usize,
     bytes_recv: usize,
-    rtt: R,
-}
-
-mod private {
-    use super::*;
-
-    pub trait RttStrategy: DataSize {}
-}
-
-/// How a [`Session`] handles the round-trip time.
-///
-/// Computing the round-trip time of a connection requires constantly sending
-/// data, waiting for the peer to acknowledge that they've received that data,
-/// and tracking how long it took for them to acknowledge it. Naturally, this
-/// introduces some bandwidth overhead as to have an accurate RTT estimate we
-/// have to constantly be sending data, even if the user code isn't sending any
-/// messages right now.
-///
-/// The session can handle computing RTT itself if [`WithInternalRtt`] is used.
-/// However, some transport implementations may already have their own way of
-/// measuring RTT. If we can use the implementation's existing RTT calculation
-/// machinery, we can avoid having to send these empty packets, and reduce the
-/// bandwidth overhead. If you already have RTT values from your transport,
-/// prefer using [`WithExternalRtt`] and manually calling [`Session::set_rtt`]
-/// in your update loop.
-pub trait RttStrategy: private::RttStrategy {
-    /// Gets the current RTT sample values.
-    fn sample(&self) -> RttSample;
-
-    /// Updates this RTT strategy with the RTT of one of our packets we just
-    /// received an acknowledgement for.
-    fn update(&mut self, rtt: Duration);
-}
-
-/// The [`Session`] manages RTT by itself.
-///
-/// See [`RttStrategy`].
-#[derive(Debug, DataSize)]
-pub struct WithInternalRtt {
-    estimator: RttEstimator,
-}
-
-impl private::RttStrategy for WithInternalRtt {}
-
-impl RttStrategy for WithInternalRtt {
-    fn sample(&self) -> RttSample {
-        self.estimator.get()
-    }
-
-    fn update(&mut self, rtt: Duration) {
-        self.estimator.update(rtt);
-    }
-}
-
-/// The [`Session`] has its RTT externally managed by the consumer of the
-/// session.
-///
-/// See [`RttStrategy`].
-///
-/// If using this strategy, make sure to call [`Session::set_rtt`] regularly.
-#[derive(Debug, DataSize)]
-pub struct WithExternalRtt {
-    last: RttSample,
-}
-
-impl private::RttStrategy for WithExternalRtt {}
-
-impl RttStrategy for WithExternalRtt {
-    fn sample(&self) -> RttSample {
-        self.last
-    }
-
-    fn update(&mut self, _: Duration) {}
+    rtt: RttEstimator,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DataSize)]
@@ -283,13 +209,31 @@ pub struct OutOfMemory;
 /// least one fragment.
 pub const OVERHEAD: usize = PacketHeader::MAX_ENCODE_LEN + FragmentHeader::MAX_ENCODE_LEN + 1;
 
-impl<R> Session<R> {
-    fn new(
+impl Session {
+    /// Creates a new session.
+    ///
+    /// See [`Session`] for an explanation of what the `min_mtu` and
+    /// `initial_mtu` values mean.
+    ///
+    /// If you are unsure what to use for `min_mtu`, see if your underlying
+    /// transport has a minimum packet size that it supports. If not, consider
+    /// using what [RFC 9000 Section 14.2] (the spec behind QUIC) uses, which
+    /// is `1200`.
+    ///
+    /// `initial_mtu` should be an initial path MTU estimate if you have one,
+    /// otherwise it may be the same as `min_mtu`.
+    ///
+    /// # Errors
+    ///
+    /// Errors if `min_mtu` is smaller than [`OVERHEAD`], or if
+    /// `initial_mtu < min_mtu`.
+    ///
+    /// [RFC 9000 Section 14.2]: https://www.rfc-editor.org/rfc/rfc9000.html#section-14-2
+    pub fn new(
         now: Instant,
         config: SessionConfig,
         min_mtu: usize,
         initial_mtu: usize,
-        rtt: R,
     ) -> Result<Self, MtuTooSmall> {
         if min_mtu < OVERHEAD {
             return Err(MtuTooSmall {
@@ -361,7 +305,7 @@ impl<R> Session<R> {
             packets_recv: 0,
             packets_acked: 0,
             bytes_recv: 0,
-            rtt,
+            rtt: RttEstimator::new(INITIAL_RTT),
         })
     }
 
@@ -398,6 +342,12 @@ impl<R> Session<R> {
             self.mtu = mtu;
             Ok(())
         }
+    }
+
+    /// Gets the current RTT estimation state.
+    #[must_use]
+    pub const fn rtt(&self) -> &RttEstimator {
+        &self.rtt
     }
 
     /// Gets how many packets have been sent out in total through
@@ -447,9 +397,7 @@ impl<R> Session<R> {
     pub const fn max_memory_usage(&self) -> usize {
         self.max_memory_usage
     }
-}
 
-impl<R: RttStrategy> Session<R> {
     /// Gets the total number of bytes this session occupies in memory.
     ///
     /// This includes both on the stack and on the heap.
@@ -478,116 +426,20 @@ impl<R: RttStrategy> Session<R> {
 
         Ok(())
     }
-
-    /// Gets the current RTT estimation.
-    #[must_use]
-    pub fn rtt(&self) -> Duration {
-        self.rtt.sample()
-    }
-}
-
-impl Session<WithInternalRtt> {
-    /// Creates a new session which manages its own RTT by itself.
-    ///
-    /// See [`Session`] for an explanation of what the `min_mtu` and
-    /// `initial_mtu` values mean.
-    ///
-    /// If you are unsure what to use for `min_mtu`, see if your underlying
-    /// transport has a minimum packet size that it supports. If not, consider
-    /// using what [RFC 9000 Section 14.2] (the spec behind QUIC) uses, which
-    /// is `1200`.
-    ///
-    /// `initial_mtu` should be an initial path MTU estimate if you have one,
-    /// otherwise it may be the same as `min_mtu`.
-    ///
-    /// # Errors
-    ///
-    /// Errors if `min_mtu` is smaller than [`OVERHEAD`], or if
-    /// `initial_mtu < min_mtu`.
-    ///
-    /// [RFC 9000 Section 14.2]: https://www.rfc-editor.org/rfc/rfc9000.html#section-14-2
-    pub fn with_internal_rtt(
-        now: Instant,
-        config: SessionConfig,
-        min_mtu: usize,
-        initial_mtu: usize,
-    ) -> Result<Self, MtuTooSmall> {
-        Self::new(
-            now,
-            config,
-            min_mtu,
-            initial_mtu,
-            WithInternalRtt {
-                estimator: RttEstimator::new(INITIAL_RTT),
-            },
-        )
-    }
-
-    /// Gets the state of the [`RttEstimator`].
-    #[must_use]
-    pub fn rtt_estimator(&self) -> &RttEstimator {
-        &self.rtt.estimator
-    }
-}
-
-impl Session<WithExternalRtt> {
-    /// Creates a new session which must have its RTT managed by the session
-    /// user.
-    ///
-    /// See [`Session`] for an explanation of what the `min_mtu` and
-    /// `initial_mtu` values mean.
-    ///
-    /// If you are unsure what to use for `min_mtu`, see if your underlying
-    /// transport has a minimum packet size that it supports. If not, consider
-    /// using what [RFC 9000 Section 14.2] (the spec behind QUIC) uses, which
-    /// is `1200`.
-    ///
-    /// `initial_mtu` should be an initial path MTU estimate if you have one,
-    /// otherwise it may be the same as `min_mtu`.
-    ///
-    /// # Errors
-    ///
-    /// Errors if `min_mtu` is smaller than [`OVERHEAD`], or if
-    /// `initial_mtu < min_mtu`.
-    ///
-    /// [RFC 9000 Section 14.2]: https://www.rfc-editor.org/rfc/rfc9000.html#section-14-2
-    pub fn with_external_rtt(
-        now: Instant,
-        config: SessionConfig,
-        min_mtu: usize,
-        initial_mtu: usize,
-    ) -> Result<Self, MtuTooSmall> {
-        Self::new(
-            now,
-            config,
-            min_mtu,
-            initial_mtu,
-            WithExternalRtt { last: INITIAL_RTT },
-        )
-    }
-
-    /// Updates the internal RTT value.
-    pub fn set_rtt(&mut self, rtt: Duration) {
-        self.rtt.last = rtt;
-    }
 }
 
 /// Indicates that this client transport may be backed by a [`Session`].
 pub trait SessionBacked {
-    type RttStrategy: RttStrategy;
-
     /// Gets the [`Session`] that this client transport is currently using to
     /// manage its connection.
-    fn get_session(&self) -> Option<&Session<Self::RttStrategy>>;
+    fn get_session(&self) -> Option<&Session>;
 }
 
 #[cfg(feature = "condition")]
 impl<T: aeronet::client::ClientTransport + SessionBacked> SessionBacked
     for aeronet::condition::ConditionedClient<T>
 {
-    type RttStrategy = T::RttStrategy;
-
-    fn get_session(&self) -> Option<&Session<Self::RttStrategy>> {
+    fn get_session(&self) -> Option<&Session> {
         self.inner().get_session()
     }
 }

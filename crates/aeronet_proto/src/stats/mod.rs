@@ -14,7 +14,7 @@ use ringbuf::{
 };
 use web_time::Duration;
 
-use crate::session::{RttStrategy, Session};
+use crate::session::Session;
 
 /// Stores network statistics collected from a [`Session`].
 ///
@@ -29,6 +29,8 @@ pub struct SessionStats {
 pub struct Sample {
     /// Smoothed session RTT.
     pub rtt: Duration,
+    /// Conservative session RTT.
+    pub conservative_rtt: Duration,
     /// Number of bytes of memory used for buffering messages.
     pub memory_usage: usize,
     /// Number of send bytes used.
@@ -134,8 +136,9 @@ impl SessionStats {
 
     /// Inserts a new sample into this stats tracker by reading the state of a
     /// [`Session`].
-    pub fn update<R: RttStrategy>(&mut self, session: &Session<R>) {
-        let rtt = session.rtt();
+    pub fn update(&mut self, session: &Session) {
+        let rtt = session.rtt().get();
+        let conservative_rtt = session.rtt().conservative();
         let memory_usage = session.memory_usage();
         let bytes_used = session.bytes_left().used();
 
@@ -215,6 +218,7 @@ impl SessionStats {
 
         self.samples.push_overwrite(Sample {
             rtt,
+            conservative_rtt,
             memory_usage,
             bytes_used,
             bytes_sent_total,

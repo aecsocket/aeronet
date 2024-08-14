@@ -12,10 +12,7 @@ use ringbuf::traits::{Consumer, Observer};
 use size_format::{BinaryPrefixes, PointSeparated, SizeFormatter};
 use web_time::Instant;
 
-use crate::{
-    session::{RttStrategy, Session},
-    stats::SessionStats,
-};
+use crate::{session::Session, stats::SessionStats};
 
 /// Allows visualizing the samples stored in a [`SessionStats`] by drawing an
 /// [`egui`] window with plots and text.
@@ -81,19 +78,15 @@ const fn color(h: f32) -> Hsva {
 
 impl SessionStatsVisualizer {
     /// Draws the session stats window.
-    pub fn draw<R: RttStrategy>(
-        &mut self,
-        ctx: &egui::Context,
-        session: &Session<R>,
-        stats: &SessionStats,
-    ) {
+    pub fn draw(&mut self, ctx: &egui::Context, session: &Session, stats: &SessionStats) {
         let now = Instant::now();
         egui::Window::new("Network Stats").show(ctx, |ui| {
             let samples = stats.capacity().get();
             let sample_rate = f64::from(stats.sample_rate());
             let history = samples as f64 / sample_rate;
 
-            let (rtt, buf_mem, bytes_used, tx, rx, loss): (
+            let (rtt, crtt, buf_mem, bytes_used, tx, rx, loss): (
+                Vec<_>,
                 Vec<_>,
                 Vec<_>,
                 Vec<_>,
@@ -108,6 +101,7 @@ impl SessionStatsVisualizer {
                     let x = -(index as f64 / sample_rate);
                     (
                         [x, (sample.rtt.as_millis() * 1000) as f64],
+                        [x, (sample.conservative_rtt.as_millis() * 1000) as f64],
                         [x, sample.memory_usage as f64],
                         [x, sample.bytes_used as f64],
                         [x, sample.bytes_sent_delta as f64 * sample_rate],

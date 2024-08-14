@@ -8,11 +8,12 @@ use web_time::Instant;
 
 use crate::{
     msg::{FragmentDecodeError, ReassembleError},
+    rtt::RttEstimator,
     seq::SeqBuf,
     ty::{Fragment, MessageSeq, PacketHeader, PacketSeq},
 };
 
-use super::{FlushedPacket, RecvLane, RecvLaneKind, RttStrategy, SendLane, Session};
+use super::{FlushedPacket, RecvLane, RecvLaneKind, SendLane, Session};
 
 /// Failed to [`Session::recv`] a packet.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -34,7 +35,7 @@ pub enum RecvError {
     Reassemble(#[source] ReassembleError),
 }
 
-impl<R: RttStrategy> Session<R> {
+impl Session {
     /// Starts receiving a packet.
     ///
     /// If this is successful, this returns:
@@ -130,7 +131,7 @@ impl<R: RttStrategy> Session<R> {
     fn recv_acks<'session, const N: usize>(
         flushed_packets: &'session mut SeqBuf<FlushedPacket, N>,
         send_lanes: &'session mut [SendLane],
-        rtt: &'session mut R,
+        rtt: &'session mut RttEstimator,
         packets_acked: &'session mut usize,
         now: Instant,
         acked_seqs: impl Iterator<Item = PacketSeq> + 'session,

@@ -9,12 +9,12 @@ use web_time::Instant;
 use crate::{
     limit::Limit,
     msg::MessageTooLarge,
+    rtt::RttEstimator,
     ty::{Fragment, FragmentHeader, MessageSeq, PacketHeader, PacketSeq},
 };
 
 use super::{
-    FlushedPacket, FragmentPath, RttStrategy, SendLane, SendLaneKind, SentFragment, SentMessage,
-    Session,
+    FlushedPacket, FragmentPath, SendLane, SendLaneKind, SentFragment, SentMessage, Session,
 };
 
 /// Key identifying a message sent across a [`Session`].
@@ -94,7 +94,7 @@ pub enum SendError {
     MessageTooLarge(MessageTooLarge),
 }
 
-impl<R: RttStrategy> Session<R> {
+impl Session {
     /// Buffers up a message for sending on this session.
     ///
     /// This will not construct any packets until the next [`Session::flush`]
@@ -315,7 +315,7 @@ impl<R: RttStrategy> Session<R> {
 
     fn write_frag_path(
         now: Instant,
-        rtt: &R,
+        rtt: &RttEstimator,
         send_lanes: &mut [SendLane],
         bytes_left: &mut impl Limit,
         packet: &mut BytesMut,
@@ -365,13 +365,7 @@ impl<R: RttStrategy> Session<R> {
             SendLaneKind::Reliable => {
                 // don't drop the frag, just attempt to resend it later
                 // it'll be dropped when the peer acks it
-                //
-                // this uses RTT as the delay until resending, but QUIC spec uses PTO
-                // we use RTT instead of PTO because:
-                // - we don't have access to PTO since the session doesn't track RTT variance
-                //   (the impl might i.e. WebTransport, but we can't guarantee that)
-                // - imo RTT makes more sense - why wait an extra variance amount before retransmission?
-                sent_frag.next_flush_at = now + rtt.sample();
+                sent_frag.next_flush_at = now + rtt.pto();
             }
         }
 
