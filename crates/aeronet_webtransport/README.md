@@ -88,8 +88,8 @@ fn create_session_config() -> SessionConfig { unimplemented!() }
 
 ## Server
 
-Create a closed [`WebTransportServer`] using [`WebTransportServer::new`], and use
-[`WebTransportServer::open`] to start opening this server and have it listen for client connections,
+Create a closed `WebTransportServer` using `WebTransportServer::new`, and use
+`WebTransportServer::open` to start opening this server and have it listen for client connections,
 passing in your server configuration (i.e. what port to bind to).
 
 In Bevy, you can use `App::init_resource::<WebTransportServer>()` to automatically insert a
@@ -97,9 +97,9 @@ closed server into your app.
 
 **Important:** after receiving a [`ServerEvent::Connecting`], you must manually decide whether to
 accept or reject the client.
-- Use [`server::Connecting`] to decide whether to accept this client based on their path, authority,
+- Use `server::Connecting` to decide whether to accept this client based on their path, authority,
   HTTP headers etc.
-- Use [`WebTransportServer::respond_to_request`] to decide whether this client is allowed to connect
+- Use `WebTransportServer::respond_to_request` to decide whether this client is allowed to connect
   or not.
 
 ```rust
@@ -159,7 +159,7 @@ cannot easily be routed to (e.g. virtual machines or virtual servers which can b
 demand). You can specify a list of *certificate hashes* which the client will implicitly trust
 (some restrictions on these certificates apply - see the [WebTransport documentation]).
 
-On the server side, use [`cert::hash_to_b64`] on your server's certificate to generate a base 64
+On the server side, use `cert::hash_to_b64` on your server's certificate to generate a base 64
 encoded version of the certificate hash.
 On the client side, use [`cert::hash_from_b64`] to decode the base 64 string into bytes of the
 certificate hash. You can use this certificate hash value in either the `ClientConfigBuilder`
@@ -184,8 +184,4 @@ On Firefox, I don't know what the equivalent flags are. PRs open!
 [`WebTransportClient`]: client::WebTransportClient
 [`WebTransportClient::new`]: client::WebTransportClient::new
 [`WebTransportClient::connect`]: client::WebTransportClient::connect
-[`WebTransportServer`]: server::WebTransportServer
-[`WebTransportServer::new`]: server::WebTransportServer::new
-[`WebTransportServer::open`]: server::WebTransportServer::open
-[`WebTransportServer::respond_to_request`]: server::WebTransportServer::respond_to_request
 [WebTransport documentation]: https://developer.mozilla.org/en-US/docs/Web/API/WebTransport/WebTransport#servercertificatehashes

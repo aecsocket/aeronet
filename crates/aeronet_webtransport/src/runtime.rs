@@ -7,7 +7,7 @@ use xwt_core::utils::maybe;
 /// Provides a platform-agnostic way of spawning futures required to drive a
 /// WebTransport endpoint.
 ///
-/// [`WebTransportClient::connect`] and [`WebTransportServer::open`] both return
+/// Connecting a WebTransport client or opening a WebTransport server returns
 /// [`Future`]s which must be spawned on an async runtime. However, which
 /// runtime to use exactly (and how that runtime is provided) is
 /// target-dependent. This type exists to provide a platform-agnostic way of
@@ -34,9 +34,6 @@ use xwt_core::utils::maybe;
 /// `wasm-bindgen`.
 ///
 /// If using Bevy, you can use this as a resource in your systems.
-///
-/// [`WebTransportClient::connect`]: crate::client::WebTransportClient::connect
-/// [`WebTransportServer::open`]: crate::server::WebTransportServer::open
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportRuntime {

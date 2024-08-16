@@ -17,6 +17,7 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 rustflags = ["--cfg=web_sys_unstable_apis"]
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [features]
 ## Enables [`rustls/dangerous-configuration`](https://docs.rs/rustls/latest/rustls/#crate-features)
