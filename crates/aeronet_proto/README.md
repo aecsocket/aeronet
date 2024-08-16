@@ -69,11 +69,8 @@ terminology and implementation.
 The aeronet protocol can be used on top of nearly any transport. The requirements are:
 - The transport MUST be able to send packets between peers, where a packet is defined as a
   variable-sized sequence of bytes
-- Packets MUST be guaranteed to have the same contents after being transported, although they may
-  be truncated or extended
-  - If the packet is truncated or extended, this is caught as an error by the protocol, and is
-    handled safely
-  - The transport MUST guarantee that the same bytes were sent via e.g. a checksum or encryption
+- Packets MUST be guaranteed to have the same contents after being transported, without being
+  truncated or extended
 - Neither reliability, ordering, nor deduplication have to be guaranteed
 
 ## Layout

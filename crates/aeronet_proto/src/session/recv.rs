@@ -10,7 +10,7 @@ use crate::{
     msg::{FragmentDecodeError, ReassembleError},
     rtt::RttEstimator,
     seq::SeqBuf,
-    ty::{Fragment, MessageSeq, PacketHeader, PacketSeq},
+    ty::{Fragment, MessageSeq, PacketFlags, PacketHeader, PacketSeq},
 };
 
 use super::{FlushedPacket, RecvLane, RecvLaneKind, SendLane, Session};
@@ -98,34 +98,38 @@ impl Session {
             .map_err(RecvError::DecodeHeader)?;
         self.acks.ack(header.seq);
 
-        trace_span!("recv", packet = header.seq.0 .0).in_scope(|| {
-            if !packet.is_empty() {
-                trace!("Received fragment packet");
-                // this packet contains actual fragment payloads, so we need to
-                // inform the peer that we've received these frags ASAP
-                self.next_ack_at = now;
+        let span = trace_span!("recv", packet = header.seq.0 .0);
+        let _span = span.enter();
+
+        if packet.is_empty() {
+            if header.flags.contains(PacketFlags::PONG) {
+                trace!("Got pong packet - not sending response");
             } else {
-                trace!("Received ack packet");
+                trace!("Got ping packet - sending pong");
+                self.send_pong = true;
             }
+        } else {
+            trace!(len = packet.len(), "Got payload packet");
+            self.next_ping_at = now;
+        }
 
-            let acks = Self::recv_acks(
-                &mut self.flushed_packets,
-                &mut self.send_lanes,
-                &mut self.rtt,
-                &mut self.packets_acked,
+        let acks = Self::recv_acks(
+            &mut self.flushed_packets,
+            &mut self.send_lanes,
+            &mut self.rtt,
+            &mut self.packets_acked,
+            now,
+            header.acks.seqs(),
+        );
+
+        Ok((
+            acks,
+            RecvMessages {
+                recv_lanes: &mut self.recv_lanes,
                 now,
-                header.acks.seqs(),
-            );
-
-            Ok((
-                acks,
-                RecvMessages {
-                    recv_lanes: &mut self.recv_lanes,
-                    now,
-                    packet,
-                },
-            ))
-        })
+                packet,
+            },
+        ))
     }
 
     fn recv_acks<'session, const N: usize>(
@@ -150,7 +154,11 @@ impl Session {
 
                 *packets_acked = packets_acked.saturating_add(1);
                 let packet_rtt = now.saturating_duration_since(packet.flushed_at);
-                trace!(packet_rtt = field::debug(packet_rtt), "Received ack");
+                trace!(
+                    packet = seq.0 .0,
+                    rtt = field::debug(packet_rtt),
+                    "Got peer ack"
+                );
                 rtt.update(packet_rtt);
 
                 Box::into_iter(packet.frags)

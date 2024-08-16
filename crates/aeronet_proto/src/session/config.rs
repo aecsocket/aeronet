@@ -5,16 +5,17 @@ use web_time::Duration;
 ///
 /// Not all session-specific configurations are exposed here. Transport-specific
 /// settings such as maximum packet length are not exposed to users, and are
-/// instead set directly when calling [`Session::new`].
+/// instead set directly when creating a new session.
 ///
 /// [`Session`]: crate::session::Session
-/// [`Session::new`]: crate::session::Session::new
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionConfig {
-    /// Configurations for the lanes which can be used to send out data.
-    pub send_lanes: Vec<LaneKind>,
-    /// Configurations for the lanes which can be used to receive data.
-    pub recv_lanes: Vec<LaneKind>,
+    /// Configurations for the lanes which the client uses to send data, and
+    /// which the server uses to receive data.
+    pub client_lanes: Vec<LaneKind>,
+    /// Configurations for the lanes which the server uses to send data, and
+    /// which the client uses to receive data.
+    pub server_lanes: Vec<LaneKind>,
     /// Maximum number of bytes of memory which can be used for buffering
     /// messages.
     ///
@@ -64,59 +65,61 @@ pub struct SessionConfig {
     /// If we haven't sent a packet with any actual message fragment within
     /// `max_ack_delay`, the transport will automatically send out an empty ack
     /// packet. The delay is to avoid flooding the connection with ack packets,
-    /// since although they are small they are not free. Note that this means
-    /// that RTT estimates may not be accurate below `max_ack_delay` - even if
-    /// the real RTT is smaller than the ack delay, we won't be able to observe
-    /// it unless the user code sends packets in a shorter period of time than
-    /// this delay.
+    /// since although they are small they are not free.
     pub max_ack_delay: Duration,
 }
 
 impl Default for SessionConfig {
     fn default() -> Self {
         Self {
-            send_lanes: Vec::new(),
-            recv_lanes: Vec::new(),
+            client_lanes: Vec::new(),
+            server_lanes: Vec::new(),
             max_memory_usage: 4 * 1024 * 1024,
             send_bytes_per_sec: usize::MAX,
-            max_ack_delay: Duration::from_millis(10),
+            max_ack_delay: Duration::from_millis(1000),
         }
     }
 }
 
 impl SessionConfig {
     /// Adds the given lanes to this configuration's
-    /// [`SessionConfig::send_lanes`].
+    /// [`SessionConfig::client_lanes`].
     ///
     /// You can `impl From<LaneKind> for [your own type]` to use it as the item
     /// in this iterator.
     #[must_use]
-    pub fn with_send_lanes(mut self, lanes: impl IntoIterator<Item = impl Into<LaneKind>>) -> Self {
-        self.send_lanes.extend(lanes.into_iter().map(Into::into));
+    pub fn with_client_lanes(
+        mut self,
+        lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
+    ) -> Self {
+        self.client_lanes.extend(lanes.into_iter().map(Into::into));
         self
     }
 
     /// Adds the given lanes to this configuration's
-    /// [`SessionConfig::recv_lanes`].
+    /// [`SessionConfig::server_lanes`].
     ///
     /// You can implement `From<LaneKind> for [your own type]` to use it as
     /// the item in this iterator.
     #[must_use]
-    pub fn with_recv_lanes(mut self, lanes: impl IntoIterator<Item = impl Into<LaneKind>>) -> Self {
-        self.recv_lanes.extend(lanes.into_iter().map(Into::into));
+    pub fn with_server_lanes(
+        mut self,
+        lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
+    ) -> Self {
+        self.server_lanes.extend(lanes.into_iter().map(Into::into));
         self
     }
 
     /// Adds the given lanes to this configuration's
-    /// [`SessionConfig::send_lanes`] and [`SessionConfig::recv_lanes`].
+    /// [`SessionConfig::client_lanes`] and [`SessionConfig::server_lanes`].
     ///
     /// You can implement `From<LaneKind> for [your own type]` to use it as
     /// the item in this iterator.
     #[must_use]
     pub fn with_lanes(mut self, lanes: impl IntoIterator<Item = impl Into<LaneKind>>) -> Self {
         let lanes = lanes.into_iter().map(Into::into).collect::<Vec<_>>();
-        self.send_lanes.extend(lanes.iter().copied());
-        self.recv_lanes.extend(lanes.iter().copied());
+        self.client_lanes.extend(lanes.iter().copied());
+        self.server_lanes.extend(lanes.iter().copied());
         self
     }
 

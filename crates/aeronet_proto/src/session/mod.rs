@@ -30,11 +30,16 @@ use crate::{
 #[derive(Derivative, DataSize)]
 #[derivative(Debug)]
 pub struct Session {
-    #[data_size(with = mem::size_of_val)]
+    #[data_size(skip)]
     connected_at: Instant,
     flushed_packets: SeqBuf<FlushedPacket, 1024>,
     acks: Acknowledge,
     max_memory_usage: usize,
+
+    // rtt estimation and acks
+    ping_interval: Duration,
+    next_ping_at: Instant,
+    send_pong: bool,
 
     // send
     send_lanes: Box<[SendLane]>,
@@ -43,8 +48,6 @@ pub struct Session {
     mtu: usize,
     bytes_left: TokenBucket,
     next_packet_seq: PacketSeq,
-    max_ack_delay: Duration,
-    next_ack_at: Instant,
     packets_sent: usize,
     bytes_sent: usize,
 
@@ -54,6 +57,12 @@ pub struct Session {
     packets_acked: usize,
     bytes_recv: usize,
     rtt: RttEstimator,
+}
+
+#[derive(Debug, Clone, Copy, DataSize)]
+struct NextPing {
+    at: Instant,
+    pong: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DataSize)]
@@ -76,15 +85,15 @@ struct SentFragment {
     #[derivative(Debug = "ignore")]
     #[data_size(with = Bytes::len)]
     payload: Bytes,
-    #[data_size(with = mem::size_of_val)]
+    #[data_size(skip)]
     sent_at: Instant,
-    #[data_size(with = mem::size_of_val)]
+    #[data_size(skip)]
     next_flush_at: Instant,
 }
 
 #[derive(Debug, DataSize)]
 struct FlushedPacket {
-    #[data_size(with = mem::size_of_val)]
+    #[data_size(skip)]
     flushed_at: Instant,
     frags: Box<[FragmentPath]>,
 }
@@ -210,26 +219,7 @@ pub struct OutOfMemory;
 pub const OVERHEAD: usize = PacketHeader::MAX_ENCODE_LEN + FragmentHeader::MAX_ENCODE_LEN + 1;
 
 impl Session {
-    /// Creates a new session.
-    ///
-    /// See [`Session`] for an explanation of what the `min_mtu` and
-    /// `initial_mtu` values mean.
-    ///
-    /// If you are unsure what to use for `min_mtu`, see if your underlying
-    /// transport has a minimum packet size that it supports. If not, consider
-    /// using what [RFC 9000 Section 14.2] (the spec behind QUIC) uses, which
-    /// is `1200`.
-    ///
-    /// `initial_mtu` should be an initial path MTU estimate if you have one,
-    /// otherwise it may be the same as `min_mtu`.
-    ///
-    /// # Errors
-    ///
-    /// Errors if `min_mtu` is smaller than [`OVERHEAD`], or if
-    /// `initial_mtu < min_mtu`.
-    ///
-    /// [RFC 9000 Section 14.2]: https://www.rfc-editor.org/rfc/rfc9000.html#section-14-2
-    pub fn new(
+    fn new<const CLIENT: bool>(
         now: Instant,
         config: SessionConfig,
         min_mtu: usize,
@@ -249,14 +239,23 @@ impl Session {
         }
 
         let max_payload_len = min_mtu - OVERHEAD;
+        let (send_lanes, recv_lanes) = if CLIENT {
+            (config.client_lanes, config.server_lanes)
+        } else {
+            (config.server_lanes, config.client_lanes)
+        };
+
         Ok(Self {
             connected_at: now,
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
             acks: Acknowledge::new(),
             max_memory_usage: config.max_memory_usage,
 
-            send_lanes: config
-                .send_lanes
+            ping_interval: config.max_ack_delay,
+            next_ping_at: now + config.max_ack_delay,
+            send_pong: false,
+
+            send_lanes: send_lanes
                 .into_iter()
                 .map(|kind| SendLane {
                     sent_msgs: AHashMap::new(),
@@ -276,13 +275,10 @@ impl Session {
             mtu: initial_mtu,
             bytes_left: TokenBucket::new(config.send_bytes_per_sec),
             next_packet_seq: PacketSeq::default(),
-            max_ack_delay: config.max_ack_delay,
-            next_ack_at: now + config.max_ack_delay,
             packets_sent: 0,
             bytes_sent: 0,
 
-            recv_lanes: config
-                .recv_lanes
+            recv_lanes: recv_lanes
                 .into_iter()
                 .map(|kind| RecvLane {
                     frags: FragmentReceiver::new(max_payload_len),
@@ -307,6 +303,62 @@ impl Session {
             bytes_recv: 0,
             rtt: RttEstimator::new(INITIAL_RTT),
         })
+    }
+
+    /// Creates a new client session.
+    ///
+    /// See [`Session`] for an explanation of what the `min_mtu` and
+    /// `initial_mtu` values mean.
+    ///
+    /// If you are unsure what to use for `min_mtu`, see if your underlying
+    /// transport has a minimum packet size that it supports. If not, consider
+    /// using what [RFC 9000 Section 14.2] (the spec behind QUIC) uses, which
+    /// is `1200`.
+    ///
+    /// `initial_mtu` should be an initial path MTU estimate if you have one,
+    /// otherwise it may be the same as `min_mtu`.
+    ///
+    /// # Errors
+    ///
+    /// Errors if `min_mtu` is smaller than [`OVERHEAD`], or if
+    /// `initial_mtu < min_mtu`.
+    ///
+    /// [RFC 9000 Section 14.2]: https://www.rfc-editor.org/rfc/rfc9000.html#section-14-2
+    pub fn client(
+        now: Instant,
+        config: SessionConfig,
+        min_mtu: usize,
+        initial_mtu: usize,
+    ) -> Result<Self, MtuTooSmall> {
+        Self::new::<true>(now, config, min_mtu, initial_mtu)
+    }
+
+    /// Creates a new server session.
+    ///
+    /// See [`Session`] for an explanation of what the `min_mtu` and
+    /// `initial_mtu` values mean.
+    ///
+    /// If you are unsure what to use for `min_mtu`, see if your underlying
+    /// transport has a minimum packet size that it supports. If not, consider
+    /// using what [RFC 9000 Section 14.2] (the spec behind QUIC) uses, which
+    /// is `1200`.
+    ///
+    /// `initial_mtu` should be an initial path MTU estimate if you have one,
+    /// otherwise it may be the same as `min_mtu`.
+    ///
+    /// # Errors
+    ///
+    /// Errors if `min_mtu` is smaller than [`OVERHEAD`], or if
+    /// `initial_mtu < min_mtu`.
+    ///
+    /// [RFC 9000 Section 14.2]: https://www.rfc-editor.org/rfc/rfc9000.html#section-14-2
+    pub fn server(
+        now: Instant,
+        config: SessionConfig,
+        min_mtu: usize,
+        initial_mtu: usize,
+    ) -> Result<Self, MtuTooSmall> {
+        Self::new::<false>(now, config, min_mtu, initial_mtu)
     }
 
     /// Gets when this session was created.

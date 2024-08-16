@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use aeronet_webtransport::runtime::WebTransportRuntime;
+use aeronet_webtransport::{proto::session::SessionConfig, runtime::WebTransportRuntime};
 use bevy::prelude::*;
 use bevy_replicon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,17 @@ pub enum GameState {
     None,
     /// Game is being simulated.
     Playing,
+}
+
+/// Creates a [`SessionConfig`] from [`RepliconChannels`], customized for this
+/// app.
+///
+/// Both the client and server should have the same [`SessionConfig`].
+#[must_use]
+pub fn session_config(channels: &RepliconChannels) -> SessionConfig {
+    SessionConfig::default()
+        .with_client_lanes(channels.client_channels())
+        .with_server_lanes(channels.server_channels())
 }
 
 impl Plugin for MoveBoxPlugin {

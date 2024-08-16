@@ -32,6 +32,7 @@
 
 use aeronet::lane::LaneIndex;
 use arbitrary::Arbitrary;
+use bitflags::bitflags;
 use datasize::DataSize;
 use derivative::Derivative;
 use derive_more::{Add, AddAssign, Deref, DerefMut, From, Sub, SubAssign};
@@ -69,6 +70,24 @@ use octs::Bytes;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Seq(pub u16);
 
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Arbitrary)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    pub struct PacketFlags: u8 {
+        const PONG = 1;
+    }
+}
+
+impl DataSize for PacketFlags {
+    const IS_DYNAMIC: bool = false;
+
+    const STATIC_HEAP_SIZE: usize = 0;
+
+    fn estimate_heap_size(&self) -> usize {
+        Self::STATIC_HEAP_SIZE
+    }
+}
+
 /// Metadata for a packet sent and received by the protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Arbitrary, DataSize)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -77,6 +96,11 @@ pub struct PacketHeader {
     pub seq: PacketSeq,
     /// Informs the receiver which packets the sender has already received.
     pub acks: Acknowledge,
+    /// Extra flags for this packet.
+    ///
+    /// At the protocol level, these are stashed at the start of
+    /// [`Acknowledge::bits`].
+    pub flags: PacketFlags,
 }
 
 /// Sequence number of a packet in transit.
@@ -142,14 +166,14 @@ pub struct MessageSeq(pub Seq);
 /// where we store two pieces of info:
 /// * the last received packet sequence number (`last_recv`)
 /// * a bitfield of which packets before `last_recv` have been acked
-///   (`ack_bits`)
+///   (`bits`)
 ///
-/// If a bit at index `N` is set in `ack_bits`, then the packet with sequence
+/// If a bit at index `N` is set in `bits`, then the packet with sequence
 /// `last_recv - N` has been acked. For example,
 ///
 /// ```text
 /// last_recv: 40
-///  ack_bits: 0b0000..00001001
+///      bits: 0b0000..00001001
 ///                    ^   ^  ^
 ///                    |   |  +- seq 40 (40 - 0) has been acked
 ///                    |   +---- seq 37 (40 - 3) has been acked
@@ -158,6 +182,9 @@ pub struct MessageSeq(pub Seq);
 ///
 /// This info is sent with every packet, and the last 32 packet acknowledgements
 /// are sent, giving a lot of reliability and redundancy for acks.
+///
+/// Note that in real usage, the MSB of `bits` is reserved and used for RTT
+/// estimation info instead.
 ///
 /// [*Gaffer On Games*]: https://gafferongames.com/post/reliable_ordered_messages/#packet-levelacks
 #[derive(Derivative, Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, DataSize)]
@@ -168,7 +195,7 @@ pub struct Acknowledge {
     pub last_recv: PacketSeq,
     /// Bitfield of which packets before `last_recv` have been acknowledged.
     #[derivative(Debug(format_with = "crate::ack::fmt"))]
-    pub ack_bits: u32,
+    pub bits: u32,
 }
 
 /// Part of, or potentially the entirety of, a user-sent message, along with

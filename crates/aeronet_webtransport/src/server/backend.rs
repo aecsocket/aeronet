@@ -143,7 +143,7 @@ async fn handle_session(
         return Err(ServerError::DatagramsNotSupported.into());
     };
     let conn = conn.0;
-    let session = Session::new(Instant::now(), session_config, MIN_MTU, mtu)
+    let session = Session::server(Instant::now(), session_config, MIN_MTU, mtu)
         .map_err(ServerError::MtuTooSmall)?;
 
     debug!("Connection opened, forwarding to frontend");

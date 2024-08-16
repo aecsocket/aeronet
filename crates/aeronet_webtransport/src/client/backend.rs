@@ -39,7 +39,7 @@ pub async fn start(
     let Some(mtu) = conn.max_datagram_size() else {
         return Err(ClientError::DatagramsNotSupported.into());
     };
-    let session = Session::new(Instant::now(), session_config, MIN_MTU, mtu)
+    let session = Session::client(Instant::now(), session_config, MIN_MTU, mtu)
         .map_err(ClientError::MtuTooSmall)?;
 
     #[cfg(target_family = "wasm")]

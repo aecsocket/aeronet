@@ -10,7 +10,6 @@ use aeronet::{
 use aeronet_replicon::server::{ClientKeys, RepliconServerPlugin};
 use aeronet_webtransport::{
     cert,
-    proto::session::SessionConfig,
     runtime::WebTransportRuntime,
     server::{ConnectionResponse, ServerConfig, WebTransportServer},
     shared::RawRtt,
@@ -96,9 +95,7 @@ fn open_server(
         .unwrap()
         .build();
 
-    let session_config = SessionConfig::default()
-        .with_send_lanes(channels.server_channels())
-        .with_recv_lanes(channels.client_channels());
+    let session_config = move_box::session_config(channels.as_ref());
 
     server
         .open(runtime.as_ref(), net_config, session_config)

@@ -9,7 +9,6 @@ use aeronet_webtransport::{
     cert,
     client::{ClientConfig, WebTransportClient},
     proto::{
-        session::SessionConfig,
         stats::{ClientSessionStats, ClientSessionStatsPlugin},
         visualizer::SessionStatsVisualizer,
     },
@@ -84,10 +83,7 @@ fn connect_to_remote(
     runtime: Res<WebTransportRuntime>,
 ) {
     let net_config = net_config(spki_hash);
-    // since we're using replicon, we map each replicon channel to a lane, 1 to 1
-    let session_config = SessionConfig::default()
-        .with_send_lanes(channels.client_channels())
-        .with_recv_lanes(channels.server_channels());
+    let session_config = move_box::session_config(channels.as_ref());
 
     if let Err(err) = client.connect(runtime.as_ref(), net_config, session_config, target) {
         warn!("Failed to start connecting: {:#}", pretty_error(&err));

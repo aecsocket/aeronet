@@ -1,8 +1,6 @@
 //! See [`Acknowledge`].
 
-use std::{convert::Infallible, fmt};
-
-use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
+use std::fmt;
 
 use crate::ty::{Acknowledge, PacketSeq};
 
@@ -52,7 +50,7 @@ impl Acknowledge {
         if let Ok(dist) = u32::try_from(dist) {
             // `seq` is before or equal to `last_recv`,
             // so we only set a bit in the bitfield
-            self.ack_bits |= shl(1, dist);
+            self.bits |= shl(1, dist);
         } else {
             // `dist` is negative
             // `seq` is after `last_recv`,
@@ -69,9 +67,9 @@ impl Acknowledge {
             //                            v----+
             //    new recv_bits: 0b00..000100000000
             //                            ^
-            self.ack_bits = shl(self.ack_bits, shift_by);
+            self.bits = shl(self.bits, shift_by);
             // then also set the `last_recv` in the bitfield
-            self.ack_bits |= 1;
+            self.bits |= 1;
         }
     }
 
@@ -102,7 +100,7 @@ impl Acknowledge {
             Ok(delta) => {
                 // `seq` is before or equal to `last_recv`,
                 // so we check the bitfield
-                self.ack_bits & shl(1, delta) != 0
+                self.bits & shl(1, delta) != 0
             }
             Err(_) => {
                 // `seq` is after `last_recv`,
@@ -121,7 +119,7 @@ impl Acknowledge {
     /// # use aeronet_proto::ty::{PacketSeq, Acknowledge};
     /// let acks = Acknowledge {
     ///     last_recv: PacketSeq::new(50),
-    ///     ack_bits: 0b0010010,
+    ///         bits: 0b0010010,
     /// };
     /// let mut iter = acks.seqs();
     /// assert_eq!(PacketSeq::new(49), iter.next().unwrap());
@@ -135,36 +133,11 @@ impl Acknowledge {
         // the last 32 packets, so it'd be invalid to ack the `last_recv`
         (0..32).filter_map(move |bit_index| {
             let packet_seq = self.last_recv - PacketSeq::new(bit_index);
-            if self.ack_bits & shl(1, u32::from(bit_index)) == 0 {
+            if self.bits & shl(1, u32::from(bit_index)) == 0 {
                 None
             } else {
                 Some(packet_seq)
             }
-        })
-    }
-}
-
-impl FixedEncodeLen for Acknowledge {
-    const ENCODE_LEN: usize = PacketSeq::ENCODE_LEN + u32::ENCODE_LEN;
-}
-
-impl Encode for Acknowledge {
-    type Error = Infallible;
-
-    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
-        dst.write(&self.last_recv)?;
-        dst.write(&self.ack_bits)?;
-        Ok(())
-    }
-}
-
-impl Decode for Acknowledge {
-    type Error = Infallible;
-
-    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
-        Ok(Self {
-            last_recv: src.read()?,
-            ack_bits: src.read()?,
         })
     }
 }
@@ -178,27 +151,7 @@ fn shl(n: u32, by: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use octs::test::*;
-
-    use crate::ty::Seq;
-
     use super::*;
-
-    #[test]
-    fn encode_decode() {
-        hint_round_trip(&Acknowledge {
-            last_recv: PacketSeq::new(0),
-            ack_bits: 0,
-        });
-        hint_round_trip(&Acknowledge {
-            last_recv: PacketSeq(Seq::MAX),
-            ack_bits: u32::MAX,
-        });
-        hint_round_trip(&Acknowledge {
-            last_recv: PacketSeq::new(12),
-            ack_bits: 0b010101,
-        });
-    }
 
     #[test]
     fn shl_in_range() {

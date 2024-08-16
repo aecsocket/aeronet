@@ -209,8 +209,7 @@ impl SessionStats {
         let acks_since_then = packets_acked_now - packets_acked_then;
 
         let loss = if expected_extra_acks == 0 {
-            // reuse the previous sample (or 0.0)
-            loss_last
+            0.0
         } else {
             let acked_frac = acks_since_then as f64 / expected_extra_acks as f64;
             1.0 - acked_frac.clamp(0.0, 1.0)
