@@ -253,7 +253,8 @@ impl Session {
                 }
             }
 
-            let should_send = !packet_frags.is_empty() || !sent_packet_yet;
+            let send_empty = !sent_packet_yet && self.send_ack;
+            let should_send = !packet_frags.is_empty() || send_empty;
             if !should_send {
                 return None;
             }
@@ -271,6 +272,7 @@ impl Session {
             self.packets_sent += 1;
             self.bytes_sent += packet.len();
             self.next_packet_seq += PacketSeq::ONE;
+            self.send_ack = false;
             sent_packet_yet = true;
             Some(packet)
         })

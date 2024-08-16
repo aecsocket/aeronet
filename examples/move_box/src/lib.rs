@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 const MOVE_SPEED: f32 = 5000.0;
 
 /// How many times per second we will replicate entity components.
-pub const TICK_RATE: u16 = 30;
+pub const TICK_RATE: u16 = 128;
 
 /// Sets up replication and basic game systems.
 #[derive(Debug)]

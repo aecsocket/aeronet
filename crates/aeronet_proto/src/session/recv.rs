@@ -102,6 +102,7 @@ impl Session {
         let _span = span.enter();
 
         trace!(len = packet.len(), "Got packet");
+        self.send_ack = true;
 
         let acks = Self::recv_acks(
             &mut self.flushed_packets,

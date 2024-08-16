@@ -43,6 +43,7 @@ pub struct Session {
     mtu: usize,
     bytes_left: TokenBucket,
     next_packet_seq: PacketSeq,
+    send_ack: bool,
     #[data_size(skip)]
     packets_sent: Saturating<usize>,
     #[data_size(skip)]
@@ -265,6 +266,7 @@ impl Session {
             mtu: initial_mtu,
             bytes_left: TokenBucket::new(config.send_bytes_per_sec),
             next_packet_seq: PacketSeq::default(),
+            send_ack: false,
             packets_sent: Saturating(0),
             bytes_sent: Saturating(0),
 
