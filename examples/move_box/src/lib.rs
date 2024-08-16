@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+use aeronet_replicon::channel::IntoLanes;
 use aeronet_webtransport::{proto::session::SessionConfig, runtime::WebTransportRuntime};
 use bevy::prelude::*;
 use bevy_replicon::prelude::*;
@@ -32,8 +33,8 @@ pub enum GameState {
 #[must_use]
 pub fn session_config(channels: &RepliconChannels) -> SessionConfig {
     SessionConfig::default()
-        .with_client_lanes(channels.client_channels())
-        .with_server_lanes(channels.server_channels())
+        .with_client_lanes(channels.client_channels().into_lanes())
+        .with_server_lanes(channels.server_channels().into_lanes())
 }
 
 impl Plugin for MoveBoxPlugin {

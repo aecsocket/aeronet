@@ -24,9 +24,6 @@ condition = ["dep:rand", "dep:rand_distr"]
 ## Enables [`bevy`](https://docs.rs/bevy) support.
 bevy = ["dep:bevy_ecs"]
 
-## Enables [`bevy_replicon`](https://docs.rs/bevy_replicon) support.
-replicon = ["dep:bevy_replicon"]
-
 [dependencies]
 arbitrary = { workspace = true }
 bytes = { workspace = true }
@@ -38,8 +35,6 @@ rand = { workspace = true, optional = true }
 rand_distr = { workspace = true, optional = true }
 
 bevy_ecs = { workspace = true, optional = true }
-
-bevy_replicon = { workspace = true, optional = true }
 
 [dev-dependencies]
 bevy_app = { workspace = true }

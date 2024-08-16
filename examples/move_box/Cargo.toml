@@ -19,6 +19,7 @@ workspace = true
 bevy = { workspace = true, features = ["wayland"] }
 serde = { workspace = true }
 
+aeronet_replicon = { workspace = true }
 aeronet_webtransport = { workspace = true }
 bevy_replicon = { workspace = true }
 

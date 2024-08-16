@@ -10,7 +10,7 @@ keywords = ["gamedev", "network", "bevy"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aecsocket/aeronet"
 rust-version = "1.80.0"
-version = "0.7.0-alpha.2"
+version = "0.7.0-alpha.3"
 
 [workspace.lints.rust]
 missing_docs = "warn"
@@ -29,12 +29,12 @@ similar_names = "allow"
 struct_excessive_bools = "allow"
 
 [workspace.dependencies]
-aeronet = { version = "0.7.0-alpha.2", path = "crates/aeronet" }
-aeronet_channel = { version = "0.7.0-alpha.2", path = "crates/aeronet_channel" }
-aeronet_proto = { version = "0.7.0-alpha.2", path = "crates/aeronet_proto" }
-aeronet_replicon = { version = "0.7.0-alpha.2", path = "crates/aeronet_replicon" }
-aeronet_steam = { version = "0.7.0-alpha.2", path = "crates/aeronet_steam" }
-aeronet_webtransport = { version = "0.7.0-alpha.2", path = "crates/aeronet_webtransport" }
+aeronet = { version = "0.7.0-alpha.3", path = "crates/aeronet" }
+aeronet_channel = { version = "0.7.0-alpha.3", path = "crates/aeronet_channel" }
+aeronet_proto = { version = "0.7.0-alpha.3", path = "crates/aeronet_proto" }
+aeronet_replicon = { version = "0.7.0-alpha.3", path = "crates/aeronet_replicon" }
+aeronet_steam = { version = "0.7.0-alpha.3", path = "crates/aeronet_steam" }
+aeronet_webtransport = { version = "0.7.0-alpha.3", path = "crates/aeronet_webtransport" }
 
 ahash = { version = "0.8.11", default-features = false, features = [
   "std",
