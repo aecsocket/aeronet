@@ -51,6 +51,7 @@ impl<T> RepliconClientPlugin<T> {
     /// Creates the plugin with a given tick rate, in hertz.
     ///
     /// This should match the Replicon server's tick rate.
+    #[must_use]
     pub fn with_tick_rate(tick_rate: u16) -> Self {
         Self {
             update_interval: Duration::from_millis(1000 / u64::from(tick_rate)),

@@ -80,9 +80,9 @@ See [`ty`] for a full description of the encoded packet layout.
 ## Session
 
 The entry point to the API is the [`Session`], which manages incoming and outgoing messages without
-performing any I/O itself. One can be created using [`Session::new`] and providing a configuration
-which determines parameters such as maximum packet length, lanes for sending/receiving, and how
-many bytes can be sent out per second.
+performing any I/O itself. One can be created using [`Session::client`] or [`Session::server`] and
+providing a configuration which determines parameters such as maximum packet length, lanes for
+sending/receiving, and how many bytes can be sent out per second.
 
 The API exposes these main functions:
 - [`Session::send`] to buffer up a message for sending later
@@ -139,7 +139,8 @@ cargo fuzz run <fuzz_target>
 [*Building a Game Network Protocol*]: https://gafferongames.com/categories/building-a-game-network-protocol/
 [*Sequence Buffers*]: https://gafferongames.com/post/reliable_ordered_messages/#sequence-buffers
 [`Session`]: session::Session
-[`Session::new`]: session::Session::new
+[`Session::client`]: session::Session::client
+[`Session::server`]: session::Session::server
 [`Session::send`]: session::Session::send
 [`Session::flush`]: session::Session::flush
 [`Session::recv`]: session::Session::recv

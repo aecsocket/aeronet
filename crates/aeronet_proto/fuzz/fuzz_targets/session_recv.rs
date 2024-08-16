@@ -16,7 +16,7 @@ fuzz_target!(|packet: &[u8]| {
         LaneKind::ReliableOrdered,
     ]);
 
-    let mut s = Session::new(Instant::now(), config, MTU, MTU).unwrap();
+    let mut s = Session::client(Instant::now(), config, MTU, MTU).unwrap();
     let Ok((acks, msgs)) = s.recv(Instant::now(), packet.to_vec()) else {
         return;
     };
