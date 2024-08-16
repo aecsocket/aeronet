@@ -1,6 +1,12 @@
 //! Example server using WebTransport which listens for clients sending strings
 //! and sends back a string reply.
-#![cfg(not(target_family = "wasm"))]
+
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+        fn main() {
+            eprintln!("this example is not for WASM");
+        }
+    } else {
 
 use aeronet::{
     error::pretty_error,
@@ -33,6 +39,7 @@ impl From<AppLane> for LaneIndex {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn main() {
     App::new()
         .add_plugins((MinimalPlugins, LogPlugin::default()))
@@ -164,3 +171,5 @@ fn flush_server(mut server: ResMut<WebTransportServer>) {
         error!("Failed to flush messages: {:#}", pretty_error(&err));
     }
 }
+
+}}
