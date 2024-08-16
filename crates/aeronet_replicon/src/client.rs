@@ -39,6 +39,8 @@ use tracing::{trace, warn};
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct RepliconClientPlugin<T> {
+    /// Interval between when the networking loop will be updated, receiving and
+    /// flushing packets.
     pub update_interval: Duration,
     #[derivative(Debug = "ignore")]
     #[doc = "hidden"]
@@ -46,6 +48,9 @@ pub struct RepliconClientPlugin<T> {
 }
 
 impl<T> RepliconClientPlugin<T> {
+    /// Creates the plugin with a given tick rate, in hertz.
+    ///
+    /// This should match the Replicon server's tick rate.
     pub fn with_tick_rate(tick_rate: u16) -> Self {
         Self {
             update_interval: Duration::from_millis(1000 / u64::from(tick_rate)),
