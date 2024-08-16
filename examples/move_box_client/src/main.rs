@@ -17,7 +17,9 @@ use aeronet_webtransport::{
 use bevy::{ecs::system::SystemId, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_replicon::{client::ClientSet, prelude::*};
-use move_box::{GameState, MoveBoxPlugin, Player, PlayerColor, PlayerMove, PlayerPosition};
+use move_box::{
+    GameState, MoveBoxPlugin, Player, PlayerColor, PlayerMove, PlayerPosition, TICK_RATE,
+};
 
 /// State of the [`egui`] interface used for connecting and disconnecting.
 #[derive(Debug, Default, Resource)]
@@ -42,7 +44,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            RepliconClientPlugin::<WebTransportClient>::default(),
+            RepliconClientPlugin::<WebTransportClient>::with_tick_rate(TICK_RATE),
             MoveBoxPlugin,
             ClientSessionStatsPlugin::<WebTransportClient>::default(),
             EguiPlugin,

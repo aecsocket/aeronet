@@ -10,8 +10,7 @@ use crate::{
     limit::Limit,
     msg::MessageTooLarge,
     rtt::RttEstimator,
-    session::NextPing,
-    ty::{Fragment, FragmentHeader, MessageSeq, PacketFlags, PacketHeader, PacketSeq},
+    ty::{Fragment, FragmentHeader, MessageSeq, PacketHeader, PacketSeq},
 };
 
 use super::{
@@ -183,12 +182,6 @@ impl Session {
     /// along the transport.
     #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn flush(&mut self, now: Instant) -> impl Iterator<Item = Bytes> + '_ {
-        enum FlushKind {
-            None,
-            RttTracked,
-            RttUntracked,
-        }
-
         // collect the paths of the frags to send, along with how old they are
         let mut frag_paths = self
             .send_lanes
@@ -218,11 +211,6 @@ impl Session {
             // ourselves, leading to very large `mtu`s (~512KiB)
             let mut packet = BytesMut::new();
 
-            let mut flags = PacketFlags::empty();
-            if self.send_pong {
-                flags |= PacketFlags::PONG;
-            }
-
             // we can't put more than either `mtu` or `bytes_left`
             // bytes into this packet, so we track this as well
             let mut bytes_left = (&mut self.bytes_left).min_of(self.mtu);
@@ -232,7 +220,6 @@ impl Session {
                 .write(PacketHeader {
                     seq: packet_seq,
                     acks: self.acks,
-                    flags,
                 })
                 .expect("BytesMut should grow the buffer when writing over capacity");
 
@@ -266,50 +253,26 @@ impl Session {
                 }
             }
 
-            let flush_kind = if !packet_frags.is_empty() {
-                FlushKind::RttTracked
-            } else if !sent_packet_yet {
-                if self.send_pong {}
-
-                if self.next_ping.pong {
-                    FlushKind::RttUntracked
-                } else {
-                    FlushKind::RttTracked
-                }
-            } else {
-                FlushKind::None
-            };
-
-            match flush_kind {
-                FlushKind::None => return None,
-                FlushKind::RttTracked => {
-                    trace!(
-                        num_frags = packet_frags.len(),
-                        "Flushed packet, tracking RTT"
-                    );
-                    self.flushed_packets.insert(
-                        packet_seq.0 .0,
-                        FlushedPacket {
-                            flushed_at: now,
-                            frags: packet_frags.into_boxed_slice(),
-                        },
-                    );
-                    // todo packets_sent / ack_eliciting_packets_sent
-                }
-                FlushKind::RttUntracked => {
-                    trace!("Flushed packet, not tracking RTT");
-                }
+            let send_if_empty = !sent_packet_yet && now >= self.next_ping_at;
+            let should_send = !packet_frags.is_empty() || send_if_empty;
+            if !should_send {
+                return None;
             }
+
+            trace!(num_frags = packet_frags.len(), "Flushed packet");
+            self.flushed_packets.insert(
+                packet_seq.0 .0,
+                FlushedPacket {
+                    flushed_at: now,
+                    frags: packet_frags.into_boxed_slice(),
+                },
+            );
 
             let packet = packet.freeze();
             self.packets_sent += 1;
             self.bytes_sent += packet.len();
             self.next_packet_seq += PacketSeq::ONE;
-            self.next_ping = NextPing {
-                at: now + self.ping_interval,
-                pong: false,
-            };
-            self.send_pong = false;
+            self.next_ping_at = now + self.ping_interval;
             sent_packet_yet = true;
             Some(packet)
         })

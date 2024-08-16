@@ -1,6 +1,6 @@
 //! Client-side traits and items.
 
-use std::{marker::PhantomData, num::Saturating};
+use std::{marker::PhantomData, num::Saturating, time::Duration};
 
 use aeronet::{
     client::{
@@ -17,7 +17,7 @@ use bevy_replicon::{
     prelude::{RepliconClient, RepliconClientStatus},
     server::ServerSet,
 };
-use bevy_time::prelude::*;
+use bevy_time::{common_conditions::on_real_timer, prelude::*};
 use derivative::Derivative;
 use tracing::{trace, warn};
 
@@ -39,8 +39,19 @@ use tracing::{trace, warn};
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct RepliconClientPlugin<T> {
+    pub update_interval: Duration,
     #[derivative(Debug = "ignore")]
-    _phantom: PhantomData<T>,
+    #[doc = "hidden"]
+    pub _phantom: PhantomData<T>,
+}
+
+impl<T> RepliconClientPlugin<T> {
+    pub fn with_tick_rate(tick_rate: u16) -> Self {
+        Self {
+            update_interval: Duration::from_millis(1000 / u64::from(tick_rate)),
+            _phantom: PhantomData,
+        }
+    }
 }
 
 impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
@@ -64,8 +75,11 @@ impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
             .add_systems(
                 PreUpdate,
                 (
-                    Self::recv
-                        .run_if(resource_exists::<T>.and_then(resource_exists::<RepliconClient>)),
+                    Self::recv.run_if(
+                        resource_exists::<T>
+                            .and_then(resource_exists::<RepliconClient>)
+                            .and_then(on_real_timer(self.update_interval)),
+                    ),
                     Self::update_state.run_if(resource_exists::<RepliconClient>),
                 )
                     .chain()
@@ -74,7 +88,11 @@ impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
             .add_systems(
                 PostUpdate,
                 Self::flush
-                    .run_if(client_connected::<T>.and_then(resource_exists::<RepliconClient>))
+                    .run_if(
+                        client_connected::<T>
+                            .and_then(resource_exists::<RepliconClient>)
+                            .and_then(on_real_timer(self.update_interval)),
+                    )
                     .in_set(ServerSet::SendPackets),
             );
     }

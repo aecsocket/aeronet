@@ -162,7 +162,6 @@ impl SessionStats {
             packets_sent_last,
             packets_recv_last,
             packets_acked_last,
-            loss_last,
         ) = self
             .samples
             .iter()
@@ -174,7 +173,6 @@ impl SessionStats {
                     sample.packets_sent_total,
                     sample.packets_recv_total,
                     sample.packets_acked_total,
-                    sample.loss,
                 )
             })
             .unwrap_or_default();

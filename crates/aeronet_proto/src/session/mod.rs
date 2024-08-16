@@ -39,7 +39,6 @@ pub struct Session {
     // rtt estimation and acks
     ping_interval: Duration,
     next_ping_at: Instant,
-    send_pong: bool,
 
     // send
     send_lanes: Box<[SendLane]>,
@@ -62,12 +61,6 @@ pub struct Session {
     #[data_size(skip)]
     bytes_recv: Saturating<usize>,
     rtt: RttEstimator,
-}
-
-#[derive(Debug, Clone, Copy, DataSize)]
-struct NextPing {
-    at: Instant,
-    pong: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DataSize)]
@@ -258,7 +251,6 @@ impl Session {
 
             ping_interval: config.max_ack_delay,
             next_ping_at: now + config.max_ack_delay,
-            send_pong: false,
 
             send_lanes: send_lanes
                 .into_iter()

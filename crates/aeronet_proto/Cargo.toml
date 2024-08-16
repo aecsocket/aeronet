@@ -22,7 +22,7 @@ all-features = true
 condition = ["aeronet/condition"]
 
 ## Allows serializing types using [`serde`](https://docs.rs/serde).
-serde = ["dep:serde", "bitflags/serde"]
+serde = ["dep:serde"]
 
 ## Enables [`bevy`](https://docs.rs/bevy) support.
 bevy = ["dep:bevy_ecs", "dep:bevy_app", "dep:bevy_time"]
@@ -35,7 +35,6 @@ aeronet = { workspace = true }
 
 ahash = { workspace = true }
 arbitrary = { workspace = true }
-bitflags = { workspace = true, features = ["arbitrary"] }
 bitvec = { workspace = true }
 datasize = { workspace = true }
 derivative = { workspace = true }

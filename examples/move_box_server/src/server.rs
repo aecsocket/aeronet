@@ -20,7 +20,9 @@ use bevy::{
     log::LogPlugin, prelude::*, state::app::StatesPlugin, time::common_conditions::on_timer,
 };
 use bevy_replicon::{core::Replicated, prelude::RepliconChannels, server::ServerEvent};
-use move_box::{ClientPlayer, GameState, MoveBoxPlugin, Player, PlayerColor, PlayerPosition};
+use move_box::{
+    ClientPlayer, GameState, MoveBoxPlugin, Player, PlayerColor, PlayerPosition, TICK_RATE,
+};
 use size_format::{BinaryPrefixes, PointSeparated, SizeFormatter};
 use web_time::{Duration, Instant};
 
@@ -49,7 +51,7 @@ pub fn main() {
             LogPlugin::default(),
             MinimalPlugins,
             StatesPlugin,
-            RepliconServerPlugin::<WebTransportServer>::default(),
+            RepliconServerPlugin::<WebTransportServer>::with_tick_rate(TICK_RATE),
             MoveBoxPlugin,
         ))
         .init_resource::<WebTransportServer>()

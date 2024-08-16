@@ -10,7 +10,7 @@ use crate::{
     msg::{FragmentDecodeError, ReassembleError},
     rtt::RttEstimator,
     seq::SeqBuf,
-    ty::{Fragment, MessageSeq, PacketFlags, PacketHeader, PacketSeq},
+    ty::{Fragment, MessageSeq, PacketHeader, PacketSeq},
 };
 
 use super::{FlushedPacket, RecvLane, RecvLaneKind, SendLane, Session};
@@ -101,17 +101,8 @@ impl Session {
         let span = trace_span!("recv", packet = header.seq.0 .0);
         let _span = span.enter();
 
-        if packet.is_empty() {
-            if header.flags.contains(PacketFlags::PONG) {
-                trace!("Got pong packet - not sending response");
-            } else {
-                trace!("Got ping packet - sending pong");
-                self.send_pong = true;
-            }
-        } else {
-            trace!(len = packet.len(), "Got payload packet");
-            self.next_ping_at = now;
-        }
+        trace!(len = packet.len(), "Got payload packet");
+        self.next_ping_at = now;
 
         let acks = Self::recv_acks(
             &mut self.flushed_packets,

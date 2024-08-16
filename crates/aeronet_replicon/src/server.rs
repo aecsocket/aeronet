@@ -1,6 +1,6 @@
 //! Server-side traits and items.
 
-use std::{marker::PhantomData, ops::Deref};
+use std::{marker::PhantomData, ops::Deref, time::Duration};
 
 use aeronet::{
     client::DisconnectReason,
@@ -14,7 +14,7 @@ use aeronet::{
 use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, system::SystemParam};
 use bevy_replicon::{core::ClientId, prelude::RepliconServer, server::ServerSet};
-use bevy_time::prelude::*;
+use bevy_time::{common_conditions::on_real_timer, prelude::*};
 use bimap::{BiHashMap, Overwritten};
 use bytes::Bytes;
 use derivative::Derivative;
@@ -42,8 +42,19 @@ use tracing::{debug, warn};
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
 pub struct RepliconServerPlugin<T> {
+    pub update_interval: Duration,
     #[derivative(Debug = "ignore")]
-    _phantom: PhantomData<T>,
+    #[doc = "hidden"]
+    pub _phantom: PhantomData<T>,
+}
+
+impl<T> RepliconServerPlugin<T> {
+    pub fn with_tick_rate(tick_rate: u16) -> Self {
+        Self {
+            update_interval: Duration::from_millis(1000 / u64::from(tick_rate)),
+            _phantom: PhantomData,
+        }
+    }
 }
 
 impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
@@ -75,7 +86,8 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
                     Self::recv.run_if(
                         resource_exists::<T>
                             .and_then(resource_exists::<ClientKeys<T>>)
-                            .and_then(resource_exists::<RepliconServer>),
+                            .and_then(resource_exists::<RepliconServer>)
+                            .and_then(on_real_timer(self.update_interval)),
                     ),
                     Self::update_state.run_if(resource_exists::<RepliconServer>),
                 )
@@ -85,7 +97,11 @@ impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
             .add_systems(
                 PostUpdate,
                 Self::flush
-                    .run_if(server_open::<T>.and_then(resource_exists::<RepliconServer>))
+                    .run_if(
+                        server_open::<T>
+                            .and_then(resource_exists::<RepliconServer>)
+                            .and_then(on_real_timer(self.update_interval)),
+                    )
                     .in_set(ServerSet::SendPackets),
             );
     }

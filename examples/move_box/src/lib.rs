@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 const MOVE_SPEED: f32 = 5000.0;
 
 /// How many times per second we will replicate entity components.
-const TICK_RATE: u16 = 128;
+pub const TICK_RATE: u16 = 128;
 
 /// Sets up replication and basic game systems.
 #[derive(Debug)]
@@ -43,10 +43,10 @@ impl Plugin for MoveBoxPlugin {
         app.init_state::<GameState>()
             .enable_state_scoped_entities::<GameState>()
             .init_resource::<WebTransportRuntime>()
-            .add_plugins((RepliconPlugins.build().set(ServerPlugin {
+            .add_plugins(RepliconPlugins.build().set(ServerPlugin {
                 tick_policy: TickPolicy::MaxTickRate(TICK_RATE),
                 ..Default::default()
-            }),))
+            }))
             .replicate::<Player>()
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
