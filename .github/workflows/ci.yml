@@ -52,7 +52,7 @@ jobs:
       matrix:
         target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
     env:
-      RUSTDOCFLAGS: "-Dwarnings"
+      RUSTDOCFLAGS: "-Dwarnings --cfg=web_sys_unstable_apis"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
