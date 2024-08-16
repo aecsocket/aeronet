@@ -269,6 +269,8 @@ impl Session {
             let flush_kind = if !packet_frags.is_empty() {
                 FlushKind::RttTracked
             } else if !sent_packet_yet {
+                if self.send_pong {}
+
                 if self.next_ping.pong {
                     FlushKind::RttUntracked
                 } else {
@@ -300,8 +302,8 @@ impl Session {
             }
 
             let packet = packet.freeze();
-            self.packets_sent = self.packets_sent.saturating_add(1);
-            self.bytes_sent = self.bytes_sent.saturating_add(packet.len());
+            self.packets_sent += 1;
+            self.bytes_sent += packet.len();
             self.next_packet_seq += PacketSeq::ONE;
             self.next_ping = NextPing {
                 at: now + self.ping_interval,

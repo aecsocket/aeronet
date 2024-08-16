@@ -1,3 +1,5 @@
+use std::num::Saturating;
+
 use aeronet::{client::DisconnectReason, error::pretty_error, lane::LaneIndex};
 use aeronet_proto::session::FatalSendError;
 use bytes::Bytes;
@@ -33,13 +35,14 @@ impl<E> ConnectionInner<E> {
     }
 
     pub fn flush(&mut self) {
-        let mut bytes_sent = 0usize;
+        let mut bytes_sent = Saturating(0usize);
         for packet in self.session.flush(Instant::now()) {
-            bytes_sent = bytes_sent.saturating_add(packet.len());
+            bytes_sent += packet.len();
             // ignore errors here, pick them up in `poll`
             let _ = self.send_msgs.unbounded_send(packet);
         }
 
+        let bytes_sent = bytes_sent.0;
         if bytes_sent > 0 {
             trace!(bytes_sent, "Flushed packets");
         }
@@ -69,9 +72,9 @@ impl<E> ConnectionInner<E> {
                 .map_err(InternalError::MtuTooSmall)?;
         }
 
-        let mut bytes_recv = 0usize;
+        let mut bytes_recv = Saturating(0usize);
         while let Ok(Some(packet)) = self.recv_msgs.try_next() {
-            bytes_recv = bytes_recv.saturating_add(packet.len());
+            bytes_recv += packet.len();
             let (acks, msgs) = match self.session.recv(Instant::now(), packet) {
                 Ok(x) => x,
                 Err(err) => {
@@ -106,6 +109,7 @@ impl<E> ConnectionInner<E> {
             .update(delta_time)
             .map_err(InternalError::OutOfMemory)?;
 
+        let bytes_recv = bytes_recv.0;
         if bytes_recv > 0 {
             trace!(bytes_recv, "Received packets");
         }

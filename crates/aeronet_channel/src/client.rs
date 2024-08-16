@@ -1,6 +1,6 @@
 //! Client-side items.
 
-use std::convert::Infallible;
+use std::{convert::Infallible, num::Saturating};
 
 use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
@@ -40,9 +40,9 @@ pub struct Connected {
     /// See [`ConnectedAt::connected_at`].
     pub connected_at: Instant,
     /// See [`MessageStats::bytes_sent`].
-    pub bytes_sent: usize,
+    pub bytes_sent: Saturating<usize>,
     /// See [`MessageStats::bytes_recv`]
-    pub bytes_recv: usize,
+    pub bytes_recv: Saturating<usize>,
     send_c2s: Sender<(Bytes, LaneIndex)>,
     recv_s2c: Receiver<(Bytes, LaneIndex)>,
     send_dc_c2s: Sender<String>,
@@ -58,11 +58,11 @@ impl ConnectedAt for Connected {
 
 impl MessageStats for Connected {
     fn bytes_sent(&self) -> usize {
-        self.bytes_sent
+        self.bytes_sent.0
     }
 
     fn bytes_recv(&self) -> usize {
-        self.bytes_recv
+        self.bytes_recv.0
     }
 }
 
@@ -125,8 +125,8 @@ impl ChannelClient {
         self.state = State::Connected(Connected {
             key,
             connected_at: Instant::now(),
-            bytes_sent: 0,
-            bytes_recv: 0,
+            bytes_sent: Saturating(0),
+            bytes_recv: Saturating(0),
             send_c2s,
             recv_s2c,
             send_dc_c2s,
@@ -186,7 +186,7 @@ impl ClientTransport for ChannelClient {
             .send_c2s
             .send((msg, lane))
             .map_err(|_| ClientError::Disconnected)?;
-        client.bytes_sent = client.bytes_sent.saturating_add(msg_len);
+        client.bytes_sent += msg_len;
         Ok(())
     }
 
@@ -229,7 +229,7 @@ impl ChannelClient {
         let res = (|| loop {
             match client.recv_s2c.try_recv() {
                 Ok((msg, lane)) => {
-                    client.bytes_recv = client.bytes_recv.saturating_add(msg.len());
+                    client.bytes_recv += msg.len();
                     events.push(ClientEvent::Recv { msg, lane });
                 }
                 Err(TryRecvError::Empty) => return Ok(()),

@@ -1,4 +1,4 @@
-use std::convert::Infallible;
+use std::{convert::Infallible, num::Saturating};
 
 use aeronet::lane::LaneIndex;
 use either::Either;
@@ -90,8 +90,8 @@ impl Session {
         RecvError,
     > {
         let mut packet: Bytes = packet.into();
-        self.packets_recv = self.packets_recv.saturating_add(1);
-        self.bytes_recv = self.bytes_recv.saturating_add(packet.len());
+        self.packets_recv += 1;
+        self.bytes_recv += packet.len();
 
         let header = packet
             .read::<PacketHeader>()
@@ -136,7 +136,7 @@ impl Session {
         flushed_packets: &'session mut SeqBuf<FlushedPacket, N>,
         send_lanes: &'session mut [SendLane],
         rtt: &'session mut RttEstimator,
-        packets_acked: &'session mut usize,
+        packets_acked: &'session mut Saturating<usize>,
         now: Instant,
         acked_seqs: impl Iterator<Item = PacketSeq> + 'session,
     ) -> impl Iterator<Item = (LaneIndex, MessageSeq)> + 'session {
@@ -152,7 +152,7 @@ impl Session {
                 let span = trace_span!("ack", packet = seq.0 .0);
                 let _span = span.enter();
 
-                *packets_acked = packets_acked.saturating_add(1);
+                *packets_acked += 1;
                 let packet_rtt = now.saturating_duration_since(packet.flushed_at);
                 trace!(
                     packet = seq.0 .0,

@@ -6,7 +6,7 @@ mod send;
 
 pub use {config::*, recv::*, send::*};
 
-use std::{fmt, mem};
+use std::{fmt, mem, num::Saturating};
 
 use aeronet::lane::{LaneIndex, LaneKind};
 use ahash::{AHashMap, AHashSet};
@@ -48,14 +48,19 @@ pub struct Session {
     mtu: usize,
     bytes_left: TokenBucket,
     next_packet_seq: PacketSeq,
-    packets_sent: usize,
-    bytes_sent: usize,
+    #[data_size(skip)]
+    packets_sent: Saturating<usize>,
+    #[data_size(skip)]
+    bytes_sent: Saturating<usize>,
 
     // recv
     recv_lanes: Box<[RecvLane]>,
-    packets_recv: usize,
-    packets_acked: usize,
-    bytes_recv: usize,
+    #[data_size(skip)]
+    packets_recv: Saturating<usize>,
+    #[data_size(skip)]
+    packets_acked: Saturating<usize>,
+    #[data_size(skip)]
+    bytes_recv: Saturating<usize>,
     rtt: RttEstimator,
 }
 
@@ -275,8 +280,8 @@ impl Session {
             mtu: initial_mtu,
             bytes_left: TokenBucket::new(config.send_bytes_per_sec),
             next_packet_seq: PacketSeq::default(),
-            packets_sent: 0,
-            bytes_sent: 0,
+            packets_sent: Saturating(0),
+            bytes_sent: Saturating(0),
 
             recv_lanes: recv_lanes
                 .into_iter()
@@ -298,9 +303,9 @@ impl Session {
                     },
                 })
                 .collect(),
-            packets_recv: 0,
-            packets_acked: 0,
-            bytes_recv: 0,
+            packets_recv: Saturating(0),
+            packets_acked: Saturating(0),
+            bytes_recv: Saturating(0),
             rtt: RttEstimator::new(INITIAL_RTT),
         })
     }
@@ -406,34 +411,34 @@ impl Session {
     /// [`Session::flush`].
     #[must_use]
     pub const fn packets_sent(&self) -> usize {
-        self.packets_sent
+        self.packets_sent.0
     }
 
     /// Gets how many packets have been received in total through
     /// [`Session::recv`].
     #[must_use]
     pub const fn packets_recv(&self) -> usize {
-        self.packets_recv
+        self.packets_recv.0
     }
 
     /// Gets how many of our packets the peer has acknowledged as received.
     #[must_use]
     pub const fn packets_acked(&self) -> usize {
-        self.packets_acked
+        self.packets_acked.0
     }
 
     /// Gets how many bytes this session have been sent out in total through
     /// [`Session::flush`].
     #[must_use]
     pub const fn bytes_sent(&self) -> usize {
-        self.bytes_sent
+        self.bytes_sent.0
     }
 
     /// Gets how many bytes this session has received in total through
     /// [`Session::recv`].
     #[must_use]
     pub const fn bytes_recv(&self) -> usize {
-        self.bytes_recv
+        self.bytes_recv.0
     }
 
     /// Gets how many bytes this session can still send out until its byte

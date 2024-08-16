@@ -1,6 +1,6 @@
 //! Server-side items.
 
-use std::{convert::Infallible, mem};
+use std::{convert::Infallible, mem, num::Saturating};
 
 use aeronet::{
     client::{ClientState, DisconnectReason},
@@ -50,9 +50,9 @@ pub struct Connected {
     /// See [`ConnectedAt::connected_at`].
     pub connected_at: Instant,
     /// See [`MessageStats::bytes_sent`].
-    pub bytes_sent: usize,
+    pub bytes_sent: Saturating<usize>,
     /// See [`MessageStats::bytes_recv`]
-    pub bytes_recv: usize,
+    pub bytes_recv: Saturating<usize>,
     recv_c2s: Receiver<(Bytes, LaneIndex)>,
     send_s2c: Sender<(Bytes, LaneIndex)>,
     recv_dc_c2s: Receiver<String>,
@@ -68,11 +68,11 @@ impl ConnectedAt for Connected {
 
 impl MessageStats for Connected {
     fn bytes_sent(&self) -> usize {
-        self.bytes_sent
+        self.bytes_sent.0
     }
 
     fn bytes_recv(&self) -> usize {
-        self.bytes_recv
+        self.bytes_recv.0
     }
 }
 
@@ -149,8 +149,8 @@ impl ChannelServer {
 
         Some(server.clients.insert(Client::Connected(Connected {
             connected_at: Instant::now(),
-            bytes_sent: 0,
-            bytes_recv: 0,
+            bytes_sent: Saturating(0),
+            bytes_recv: Saturating(0),
             recv_c2s,
             send_s2c,
             recv_dc_c2s,
@@ -243,7 +243,7 @@ impl ServerTransport for ChannelServer {
             .send_s2c
             .send((msg, lane))
             .map_err(|_| ServerError::Disconnected)?;
-        client.bytes_sent = client.bytes_sent.saturating_add(msg_len);
+        client.bytes_sent += msg_len;
         Ok(())
     }
 
@@ -345,7 +345,7 @@ impl ChannelServer {
         let res = (|| loop {
             match client.recv_c2s.try_recv() {
                 Ok((msg, lane)) => {
-                    client.bytes_recv = client.bytes_recv.saturating_add(msg.len());
+                    client.bytes_recv += msg.len();
                     events.push(ServerEvent::Recv {
                         client_key,
                         msg,

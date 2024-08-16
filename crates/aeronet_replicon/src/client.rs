@@ -1,6 +1,6 @@
 //! Client-side traits and items.
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, num::Saturating};
 
 use aeronet::{
     client::{
@@ -93,7 +93,7 @@ impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
         mut replicon: ResMut<RepliconClient>,
         mut events: Events<T>,
     ) {
-        let mut bytes_recv = 0usize;
+        let mut bytes_recv = Saturating(0usize);
         for event in client.poll(time.delta()) {
             match event {
                 ClientEvent::Connected => {
@@ -109,13 +109,14 @@ impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
                         );
                         continue;
                     };
-                    bytes_recv = bytes_recv.saturating_add(msg.len());
+                    bytes_recv += msg.len();
                     replicon.insert_received(channel, msg);
                 }
                 ClientEvent::Ack { .. } | ClientEvent::Nack { .. } => {}
             }
         }
 
+        let bytes_recv = bytes_recv.0;
         if bytes_recv > 0 {
             trace!(bytes_recv, dt = debug(time.delta()), "Received messages");
         }
@@ -136,9 +137,9 @@ impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
     }
 
     fn flush(mut client: ResMut<T>, mut replicon: ResMut<RepliconClient>) {
-        let mut bytes_sent = 0usize;
+        let mut bytes_sent = Saturating(0usize);
         for (channel_id, payload) in replicon.drain_sent() {
-            bytes_sent = bytes_sent.saturating_add(payload.len());
+            bytes_sent += payload.len();
             let _ = client.send(payload, LaneIndex::from_raw(u64::from(channel_id)));
         }
 
@@ -146,6 +147,7 @@ impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
             warn!("Failed to flush data: {:#}", pretty_error(&error));
         }
 
+        let bytes_sent = bytes_sent.0;
         if bytes_sent > 0 {
             trace!(bytes_sent, "Flushed messages");
         }
