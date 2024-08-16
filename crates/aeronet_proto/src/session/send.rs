@@ -253,8 +253,7 @@ impl Session {
                 }
             }
 
-            let send_if_empty = !sent_packet_yet && now >= self.next_ping_at;
-            let should_send = !packet_frags.is_empty() || send_if_empty;
+            let should_send = !packet_frags.is_empty() || !sent_packet_yet;
             if !should_send {
                 return None;
             }
@@ -272,7 +271,6 @@ impl Session {
             self.packets_sent += 1;
             self.bytes_sent += packet.len();
             self.next_packet_seq += PacketSeq::ONE;
-            self.next_ping_at = now + self.ping_interval;
             sent_packet_yet = true;
             Some(packet)
         })

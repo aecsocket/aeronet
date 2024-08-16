@@ -36,10 +36,6 @@ pub struct Session {
     acks: Acknowledge,
     max_memory_usage: usize,
 
-    // rtt estimation and acks
-    ping_interval: Duration,
-    next_ping_at: Instant,
-
     // send
     send_lanes: Box<[SendLane]>,
     splitter: MessageSplitter,
@@ -248,9 +244,6 @@ impl Session {
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
             acks: Acknowledge::new(),
             max_memory_usage: config.max_memory_usage,
-
-            ping_interval: config.max_ack_delay,
-            next_ping_at: now + config.max_ack_delay,
 
             send_lanes: send_lanes
                 .into_iter()

@@ -101,8 +101,7 @@ impl Session {
         let span = trace_span!("recv", packet = header.seq.0 .0);
         let _span = span.enter();
 
-        trace!(len = packet.len(), "Got payload packet");
-        self.next_ping_at = now;
+        trace!(len = packet.len(), "Got packet");
 
         let acks = Self::recv_acks(
             &mut self.flushed_packets,
