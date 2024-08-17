@@ -10,6 +10,7 @@ use crate::{
     limit::Limit,
     msg::MessageTooLarge,
     rtt::RttEstimator,
+    session::MAX_ACK_DELAY,
     ty::{Fragment, FragmentHeader, MessageSeq, PacketHeader, PacketSeq},
 };
 
@@ -253,7 +254,7 @@ impl Session {
                 }
             }
 
-            let send_empty = !sent_packet_yet && self.send_ack;
+            let send_empty = !sent_packet_yet && now >= self.next_ack_at;
             let should_send = !packet_frags.is_empty() || send_empty;
             if !should_send {
                 return None;
@@ -272,7 +273,7 @@ impl Session {
             self.packets_sent += 1;
             self.bytes_sent += packet.len();
             self.next_packet_seq += PacketSeq::ONE;
-            self.send_ack = false;
+            self.next_ack_at = now + MAX_ACK_DELAY;
             sent_packet_yet = true;
             Some(packet)
         })

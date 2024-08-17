@@ -43,7 +43,8 @@ pub struct Session {
     mtu: usize,
     bytes_left: TokenBucket,
     next_packet_seq: PacketSeq,
-    send_ack: bool,
+    #[data_size(skip)]
+    next_ack_at: Instant,
     #[data_size(skip)]
     packets_sent: Saturating<usize>,
     #[data_size(skip)]
@@ -213,6 +214,21 @@ pub struct OutOfMemory;
 /// least one fragment.
 pub const OVERHEAD: usize = PacketHeader::MAX_ENCODE_LEN + FragmentHeader::MAX_ENCODE_LEN + 1;
 
+/// Maximum amount of time to wait until we will be forced to send a packet,
+/// even if it is empty.
+///
+/// If we receive a packet from the peer, we will immediately try to send a
+/// response packet. Likewise, when the peer receives our response, it will
+/// immediately try to send a response. Due to this, in theory there should
+/// always be a ping-pong of packets happening over the connection.
+///
+/// However, if there are connection errors e.g. packet loss or a sudden RTT
+/// change, this ping-pong might be interrupted and will not restart again until
+/// the user code explicitly sends a message. In order to automatically restart
+/// this ping-pong without user intervention, if we haven't sent a packet in the
+/// last [`MAX_ACK_DELAY`], we will forcefully send an empty one.
+const MAX_ACK_DELAY: Duration = Duration::from_millis(500);
+
 impl Session {
     fn new<const CLIENT: bool>(
         now: Instant,
@@ -266,7 +282,7 @@ impl Session {
             mtu: initial_mtu,
             bytes_left: TokenBucket::new(config.send_bytes_per_sec),
             next_packet_seq: PacketSeq::default(),
-            send_ack: false,
+            next_ack_at: now + MAX_ACK_DELAY,
             packets_sent: Saturating(0),
             bytes_sent: Saturating(0),
 
