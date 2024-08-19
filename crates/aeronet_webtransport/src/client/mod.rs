@@ -18,7 +18,7 @@ use crate::internal::{ConnectionInner, ConnectionMeta, InternalError};
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
-        use crate::js_error::JsError;
+        use crate::shared::JsError;
 
         /// Client network configuration.
         pub type ClientConfig = xwt_web_sys::WebTransportOptions;

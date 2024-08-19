@@ -20,12 +20,18 @@ rustflags = ["--cfg=web_sys_unstable_apis"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [features]
-## Enables [`rustls/dangerous-configuration`](https://docs.rs/rustls/latest/rustls/#crate-features)
-## on targets building against native `wtransport`.
-dangerous-configuration = ["wtransport/dangerous-configuration"]
+## Enables client-side items.
+client = ["aeronet/client"]
+
+## Enables server-side items.
+server = ["aeronet/server"]
 
 ## Enables [`bevy`](https://docs.rs/bevy) support by deriving `Resource` on certain types.
 bevy = ["dep:bevy_ecs", "aeronet/bevy", "aeronet_proto/bevy"]
+
+## Enables [`rustls/dangerous-configuration`](https://docs.rs/rustls/latest/rustls/#crate-features)
+## on targets building against native `wtransport`.
+dangerous-configuration = ["wtransport/dangerous-configuration"]
 
 ## Enables [`aeronet_proto`]'s [`egui`](https://docs.rs/egui) network statistics visualizer.
 visualizer = ["aeronet_proto/visualizer"]
@@ -73,9 +79,9 @@ rand = { workspace = true }
 [[example]]
 name = "echo_client"
 path = "examples/echo_client.rs"
-required-features = ["bevy", "dangerous-configuration"]
+required-features = ["client", "bevy", "dangerous-configuration"]
 
 [[example]]
 name = "echo_server"
 path = "examples/echo_server.rs"
-required-features = ["bevy"]
+required-features = ["server", "bevy"]

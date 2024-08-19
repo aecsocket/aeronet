@@ -21,7 +21,7 @@ all-features = true
 bevy = ["dep:bevy_ecs", "aeronet/bevy"]
 
 [dependencies]
-aeronet = { workspace = true }
+aeronet = { workspace = true, features = ["client", "server"] }
 
 bytes = { workspace = true }
 crossbeam-channel = { workspace = true }

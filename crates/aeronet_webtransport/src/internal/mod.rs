@@ -18,7 +18,7 @@ cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         pub type Connection = xwt_web_sys::Session;
         pub type ClientEndpoint = xwt_web_sys::Endpoint;
-        pub type ConnectionError = crate::JsError;
+        pub type ConnectionError = crate::shared::JsError;
     } else {
         use std::net::SocketAddr;
 

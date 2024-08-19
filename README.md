@@ -49,16 +49,16 @@ The current transport implementations available are:
   [WebTransport](https://www.w3.org/TR/webtransport/) protocol, based on QUIC
   * Good choice for a general transport implementation
   * Targets: **Native (client + server) + WASM (client)**
-  * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration"`
-  * `cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration" --target wasm32-unknown-unknown`
+  * `cargo run --package aeronet_webtransport --example echo_client --features "client bevy dangerous-configuration"`
+  * `cargo run --package aeronet_webtransport --example echo_client --features "client bevy dangerous-configuration" --target wasm32-unknown-unknown`
     * Requires `wasm-server-runner` to be installed
-  * `cargo run --package aeronet_webtransport --example echo_server --features "bevy"`
+  * `cargo run --package aeronet_webtransport --example echo_server --features "server bevy"`
 * [`aeronet_steam`](https://docs.rs/aeronet_steam) - using Steam's
   [NetworkingSockets](https://partner.steamgames.com/doc/api/ISteamNetworkingSockets) API
   * **STILL WIP**
   * Targets: **Native**
-  * `cargo run --package aeronet_steam --example echo_client --features "bevy"`
-  * `cargo run --package aeronet_steam --example echo_server --features "bevy"`
+  * `cargo run --package aeronet_steam --example echo_client --features "client bevy"`
+  * `cargo run --package aeronet_steam --example echo_server --features "server bevy"`
 
 # Goals
 
@@ -91,6 +91,14 @@ This crate does not aim to be:
     also be a client who is running the same app
 
 # Overview
+
+## Client/server separation
+
+To avoid API mistakes and keep the client and server as separated as possible, the client and server
+sides are separated behind two feature flags - `client` and `server`. If you split your app into a
+pair of client and server apps, you can use these features to ensure that you're not using client
+types on the server side, and vice versa. However, there's nothing stopping you from including both
+the client and server in the same binary.
 
 ## Messages
 
@@ -155,8 +163,8 @@ add both this crate and the transport implementation crate as dependencies to yo
 
 ```toml
 [dependencies]
-aeronet = "version"
-aeronet_whatever_transport_impl = "version"
+aeronet = "0.0.0"
+aeronet_transport_impl = { version = "0.0.0", features = ["client", "server"] }
 ```
 
 The version of this crate is synced between all official subcrates of aeronet - use the same version

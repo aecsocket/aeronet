@@ -1,5 +1,10 @@
 //! Items shared between the client and server.
 
+#[cfg(target_family = "wasm")]
+mod js_error;
+#[cfg(target_family = "wasm")]
+pub use js_error::*;
+
 pub use aeronet_proto::session::MessageKey;
 
 use web_time::Duration;

@@ -3,6 +3,10 @@
 // #![cfg(not(target_family = "wasm"))]
 #![cfg(any())] // TODO
 
-pub mod client;
-pub mod server;
 pub mod shared;
+
+#[cfg(feature = "client")]
+pub mod client;
+
+#[cfg(feature = "server")]
+pub mod server;
