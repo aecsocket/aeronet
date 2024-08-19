@@ -57,8 +57,8 @@ The current transport implementations available are:
   [NetworkingSockets](https://partner.steamgames.com/doc/api/ISteamNetworkingSockets) API
   * **STILL WIP**
   * Targets: **Native**
-  * `cargo run --package aeronet_steam --example echo_client --features "bevy"`
-  * `cargo run --package aeronet_steam --example echo_server --features "bevy"`
+  * `cargo run --package aeronet_steam --example echo_client --features "client bevy"`
+  * `cargo run --package aeronet_steam --example echo_server --features "server bevy"`
 
 # Goals
 
