@@ -17,6 +17,13 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
+[features]
+## Enables client-side items.
+client = ["aeronet/client", "bevy_replicon/client"]
+
+## Enables server-side items.
+server = ["aeronet/server", "bevy_replicon/server"]
+
 [dependencies]
 aeronet = { workspace = true, features = ["bevy"] }
 

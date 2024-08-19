@@ -7,22 +7,19 @@
 
 pub use aeronet_proto as proto;
 
+#[cfg(not(target_family = "wasm"))]
+pub use wtransport;
+#[cfg(target_family = "wasm")]
+pub use xwt_web_sys;
+
 pub mod cert;
-pub mod client;
 pub mod runtime;
 pub mod shared;
 
 mod internal;
 
-cfg_if::cfg_if! {
-    if #[cfg(target_family = "wasm")] {
-        pub use xwt_web_sys;
+#[cfg(feature = "client")]
+pub mod client;
 
-        mod js_error;
-        pub use js_error::JsError;
-    } else {
-        pub use wtransport;
-
-        pub mod server;
-    }
-}
+#[cfg(all(feature = "server", not(target_family = "wasm")))]
+pub mod server;

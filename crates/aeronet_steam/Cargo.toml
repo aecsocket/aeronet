@@ -15,6 +15,12 @@ version.workspace = true
 workspace = true
 
 [features]
+## Enables client-side items.
+client = ["aeronet/client"]
+
+## Enables server-side items.
+server = ["aeronet/server"]
+
 ## Enables [`bevy`](https://docs.rs/bevy) support by deriving `Resource` on certain types.
 bevy = ["dep:bevy_ecs", "aeronet/bevy", "aeronet_proto/bevy"]
 

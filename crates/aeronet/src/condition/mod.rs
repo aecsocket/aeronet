@@ -41,10 +41,14 @@
 //! # }
 //! ```
 
+#[cfg(feature = "client")]
 mod client;
-mod server;
-
+#[cfg(feature = "client")]
 pub use client::*;
+
+#[cfg(feature = "server")]
+mod server;
+#[cfg(feature = "server")]
 pub use server::*;
 
 use web_time::{Duration, Instant};

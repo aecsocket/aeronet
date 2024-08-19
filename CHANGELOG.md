@@ -6,7 +6,7 @@
   - `{Client, Server}Event::Disconnected` now hold a `reason: DisconnectReason`, specifying why the client was disconnected
   - `ServerEvent::Closed` now holds a `reason: CloseReason`, specifying why the server closed
 - Fixes to WASM transport (there may still be bugs or instability)
-- Standard transport implementations will now attempt to send over a disconnection/closing reason when dropped
+- Added client/server features to separate the two sides
 
 # 0.6.0
 

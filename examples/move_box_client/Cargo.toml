@@ -26,8 +26,9 @@ web-time = { workspace = true }
 
 # transport
 
-aeronet = { workspace = true, features = ["bevy"] }
+aeronet = { workspace = true }
 aeronet_webtransport = { workspace = true, features = [
+  "client",
   "dangerous-configuration",
   "bevy",
   "visualizer",
