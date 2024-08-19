@@ -35,5 +35,5 @@ aeronet_webtransport = { workspace = true, features = ["bevy", "server"] }
 
 # replication
 
-aeronet_replicon = { workspace = true }
+aeronet_replicon = { workspace = true, features = ["server"] }
 bevy_replicon = { workspace = true }

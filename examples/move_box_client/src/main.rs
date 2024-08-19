@@ -44,6 +44,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
+            RepliconPlugins,
             RepliconClientPlugin::<WebTransportClient>::with_tick_rate(TICK_RATE),
             MoveBoxPlugin,
             ClientSessionStatsPlugin::<WebTransportClient>::default(),

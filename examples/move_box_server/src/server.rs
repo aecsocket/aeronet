@@ -19,7 +19,7 @@ use ascii_table::AsciiTable;
 use bevy::{
     log::LogPlugin, prelude::*, state::app::StatesPlugin, time::common_conditions::on_timer,
 };
-use bevy_replicon::{core::Replicated, prelude::RepliconChannels, server::ServerEvent};
+use bevy_replicon::prelude::*;
 use move_box::{
     ClientPlayer, GameState, MoveBoxPlugin, Player, PlayerColor, PlayerPosition, TICK_RATE,
 };
@@ -51,6 +51,10 @@ pub fn main() {
             LogPlugin::default(),
             MinimalPlugins,
             StatesPlugin,
+            RepliconPlugins.build().set(ServerPlugin {
+                tick_policy: TickPolicy::MaxTickRate(TICK_RATE),
+                ..Default::default()
+            }),
             RepliconServerPlugin::<WebTransportServer>::with_tick_rate(TICK_RATE),
             MoveBoxPlugin,
         ))

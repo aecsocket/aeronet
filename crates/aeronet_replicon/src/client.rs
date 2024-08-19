@@ -15,7 +15,6 @@ use bevy_ecs::{prelude::*, system::SystemParam};
 use bevy_replicon::{
     client::ClientSet,
     prelude::{RepliconClient, RepliconClientStatus},
-    server::ServerSet,
 };
 use bevy_time::{common_conditions::on_real_timer, prelude::*};
 use derivative::Derivative;
@@ -89,7 +88,7 @@ impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
                     Self::update_state.run_if(resource_exists::<RepliconClient>),
                 )
                     .chain()
-                    .in_set(ServerSet::ReceivePackets),
+                    .in_set(ClientSet::ReceivePackets),
             )
             .add_systems(
                 PostUpdate,
@@ -99,7 +98,7 @@ impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
                             .and_then(resource_exists::<RepliconClient>)
                             .and_then(on_real_timer(self.update_interval)),
                     )
-                    .in_set(ServerSet::SendPackets),
+                    .in_set(ClientSet::SendPackets),
             );
     }
 }

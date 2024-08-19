@@ -39,15 +39,11 @@ pub fn session_config(channels: &RepliconChannels) -> SessionConfig {
 
 impl Plugin for MoveBoxPlugin {
     fn build(&self, app: &mut App) {
-        // use the convenience resource WebTransportRuntime for spawning tasks
-        // platform-independently (native using tokio, or WASM using wasm-bindgen-futures)
         app.init_state::<GameState>()
             .enable_state_scoped_entities::<GameState>()
+            // use the convenience resource WebTransportRuntime for spawning tasks
+            // platform-independently (native using tokio, or WASM using wasm-bindgen-futures)
             .init_resource::<WebTransportRuntime>()
-            .add_plugins(RepliconPlugins.build().set(ServerPlugin {
-                tick_policy: TickPolicy::MaxTickRate(TICK_RATE),
-                ..Default::default()
-            }))
             .replicate::<Player>()
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
