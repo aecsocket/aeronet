@@ -6,7 +6,8 @@ use futures::{
     never::Never,
     FutureExt, SinkExt,
 };
-use tracing::{debug, debug_span, field, Instrument};
+use slotmap::Key;
+use tracing::{debug, debug_span, Instrument};
 use web_time::Instant;
 use wtransport::endpoint::{IncomingSession, SessionRequest};
 use xwt_core::prelude::*;
@@ -101,10 +102,7 @@ async fn start_handle_session(
         }
         err
     }
-    .instrument(debug_span!(
-        "session",
-        client = field::debug(slotmap::Key::data(&client_key))
-    ))
+    .instrument(debug_span!("client", key = ?client_key.data()))
     .await;
     let _ = send_dc.send(err);
     Ok(())

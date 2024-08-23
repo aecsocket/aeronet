@@ -10,8 +10,8 @@ use aeronet::{
 use aeronet_proto::session::{MessageKey, SessionConfig};
 use bytes::Bytes;
 use futures::channel::oneshot;
-use slotmap::SlotMap;
-use tracing::{debug, field, trace_span};
+use slotmap::{Key, SlotMap};
+use tracing::{debug, trace_span};
 use web_time::Duration;
 
 use crate::{
@@ -172,8 +172,8 @@ impl ServerTransport for WebTransportServer {
 
         for (client_key, client) in &mut server.clients {
             let span = trace_span!(
-                "client",
-                key = field::debug(slotmap::Key::data(&client_key))
+                "session",
+                key = ?client_key.data()
             );
             let _ = span.enter();
 
@@ -307,7 +307,7 @@ impl WebTransportServer {
             for (client_key, client) in &mut server.clients {
                 let span = trace_span!(
                     "client",
-                    key = field::debug(slotmap::Key::data(&client_key))
+                    key = ?client_key.data()
                 );
                 let _span = span.enter();
 

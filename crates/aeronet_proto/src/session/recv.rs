@@ -3,7 +3,7 @@ use std::{convert::Infallible, num::Saturating};
 use aeronet::lane::LaneIndex;
 use either::Either;
 use octs::{Buf, BufTooShortOr, Bytes, Read};
-use tracing::{field, trace, trace_span};
+use tracing::{trace, trace_span};
 use web_time::Instant;
 
 use crate::{
@@ -134,23 +134,20 @@ impl Session {
         acked_seqs
             // we now know that our packet with sequence `seq` was acked by the peer
             // let's find what fragments that packet contained when we flushed it out
-            .filter_map(move |seq| {
+            .filter_map(move |acked_seq| {
                 flushed_packets
-                    .remove_with(seq.0 .0, FlushedPacket::new(now))
-                    .map(|packet| (seq, packet))
+                    .remove_with(acked_seq.0 .0, FlushedPacket::new(now))
+                    .map(|packet| (acked_seq, packet))
             })
-            .flat_map(move |(seq, packet)| {
-                let span = trace_span!("ack", packet = seq.0 .0);
+            .flat_map(move |(acked_seq, packet)| {
+                let span = trace_span!("ack", packet = acked_seq.0 .0);
                 let _span = span.enter();
 
                 *packets_acked += 1;
                 let packet_rtt = now.saturating_duration_since(packet.flushed_at);
-                trace!(
-                    packet = seq.0 .0,
-                    rtt = field::debug(packet_rtt),
-                    "Got peer ack"
-                );
                 rtt.update(packet_rtt);
+                let rtt_now = rtt.get();
+                trace!(?acked_seq, ?packet_rtt, ?rtt_now, "Got peer ack");
 
                 Box::into_iter(packet.frags)
             })
