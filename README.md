@@ -72,8 +72,8 @@ This crate aims to be:
   - Error handling is explicit - it's clear what operations can fail, how they may fail, and how you
     should handle it
   - If any aeronet code panics during normal operation, it's a bug - open an issue!
-  - Transport implementations are designed to be resilient against DoS, memory exhaustion, malicious
-    peers, etc., and the problems + mitigations are documented
+  - Transport implementations are designed to be resilient against denial-of-service attacks, be it
+    from memory exhaustion, malicious peers, etc., and the problems + mitigations are documented
 - Integrated with Bevy
   - Built with apps and games in mind, the abstractions chosen closely suit Bevy's app model, and
     likely other similar frameworks
