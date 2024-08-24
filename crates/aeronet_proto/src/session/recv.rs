@@ -40,8 +40,8 @@ impl Session {
     ///
     /// If this is successful, this returns:
     /// - an iterator over all of *our* sent messages which have been
-    ///   acknowledged by the peer, along with the lane on which the message
-    ///   was sent on
+    ///   acknowledged by the peer, along with the lane on which the message was
+    ///   sent on
     /// - a [`RecvMessages`], used to read the fragments (actual payload) of
     ///   this packet
     ///
@@ -158,8 +158,8 @@ impl Session {
                 let lane = send_lanes
                     .get_mut(lane_index)
                     .expect("frag path should point into a valid lane index");
-                // fallible instead of panicking, because these messages may have already been removed
-                // by a previous ack that we received
+                // fallible instead of panicking, because these messages may have already been
+                // removed by a previous ack that we received
                 let msg = lane.sent_msgs.get_mut(&frag_path.msg_seq)?;
                 let frag_opt = msg.frags.get_mut(usize::from(frag_path.frag_index))?;
                 // take this fragment out so it stops being resent

@@ -119,7 +119,7 @@ impl Acknowledge {
     /// # use aeronet_proto::ty::{PacketSeq, Acknowledge};
     /// let acks = Acknowledge {
     ///     last_recv: PacketSeq::new(50),
-    ///         bits: 0b0010010,
+    ///     bits: 0b0010010,
     /// };
     /// let mut iter = acks.seqs();
     /// assert_eq!(PacketSeq::new(49), iter.next().unwrap());

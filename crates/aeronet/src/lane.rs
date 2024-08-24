@@ -20,9 +20,9 @@
 //!
 //! Although it is not a part of the guarantees laid out by the lane kinds,
 //! *head-of-line blocking* is also an important factor to consider when
-//! choosing which kind of lane to use. A lane kind with head-of-line
-//! blocking may block when it is awaiting a message sent earlier, in order to
-//! maintain ordering; others may not.
+//! choosing which kind of lane to use. A lane kind with head-of-line blocking
+//! may block when it is awaiting a message sent earlier, in order to maintain
+//! ordering; others may not.
 //!
 //! Note that lane kinds provide a *minimum* guarantee of reliability and
 //! ordering - a transport may provide some guarantees even if using a less

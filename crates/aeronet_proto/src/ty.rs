@@ -43,7 +43,7 @@ use octs::Bytes;
 /// sequence number - see [`MessageSeq`] and [`PacketSeq`].
 ///
 /// The number is stored internally as a [`u16`], which means it will wrap
-/// around fairly quickly as many messages and packetscan be sent per second.
+/// around fairly quickly as many messages and packets can be sent per second.
 /// Users of a sequence number should take this into account, and use the custom
 /// [`Seq::cmp`] implementation which takes wraparound into consideration.
 ///
@@ -141,8 +141,7 @@ pub struct MessageSeq(pub Seq);
 /// This uses a modification of the strategy described in [*Gaffer On Games*],
 /// where we store two pieces of info:
 /// * the last received packet sequence number (`last_recv`)
-/// * a bitfield of which packets before `last_recv` have been acked
-///   (`bits`)
+/// * a bitfield of which packets before `last_recv` have been acked (`bits`)
 ///
 /// If a bit at index `N` is set in `bits`, then the packet with sequence
 /// `last_recv - N` has been acked. For example,

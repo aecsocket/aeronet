@@ -196,7 +196,7 @@ pub enum ClientEvent<T: ClientTransport + ?Sized> {
     /// receiving the initial world state and e.g. showing a spawn screen.
     Connected,
     /// The client has unrecoverably lost connection from its previously
-    /// connected server changing state to [`ClientState::Disconnected`].
+    /// connected server, changing state to [`ClientState::Disconnected`].
     ///
     /// This is emitted for *any* reason that the client may be disconnected,
     /// including user code calling [`ClientTransport::disconnect`], therefore

@@ -190,8 +190,9 @@ async fn send_loop<E>(
                     Ok(())
                 }
                 Err(SendDatagramError::UnsupportedByPeer) => {
-                    // this should be impossible, since we checked that the client does support datagrams
-                    // before connecting, but we'll error-case it anyway
+                    // this should be impossible, since we checked that the client does support
+                    // datagrams before connecting, but we'll error-case it
+                    // anyway
                     Err(InternalError::DatagramsNotSupported)
                 }
             }?;

@@ -63,31 +63,37 @@ The current transport implementations available are:
 # Goals
 
 This crate aims to be:
-* Generic over as many transports as possible
-  * You should be able to plug nearly anything in as the underlying transport layer, and have things
+- Generic over as many transports as possible
+  - You should be able to plug nearly anything in as the underlying transport layer, and have things
     work
-  * To achieve this, aeronet provides its own implementation of certain protocol elements such as
+  - To achieve this, aeronet provides its own implementation of certain protocol elements such as
     fragmentation and reliable messages - see [`aeronet_proto`](https://docs.rs/aeronet_proto)
-* Integrated with Bevy
-  * Built with apps and games in mind, the abstractions chosen closely suit Bevy's app model, and
+- Correct and non-panicking
+  - Error handling is explicit - it's clear what operations can fail, how they may fail, and how you
+    should handle it
+  - If any aeronet code panics during normal operation, it's a bug - open an issue!
+  - Transport implementations are designed to be resilient against DoS, memory exhaustion, malicious
+    peers, etc., and the problems + mitigations are documented
+- Integrated with Bevy
+  - Built with apps and games in mind, the abstractions chosen closely suit Bevy's app model, and
     likely other similar frameworks
-* Simple in terms of API
-  * The complexity of the underlying transport is abstracted away, which allows for both flexibility
+- Simple in terms of API
+  - The complexity of the underlying transport is abstracted away, which allows for both flexibility
     in implementation, and less cognitive load on the API user
-  * Configuration options are still exposed, however there are always a set of sane defaults
-* Comfortable for non-async code
-  * This crate abstracts away transport-related async code, and exposes a simpler sync API.
-* Lightweight and have a small footprint
-  * The crate minimizes the amount of data copied by using [`Bytes`], reducing allocations
-  * Features such as reliability and ordering are implemented with a small memory footprint
+  - Configuration options are still exposed, however there are always a set of sane defaults
+- Comfortable for non-async code
+  - This crate abstracts away transport-related async code, and exposes a simpler sync API.
+- Lightweight and have a small footprint
+  - The crate minimizes the amount of data copied by using [`Bytes`], reducing allocations
+  - Features such as reliability and ordering are implemented with a small memory footprint
 
 This crate does not aim to be:
-* A high-level app networking library, featuring replication, rollback, etc.
-  * This crate only concerns the transport of data payloads, not what the payloads actually contain
-* An async library
-* `#![no_std]`
-* A non-client-to-server networking library (e.g. peer-to-peer)
-  * A client is expected to only have at most 1 connection to a server - although this server could
+- A high-level app networking library, featuring replication, rollback, etc.
+  - This crate only concerns the transport of data payloads, not what the payloads actually contain
+- An async library
+- `#![no_std]`
+- A non-client-to-server networking library (e.g. peer-to-peer)
+  - A client is expected to only have at most 1 connection to a server - although this server could
     also be a client who is running the same app
 
 # Overview

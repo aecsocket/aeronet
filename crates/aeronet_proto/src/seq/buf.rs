@@ -28,9 +28,11 @@ use datasize::DataSize;
 ///
 /// [*Gaffer On Games*]: https://gafferongames.com/post/reliable_ordered_messages#sequence-buffers
 // TODO:
-// The solution to this problem is to walk between the previous highest insert sequence and the new insert sequence (if it is more recent)
-// and clear those entries in the sequence buffer to 0xFFFFFFFF. Now in the common case, insert is very close to constant time, but worst
-// case is linear where n is the number of sequence entries between the previous highest insert sequence and the current insert sequence.
+// The solution to this problem is to walk between the previous highest insert sequence and the new
+// insert sequence (if it is more recent) and clear those entries in the sequence buffer to
+// 0xFFFFFFFF. Now in the common case, insert is very close to constant time, but worst
+// case is linear where n is the number of sequence entries between the previous highest insert
+// sequence and the current insert sequence.
 #[derive(Debug)]
 pub struct SeqBuf<T, const N: usize> {
     indices: Box<[u16; N]>,
