@@ -144,10 +144,8 @@ fn poll_server(
 struct AcceptClient(SystemId<ClientKey>);
 
 fn accept_client(In(client_key): In<ClientKey>, mut server: ResMut<WebTransportServer>) {
-    match server.respond_to_request(client_key, ConnectionResponse::Accepted) {
-        Ok(()) => info!("Accepted {client_key:?}"),
-        Err(err) => warn!("Failed to accept {client_key:?}: {:#}", pretty_error(&err)),
-    }
+    server.respond_to_request(client_key, ConnectionResponse::Accepted);
+    info!("Accepted {client_key:?}");
 }
 
 #[derive(Debug, Clone, Resource)]
@@ -167,9 +165,7 @@ fn send_message(
 }
 
 fn flush_server(mut server: ResMut<WebTransportServer>) {
-    if let Err(err) = server.flush() {
-        error!("Failed to flush messages: {:#}", pretty_error(&err));
-    }
+    server.flush();
 }
 
 }}

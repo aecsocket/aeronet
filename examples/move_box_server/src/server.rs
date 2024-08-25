@@ -132,7 +132,7 @@ fn on_connecting(
 ) {
     for RemoteClientConnecting { client_key } in events.read() {
         info!("{client_key:?} connecting");
-        let _ = server.respond_to_request(*client_key, ConnectionResponse::Accepted);
+        server.respond_to_request(*client_key, ConnectionResponse::Accepted);
     }
 }
 
@@ -155,6 +155,7 @@ fn on_server_event(
                     continue;
                 };
                 info!("{client_id:?} controlled by {client_key:?} connected");
+
                 let color = Color::srgb(rand::random(), rand::random(), rand::random());
                 commands.spawn((
                     Player,

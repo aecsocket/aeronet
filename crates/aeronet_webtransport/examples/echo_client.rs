@@ -99,13 +99,8 @@ fn poll_client(
     }
 }
 
-fn flush_client(mut client: ResMut<WebTransportClient>, mut ui_state: ResMut<UiState>) {
-    if let Err(err) = client.flush() {
-        ui_state.log.push(format!(
-            "Failed to flush messages: {:#}",
-            pretty_error(&err)
-        ));
-    }
+fn flush_client(mut client: ResMut<WebTransportClient>) {
+    client.flush();
 }
 
 fn ui(
@@ -164,7 +159,7 @@ fn ui(
 
         if do_disconnect {
             ui_state.log.push(format!("Disconnected by user"));
-            let _ = client.disconnect("user pressed disconnect button");
+            client.disconnect("user pressed disconnect button");
         }
 
         if do_send {

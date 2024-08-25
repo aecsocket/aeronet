@@ -66,6 +66,7 @@ enum State {
 #[error("not disconnected")]
 pub struct ClientNotDisconnected;
 
+/// Error type for operations on a [`WebTransportClient`].
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
     // frontend

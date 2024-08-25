@@ -6,7 +6,7 @@ mod frontend;
 use std::{collections::HashMap, io, net::SocketAddr};
 
 use aeronet::{
-    client::{ClientState, DisconnectReason},
+    client::DisconnectReason,
     stats::{ConnectedAt, MessageStats, RemoteAddr, Rtt},
 };
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
@@ -195,7 +195,13 @@ pub struct Open {
     _send_closed: oneshot::Sender<()>,
 }
 
-type Client = ClientState<Connecting, Connected>;
+#[derive(Debug)]
+enum Client {
+    Disconnected,
+    Disconnecting { reason: String },
+    Connecting(Connecting),
+    Connected(Connected),
+}
 
 #[derive(Debug)]
 struct ToConnecting {

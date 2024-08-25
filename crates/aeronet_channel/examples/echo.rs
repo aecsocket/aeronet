@@ -103,7 +103,7 @@ fn client_flush(mut client: ResMut<ChannelClient>) {
     // technically for the channel transport we don't need to flush
     // since messages are guaranteed to be instantly sent along the channel
     // but all other transports must be periodically flushed
-    let _ = client.flush();
+    client.flush();
 }
 
 fn client_ui(
@@ -120,7 +120,7 @@ fn client_ui(
         });
 
         if do_disconnect {
-            let _ = client.disconnect("disconnected by user");
+            client.disconnect("disconnected by user");
         }
 
         let mut do_send = false;
@@ -222,7 +222,7 @@ fn server_flush(mut server: ResMut<ChannelServer>) {
     // technically for the channel transport we don't need to flush
     // since messages are guaranteed to be instantly sent along the channel
     // but all other transports must be periodically flushed
-    let _ = server.flush();
+    server.flush();
 }
 
 fn server_ui(
