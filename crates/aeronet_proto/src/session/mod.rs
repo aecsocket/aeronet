@@ -494,12 +494,3 @@ pub trait SessionBacked {
     /// manage its connection.
     fn get_session(&self) -> Option<&Session>;
 }
-
-#[cfg(feature = "condition")]
-impl<T: aeronet::client::ClientTransport + SessionBacked> SessionBacked
-    for aeronet::condition::ConditionedClient<T>
-{
-    fn get_session(&self) -> Option<&Session> {
-        self.inner().get_session()
-    }
-}

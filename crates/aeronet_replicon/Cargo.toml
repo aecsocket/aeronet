@@ -19,10 +19,10 @@ all-features = true
 
 [features]
 ## Enables client-side items.
-client = ["aeronet/client", "bevy_replicon/client"]
+client = ["bevy_replicon/client"]
 
 ## Enables server-side items.
-server = ["aeronet/server", "bevy_replicon/server"]
+server = ["bevy_replicon/server"]
 
 [dependencies]
 aeronet = { workspace = true, features = ["bevy"] }
