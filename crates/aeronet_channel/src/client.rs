@@ -76,8 +76,8 @@ impl MessageStats for Connected {
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ClientConnectError {
     /// Attempted to connect a client which was already connected.
-    #[error("already connected")]
-    AlreadyConnected,
+    #[error("not disconnected")]
+    NotDisconnected,
     /// Attempted to connect to a server which is closed.
     #[error("server closed")]
     ServerClosed,
@@ -120,7 +120,7 @@ impl ChannelClient {
     /// is closed.
     pub fn connect(&mut self, server: &mut ChannelServer) -> Result<(), ClientConnectError> {
         if matches!(self.state, State::Connected(..)) {
-            return Err(ClientConnectError::AlreadyConnected);
+            return Err(ClientConnectError::NotDisconnected);
         }
 
         let (send_c2s, recv_c2s) = crossbeam_channel::unbounded();

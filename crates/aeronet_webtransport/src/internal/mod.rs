@@ -57,18 +57,22 @@ pub struct ConnectionInner<E> {
     pub fatal_error: Option<FatalSendError>,
 }
 
+// error types
 // intentionally don't derive Error so that consumers are forced to map each
 // variant to their own error variant
-#[derive(Debug)]
-pub enum InternalError<E> {
-    Spec(E),
 
+#[derive(Debug)]
+pub enum InternalSendError {
+    Trivial(SendError),
+    Fatal(FatalSendError),
+}
+
+#[derive(Debug)]
+pub enum InternalPollError {
     // frontend
     BackendClosed,
     MtuTooSmall(MtuTooSmall),
     OutOfMemory(OutOfMemory),
-    Send(SendError),
-    FatalSend(FatalSendError),
 
     // backend
     FrontendClosed,

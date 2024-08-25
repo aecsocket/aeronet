@@ -492,5 +492,5 @@ impl Session {
 pub trait SessionBacked {
     /// Gets the [`Session`] that this client transport is currently using to
     /// manage its connection.
-    fn get_session(&self) -> Option<&Session>;
+    fn session(&self) -> Option<&Session>;
 }
