@@ -162,7 +162,7 @@ async fn send_loop(
         {
             conn.send_datagram(packet)
                 .await
-                .map_err(|err| InternalError::ConnectionLost(err.into()))?;
+                .map_err(|err| SessionError::ConnectionLost(err.into()))?;
         }
 
         #[cfg(not(target_family = "wasm"))]
