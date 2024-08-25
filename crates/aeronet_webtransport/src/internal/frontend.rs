@@ -8,7 +8,7 @@ use web_time::{Duration, Instant};
 
 use crate::shared::MessageKey;
 
-use super::{ConnectionInner, InternalError};
+use super::{ConnectionInner, InternalError, InternalSendError};
 
 #[derive(Debug)]
 pub enum PollEvent {
@@ -17,7 +17,7 @@ pub enum PollEvent {
 }
 
 impl<E> ConnectionInner<E> {
-    pub fn send(&mut self, msg: Bytes, lane: LaneIndex) -> Result<MessageKey, InternalError<E>> {
+    pub fn send(&mut self, msg: Bytes, lane: LaneIndex) -> Result<MessageKey, InternalSendError> {
         let err = match self.session.send(Instant::now(), msg, lane) {
             Ok(key) => {
                 return Ok(key);
@@ -28,9 +28,9 @@ impl<E> ConnectionInner<E> {
         match err.narrow::<FatalSendError, _>() {
             Ok(err) => {
                 self.fatal_error = Some(err.clone());
-                Err(InternalError::FatalSend(err))
+                Err(InternalSendError::Fatal(err))
             }
-            Err(err) => Err(InternalError::Send(err.take())),
+            Err(err) => Err(InternalSendError::Trivial(err.take())),
         }
     }
 

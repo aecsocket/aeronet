@@ -16,6 +16,8 @@ use xwt_core::utils::maybe;
 /// This is also used internally, as clients and servers may need to spawn their
 /// own tasks for e.g. the sending and receiving halves of a session.
 ///
+/// If using Bevy, you can use this as a resource in your systems.
+///
 /// # Platforms
 ///
 /// ## Native
@@ -32,8 +34,6 @@ use xwt_core::utils::maybe;
 ///
 /// On a WASM target, this uses `wasm-bindgen-futures` to spawn the future via
 /// `wasm-bindgen`.
-///
-/// If using Bevy, you can use this as a resource in your systems.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
 pub struct WebTransportRuntime {

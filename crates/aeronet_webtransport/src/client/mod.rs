@@ -60,8 +60,28 @@ enum State {
     Disconnecting { reason: String },
 }
 
-/// Error type for operations on a [`WebTransportClient`].
-#[derive(Debug, thiserror::Error)]
+/// Error type for [`WebTransportClient::connect`], emitted if the client is
+/// already connecting or connected.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("not disconnected")]
+pub struct ClientNotDisconnected;
+
+/// Error type for [`WebTransportClient::send`].
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ClientSendError {
+    /// Attempted to send over a client which is not connected.
+    #[error("not connected")]
+    NotConnected,
+    /// Failed to buffer up a message for sending, but the connection can still
+    /// remain alive.
+    #[error(transparent)]
+    Trivial(SendError),
+    /// Failed to buffer up a message for sending, which also caused the
+    /// connection to be closed.
+    #[error(transparent)]
+    Fatal(FatalSendError),
+}
+
 pub enum ClientError {
     // frontend
     /// Backend client task was cancelled, dropping the underlying connection.
@@ -76,12 +96,6 @@ pub enum ClientError {
     /// Client is not connected.
     #[error("not connected")]
     NotConnected,
-    /// See [`SendError`].
-    #[error(transparent)]
-    Send(SendError),
-    /// See [`FatalSendError`].
-    #[error(transparent)]
-    FatalSend(FatalSendError),
     /// See [`OutOfMemory`].
     #[error(transparent)]
     OutOfMemory(OutOfMemory),
@@ -124,8 +138,6 @@ impl From<InternalError<Self>> for ClientError {
             InternalError::BackendClosed => Self::BackendClosed,
             InternalError::MtuTooSmall(err) => Self::MtuTooSmall(err),
             InternalError::OutOfMemory(err) => Self::OutOfMemory(err),
-            InternalError::Send(err) => Self::Send(err),
-            InternalError::FatalSend(err) => Self::FatalSend(err),
             InternalError::FrontendClosed => Self::FrontendClosed,
             InternalError::DatagramsNotSupported => Self::DatagramsNotSupported,
             InternalError::ConnectionLost(err) => Self::ConnectionLost(err),

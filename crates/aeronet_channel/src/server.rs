@@ -91,8 +91,8 @@ enum Client {
 /// Error type for [`ChannelServer::open`], emitted if the server is already
 /// open.
 #[derive(Debug, Clone, thiserror::Error)]
-#[error("already open")]
-pub struct ServerAlreadyOpen;
+#[error("not closed")]
+pub struct ServerNotClosed;
 
 /// Error type for [`ChannelServer::send`].
 #[derive(Debug, Clone, thiserror::Error)]
@@ -151,9 +151,9 @@ impl ChannelServer {
     /// # Errors
     ///
     /// Errors if this server is already open.
-    pub fn open(&mut self) -> Result<(), ServerAlreadyOpen> {
+    pub fn open(&mut self) -> Result<(), ServerNotClosed> {
         if !matches!(self.state, State::Closed) {
-            return Err(ServerAlreadyOpen);
+            return Err(ServerNotClosed);
         }
 
         self.state = State::Open(Open {

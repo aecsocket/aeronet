@@ -1,5 +1,3 @@
-use std::mem;
-
 use aeronet::{
     client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
     error::pretty_error,
@@ -13,13 +11,13 @@ use tracing::debug;
 use web_time::Duration;
 
 use crate::{
-    internal::{ConnectionInner, PollEvent},
+    internal::{ConnectionInner, InternalSendError, PollEvent},
     runtime::WebTransportRuntime,
 };
 
 use super::{
-    backend, ClientConfig, ClientError, Connected, Connecting, State, ToConnected,
-    WebTransportClient,
+    backend, ClientConfig, ClientError, ClientNotDisconnected, ClientSendError, Connected,
+    Connecting, State, ToConnected, WebTransportClient,
 };
 
 impl Default for WebTransportClient {
@@ -54,9 +52,9 @@ impl WebTransportClient {
         net_config: ClientConfig,
         session_config: SessionConfig,
         target: impl Into<String>,
-    ) -> Result<(), ClientError> {
+    ) -> Result<(), ClientNotDisconnected> {
         if !matches!(self.state, State::Disconnected) {
-            return Err(ClientError::AlreadyConnected);
+            return Err(ClientNotDisconnected);
         }
 
         let (send_connected, recv_connected) = oneshot::channel::<ToConnected>();
@@ -96,7 +94,7 @@ impl WebTransportClient {
 }
 
 impl ClientTransport for WebTransportClient {
-    type Error = ClientError;
+    type SendError = ClientSendError;
 
     type Connecting<'this> = &'this Connecting;
 
@@ -132,42 +130,37 @@ impl ClientTransport for WebTransportClient {
         &mut self,
         msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
-    ) -> Result<Self::MessageKey, Self::Error> {
+    ) -> Result<Self::MessageKey, Self::SendError> {
         let State::Connected(client) = &mut self.state else {
-            return Err(ClientError::NotConnected);
+            return Err(ClientSendError::NotConnected);
         };
 
         let msg = msg.into();
         let lane = lane.into();
-        client.inner.send(msg, lane).map_err(From::from)
+        client.inner.send(msg, lane).map_err(|err| match err {
+            InternalSendError::Trivial(err) => ClientSendError::Trivial(err),
+            InternalSendError::Fatal(err) => ClientSendError::Fatal(err),
+        })
     }
 
-    fn flush(&mut self) -> Result<(), Self::Error> {
+    fn flush(&mut self) {
         let State::Connected(client) = &mut self.state else {
-            return Err(ClientError::NotConnected);
+            return;
         };
 
         client.inner.flush();
-        Ok(())
     }
 
-    fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
+    fn disconnect(&mut self, reason: impl Into<String>) {
         let reason = reason.into();
-        match mem::replace(
-            &mut self.state,
-            State::Disconnecting {
-                reason: reason.clone(),
-            },
-        ) {
+        replace_with::replace_with_or_abort(&mut self.state, |state| match state {
             State::Connected(client) => {
-                let _ = client.inner.send_local_dc.send(reason);
-                Ok(())
+                let _ = client.inner.send_local_dc.send(reason.clone());
+                State::Disconnecting { reason }
             }
-            State::Connecting(_) => Ok(()),
-            State::Disconnected | State::Disconnecting { .. } => {
-                Err(ClientError::AlreadyDisconnected)
-            }
-        }
+            State::Connecting(_) => State::Disconnecting { reason },
+            State::Disconnected | State::Disconnecting { .. } => state,
+        });
     }
 }
 
@@ -234,7 +227,7 @@ impl WebTransportClient {
 }
 
 impl SessionBacked for WebTransportClient {
-    fn get_session(&self) -> Option<&Session> {
+    fn session(&self) -> Option<&Session> {
         if let State::Connected(client) = &self.state {
             Some(&client.inner.session)
         } else {

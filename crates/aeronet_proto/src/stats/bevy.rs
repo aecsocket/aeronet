@@ -103,7 +103,7 @@ impl<T> DerefMut for ClientSessionStats<T> {
 
 impl<T: SessionBacked + Resource> ClientSessionStatsPlugin<T> {
     fn update_stats(mut stats: ResMut<ClientSessionStats<T>>, client: Res<T>) {
-        let Some(session) = client.get_session() else {
+        let Some(session) = client.session() else {
             stats.clear();
             return;
         };
