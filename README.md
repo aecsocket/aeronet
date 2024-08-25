@@ -8,6 +8,13 @@ consistent API which can be implemented by different transport mechanisms.
 
 # Try the example!
 
+Clone the repo:
+
+```sh
+git clone https://github.com/aecsocket/aeronet
+cd aeronet
+```
+
 Start the server:
 
 ```sh
@@ -35,39 +42,54 @@ See the [examples](./examples) folder for the source code.
 
 # Transport
 
-The main purpose of this crate is to provide an API for transmitting messages between a client and
-a server over any type of connection - in-memory channels, networked, WASM, etc. This is done
-through the traits [`ClientTransport`] and [`ServerTransport`].
+The main purpose of this crate is to provide an API for transmitting messages, defined as sequences
+of bytes, between a client and a server over any type of IO layer, be it in-memory (MPSC channels),
+a network, or anything else. This is done through the traits [`ClientTransport`] and
+[`ServerTransport`].
 
 The current transport implementations available are:
 
-* [`aeronet_channel`](https://docs.rs/aeronet_channel) - using in-memory MPSC channels
-  * Useful for non-networked scenarios, such as a local singleplayer server
-  * Targets: **Native + WASM**
-  * `cargo run --package aeronet_channel --example echo --features "bevy"`
-* [`aeronet_webtransport`](https://docs.rs/aeronet_webtransport) - using the
+- [`aeronet_channel`](https://docs.rs/aeronet_channel) - using in-memory MPSC channels
+  - Useful for non-networked scenarios, such as a local singleplayer server
+  - Targets **native + WASM**
+
+```sh
+cargo run --package aeronet_channel --example echo --features "bevy"
+```
+
+- [`aeronet_webtransport`](https://docs.rs/aeronet_webtransport) - using the
   [WebTransport](https://www.w3.org/TR/webtransport/) protocol, based on QUIC
-  * Good choice for a general transport implementation
-  * Targets: **Native (client + server) + WASM (client)**
-  * `cargo run --package aeronet_webtransport --example echo_client --features "client bevy dangerous-configuration"`
-  * `cargo run --package aeronet_webtransport --example echo_client --features "client bevy dangerous-configuration" --target wasm32-unknown-unknown`
-    * Requires `wasm-server-runner` to be installed
-  * `cargo run --package aeronet_webtransport --example echo_server --features "server bevy"`
-* [`aeronet_steam`](https://docs.rs/aeronet_steam) - using Steam's
+  - Good choice for a general transport implementation
+  - Targets **native (client + server) + WASM (client)**
+
+```sh
+cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration client"
+
+# requires `cargo install wasm-server-runner`
+cargo run --package aeronet_webtransport --example echo_client --features "bevy dangerous-configuration client" --target wasm32-unknown-unknown
+
+cargo run --package aeronet_webtransport --example echo_server --features "bevy server"
+```
+
+- [`aeronet_steam`](https://docs.rs/aeronet_steam) - using Steam's
   [NetworkingSockets](https://partner.steamgames.com/doc/api/ISteamNetworkingSockets) API
-  * **STILL WIP**
-  * Targets: **Native**
-  * `cargo run --package aeronet_steam --example echo_client --features "client bevy"`
-  * `cargo run --package aeronet_steam --example echo_server --features "server bevy"`
+  - **STILL WIP**
+  - Targets **native**
+
+```sh
+cargo run --package aeronet_steam --example echo_client --features "bevy client"
+cargo run --package aeronet_steam --example echo_server --features "bevy server"
+```
 
 # Goals
 
 This crate aims to be:
-- Generic over as many transports as possible
-  - You should be able to plug nearly anything in as the underlying transport layer, and have things
-    work
+- Generic over as many IO layers as possible
+  - You should be able to plug nearly anything in as the underlying IO layer, and have things work
   - To achieve this, aeronet provides its own implementation of certain protocol elements such as
     fragmentation and reliable messages - see [`aeronet_proto`](https://docs.rs/aeronet_proto)
+  - If the IO layer gives us some guarantees like pre-fragmenting messages or reliability, we can
+    take advantage of that instead of adding redundant fragmentation/reliability on top
 - Correct and non-panicking
   - Error handling is explicit - it's clear what operations can fail, how they may fail, and how you
     should handle it
@@ -99,19 +121,14 @@ This crate does not aim to be:
 
 # Overview
 
-## Client/server separation
-
-To avoid API mistakes and keep the client and server as separated as possible, the client and server
-sides are separated behind two feature flags - `client` and `server`. If you split your app into a
-pair of client and server apps, you can use these features to ensure that you're not using client
-types on the server side, and vice versa. However, there's nothing stopping you from including both
-the client and server in the same binary.
-
 ## Messages
 
 The smallest unit of transmission that the API exposes is a message. A message is represented as a
 [`Bytes`] - a container for a byte sequence which allows zero-copy networking code. It is up to the
 user to give meaning to these bytes.
+
+This crate does not depend on `serde` or any other serialization crate - you are responsible for
+encoding and decoding messages into and from raw bytes.
 
 ## Lanes
 
@@ -121,8 +138,8 @@ but lanes are abstractions over the manner of delivery, rather than the individu
 channel. The types of lanes that are supported, and therefore what guarantees are given, are listed
 in [`LaneKind`].
 
-Note that if a transport does not support lanes, then it inherently guarantees the strongest
-guarantees provided by lanes - that is, communication is always reliable-ordered.
+Note that if a transport does not support lanes, then it inherently provides the strongest
+guarantees possible - that is, communication is always reliable-ordered.
 
 Typically, a transport implementation will require you to pass a configuration on creation,
 which defines which lanes are available to the transport, and what their properties are (i.e. is it
@@ -135,14 +152,6 @@ reliable, ordered, etc).
 This crate provides some useful items and types for working with transports, which can be added to
 your app as a resource. However, note that no plugins are provided - instead, it is your
 responsibility to drive the transport event loop manually.
-
-## Conditioning
-
-*Feature flag: `condition` - depends on `getrandom`, which may not work in WASM*
-
-A common strategy used for ensuring that your network code is robust against failure is to add
-artificial packet loss and delays. This crate provides a utility for this via the [`condition`]
-module.
 
 ## Protocol
 
@@ -202,10 +211,68 @@ After a connection is established:
 - use `flush` to flush all buffered messages and actually send them across the transport
 - use `poll` to update the internal state of the transport and receive events about what happened
 
-It is recommended that you use `send` to buffer up messages for sending during your app's update,
-then use `poll` and `flush` at the end of each update to finalize the update.
+During your app's update, call `send` to buffer up messages for sending, then use `poll` and `flush`
+at the end of each update to finalize. You can also perform all the `send` calls right before
+flushing, at the end of the update.
 
-It is up to you to encode and decode your own data into the [`Bytes`].
+## Testing
+
+Communication over a network always has the possibility of failure. The connection might be dropped,
+there may be a burst of packet loss, or jitter may suddenly increase. Code which handles networking
+must be resilient to these conditions.
+
+### Visualizer
+
+
+
+### Conditioning
+
+A common strategy used for ensuring that your network code is robust against failure is to add
+artificial errors to the connection. This can include randomly duplicating, dropping, or delaying
+packets, and you typically use a *conditioner* to simulate a poor network condition.
+
+It's not very useful to condition the messages at the application layer - instead, conditioning
+should be done at the network link level, so that the results of conditioning are the most accurate
+to what will actually happen in real-life scenarios. There are various tools for different operating
+systems to simulate poor network conditions.
+
+#### Linux
+
+You can use the `tc` utility from `iproute2` for this:
+
+```sh
+# make sure the netem (network emulator) kernel module is loaded
+# this should automatically be loaded on most distros, but if you get:
+#   Error: Specified qdisc kind is unknown.
+# run this command:
+#   sudo modprobe sch_netem
+
+# add a queue discipline
+# replace <INTERFACE> with your network interface
+# if testing with client and server on the same computer, use `lo`
+sudo tc qdisc add dev <INTERFACE> root netem
+  delay <DELAY>                               # fixed packet delay
+  delay <MEAN> <STD DEV> distribution normal  # random packet delay (normal distribution)
+  loss <CHANCE>%                              # random packet loss
+  corrupt <CHANCE>%                           # random single-bit error
+  duplicate <CHANCE>%                         # random packet duplication
+
+# remove the queue discipline
+sudo tc qdisc delete dev <INTERFACE> root
+
+# examples
+sudo tc qdisc add dev lo root netem delay 150ms 50ms distribution normal
+sudo tc qdisc add dev lo root netem loss 20%
+sudo tc qdisc delete dev lo root
+```
+
+#### MacOS
+
+See [Network Link Conditioner](https://stackoverflow.com/questions/9659382/installing-apples-network-link-conditioner-tool).
+
+#### Windows
+
+See [clumsy](https://jagt.github.io/clumsy/index.html).
 
 ```rust
 use aeronet::bytes::Bytes;
@@ -249,7 +316,7 @@ for event in client.poll(delta_time) {
 
 | `bevy` | `aeronet` |
 |--------|-----------|
-| 0.14   | 0.7       |
+| 0.14   | 0.8       |
 | 0.13   | 0.6       |
 
 [`Bytes`]: bytes::Bytes

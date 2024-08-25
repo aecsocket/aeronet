@@ -15,11 +15,11 @@ version.workspace = true
 workspace = true
 
 [features]
-## Enables client-side items.
-client = ["aeronet/client"]
+## Enables the `SteamClient`.
+client = []
 
-## Enables server-side items.
-server = ["aeronet/server"]
+## Enables the `SteamServer`.
+server = []
 
 ## Enables [`bevy`](https://docs.rs/bevy) support by deriving `Resource` on certain types.
 bevy = ["dep:bevy_ecs", "aeronet/bevy", "aeronet_proto/bevy"]

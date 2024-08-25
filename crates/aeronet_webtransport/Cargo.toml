@@ -20,11 +20,11 @@ rustflags = ["--cfg=web_sys_unstable_apis"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [features]
-## Enables client-side items.
-client = ["aeronet/client"]
+## Enables the `WebTransportClient`.
+client = []
 
-## Enables server-side items.
-server = ["aeronet/server"]
+## Enables the `WebTransportServer`.
+server = []
 
 ## Enables [`bevy`](https://docs.rs/bevy) support by deriving `Resource` on certain types.
 bevy = ["dep:bevy_ecs", "aeronet/bevy", "aeronet_proto/bevy"]
