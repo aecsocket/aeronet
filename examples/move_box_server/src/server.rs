@@ -121,7 +121,7 @@ fn on_opened(
 }
 
 fn on_closed(mut events: EventReader<ServerClosed<WebTransportServer>>) {
-    for ServerClosed { error } in events.read() {
+    for ServerClosed { reason: error } in events.read() {
         info!("Server closed: {:#}", pretty_error(&error));
     }
 }

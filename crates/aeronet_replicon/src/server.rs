@@ -196,8 +196,8 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
                 ServerEvent::Opened => {
                     events.opened.send(ServerOpened::default());
                 }
-                ServerEvent::Closed { reason: error } => {
-                    events.closed.send(ServerClosed { error });
+                ServerEvent::Closed { reason } => {
+                    events.closed.send(ServerClosed { reason });
                 }
                 ServerEvent::Connecting { client_key } => {
                     events
@@ -258,9 +258,9 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
         client_keys: &mut ClientKeys<T>,
         events: &mut Events<T>,
         client_key: T::ClientKey,
-        reason: DisconnectReason<T::Error>,
+        reason: DisconnectReason<T::PollError>,
     ) {
-        let reason_str = format!("{:#}", aeronet::error::pretty_error(&reason));
+        let reason_str = format!("{:#}", pretty_error(&reason));
         events.disconnected.send(RemoteClientDisconnected {
             client_key: client_key.clone(),
             reason,
@@ -329,8 +329,6 @@ impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
             );
         }
 
-        if let Err(error) = server.flush() {
-            warn!("Failed to flush data: {:#}", pretty_error(&error));
-        }
+        server.flush();
     }
 }

@@ -99,10 +99,13 @@ pub struct ServerOpened<T: ServerTransport> {
 /// [`ServerState::Closed`]: crate::server::ServerState::Closed
 /// [`ServerEvent::Closed`]: super::ServerEvent::Closed
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+#[derivative(
+    Debug(bound = "T::PollError: Debug"),
+    Clone(bound = "T::PollError: Clone")
+)]
 pub struct ServerClosed<T: ServerTransport> {
     /// Why the server closed.
-    pub error: CloseReason<T::Error>,
+    pub reason: CloseReason<T::PollError>,
 }
 
 /// A remote client has requested to connect to this server.
@@ -152,12 +155,15 @@ pub struct RemoteClientConnected<T: ServerTransport> {
 ///
 /// [`ServerEvent::Disconnected`]: super::ServerEvent::Disconnected
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+#[derivative(
+    Debug(bound = "T::PollError: Debug"),
+    Clone(bound = "T::PollError: Clone")
+)]
 pub struct RemoteClientDisconnected<T: ServerTransport> {
     /// Key of the client.
     pub client_key: T::ClientKey,
     /// Why the client lost connection.
-    pub reason: DisconnectReason<T::Error>,
+    pub reason: DisconnectReason<T::PollError>,
 }
 
 /// A client acknowledged that they have fully received a message sent by
