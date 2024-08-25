@@ -19,7 +19,7 @@ use super::{ClientEndpoint, Connection, ConnectionMeta, InternalError};
 
 const STATS_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
 
-const DC_ERROR_CODE: u32 = 0;
+const DISCONNECT_ERROR_CODE: u32 = 0;
 
 #[allow(clippy::unnecessary_wraps)] // on WASM, must match fn sig
 pub fn create_client_endpoint(config: ClientConfig) -> Result<ClientEndpoint, ClientError> {
@@ -97,7 +97,7 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
                     use wasm_bindgen_futures::JsFuture;
 
                     let mut close_info = WebTransportCloseInfo::new();
-                    close_info.close_code(DC_ERROR_CODE);
+                    close_info.close_code(DISCONNECT_ERROR_CODE);
                     close_info.reason(&reason);
 
                     // TODO: This seems to not close the connection properly
@@ -111,7 +111,7 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
                 {
                     use wtransport::VarInt;
 
-                    conn.0.close(VarInt::from_u32(DC_ERROR_CODE), reason.as_bytes());
+                    conn.0.close(VarInt::from_u32(DISCONNECT_ERROR_CODE), reason.as_bytes());
                     conn.0.closed().await;
                 }
             }
