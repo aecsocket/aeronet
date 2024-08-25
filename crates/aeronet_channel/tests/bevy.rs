@@ -14,6 +14,9 @@ use bytes::Bytes;
 
 #[test]
 fn send_recv() {
+    #[derive(Debug, Resource)]
+    struct Complete;
+
     const MSG1: Bytes = Bytes::from_static(b"hello 1");
     const MSG2: Bytes = Bytes::from_static(b"hello two");
     const LANE: LaneIndex = LaneIndex::from_raw(0);
@@ -52,12 +55,17 @@ fn send_recv() {
         server.send(ck, MSG2, LANE).unwrap();
     }
 
-    fn client_recv_msg(mut client: ResMut<ChannelClient>) {
+    fn client_recv_msg(mut commands: Commands, mut client: ResMut<ChannelClient>) {
         let mut events = client.poll(Duration::ZERO);
         assert_matches!(events.next().unwrap(), ClientEvent::Connected);
         assert_matches!(events.next().unwrap(), ClientEvent::Recv { msg, lane } if msg == MSG2 && lane == LANE);
+        assert_matches!(events.next().unwrap(), ClientEvent::Ack { .. });
         assert!(events.next().is_none());
+
+        commands.insert_resource(Complete);
     }
 
     app.update();
+
+    app.world().resource::<Complete>();
 }
