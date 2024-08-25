@@ -8,7 +8,7 @@ use web_time::{Duration, Instant};
 
 use crate::shared::MessageKey;
 
-use super::{ConnectionInner, InternalError, InternalSendError};
+use super::{InternalSession, SessionError, SessionSendError};
 
 #[derive(Debug)]
 pub enum PollEvent {
@@ -16,8 +16,8 @@ pub enum PollEvent {
     Recv { msg: Bytes, lane: LaneIndex },
 }
 
-impl<E> ConnectionInner<E> {
-    pub fn send(&mut self, msg: Bytes, lane: LaneIndex) -> Result<MessageKey, InternalSendError> {
+impl InternalSession {
+    pub fn send(&mut self, msg: Bytes, lane: LaneIndex) -> Result<MessageKey, SessionSendError> {
         let err = match self.session.send(Instant::now(), msg, lane) {
             Ok(key) => {
                 return Ok(key);
@@ -28,9 +28,9 @@ impl<E> ConnectionInner<E> {
         match err.narrow::<FatalSendError, _>() {
             Ok(err) => {
                 self.fatal_error = Some(err.clone());
-                Err(InternalSendError::Fatal(err))
+                Err(SessionSendError::Fatal(err))
             }
-            Err(err) => Err(InternalSendError::Trivial(err.take())),
+            Err(err) => Err(SessionSendError::Trivial(err.take())),
         }
     }
 
@@ -52,15 +52,7 @@ impl<E> ConnectionInner<E> {
         &mut self,
         delta_time: Duration,
         mut cb: impl FnMut(PollEvent),
-    ) -> Result<(), DisconnectReason<InternalError<E>>> {
-        if let Some(reason) = self
-            .recv_dc
-            .try_recv()
-            .map_err(|_| InternalError::BackendClosed)?
-        {
-            return Err(reason.map_err(InternalError::Spec));
-        }
-
+    ) -> Result<(), DisconnectReason<SessionError>> {
         while let Ok(Some(meta)) = self.recv_meta.try_next() {
             #[cfg(not(target_family = "wasm"))]
             {
@@ -69,7 +61,7 @@ impl<E> ConnectionInner<E> {
             }
             self.session
                 .set_mtu(meta.mtu)
-                .map_err(InternalError::MtuTooSmall)?;
+                .map_err(SessionError::MtuTooSmall)?;
         }
 
         let mut bytes_recv = Saturating(0usize);
@@ -107,7 +99,7 @@ impl<E> ConnectionInner<E> {
 
         self.session
             .update(delta_time)
-            .map_err(InternalError::OutOfMemory)?;
+            .map_err(SessionError::OutOfMemory)?;
 
         let bytes_recv = bytes_recv.0;
         if bytes_recv > 0 {

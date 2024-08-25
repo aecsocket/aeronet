@@ -102,11 +102,11 @@ pub enum ServerSendError {
     NotOpen,
     /// Attempted to send to a client which is not connected.
     #[error("client not connected")]
-    NotConnected,
+    ClientNotConnected,
     /// Attempted to send to a client which we thought was connected, but the
     /// other side of the channel was disconnected.
     #[error("disconnected")]
-    Disconnected,
+    ClientDisconnected,
 }
 
 /// Error type for operations on a [`ChannelServer`].
@@ -192,10 +192,6 @@ impl ChannelServer {
 }
 
 impl ServerTransport for ChannelServer {
-    type PollError = Disconnected;
-
-    type SendError = ServerSendError;
-
     type Opening<'this> = Infallible;
 
     type Open<'this> = &'this Open;
@@ -207,6 +203,10 @@ impl ServerTransport for ChannelServer {
     type ClientKey = ClientKey;
 
     type MessageKey = MessageKey;
+
+    type PollError = Disconnected;
+
+    type SendError = ServerSendError;
 
     fn state(&self) -> ServerState<Self::Opening<'_>, Self::Open<'_>> {
         match &self.state {
@@ -265,7 +265,7 @@ impl ServerTransport for ChannelServer {
             return Err(ServerSendError::NotOpen);
         };
         let Some(Client::Connected(client)) = server.clients.get_mut(client_key) else {
-            return Err(ServerSendError::NotConnected);
+            return Err(ServerSendError::ClientNotConnected);
         };
 
         let msg = msg.into();
@@ -276,7 +276,7 @@ impl ServerTransport for ChannelServer {
         client
             .send_s2c
             .send((msg_key, msg, lane))
-            .map_err(|_| ServerSendError::Disconnected)?;
+            .map_err(|_| ServerSendError::ClientDisconnected)?;
         client.bytes_sent += msg_len;
         client.next_send_msg_key.inc();
         Ok(msg_key)

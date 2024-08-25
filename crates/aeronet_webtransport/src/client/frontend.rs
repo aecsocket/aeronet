@@ -11,7 +11,7 @@ use tracing::debug;
 use web_time::Duration;
 
 use crate::{
-    internal::{ConnectionInner, InternalSendError, PollEvent},
+    internal::{InternalSession, PollEvent},
     runtime::WebTransportRuntime,
 };
 
@@ -94,13 +94,15 @@ impl WebTransportClient {
 }
 
 impl ClientTransport for WebTransportClient {
-    type SendError = ClientSendError;
-
     type Connecting<'this> = &'this Connecting;
 
     type Connected<'this> = &'this Connected;
 
     type MessageKey = MessageKey;
+
+    type PollError = ClientError;
+
+    type SendError = ClientSendError;
 
     fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
         match &self.state {
@@ -137,10 +139,7 @@ impl ClientTransport for WebTransportClient {
 
         let msg = msg.into();
         let lane = lane.into();
-        client.inner.send(msg, lane).map_err(|err| match err {
-            InternalSendError::Trivial(err) => ClientSendError::Trivial(err),
-            InternalSendError::Fatal(err) => ClientSendError::Fatal(err),
-        })
+        client.inner.send(msg, lane).map_err(From::from)
     }
 
     fn flush(&mut self) {
@@ -178,19 +177,19 @@ impl WebTransportClient {
                 State::Connected(Connected {
                     #[cfg(not(target_family = "wasm"))]
                     local_addr: next.local_addr,
-                    inner: ConnectionInner {
+                    inner: InternalSession {
                         #[cfg(not(target_family = "wasm"))]
                         remote_addr: next.initial_remote_addr,
                         #[cfg(not(target_family = "wasm"))]
                         raw_rtt: next.initial_rtt,
                         session: next.session,
-                        recv_dc: client.recv_dc,
                         recv_meta: next.recv_meta,
                         send_msgs: next.send_c2s,
                         recv_msgs: next.recv_s2c,
                         send_local_dc: next.send_local_dc,
                         fatal_error: None,
                     },
+                    recv_dc: client.recv_dc,
                 })
             }
             Err(_) => {
@@ -207,19 +206,30 @@ impl WebTransportClient {
         events: &mut Vec<ClientEvent<Self>>,
         delta_time: Duration,
     ) -> State {
-        let res = client.inner.poll(delta_time, |event| {
-            events.push(match event {
-                PollEvent::Ack { msg_key } => ClientEvent::Ack { msg_key },
-                PollEvent::Recv { msg, lane } => ClientEvent::Recv { msg, lane },
-            });
-        });
+        let res = (|| {
+            if let Some(reason) = client
+                .recv_dc
+                .try_recv()
+                .map_err(|_| DisconnectReason::Error(ClientError::BackendClosed))?
+            {
+                return Err(reason);
+            }
+
+            client
+                .inner
+                .poll(delta_time, |event| {
+                    events.push(match event {
+                        PollEvent::Ack { msg_key } => ClientEvent::Ack { msg_key },
+                        PollEvent::Recv { msg, lane } => ClientEvent::Recv { msg, lane },
+                    });
+                })
+                .map_err(|reason| reason.map_err(From::from))
+        })();
 
         match res {
             Ok(()) => State::Connected(client),
             Err(reason) => {
-                events.push(ClientEvent::Disconnected {
-                    reason: reason.map_err(From::from),
-                });
+                events.push(ClientEvent::Disconnected { reason });
                 State::Disconnected
             }
         }
