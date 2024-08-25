@@ -143,7 +143,7 @@ fn net_config(cert_hash: String) -> ClientConfig {
     config
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
-        .unwrap()
+        .expect("should be a valid max idle timeout")
         .build()
 }
 

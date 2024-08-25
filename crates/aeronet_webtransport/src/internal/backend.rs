@@ -53,9 +53,9 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
         let conn = conn.clone();
         let mut send_err = send_err.clone();
         async move {
-            let err = send_loop(conn, recv_sending_closed, recv_s)
-                .await
-                .unwrap_err();
+            let Err(err) = send_loop(conn, recv_sending_closed, recv_s).await else {
+                unreachable!();
+            };
             let _ = send_err.try_send(err);
         }
     });
@@ -65,9 +65,9 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
         let conn = conn.clone();
         let mut send_err = send_err.clone();
         async move {
-            let err = recv_loop(conn, recv_receiving_closed, send_r)
-                .await
-                .unwrap_err();
+            let Err(err) = recv_loop(conn, recv_receiving_closed, send_r).await else {
+                unreachable!();
+            };
             let _ = send_err.try_send(err);
         }
     });
@@ -78,9 +78,9 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
         let conn = conn.clone();
         let mut send_err = send_err.clone();
         async move {
-            let err = meta_loop(runtime, conn, recv_meta_closed, send_meta)
-                .await
-                .unwrap_err();
+            let Err(err) = meta_loop(runtime, conn, recv_meta_closed, send_meta).await else {
+                unreachable!();
+            };
             let _ = send_err.try_send(err);
         }
     });
@@ -150,11 +150,11 @@ async fn send_loop<E>(
     conn: Arc<Connection>,
     mut recv_closed: oneshot::Receiver<()>,
     mut recv_s: mpsc::UnboundedReceiver<Bytes>,
-) -> Result<(), InternalError<E>> {
+) -> Result<Never, InternalError<E>> {
     loop {
         let packet = futures::select! {
             x = recv_s.next() => x,
-            _ = recv_closed => return Ok(()),
+            _ = recv_closed => return Err(InternalError::FrontendClosed),
         }
         .ok_or(InternalError::FrontendClosed)?;
 
@@ -204,12 +204,12 @@ async fn recv_loop<E>(
     conn: Arc<Connection>,
     mut recv_closed: oneshot::Receiver<()>,
     mut send_r: mpsc::Sender<Bytes>,
-) -> Result<(), InternalError<E>> {
+) -> Result<Never, InternalError<E>> {
     loop {
         #[allow(clippy::useless_conversion)] // multi-target support
         let packet = futures::select! {
             x = conn.receive_datagram().fuse() => x,
-            _ = recv_closed => return Ok(()),
+            _ = recv_closed => return Err(InternalError::FrontendClosed),
         }
         .map_err(|err| InternalError::ConnectionLost(err.into()))?;
 
@@ -236,14 +236,13 @@ async fn meta_loop<E>(
     conn: Arc<Connection>,
     mut recv_closed: oneshot::Receiver<()>,
     mut send_meta: mpsc::Sender<ConnectionMeta>,
-) -> Result<(), InternalError<E>> {
+) -> Result<Never, InternalError<E>> {
     loop {
-        {
-            futures::select! {
-                () = runtime.sleep(STATS_UPDATE_INTERVAL).fuse() => {},
-                _ = recv_closed => return Ok(()),
-            };
-        }
+        futures::select! {
+            () = runtime.sleep(STATS_UPDATE_INTERVAL).fuse() => {},
+            _ = recv_closed => return Err(InternalError::FrontendClosed),
+        };
+
         let meta = ConnectionMeta {
             #[cfg(not(target_family = "wasm"))]
             rtt: conn.0.rtt(),

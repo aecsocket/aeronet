@@ -71,7 +71,8 @@ This crate aims to be:
 - Correct and non-panicking
   - Error handling is explicit - it's clear what operations can fail, how they may fail, and how you
     should handle it
-  - If any aeronet code panics during normal operation, it's a bug - open an issue!
+  - No `unwrap`s - all panicking paths are a bug unless explicitly stated otherwise. If you
+    encounter one, open an issue!
   - Transport implementations are designed to be resilient against denial-of-service attacks, be it
     from memory exhaustion, malicious peers, etc., and the problems + mitigations are documented
 - Integrated with Bevy

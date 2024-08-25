@@ -82,9 +82,11 @@ fn open_server(
     args: Res<Args>,
     channels: Res<RepliconChannels>,
 ) {
-    let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
+    let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"])
+        .expect("should be able to generate self-signed certs");
     let cert = &identity.certificate_chain().as_slice()[0];
-    let spki_fingerprint = cert::spki_fingerprint_b64(cert).unwrap();
+    let spki_fingerprint =
+        cert::spki_fingerprint_b64(cert).expect("should be able to get SPKI fingerprint of cert");
     let cert_hash = cert::hash_to_b64(cert.hash());
     info!("************************");
     info!("SPKI FINGERPRINT");
@@ -98,14 +100,14 @@ fn open_server(
         .with_identity(&identity)
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
-        .unwrap()
+        .expect("should be a valid max idle timeout")
         .build();
 
     let session_config = move_box::session_config(channels.as_ref());
 
     server
         .open(runtime.as_ref(), net_config, session_config)
-        .unwrap();
+        .expect("server should be closed");
 }
 
 fn on_opened(
@@ -149,7 +151,9 @@ fn on_server_event(
     for event in events.read() {
         match event {
             ServerEvent::ClientConnected { client_id } => {
-                let client_key = client_keys.get_by_right(client_id).unwrap();
+                let Some(client_key) = client_keys.get_by_right(client_id) else {
+                    continue;
+                };
                 info!("{client_id:?} controlled by {client_key:?} connected");
                 let color = Color::srgb(rand::random(), rand::random(), rand::random());
                 commands.spawn((
