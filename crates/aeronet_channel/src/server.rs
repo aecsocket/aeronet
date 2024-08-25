@@ -393,6 +393,6 @@ impl ChannelServer {
 
 impl Drop for ChannelServer {
     fn drop(&mut self) {
-        let _ = self.close(DROP_DISCONNECT_REASON);
+        self.close(DROP_DISCONNECT_REASON);
     }
 }

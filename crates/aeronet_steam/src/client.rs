@@ -116,6 +116,6 @@ impl SessionBacked for SteamClient {
 
 impl Drop for SteamClient {
     fn drop(&mut self) {
-        let _ = self.disconnect(DROP_DISCONNECT_REASON);
+        self.disconnect(DROP_DISCONNECT_REASON);
     }
 }

@@ -194,6 +194,6 @@ impl SteamServer {
 
 impl Drop for SteamServer {
     fn drop(&mut self) {
-        let _ = self.close(DROP_DISCONNECT_REASON);
+        self.close(DROP_DISCONNECT_REASON);
     }
 }

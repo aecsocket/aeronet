@@ -119,7 +119,11 @@ impl ServerTransport for WebTransportServer {
         server
             .clients
             .get(client_key)
-            .map_or(ClientState::Disconnected, ClientState::as_ref)
+            .map_or(ClientState::Disconnected, |client| match client {
+                Client::Disconnected | Client::Disconnecting { .. } => ClientState::Disconnected,
+                Client::Connecting(client) => ClientState::Connecting(client),
+                Client::Connected(client) => ClientState::Connected(client),
+            })
     }
 
     fn client_keys(&self) -> impl Iterator<Item = Self::ClientKey> + '_ {
@@ -175,7 +179,7 @@ impl ServerTransport for WebTransportServer {
                 "session",
                 key = ?client_key.data()
             );
-            let _ = span.enter();
+            let _span = span.enter();
 
             let Client::Connected(client) = client else {
                 continue;
@@ -193,14 +197,14 @@ impl ServerTransport for WebTransportServer {
             return;
         };
 
-        // todo retain reason for `poll`
-        // make a new Client::Disconnecting { reason }
+        let reason = reason.into();
         replace_with::replace_with_or_abort(client, |state| match state {
             Client::Connected(client) => {
-                let reason = reason.into();
-                let _ = client.inner.send_local_dc.send(reason);
-                Client::Disconnected
+                let _ = client.inner.send_local_dc.send(reason.clone());
+                Client::Disconnecting { reason }
             }
+            Client::Connecting(_) => Client::Disconnecting { reason },
+            Client::Disconnected | Client::Disconnecting { .. } => state,
         });
     }
 
@@ -216,7 +220,7 @@ impl ServerTransport for WebTransportServer {
                 State::Closing { reason }
             }
             State::Opening(_) => State::Closing { reason },
-            State::Closed | State::Closing { .. } => {}
+            State::Closed | State::Closing { .. } => state,
         });
     }
 }
@@ -297,8 +301,15 @@ impl WebTransportServer {
                 );
                 let _span = span.enter();
 
-                replace_with::replace_with_or_abort(client, |client_state| match client_state {
-                    Client::Disconnected => ClientState::Disconnected,
+                replace_with::replace_with_or_abort(client, |state| match state {
+                    Client::Disconnected => state,
+                    Client::Disconnecting { reason } => {
+                        events.push(ServerEvent::Disconnected {
+                            client_key,
+                            reason: DisconnectReason::Local(reason),
+                        });
+                        Client::Disconnected
+                    }
                     Client::Connecting(client) => Self::poll_connecting(events, client_key, client),
                     Client::Connected(client) => {
                         Self::poll_connected(events, client_key, client, delta_time)
@@ -410,6 +421,6 @@ impl WebTransportServer {
 
 impl Drop for WebTransportServer {
     fn drop(&mut self) {
-        let _ = self.close(DROP_DISCONNECT_REASON);
+        self.close(DROP_DISCONNECT_REASON);
     }
 }

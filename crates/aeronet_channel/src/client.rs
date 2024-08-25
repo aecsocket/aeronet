@@ -267,6 +267,6 @@ impl ChannelClient {
 
 impl Drop for ChannelClient {
     fn drop(&mut self) {
-        let _ = self.disconnect(DROP_DISCONNECT_REASON);
+        self.disconnect(DROP_DISCONNECT_REASON);
     }
 }

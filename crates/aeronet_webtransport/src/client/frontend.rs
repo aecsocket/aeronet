@@ -248,6 +248,6 @@ impl SessionBacked for WebTransportClient {
 
 impl Drop for WebTransportClient {
     fn drop(&mut self) {
-        let _ = self.disconnect(DROP_DISCONNECT_REASON);
+        self.disconnect(DROP_DISCONNECT_REASON);
     }
 }

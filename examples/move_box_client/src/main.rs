@@ -196,7 +196,7 @@ fn ui(
         }
 
         if do_disconnect {
-            let _ = client.disconnect("pressed disconnect button");
+            client.disconnect("pressed disconnect button");
         }
     });
 }
