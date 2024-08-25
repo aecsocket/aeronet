@@ -7,7 +7,6 @@ use aeronet::{
         client_connected, ClientEvent, ClientState, ClientTransport, ClientTransportSet,
         LocalClientConnected, LocalClientDisconnected,
     },
-    error::pretty_error,
     lane::LaneIndex,
 };
 use bevy_app::prelude::*;
@@ -166,9 +165,7 @@ impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
             let _ = client.send(payload, LaneIndex::from_raw(u64::from(channel_id)));
         }
 
-        if let Err(error) = client.flush() {
-            warn!("Failed to flush data: {:#}", pretty_error(&error));
-        }
+        client.flush();
 
         let bytes_sent = bytes_sent.0;
         if bytes_sent > 0 {

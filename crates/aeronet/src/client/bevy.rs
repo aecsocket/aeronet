@@ -93,7 +93,7 @@ pub struct LocalClientConnected<T: ClientTransport> {
 }
 
 /// The client has unrecoverably lost connection from its previously
-/// connected server changing state to [`ClientState::Disconnected`].
+/// connected server, changing state to [`ClientState::Disconnected`].
 ///
 /// This is emitted for *any* reason that the client may be disconnected,
 /// including user code calling [`ClientTransport::disconnect`], therefore
@@ -104,10 +104,13 @@ pub struct LocalClientConnected<T: ClientTransport> {
 /// [`ClientState::Disconnected`]: crate::client::ClientState::Disconnected
 /// [`ClientEvent::Disconnected`]: crate::client::ClientEvent::Disconnected
 #[derive(Derivative, Event)]
-#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+#[derivative(
+    Debug(bound = "T::PollError: Debug"),
+    Clone(bound = "T::PollError: Clone")
+)]
 pub struct LocalClientDisconnected<T: ClientTransport> {
     /// Why the client lost connection.
-    pub reason: DisconnectReason<T::Error>,
+    pub reason: DisconnectReason<T::PollError>,
 }
 
 /// The peer acknowledged that they have fully received a message sent by

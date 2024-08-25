@@ -5,12 +5,12 @@ mod bevy;
 
 #[cfg(feature = "bevy")]
 pub use bevy::*;
-use web_time::Duration;
 
 use std::{error::Error, fmt::Debug, hash::Hash};
 
 use bytes::Bytes;
 use derivative::Derivative;
+use web_time::Duration;
 
 use crate::lane::LaneIndex;
 
@@ -19,9 +19,6 @@ use crate::lane::LaneIndex;
 ///
 /// See the [crate-level documentation](crate).
 pub trait ClientTransport {
-    /// Error type for operations performed on this transport.
-    type Error: Error + Send + Sync;
-
     /// Client state when it is in [`ClientState::Connecting`].
     type Connecting<'this>
     where
@@ -40,6 +37,12 @@ pub trait ClientTransport {
     /// See [`ClientTransport::send`].
     type MessageKey: Send + Sync + Debug + Clone + PartialEq + Eq + Hash;
 
+    /// Error type for [`ClientEvent`]s emitted by [`ClientTransport::poll`].
+    type PollError: Send + Sync + Error;
+
+    /// Error type for [`ClientTransport::send`].
+    type SendError: Send + Sync + Error;
+
     /// Gets the current state of this client.
     ///
     /// See [`ClientState`].
@@ -53,7 +56,8 @@ pub trait ClientTransport {
     ///
     /// If this emits an event which changes the transport's state, then after
     /// this function, the transport is guaranteed to be in this new state. The
-    /// transport may emit an arbitrary number of state-changing events.
+    /// transport may emit an arbitrary number of state-changing events in one
+    /// call.
     fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>>;
 
     /// Attempts to send a message along a specific lane to the currently
@@ -62,6 +66,15 @@ pub trait ClientTransport {
     /// This returns a key uniquely identifying the sent message. This can be
     /// used to query the state of the message, such as if it was acknowledged
     /// by the peer, if the implementation supports it.
+    ///
+    /// This key must stay unique to this specific sent message for a reasonable
+    /// amount of time, such that it can be used for e.g. predicting RTT or
+    /// other short-term actions, but is not guaranteed to stay unique forever.
+    /// This requirement is purposefully left vague to give transport
+    /// implementations the freedom to optimize the message key - for example,
+    /// the implementation may choose to represent message keys as [`u16`]s,
+    /// which wrap around quickly, but is suitable for short-term message
+    /// tracking.
     ///
     /// The implementation may choose to buffer the message before sending it
     /// out - therefore, you should call [`ClientTransport::flush`] after you
@@ -74,12 +87,13 @@ pub trait ClientTransport {
     /// if it is not connected to a server.
     ///
     /// If a transmission error occurs later after this function's scope has
-    /// finished, then this will still return [`Ok`].
+    /// finished, the error will be emitted on the next
+    /// [`ClientTransport::poll`] call.
     fn send(
         &mut self,
         msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
-    ) -> Result<Self::MessageKey, Self::Error>;
+    ) -> Result<Self::MessageKey, Self::SendError>;
 
     /// Sends all messages previously buffered by [`ClientTransport::send`] to
     /// peers.
@@ -87,14 +101,12 @@ pub trait ClientTransport {
     /// Note that implementations may choose to send messages immediately
     /// instead of buffering them. In this case, flushing will be a no-op.
     ///
-    /// # Errors
+    /// If the transport is disconnected or otherwise unable to flush messages,
+    /// the call will be a no-op.
     ///
-    /// Errors if the transport failed to *attempt to* flush messages, e.g. if
-    /// the transport is not connected.
-    ///
-    /// If a transmission error occurs later after this function's scope has
-    /// finished, then this will still return [`Ok`].
-    fn flush(&mut self) -> Result<(), Self::Error>;
+    /// If a fatal connection error occurs while flushing, the error will be
+    /// emitted on the next [`ClientTransport::poll`] call.
+    fn flush(&mut self);
 
     /// Disconnects this client from its currently connected server.
     ///
@@ -106,13 +118,10 @@ pub trait ClientTransport {
     /// The implementation may place limitations on the `reason`, e.g. a maximum
     /// byte length.
     ///
-    /// If this is called twice in a row, the second call must be a no-op.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the transport failed to *attempt to* disconnect, e.g. if the
-    /// transport has not been connected yet.
-    fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error>;
+    /// Disconnection is an infallible operation. If this is called while the
+    /// transport is disconnected, or this is called twice in a row, the call
+    /// will be a no-op.
+    fn disconnect(&mut self, reason: impl Into<String>);
 }
 
 /// Implementation-specific state details of a [`ClientTransport`].
@@ -186,7 +195,10 @@ impl<A, B> ClientState<A, B> {
 
 /// Event emitted by a [`ClientTransport`].
 #[derive(Derivative, PartialEq, Eq)]
-#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+#[derivative(
+    Debug(bound = "T::PollError: Debug"),
+    Clone(bound = "T::PollError: Clone")
+)]
 pub enum ClientEvent<T: ClientTransport + ?Sized> {
     // state
     /// The client has fully established a connection to the server,
@@ -203,7 +215,7 @@ pub enum ClientEvent<T: ClientTransport + ?Sized> {
     /// this may be used as a signal to tear down the app state.
     Disconnected {
         /// Why the client lost connection.
-        reason: DisconnectReason<T::Error>,
+        reason: DisconnectReason<T::PollError>,
     },
 
     /// The client received a message from the server.
@@ -230,16 +242,16 @@ pub enum ClientEvent<T: ClientTransport + ?Sized> {
     },
 }
 
-impl<Error, MessageKey, T> ClientEvent<T>
+impl<PollError, MessageKey, T> ClientEvent<T>
 where
-    T: ClientTransport<Error = Error, MessageKey = MessageKey>,
+    T: ClientTransport<PollError = PollError, MessageKey = MessageKey>,
 {
     /// Remaps this `ClientEvent<T>` into a `ClientEvent<R>` where `T` and `R`
-    /// are [`ClientTransport`]s which share the same `Error` and `MessageKey`
-    /// types.
+    /// are [`ClientTransport`]s which share the same `PollError` and
+    /// `MessageKey` types.
     pub fn remap<R>(self) -> ClientEvent<R>
     where
-        R: ClientTransport<Error = Error, MessageKey = MessageKey>,
+        R: ClientTransport<PollError = PollError, MessageKey = MessageKey>,
     {
         match self {
             Self::Connected => ClientEvent::Connected,
@@ -265,6 +277,12 @@ pub enum DisconnectReason<E> {
     /// [`ServerTransport::disconnect`]: crate::server::ServerTransport::disconnect
     #[error("disconnected locally: {0}")]
     Local(String),
+    /// Server decided to disconnect our client, and has provided a reason as to
+    /// why it disconnected us.
+    ///
+    /// This is only raised on the client side.
+    #[error("disconnected remotely: {0}")]
+    Remote(String),
     /// Encountered a fatal connection error.
     ///
     /// This may also be raised if the other side wanted to discreetly end the
@@ -276,12 +294,6 @@ pub enum DisconnectReason<E> {
         #[from]
         E,
     ),
-    /// Server decided to disconnect our client, and has provided a reason as to
-    /// why it disconnected us.
-    ///
-    /// This is only raised on the client side.
-    #[error("disconnected remotely: {0}")]
-    Remote(String),
 }
 
 impl<E> DisconnectReason<E> {
@@ -290,8 +302,8 @@ impl<E> DisconnectReason<E> {
     pub fn map_err<F>(self, f: impl FnOnce(E) -> F) -> DisconnectReason<F> {
         match self {
             Self::Local(reason) => DisconnectReason::Local(reason),
-            Self::Error(err) => DisconnectReason::Error(f(err)),
             Self::Remote(reason) => DisconnectReason::Remote(reason),
+            Self::Error(err) => DisconnectReason::Error(f(err)),
         }
     }
 }

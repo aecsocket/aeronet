@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use aeronet::{
-    client::{ClientEvent, ClientTransport, DisconnectReason},
+    client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
     lane::LaneIndex,
-    server::{CloseReason, ServerEvent, ServerTransport},
+    server::{CloseReason, ServerEvent, ServerState, ServerTransport},
     shared::DROP_DISCONNECT_REASON,
 };
 use aeronet_channel::{
@@ -50,6 +50,10 @@ fn open() -> (ChannelClient, ChannelServer, ClientKey) {
         target_key
     };
 
+    assert_matches!(server.state(), ServerState::Open(_));
+    assert_matches!(server.client_state(target_key), ClientState::Connected(_));
+    assert_matches!(client.state(), ClientState::Connected(_));
+
     (client, server, target_key)
 }
 
@@ -57,7 +61,7 @@ fn open() -> (ChannelClient, ChannelServer, ClientKey) {
 fn send_recv() {
     let (mut client, mut server, target_key) = open();
 
-    client.send(C2S, LANE).unwrap();
+    let client_sent_msg = client.send(C2S, LANE).unwrap();
 
     assert!(client.poll(DT).next().is_none());
 
@@ -65,12 +69,13 @@ fn send_recv() {
         let mut events = server.poll(DT);
         assert_matches!(
             events.next().unwrap(),
-            ServerEvent::Recv { client_key, msg, lane } if client_key == target_key && msg == C2S && lane == LANE
+            ServerEvent::Recv { client_key, msg, lane }
+            if client_key == target_key && msg == C2S && lane == LANE
         );
         assert!(events.next().is_none());
     }
 
-    server.send(target_key, S2C, LANE).unwrap();
+    let server_sent_msg = server.send(target_key, S2C, LANE).unwrap();
 
     {
         let mut events = client.poll(DT);
@@ -78,6 +83,21 @@ fn send_recv() {
             events.next().unwrap(),
             ClientEvent::Recv { msg, lane }
             if msg == S2C && lane == LANE
+        );
+        assert_matches!(
+            events.next().unwrap(),
+            ClientEvent::Ack { msg_key }
+            if msg_key == client_sent_msg
+        );
+        assert!(events.next().is_none());
+    }
+
+    {
+        let mut events = server.poll(DT);
+        assert_matches!(
+            events.next().unwrap(),
+            ServerEvent::Ack { client_key, msg_key }
+            if client_key == target_key && msg_key == server_sent_msg
         );
         assert!(events.next().is_none());
     }
@@ -87,7 +107,8 @@ fn send_recv() {
 fn client_disconnect() {
     let (mut client, mut server, target_key) = open();
 
-    client.disconnect(REASON).unwrap();
+    client.disconnect(REASON);
+    assert_matches!(client.state(), ClientState::Disconnected);
 
     {
         let mut events = client.poll(DT);
@@ -114,7 +135,8 @@ fn client_disconnect() {
 fn server_disconnect() {
     let (mut client, mut server, target_key) = open();
 
-    server.disconnect(target_key, REASON).unwrap();
+    server.disconnect(target_key, REASON);
+    assert_matches!(server.client_state(target_key), ClientState::Disconnected);
 
     {
         let mut events = client.poll(DT);
@@ -141,7 +163,8 @@ fn server_disconnect() {
 fn server_close() {
     let (mut client, mut server, _) = open();
 
-    server.close(REASON).unwrap();
+    server.close(REASON);
+    assert_matches!(server.state(), ServerState::Closed);
 
     {
         let mut events = client.poll(DT);
@@ -167,6 +190,7 @@ fn server_drop() {
     let (mut client, server, _) = open();
 
     drop(server);
+
     {
         let mut events = client.poll(DT);
         assert_matches!(

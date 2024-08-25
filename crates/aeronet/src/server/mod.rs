@@ -5,6 +5,7 @@ mod bevy;
 
 #[cfg(feature = "bevy")]
 pub use bevy::*;
+
 use web_time::Duration;
 
 use std::{error::Error, fmt::Debug, hash::Hash};
@@ -22,9 +23,6 @@ use crate::{
 ///
 /// See the [crate-level documentation](crate).
 pub trait ServerTransport {
-    /// Error type of operations performed on this transport.
-    type Error: Error + Send + Sync;
-
     /// Server state when it is in [`ServerState::Opening`].
     type Opening<'this>
     where
@@ -60,6 +58,12 @@ pub trait ServerTransport {
     /// See [`ServerTransport::send`].
     type MessageKey: Send + Sync + Debug + Clone + PartialEq + Eq + Hash;
 
+    /// Error type for [`ServerEvent`]s emitted by [`ServerTransport::poll`].
+    type PollError: Send + Sync + Error;
+
+    /// Error type for [`ServerTransport::send`].
+    type SendError: Send + Sync + Error;
+
     /// Gets the current state of this server.
     ///
     /// See [`ServerState`].
@@ -91,7 +95,8 @@ pub trait ServerTransport {
     ///
     /// If this emits an event which changes the transport's state, then after
     /// this function, the transport is guaranteed to be in this new state. The
-    /// transport may emit an arbitrary number of state-changing events.
+    /// transport may emit an arbitrary number of state-changing events in one
+    /// call.
     fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ServerEvent<Self>>;
 
     /// Attempts to send a message along a specific lane to a connected client.
@@ -99,6 +104,15 @@ pub trait ServerTransport {
     /// This returns a key uniquely identifying the sent message. This can be
     /// used to query the state of the message, such as if it was acknowledged
     /// by the peer, if the implementation supports it.
+    ///
+    /// This key must stay unique to this specific sent message for a reasonable
+    /// amount of time, such that it can be used for e.g. predicting RTT or
+    /// other short-term actions, but is not guaranteed to stay unique forever.
+    /// This requirement is purposefully left vague to give transport
+    /// implementations the freedom to optimize the message key - for example,
+    /// the implementation may choose to represent message keys as [`u16`]s,
+    /// which wrap around quickly, but is suitable for short-term message
+    /// tracking.
     ///
     /// The implementation may choose to buffer the message before sending it
     /// out - therefore, you should call [`ServerTransport::flush`] after you
@@ -111,13 +125,14 @@ pub trait ServerTransport {
     /// if the server is not open, or if the client is not connected.
     ///
     /// If a transmission error occurs later after this function's scope has
-    /// finished, then this will still return [`Ok`].
+    /// finished, the error will be emitted on the next
+    /// [`ServerTransport::poll`] call.
     fn send(
         &mut self,
         client_key: Self::ClientKey,
         msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
-    ) -> Result<Self::MessageKey, Self::Error>;
+    ) -> Result<Self::MessageKey, Self::SendError>;
 
     /// Sends all messages previously buffered by [`ServerTransport::send`] to
     /// peers.
@@ -125,14 +140,12 @@ pub trait ServerTransport {
     /// Note that implementations may choose to send messages immediately
     /// instead of buffering them. In this case, flushing will be a no-op.
     ///
-    /// # Errors
+    /// If the transport is disconnected or otherwise unable to flush messages,
+    /// the call will be a no-op.
     ///
-    /// Errors if the transport failed to *attempt to* flush messages, e.g. if
-    /// the transport is closed.
-    ///
-    /// If a transmission error occurs later after this function's scope has
-    /// finished, then this will still return [`Ok`].
-    fn flush(&mut self) -> Result<(), Self::Error>;
+    /// If a fatal connection error occurs while flushing, the error will be
+    /// emitted on the next [`ServerTransport::poll`] call.
+    fn flush(&mut self);
 
     /// Forces a client to disconnect from this server.
     ///
@@ -144,17 +157,10 @@ pub trait ServerTransport {
     /// The implementation may place limitations on the `reason`, e.g. a maximum
     /// byte length.
     ///
-    /// If this is called twice in a row, the second call must be a no-op.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the transport failed to *attempt to* disconnect the client,
-    /// e.g. if the server already knows that the client is disconnected.
-    fn disconnect(
-        &mut self,
-        client_key: Self::ClientKey,
-        reason: impl Into<String>,
-    ) -> Result<(), Self::Error>;
+    /// Disconnection is an infallible operation. If this is called while the
+    /// client is disconnected, or this is called twice in a row, the call will
+    /// be a no-op.
+    fn disconnect(&mut self, client_key: Self::ClientKey, reason: impl Into<String>);
 
     /// Closes this server, stopping all current connections and disallowing any
     /// new connections.
@@ -163,12 +169,10 @@ pub trait ServerTransport {
     /// reason. See [`ServerTransport::disconnect`] on how this reason will be
     /// handled.
     ///
-    /// If this is called twice in a row, the second call must be a no-op.
-    ///
-    /// # Errors
-    ///
-    /// Errors if the transport is already closed.
-    fn close(&mut self, reason: impl Into<String>) -> Result<(), Self::Error>;
+    /// Closing is an infallible operation. If this is called while the
+    /// transport is closed, or this is called twice in a row, the call will be
+    /// a no-op.
+    fn close(&mut self, reason: impl Into<String>);
 }
 
 /// Implementation-specific state details of a [`ServerTransport`].
@@ -246,7 +250,10 @@ impl<A, B> ServerState<A, B> {
 
 /// Event emitted by a [`ServerTransport`].
 #[derive(Derivative)]
-#[derivative(Debug(bound = "T::Error: Debug"), Clone(bound = "T::Error: Clone"))]
+#[derivative(
+    Debug(bound = "T::PollError: Debug"),
+    Clone(bound = "T::PollError: Clone")
+)]
 pub enum ServerEvent<T: ServerTransport + ?Sized> {
     // server state
     /// The server has completed setup and is ready to accept client
@@ -256,7 +263,7 @@ pub enum ServerEvent<T: ServerTransport + ?Sized> {
     /// [`ServerState::Closed`].
     Closed {
         /// Why the server closed.
-        reason: CloseReason<T::Error>,
+        reason: CloseReason<T::PollError>,
     },
 
     // client state
@@ -289,7 +296,7 @@ pub enum ServerEvent<T: ServerTransport + ?Sized> {
         /// Key of the client.
         client_key: T::ClientKey,
         /// Why the client lost connection.
-        reason: DisconnectReason<T::Error>,
+        reason: DisconnectReason<T::PollError>,
     },
 
     // messages
@@ -323,16 +330,16 @@ pub enum ServerEvent<T: ServerTransport + ?Sized> {
     },
 }
 
-impl<Error, ClientKey, MessageKey, T> ServerEvent<T>
+impl<PollError, ClientKey, MessageKey, T> ServerEvent<T>
 where
-    T: ServerTransport<Error = Error, ClientKey = ClientKey, MessageKey = MessageKey>,
+    T: ServerTransport<PollError = PollError, ClientKey = ClientKey, MessageKey = MessageKey>,
 {
     /// Remaps this `ServerEvent<T>` into a `ServerEvent<R>` where `T` and `R`
-    /// are [`ServerTransport`]s which share the same `Error`, `ClientKey`, and
-    /// `MessageKey` types.
+    /// are [`ServerTransport`]s which share the same `PollError`, `ClientKey`,
+    /// and `MessageKey` types.
     pub fn remap<R>(self) -> ServerEvent<R>
     where
-        R: ServerTransport<Error = Error, ClientKey = ClientKey, MessageKey = MessageKey>,
+        R: ServerTransport<PollError = PollError, ClientKey = ClientKey, MessageKey = MessageKey>,
     {
         match self {
             Self::Opened => ServerEvent::Opened,

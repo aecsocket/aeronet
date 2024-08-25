@@ -12,7 +12,10 @@ use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use web_time::{Duration, Instant};
 
-use crate::server::{ChannelServer, ClientKey};
+use crate::{
+    server::{ChannelServer, ClientKey},
+    shared::{Disconnected, MessageKey},
+};
 
 /// Implementation of [`ClientTransport`] using in-memory MPSC channels.
 ///
@@ -43,11 +46,14 @@ pub struct Connected {
     pub bytes_sent: Saturating<usize>,
     /// See [`MessageStats::bytes_recv`]
     pub bytes_recv: Saturating<usize>,
-    send_c2s: Sender<(Bytes, LaneIndex)>,
-    recv_s2c: Receiver<(Bytes, LaneIndex)>,
+    send_c2s: Sender<(MessageKey, Bytes, LaneIndex)>,
+    recv_s2c: Receiver<(MessageKey, Bytes, LaneIndex)>,
+    send_ack_c2s: Sender<MessageKey>,
+    recv_ack_s2c: Receiver<MessageKey>,
     send_dc_c2s: Sender<String>,
     recv_dc_s2c: Receiver<String>,
     send_initial: bool,
+    next_send_msg_key: MessageKey,
 }
 
 impl ConnectedAt for Connected {
@@ -66,23 +72,25 @@ impl MessageStats for Connected {
     }
 }
 
-/// Error type for operations on a [`ChannelClient`].
+/// Error type for [`ChannelClient::connect`].
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum ClientError {
+pub enum ClientConnectError {
     /// Attempted to connect a client which was already connected.
     #[error("already connected")]
     AlreadyConnected,
-    /// Attempted to disconnect a client which was already disconnected.
-    #[error("already disconnected")]
-    AlreadyDisconnected,
-    /// Attempted to perform an operation on a client which was not connected.
-    #[error("not connected")]
-    NotConnected,
     /// Attempted to connect to a server which is closed.
     #[error("server closed")]
     ServerClosed,
-    /// Attempted to perform an operation, but the channel to the peer was
-    /// unexpectedly closed.
+}
+
+/// Error type for [`ChannelClient::send`].
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ClientSendError {
+    /// Attempted to send over a client which is not connected.
+    #[error("not connected")]
+    NotConnected,
+    /// Attempted to send over a client which we thought was connected, but the
+    /// other side of the channel was disconnected.
     #[error("disconnected")]
     Disconnected,
 }
@@ -110,18 +118,27 @@ impl ChannelClient {
     ///
     /// Errors if this client is already connected to a server, or if the server
     /// is closed.
-    pub fn connect(&mut self, server: &mut ChannelServer) -> Result<(), ClientError> {
+    pub fn connect(&mut self, server: &mut ChannelServer) -> Result<(), ClientConnectError> {
         if matches!(self.state, State::Connected(..)) {
-            return Err(ClientError::AlreadyConnected);
+            return Err(ClientConnectError::AlreadyConnected);
         }
 
         let (send_c2s, recv_c2s) = crossbeam_channel::unbounded();
         let (send_s2c, recv_s2c) = crossbeam_channel::unbounded();
+        let (send_ack_c2s, recv_ack_c2s) = crossbeam_channel::unbounded();
+        let (send_ack_s2c, recv_ack_s2c) = crossbeam_channel::unbounded();
         let (send_dc_c2s, recv_dc_c2s) = crossbeam_channel::bounded(1);
         let (send_dc_s2c, recv_dc_s2c) = crossbeam_channel::bounded(1);
         let key = server
-            .insert_client(recv_c2s, send_s2c, recv_dc_c2s, send_dc_s2c)
-            .ok_or(ClientError::ServerClosed)?;
+            .insert_client(
+                recv_c2s,
+                send_s2c,
+                recv_ack_c2s,
+                send_ack_s2c,
+                recv_dc_c2s,
+                send_dc_s2c,
+            )
+            .ok_or(ClientConnectError::ServerClosed)?;
         self.state = State::Connected(Connected {
             key,
             connected_at: Instant::now(),
@@ -129,22 +146,27 @@ impl ChannelClient {
             bytes_recv: Saturating(0),
             send_c2s,
             recv_s2c,
+            send_ack_c2s,
+            recv_ack_s2c,
             send_dc_c2s,
             recv_dc_s2c,
             send_initial: true,
+            next_send_msg_key: MessageKey::default(),
         });
         Ok(())
     }
 }
 
 impl ClientTransport for ChannelClient {
-    type Error = ClientError;
+    type PollError = Disconnected;
+
+    type SendError = ClientSendError;
 
     type Connecting<'this> = Infallible;
 
     type Connected<'this> = &'this Connected;
 
-    type MessageKey = ();
+    type MessageKey = MessageKey;
 
     #[must_use]
     fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
@@ -173,79 +195,73 @@ impl ClientTransport for ChannelClient {
         &mut self,
         msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
-    ) -> Result<Self::MessageKey, Self::Error> {
+    ) -> Result<Self::MessageKey, Self::SendError> {
         let State::Connected(client) = &mut self.state else {
-            return Err(ClientError::NotConnected);
+            return Err(ClientSendError::NotConnected);
         };
 
         let msg = msg.into();
         let lane = lane.into();
 
+        let msg_key = client.next_send_msg_key;
         let msg_len = msg.len();
         client
             .send_c2s
-            .send((msg, lane))
-            .map_err(|_| ClientError::Disconnected)?;
+            .send((msg_key, msg, lane))
+            .map_err(|_| ClientSendError::Disconnected)?;
         client.bytes_sent += msg_len;
-        Ok(())
+        client.next_send_msg_key.inc();
+        Ok(msg_key)
     }
 
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        let State::Connected(_) = self.state else {
-            return Err(ClientError::NotConnected);
-        };
+    fn flush(&mut self) {}
 
-        Ok(())
-    }
-
-    fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
-        replace_with::replace_with_or_abort_and_return(&mut self.state, |state| match state {
+    fn disconnect(&mut self, reason: impl Into<String>) {
+        let reason = reason.into();
+        replace_with::replace_with_or_abort(&mut self.state, |state| match state {
             State::Connected(client) => {
-                let reason = reason.into();
                 let _ = client.send_dc_c2s.try_send(reason.clone());
-                (Ok(()), State::Disconnecting { reason })
+                State::Disconnecting { reason }
             }
-            State::Disconnected | State::Disconnecting { .. } => {
-                (Err(ClientError::AlreadyDisconnected), state)
-            }
+            State::Disconnected | State::Disconnecting { .. } => state,
         })
     }
 }
 
 impl ChannelClient {
     fn poll_connected(mut client: Connected, events: &mut Vec<ClientEvent<Self>>) -> State {
+        match client.recv_dc_s2c.try_recv() {
+            Ok(reason) => {
+                events.push(ClientEvent::Disconnected {
+                    reason: DisconnectReason::Remote(reason),
+                });
+                return State::Disconnected;
+            }
+            Err(TryRecvError::Disconnected) => {
+                events.push(ClientEvent::Disconnected {
+                    reason: DisconnectReason::Error(Disconnected),
+                });
+                return State::Disconnected;
+            }
+            Err(TryRecvError::Empty) => {}
+        }
+
         if client.send_initial {
             events.push(ClientEvent::Connected);
             client.send_initial = false;
         }
 
-        if let Ok(reason) = client.recv_dc_s2c.try_recv() {
-            events.push(ClientEvent::Disconnected {
-                reason: DisconnectReason::Remote(reason),
-            });
-            return State::Disconnected;
+        for (msg_key, msg, lane) in client.recv_s2c.try_iter() {
+            client.bytes_recv += msg.len();
+            let _ = client.send_ack_c2s.send(msg_key);
+            events.push(ClientEvent::Recv { msg, lane });
         }
 
-        let res = (|| loop {
-            match client.recv_s2c.try_recv() {
-                Ok((msg, lane)) => {
-                    client.bytes_recv += msg.len();
-                    events.push(ClientEvent::Recv { msg, lane });
-                }
-                Err(TryRecvError::Empty) => return Ok(()),
-                Err(TryRecvError::Disconnected) => return Err(ClientError::Disconnected),
-            }
-        })();
-
-        match res {
-            Ok(()) => State::Connected(client),
-            Err(err) => {
-                events.push(ClientEvent::Disconnected {
-                    reason: DisconnectReason::Error(err),
-                });
-                State::Disconnected
-            }
+        for msg_key in client.recv_ack_s2c.try_iter() {
+            events.push(ClientEvent::Ack { msg_key });
         }
+
+        State::Connected(client)
     }
 }
 
