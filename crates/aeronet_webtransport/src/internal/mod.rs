@@ -3,7 +3,6 @@ mod frontend;
 
 pub use {backend::*, frontend::*};
 
-use aeronet::client::DisconnectReason;
 use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
@@ -43,13 +42,12 @@ pub struct ConnectionMeta {
 }
 
 #[derive(Debug)]
-pub struct ConnectionInner<E> {
+pub struct InternalSession {
     #[cfg(not(target_family = "wasm"))]
     pub remote_addr: SocketAddr,
     #[cfg(not(target_family = "wasm"))]
     pub raw_rtt: Duration,
     pub session: Session,
-    pub recv_dc: oneshot::Receiver<DisconnectReason<E>>,
     pub recv_meta: mpsc::Receiver<ConnectionMeta>,
     pub send_msgs: mpsc::UnboundedSender<Bytes>,
     pub recv_msgs: mpsc::Receiver<Bytes>,
@@ -62,13 +60,13 @@ pub struct ConnectionInner<E> {
 // variant to their own error variant
 
 #[derive(Debug)]
-pub enum InternalSendError {
+pub enum SessionSendError {
     Trivial(SendError),
     Fatal(FatalSendError),
 }
 
 #[derive(Debug)]
-pub enum InternalPollError {
+pub enum SessionError {
     // frontend
     BackendClosed,
     MtuTooSmall(MtuTooSmall),

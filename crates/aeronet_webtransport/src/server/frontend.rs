@@ -1,7 +1,5 @@
-use std::mem;
-
 use aeronet::{
-    client::ClientState,
+    client::{ClientState, DisconnectReason},
     error::pretty_error,
     lane::LaneIndex,
     server::{CloseReason, ServerEvent, ServerState, ServerTransport},
@@ -15,13 +13,13 @@ use tracing::{debug, trace_span};
 use web_time::Duration;
 
 use crate::{
-    internal::{ConnectionInner, PollEvent},
+    internal::{InternalSession, PollEvent},
     runtime::WebTransportRuntime,
 };
 
 use super::{
     backend, Client, ClientKey, Connected, Connecting, ConnectionResponse, Open, Opening,
-    ServerConfig, ServerError, State, ToOpen, WebTransportServer,
+    ServerConfig, ServerError, ServerSendError, State, ToOpen, WebTransportServer,
 };
 
 impl Default for WebTransportServer {
@@ -87,8 +85,6 @@ impl WebTransportServer {
 }
 
 impl ServerTransport for WebTransportServer {
-    type Error = ServerError;
-
     type Opening<'this> = &'this Opening;
 
     type Open<'this> = &'this Open;
@@ -100,6 +96,10 @@ impl ServerTransport for WebTransportServer {
     type ClientKey = ClientKey;
 
     type MessageKey = MessageKey;
+
+    type PollError = ServerError;
+
+    type SendError = ServerSendError;
 
     fn state(&self) -> ServerState<Self::Opening<'_>, Self::Open<'_>> {
         match &self.state {
@@ -152,12 +152,12 @@ impl ServerTransport for WebTransportServer {
         client_key: Self::ClientKey,
         msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
-    ) -> Result<Self::MessageKey, Self::Error> {
+    ) -> Result<Self::MessageKey, Self::SendError> {
         let State::Open(server) = &mut self.state else {
-            return Err(ServerError::NotOpen);
+            return Err(ServerSendError::NotOpen);
         };
         let Some(Client::Connected(client)) = server.clients.get_mut(client_key) else {
-            return Err(ServerError::ClientNotConnected);
+            return Err(ServerSendError::ClientNotConnected);
         };
 
         let msg = msg.into();
@@ -165,9 +165,9 @@ impl ServerTransport for WebTransportServer {
         client.inner.send(msg, lane).map_err(From::from)
     }
 
-    fn flush(&mut self) -> Result<(), Self::Error> {
+    fn flush(&mut self) {
         let State::Open(server) = &mut self.state else {
-            return Err(ServerError::NotOpen);
+            return;
         };
 
         for (client_key, client) in &mut server.clients {
@@ -180,50 +180,44 @@ impl ServerTransport for WebTransportServer {
             let Client::Connected(client) = client else {
                 continue;
             };
+
             client.inner.flush();
         }
-        Ok(())
     }
 
-    fn disconnect(
-        &mut self,
-        client_key: Self::ClientKey,
-        reason: impl Into<String>,
-    ) -> Result<(), Self::Error> {
+    fn disconnect(&mut self, client_key: Self::ClientKey, reason: impl Into<String>) {
         let State::Open(server) = &mut self.state else {
-            return Err(ServerError::NotOpen);
+            return;
+        };
+        let Some(client) = server.clients.get_mut(client_key) else {
+            return;
         };
 
-        let client = server
-            .clients
-            .remove(client_key)
-            .ok_or(ServerError::ClientNotConnected)?;
-        if let Client::Connected(client) = client {
-            let reason = reason.into();
-            let _ = client.inner.send_local_dc.send(reason);
-        }
-        Ok(())
+        // todo retain reason for `poll`
+        // make a new Client::Disconnecting { reason }
+        replace_with::replace_with_or_abort(client, |state| match state {
+            Client::Connected(client) => {
+                let reason = reason.into();
+                let _ = client.inner.send_local_dc.send(reason);
+                Client::Disconnected
+            }
+        });
     }
 
-    fn close(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
+    fn close(&mut self, reason: impl Into<String>) {
         let reason = reason.into();
-        match mem::replace(
-            &mut self.state,
-            State::Closing {
-                reason: reason.clone(),
-            },
-        ) {
+        replace_with::replace_with_or_abort(&mut self.state, |state| match state {
             State::Open(server) => {
                 for (_, client) in server.clients {
                     if let Client::Connected(client) = client {
                         let _ = client.inner.send_local_dc.send(reason.clone());
                     }
                 }
-                Ok(())
+                State::Closing { reason }
             }
-            State::Opening(_) => Ok(()),
-            State::Closed | State::Closing { .. } => Err(ServerError::AlreadyClosed),
-        }
+            State::Opening(_) => State::Closing { reason },
+            State::Closed | State::Closing { .. } => {}
+        });
     }
 }
 
@@ -231,29 +225,21 @@ impl WebTransportServer {
     /// Responds to a connecting client's connection request, determining
     /// whether this client is allowed to connect or should be rejected.
     ///
-    /// # Errors
-    ///
-    /// Errors if the server is not open, the client is not connecting, or if
-    /// we have already responded to this client's connection request.
-    pub fn respond_to_request(
-        &mut self,
-        client_key: ClientKey,
-        resp: ConnectionResponse,
-    ) -> Result<(), ServerError> {
+    /// If the client is not connected or has already been responded to, this is
+    /// a no-op.
+    pub fn respond_to_request(&mut self, client_key: ClientKey, resp: ConnectionResponse) {
         let State::Open(server) = &mut self.state else {
-            return Err(ServerError::NotOpen);
+            return;
         };
         let Some(Client::Connecting(client)) = server.clients.get_mut(client_key) else {
-            return Err(ServerError::ClientNotConnecting);
+            return;
         };
 
+        let Some(send_conn_resp) = client.send_conn_resp.take() else {
+            return;
+        };
         // ignore errors here because we'll pick up errors in `poll`
-        let _ = client
-            .send_conn_resp
-            .take()
-            .ok_or(ServerError::AlreadyResponded)?
-            .send(resp);
-        Ok(())
+        let _ = send_conn_resp.send(resp);
     }
 
     fn poll_opening(mut server: Opening, events: &mut Vec<ServerEvent<Self>>) -> State {
@@ -353,17 +339,17 @@ impl WebTransportServer {
             if let Ok(Some(next)) = client.recv_connected.try_recv() {
                 events.push(ServerEvent::Connected { client_key });
                 Ok(Client::Connected(Connected {
-                    inner: ConnectionInner {
+                    inner: InternalSession {
                         remote_addr: next.remote_addr,
                         raw_rtt: next.initial_rtt,
                         session: next.session,
-                        recv_dc: client.recv_dc,
                         recv_meta: next.recv_meta,
                         recv_msgs: next.recv_c2s,
                         send_msgs: next.send_s2c,
                         send_local_dc: next.send_local_dc,
                         fatal_error: None,
                     },
+                    recv_dc: client.recv_dc,
                 }))
             } else {
                 Ok(Client::Connecting(client))
@@ -385,27 +371,37 @@ impl WebTransportServer {
         mut client: Connected,
         delta_time: Duration,
     ) -> Client {
-        let res = client.inner.poll(delta_time, |event| {
-            events.push(match event {
-                PollEvent::Ack { msg_key } => ServerEvent::Ack {
-                    client_key,
-                    msg_key,
-                },
-                PollEvent::Recv { msg, lane } => ServerEvent::Recv {
-                    client_key,
-                    msg,
-                    lane,
-                },
-            });
-        });
+        let res = (|| {
+            if let Some(reason) = client
+                .recv_dc
+                .try_recv()
+                .map_err(|_| DisconnectReason::Error(ServerError::BackendClosed))?
+            {
+                return Err(reason);
+            }
+
+            client
+                .inner
+                .poll(delta_time, |event| {
+                    events.push(match event {
+                        PollEvent::Ack { msg_key } => ServerEvent::Ack {
+                            client_key,
+                            msg_key,
+                        },
+                        PollEvent::Recv { msg, lane } => ServerEvent::Recv {
+                            client_key,
+                            msg,
+                            lane,
+                        },
+                    });
+                })
+                .map_err(|reason| reason.map_err(From::from))
+        })();
 
         match res {
             Ok(()) => Client::Connected(client),
             Err(reason) => {
-                events.push(ServerEvent::Disconnected {
-                    client_key,
-                    reason: reason.map_err(From::from),
-                });
+                events.push(ServerEvent::Disconnected { client_key, reason });
                 Client::Disconnected
             }
         }

@@ -8,14 +8,14 @@ use futures::{
     FutureExt, SinkExt, StreamExt,
 };
 use web_time::Duration;
-use xwt_core::{prelude::*, utils::maybe};
+use xwt_core::prelude::*;
 
 use crate::{
     client::{ClientConfig, ClientError},
     runtime::WebTransportRuntime,
 };
 
-use super::{ClientEndpoint, Connection, ConnectionMeta, InternalError};
+use super::{ClientEndpoint, Connection, ConnectionMeta, SessionError};
 
 const STATS_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -37,16 +37,16 @@ pub fn create_client_endpoint(config: ClientConfig) -> Result<ClientEndpoint, Cl
     }
 }
 
-pub async fn handle_connection<E: maybe::Send + 'static>(
+pub async fn handle_connection(
     runtime: WebTransportRuntime,
     conn: Connection,
     recv_s: mpsc::UnboundedReceiver<Bytes>,
     send_r: mpsc::Sender<Bytes>,
     send_meta: mpsc::Sender<ConnectionMeta>,
     mut recv_local_dc: oneshot::Receiver<String>,
-) -> Result<Never, DisconnectReason<InternalError<E>>> {
+) -> Result<Never, DisconnectReason<SessionError>> {
     let conn = Arc::new(conn);
-    let (send_err, mut recv_err) = mpsc::channel::<InternalError<E>>(1);
+    let (send_err, mut recv_err) = mpsc::channel::<SessionError>(1);
 
     let (_send_sending_closed, recv_sending_closed) = oneshot::channel();
     runtime.spawn({
@@ -87,7 +87,7 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
 
     let err = futures::select! {
         err = recv_err.next() => {
-            err.unwrap_or(InternalError::BackendClosed)
+            err.unwrap_or(SessionError::BackendClosed)
         }
         reason = recv_local_dc => {
             if let Ok(reason) = reason {
@@ -115,7 +115,7 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
                     conn.0.closed().await;
                 }
             }
-            InternalError::BackendClosed
+            SessionError::BackendClosed
         }
     };
 
@@ -133,7 +133,7 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
             use wtransport::error::ConnectionError;
 
             match err {
-                InternalError::ConnectionLost(ConnectionError::ApplicationClosed(err)) => {
+                SessionError::ConnectionLost(ConnectionError::ApplicationClosed(err)) => {
                     // TODO: wtransport doesn't expose the disconnect reason message
                     // https://github.com/BiagioFesta/wtransport/issues/193
                     DisconnectReason::Remote(err.to_string())
@@ -146,17 +146,17 @@ pub async fn handle_connection<E: maybe::Send + 'static>(
     Err(reason)
 }
 
-async fn send_loop<E>(
+async fn send_loop(
     conn: Arc<Connection>,
     mut recv_closed: oneshot::Receiver<()>,
     mut recv_s: mpsc::UnboundedReceiver<Bytes>,
-) -> Result<Never, InternalError<E>> {
+) -> Result<Never, SessionError> {
     loop {
         let packet = futures::select! {
             x = recv_s.next() => x,
-            _ = recv_closed => return Err(InternalError::FrontendClosed),
+            _ = recv_closed => return Err(SessionError::FrontendClosed),
         }
-        .ok_or(InternalError::FrontendClosed)?;
+        .ok_or(SessionError::FrontendClosed)?;
 
         #[cfg(target_family = "wasm")]
         {
@@ -193,25 +193,25 @@ async fn send_loop<E>(
                     // this should be impossible, since we checked that the client does support
                     // datagrams before connecting, but we'll error-case it
                     // anyway
-                    Err(InternalError::DatagramsNotSupported)
+                    Err(SessionError::DatagramsNotSupported)
                 }
             }?;
         }
     }
 }
 
-async fn recv_loop<E>(
+async fn recv_loop(
     conn: Arc<Connection>,
     mut recv_closed: oneshot::Receiver<()>,
     mut send_r: mpsc::Sender<Bytes>,
-) -> Result<Never, InternalError<E>> {
+) -> Result<Never, SessionError> {
     loop {
         #[allow(clippy::useless_conversion)] // multi-target support
         let packet = futures::select! {
             x = conn.receive_datagram().fuse() => x,
-            _ = recv_closed => return Err(InternalError::FrontendClosed),
+            _ = recv_closed => return Err(SessionError::FrontendClosed),
         }
-        .map_err(|err| InternalError::ConnectionLost(err.into()))?;
+        .map_err(|err| SessionError::ConnectionLost(err.into()))?;
 
         let packet = {
             #[cfg(target_family = "wasm")]
@@ -227,20 +227,20 @@ async fn recv_loop<E>(
         send_r
             .send(packet)
             .await
-            .map_err(|_| InternalError::FrontendClosed)?;
+            .map_err(|_| SessionError::FrontendClosed)?;
     }
 }
 
-async fn meta_loop<E>(
+async fn meta_loop(
     runtime: WebTransportRuntime,
     conn: Arc<Connection>,
     mut recv_closed: oneshot::Receiver<()>,
     mut send_meta: mpsc::Sender<ConnectionMeta>,
-) -> Result<Never, InternalError<E>> {
+) -> Result<Never, SessionError> {
     loop {
         futures::select! {
             () = runtime.sleep(STATS_UPDATE_INTERVAL).fuse() => {},
-            _ = recv_closed => return Err(InternalError::FrontendClosed),
+            _ = recv_closed => return Err(SessionError::FrontendClosed),
         };
 
         let meta = ConnectionMeta {
@@ -250,11 +250,11 @@ async fn meta_loop<E>(
             remote_addr: conn.0.remote_address(),
             mtu: conn
                 .max_datagram_size()
-                .ok_or(InternalError::DatagramsNotSupported)?,
+                .ok_or(SessionError::DatagramsNotSupported)?,
         };
         send_meta
             .send(meta)
             .await
-            .map_err(|_| InternalError::FrontendClosed)?;
+            .map_err(|_| SessionError::FrontendClosed)?;
     }
 }

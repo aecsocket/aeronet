@@ -158,15 +158,15 @@ impl ChannelClient {
 }
 
 impl ClientTransport for ChannelClient {
-    type PollError = Disconnected;
-
-    type SendError = ClientSendError;
-
     type Connecting<'this> = Infallible;
 
     type Connected<'this> = &'this Connected;
 
     type MessageKey = MessageKey;
+
+    type PollError = Disconnected;
+
+    type SendError = ClientSendError;
 
     #[must_use]
     fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {

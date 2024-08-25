@@ -17,7 +17,7 @@ use web_time::{Duration, Instant};
 use wtransport::error::ConnectionError;
 
 use crate::{
-    internal::{self, ConnectionInner, ConnectionMeta, InternalError},
+    internal::{self, ConnectionMeta, InternalSession, SessionError, SessionSendError},
     shared::RawRtt,
 };
 
@@ -80,12 +80,6 @@ pub enum ServerError {
     /// Already responded to this client's connection request.
     #[error("already responded to this client's connection request")]
     AlreadyResponded,
-    /// See [`SendError`].
-    #[error(transparent)]
-    Send(SendError),
-    /// See [`FatalSendError`].
-    #[error(transparent)]
-    FatalSend(FatalSendError),
     /// See [`OutOfMemory`].
     #[error(transparent)]
     OutOfMemory(OutOfMemory),
@@ -124,18 +118,43 @@ pub enum ServerError {
     ConnectionLost(#[source] <internal::Connection as xwt_core::session::datagram::Receive>::Error),
 }
 
-impl From<InternalError<Self>> for ServerError {
-    fn from(value: InternalError<Self>) -> Self {
+impl From<SessionError> for ServerError {
+    fn from(value: SessionError) -> Self {
         match value {
-            InternalError::Spec(err) => err,
-            InternalError::BackendClosed => Self::BackendClosed,
-            InternalError::MtuTooSmall(err) => Self::MtuTooSmall(err),
-            InternalError::OutOfMemory(err) => Self::OutOfMemory(err),
-            InternalError::Send(err) => Self::Send(err),
-            InternalError::FatalSend(err) => Self::FatalSend(err),
-            InternalError::FrontendClosed => Self::FrontendClosed,
-            InternalError::DatagramsNotSupported => Self::DatagramsNotSupported,
-            InternalError::ConnectionLost(err) => Self::ConnectionLost(err),
+            SessionError::BackendClosed => Self::BackendClosed,
+            SessionError::MtuTooSmall(err) => Self::MtuTooSmall(err),
+            SessionError::OutOfMemory(err) => Self::OutOfMemory(err),
+            SessionError::FrontendClosed => Self::FrontendClosed,
+            SessionError::DatagramsNotSupported => Self::DatagramsNotSupported,
+            SessionError::ConnectionLost(err) => Self::ConnectionLost(err),
+        }
+    }
+}
+
+/// Error type for [`WebTransportServer::send`].
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ServerSendError {
+    /// Attempted to send over a server which is not open.
+    #[error("not open")]
+    NotOpen,
+    /// Attempted to send to a client which is not connected.
+    #[error("client not connected")]
+    ClientNotConnected,
+    /// Failed to buffer up a message for sending, but the connection can still
+    /// remain alive.
+    #[error(transparent)]
+    Trivial(SendError),
+    /// Failed to buffer up a message for sending, which also caused the
+    /// connection to be closed.
+    #[error(transparent)]
+    Fatal(FatalSendError),
+}
+
+impl From<SessionSendError> for ServerSendError {
+    fn from(value: SessionSendError) -> Self {
+        match value {
+            SessionSendError::Trivial(err) => Self::Trivial(err),
+            SessionSendError::Fatal(err) => Self::Fatal(err),
         }
     }
 }
@@ -230,7 +249,8 @@ struct ToConnected {
 /// [`ClientState::Connected`].
 #[derive(Debug)]
 pub struct Connected {
-    inner: ConnectionInner<ServerError>,
+    inner: InternalSession,
+    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
 }
 
 impl Connected {
