@@ -224,7 +224,7 @@ impl ClientTransport for ChannelClient {
                 State::Disconnecting { reason }
             }
             State::Disconnected | State::Disconnecting { .. } => state,
-        })
+        });
     }
 }
 
