@@ -73,15 +73,6 @@ pub enum ClientError {
     /// Backend client task was cancelled, dropping the underlying connection.
     #[error("backend closed")]
     BackendClosed,
-    /// Client is already connecting or connected.
-    #[error("already connecting or connected")]
-    AlreadyConnected,
-    /// Client is already disconnected.
-    #[error("already disconnected")]
-    AlreadyDisconnected,
-    /// Client is not connected.
-    #[error("not connected")]
-    NotConnected,
     /// See [`OutOfMemory`].
     #[error(transparent)]
     OutOfMemory(OutOfMemory),

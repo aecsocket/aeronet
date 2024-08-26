@@ -55,6 +55,12 @@ pub enum ConnectionResponse {
     NotFound,
 }
 
+/// Error type for [`WebTransportServer::open`], emitted if the server is
+/// already opening or open.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("not closed")]
+pub struct ServerNotClosed;
+
 /// Error type for operations on a [`WebTransportServer`].
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
@@ -62,24 +68,6 @@ pub enum ServerError {
     /// Backend server task was cancelled, dropping the underlying connections.
     #[error("backend closed")]
     BackendClosed,
-    /// Server is already opening or open.
-    #[error("already opening or open")]
-    AlreadyOpen,
-    /// Server is already closed.
-    #[error("already closed")]
-    AlreadyClosed,
-    /// Server is not open.
-    #[error("not open")]
-    NotOpen,
-    /// Given client is not connected.
-    #[error("client not connected")]
-    ClientNotConnected,
-    /// Given client is not connecting.
-    #[error("client not connecting")]
-    ClientNotConnecting,
-    /// Already responded to this client's connection request.
-    #[error("already responded to this client's connection request")]
-    AlreadyResponded,
     /// See [`OutOfMemory`].
     #[error(transparent)]
     OutOfMemory(OutOfMemory),

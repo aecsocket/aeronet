@@ -21,7 +21,7 @@ use crate::{
 
 use super::{
     backend, Client, ClientKey, Connected, Connecting, ConnectionResponse, Open, Opening,
-    ServerConfig, ServerError, ServerSendError, State, ToOpen, WebTransportServer,
+    ServerConfig, ServerError, ServerNotClosed, ServerSendError, State, ToOpen, WebTransportServer,
 };
 
 impl Default for WebTransportServer {
@@ -53,9 +53,9 @@ impl WebTransportServer {
         runtime: &WebTransportRuntime,
         net_config: ServerConfig,
         session_config: SessionConfig,
-    ) -> Result<(), ServerError> {
+    ) -> Result<(), ServerNotClosed> {
         if !matches!(self.state, State::Closed) {
-            return Err(ServerError::AlreadyOpen);
+            return Err(ServerNotClosed);
         }
 
         let (send_open, recv_open) = oneshot::channel::<ToOpen>();
@@ -81,7 +81,7 @@ impl WebTransportServer {
             recv_err,
         });
 
-        debug!("Opened server");
+        debug!("Opening server");
         Ok(())
     }
 }
