@@ -132,6 +132,8 @@ impl From<SessionError> for ServerError {
 }
 
 /// Error type for [`WebTransportServer::send`].
+///
+/// [`WebTransportServer::send`]: aeronet::server::ServerTransport::send
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ServerSendError {
     /// Attempted to send over a server which is not open.
