@@ -225,6 +225,7 @@ struct ToConnecting {
 /// to determine whether to accept or to reject this client.
 ///
 /// [`ServerEvent::Connecting`]: aeronet::server::ServerEvent::Connecting
+/// [`ClientState::Connecting`]: aeronet::client::ClientState::Connecting
 #[derive(Debug)]
 pub struct Connecting {
     /// `:authority` field of the request.
@@ -255,6 +256,8 @@ struct ToConnected {
 
 /// State of a client connected to a [`WebTransportServer`] when it is
 /// [`ClientState::Connected`].
+///
+/// [`ClientState::Connected`]: aeronet::client::ClientState::Connected
 #[derive(Debug)]
 pub struct Connected {
     inner: InternalSession,
