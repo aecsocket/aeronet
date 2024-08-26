@@ -89,6 +89,7 @@ impl WebTransportClient {
             recv_dc,
         });
 
+        debug!("Connecting client");
         Ok(())
     }
 }
