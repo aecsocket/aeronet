@@ -1,6 +1,6 @@
 //! Server-side items.
 
-use std::{convert::Infallible, num::Saturating};
+use std::{borrow::Borrow, convert::Infallible, num::Saturating};
 
 use aeronet::{
     client::{ClientState, DisconnectReason},
@@ -217,13 +217,14 @@ impl ServerTransport for ChannelServer {
 
     fn client_state(
         &self,
-        client_key: ClientKey,
+        client_key: impl Borrow<ClientKey>,
     ) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
         let State::Open(server) = &self.state else {
             return ClientState::Disconnected;
         };
 
-        match server.clients.get(client_key) {
+        let client_key = client_key.borrow();
+        match server.clients.get(*client_key) {
             None | Some(Client::Disconnected | Client::Disconnecting { .. }) => {
                 ClientState::Disconnected
             }
@@ -257,14 +258,16 @@ impl ServerTransport for ChannelServer {
 
     fn send(
         &mut self,
-        client_key: Self::ClientKey,
+        client_key: impl Borrow<Self::ClientKey>,
         msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::SendError> {
         let State::Open(server) = &mut self.state else {
             return Err(ServerSendError::NotOpen);
         };
-        let Some(Client::Connected(client)) = server.clients.get_mut(client_key) else {
+
+        let client_key = client_key.borrow();
+        let Some(Client::Connected(client)) = server.clients.get_mut(*client_key) else {
             return Err(ServerSendError::ClientNotConnected);
         };
 
@@ -284,11 +287,13 @@ impl ServerTransport for ChannelServer {
 
     fn flush(&mut self) {}
 
-    fn disconnect(&mut self, client_key: Self::ClientKey, reason: impl Into<String>) {
+    fn disconnect(&mut self, client_key: impl Borrow<Self::ClientKey>, reason: impl Into<String>) {
         let State::Open(server) = &mut self.state else {
             return;
         };
-        let Some(client) = server.clients.get_mut(client_key) else {
+
+        let client_key = client_key.borrow();
+        let Some(client) = server.clients.get_mut(*client_key) else {
             return;
         };
 

@@ -87,7 +87,7 @@ This crate aims to be:
 - Generic over as many IO layers as possible
   - You should be able to plug nearly anything in as the underlying IO layer, and have things work
   - To achieve this, aeronet provides its own implementation of certain protocol elements such as
-    fragmentation and reliable messages - see [`aeronet_proto`](https://docs.rs/aeronet_proto)
+    fragmentation and reliable messages - see [`aeronet_proto`]
   - If the IO layer gives us some guarantees like pre-fragmenting messages or reliability, we can
     take advantage of that instead of adding redundant fragmentation/reliability on top
 - Correct and non-panicking
@@ -155,7 +155,7 @@ responsibility to drive the transport event loop manually.
 
 ## Protocol
 
-*Crate: `aeronet_proto`*
+*Crate: [`aeronet_proto`]*
 
 This crate provides a reusable set of transport-level abstractions which can be used by transport
 implementations, if they do not support certain features already. This makes providing a new
@@ -169,6 +169,87 @@ or whatever other mechanism your transport uses.
 Using this crate, you can plug any aeronet transport into [`bevy_replicon`] as a backend, giving you
 high-level networking features such as entity replication, while still being free to use any
 transport implementation under the hood.
+
+# Sample code
+
+```rust
+use aeronet::{
+    bytes::Bytes,
+    client::{ClientEvent, ClientTransport, ClientState},
+    server::{ServerEvent, ServerTransport},
+    lane::LaneIndex,
+};
+
+# fn run(
+#     mut client: impl ClientTransport,
+#     mut server: impl ServerTransport,
+#     delta_time: web_time::Duration,
+# ) {
+// on the client side...
+
+// define the indices of the lanes you'll use
+// you can also define your own type which implements `Into<LaneIndex>`
+// and pass that into functions rather than a raw `LaneIndex`
+const LOW_PRIORITY: LaneIndex = LaneIndex::from_raw(0);
+const HIGH_PRIORITY: LaneIndex = LaneIndex::from_raw(1);
+
+// we re-export `bytes::Bytes`, and use that as our byte container type
+let msg: Bytes = Bytes::from_static(b"hello world");
+
+// you can track when your message is acked/nacked using the returned key
+let sent_msg_key = client.send(msg, HIGH_PRIORITY).unwrap();
+
+// after `send`ing messages, `flush` to send them downstream
+client.flush();
+
+// manually drive the transport loop via `poll`
+for event in client.poll(delta_time) {
+    match event {
+        ClientEvent::Recv { msg, lane } => {
+            // please don't actually unwrap in production code!
+            // this is just here for demo purposes
+            let msg = String::from_utf8(Vec::from(msg)).unwrap();
+            println!("Received on {lane:?}: {msg}");
+        }
+        ClientEvent::Ack { msg_key } => {
+            if msg_key == sent_msg_key {
+                println!("Server acknowledged our first message");
+            }
+        }
+        _ => unimplemented!()
+    }
+}
+
+// on the server side...
+
+// manually drive the transport loop just like on the client
+for event in server.poll(delta_time) {
+    match event {
+        // get notified of incoming connections
+        ServerEvent::Connecting { client_key } => {
+            println!("{client_key:?} connecting");
+        }
+        ServerEvent::Connected { client_key } => {
+            println!("{client_key:?} connected");
+        }
+        // get notified of incoming messages
+        ServerEvent::Recv { client_key, msg, lane } => {
+            let msg = String::from_utf8(Vec::from(msg)).unwrap();
+            println!("Received from {client_key:?} on {lane:?}: {msg}");
+        }
+        _ => unimplemented!()
+    }
+}
+
+// you can iterate over all tracked clients..
+for client_key in server.client_keys().collect::<Vec<_>>() {
+    // ..and read data about the client
+    if let ClientState::Connected(_) = server.client_state(&client_key) {
+        println!("{client_key:?} is currently connected");
+    }
+}
+# }
+```
 
 # Getting started
 
@@ -219,11 +300,14 @@ flushing, at the end of the update.
 
 Communication over a network always has the possibility of failure. The connection might be dropped,
 there may be a burst of packet loss, or jitter may suddenly increase. Code which handles networking
-must be resilient to these conditions.
+must be resilient to these conditions, and it must be easy to detect and debug in these conditions.
 
 ### Visualizer
 
-
+It can be useful to see real-time network statistics such as round-trip time and packet loss while
+working in the app. Transports using [`aeronet_proto`] all have a `visualizer` feature which allows
+you to draw an egui window with plots of such statistics, giving you real-time insight on how your
+code is impacting the network.
 
 ### Conditioning
 
@@ -274,44 +358,6 @@ See [Network Link Conditioner](https://stackoverflow.com/questions/9659382/insta
 
 See [clumsy](https://jagt.github.io/clumsy/index.html).
 
-```rust
-use aeronet::bytes::Bytes;
-use aeronet::client::{ClientEvent, ClientTransport};
-use aeronet::lane::LaneIndex;
-
-#[derive(Debug, Clone, Copy)]
-enum AppLane {
-    HighPriority,
-    LowPriority,
-}
-
-impl From<AppLane> for LaneIndex {
-    fn from(value: AppLane) -> Self {
-        match value {
-            AppLane::HighPriority => LaneIndex::from_raw(0),
-            AppLane::LowPriority => LaneIndex::from_raw(1),
-        }
-    }
-}
-
-# fn run(mut client: impl ClientTransport, delta_time: web_time::Duration) {
-let message: Bytes = Bytes::from_static(b"hello world");
-client.send(message, AppLane::HighPriority).unwrap();
-
-client.flush().unwrap();
-
-for event in client.poll(delta_time) {
-    match event {
-        ClientEvent::Recv { msg, lane } => {
-            let msg = String::from_utf8(Vec::from(msg)).unwrap();
-            println!("Received on {lane:?}: {msg}");
-        }
-        _ => unimplemented!()
-    }
-}
-# }
-```
-
 # Bevy support
 
 | `bevy` | `aeronet` |
@@ -328,4 +374,5 @@ for event in client.poll(delta_time) {
 [`ServerTransportPlugin`]: server::ServerTransportPlugin
 [`ClientState`]: client::ClientState
 [`ServerState`]: server::ServerState
+[`aeronet_proto`]: https://docs.rs/aeronet_proto
 [`bevy_replicon`]: https://docs.rs/bevy_replicon

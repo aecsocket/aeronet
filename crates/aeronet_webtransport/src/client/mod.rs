@@ -131,6 +131,8 @@ impl From<SessionError> for ClientError {
 }
 
 /// Error type for [`WebTransportClient::send`].
+///
+/// [`WebTransportClient::send`]: aeronet::client::ClientTransport::send
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ClientSendError {
     /// Attempted to send over a client which is not connected.

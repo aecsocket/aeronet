@@ -8,7 +8,7 @@ pub use bevy::*;
 
 use web_time::Duration;
 
-use std::{error::Error, fmt::Debug, hash::Hash};
+use std::{borrow::Borrow, error::Error, fmt::Debug, hash::Hash};
 
 use bytes::Bytes;
 use derivative::Derivative;
@@ -76,7 +76,7 @@ pub trait ServerTransport {
     /// See [`ClientState`].
     fn client_state(
         &self,
-        client_key: Self::ClientKey,
+        client_key: impl Borrow<Self::ClientKey>,
     ) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>>;
 
     /// Iterator over the keys of all clients currently recognized by this
@@ -129,7 +129,7 @@ pub trait ServerTransport {
     /// [`ServerTransport::poll`] call.
     fn send(
         &mut self,
-        client_key: Self::ClientKey,
+        client_key: impl Borrow<Self::ClientKey>,
         msg: impl Into<Bytes>,
         lane: impl Into<LaneIndex>,
     ) -> Result<Self::MessageKey, Self::SendError>;
@@ -160,7 +160,7 @@ pub trait ServerTransport {
     /// Disconnection is an infallible operation. If this is called while the
     /// client is disconnected, or this is called twice in a row, the call will
     /// be a no-op.
-    fn disconnect(&mut self, client_key: Self::ClientKey, reason: impl Into<String>);
+    fn disconnect(&mut self, client_key: impl Borrow<Self::ClientKey>, reason: impl Into<String>);
 
     /// Closes this server, stopping all current connections and disallowing any
     /// new connections.
