@@ -1,8 +1,9 @@
 //! See [`WebTransportRuntime`].
 
-use std::{future::Future, time::Duration};
-
-use xwt_core::utils::maybe;
+use {
+    std::{future::Future, time::Duration},
+    xwt_core::utils::maybe,
+};
 
 /// Provides a platform-agnostic way of spawning futures required to drive a
 /// WebTransport endpoint.

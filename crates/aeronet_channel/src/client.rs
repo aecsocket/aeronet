@@ -1,20 +1,20 @@
 //! Client-side items.
 
-use std::{convert::Infallible, num::Saturating};
-
-use aeronet::{
-    client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
-    lane::LaneIndex,
-    shared::DROP_DISCONNECT_REASON,
-    stats::{ConnectedAt, MessageStats},
-};
-use bytes::Bytes;
-use crossbeam_channel::{Receiver, Sender, TryRecvError};
-use web_time::{Duration, Instant};
-
-use crate::{
-    server::{ChannelServer, ClientKey},
-    shared::{Disconnected, MessageKey},
+use {
+    crate::{
+        server::{ChannelServer, ClientKey},
+        shared::{Disconnected, MessageKey},
+    },
+    aeronet::{
+        client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
+        lane::LaneIndex,
+        shared::DROP_DISCONNECT_REASON,
+        stats::{ConnectedAt, MessageStats},
+    },
+    bytes::Bytes,
+    crossbeam_channel::{Receiver, Sender, TryRecvError},
+    std::{convert::Infallible, num::Saturating},
+    web_time::{Duration, Instant},
 };
 
 /// Implementation of [`ClientTransport`] using in-memory MPSC channels.

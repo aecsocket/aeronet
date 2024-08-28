@@ -30,12 +30,14 @@
 //! }
 //! ```
 
-use aeronet::lane::LaneIndex;
-use arbitrary::Arbitrary;
-use datasize::DataSize;
-use derivative::Derivative;
-use derive_more::{Add, AddAssign, Deref, DerefMut, From, Sub, SubAssign};
-use octs::Bytes;
+use {
+    aeronet::lane::LaneIndex,
+    arbitrary::Arbitrary,
+    datasize::DataSize,
+    derivative::Derivative,
+    derive_more::{Add, AddAssign, Deref, DerefMut, From, Sub, SubAssign},
+    octs::Bytes,
+};
 
 /// Sequence number uniquely identifying an item sent across a network.
 ///

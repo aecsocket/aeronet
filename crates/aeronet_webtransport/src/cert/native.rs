@@ -1,8 +1,9 @@
-use base64::Engine;
-use spki::der::Decode;
-use wtransport::tls::Sha256Digest;
-
-use super::{CertificateHash, BASE64};
+use {
+    super::{CertificateHash, BASE64},
+    base64::Engine,
+    spki::der::Decode,
+    wtransport::tls::Sha256Digest,
+};
 
 /// Encodes a SHA-256 digest of a certificate hash into a base 64 string which
 /// can be decoded by `hash_from_b64`.

@@ -3,17 +3,16 @@
 mod buf;
 
 pub use buf::*;
-
-use std::{
-    cmp::Ordering,
-    convert::Infallible,
-    fmt,
-    ops::{Add, AddAssign, Sub, SubAssign},
+use {
+    crate::ty::{MessageSeq, PacketSeq, Seq},
+    octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write},
+    std::{
+        cmp::Ordering,
+        convert::Infallible,
+        fmt,
+        ops::{Add, AddAssign, Sub, SubAssign},
+    },
 };
-
-use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
-
-use crate::ty::{MessageSeq, PacketSeq, Seq};
 
 impl Seq {
     /// Sequence number with value `0`.
@@ -39,7 +38,7 @@ impl Seq {
     ///                              1.dist_to(65534) = -3
     /// ```
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # use aeronet_proto::ty::Seq;
@@ -240,9 +239,7 @@ impl Decode for MessageSeq {
 
 #[cfg(test)]
 mod tests {
-    use octs::test::*;
-
-    use super::*;
+    use {super::*, octs::test::*};
 
     #[test]
     fn encode_decode_all_seqs() {

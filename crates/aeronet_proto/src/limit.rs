@@ -27,7 +27,7 @@ pub trait Limit {
     ///
     /// Errors if there are less than `n` counts left in this value.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use aeronet_proto::limit::{Limit, TokenBucket};
@@ -51,7 +51,7 @@ pub trait Limit {
     /// When consuming `n` counts, if one of them has less than `n` counts left,
     /// then counts will be consumed from neither of them.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use aeronet_proto::limit::{Limit, TokenBucket};
@@ -192,7 +192,7 @@ impl TokenBucket {
     ///
     /// This is equivalent to `cap - rem`.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use aeronet_proto::limit::{Limit, TokenBucket};
@@ -213,7 +213,7 @@ impl TokenBucket {
 
     /// Refills this bucket to its maximum capacity.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use aeronet_proto::limit::{Limit, TokenBucket};
@@ -236,7 +236,7 @@ impl TokenBucket {
     ///
     /// If the bucket is already full, this will not add any more counts.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use aeronet_proto::limit::{Limit, TokenBucket};
@@ -261,7 +261,7 @@ impl TokenBucket {
     ///
     /// If the bucket is already full, this will not add any more counts.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use aeronet_proto::limit::{Limit, TokenBucket};
@@ -326,7 +326,7 @@ pub struct MinOf<A, B> {
 impl<A, B> MinOf<A, B> {
     /// Gets the inner values wrapped in this value.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use aeronet_proto::limit::{Limit, TokenBucket};

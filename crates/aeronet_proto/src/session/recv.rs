@@ -1,19 +1,18 @@
-use std::{convert::Infallible, num::Saturating};
-
-use aeronet::lane::LaneIndex;
-use either::Either;
-use octs::{Buf, BufTooShortOr, Bytes, Read};
-use tracing::{trace, trace_span};
-use web_time::Instant;
-
-use crate::{
-    msg::{FragmentDecodeError, ReassembleError},
-    rtt::RttEstimator,
-    seq::SeqBuf,
-    ty::{Fragment, MessageSeq, PacketHeader, PacketSeq},
+use {
+    super::{FlushedPacket, RecvLane, RecvLaneKind, SendLane, Session},
+    crate::{
+        msg::{FragmentDecodeError, ReassembleError},
+        rtt::RttEstimator,
+        seq::SeqBuf,
+        ty::{Fragment, MessageSeq, PacketHeader, PacketSeq},
+    },
+    aeronet::lane::LaneIndex,
+    either::Either,
+    octs::{Buf, BufTooShortOr, Bytes, Read},
+    std::{convert::Infallible, num::Saturating},
+    tracing::{trace, trace_span},
+    web_time::Instant,
 };
-
-use super::{FlushedPacket, RecvLane, RecvLaneKind, SendLane, Session};
 
 /// Failed to [`Session::recv`] a packet.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -39,11 +38,9 @@ impl Session {
     /// Starts receiving a packet.
     ///
     /// If this is successful, this returns:
-    /// - an iterator over all of *our* sent messages which have been
-    ///   acknowledged by the peer, along with the lane on which the message was
-    ///   sent on
-    /// - a [`RecvMessages`], used to read the fragments (actual payload) of
-    ///   this packet
+    /// - an iterator over all of *our* sent messages which have been acknowledged by the peer,
+    ///   along with the lane on which the message was sent on
+    /// - a [`RecvMessages`], used to read the fragments (actual payload) of this packet
     ///
     /// Generally, you should use this like:
     ///
@@ -98,7 +95,7 @@ impl Session {
             .map_err(RecvError::DecodeHeader)?;
         self.acks.ack(header.seq);
 
-        let span = trace_span!("recv", packet = header.seq.0 .0);
+        let span = trace_span!("recv", packet = header.seq.0.0);
         let _span = span.enter();
 
         trace!(len = packet.len(), "Got packet");

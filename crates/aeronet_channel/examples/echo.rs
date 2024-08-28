@@ -1,17 +1,19 @@
 //! Example creating a client and server pair, where the client can send a
 //! message, and the server just echoes back that message to the client.
 
-use aeronet::{
-    client::{ClientEvent, ClientState, ClientTransport},
-    error::pretty_error,
-    lane::LaneIndex,
-    server::{ServerEvent, ServerTransport},
-    stats::MessageStats,
+use {
+    aeronet::{
+        client::{ClientEvent, ClientState, ClientTransport},
+        error::pretty_error,
+        lane::LaneIndex,
+        server::{ServerEvent, ServerTransport},
+        stats::MessageStats,
+    },
+    aeronet_channel::{client::ChannelClient, server::ChannelServer},
+    bevy::prelude::*,
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    bytes::Bytes,
 };
-use aeronet_channel::{client::ChannelClient, server::ChannelServer};
-use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
-use bytes::Bytes;
 
 // define what lanes our app will use
 // we're writing a very simple example, so we'll only use a single lane,

@@ -1,15 +1,15 @@
-use std::{collections::hash_map::Entry, fmt, mem};
-
-use ahash::AHashMap;
-use bitvec::array::BitArray;
-use datasize::{data_size, DataSize};
-use derivative::Derivative;
-use octs::Bytes;
-use web_time::Instant;
-
-use crate::{
-    msg::MAX_FRAGS,
-    ty::{FragmentMarker, MessageSeq},
+use {
+    crate::{
+        msg::MAX_FRAGS,
+        ty::{FragmentMarker, MessageSeq},
+    },
+    ahash::AHashMap,
+    bitvec::array::BitArray,
+    datasize::{data_size, DataSize},
+    derivative::Derivative,
+    octs::Bytes,
+    std::{collections::hash_map::Entry, fmt, mem},
+    web_time::Instant,
 };
 
 /// Handles receiving small message fragments produced by a [`MessageSplitter`]
@@ -213,8 +213,8 @@ impl FragmentReceiver {
             .is_some_and(|last| buf.num_frags_recv >= last)
         {
             let buf = self.msgs.remove(&msg_seq).expect(
-                "we already have a mut ref to the buffer at this key, \
-                so we should be able to remove and take ownership of it",
+                "we already have a mut ref to the buffer at this key, so we should be able to \
+                 remove and take ownership of it",
             );
             Ok(Some(Bytes::from(buf.payload)))
         } else {
@@ -228,9 +228,7 @@ impl FragmentReceiver {
 
 #[cfg(test)]
 mod tests {
-    use crate::msg::MAX_FRAG_INDEX;
-
-    use super::*;
+    use {super::*, crate::msg::MAX_FRAG_INDEX};
 
     const SEQ: MessageSeq = MessageSeq::ZERO;
     const SEQ1: MessageSeq = MessageSeq::new(1);
@@ -303,10 +301,11 @@ mod tests {
     #[test]
     fn one_half_frags_opposite_order() {
         let mut r = FragmentReceiver::new(2);
-        assert!(r
-            .reassemble(now(), SEQ, non_last(0), [1, 2])
-            .unwrap()
-            .is_none());
+        assert!(
+            r.reassemble(now(), SEQ, non_last(0), [1, 2])
+                .unwrap()
+                .is_none()
+        );
         assert!(data_size(&r) > 0);
         assert_eq!(
             Bytes::from(vec![1, 2, 3]),
@@ -332,10 +331,11 @@ mod tests {
     #[test]
     fn already_received() {
         let mut r = FragmentReceiver::new(2);
-        assert!(r
-            .reassemble(now(), SEQ, non_last(0), [1, 2])
-            .unwrap()
-            .is_none());
+        assert!(
+            r.reassemble(now(), SEQ, non_last(0), [1, 2])
+                .unwrap()
+                .is_none()
+        );
         assert_eq!(
             ReassembleError::AlreadyReceived,
             r.reassemble(now(), SEQ, non_last(0), [1, 2]).unwrap_err()
@@ -360,10 +360,11 @@ mod tests {
     #[test]
     fn invalid_last_frag() {
         let mut r = FragmentReceiver::new(2);
-        assert!(r
-            .reassemble(now(), SEQ, non_last(1), [1, 2])
-            .unwrap()
-            .is_none());
+        assert!(
+            r.reassemble(now(), SEQ, non_last(1), [1, 2])
+                .unwrap()
+                .is_none()
+        );
         assert_eq!(
             ReassembleError::InvalidLastFragment,
             r.reassemble(now(), SEQ, last(0), []).unwrap_err()
@@ -373,10 +374,11 @@ mod tests {
     #[test]
     fn lower_index_last_frag() {
         let mut r = FragmentReceiver::new(2);
-        assert!(r
-            .reassemble(now(), SEQ, non_last(10), [1, 2])
-            .unwrap()
-            .is_none());
+        assert!(
+            r.reassemble(now(), SEQ, non_last(10), [1, 2])
+                .unwrap()
+                .is_none()
+        );
         assert_eq!(
             ReassembleError::InvalidLastFragment,
             r.reassemble(now(), SEQ, last(0), [3]).unwrap_err()
@@ -406,10 +408,11 @@ mod tests {
     fn max_frags() {
         let mut r = FragmentReceiver::new(2);
         for index in 0..=(MAX_FRAG_INDEX - 1) {
-            assert!(r
-                .reassemble(now(), SEQ, non_last(index), [1, 1])
-                .unwrap()
-                .is_none());
+            assert!(
+                r.reassemble(now(), SEQ, non_last(index), [1, 1])
+                    .unwrap()
+                    .is_none()
+            );
         }
         assert_eq!(
             Bytes::from(vec![1; MAX_FRAGS * 2]),
@@ -436,14 +439,16 @@ mod tests {
     #[test]
     fn two_msgs_two_frags() {
         let mut r = FragmentReceiver::new(2);
-        assert!(r
-            .reassemble(now(), SEQ1, non_last(0), [1, 2])
-            .unwrap()
-            .is_none());
-        assert!(r
-            .reassemble(now(), SEQ2, non_last(0), [4, 5])
-            .unwrap()
-            .is_none());
+        assert!(
+            r.reassemble(now(), SEQ1, non_last(0), [1, 2])
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            r.reassemble(now(), SEQ2, non_last(0), [4, 5])
+                .unwrap()
+                .is_none()
+        );
         let data_size_1 = data_size(&r);
         assert!(data_size_1 > 0);
 

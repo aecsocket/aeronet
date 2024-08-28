@@ -3,18 +3,17 @@
 #[cfg(feature = "bevy")]
 mod bevy;
 
-use std::ops::Deref;
-
 #[cfg(feature = "bevy")]
 pub use bevy::*;
-
-use ringbuf::{
-    traits::{Consumer, RingBuffer},
-    HeapRb,
+use {
+    crate::session::Session,
+    ringbuf::{
+        traits::{Consumer, RingBuffer},
+        HeapRb,
+    },
+    std::ops::Deref,
+    web_time::Duration,
 };
-use web_time::Duration;
-
-use crate::session::Session;
 
 /// Stores network statistics collected from a [`Session`].
 ///
@@ -87,13 +86,12 @@ pub struct Sample {
     /// Therefore, at sample 100, we expect to have received 950 + 10 = 960
     /// total acknowledgements.
     ///
-    /// - If by now we have received 960 acknowledgements, then we have 0%
-    ///   packet loss, and our RTT estimate is very accurate.
-    /// - If we have more than 960 acknowledgements, our packet loss is still
-    ///   0%, but our RTT estimate is too high, and the peer actually
-    ///   acknowledges packets faster than we think.
-    /// - If we have between 950 and 960 acknowledgements, we have some
-    ///   percentage of packet loss i.e. 959 acks means 10% packet loss.
+    /// - If by now we have received 960 acknowledgements, then we have 0% packet loss, and our RTT
+    ///   estimate is very accurate.
+    /// - If we have more than 960 acknowledgements, our packet loss is still 0%, but our RTT
+    ///   estimate is too high, and the peer actually acknowledges packets faster than we think.
+    /// - If we have between 950 and 960 acknowledgements, we have some percentage of packet loss
+    ///   i.e. 959 acks means 10% packet loss.
     /// - If we still only have 950 acks, we have 100% packet loss.
     ///
     /// [the PTO]: crate::rtt::RttEstimator::pto

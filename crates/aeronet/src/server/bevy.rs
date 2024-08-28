@@ -4,14 +4,13 @@
 //! i.e. polling, connecting, or writing. This module simply provides the items
 //! so that other crates can build on top of them, allowing interoperability.
 
-use std::{fmt::Debug, marker::PhantomData};
-
-use bevy_ecs::prelude::*;
-use derivative::Derivative;
-
-use crate::client::DisconnectReason;
-
-use super::{CloseReason, ServerTransport};
+use {
+    super::{CloseReason, ServerTransport},
+    crate::client::DisconnectReason,
+    bevy_ecs::prelude::*,
+    derivative::Derivative,
+    std::{fmt::Debug, marker::PhantomData},
+};
 
 /// System set for server-side networking systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
@@ -27,7 +26,7 @@ pub enum ServerTransportSet {
 /// A [`Condition`]-satisfying system that returns `true` if the server `T`
 /// exists *and* is in the [`Open`] state.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # use bevy_app::prelude::*;
@@ -53,7 +52,7 @@ pub fn server_open<T: ServerTransport + Resource>(server: Option<Res<T>>) -> boo
 /// A [`Condition`]-satisfying system that returns `true` if the server `T`
 /// exists *and* is in the [`Closed`] state.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # use bevy_app::prelude::*;

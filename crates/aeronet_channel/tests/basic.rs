@@ -1,16 +1,17 @@
-use std::time::Duration;
-
-use aeronet::{
-    client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
-    lane::LaneIndex,
-    server::{CloseReason, ServerEvent, ServerState, ServerTransport},
-    shared::DROP_DISCONNECT_REASON,
+use {
+    aeronet::{
+        client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
+        lane::LaneIndex,
+        server::{CloseReason, ServerEvent, ServerState, ServerTransport},
+        shared::DROP_DISCONNECT_REASON,
+    },
+    aeronet_channel::{
+        client::ChannelClient,
+        server::{ChannelServer, ClientKey},
+    },
+    assert_matches::assert_matches,
+    std::time::Duration,
 };
-use aeronet_channel::{
-    client::ChannelClient,
-    server::{ChannelServer, ClientKey},
-};
-use assert_matches::assert_matches;
 
 const C2S: &[u8] = b"hello server";
 const S2C: &[u8] = b"hello client";

@@ -1,14 +1,13 @@
-use std::num::Saturating;
-
-use aeronet::{client::DisconnectReason, error::pretty_error, lane::LaneIndex};
-use aeronet_proto::session::FatalSendError;
-use bytes::Bytes;
-use tracing::{debug, trace};
-use web_time::{Duration, Instant};
-
-use crate::shared::MessageKey;
-
-use super::{InternalSession, SessionError, SessionSendError};
+use {
+    super::{InternalSession, SessionError, SessionSendError},
+    crate::shared::MessageKey,
+    aeronet::{client::DisconnectReason, error::pretty_error, lane::LaneIndex},
+    aeronet_proto::session::FatalSendError,
+    bytes::Bytes,
+    std::num::Saturating,
+    tracing::{debug, trace},
+    web_time::{Duration, Instant},
+};
 
 #[derive(Debug)]
 pub enum PollEvent {

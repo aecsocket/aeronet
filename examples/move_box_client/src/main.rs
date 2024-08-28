@@ -1,24 +1,26 @@
 #![doc = include_str!("../README.md")]
 
-use aeronet::{
-    client::{ClientState, ClientTransport, LocalClientConnected, LocalClientDisconnected},
-    error::pretty_error,
-};
-use aeronet_replicon::client::RepliconClientPlugin;
-use aeronet_webtransport::{
-    cert,
-    client::{ClientConfig, WebTransportClient},
-    proto::{
-        stats::{ClientSessionStats, ClientSessionStatsPlugin},
-        visualizer::SessionStatsVisualizer,
+use {
+    aeronet::{
+        client::{ClientState, ClientTransport, LocalClientConnected, LocalClientDisconnected},
+        error::pretty_error,
     },
-    runtime::WebTransportRuntime,
-};
-use bevy::{ecs::system::SystemId, prelude::*};
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
-use bevy_replicon::{client::ClientSet, prelude::*};
-use move_box::{
-    GameState, MoveBoxPlugin, Player, PlayerColor, PlayerMove, PlayerPosition, TICK_RATE,
+    aeronet_replicon::client::RepliconClientPlugin,
+    aeronet_webtransport::{
+        cert,
+        client::{ClientConfig, WebTransportClient},
+        proto::{
+            stats::{ClientSessionStats, ClientSessionStatsPlugin},
+            visualizer::SessionStatsVisualizer,
+        },
+        runtime::WebTransportRuntime,
+    },
+    bevy::{ecs::system::SystemId, prelude::*},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    bevy_replicon::{client::ClientSet, prelude::*},
+    move_box::{
+        GameState, MoveBoxPlugin, Player, PlayerColor, PlayerMove, PlayerPosition, TICK_RATE,
+    },
 };
 
 /// State of the [`egui`] interface used for connecting and disconnecting.
@@ -119,8 +121,7 @@ fn net_config(cert_hash: String) -> ClientConfig {
 
 #[cfg(not(target_family = "wasm"))]
 fn net_config(cert_hash: String) -> ClientConfig {
-    use aeronet_webtransport::wtransport::tls::Sha256Digest;
-    use web_time::Duration;
+    use {aeronet_webtransport::wtransport::tls::Sha256Digest, web_time::Duration};
 
     let config = ClientConfig::builder().with_bind_default();
 

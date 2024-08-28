@@ -4,12 +4,12 @@
 //! i.e. polling, connecting, or writing. This module simply provides the items
 //! so that other crates can build on top of them, allowing interoperability.
 
-use std::{fmt::Debug, marker::PhantomData};
-
-use bevy_ecs::prelude::*;
-use derivative::Derivative;
-
-use super::{ClientTransport, DisconnectReason};
+use {
+    super::{ClientTransport, DisconnectReason},
+    bevy_ecs::prelude::*,
+    derivative::Derivative,
+    std::{fmt::Debug, marker::PhantomData},
+};
 
 /// System set for client-side networking systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
@@ -25,7 +25,7 @@ pub enum ClientTransportSet {
 /// A [`Condition`]-satisfying system that returns `true` if the client `T`
 /// exists *and* is in the [`Connected`] state.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # use bevy_app::prelude::*;
@@ -51,7 +51,7 @@ pub fn client_connected<T: ClientTransport + Resource>(client: Option<Res<T>>) -
 /// A [`Condition`]-satisfying system that returns `true` if the client `T` does
 /// not exist *or* is in the [`Disconnected`] state.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # use bevy_app::prelude::*;

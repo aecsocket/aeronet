@@ -1,24 +1,26 @@
 //! Server-side traits and items.
 
-use std::{marker::PhantomData, ops::Deref, time::Duration};
-
-use aeronet::{
-    client::DisconnectReason,
-    error::pretty_error,
-    lane::LaneIndex,
-    server::{
-        server_open, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
-        ServerClosed, ServerEvent, ServerOpened, ServerState, ServerTransport, ServerTransportSet,
+use {
+    aeronet::{
+        client::DisconnectReason,
+        error::pretty_error,
+        lane::LaneIndex,
+        server::{
+            server_open, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
+            ServerClosed, ServerEvent, ServerOpened, ServerState, ServerTransport,
+            ServerTransportSet,
+        },
     },
+    bevy_app::prelude::*,
+    bevy_ecs::{prelude::*, system::SystemParam},
+    bevy_replicon::{core::ClientId, prelude::RepliconServer, server::ServerSet},
+    bevy_time::{common_conditions::on_real_timer, prelude::*},
+    bimap::{BiHashMap, Overwritten},
+    bytes::Bytes,
+    derivative::Derivative,
+    std::{marker::PhantomData, ops::Deref, time::Duration},
+    tracing::{debug, warn},
 };
-use bevy_app::prelude::*;
-use bevy_ecs::{prelude::*, system::SystemParam};
-use bevy_replicon::{core::ClientId, prelude::RepliconServer, server::ServerSet};
-use bevy_time::{common_conditions::on_real_timer, prelude::*};
-use bimap::{BiHashMap, Overwritten};
-use bytes::Bytes;
-use derivative::Derivative;
-use tracing::{debug, warn};
 
 /// Provides a [`bevy_replicon`] server backend using the given [`aeronet`]
 /// transport.
@@ -46,7 +48,7 @@ pub struct RepliconServerPlugin<T> {
     /// flushing packets.
     pub update_interval: Duration,
     #[derivative(Debug = "ignore")]
-    #[doc = "hidden"]
+    ///hidden
     pub _phantom: PhantomData<T>,
 }
 

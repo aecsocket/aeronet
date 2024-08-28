@@ -4,24 +4,23 @@ mod config;
 mod recv;
 mod send;
 
-pub use {config::*, recv::*, send::*};
-
-use std::{fmt, mem, num::Saturating};
-
-use aeronet::lane::{LaneIndex, LaneKind};
-use ahash::{AHashMap, AHashSet};
-use datasize::{data_size, DataSize};
-use derivative::Derivative;
-use octs::{Bytes, FixedEncodeLenHint};
-use web_time::{Duration, Instant};
-
-use crate::{
-    limit::TokenBucket,
-    msg::{FragmentReceiver, MessageSplitter},
-    rtt::{RttEstimator, INITIAL_RTT},
-    seq::SeqBuf,
-    ty::{Acknowledge, FragmentHeader, FragmentMarker, MessageSeq, PacketHeader, PacketSeq},
+use {
+    crate::{
+        limit::TokenBucket,
+        msg::{FragmentReceiver, MessageSplitter},
+        rtt::{RttEstimator, INITIAL_RTT},
+        seq::SeqBuf,
+        ty::{Acknowledge, FragmentHeader, FragmentMarker, MessageSeq, PacketHeader, PacketSeq},
+    },
+    aeronet::lane::{LaneIndex, LaneKind},
+    ahash::{AHashMap, AHashSet},
+    datasize::{data_size, DataSize},
+    derivative::Derivative,
+    octs::{Bytes, FixedEncodeLenHint},
+    std::{fmt, mem, num::Saturating},
+    web_time::{Duration, Instant},
 };
+pub use {config::*, recv::*, send::*};
 
 /// Manages the messages sent and received over a transport's connection without
 /// performing any I/O.
