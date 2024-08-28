@@ -1,5 +1,5 @@
 use {
-    super::{ClientConfig, ClientError},
+    super::{ClientConfig, ClientEndpoint, ClientError},
     crate::{
         client::ToConnected,
         internal::{self, ConnectionMeta, MIN_MTU},
@@ -24,7 +24,7 @@ pub async fn start(
     target: String,
     send_connected: oneshot::Sender<ToConnected>,
 ) -> Result<Never, DisconnectReason<ClientError>> {
-    let endpoint = internal::create_client_endpoint(net_config)?;
+    let endpoint = create_client_endpoint(net_config)?;
 
     debug!("Created endpoint, connecting to {target:?}");
     #[allow(clippy::useless_conversion)] // multi-target support
@@ -76,4 +76,20 @@ pub async fn start(
     internal::handle_connection(runtime, conn, recv_c2s, send_s2c, send_meta, recv_local_dc)
         .await
         .map_err(|reason| reason.map_err(From::from))
+}
+
+#[allow(clippy::unnecessary_wraps)] // on WASM, must match fn sig
+fn create_client_endpoint(config: ClientConfig) -> Result<ClientEndpoint, ClientError> {
+    #[cfg(target_family = "wasm")]
+    {
+        Ok(xwt_web_sys::Endpoint {
+            options: config.to_js(),
+        })
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let raw = wtransport::Endpoint::client(config).map_err(ClientError::CreateEndpoint)?;
+        Ok(xwt_wtransport::Endpoint(raw))
+    }
 }

@@ -77,4 +77,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
-      - run: cargo build --bin '${{ matrix.bin }}'
+      - run: cargo build --package '${{ matrix.bin }}'
