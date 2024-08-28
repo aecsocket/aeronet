@@ -22,6 +22,8 @@ cfg_if::cfg_if! {
 
         /// Client network configuration.
         pub type ClientConfig = xwt_web_sys::WebTransportOptions;
+
+        type ClientEndpoint = xwt_web_sys::Endpoint;
         type ConnectError = JsError;
         type AwaitConnectError = JsError;
         type ConnectionLostError = JsError;
@@ -35,8 +37,10 @@ cfg_if::cfg_if! {
 
         /// Client network configuration.
         pub type ClientConfig = wtransport::ClientConfig;
-        type ConnectError = <internal::ClientEndpoint as Connect>::Error;
-        type AwaitConnectError = <<internal::ClientEndpoint as Connect>::Connecting as xwt_core::endpoint::connect::Connecting>::Error;
+
+        type ClientEndpoint = xwt_wtransport::Endpoint<wtransport::endpoint::endpoint_side::Client>;
+        type ConnectError = <ClientEndpoint as Connect>::Error;
+        type AwaitConnectError = <<ClientEndpoint as Connect>::Connecting as xwt_core::endpoint::connect::Connecting>::Error;
         type ConnectionLostError = <internal::Connection as xwt_core::session::datagram::Receive>::Error;
     }
 }

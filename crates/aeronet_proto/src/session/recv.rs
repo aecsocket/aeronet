@@ -38,9 +38,11 @@ impl Session {
     /// Starts receiving a packet.
     ///
     /// If this is successful, this returns:
-    /// - an iterator over all of *our* sent messages which have been acknowledged by the peer,
-    ///   along with the lane on which the message was sent on
-    /// - a [`RecvMessages`], used to read the fragments (actual payload) of this packet
+    /// - an iterator over all of *our* sent messages which have been
+    ///   acknowledged by the peer, along with the lane on which the message was
+    ///   sent on
+    /// - a [`RecvMessages`], used to read the fragments (actual payload) of
+    ///   this packet
     ///
     /// Generally, you should use this like:
     ///

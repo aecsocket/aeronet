@@ -17,7 +17,7 @@ use {
 /// This is also used internally, as clients and servers may need to spawn their
 /// own tasks for e.g. the sending and receiving halves of a session.
 ///
-/// If using Bevy, you can use this as a resource in your systems.
+/// If using Bevy, you can use this as a resource in your app.
 ///
 /// # Platforms
 ///
@@ -41,7 +41,7 @@ pub struct WebTransportRuntime {
     #[cfg(target_family = "wasm")]
     _priv: (),
     #[cfg(not(target_family = "wasm"))]
-    runtime: tokio::runtime::Handle,
+    handle: tokio::runtime::Handle,
 }
 
 #[allow(clippy::derivable_impls)] // no it can't because conditional cfg logic
@@ -51,6 +51,7 @@ impl Default for WebTransportRuntime {
         {
             Self { _priv: () }
         }
+
         #[cfg(not(target_family = "wasm"))]
         {
             let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -59,7 +60,7 @@ impl Default for WebTransportRuntime {
                 .expect("failed to create tokio runtime");
             let runtime = Box::leak(Box::new(runtime));
             Self {
-                runtime: runtime.handle().clone(),
+                handle: runtime.handle().clone(),
             }
         }
     }
@@ -68,11 +69,21 @@ impl Default for WebTransportRuntime {
 #[cfg(not(target_family = "wasm"))]
 impl From<tokio::runtime::Handle> for WebTransportRuntime {
     fn from(value: tokio::runtime::Handle) -> Self {
-        Self { runtime: value }
+        Self { handle: value }
     }
 }
 
 impl WebTransportRuntime {
+    /// Gets a handle to the underlying [`tokio`] runtime.
+    ///
+    /// This function only exists on platforms which use [`tokio`] as their
+    /// underlying runtime (i.e. not on WASM).
+    #[cfg(not(target_family = "wasm"))]
+    #[must_use]
+    pub fn handle(&self) -> tokio::runtime::Handle {
+        self.handle.clone()
+    }
+
     /// Spawns a future on the task runtime.
     pub fn spawn<F>(&self, future: F)
     where
@@ -82,9 +93,10 @@ impl WebTransportRuntime {
         {
             wasm_bindgen_futures::spawn_local(future);
         }
+
         #[cfg(not(target_family = "wasm"))]
         {
-            self.runtime.spawn(future);
+            self.handle.spawn(future);
         }
     }
 
@@ -94,6 +106,7 @@ impl WebTransportRuntime {
         {
             gloo_timers::future::sleep(duration).await;
         }
+
         #[cfg(not(target_family = "wasm"))]
         {
             tokio::time::sleep(duration).await;

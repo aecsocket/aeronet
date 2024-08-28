@@ -17,7 +17,6 @@ pub const MIN_MTU: usize = 1024;
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         pub type Connection = xwt_web_sys::Session;
-        pub type ClientEndpoint = xwt_web_sys::Endpoint;
         pub type ConnectionError = crate::shared::JsError;
     } else {
         use std::net::SocketAddr;
@@ -26,7 +25,6 @@ cfg_if::cfg_if! {
         use xwt_core::session::datagram;
 
         pub type Connection = xwt_wtransport::Connection;
-        pub type ClientEndpoint = xwt_wtransport::Endpoint<wtransport::endpoint::endpoint_side::Client>;
         pub type ConnectionError = <Connection as datagram::Receive>::Error;
     }
 }

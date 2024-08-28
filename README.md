@@ -18,20 +18,20 @@ cd aeronet
 Start the server:
 
 ```sh
-cargo run --bin move_box_server
+cargo run -p move_box_server
 ```
 
 Run a native desktop client:
 
 ```sh
-cargo run --bin move_box_client
+cargo run -p move_box_client
 ```
 
 Run the client in a browser:
 
 ```sh
 cargo install wasm-server-runner
-cargo run --bin move_box_client --target wasm32-unknown-unknown
+cargo run -p move_box_client --target wasm32-unknown-unknown
 ```
 
 And connect to `http://[::1]:25565`.

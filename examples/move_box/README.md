@@ -11,7 +11,7 @@ Based on <https://github.com/projectharmonia/bevy_replicon_renet/blob/master/exa
 ## Server
 
 ```sh
-cargo run --bin move_box_server
+cargo run -p move_box_server
 ```
 
 ## Client
@@ -19,14 +19,14 @@ cargo run --bin move_box_server
 Native:
 
 ```sh
-cargo run --bin move_box_client
+cargo run -p move_box_client
 ```
 
 WASM:
 
 ```sh
 cargo install wasm-server-runner
-cargo run --bin move_box_client --target wasm32-unknown-unknown
+cargo run -p move_box_client --target wasm32-unknown-unknown
 ```
 
 You must use a Chromium browser to try the demo:

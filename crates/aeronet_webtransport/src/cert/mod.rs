@@ -2,8 +2,8 @@
 
 #[cfg(not(target_family = "wasm"))]
 mod native;
-pub(crate) use base64::engine::general_purpose::STANDARD as BASE64;
-use base64::Engine;
+
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 #[cfg(not(target_family = "wasm"))]
 pub use native::*;
 

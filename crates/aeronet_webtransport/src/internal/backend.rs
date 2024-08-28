@@ -1,9 +1,6 @@
 use {
-    super::{ClientEndpoint, Connection, ConnectionMeta, SessionError},
-    crate::{
-        client::{ClientConfig, ClientError},
-        runtime::WebTransportRuntime,
-    },
+    super::{Connection, ConnectionMeta, SessionError},
+    crate::runtime::WebTransportRuntime,
     aeronet::client::DisconnectReason,
     bytes::Bytes,
     futures::{
@@ -19,22 +16,6 @@ use {
 const STATS_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
 
 const DISCONNECT_ERROR_CODE: u32 = 0;
-
-#[allow(clippy::unnecessary_wraps)] // on WASM, must match fn sig
-pub fn create_client_endpoint(config: ClientConfig) -> Result<ClientEndpoint, ClientError> {
-    #[cfg(target_family = "wasm")]
-    {
-        Ok(xwt_web_sys::Endpoint {
-            options: config.to_js(),
-        })
-    }
-
-    #[cfg(not(target_family = "wasm"))]
-    {
-        let raw = wtransport::Endpoint::client(config).map_err(ClientError::CreateEndpoint)?;
-        Ok(xwt_wtransport::Endpoint(raw))
-    }
-}
 
 pub async fn handle_connection(
     runtime: WebTransportRuntime,
