@@ -22,7 +22,8 @@ use {
     },
     bevy_replicon::prelude::*,
     move_box::{
-        ClientPlayer, GameState, MoveBoxPlugin, Player, PlayerColor, PlayerPosition, TICK_RATE,
+        ClientPlayer, GameState, MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition,
+        TICK_RATE,
     },
     size_format::{BinaryPrefixes, PointSeparated, SizeFormatter},
     web_time::{Duration, Instant},
@@ -123,8 +124,8 @@ fn on_opened(
 }
 
 fn on_closed(mut events: EventReader<ServerClosed<WebTransportServer>>) {
-    for ServerClosed { reason: error } in events.read() {
-        info!("Server closed: {:#}", pretty_error(&error));
+    for ServerClosed { reason } in events.read() {
+        info!("Server closed: {:#}", pretty_error(reason));
     }
 }
 
@@ -140,7 +141,7 @@ fn on_connecting(
 
 fn on_disconnected(mut events: EventReader<RemoteClientDisconnected<WebTransportServer>>) {
     for RemoteClientDisconnected { client_key, reason } in events.read() {
-        info!("{client_key:?} disconnected: {:#}", pretty_error(&reason));
+        info!("{client_key:?} disconnected: {:#}", pretty_error(reason));
     }
 }
 
@@ -152,8 +153,8 @@ fn on_server_event(
 ) {
     for event in events.read() {
         match event {
-            ServerEvent::ClientConnected { client_id } => {
-                let Some(client_key) = client_keys.get_by_right(client_id) else {
+            &ServerEvent::ClientConnected { client_id } => {
+                let Some(client_key) = client_keys.get_by_right(&client_id) else {
                     continue;
                 };
                 info!("{client_id:?} controlled by {client_key:?} connected");
@@ -161,16 +162,20 @@ fn on_server_event(
                 let color = Color::srgb(rand::random(), rand::random(), rand::random());
                 commands.spawn((
                     Player,
-                    ClientPlayer(*client_id),
+                    ClientPlayer(client_id),
                     PlayerPosition(Vec2::ZERO),
                     PlayerColor(color),
+                    PlayerInput::default(),
                     Replicated,
                 ));
             }
-            ServerEvent::ClientDisconnected { client_id, reason } => {
+            &ServerEvent::ClientDisconnected {
+                client_id,
+                ref reason,
+            } => {
                 info!("{client_id:?} disconnected: {reason}");
-                for (entity, ClientPlayer(test_id)) in &players {
-                    if *test_id == *client_id {
+                for (entity, &ClientPlayer(test_id)) in &players {
+                    if test_id == client_id {
                         commands.entity(entity).despawn();
                     }
                 }

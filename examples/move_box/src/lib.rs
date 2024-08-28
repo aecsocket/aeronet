@@ -9,7 +9,7 @@ use {
 };
 
 /// How many units a player may move in a single second.
-const MOVE_SPEED: f32 = 5000.0;
+const MOVE_SPEED: f32 = 250.0;
 
 /// How many times per second we will replicate entity components.
 pub const TICK_RATE: u16 = 128;
@@ -49,8 +49,8 @@ impl Plugin for MoveBoxPlugin {
             .replicate::<Player>()
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
-            .add_client_event::<PlayerMove>(ChannelKind::Ordered)
-            .add_systems(Update, apply_movement.run_if(has_authority));
+            .add_client_event::<PlayerInput>(ChannelKind::Ordered)
+            .add_systems(FixedUpdate, (recv_input, apply_movement).chain().run_if(has_authority));
     }
 }
 
@@ -60,7 +60,7 @@ pub struct Player;
 
 /// Player who is being controlled by a specific [`ClientId`] connected to our
 /// server.
-#[derive(Debug, Clone, Component, Serialize, Deserialize)]
+#[derive(Debug, Clone, Component, Deref, DerefMut, Serialize, Deserialize)]
 pub struct ClientPlayer(pub ClientId);
 
 /// Player's box position.
@@ -71,27 +71,42 @@ pub struct PlayerPosition(pub Vec2);
 #[derive(Debug, Clone, Component, Deref, DerefMut, Serialize, Deserialize)]
 pub struct PlayerColor(pub Color);
 
-/// Player sent an input to move their box.
-#[derive(Debug, Clone, Event, Serialize, Deserialize)]
-pub struct PlayerMove(pub Vec2);
+/// Player's inputs that they send to control their box.
+#[derive(Debug, Clone, Default, Event, Serialize, Deserialize)]
+pub struct PlayerInput {
+    /// Lateral movement vector.
+    ///
+    /// The client has full control over this field, and may send an
+    /// unnormalized vector! Authorities must ensure that they normalize or
+    /// zero this vector before using it for movement updates.
+    pub movement: Vec2,
+}
 
-fn apply_movement(
-    time: Res<Time>,
-    mut move_events: EventReader<FromClient<PlayerMove>>,
-    mut players: Query<(&ClientPlayer, &mut PlayerPosition)>,
+fn recv_input(
+    mut inputs: EventReader<FromClient<PlayerInput>>,
+    mut players: Query<(&ClientPlayer, &mut PlayerInput)>,
 ) {
-    for FromClient {
+    for &FromClient {
         client_id,
-        event: PlayerMove(delta),
-    } in move_events.read()
+        event: ref new_input,
+    } in inputs.read()
     {
-        for (player, mut position) in &mut players {
-            if *client_id == player.0 {
-                // make sure to normalize on the server side;
-                // since we're accepting arbitrary client input,
-                // we have to do input validation on the server side
-                **position += delta.normalize_or_zero() * time.delta_seconds() * MOVE_SPEED;
+        for (player, mut old_input) in &mut players {
+            if client_id == **player {
+                *old_input = new_input.clone();
             }
+        }
+    }
+}
+
+fn apply_movement(time: Res<Time>, mut players: Query<(&PlayerInput, &mut PlayerPosition)>) {
+    for (input, mut position) in &mut players {
+        // make sure to validate inputs and normalize on the server side,
+        // since we're accepting arbitrary client input
+        if let Some(movement) = input.movement.try_normalize() {
+            // only change `position` if we actually have a movement vector to apply
+            // this saves bandwidth; we don't replicate position if we don't change it
+            **position += movement * time.delta_seconds() * MOVE_SPEED;
         }
     }
 }

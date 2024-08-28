@@ -19,7 +19,7 @@ use {
     bevy_egui::{egui, EguiContexts, EguiPlugin},
     bevy_replicon::{client::ClientSet, prelude::*},
     move_box::{
-        GameState, MoveBoxPlugin, Player, PlayerColor, PlayerMove, PlayerPosition, TICK_RATE,
+        GameState, MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition, TICK_RATE,
     },
 };
 
@@ -217,7 +217,7 @@ fn on_disconnected(
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     for LocalClientDisconnected { reason } in events.read() {
-        info!("Client disconnected: {:#}", pretty_error(&reason));
+        info!("Client disconnected: {:#}", pretty_error(reason));
         game_state.set(GameState::None);
     }
 }
@@ -233,25 +233,23 @@ fn init_player(
     }
 }
 
-fn handle_inputs(mut move_events: EventWriter<PlayerMove>, input: Res<ButtonInput<KeyCode>>) {
-    let mut delta = Vec2::ZERO;
+fn handle_inputs(mut inputs: EventWriter<PlayerInput>, input: Res<ButtonInput<KeyCode>>) {
+    let mut movement = Vec2::ZERO;
     if input.pressed(KeyCode::ArrowRight) {
-        delta.x += 1.0;
+        movement.x += 1.0;
     }
     if input.pressed(KeyCode::ArrowLeft) {
-        delta.x -= 1.0;
+        movement.x -= 1.0;
     }
     if input.pressed(KeyCode::ArrowUp) {
-        delta.y += 1.0;
+        movement.y += 1.0;
     }
     if input.pressed(KeyCode::ArrowDown) {
-        delta.y -= 1.0;
+        movement.y -= 1.0;
     }
-    if delta != Vec2::ZERO {
-        // don't normalize here, since that means it's client sided
-        // normalize the delta on the server side
-        move_events.send(PlayerMove(delta));
-    }
+
+    // don't normalize here, since the server will normalize anyway
+    inputs.send(PlayerInput { movement });
 }
 
 fn draw_boxes(mut gizmos: Gizmos, players: Query<(&PlayerPosition, &PlayerColor)>) {
