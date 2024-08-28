@@ -1,21 +1,21 @@
-use aeronet::client::DisconnectReason;
-use aeronet_proto::session::{Session, SessionConfig};
-use bytes::Bytes;
-use futures::{
-    channel::{mpsc, oneshot},
-    never::Never,
+use {
+    super::{ClientConfig, ClientError},
+    crate::{
+        client::ToConnected,
+        internal::{self, ConnectionMeta, MIN_MTU},
+        runtime::WebTransportRuntime,
+    },
+    aeronet::client::DisconnectReason,
+    aeronet_proto::session::{Session, SessionConfig},
+    bytes::Bytes,
+    futures::{
+        channel::{mpsc, oneshot},
+        never::Never,
+    },
+    tracing::debug,
+    web_time::Instant,
+    xwt_core::prelude::*,
 };
-use tracing::debug;
-use web_time::Instant;
-use xwt_core::prelude::*;
-
-use crate::{
-    client::ToConnected,
-    internal::{self, ConnectionMeta, MIN_MTU},
-    runtime::WebTransportRuntime,
-};
-
-use super::{ClientConfig, ClientError};
 
 pub async fn start(
     runtime: WebTransportRuntime,

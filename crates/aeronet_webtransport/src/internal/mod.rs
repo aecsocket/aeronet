@@ -1,11 +1,12 @@
 mod backend;
 mod frontend;
 
+use {
+    aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session},
+    bytes::Bytes,
+    futures::channel::{mpsc, oneshot},
+};
 pub use {backend::*, frontend::*};
-
-use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
-use bytes::Bytes;
-use futures::channel::{mpsc, oneshot};
 
 pub const MSG_BUF_CAP: usize = 256;
 

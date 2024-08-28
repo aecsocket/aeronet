@@ -1,16 +1,17 @@
 #![cfg(feature = "bevy")]
 
-use std::time::Duration;
-
-use aeronet::{
-    client::{ClientEvent, ClientTransport},
-    lane::LaneIndex,
-    server::{ServerEvent, ServerTransport},
+use {
+    aeronet::{
+        client::{ClientEvent, ClientTransport},
+        lane::LaneIndex,
+        server::{ServerEvent, ServerTransport},
+    },
+    aeronet_channel::{client::ChannelClient, server::ChannelServer},
+    assert_matches::assert_matches,
+    bevy::prelude::*,
+    bytes::Bytes,
+    std::time::Duration,
 };
-use aeronet_channel::{client::ChannelClient, server::ChannelServer};
-use assert_matches::assert_matches;
-use bevy::prelude::*;
-use bytes::Bytes;
 
 #[test]
 fn send_recv() {

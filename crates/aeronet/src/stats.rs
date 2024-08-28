@@ -11,9 +11,10 @@
 //! [`ClientTransport::state`]: crate::client::ClientTransport::state
 //! [`ServerTransport::client_state`]: crate::server::ServerTransport::client_state
 
-use std::net::SocketAddr;
-
-use web_time::{Duration, Instant};
+use {
+    std::net::SocketAddr,
+    web_time::{Duration, Instant},
+};
 
 /// Gets the instant at which this client was considered connected, and messages
 /// could start being exchanged between the client and its peer.

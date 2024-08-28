@@ -5,17 +5,15 @@ mod bevy;
 
 #[cfg(feature = "bevy")]
 pub use bevy::*;
-
-use web_time::Duration;
-
-use std::{borrow::Borrow, error::Error, fmt::Debug, hash::Hash};
-
-use bytes::Bytes;
-use derivative::Derivative;
-
-use crate::{
-    client::{ClientState, DisconnectReason},
-    lane::LaneIndex,
+use {
+    crate::{
+        client::{ClientState, DisconnectReason},
+        lane::LaneIndex,
+    },
+    bytes::Bytes,
+    derivative::Derivative,
+    std::{borrow::Borrow, error::Error, fmt::Debug, hash::Hash},
+    web_time::Duration,
 };
 
 /// Allows listening to client connections and transporting data between this

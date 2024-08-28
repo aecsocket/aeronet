@@ -1,8 +1,9 @@
 //! See [`Acknowledge`].
 
-use std::fmt;
-
-use crate::ty::{Acknowledge, PacketSeq};
+use {
+    crate::ty::{Acknowledge, PacketSeq},
+    std::fmt,
+};
 
 #[allow(clippy::trivially_copy_pass_by_ref)] // requires exact type sig
 pub(crate) fn fmt(value: &u32, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
@@ -18,7 +19,7 @@ impl Acknowledge {
 
     /// Marks a packet sequence as acknowledged.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # use aeronet_proto::ty::{Acknowledge, PacketSeq};
@@ -75,7 +76,7 @@ impl Acknowledge {
 
     /// Gets if a certain sequence has been marked as acknowledged.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # use aeronet_proto::ty::{Acknowledge, PacketSeq};
@@ -113,7 +114,7 @@ impl Acknowledge {
     /// Converts this into an iterator over all [`PacketSeq`]s this header
     /// contains.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # use aeronet_proto::ty::{PacketSeq, Acknowledge};

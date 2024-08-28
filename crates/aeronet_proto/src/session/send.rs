@@ -1,21 +1,20 @@
-use std::{collections::hash_map::Entry, iter};
-
-use aeronet::lane::LaneIndex;
-use octs::{Bytes, BytesMut, EncodeLen, FixedEncodeLen, Write};
-use terrors::OneOf;
-use tracing::{trace, trace_span};
-use web_time::Instant;
-
-use crate::{
-    limit::Limit,
-    msg::MessageTooLarge,
-    rtt::RttEstimator,
-    session::MAX_ACK_DELAY,
-    ty::{Fragment, FragmentHeader, MessageSeq, PacketHeader, PacketSeq},
-};
-
-use super::{
-    FlushedPacket, FragmentPath, SendLane, SendLaneKind, SentFragment, SentMessage, Session,
+use {
+    super::{
+        FlushedPacket, FragmentPath, SendLane, SendLaneKind, SentFragment, SentMessage, Session,
+    },
+    crate::{
+        limit::Limit,
+        msg::MessageTooLarge,
+        rtt::RttEstimator,
+        session::MAX_ACK_DELAY,
+        ty::{Fragment, FragmentHeader, MessageSeq, PacketHeader, PacketSeq},
+    },
+    aeronet::lane::LaneIndex,
+    octs::{Bytes, BytesMut, EncodeLen, FixedEncodeLen, Write},
+    std::{collections::hash_map::Entry, iter},
+    terrors::OneOf,
+    tracing::{trace, trace_span},
+    web_time::Instant,
 };
 
 /// Key identifying a message sent across a [`Session`].
@@ -224,7 +223,7 @@ impl Session {
                 })
                 .expect("BytesMut should grow the buffer when writing over capacity");
 
-            let span = trace_span!("flush", packet = packet_seq.0 .0);
+            let span = trace_span!("flush", packet = packet_seq.0.0);
             let _span = span.enter();
 
             // collect the paths of the frags we want to put into this packet
@@ -262,7 +261,7 @@ impl Session {
 
             trace!(num_frags = packet_frags.len(), "Flushed packet");
             self.flushed_packets.insert(
-                packet_seq.0 .0,
+                packet_seq.0.0,
                 FlushedPacket {
                     flushed_at: now,
                     frags: packet_frags.into_boxed_slice(),

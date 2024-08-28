@@ -1,15 +1,15 @@
 //! Handles splitting and reassembling a single large message into multiple
 //! smaller packets for sending over a network.
 
-use std::convert::Infallible;
-
-use aeronet::lane::LaneIndex;
-use octs::{
-    BufError, BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt,
-    VarIntTooLarge, Write,
+use {
+    crate::ty::{Fragment, FragmentHeader, FragmentMarker, MessageSeq},
+    aeronet::lane::LaneIndex,
+    octs::{
+        BufError, BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt,
+        VarIntTooLarge, Write,
+    },
+    std::convert::Infallible,
 };
-
-use crate::ty::{Fragment, FragmentHeader, FragmentMarker, MessageSeq};
 
 mod marker;
 mod recv;
@@ -115,12 +115,12 @@ impl Decode for Fragment {
 
 #[cfg(test)]
 mod tests {
-    use octs::test::*;
-    use web_time::Instant;
-
-    use crate::ty::{FragmentMarker, MessageSeq};
-
-    use super::*;
+    use {
+        super::*,
+        crate::ty::{FragmentMarker, MessageSeq},
+        octs::test::*,
+        web_time::Instant,
+    };
 
     #[test]
     fn encode_decode_fragment() {

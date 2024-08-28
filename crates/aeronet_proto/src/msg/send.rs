@@ -1,10 +1,9 @@
-use std::iter::FusedIterator;
-
-use octs::{chunks::ByteChunksExt, Bytes};
-
-use crate::ty::FragmentMarker;
-
-use super::MAX_FRAGS;
+use {
+    super::MAX_FRAGS,
+    crate::ty::FragmentMarker,
+    octs::{chunks::ByteChunksExt, Bytes},
+    std::iter::FusedIterator,
+};
 
 /// Handles splitting large messages into multiple smaller fragments which can
 /// be reassembled by a [`FragmentReceiver`].
@@ -104,9 +103,8 @@ impl MessageSplitter {
             let last_index = iter_len - 1;
             let is_last = index == last_index;
             let index = u8::try_from(index).expect(
-                "`iter` has no more than `MAX_FRAGS` items, \
-                so `index` should be no more than `MAX_FRAG_INDEX`, \
-                so `index` should fit into a u8",
+                "`iter` has no more than `MAX_FRAGS` items, so `index` should be no more than \
+                 `MAX_FRAG_INDEX`, so `index` should fit into a u8",
             );
             let marker = FragmentMarker::new(index, is_last)
                 .expect("`index` should be no more than `MAX_FRAG_INDEX`");

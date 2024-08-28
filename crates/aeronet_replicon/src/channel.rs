@@ -1,9 +1,10 @@
 //! Utilities for working with Replicon channels.
 
-use std::borrow::Borrow;
-
-use aeronet::lane::LaneKind;
-use bevy_replicon::prelude::{ChannelKind, RepliconChannel};
+use {
+    aeronet::lane::LaneKind,
+    bevy_replicon::prelude::{ChannelKind, RepliconChannel},
+    std::borrow::Borrow,
+};
 
 /// Converts this into an iterator of [`LaneKind`]s.
 ///

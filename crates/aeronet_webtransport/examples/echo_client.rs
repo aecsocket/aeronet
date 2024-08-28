@@ -1,19 +1,21 @@
 //! Example client using WebTransport which allows sending a string to a server
 //! and reading a string back.
 
-use aeronet::{
-    client::{client_connected, ClientEvent, ClientState, ClientTransport},
-    error::pretty_error,
-    lane::{LaneIndex, LaneKind},
-    stats::{MessageStats, Rtt},
+use {
+    aeronet::{
+        client::{client_connected, ClientEvent, ClientState, ClientTransport},
+        error::pretty_error,
+        lane::{LaneIndex, LaneKind},
+        stats::{MessageStats, Rtt},
+    },
+    aeronet_proto::session::SessionConfig,
+    aeronet_webtransport::{
+        client::{ClientConfig, WebTransportClient},
+        runtime::WebTransportRuntime,
+    },
+    bevy::prelude::*,
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
 };
-use aeronet_proto::session::SessionConfig;
-use aeronet_webtransport::{
-    client::{ClientConfig, WebTransportClient},
-    runtime::WebTransportRuntime,
-};
-use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 #[derive(Debug, Clone, Copy)]
 struct AppLane;

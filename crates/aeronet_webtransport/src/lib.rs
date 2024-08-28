@@ -6,7 +6,6 @@
 #![doc = include_str!("../README.md")]
 
 pub use aeronet_proto as proto;
-
 #[cfg(not(target_family = "wasm"))]
 pub use wtransport;
 #[cfg(target_family = "wasm")]

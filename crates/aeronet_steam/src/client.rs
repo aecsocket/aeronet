@@ -1,12 +1,13 @@
-use std::{mem, time::Duration};
-
-use aeronet::{
-    bytes::Bytes,
-    client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
-    lane::LaneIndex,
-    shared::DROP_DISCONNECT_REASON,
+use {
+    aeronet::{
+        bytes::Bytes,
+        client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
+        lane::LaneIndex,
+        shared::DROP_DISCONNECT_REASON,
+    },
+    aeronet_proto::session::{MessageKey, Session, SessionBacked},
+    std::{mem, time::Duration},
 };
-use aeronet_proto::session::{MessageKey, Session, SessionBacked};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]

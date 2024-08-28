@@ -1,21 +1,20 @@
-use std::sync::Arc;
-
-use aeronet::client::DisconnectReason;
-use bytes::Bytes;
-use futures::{
-    channel::{mpsc, oneshot},
-    never::Never,
-    FutureExt, SinkExt, StreamExt,
+use {
+    super::{ClientEndpoint, Connection, ConnectionMeta, SessionError},
+    crate::{
+        client::{ClientConfig, ClientError},
+        runtime::WebTransportRuntime,
+    },
+    aeronet::client::DisconnectReason,
+    bytes::Bytes,
+    futures::{
+        channel::{mpsc, oneshot},
+        never::Never,
+        FutureExt, SinkExt, StreamExt,
+    },
+    std::sync::Arc,
+    web_time::Duration,
+    xwt_core::prelude::*,
 };
-use web_time::Duration;
-use xwt_core::prelude::*;
-
-use crate::{
-    client::{ClientConfig, ClientError},
-    runtime::WebTransportRuntime,
-};
-
-use super::{ClientEndpoint, Connection, ConnectionMeta, SessionError};
 
 const STATS_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
 

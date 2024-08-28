@@ -2,12 +2,10 @@
 
 #[cfg(not(target_family = "wasm"))]
 mod native;
+pub(crate) use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 #[cfg(not(target_family = "wasm"))]
 pub use native::*;
-
-use base64::Engine;
-
-pub(crate) use base64::engine::general_purpose::STANDARD as BASE64;
 
 /// Bytes representing the SHA-256 digest of the DER encoding of a certificate.
 pub type CertificateHash = [u8; 32];

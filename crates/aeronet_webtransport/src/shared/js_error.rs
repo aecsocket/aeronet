@@ -1,6 +1,7 @@
-use std::{convert::Infallible, error::Error, fmt};
-
-use wasm_bindgen::JsValue;
+use {
+    std::{convert::Infallible, error::Error, fmt},
+    wasm_bindgen::JsValue,
+};
 
 /// Error obtained from a JavaScript execution context.
 #[derive(Debug, Clone)]

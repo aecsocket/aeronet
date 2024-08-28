@@ -13,10 +13,10 @@
 //! # Guarantees
 //!
 //! Lanes mainly offer guarantees about:
-//! * [reliability](LaneReliability) - ensuring that a message reaches the other
-//!   side without being lost; and if it is lost, it is resent
-//! * [ordering](LaneOrdering) - ensuring that messages are received in the same
-//!   order that they are sent
+//! * [reliability](LaneReliability) - ensuring that a message reaches the other side without being
+//!   lost; and if it is lost, it is resent
+//! * [ordering](LaneOrdering) - ensuring that messages are received in the same order that they are
+//!   sent
 //!
 //! Although it is not a part of the guarantees laid out by the lane kinds,
 //! *head-of-line blocking* is also an important factor to consider when
@@ -39,8 +39,8 @@
 //!
 //! 1. If delivery of a single chunk fails, delivery of the whole packet fails.
 //! 2. If messages X and Y are sent, and X arrives after Y, then X is discarded.
-//! 3. If delivery of a single chunk fails, delivery of all messages halts until
-//!    that single chunk is received.
+//! 3. If delivery of a single chunk fails, delivery of all messages halts until that single chunk
+//!    is received.
 //!
 //! Note: Although reliable-sequenced is possible in theory, this crate does not
 //! support this kind of lane. "Reliable-sequenced" is not actually reliable, as

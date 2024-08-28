@@ -1,10 +1,12 @@
 #![doc = include_str!("../README.md")]
 
-use aeronet_replicon::channel::IntoLanes;
-use aeronet_webtransport::{proto::session::SessionConfig, runtime::WebTransportRuntime};
-use bevy::prelude::*;
-use bevy_replicon::prelude::*;
-use serde::{Deserialize, Serialize};
+use {
+    aeronet_replicon::channel::IntoLanes,
+    aeronet_webtransport::{proto::session::SessionConfig, runtime::WebTransportRuntime},
+    bevy::prelude::*,
+    bevy_replicon::prelude::*,
+    serde::{Deserialize, Serialize},
+};
 
 /// How many units a player may move in a single second.
 const MOVE_SPEED: f32 = 5000.0;

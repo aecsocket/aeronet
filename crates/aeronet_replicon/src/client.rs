@@ -1,23 +1,24 @@
 //! Client-side traits and items.
 
-use std::{marker::PhantomData, num::Saturating, time::Duration};
-
-use aeronet::{
-    client::{
-        client_connected, ClientEvent, ClientState, ClientTransport, ClientTransportSet,
-        LocalClientConnected, LocalClientDisconnected,
+use {
+    aeronet::{
+        client::{
+            client_connected, ClientEvent, ClientState, ClientTransport, ClientTransportSet,
+            LocalClientConnected, LocalClientDisconnected,
+        },
+        lane::LaneIndex,
     },
-    lane::LaneIndex,
+    bevy_app::prelude::*,
+    bevy_ecs::{prelude::*, system::SystemParam},
+    bevy_replicon::{
+        client::ClientSet,
+        prelude::{RepliconClient, RepliconClientStatus},
+    },
+    bevy_time::{common_conditions::on_real_timer, prelude::*},
+    derivative::Derivative,
+    std::{marker::PhantomData, num::Saturating, time::Duration},
+    tracing::{trace, warn},
 };
-use bevy_app::prelude::*;
-use bevy_ecs::{prelude::*, system::SystemParam};
-use bevy_replicon::{
-    client::ClientSet,
-    prelude::{RepliconClient, RepliconClientStatus},
-};
-use bevy_time::{common_conditions::on_real_timer, prelude::*};
-use derivative::Derivative;
-use tracing::{trace, warn};
 
 /// Provides a [`bevy_replicon`] client backend using the given [`aeronet`]
 /// transport.
@@ -41,7 +42,7 @@ pub struct RepliconClientPlugin<T> {
     /// flushing packets.
     pub update_interval: Duration,
     #[derivative(Debug = "ignore")]
-    #[doc = "hidden"]
+    ///hidden
     pub _phantom: PhantomData<T>,
 }
 

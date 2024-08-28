@@ -1,6 +1,7 @@
-use std::{array, mem};
-
-use datasize::DataSize;
+use {
+    datasize::DataSize,
+    std::{array, mem},
+};
 
 /// Rolling sequence buffer data structure.
 ///
@@ -83,9 +84,8 @@ impl<T, const N: usize> SeqBuf<T, N> {
         let real_index = *self.indices.get(index_u).expect("key % N should be < N");
         if key == real_index {
             Some(self.data.get(index_u).expect(
-                "`index_u` is valid into `indices`, \
-                and `indices` is of the same length as `data`, \
-                so it should be a valid index into `data`",
+                "`index_u` is valid into `indices`, and `indices` is of the same length as \
+                 `data`, so it should be a valid index into `data`",
             ))
         } else {
             None
@@ -102,9 +102,8 @@ impl<T, const N: usize> SeqBuf<T, N> {
         let real_index = *self.indices.get(index_u).expect("key % N should be < N");
         if key == real_index {
             Some(self.data.get_mut(index_u).expect(
-                "`index_u` is valid into `indices`, \
-                and `indices` is of the same length as `data`, \
-                so it should be a valid index into `data`",
+                "`index_u` is valid into `indices`, and `indices` is of the same length as \
+                 `data`, so it should be a valid index into `data`",
             ))
         } else {
             None
@@ -126,9 +125,8 @@ impl<T, const N: usize> SeqBuf<T, N> {
         *index_slot = key;
 
         let data_slot = self.data.get_mut(index_u).expect(
-            "`index_u` is valid into `indices`, \
-            and `indices` is of the same length as `data`, \
-            so it should be a valid index into `data`",
+            "`index_u` is valid into `indices`, and `indices` is of the same length as `data`, so \
+             it should be a valid index into `data`",
         );
         *data_slot = value;
         data_slot
@@ -150,9 +148,8 @@ impl<T, const N: usize> SeqBuf<T, N> {
         if key == *index_slot {
             *index_slot = EMPTY;
             let data_slot = self.data.get_mut(index_u).expect(
-                "`index_u` is valid into `indices`, \
-                and `indices` is of the same length as `data`, \
-                so it should be a valid index into `data`",
+                "`index_u` is valid into `indices`, and `indices` is of the same length as \
+                 `data`, so it should be a valid index into `data`",
             );
             Some(mem::replace(data_slot, default))
         } else {

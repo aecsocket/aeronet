@@ -1,8 +1,6 @@
 //! See [`RttEstimator`].
 
-use std::cmp;
-
-use web_time::Duration;
+use {std::cmp, web_time::Duration};
 
 /// Default initial RTT to use before any RTT samples have been provided.
 ///

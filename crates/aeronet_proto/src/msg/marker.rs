@@ -1,8 +1,8 @@
-use std::{convert::Infallible, fmt};
-
-use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
-
-use crate::ty::FragmentMarker;
+use {
+    crate::ty::FragmentMarker,
+    octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write},
+    std::{convert::Infallible, fmt},
+};
 
 const LAST_MASK: u8 = 0b1000_0000;
 
@@ -122,9 +122,7 @@ impl Decode for FragmentMarker {
 
 #[cfg(test)]
 mod tests {
-    use octs::test::*;
-
-    use super::*;
+    use {super::*, octs::test::*};
 
     #[test]
     fn encode_decode_all_markers() {

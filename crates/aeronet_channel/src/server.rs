@@ -1,20 +1,20 @@
 //! Server-side items.
 
-use std::{borrow::Borrow, convert::Infallible, num::Saturating};
-
-use aeronet::{
-    client::{ClientState, DisconnectReason},
-    lane::LaneIndex,
-    server::{CloseReason, ServerEvent, ServerState, ServerTransport},
-    shared::DROP_DISCONNECT_REASON,
-    stats::{ConnectedAt, MessageStats},
+use {
+    crate::shared::{Disconnected, MessageKey},
+    aeronet::{
+        client::{ClientState, DisconnectReason},
+        lane::LaneIndex,
+        server::{CloseReason, ServerEvent, ServerState, ServerTransport},
+        shared::DROP_DISCONNECT_REASON,
+        stats::{ConnectedAt, MessageStats},
+    },
+    bytes::Bytes,
+    crossbeam_channel::{Receiver, Sender, TryRecvError},
+    slotmap::SlotMap,
+    std::{borrow::Borrow, convert::Infallible, num::Saturating},
+    web_time::{Duration, Instant},
 };
-use bytes::Bytes;
-use crossbeam_channel::{Receiver, Sender, TryRecvError};
-use slotmap::SlotMap;
-use web_time::{Duration, Instant};
-
-use crate::shared::{Disconnected, MessageKey};
 
 slotmap::new_key_type! {
     /// Key identifying a unique client connected to a [`ChannelServer`].

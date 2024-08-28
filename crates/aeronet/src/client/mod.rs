@@ -5,14 +5,13 @@ mod bevy;
 
 #[cfg(feature = "bevy")]
 pub use bevy::*;
-
-use std::{error::Error, fmt::Debug, hash::Hash};
-
-use bytes::Bytes;
-use derivative::Derivative;
-use web_time::Duration;
-
-use crate::lane::LaneIndex;
+use {
+    crate::lane::LaneIndex,
+    bytes::Bytes,
+    derivative::Derivative,
+    std::{error::Error, fmt::Debug, hash::Hash},
+    web_time::Duration,
+};
 
 /// Allows connecting to a server and transporting data between this client and
 /// the server.

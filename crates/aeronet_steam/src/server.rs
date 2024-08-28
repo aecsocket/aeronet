@@ -1,15 +1,16 @@
-use core::fmt;
-use std::{mem, time::Duration};
-
-use aeronet::{
-    bytes::Bytes,
-    client::ClientState,
-    lane::LaneIndex,
-    server::{CloseReason, ServerEvent, ServerState, ServerTransport},
-    shared::DROP_DISCONNECT_REASON,
+use {
+    aeronet::{
+        bytes::Bytes,
+        client::ClientState,
+        lane::LaneIndex,
+        server::{CloseReason, ServerEvent, ServerState, ServerTransport},
+        shared::DROP_DISCONNECT_REASON,
+    },
+    aeronet_proto::session::MessageKey,
+    core::fmt,
+    slotmap::SlotMap,
+    std::{mem, time::Duration},
 };
-use aeronet_proto::session::MessageKey;
-use slotmap::SlotMap;
 
 #[derive(Debug)]
 #[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]

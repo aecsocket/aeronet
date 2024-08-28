@@ -1,17 +1,16 @@
-use std::{
-    marker::PhantomData,
-    ops::{Deref, DerefMut},
+use {
+    super::SessionStats,
+    crate::session::SessionBacked,
+    aeronet::client::ClientTransportSet,
+    bevy_app::prelude::*,
+    bevy_ecs::prelude::*,
+    bevy_time::common_conditions::on_timer,
+    std::{
+        marker::PhantomData,
+        ops::{Deref, DerefMut},
+    },
+    web_time::Duration,
 };
-
-use aeronet::client::ClientTransportSet;
-use bevy_app::prelude::*;
-use bevy_ecs::prelude::*;
-use bevy_time::common_conditions::on_timer;
-use web_time::Duration;
-
-use crate::session::SessionBacked;
-
-use super::SessionStats;
 
 /// Provides the [`ClientSessionStats`] and automatically updates it by sampling
 /// the client transport `T`, which must implement [`SessionBacked`].

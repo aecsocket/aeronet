@@ -1,10 +1,10 @@
 //! See [`PacketHeader`].
 
-use std::convert::Infallible;
-
-use octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write};
-
-use crate::ty::{Acknowledge, PacketHeader, PacketSeq};
+use {
+    crate::ty::{Acknowledge, PacketHeader, PacketSeq},
+    octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write},
+    std::convert::Infallible,
+};
 
 impl FixedEncodeLen for PacketHeader {
     const ENCODE_LEN: usize = PacketSeq::ENCODE_LEN + PacketSeq::ENCODE_LEN + u32::ENCODE_LEN;
@@ -37,13 +37,7 @@ impl Decode for PacketHeader {
 
 #[cfg(test)]
 mod tests {
-    use std::u32;
-
-    use octs::test::*;
-
-    use crate::ty::Seq;
-
-    use super::*;
+    use {super::*, crate::ty::Seq, octs::test::*, std::u32};
 
     #[test]
     fn encode_decode() {

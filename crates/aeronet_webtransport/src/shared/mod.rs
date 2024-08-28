@@ -2,11 +2,9 @@
 
 #[cfg(target_family = "wasm")]
 mod js_error;
+pub use aeronet_proto::session::MessageKey;
 #[cfg(target_family = "wasm")]
 pub use js_error::*;
-
-pub use aeronet_proto::session::MessageKey;
-
 use web_time::Duration;
 
 /// Low-level [`Rtt`] value provided by the underlying WebTransport connection.

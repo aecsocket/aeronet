@@ -3,18 +3,18 @@
 mod backend;
 mod frontend;
 
-use std::io;
-
-use aeronet::{
-    client::DisconnectReason,
-    stats::{ConnectedAt, MessageStats, Rtt},
+use {
+    crate::internal::{ConnectionMeta, InternalSession, SessionError, SessionSendError},
+    aeronet::{
+        client::DisconnectReason,
+        stats::{ConnectedAt, MessageStats, Rtt},
+    },
+    aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session},
+    bytes::Bytes,
+    futures::channel::{mpsc, oneshot},
+    std::io,
+    web_time::{Duration, Instant},
 };
-use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
-use bytes::Bytes;
-use futures::channel::{mpsc, oneshot};
-use web_time::{Duration, Instant};
-
-use crate::internal::{ConnectionMeta, InternalSession, SessionError, SessionSendError};
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {

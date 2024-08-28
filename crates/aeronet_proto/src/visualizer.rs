@@ -1,18 +1,18 @@
 //! Draws plots of network statistics in an [`egui`] window.
 
-use std::{hash::Hash, ops::RangeInclusive};
-
-use egui::{epaint::Hsva, Align, Color32, Layout, WidgetText};
-use egui_plot::{
-    log_grid_spacer, uniform_grid_spacer, AxisHints, Corner, GridMark, Legend, Line, Placement,
-    Plot,
+use {
+    crate::{session::Session, stats::SessionStats},
+    egui::{epaint::Hsva, Align, Color32, Layout, WidgetText},
+    egui_plot::{
+        log_grid_spacer, uniform_grid_spacer, AxisHints, Corner, GridMark, Legend, Line, Placement,
+        Plot,
+    },
+    itertools::Itertools,
+    ringbuf::traits::{Consumer, Observer},
+    size_format::{BinaryPrefixes, PointSeparated, SizeFormatter},
+    std::{hash::Hash, ops::RangeInclusive},
+    web_time::Instant,
 };
-use itertools::Itertools;
-use ringbuf::traits::{Consumer, Observer};
-use size_format::{BinaryPrefixes, PointSeparated, SizeFormatter};
-use web_time::Instant;
-
-use crate::{session::Session, stats::SessionStats};
 
 /// Allows visualizing the samples stored in a [`SessionStats`] by drawing an
 /// [`egui`] window with plots and text.
