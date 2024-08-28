@@ -28,7 +28,7 @@ pub struct SessionStats {
 pub struct Sample {
     /// Smoothed session RTT.
     pub rtt: Duration,
-    /// Conservative session RTT.
+    /// Conservative session RTT, defined as `max(latest_rtt, rtt)`.
     pub conservative_rtt: Duration,
     /// Number of bytes of memory used for buffering messages.
     pub memory_usage: usize,
@@ -37,29 +37,29 @@ pub struct Sample {
 
     /// Total number of bytes sent up to now.
     pub bytes_sent_total: usize,
-    /// Number of bytes sent between the last sample and this.
+    /// Number of bytes sent between the last sample and now.
     pub bytes_sent_delta: usize,
 
     /// Total number of bytes received up to now.
     pub bytes_recv_total: usize,
-    /// Number of bytes received between the last sample and this.
+    /// Number of bytes received between the last sample and now.
     pub bytes_recv_delta: usize,
 
     /// Total number of packets sent up to now.
     pub packets_sent_total: usize,
-    /// Number of packets sent between the last sample and this.
+    /// Number of packets sent between the last sample and now.
     pub packets_sent_delta: usize,
 
     /// Total number of packets received up to now.
     pub packets_recv_total: usize,
-    /// Number of packets received between the last sample and this.
+    /// Number of packets received between the last sample and now.
     pub packets_recv_delta: usize,
 
     /// Total number of our sent packets that have been acknowledged by the peer
     /// up to now.
     pub packets_acked_total: usize,
     /// Number of sent packets that have between acknowledged by the peer
-    /// between the last sample and this.
+    /// between the last sample and now.
     pub packets_acked_delta: usize,
 
     /// What proportion of packets sent recently are believed to have been lost
