@@ -25,6 +25,7 @@ bevy = ["dep:bevy_ecs"]
 arbitrary = { workspace = true }
 bytes = { workspace = true }
 derivative = { workspace = true }
+either = { workspace = true }
 thiserror = { workspace = true }
 web-time = { workspace = true }
 

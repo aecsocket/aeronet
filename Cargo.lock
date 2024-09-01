@@ -98,6 +98,7 @@ dependencies = [
  "bevy_ecs",
  "bytes",
  "derivative",
+ "either",
  "thiserror",
  "web-time",
 ]

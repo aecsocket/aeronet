@@ -1,5 +1,7 @@
 //! Client-side traits and items.
 
+mod either;
+
 #[cfg(feature = "bevy")]
 mod bevy;
 
@@ -241,23 +243,25 @@ pub enum ClientEvent<T: ClientTransport + ?Sized> {
     },
 }
 
-impl<PollError, MessageKey, T> ClientEvent<T>
-where
-    T: ClientTransport<PollError = PollError, MessageKey = MessageKey>,
-{
-    /// Remaps this `ClientEvent<T>` into a `ClientEvent<R>` where `T` and `R`
-    /// are [`ClientTransport`]s which share the same `PollError` and
-    /// `MessageKey` types.
-    pub fn remap<R>(self) -> ClientEvent<R>
-    where
-        R: ClientTransport<PollError = PollError, MessageKey = MessageKey>,
-    {
+impl<T: ClientTransport> ClientEvent<T> {
+    /// Maps this [`ClientEvent<T>`] into a [`ClientEvent<R>`].
+    pub fn map<R: ClientTransport>(
+        self,
+        map_poll_error: impl FnOnce(T::PollError) -> R::PollError,
+        map_message_key: impl FnOnce(T::MessageKey) -> R::MessageKey,
+    ) -> ClientEvent<R> {
         match self {
             Self::Connected => ClientEvent::Connected,
-            Self::Disconnected { reason } => ClientEvent::Disconnected { reason },
+            Self::Disconnected { reason } => ClientEvent::Disconnected {
+                reason: reason.map_err(map_poll_error),
+            },
             Self::Recv { msg, lane } => ClientEvent::Recv { msg, lane },
-            Self::Ack { msg_key } => ClientEvent::Ack { msg_key },
-            Self::Nack { msg_key } => ClientEvent::Nack { msg_key },
+            Self::Ack { msg_key } => ClientEvent::Ack {
+                msg_key: map_message_key(msg_key),
+            },
+            Self::Nack { msg_key } => ClientEvent::Nack {
+                msg_key: map_message_key(msg_key),
+            },
         }
     }
 }
