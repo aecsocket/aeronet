@@ -1,5 +1,7 @@
 //! Server-side traits and items.
 
+mod either;
+
 #[cfg(feature = "bevy")]
 mod bevy;
 
@@ -328,31 +330,35 @@ pub enum ServerEvent<T: ServerTransport + ?Sized> {
     },
 }
 
-impl<PollError, ClientKey, MessageKey, T> ServerEvent<T>
-where
-    T: ServerTransport<PollError = PollError, ClientKey = ClientKey, MessageKey = MessageKey>,
-{
-    /// Remaps this `ServerEvent<T>` into a `ServerEvent<R>` where `T` and `R`
-    /// are [`ServerTransport`]s which share the same `PollError`, `ClientKey`,
-    /// and `MessageKey` types.
-    pub fn remap<R>(self) -> ServerEvent<R>
-    where
-        R: ServerTransport<PollError = PollError, ClientKey = ClientKey, MessageKey = MessageKey>,
-    {
+impl<T: ServerTransport> ServerEvent<T> {
+    /// Maps this [`ServerEvent<T>`] into a [`ServerEvent<R>`].
+    pub fn map<R: ServerTransport>(
+        self,
+        map_poll_error: impl FnOnce(T::PollError) -> R::PollError,
+        map_client_key: impl FnOnce(T::ClientKey) -> R::ClientKey,
+        map_message_key: impl FnOnce(T::MessageKey) -> R::MessageKey,
+    ) -> ServerEvent<R> {
         match self {
             Self::Opened => ServerEvent::Opened,
-            Self::Closed { reason } => ServerEvent::Closed { reason },
-            Self::Connecting { client_key } => ServerEvent::Connecting { client_key },
-            Self::Connected { client_key } => ServerEvent::Connected { client_key },
-            Self::Disconnected { client_key, reason } => {
-                ServerEvent::Disconnected { client_key, reason }
-            }
+            Self::Closed { reason } => ServerEvent::Closed {
+                reason: reason.map_err(map_poll_error),
+            },
+            Self::Connecting { client_key } => ServerEvent::Connecting {
+                client_key: map_client_key(client_key),
+            },
+            Self::Connected { client_key } => ServerEvent::Connected {
+                client_key: map_client_key(client_key),
+            },
+            Self::Disconnected { client_key, reason } => ServerEvent::Disconnected {
+                client_key: map_client_key(client_key),
+                reason: reason.map_err(map_poll_error),
+            },
             Self::Recv {
                 client_key,
                 msg,
                 lane,
             } => ServerEvent::Recv {
-                client_key,
+                client_key: map_client_key(client_key),
                 msg,
                 lane,
             },
@@ -360,15 +366,15 @@ where
                 client_key,
                 msg_key,
             } => ServerEvent::Ack {
-                client_key,
-                msg_key,
+                client_key: map_client_key(client_key),
+                msg_key: map_message_key(msg_key),
             },
             Self::Nack {
                 client_key,
                 msg_key,
             } => ServerEvent::Nack {
-                client_key,
-                msg_key,
+                client_key: map_client_key(client_key),
+                msg_key: map_message_key(msg_key),
             },
         }
     }
