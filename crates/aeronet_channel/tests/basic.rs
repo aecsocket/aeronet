@@ -24,6 +24,8 @@ fn test() {
         .spawn((
             Name::new("Server"),
             ChannelServer,
+            // TODO: required components
+            // TODO: ConnectedClients MUST be spawned in the same archetype move as the server
             ConnectedClients::default(),
         ))
         .id();
