@@ -3,9 +3,9 @@
 
 pub use {bytes, web_time};
 
+#[cfg(feature = "client")]
 pub mod client;
-pub mod error;
-pub mod lane;
+#[cfg(feature = "server")]
 pub mod server;
-pub mod shared;
 pub mod stats;
+pub mod transport;

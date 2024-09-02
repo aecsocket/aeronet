@@ -8,7 +8,7 @@ use {
         runtime::WebTransportRuntime,
     },
     aeronet::{
-        client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
+        client::{ClientEvent, ClientState, DisconnectReason, MessageSink},
         error::pretty_error,
         lane::LaneIndex,
         shared::DROP_DISCONNECT_REASON,
@@ -94,7 +94,7 @@ impl WebTransportClient {
     }
 }
 
-impl ClientTransport for WebTransportClient {
+impl MessageSink for WebTransportClient {
     type Connecting<'this> = &'this Connecting;
 
     type Connected<'this> = &'this Connected;

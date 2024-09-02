@@ -18,8 +18,11 @@ workspace = true
 all-features = true
 
 [features]
+client = []
+server = []
+
 ## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = ["dep:bevy_ecs"]
+bevy = []
 
 [dependencies]
 arbitrary = { workspace = true }
@@ -28,8 +31,15 @@ derivative = { workspace = true }
 either = { workspace = true }
 thiserror = { workspace = true }
 web-time = { workspace = true }
+anyhow = "1.0"
+tracing = { workspace = true }
+ahash = { workspace = true }
 
-bevy_ecs = { workspace = true, optional = true }
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_reflect = { workspace = true }
+bevy_core = { workspace = true }
+bevy_derive = { workspace = true }
 
 [dev-dependencies]
 bevy_app = { workspace = true }

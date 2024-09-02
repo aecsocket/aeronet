@@ -16,21 +16,19 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-[features]
-## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = ["dep:bevy_ecs", "aeronet/bevy"]
-
 [dependencies]
-aeronet = { workspace = true }
+aeronet = { workspace = true, features = ["client", "server"] }
 
 bytes = { workspace = true }
-crossbeam-channel = { workspace = true }
-replace_with = { workspace = true }
-slotmap = { workspace = true }
+flume = { workspace = true }
+sync_wrapper = { workspace = true }
 thiserror = { workspace = true }
-web-time = { workspace = true }
+tracing = { workspace = true }
 
-bevy_ecs = { workspace = true, optional = true }
+bevy_app = { workspace = true }
+bevy_derive = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_reflect = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
