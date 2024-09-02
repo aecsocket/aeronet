@@ -20,7 +20,7 @@ impl Plugin for EventLogPlugin {
             PreUpdate,
             (log_connecting, log_connected, log_disconnected)
                 .chain()
-                .after(TransportSet::Connection),
+                .after(TransportSet::Recv),
         );
     }
 }

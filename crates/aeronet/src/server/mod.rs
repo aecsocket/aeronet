@@ -112,30 +112,9 @@ impl Component for RemoteClient {
     }
 }
 
-#[derive(Debug, Clone, Default, Deref, Reflect)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deref, Reflect)]
 #[reflect(Component)]
 pub struct ConnectedClients(#[reflect(ignore)] AHashSet<Entity>);
-
-impl ConnectedClients {
-    #[must_use]
-    pub fn new() -> Self {
-        Self(AHashSet::new())
-    }
-
-    #[must_use]
-    pub fn with(self, added: Entity) -> Self {
-        let mut clients = self.0;
-        clients.insert(added);
-        Self(clients)
-    }
-
-    #[must_use]
-    pub fn without(self, removed: Entity) -> Self {
-        let mut clients = self.0;
-        clients.remove(&removed);
-        Self(clients)
-    }
-}
 
 impl Component for ConnectedClients {
     const STORAGE_TYPE: StorageType = StorageType::Table;
@@ -165,6 +144,21 @@ impl Component for ConnectedClients {
                         type_name::<RemoteClient>(),
                     );
                 }
+            }
+        });
+
+        hooks.on_remove(|world, server, _| {
+            let ConnectedClients(clients) = world
+                .get::<ConnectedClients>(server)
+                .expect("we are inserting this component");
+
+            if !clients.is_empty() {
+                panic!(
+                    "removed `{}` from server {server:?}, but it still has connected clients - \
+                    all connected clients must have their `{}`s removed first",
+                    type_name::<ConnectedClients>(),
+                    type_name::<RemoteClient>(),
+                );
             }
         });
     }
@@ -216,4 +210,74 @@ pub struct FromClient {
     pub server: Entity,
     pub client: Entity,
     pub msg: Bytes,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_remote_clients() {
+        let mut world = World::new();
+        let server = world.spawn(ConnectedClients::default()).id();
+
+        assert_eq!(
+            AHashSet::new(),
+            world.get::<ConnectedClients>(server).unwrap().0
+        );
+
+        let client1 = world.spawn(RemoteClient::new(server)).id();
+        assert_eq!(
+            AHashSet::from([client1]),
+            world.get::<ConnectedClients>(server).unwrap().0
+        );
+
+        let client2 = world.spawn(RemoteClient::new(server)).id();
+        assert_eq!(
+            AHashSet::from([client1, client2]),
+            world.get::<ConnectedClients>(server).unwrap().0
+        );
+    }
+
+    #[test]
+    fn remove_remote_clients() {
+        let mut world = World::new();
+        let server = world.spawn(ConnectedClients::default()).id();
+        let client1 = world.spawn(RemoteClient::new(server)).id();
+        let client2 = world.spawn(RemoteClient::new(server)).id();
+
+        assert_eq!(
+            AHashSet::from([client1, client2]),
+            world.get::<ConnectedClients>(server).unwrap().0
+        );
+
+        world.entity_mut(client1).remove::<RemoteClient>();
+        assert_eq!(
+            AHashSet::from([client2]),
+            world.get::<ConnectedClients>(server).unwrap().0
+        );
+
+        world.entity_mut(client2).remove::<RemoteClient>();
+        assert_eq!(
+            AHashSet::new(),
+            world.get::<ConnectedClients>(server).unwrap().0
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn remove_connected_clients_with_oustanding_remote_clients() {
+        let mut world = World::new();
+        let server = world.spawn(ConnectedClients::default()).id();
+        world.spawn(RemoteClient::new(server));
+        world.entity_mut(server).remove::<ConnectedClients>();
+    }
+
+    #[test]
+    #[should_panic]
+    fn add_connected_client_without_remote_client() {
+        let mut world = World::new();
+        let client1 = world.spawn_empty().id();
+        world.spawn(ConnectedClients(AHashSet::from([client1])));
+    }
 }

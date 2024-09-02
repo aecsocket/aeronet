@@ -71,7 +71,7 @@ impl RemoteChannelClient {
 
 impl Drop for RemoteChannelClient {
     fn drop(&mut self) {
-        let _ = self.send_s2c_dc.send(DROP_DISCONNECT_REASON.to_owned());
+        let _ = self.send_s2c_dc.try_send(DROP_DISCONNECT_REASON.to_owned());
     }
 }
 
@@ -129,7 +129,7 @@ fn poll(
             num_bytes += msg.len();
 
             recv_buf.push(msg);
-            let _ = transport.send_s2c_acks.send(());
+            let _ = transport.send_s2c_acks.try_send(());
         }
 
         trace!(
