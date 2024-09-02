@@ -11,7 +11,7 @@ use aeronet::{
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bytes::Bytes;
-use tracing::{debug, trace, trace_span};
+use tracing::{debug, debug_span, trace, trace_span};
 
 use crate::transport::{Disconnected, MessageKey};
 
@@ -70,7 +70,7 @@ impl LocalChannelClient {
 
 impl Drop for LocalChannelClient {
     fn drop(&mut self) {
-        let _ = self.send_c2s_dc.send(DROP_DISCONNECT_REASON.to_owned());
+        let _ = self.send_c2s_dc.try_send(DROP_DISCONNECT_REASON.to_owned());
     }
 }
 
@@ -80,6 +80,11 @@ fn disconnect(
     mut disconnected: EventWriter<LocalClientDisconnected>,
 ) {
     for (client, transport, Disconnect { reason }) in &clients {
+        let span = debug_span!("disconnect", ?client);
+        let _span = span.enter();
+
+        debug!("Disconnecting by user: {reason}");
+
         let _ = transport.send_c2s_dc.try_send(reason.clone());
         commands.entity(client).despawn();
         disconnected.send(LocalClientDisconnected {
@@ -138,7 +143,7 @@ fn poll(
             num_bytes += msg.len();
 
             recv_buf.push(msg);
-            let _ = transport.send_c2s_acks.send(());
+            let _ = transport.send_c2s_acks.try_send(());
         }
 
         trace!(

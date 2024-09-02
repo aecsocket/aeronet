@@ -17,10 +17,7 @@ impl Plugin for TransportPlugin {
             .register_type::<Disconnect>()
             .register_type::<RecvBuffer>()
             .register_type::<SendBuffer>()
-            .configure_sets(
-                PreUpdate,
-                (TransportSet::Connection, TransportSet::Recv).chain(),
-            )
+            .configure_sets(PreUpdate, TransportSet::Recv)
             .configure_sets(PostUpdate, TransportSet::Send);
     }
 }
@@ -63,7 +60,6 @@ pub struct SendBuffer(#[reflect(ignore)] pub Vec<(SendMode, Bytes)>);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum TransportSet {
-    Connection,
     Recv,
     Send,
 }
