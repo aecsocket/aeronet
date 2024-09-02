@@ -1,10 +1,13 @@
 use std::num::Saturating;
 
 use aeronet::{
-    client::{ClientTransportPlugin, LocalClientDisconnected},
+    client::{
+        ClientTransportPlugin, LocalClient, LocalClientConnected, LocalClientConnecting,
+        LocalClientDisconnected,
+    },
     stats::SessionStats,
     transport::{
-        AckBuffer, Disconnect, DisconnectReason, RecvBuffer, SendBuffer, TransportSet,
+        AckBuffer, Connected, Disconnect, DisconnectReason, RecvBuffer, SendBuffer, TransportSet,
         DROP_DISCONNECT_REASON,
     },
 };
@@ -26,7 +29,9 @@ impl Plugin for ChannelClientPlugin {
 
         app.add_systems(
             PreUpdate,
-            (disconnect, poll).chain().in_set(TransportSet::Recv),
+            (connect, disconnect, poll)
+                .chain()
+                .in_set(TransportSet::Recv),
         )
         .add_systems(PostUpdate, flush.in_set(TransportSet::Send));
     }
@@ -71,6 +76,20 @@ impl LocalChannelClient {
 impl Drop for LocalChannelClient {
     fn drop(&mut self) {
         let _ = self.send_c2s_dc.try_send(DROP_DISCONNECT_REASON.to_owned());
+    }
+}
+
+fn connect(
+    mut commands: Commands,
+    clients: Query<Entity, Added<LocalChannelClient>>,
+    mut connecting: EventWriter<LocalClientConnecting>,
+    mut connected: EventWriter<LocalClientConnected>,
+) {
+    for client in &clients {
+        // TODO: required components
+        commands.entity(client).insert((LocalClient, Connected));
+        connecting.send(LocalClientConnecting { client });
+        connected.send(LocalClientConnected { client });
     }
 }
 

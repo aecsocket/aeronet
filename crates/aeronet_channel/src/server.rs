@@ -1,10 +1,14 @@
 use std::num::Saturating;
 
 use aeronet::{
-    server::{RemoteClient, RemoteClientDisconnected, ServerTransportPlugin},
+    server::{
+        Open, RemoteClient, RemoteClientConnected, RemoteClientConnecting,
+        RemoteClientDisconnected, Server, ServerOpened, ServerOpening, ServerTransportPlugin,
+    },
     stats::SessionStats,
     transport::{
-        AckBuffer, DisconnectReason, RecvBuffer, SendBuffer, TransportSet, DROP_DISCONNECT_REASON,
+        AckBuffer, Connected, DisconnectReason, RecvBuffer, SendBuffer, TransportSet,
+        DROP_DISCONNECT_REASON,
     },
 };
 use bevy_app::prelude::*;
@@ -24,7 +28,7 @@ impl Plugin for ChannelServerPlugin {
             app.add_plugins(ServerTransportPlugin);
         }
 
-        app.add_systems(PreUpdate, poll.in_set(TransportSet::Recv))
+        app.add_systems(PreUpdate, (open, connect, poll).in_set(TransportSet::Recv))
             .add_systems(PostUpdate, flush.in_set(TransportSet::Send));
     }
 }
@@ -72,6 +76,35 @@ impl RemoteChannelClient {
 impl Drop for RemoteChannelClient {
     fn drop(&mut self) {
         let _ = self.send_s2c_dc.try_send(DROP_DISCONNECT_REASON.to_owned());
+    }
+}
+
+fn open(
+    mut commands: Commands,
+    servers: Query<Entity, Added<ChannelServer>>,
+    mut opening: EventWriter<ServerOpening>,
+    mut opened: EventWriter<ServerOpened>,
+) {
+    for server in &servers {
+        // TODO: required components
+        // TODO: ConnectedClients MUST be spawned in the same archetype move as the server
+        commands.entity(server).insert((Server, Open));
+        opening.send(ServerOpening { server });
+        opened.send(ServerOpened { server });
+    }
+}
+
+fn connect(
+    mut commands: Commands,
+    clients: Query<(Entity, &RemoteClient), Added<RemoteChannelClient>>,
+    mut connecting: EventWriter<RemoteClientConnecting>,
+    mut connected: EventWriter<RemoteClientConnected>,
+) {
+    for (client, remote_client) in &clients {
+        commands.entity(client).insert(Connected);
+        let server = remote_client.server();
+        connecting.send(RemoteClientConnecting { server, client });
+        connected.send(RemoteClientConnected { server, client });
     }
 }
 

@@ -1,10 +1,6 @@
 use std::num::Wrapping;
 
-use aeronet::{
-    client::{LocalClient, LocalClientConnected, LocalClientConnecting},
-    server::{RemoteClient, RemoteClientConnected, RemoteClientConnecting},
-    transport::Connected,
-};
+use aeronet::server::RemoteClient;
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
 use bytes::Bytes;
@@ -54,24 +50,19 @@ impl SpawnChannelClientExt for Commands<'_, '_> {
         let (send_s2c_dc, recv_s2c_dc) = flume::bounded::<String>(1);
 
         let local = self
-            .spawn((
-                LocalClient,
-                Connected,
-                LocalChannelClient::new(
-                    send_c2s,
-                    recv_s2c,
-                    send_c2s_acks,
-                    recv_s2c_acks,
-                    send_c2s_dc,
-                    recv_s2c_dc,
-                ),
+            .spawn(LocalChannelClient::new(
+                send_c2s,
+                recv_s2c,
+                send_c2s_acks,
+                recv_s2c_acks,
+                send_c2s_dc,
+                recv_s2c_dc,
             ))
             .id();
 
         let remote = self
             .spawn((
                 RemoteClient::new(server),
-                Connected,
                 RemoteChannelClient::new(
                     recv_c2s,
                     send_s2c,
@@ -82,20 +73,6 @@ impl SpawnChannelClientExt for Commands<'_, '_> {
                 ),
             ))
             .id();
-
-        self.add(move |world: &mut World| {
-            world.send_event(LocalClientConnecting { client: local });
-            world.send_event(LocalClientConnected { client: local });
-
-            world.send_event(RemoteClientConnecting {
-                server,
-                client: remote,
-            });
-            world.send_event(RemoteClientConnected {
-                server,
-                client: remote,
-            });
-        });
 
         (local, remote)
     }

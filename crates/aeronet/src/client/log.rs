@@ -18,20 +18,18 @@ impl Plugin for EventLogPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             PreUpdate,
-            (log_connecting, log_connected, log_disconnected)
-                .chain()
-                .after(TransportSet::Recv),
+            (log_connecting, log_connected, log_disconnected).after(TransportSet::Recv),
         );
     }
 }
 
 fn log_connecting(
     mut connecting: EventReader<LocalClientConnecting>,
-    clients: Query<(Entity, Option<&Name>)>,
+    clients: Query<Option<&Name>>,
     #[cfg(debug_assertions)] with_local_client: Query<(), With<super::LocalClient>>,
 ) {
     for &LocalClientConnecting { client } in connecting.read() {
-        let Ok((client, name)) = clients.get(client) else {
+        let Ok(name) = clients.get(client) else {
             error!("Client {client:?} reported as connecting but does not exist");
             continue;
         };
@@ -56,12 +54,12 @@ fn log_connecting(
 
 fn log_connected(
     mut connected: EventReader<LocalClientConnected>,
-    clients: Query<(Entity, Option<&Name>)>,
+    clients: Query<Option<&Name>>,
     #[cfg(debug_assertions)] with_local_client: Query<(), With<super::LocalClient>>,
     #[cfg(debug_assertions)] with_connected: Query<(), With<crate::transport::Connected>>,
 ) {
     for &LocalClientConnected { client } in connected.read() {
-        let Ok((client, name)) = clients.get(client) else {
+        let Ok(name) = clients.get(client) else {
             error!("Client {client:?} reported as connected but does not exist");
             continue;
         };
@@ -93,7 +91,7 @@ fn log_connected(
 
 fn log_disconnected(
     mut disconnected: EventReader<LocalClientDisconnected>,
-    #[cfg(debug_assertions)] clients: Query<Entity>,
+    #[cfg(debug_assertions)] clients: Query<()>,
 ) {
     for &LocalClientDisconnected { client, ref reason } in disconnected.read() {
         match reason {

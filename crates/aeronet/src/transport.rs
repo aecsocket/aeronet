@@ -1,6 +1,6 @@
 //! Client/server-independent items.
 
-use std::{error::Error, fmt::Debug, hash::Hash};
+use std::{fmt::Debug, hash::Hash};
 
 use bevy_app::prelude::*;
 use bevy_derive::{Deref, DerefMut};
@@ -28,18 +28,6 @@ pub enum SendMode {
     UnreliableSequenced,
     ReliableUnordered,
     ReliableOrdered(usize),
-}
-
-pub trait MessageSink {
-    type MessageKey: Send + Sync + Debug + Clone + PartialEq + Hash;
-
-    type SendError: Send + Sync + Error;
-
-    fn send(
-        &mut self,
-        mode: SendMode,
-        msg: impl Into<Bytes>,
-    ) -> Result<Self::MessageKey, Self::SendError>;
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Component, Reflect)]
