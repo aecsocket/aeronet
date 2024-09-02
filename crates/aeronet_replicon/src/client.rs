@@ -3,8 +3,8 @@
 use {
     aeronet::{
         client::{
-            client_connected, ClientEvent, ClientState, ClientTransport, ClientTransportSet,
-            LocalClientConnected, LocalClientDisconnected,
+            client_connected, ClientEvent, ClientState, ClientTransportSet, LocalClientConnected,
+            LocalClientDisconnected, MessageSink,
         },
         lane::LaneIndex,
     },
@@ -59,7 +59,7 @@ impl<T> RepliconClientPlugin<T> {
     }
 }
 
-impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
+impl<T: MessageSink + Resource> Plugin for RepliconClientPlugin<T> {
     fn build(&self, app: &mut App) {
         app.add_event::<LocalClientConnected<T>>()
             .add_event::<LocalClientDisconnected<T>>()
@@ -104,12 +104,12 @@ impl<T: ClientTransport + Resource> Plugin for RepliconClientPlugin<T> {
 }
 
 #[derive(SystemParam)]
-struct Events<'w, T: ClientTransport + Resource> {
+struct Events<'w, T: MessageSink + Resource> {
     connected: EventWriter<'w, LocalClientConnected<T>>,
     disconnected: EventWriter<'w, LocalClientDisconnected<T>>,
 }
 
-impl<T: ClientTransport + Resource> RepliconClientPlugin<T> {
+impl<T: MessageSink + Resource> RepliconClientPlugin<T> {
     fn recv(
         time: Res<Time>,
         mut client: ResMut<T>,

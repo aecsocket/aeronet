@@ -3,10 +3,10 @@
 
 use {
     aeronet::{
-        client::{client_connected, ClientEvent, ClientState, ClientTransport},
+        client::{client_connected, ClientEvent, ClientState, MessageSink},
         error::pretty_error,
         lane::{LaneIndex, LaneKind},
-        stats::{MessageStats, Rtt},
+        stats::{Rtt, SessionStats},
     },
     aeronet_proto::session::SessionConfig,
     aeronet_webtransport::{

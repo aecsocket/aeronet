@@ -2,7 +2,7 @@
 
 use {
     aeronet::{
-        client::{ClientState, ClientTransport, LocalClientConnected, LocalClientDisconnected},
+        client::{ClientState, LocalClientConnected, LocalClientDisconnected, MessageSink},
         error::pretty_error,
     },
     aeronet_replicon::client::RepliconClientPlugin,

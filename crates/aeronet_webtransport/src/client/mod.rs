@@ -7,7 +7,7 @@ use {
     crate::internal::{ConnectionMeta, InternalSession, SessionError, SessionSendError},
     aeronet::{
         client::DisconnectReason,
-        stats::{ConnectedAt, MessageStats, Rtt},
+        stats::{ConnectedAt, Rtt, SessionStats},
     },
     aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session},
     bytes::Bytes,
@@ -215,7 +215,7 @@ impl Rtt for Connected {
     }
 }
 
-impl MessageStats for Connected {
+impl SessionStats for Connected {
     fn bytes_sent(&self) -> usize {
         self.session().bytes_sent()
     }

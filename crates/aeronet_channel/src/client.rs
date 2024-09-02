@@ -1,272 +1,196 @@
-//! Client-side items.
+use std::num::Saturating;
 
-use {
-    crate::{
-        server::{ChannelServer, ClientKey},
-        shared::{Disconnected, MessageKey},
+use aeronet::{
+    client::{ClientTransportPlugin, LocalClientDisconnected},
+    stats::SessionStats,
+    transport::{
+        AckBuffer, Disconnect, DisconnectReason, RecvBuffer, SendBuffer, TransportSet,
+        DROP_DISCONNECT_REASON,
     },
-    aeronet::{
-        client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
-        lane::LaneIndex,
-        shared::DROP_DISCONNECT_REASON,
-        stats::{ConnectedAt, MessageStats},
-    },
-    bytes::Bytes,
-    crossbeam_channel::{Receiver, Sender, TryRecvError},
-    std::{convert::Infallible, num::Saturating},
-    web_time::{Duration, Instant},
 };
+use bevy_app::prelude::*;
+use bevy_ecs::prelude::*;
+use bytes::Bytes;
+use tracing::{debug, trace, trace_span};
 
-/// Implementation of [`ClientTransport`] using in-memory MPSC channels.
-///
-/// See the [crate-level documentation](crate).
-#[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct ChannelClient {
-    state: State,
-}
+use crate::transport::{Disconnected, MessageKey};
 
 #[derive(Debug)]
-enum State {
-    Disconnected,
-    Connected(Connected),
-    Disconnecting { reason: String },
-}
+pub struct ChannelClientPlugin;
 
-/// State of a [`ChannelClient`] when it is [`ClientState::Connected`].
-#[derive(Debug)]
-pub struct Connected {
-    /// Key of this client as recognized by the [`ChannelServer`].
-    ///
-    /// Use this key to disconnect this client from the server side.
-    pub key: ClientKey,
-    /// See [`ConnectedAt::connected_at`].
-    pub connected_at: Instant,
-    /// See [`MessageStats::bytes_sent`].
-    pub bytes_sent: Saturating<usize>,
-    /// See [`MessageStats::bytes_recv`]
-    pub bytes_recv: Saturating<usize>,
-    send_c2s: Sender<(MessageKey, Bytes, LaneIndex)>,
-    recv_s2c: Receiver<(MessageKey, Bytes, LaneIndex)>,
-    send_ack_c2s: Sender<MessageKey>,
-    recv_ack_s2c: Receiver<MessageKey>,
-    send_dc_c2s: Sender<String>,
-    recv_dc_s2c: Receiver<String>,
-    send_initial: bool,
-    next_send_msg_key: MessageKey,
-}
+impl Plugin for ChannelClientPlugin {
+    fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<ClientTransportPlugin>() {
+            app.add_plugins(ClientTransportPlugin);
+        }
 
-impl ConnectedAt for Connected {
-    fn connected_at(&self) -> Instant {
-        self.connected_at
+        app.add_systems(
+            PreUpdate,
+            (disconnect, poll).chain().in_set(TransportSet::Recv),
+        )
+        .add_systems(PostUpdate, flush.in_set(TransportSet::Send));
     }
 }
 
-impl MessageStats for Connected {
-    fn bytes_sent(&self) -> usize {
-        self.bytes_sent.0
-    }
-
-    fn bytes_recv(&self) -> usize {
-        self.bytes_recv.0
-    }
+#[derive(Debug, Component)]
+// TODO: #[require(LocalClient)]
+pub struct LocalChannelClient {
+    send_c2s: flume::Sender<Bytes>,
+    recv_s2c: flume::Receiver<Bytes>,
+    next_msg_key: MessageKey,
+    send_c2s_acks: flume::Sender<()>,
+    recv_s2c_acks: flume::Receiver<()>,
+    next_recv_ack: MessageKey,
+    send_c2s_dc: flume::Sender<String>,
+    recv_s2c_dc: flume::Receiver<String>,
 }
 
-/// Error type for [`ChannelClient::connect`].
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum ClientConnectError {
-    /// Attempted to connect a client which was already connected.
-    #[error("not disconnected")]
-    NotDisconnected,
-    /// Attempted to connect to a server which is closed.
-    #[error("server closed")]
-    ServerClosed,
-}
-
-/// Error type for [`ChannelClient::send`].
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum ClientSendError {
-    /// Attempted to send over a client which is not connected.
-    #[error("not connected")]
-    NotConnected,
-    /// Attempted to send over a client which we thought was connected, but the
-    /// other side of the channel was disconnected.
-    #[error("disconnected")]
-    Disconnected,
-}
-
-impl Default for ChannelClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ChannelClient {
-    /// Creates a new client which is not connected to a server.
-    ///
-    /// Use [`ChannelClient::connect`] to connect this client to a server.
+impl LocalChannelClient {
     #[must_use]
-    pub const fn new() -> Self {
+    pub(crate) const fn new(
+        send_c2s: flume::Sender<Bytes>,
+        recv_s2c: flume::Receiver<Bytes>,
+        send_c2s_acks: flume::Sender<()>,
+        recv_s2c_acks: flume::Receiver<()>,
+        send_c2s_dc: flume::Sender<String>,
+        recv_s2c_dc: flume::Receiver<String>,
+    ) -> Self {
         Self {
-            state: State::Disconnected,
-        }
-    }
-
-    /// Connects this client to an existing server.
-    ///
-    /// # Errors
-    ///
-    /// Errors if this client is already connected to a server, or if the server
-    /// is closed.
-    pub fn connect(&mut self, server: &mut ChannelServer) -> Result<(), ClientConnectError> {
-        if matches!(self.state, State::Connected(..)) {
-            return Err(ClientConnectError::NotDisconnected);
-        }
-
-        let (send_c2s, recv_c2s) = crossbeam_channel::unbounded();
-        let (send_s2c, recv_s2c) = crossbeam_channel::unbounded();
-        let (send_ack_c2s, recv_ack_c2s) = crossbeam_channel::unbounded();
-        let (send_ack_s2c, recv_ack_s2c) = crossbeam_channel::unbounded();
-        let (send_dc_c2s, recv_dc_c2s) = crossbeam_channel::bounded(1);
-        let (send_dc_s2c, recv_dc_s2c) = crossbeam_channel::bounded(1);
-        let key = server
-            .insert_client(
-                recv_c2s,
-                send_s2c,
-                recv_ack_c2s,
-                send_ack_s2c,
-                recv_dc_c2s,
-                send_dc_s2c,
-            )
-            .ok_or(ClientConnectError::ServerClosed)?;
-        self.state = State::Connected(Connected {
-            key,
-            connected_at: Instant::now(),
-            bytes_sent: Saturating(0),
-            bytes_recv: Saturating(0),
             send_c2s,
             recv_s2c,
-            send_ack_c2s,
-            recv_ack_s2c,
-            send_dc_c2s,
-            recv_dc_s2c,
-            send_initial: true,
-            next_send_msg_key: MessageKey::default(),
-        });
-        Ok(())
-    }
-}
-
-impl ClientTransport for ChannelClient {
-    type Connecting<'this> = Infallible;
-
-    type Connected<'this> = &'this Connected;
-
-    type MessageKey = MessageKey;
-
-    type PollError = Disconnected;
-
-    type SendError = ClientSendError;
-
-    #[must_use]
-    fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
-        match &self.state {
-            State::Disconnected | State::Disconnecting { .. } => ClientState::Disconnected,
-            State::Connected(client) => ClientState::Connected(client),
+            next_msg_key: MessageKey::from_raw(0),
+            send_c2s_acks,
+            recv_s2c_acks,
+            next_recv_ack: MessageKey::from_raw(0),
+            send_c2s_dc,
+            recv_s2c_dc,
         }
     }
+}
 
-    fn poll(&mut self, _: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
-        let mut events = Vec::new();
-        replace_with::replace_with_or_abort(&mut self.state, |state| match state {
-            State::Disconnected => state,
-            State::Disconnecting { reason } => {
-                events.push(ClientEvent::Disconnected {
-                    reason: DisconnectReason::Local(reason),
-                });
-                State::Disconnected
-            }
-            State::Connected(client) => Self::poll_connected(client, &mut events),
-        });
-        events.into_iter()
+impl Drop for LocalChannelClient {
+    fn drop(&mut self) {
+        let _ = self.send_c2s_dc.send(DROP_DISCONNECT_REASON.to_owned());
     }
+}
 
-    fn send(
-        &mut self,
-        msg: impl Into<Bytes>,
-        lane: impl Into<LaneIndex>,
-    ) -> Result<Self::MessageKey, Self::SendError> {
-        let State::Connected(client) = &mut self.state else {
-            return Err(ClientSendError::NotConnected);
-        };
-
-        let msg = msg.into();
-        let lane = lane.into();
-
-        let msg_key = client.next_send_msg_key;
-        let msg_len = msg.len();
-        client
-            .send_c2s
-            .send((msg_key, msg, lane))
-            .map_err(|_| ClientSendError::Disconnected)?;
-        client.bytes_sent += msg_len;
-        client.next_send_msg_key.inc();
-        Ok(msg_key)
-    }
-
-    fn flush(&mut self) {}
-
-    fn disconnect(&mut self, reason: impl Into<String>) {
-        let reason = reason.into();
-        replace_with::replace_with_or_abort(&mut self.state, |state| match state {
-            State::Connected(client) => {
-                let _ = client.send_dc_c2s.try_send(reason.clone());
-                State::Disconnecting { reason }
-            }
-            State::Disconnected | State::Disconnecting { .. } => state,
+fn disconnect(
+    mut commands: Commands,
+    clients: Query<(Entity, &LocalChannelClient, &Disconnect)>,
+    mut disconnected: EventWriter<LocalClientDisconnected>,
+) {
+    for (client, transport, Disconnect { reason }) in &clients {
+        let _ = transport.send_c2s_dc.try_send(reason.clone());
+        commands.entity(client).despawn();
+        disconnected.send(LocalClientDisconnected {
+            client,
+            reason: DisconnectReason::Local(reason.clone()),
         });
     }
 }
 
-impl ChannelClient {
-    fn poll_connected(mut client: Connected, events: &mut Vec<ClientEvent<Self>>) -> State {
-        match client.recv_dc_s2c.try_recv() {
+fn poll(
+    mut commands: Commands,
+    mut clients: Query<(
+        Entity,
+        &mut LocalChannelClient,
+        &mut SessionStats,
+        &mut RecvBuffer,
+        &mut AckBuffer<MessageKey>,
+    )>,
+    mut disconnected: EventWriter<LocalClientDisconnected>,
+) {
+    for (client, mut transport, mut stats, mut recv_buf, mut ack_buf) in &mut clients {
+        let span = trace_span!("poll", ?client);
+        let _span = span.enter();
+
+        // check for disconnection first
+
+        match transport.recv_s2c_dc.try_recv() {
             Ok(reason) => {
-                events.push(ClientEvent::Disconnected {
+                commands.entity(client).despawn();
+                disconnected.send(LocalClientDisconnected {
+                    client,
                     reason: DisconnectReason::Remote(reason),
                 });
-                return State::Disconnected;
+                continue;
             }
-            Err(TryRecvError::Disconnected) => {
-                events.push(ClientEvent::Disconnected {
-                    reason: DisconnectReason::Error(Disconnected),
+            Err(flume::TryRecvError::Disconnected) => {
+                commands.entity(client).despawn();
+                disconnected.send(LocalClientDisconnected {
+                    client,
+                    reason: DisconnectReason::Error(Disconnected.into()),
                 });
-                return State::Disconnected;
+                continue;
             }
-            Err(TryRecvError::Empty) => {}
+            Err(flume::TryRecvError::Empty) => {}
         }
 
-        if client.send_initial {
-            events.push(ClientEvent::Connected);
-            client.send_initial = false;
+        // ignore disconnections here, since we already checked that above
+
+        let mut num_msgs = Saturating(0);
+        let mut num_bytes = Saturating(0);
+        for msg in transport.recv_s2c.try_iter() {
+            stats.msgs_recv += 1;
+            stats.packets_recv += 1;
+            stats.bytes_recv += msg.len();
+            num_msgs += 1;
+            num_bytes += msg.len();
+
+            recv_buf.push(msg);
+            let _ = transport.send_c2s_acks.send(());
         }
 
-        for (msg_key, msg, lane) in client.recv_s2c.try_iter() {
-            client.bytes_recv += msg.len();
-            let _ = client.send_ack_c2s.send(msg_key);
-            events.push(ClientEvent::Recv { msg, lane });
+        trace!(
+            num_msgs = num_msgs.0,
+            num_bytes = num_bytes.0,
+            "Received messages",
+        );
+
+        let num_acks = transport.recv_s2c_acks.try_iter().count();
+        for _ in 0..num_acks {
+            stats.acks_recv += 1;
+            let msg_key = transport.next_recv_ack.get_and_increment();
+
+            ack_buf.push(msg_key);
         }
 
-        for msg_key in client.recv_ack_s2c.try_iter() {
-            events.push(ClientEvent::Ack { msg_key });
-        }
-
-        State::Connected(client)
+        trace!(num_acks, "Received acks");
     }
 }
 
-impl Drop for ChannelClient {
-    fn drop(&mut self) {
-        self.disconnect(DROP_DISCONNECT_REASON);
+fn flush(
+    mut clients: Query<(
+        Entity,
+        &mut LocalChannelClient,
+        &mut SendBuffer,
+        &mut SessionStats,
+    )>,
+) {
+    for (client, mut transport, mut send_buf, mut stats) in &mut clients {
+        let span = trace_span!("flush", ?client);
+        let _span = span.enter();
+
+        let mut num_msgs = Saturating(0);
+        let mut num_bytes = Saturating(0);
+        for (_, msg) in send_buf.drain(..) {
+            stats.msgs_sent += 1;
+            stats.packets_sent += 1;
+            stats.bytes_sent += msg.len();
+            num_msgs += 1;
+            num_bytes += msg.len();
+
+            if transport.send_c2s.try_send(msg).is_err() {
+                debug!("Channel disconnected");
+                continue;
+            }
+            transport.next_msg_key.get_and_increment();
+        }
+
+        trace!(
+            num_msgs = num_msgs.0,
+            num_bytes = num_bytes.0,
+            "Flushed messages"
+        );
     }
 }

@@ -10,7 +10,7 @@ use {
     },
     aeronet::{
         client::DisconnectReason,
-        stats::{ConnectedAt, MessageStats, RemoteAddr, Rtt},
+        stats::{ConnectedAt, RemoteAddr, Rtt, SessionStats},
     },
     aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session},
     bytes::Bytes,
@@ -273,7 +273,7 @@ impl Rtt for Connected {
     }
 }
 
-impl MessageStats for Connected {
+impl SessionStats for Connected {
     fn bytes_sent(&self) -> usize {
         self.session().bytes_sent()
     }
