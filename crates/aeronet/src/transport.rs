@@ -3,6 +3,7 @@
 use std::{fmt::Debug, hash::Hash};
 
 use bevy_app::prelude::*;
+use bevy_core::Name;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
@@ -52,6 +53,14 @@ pub enum TransportSet {
     Send,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Reflect)]
+pub struct SendParams {
+    pub client: Entity,
+    pub mode: SendMode,
+    #[reflect(ignore)]
+    pub msg: Bytes,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut, Component, Reflect)]
 #[reflect(Component)]
 pub struct Disconnect {
@@ -85,3 +94,11 @@ impl DisconnectExt for Commands<'_, '_> {
 /// required. Implementations may use this string as a default disconnect
 /// reason.
 pub const DROP_DISCONNECT_REASON: &str = "dropped";
+
+pub(crate) fn display_name(entity: Entity, name: Option<&Name>) -> String {
+    if let Some(name) = name {
+        format!("'{name}' ({entity:?})")
+    } else {
+        format!("{entity:?}")
+    }
+}

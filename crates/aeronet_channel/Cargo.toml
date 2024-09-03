@@ -21,7 +21,6 @@ aeronet = { workspace = true, features = ["client", "server"] }
 
 bytes = { workspace = true }
 flume = { workspace = true }
-sync_wrapper = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

@@ -101,7 +101,9 @@ fn connect(
     mut connected: EventWriter<RemoteClientConnected>,
 ) {
     for (client, remote_client) in &clients {
-        commands.entity(client).insert(Connected);
+        commands
+            .entity(client)
+            .insert((Connected, SessionStats::default()));
         let server = remote_client.server();
         connecting.send(RemoteClientConnecting { server, client });
         connected.send(RemoteClientConnected { server, client });
