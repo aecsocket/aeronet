@@ -202,4 +202,20 @@ mod tests {
         let client1 = world.spawn_empty().id();
         world.spawn(ConnectedClients(AHashSet::from([client1])));
     }
+
+    #[test]
+    fn despawn_entity_with_no_connected_clients() {
+        let mut world = World::new();
+        let server = world.spawn(ConnectedClients::default()).id();
+        world.despawn(server);
+    }
+
+    #[test]
+    #[should_panic]
+    fn despawn_entity_with_connected_clients() {
+        let mut world = World::new();
+        let server = world.spawn(ConnectedClients::default()).id();
+        world.spawn(RemoteClient::new(server));
+        world.despawn(server);
+    }
 }

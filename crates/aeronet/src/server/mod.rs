@@ -59,26 +59,22 @@ pub struct ServerClosed {
 
 #[derive(Debug, Clone, Event)]
 pub struct RemoteClientConnecting {
-    pub server: Entity,
     pub client: Entity,
 }
 
 #[derive(Debug, Clone, Event)]
 pub struct RemoteClientConnected {
-    pub server: Entity,
     pub client: Entity,
 }
 
 #[derive(Debug, Event)]
 pub struct RemoteClientDisconnected {
-    pub server: Entity,
     pub client: Entity,
     pub reason: DisconnectReason,
 }
 
 #[derive(Debug, Clone, Event)]
 pub struct FromClient {
-    pub server: Entity,
     pub client: Entity,
     pub msg: Bytes,
 }

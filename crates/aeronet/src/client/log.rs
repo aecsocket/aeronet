@@ -5,7 +5,7 @@ use bevy_core::Name;
 use bevy_ecs::prelude::*;
 use tracing::{error, info, warn};
 
-use crate::transport::TransportSet;
+use crate::transport::{display_name, TransportSet};
 
 use super::{
     DisconnectReason, LocalClientConnected, LocalClientConnecting, LocalClientDisconnected,
@@ -44,11 +44,7 @@ fn log_connecting(
             }
         }
 
-        if let Some(name) = name {
-            info!("Client {client:?} ({name}) connecting");
-        } else {
-            info!("Client {client:?} connecting");
-        }
+        info!("Client {} connecting", display_name(client, name));
     }
 }
 
@@ -81,11 +77,7 @@ fn log_connected(
             }
         }
 
-        if let Some(name) = name {
-            info!("Client {client:?} ({name}) connected");
-        } else {
-            info!("Client {client:?} connected");
-        }
+        info!("Client {} connected", display_name(client, name));
     }
 }
 

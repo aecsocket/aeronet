@@ -114,7 +114,6 @@ dependencies = [
  "bevy_reflect",
  "bytes",
  "flume",
- "sync_wrapper",
  "thiserror",
  "tracing",
 ]
@@ -3684,12 +3683,6 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
-
-[[package]]
-name = "sync_wrapper"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7065abeca94b6a8a577f9bd45aa0867a2238b74e8eb67cf10d492bc39351394"
 
 [[package]]
 name = "sysinfo"

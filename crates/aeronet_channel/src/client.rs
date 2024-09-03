@@ -7,14 +7,14 @@ use aeronet::{
     },
     stats::SessionStats,
     transport::{
-        AckBuffer, Connected, Disconnect, DisconnectReason, RecvBuffer, SendBuffer, TransportSet,
-        DROP_DISCONNECT_REASON,
+        AckBuffer, Connected, Disconnect, DisconnectReason, RecvBuffer, SendBuffer, SendParams,
+        TransportSet, DROP_DISCONNECT_REASON,
     },
 };
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bytes::Bytes;
-use tracing::{debug, debug_span, trace, trace_span};
+use tracing::{debug, debug_span, error, trace, trace_span};
 
 use crate::transport::{Disconnected, MessageKey};
 
@@ -79,6 +79,35 @@ impl Drop for LocalChannelClient {
     }
 }
 
+pub fn send_to_server(
+    In(SendParams { client, msg, .. }): In<SendParams>,
+    mut clients: Query<(&mut LocalChannelClient, &mut SessionStats)>,
+) -> Option<MessageKey> {
+    let Ok((mut transport, mut stats)) = clients.get_mut(client) else {
+        error!("Attempted to send message to server using client {client:?} which does not exist");
+        return None;
+    };
+
+    // TODO: reliability
+    send(&mut transport, &mut stats, msg).ok()
+}
+
+fn send(
+    transport: &mut LocalChannelClient,
+    stats: &mut SessionStats,
+    msg: Bytes,
+) -> Result<MessageKey, Disconnected> {
+    stats.msgs_sent += 1;
+    stats.packets_sent += 1;
+    stats.bytes_sent += msg.len();
+
+    transport
+        .send_c2s
+        .try_send(msg)
+        .map(|_| transport.next_msg_key.get_and_increment())
+        .map_err(|_| Disconnected)
+}
+
 fn connect(
     mut commands: Commands,
     clients: Query<Entity, Added<LocalChannelClient>>,
@@ -87,7 +116,9 @@ fn connect(
 ) {
     for client in &clients {
         // TODO: required components
-        commands.entity(client).insert((LocalClient, Connected));
+        commands
+            .entity(client)
+            .insert((LocalClient, Connected, SessionStats::default()));
         connecting.send(LocalClientConnecting { client });
         connected.send(LocalClientConnected { client });
     }
@@ -155,11 +186,12 @@ fn poll(
         let mut num_msgs = Saturating(0);
         let mut num_bytes = Saturating(0);
         for msg in transport.recv_s2c.try_iter() {
+            num_msgs += 1;
+            num_bytes += msg.len();
+
             stats.msgs_recv += 1;
             stats.packets_recv += 1;
             stats.bytes_recv += msg.len();
-            num_msgs += 1;
-            num_bytes += msg.len();
 
             recv_buf.push(msg);
             let _ = transport.send_c2s_acks.try_send(());
@@ -198,17 +230,12 @@ fn flush(
         let mut num_msgs = Saturating(0);
         let mut num_bytes = Saturating(0);
         for (_, msg) in send_buf.drain(..) {
-            stats.msgs_sent += 1;
-            stats.packets_sent += 1;
-            stats.bytes_sent += msg.len();
             num_msgs += 1;
             num_bytes += msg.len();
 
-            if transport.send_c2s.try_send(msg).is_err() {
-                debug!("Channel disconnected");
-                continue;
+            if let Err(err) = send(&mut transport, &mut stats, msg) {
+                debug!("Failed to flush message: {err:#}");
             }
-            transport.next_msg_key.get_and_increment();
         }
 
         trace!(

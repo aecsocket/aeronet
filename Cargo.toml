@@ -91,8 +91,6 @@ bevy_replicon = { version = "0.27.0", default-features = false }
 # aeronet_channel
 
 flume = "0.11.0"
-oneshot = "0.1.8"
-sync_wrapper = "1.0.1"
 
 # aeronet_steam
 
