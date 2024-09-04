@@ -3,7 +3,7 @@ use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
 use bytes::Bytes;
 
-use crate::transport::{DisconnectReason, TransportPlugin};
+use crate::session::{DisconnectReason, SessionPlugin};
 
 mod connection;
 mod log;
@@ -15,8 +15,8 @@ pub struct ServerTransportPlugin;
 
 impl Plugin for ServerTransportPlugin {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<TransportPlugin>() {
-            app.add_plugins(TransportPlugin);
+        if !app.is_plugin_added::<SessionPlugin>() {
+            app.add_plugins(SessionPlugin);
         }
 
         app.register_type::<Server>()

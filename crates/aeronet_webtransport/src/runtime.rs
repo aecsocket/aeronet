@@ -1,42 +1,12 @@
 //! See [`WebTransportRuntime`].
 
 use {
+    bevy_ecs::prelude::*,
     std::{future::Future, time::Duration},
     xwt_core::utils::maybe,
 };
 
-/// Provides a platform-agnostic way of spawning futures required to drive a
-/// WebTransport endpoint.
-///
-/// Connecting a WebTransport client or opening a WebTransport server returns
-/// [`Future`]s which must be spawned on an async runtime. However, which
-/// runtime to use exactly (and how that runtime is provided) is
-/// target-dependent. This type exists to provide a platform-agnostic way of
-/// running those futures on a runtime.
-///
-/// This is also used internally, as clients and servers may need to spawn their
-/// own tasks for e.g. the sending and receiving halves of a session.
-///
-/// If using Bevy, you can use this as a resource in your app.
-///
-/// # Platforms
-///
-/// ## Native
-///
-/// On a native target, this holds a handle to a `tokio` runtime, because
-/// `wtransport` currently only supports this async runtime. The [`Default`]
-/// impl will create and leak a new `tokio` runtime, and store a handle to this
-/// leaked runtime.
-///
-/// If you already have a runtime handle, you can use
-/// `WebTransportRuntime::from(handle)` to create a runtime from that handle.
-///
-/// ## WASM
-///
-/// On a WASM target, this uses `wasm-bindgen-futures` to spawn the future via
-/// `wasm-bindgen`.
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
+#[derive(Debug, Clone, Resource)]
 pub struct WebTransportRuntime {
     #[cfg(target_family = "wasm")]
     _priv: (),

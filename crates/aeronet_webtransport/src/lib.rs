@@ -5,20 +5,15 @@
 )]
 #![doc = include_str!("../README.md")]
 
-pub use aeronet_proto as proto;
 #[cfg(not(target_family = "wasm"))]
 pub use wtransport;
 #[cfg(target_family = "wasm")]
 pub use xwt_web_sys;
 
 pub mod cert;
-pub mod runtime;
-pub mod shared;
-
-mod internal;
-
-#[cfg(feature = "client")]
+// #[cfg(feature = "client")]
 pub mod client;
-
-#[cfg(all(feature = "server", not(target_family = "wasm")))]
+pub mod runtime;
+pub mod session;
+// #[cfg(all(feature = "server", not(target_family = "wasm")))]
 pub mod server;

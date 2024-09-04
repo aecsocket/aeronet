@@ -1,5 +1,5 @@
 [package]
-description = "WebTransport transport implementation for aeronet"
+description = "WebTransport IO layer implementation for aeronet"
 name = "aeronet_webtransport"
 
 authors.workspace = true
@@ -20,26 +20,15 @@ rustflags = ["--cfg=web_sys_unstable_apis"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [features]
-## Enables the `WebTransportClient`.
 client = []
-
-## Enables the `WebTransportServer`.
 server = []
 
-## Enables [`bevy`](https://docs.rs/bevy) support by deriving `Resource` on certain types.
-bevy = ["dep:bevy_ecs", "aeronet/bevy", "aeronet_proto/bevy"]
-
-## Enables [`rustls/dangerous-configuration`](https://docs.rs/rustls/latest/rustls/#crate-features)
-## on targets building against native `wtransport`.
 dangerous-configuration = ["wtransport/dangerous-configuration"]
-
-## Enables [`aeronet_proto`]'s [`egui`](https://docs.rs/egui) network statistics visualizer.
-visualizer = ["aeronet_proto/visualizer"]
 
 [dependencies]
 aeronet = { workspace = true }
-aeronet_proto = { workspace = true }
 
+anyhow = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 cfg-if = { workspace = true }
@@ -50,7 +39,11 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 web-time = { workspace = true }
 
-bevy_ecs = { workspace = true, optional = true }
+bevy_app = { workspace = true }
+bevy_derive = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_hierarchy = { workspace = true }
+bevy_reflect = { workspace = true }
 
 # xwt
 

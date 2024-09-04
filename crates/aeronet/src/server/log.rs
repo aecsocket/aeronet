@@ -5,7 +5,7 @@ use bevy_core::Name;
 use bevy_ecs::prelude::*;
 use tracing::{error, info};
 
-use crate::transport::{display_name, TransportSet};
+use crate::{session::SessionSet, util::display_name};
 
 use super::{
     CloseReason, RemoteClient, RemoteClientConnecting, ServerClosed, ServerOpened, ServerOpening,
@@ -22,7 +22,7 @@ impl Plugin for EventLogPlugin {
                 (log_opening, log_opened, log_closed),
                 // (log_connecting, log_connected, log_disconnected),
             )
-                .after(TransportSet::Recv),
+                .after(SessionSet::Recv),
         );
     }
 }
@@ -145,7 +145,7 @@ fn log_connected(
     mut connected: EventReader<LocalClientConnected>,
     clients: Query<Option<&Name>>,
     #[cfg(debug_assertions)] with_local_client: Query<(), With<super::LocalClient>>,
-    #[cfg(debug_assertions)] with_connected: Query<(), With<crate::transport::Connected>>,
+    #[cfg(debug_assertions)] with_connected: Query<(), With<crate::session::ConnectedSession>>,
 ) {
     for &LocalClientConnected { client } in connected.read() {
         let Ok(name) = clients.get(client) else {
@@ -165,7 +165,7 @@ fn log_connected(
             if with_connected.get(client).is_err() {
                 error!(
                     "Client {client:?} is missing `{}`",
-                    type_name::<crate::transport::Connected>()
+                    type_name::<crate::session::ConnectedSession>()
                 );
             }
         }
