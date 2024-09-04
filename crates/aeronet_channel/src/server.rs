@@ -5,11 +5,11 @@ use aeronet::{
         Open, RemoteClient, RemoteClientConnected, RemoteClientConnecting,
         RemoteClientDisconnected, Server, ServerOpened, ServerOpening, ServerTransportPlugin,
     },
-    stats::SessionStats,
-    transport::{
-        AckBuffer, Connected, DisconnectReason, RecvBuffer, SendBuffer, TransportSet,
+    session::{
+        AckBuffer, ConnectedSession, DisconnectReason, RecvBuffer, SendBuffer, SessionSet,
         DROP_DISCONNECT_REASON,
     },
+    stats::SessionStats,
 };
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
@@ -28,8 +28,8 @@ impl Plugin for ChannelServerPlugin {
             app.add_plugins(ServerTransportPlugin);
         }
 
-        app.add_systems(PreUpdate, (open, connect, poll).in_set(TransportSet::Recv))
-            .add_systems(PostUpdate, flush.in_set(TransportSet::Send));
+        app.add_systems(PreUpdate, (open, connect, poll).in_set(SessionSet::Recv))
+            .add_systems(PostUpdate, flush.in_set(SessionSet::Send));
     }
 }
 
@@ -103,7 +103,7 @@ fn connect(
     for (client, remote_client) in &clients {
         commands
             .entity(client)
-            .insert((Connected, SessionStats::default()));
+            .insert((ConnectedSession, SessionStats::default()));
         let server = remote_client.server();
         connecting.send(RemoteClientConnecting { server, client });
         connected.send(RemoteClientConnected { server, client });

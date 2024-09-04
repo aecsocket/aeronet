@@ -2,7 +2,7 @@ use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
 
-use crate::transport::{DisconnectReason, TransportPlugin};
+use crate::session::{DisconnectReason, SessionPlugin};
 
 mod log;
 
@@ -11,8 +11,8 @@ pub struct ClientTransportPlugin;
 
 impl Plugin for ClientTransportPlugin {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<TransportPlugin>() {
-            app.add_plugins(TransportPlugin);
+        if !app.is_plugin_added::<SessionPlugin>() {
+            app.add_plugins(SessionPlugin);
         }
 
         app.register_type::<LocalClient>()

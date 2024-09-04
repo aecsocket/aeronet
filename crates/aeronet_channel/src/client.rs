@@ -5,11 +5,11 @@ use aeronet::{
         ClientTransportPlugin, LocalClient, LocalClientConnected, LocalClientConnecting,
         LocalClientDisconnected,
     },
-    stats::SessionStats,
-    transport::{
-        AckBuffer, Connected, Disconnect, DisconnectReason, RecvBuffer, SendBuffer, SendParams,
-        TransportSet, DROP_DISCONNECT_REASON,
+    session::{
+        AckBuffer, ConnectedSession, Disconnect, DisconnectReason, RecvBuffer, SendBuffer,
+        SendParams, SessionSet, DROP_DISCONNECT_REASON,
     },
+    stats::SessionStats,
 };
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
@@ -29,11 +29,9 @@ impl Plugin for ChannelClientPlugin {
 
         app.add_systems(
             PreUpdate,
-            (connect, disconnect, poll)
-                .chain()
-                .in_set(TransportSet::Recv),
+            (connect, disconnect, poll).chain().in_set(SessionSet::Recv),
         )
-        .add_systems(PostUpdate, flush.in_set(TransportSet::Send));
+        .add_systems(PostUpdate, flush.in_set(SessionSet::Send));
     }
 }
 
@@ -118,7 +116,7 @@ fn connect(
         // TODO: required components
         commands
             .entity(client)
-            .insert((LocalClient, Connected, SessionStats::default()));
+            .insert((LocalClient, ConnectedSession, SessionStats::default()));
         connecting.send(LocalClientConnecting { client });
         connected.send(LocalClientConnected { client });
     }

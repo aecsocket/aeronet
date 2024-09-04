@@ -1,6 +1,6 @@
 use aeronet::{
     server::ConnectedClients,
-    transport::{DisconnectExt, SendMode, SendParams},
+    session::{DisconnectExt, SendMode, SendParams},
 };
 use aeronet_channel::{
     client::{send_to_server, ChannelClientPlugin},
