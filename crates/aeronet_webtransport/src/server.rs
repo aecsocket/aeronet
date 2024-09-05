@@ -252,9 +252,6 @@ async fn handle_session(
     .await
     .map(xwt_wtransport::Connection)
     .map_err(ServerError::AcceptSessionRequest)?;
-    let initial_mtu = conn
-        .max_datagram_size()
-        .ok_or(SessionError::DatagramsNotSupported)?;
     debug!("Connected");
 
     let (send_meta, recv_meta) = mpsc::channel::<SessionMeta>(1);
@@ -265,7 +262,9 @@ async fn handle_session(
     let next = ToConnected {
         initial_remote_addr: conn.0.remote_address(),
         initial_rtt: conn.0.rtt(),
-        initial_mtu,
+        initial_mtu: conn
+            .max_datagram_size()
+            .ok_or(SessionError::DatagramsNotSupported)?,
         recv_meta,
         recv_packet_b2f,
         send_packet_f2b,

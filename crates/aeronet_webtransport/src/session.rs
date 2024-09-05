@@ -28,8 +28,6 @@ cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         type ConnectionError = ();
     } else {
-        use wtransport::error::SendDatagramError;
-
         type Connection = xwt_wtransport::Connection;
         type ConnectionError = wtransport::error::ConnectionError;
     }
@@ -70,11 +68,9 @@ pub(crate) const PACKET_BUF_CAP: usize = 16;
 
 #[derive(Debug, Component)]
 pub(crate) struct WebTransportIo {
-    pub(crate) recv_err: oneshot::Receiver<anyhow::Error>,
     pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,
     pub(crate) recv_packet_b2f: mpsc::Receiver<Bytes>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
-    pub(crate) recv_dc: oneshot::Receiver<DisconnectReason<SessionError>>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
 }
 
@@ -231,19 +227,17 @@ pub(crate) struct SessionBackend {
     pub(crate) send_meta: mpsc::Sender<SessionMeta>,
     pub(crate) send_packet_b2f: mpsc::Sender<Bytes>,
     pub(crate) recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
-    pub(crate) send_dc: oneshot::Sender<DisconnectReason<SessionError>>,
     pub(crate) recv_user_dc: oneshot::Receiver<String>,
 }
 
 impl SessionBackend {
-    pub async fn start(self) {
+    pub async fn start(self) -> DisconnectReason<SessionError> {
         let SessionBackend {
             runtime,
             conn,
             send_meta,
             send_packet_b2f,
             recv_packet_f2b,
-            send_dc,
             mut recv_user_dc,
         } = self;
 
@@ -287,7 +281,7 @@ impl SessionBackend {
             }
         });
 
-        let dc_reason = futures::select! {
+        futures::select! {
             err = recv_err.next() => {
                 let err = err.unwrap_or(SessionError::BackendClosed);
                 get_disconnect_reason(err)
@@ -300,9 +294,7 @@ impl SessionBackend {
                     DisconnectReason::Error(SessionError::FrontendClosed)
                 }
             }
-        };
-
-        let _ = send_dc.send(dc_reason);
+        }
     }
 }
 
@@ -392,6 +384,8 @@ async fn send_loop(
 
         #[cfg(not(target_family = "wasm"))]
         {
+            use wtransport::error::SendDatagramError;
+
             let packet_len = packet.len();
             match conn.send_datagram(packet).await {
                 Ok(()) => Ok(()),
