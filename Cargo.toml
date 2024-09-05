@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/aeronet", "crates/aeronet_webtransport"]
+members = ["crates/aeronet", "crates/aeronet_channel"]
 resolver = "2"
 
 [workspace.package]
@@ -61,6 +61,7 @@ either = "1.13.0"
 futures = "0.3.30"
 itertools = "0.13.0"
 octs = "0.4.2"
+oneshot = "0.1.8"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 replace_with = "0.1.7"
@@ -68,6 +69,7 @@ ringbuf = "0.4.1"
 serde = { version = "1.0.204", features = ["derive"] }
 size_format = "1.0.2"
 slotmap = "1.0.7"
+sync_wrapper = "1.0.1"
 terrors = "0.3.0"
 thiserror = "1.0.63"
 tokio = { version = "1.39.2", default-features = false }

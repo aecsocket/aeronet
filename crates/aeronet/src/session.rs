@@ -98,4 +98,20 @@ pub enum DisconnectReason<E> {
     Error(E),
 }
 
+impl<E> DisconnectReason<E> {
+    pub fn map_err<F>(self, f: impl FnOnce(E) -> F) -> DisconnectReason<F> {
+        match self {
+            Self::User(reason) => DisconnectReason::User(reason),
+            Self::Peer(reason) => DisconnectReason::Peer(reason),
+            Self::Error(err) => DisconnectReason::Error(f(err)),
+        }
+    }
+}
+
+impl<E> From<E> for DisconnectReason<E> {
+    fn from(value: E) -> Self {
+        Self::Error(value)
+    }
+}
+
 pub const DROP_DISCONNECT_REASON: &str = "dropped";
