@@ -1,6 +1,11 @@
+//! Statistics and metadata components that may be present on a [session] or
+//! other session-related entities.
+//!
+//! [session]: crate::session
+
 use std::{net::SocketAddr, num::Saturating, time::Duration};
 
-use bevy_derive::{Deref, DerefMut};
+use bevy_derive::Deref;
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
 
@@ -34,8 +39,8 @@ pub struct SessionStats {
     pub acks_recv: Saturating<usize>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, Component)]
 pub struct LocalAddr(pub SocketAddr);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, Component)]
 pub struct RemoteAddr(pub SocketAddr);

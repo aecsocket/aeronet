@@ -1,3 +1,8 @@
+//! Types describing individual messages which may be sent and received at the
+//! [transport layer].
+//!
+//! [transport layer]: crate::transport
+
 use std::{cmp::Ordering, num::Wrapping};
 
 use arbitrary::Arbitrary;
@@ -31,6 +36,24 @@ pub enum SendReliability {
     Unreliable,
     /// Messages are guaranteed to be delivered.
     Reliable,
+}
+
+/// Ordering of a [`SendMode`].
+///
+/// See [`SendMode`] for more info on ordering.
+pub enum SendOrdering {
+    /// Messages have no guarantees on ordering, and duplicates may be received.
+    Unordered,
+    /// Messages will be received in the order they are sent, however if a
+    /// message is received out of order, it will be discarded.
+    ///
+    /// For example, if messages A and B are sent in that order, and the
+    /// receiver receives B then A, B will be received and A will be discarded
+    /// as it is older than the latest received message (B). Duplicates will not
+    /// be received.
+    Sequenced,
+    /// Messages will be received in the order they are sent, with no gaps.
+    Ordered,
 }
 
 #[derive(
