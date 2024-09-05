@@ -21,27 +21,16 @@ all-features = true
 client = []
 server = []
 
-## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = []
-
 [dependencies]
-ahash = { workspace = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true }
 bytes = { workspace = true }
 datasize = { workspace = true }
-derivative = { workspace = true }
 derive_more = { workspace = true }
-either = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
-web-time = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_core = { workspace = true }
 bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_reflect = { workspace = true }
-
-[dev-dependencies]
-bevy_app = { workspace = true }

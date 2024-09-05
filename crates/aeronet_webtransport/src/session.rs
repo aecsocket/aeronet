@@ -1,8 +1,11 @@
-use std::{io, net::SocketAddr, num::Saturating, sync::Arc, time::Duration};
+use std::{any::type_name, io, net::SocketAddr, num::Saturating, sync::Arc, time::Duration};
 
 use aeronet::{
-    io::{PacketBuffers, PacketMtu},
-    session::SessionSet,
+    io::{IoSet, PacketBuffers, PacketMtu},
+    session::{
+        DisconnectReason, DisconnectSession, SessionConnected, SessionDisconnected,
+        DROP_DISCONNECT_REASON,
+    },
     stats::{RemoteAddr, SessionStats},
 };
 use bevy_app::prelude::*;
@@ -16,7 +19,7 @@ use futures::{
     FutureExt, SinkExt, StreamExt,
 };
 use thiserror::Error;
-use tracing::{debug, trace, trace_span};
+use tracing::{debug, debug_span, trace, trace_span};
 use xwt_core::prelude::*;
 
 use crate::runtime::WebTransportRuntime;
@@ -38,8 +41,8 @@ pub struct WebTransportSessionPlugin;
 impl Plugin for WebTransportSessionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WebTransportRuntime>()
-            .add_systems(PreUpdate, recv.in_set(SessionSet::Recv))
-            .add_systems(PostUpdate, send.in_set(SessionSet::Send));
+            .add_systems(PreUpdate, (setup_session, recv).chain().in_set(IoSet::Recv))
+            .add_systems(PostUpdate, send.in_set(IoSet::Send));
     }
 }
 
@@ -61,7 +64,9 @@ pub enum SessionError {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deref, Component, Reflect)]
 #[reflect(Component)]
-pub struct RawRtt(pub(crate) Duration);
+pub struct RawRtt(pub Duration);
+
+pub(crate) const PACKET_BUF_CAP: usize = 16;
 
 #[derive(Debug, Component)]
 pub(crate) struct WebTransportIo {
@@ -69,6 +74,16 @@ pub(crate) struct WebTransportIo {
     pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,
     pub(crate) recv_packet_b2f: mpsc::Receiver<Bytes>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
+    pub(crate) recv_dc: oneshot::Receiver<DisconnectReason<SessionError>>,
+    pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
+}
+
+impl Drop for WebTransportIo {
+    fn drop(&mut self) {
+        if let Some(sender) = self.send_user_dc.take() {
+            let _ = sender.send(DROP_DISCONNECT_REASON.to_owned());
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -80,9 +95,51 @@ pub(crate) struct SessionMeta {
     mtu: usize,
 }
 
-pub(crate) const PACKET_BUF_CAP: usize = 16;
+fn setup_session(
+    mut commands: Commands,
+    query: Query<Entity, Added<WebTransportIo>>,
+    mut connected: EventWriter<SessionConnected>,
+) {
+    for session in &query {
+        connected.send(SessionConnected { session });
+        commands.entity(session).observe(on_disconnect);
+    }
+}
 
-const META_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
+fn on_disconnect(
+    trigger: Trigger<DisconnectSession>,
+    mut sessions: Query<&mut WebTransportIo>,
+    mut commands: Commands,
+    mut disconnected: EventWriter<SessionDisconnected>,
+) {
+    let session = trigger.entity();
+    let span = debug_span!("disconnect", ?session);
+    let _span = span.enter();
+
+    let Ok(mut io) = sessions.get_mut(session) else {
+        trace!(
+            "Ignoring disconnect request because session doesn't have `{}`",
+            type_name::<WebTransportIo>()
+        );
+        return;
+    };
+
+    if let Some(sender) = io.send_user_dc.take() {
+        let reason = trigger.event().reason.clone();
+        debug!("Disconnecting: {reason}");
+
+        let _ = sender.send(reason.clone());
+        disconnected.send(SessionDisconnected {
+            session,
+            reason: DisconnectReason::User(reason),
+        });
+        commands.entity(session).despawn();
+    } else {
+        trace!(
+            "Ignoring disconnect request because session has already sent its disconnect reason"
+        );
+    }
+}
 
 fn recv(
     mut query: Query<(
@@ -101,7 +158,7 @@ fn recv(
         let _span = span.enter();
 
         while let Ok(Some(meta)) = io.recv_meta.try_next() {
-            **mtu = meta.mtu;
+            mtu.0 = meta.mtu;
             #[cfg(not(target_family = "wasm"))]
             {
                 if let Some(ref mut remote_addr) = remote_addr {
@@ -172,18 +229,22 @@ pub(crate) struct SessionBackend {
     pub(crate) runtime: WebTransportRuntime,
     pub(crate) conn: Connection,
     pub(crate) send_meta: mpsc::Sender<SessionMeta>,
-    pub(crate) recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
     pub(crate) send_packet_b2f: mpsc::Sender<Bytes>,
+    pub(crate) recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
+    pub(crate) send_dc: oneshot::Sender<DisconnectReason<SessionError>>,
+    pub(crate) recv_user_dc: oneshot::Receiver<String>,
 }
 
 impl SessionBackend {
-    pub async fn start(self) -> Result<Never, SessionError> {
+    pub async fn start(self) {
         let SessionBackend {
             runtime,
             conn,
             send_meta,
-            recv_packet_f2b,
             send_packet_b2f,
+            recv_packet_f2b,
+            send_dc,
+            mut recv_user_dc,
         } = self;
 
         let conn = Arc::new(conn);
@@ -226,13 +287,22 @@ impl SessionBackend {
             }
         });
 
-        let err = futures::select! {
+        let dc_reason = futures::select! {
             err = recv_err.next() => {
-                err.unwrap_or(SessionError::BackendClosed)
+                let err = err.unwrap_or(SessionError::BackendClosed);
+                get_disconnect_reason(err)
+            }
+            reason = recv_user_dc => {
+                if let Ok(reason) = reason {
+                    disconnect(conn, &reason).await;
+                    DisconnectReason::User(reason)
+                } else {
+                    DisconnectReason::Error(SessionError::FrontendClosed)
+                }
             }
         };
 
-        loop {}
+        let _ = send_dc.send(dc_reason);
     }
 }
 
@@ -242,6 +312,8 @@ async fn meta_loop(
     mut recv_closed: oneshot::Receiver<()>,
     mut send_meta: mpsc::Sender<SessionMeta>,
 ) -> Result<Never, SessionError> {
+    const META_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
+
     loop {
         futures::select! {
             () = runtime.sleep(META_UPDATE_INTERVAL).fuse() => {},
@@ -346,5 +418,59 @@ async fn send_loop(
                 }
             }?;
         }
+    }
+}
+
+fn get_disconnect_reason(err: SessionError) -> DisconnectReason<SessionError> {
+    #[cfg(target_family = "wasm")]
+    {
+        // TODO: I don't know how the app-initiated disconnect message looks
+        // I suspect we need this fixed first
+        // https://github.com/BiagioFesta/wtransport/issues/182
+        DisconnectReason::Error(err)
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    {
+        use wtransport::error::ConnectionError;
+
+        match err {
+            SessionError::Connection(ConnectionError::ApplicationClosed(err)) => {
+                // TODO: wtransport doesn't expose the disconnect reason message
+                // https://github.com/BiagioFesta/wtransport/issues/193
+                DisconnectReason::Peer(err.to_string())
+            }
+            err => DisconnectReason::Error(err),
+        }
+    }
+}
+
+async fn disconnect(conn: Arc<Connection>, reason: &str) {
+    const DISCONNECT_ERROR_CODE: u32 = 0;
+
+    #[cfg(target_family = "wasm")]
+    {
+        use wasm_bindgen_futures::JsFuture;
+        use xwt_web_sys::sys::WebTransportCloseInfo;
+
+        let mut close_info = WebTransportCloseInfo::new();
+        close_info.close_code(DISCONNECT_ERROR_CODE);
+        close_info.reason(reason);
+
+        // TODO: This seems to not close the connection properly
+        // Could it be because of this?
+        // https://github.com/BiagioFesta/wtransport/issues/182
+        conn.transport.close_with_close_info(&close_info);
+        let _ = JsFuture::from(conn.transport.closed()).await;
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    {
+        use wtransport::VarInt;
+
+        const ERROR_CODE: VarInt = VarInt::from_u32(DISCONNECT_ERROR_CODE);
+
+        conn.0.close(ERROR_CODE, reason.as_bytes());
+        conn.0.closed().await;
     }
 }

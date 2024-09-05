@@ -1,4 +1,39 @@
-use std::{fmt::Debug, hash::Hash};
+//! Core logic for sessions.
+//!
+//! # Session
+//!
+//! A session is an [`Entity`] which can be used to transfer sequences of bytes
+//! over to the other side of a connection - to the session's peer. The peer may
+//! be located on a different machine and connected over a network such as the
+//! internet, and may use any protocol for communication. The peer can also be
+//! located on the same machine, or even within the same app - these details are
+//! deliberately left unspecified and abstracted away.
+//!
+//! The session API is agnostic to the networking model used: it can be used to
+//! represent a client-server, peer-to-peer, or any other kind of network
+//! topology. The only constraint is that one session talks to one and only one
+//! peer for its lifetime, however you can have multiple sessions within the
+//! same world. These different sessions may even be communicating over
+//! different protocols, such as raw UDP datagrams alongside Steam networking
+//! sockets, so that you can e.g. support crossplay between different platforms.
+//!
+//! At the lowest level, sessions operate on packets. Sessions do not provide
+//! any guarantees of packet delivery, so they may be delayed, lost, or even
+//! duplicated. This is because when working with a network such as the internet
+//! we have effectively zero guarantees - network conditions are constantly
+//! changing, paths may change, or the computer might suddenly be disconnected
+//! from the network. Sessions pass down packets to, and receive packets from,
+//! the [IO layer].
+//!
+//! However, you will typically want guarantees when working with networking
+//! code, such as reliability or ordering (see [`SendMode`]). This is handled
+//! by the [transport layer].
+//!
+//! [IO layer]: crate::io
+//! [`SendMode`]: crate::message::SendMode
+//! [transport layer]: crate::transport
+
+use std::fmt::Debug;
 
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
@@ -9,22 +44,35 @@ pub struct SessionPlugin;
 
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
-        app.configure_sets(PreUpdate, SessionSet::Recv)
-            .configure_sets(PostUpdate, SessionSet::Send)
-            .register_type::<crate::io::PacketBuffers>()
-            .register_type::<Disconnect>();
+        app.add_event::<SessionConnected>()
+            .add_event::<SessionDisconnected>()
+            .register_type::<DisconnectSession>();
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum SessionSet {
-    Recv,
-    Send,
+#[derive(Debug, Event)]
+pub struct SessionConnected {
+    pub session: Entity,
+}
+
+#[derive(Debug, Event)]
+pub struct SessionDisconnected {
+    pub session: Entity,
+    pub reason: DisconnectReason<anyhow::Error>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Event, Reflect)]
+#[reflect(Component)]
+pub struct DisconnectSession {
+    /// User-specified message on why this session should be disconnected.
+    ///
+    /// This will be available in the [`DisconnectReason`].
+    pub reason: String,
 }
 
 /// Why a session was disconnected from its peer.
 #[derive(Debug)]
-pub enum DisconnectReason {
+pub enum DisconnectReason<E> {
     /// Session was disconnected by the user on our side, with a provided
     /// reason.
     ///
@@ -47,47 +95,7 @@ pub enum DisconnectReason {
     /// - the peer pretending like there are network errors to discreetly
     ///   force us to disconnect
     /// - ..and more
-    ///
-    /// If you need the actual typed error value, use
-    /// [`anyhow::Error::downcast`].
-    ///
-    /// [reliably]: crate::message::SendReliability::Reliable
-    Error(anyhow::Error),
+    Error(E),
 }
 
-/// Component for sessions which should be disconnected from their peer the next
-/// time (TODO what?) runs.
-///
-/// On our side, a disconnection due to this component being present will be
-/// interpreted as a [`DisconnectReason::User`].
-///
-/// On the peer's side, this disconnection will be interpreted as a
-/// [`DisconnectReason::Peer`].
-///
-/// You can disconnect a session even if it doesn't have [`ConnectedSession`],
-/// if you need to e.g. disconnect a session that's still in the process of
-/// connecting.
-#[derive(Debug, Clone, PartialEq, Eq, Component, Reflect)]
-#[reflect(Component)]
-#[component(storage = "SparseSet")]
-pub struct Disconnect {
-    /// User-specified message on why this session should be disconnected.
-    ///
-    /// This will be available in the [`DisconnectReason`].
-    pub reason: String,
-}
-
-/// Extension trait on [`Commands`] providing [`DisconnectExt::disconnect`].
-pub trait DisconnectExt {
-    fn disconnect(&mut self, session: Entity, reason: impl Into<String>);
-}
-
-impl DisconnectExt for Commands<'_, '_> {
-    fn disconnect(&mut self, session: Entity, reason: impl Into<String>) {
-        disconnect(self, session, reason.into());
-    }
-}
-
-fn disconnect(this: &mut Commands, session: Entity, reason: String) {
-    this.entity(session).insert(Disconnect { reason });
-}
+pub const DROP_DISCONNECT_REASON: &str = "dropped";

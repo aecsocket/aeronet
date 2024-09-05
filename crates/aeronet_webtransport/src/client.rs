@@ -1,13 +1,12 @@
-use std::{io, net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, time::Duration};
 
 use aeronet::{
-    io::{PacketBuffers, PacketMtu},
-    session::SessionSet,
+    io::{IoSet, PacketBuffers, PacketMtu},
+    session::DisconnectReason,
     stats::{LocalAddr, RemoteAddr, SessionStats},
 };
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
-use bevy_hierarchy::DespawnRecursiveExt;
 use bytes::Bytes;
 use futures::{
     channel::{mpsc, oneshot},
@@ -51,7 +50,7 @@ impl Plugin for WebTransportClientPlugin {
             app.add_plugins(WebTransportSessionPlugin);
         }
 
-        app.add_systems(PreUpdate, frontend.before(SessionSet::Recv));
+        app.add_systems(PreUpdate, update_frontend.before(IoSet::Recv));
     }
 }
 
@@ -123,7 +122,7 @@ fn connect_web_transport_client(
 #[derive(Debug, Component)]
 enum Frontend {
     Connecting {
-        recv_err: oneshot::Receiver<anyhow::Error>,
+        recv_err: oneshot::Receiver<ClientError>,
         recv_next: oneshot::Receiver<ToConnected>,
     },
     Finished,
@@ -141,56 +140,66 @@ struct ToConnected {
     recv_meta: mpsc::Receiver<SessionMeta>,
     recv_packet_b2f: mpsc::Receiver<Bytes>,
     send_packet_f2b: mpsc::UnboundedSender<Bytes>,
+    recv_dc: oneshot::Receiver<DisconnectReason<SessionError>>,
+    send_user_dc: oneshot::Sender<String>,
 }
 
-fn frontend(mut commands: Commands, mut query: Query<(Entity, &mut Frontend)>) {
+fn update_frontend(mut commands: Commands, mut query: Query<(Entity, &mut Frontend)>) {
     for (session, mut frontend) in &mut query {
         replace_with::replace_with_or_abort(&mut *frontend, |state| match state {
             Frontend::Connecting {
-                mut recv_err,
-                mut recv_next,
-            } => {
-                let err = match recv_err.try_recv() {
-                    Ok(None) => None,
-                    Ok(Some(err)) => Some(err),
-                    Err(_) => Some(ClientError::Session(SessionError::BackendClosed).into()),
-                };
-                if let Some(err) = err {
-                    commands.entity(session).despawn_recursive();
-                    // todo send event
-                    return Frontend::Finished;
-                }
-
-                match recv_next.try_recv() {
-                    Ok(None) | Err(_) => Frontend::Connecting {
-                        recv_err,
-                        recv_next,
-                    },
-                    Ok(Some(next)) => {
-                        commands.entity(session).insert((
-                            WebTransportIo {
-                                recv_err,
-                                recv_meta: next.recv_meta,
-                                recv_packet_b2f: next.recv_packet_b2f,
-                                send_packet_f2b: next.send_packet_f2b,
-                            },
-                            PacketBuffers::default(),
-                            PacketMtu(next.initial_mtu),
-                            SessionStats::default(),
-                            #[cfg(not(target_family = "wasm"))]
-                            LocalAddr(next.local_addr),
-                            #[cfg(not(target_family = "wasm"))]
-                            RemoteAddr(next.initial_remote_addr),
-                            #[cfg(not(target_family = "wasm"))]
-                            RawRtt(next.initial_rtt),
-                        ));
-                        Frontend::Finished
-                    }
-                }
-            }
+                recv_err,
+                recv_next,
+            } => update_connecting(&mut commands, session, recv_err, recv_next),
             Frontend::Finished => state,
         });
     }
+}
+
+fn update_connecting(
+    commands: &mut Commands,
+    session: Entity,
+    mut recv_err: oneshot::Receiver<anyhow::Error>,
+    mut recv_next: oneshot::Receiver<ToConnected>,
+) -> Frontend {
+    let err = match recv_err.try_recv() {
+        Ok(None) => None,
+        Ok(Some(err)) => Some(err),
+        Err(_) => Some(ClientError::Session(SessionError::BackendClosed).into()),
+    };
+    if let Some(err) = err {
+        commands.entity(session).despawn();
+        // todo send event
+        return Frontend::Finished;
+    }
+
+    let Ok(Some(next)) = recv_next.try_recv() else {
+        return Frontend::Connecting {
+            recv_err,
+            recv_next,
+        };
+    };
+
+    commands.entity(session).insert((
+        WebTransportIo {
+            recv_err,
+            recv_meta: next.recv_meta,
+            recv_packet_b2f: next.recv_packet_b2f,
+            send_packet_f2b: next.send_packet_f2b,
+            recv_dc: next.recv_dc,
+            send_user_dc: Some(next.send_user_dc),
+        },
+        PacketBuffers::default(),
+        PacketMtu(next.initial_mtu),
+        SessionStats::default(),
+        #[cfg(not(target_family = "wasm"))]
+        LocalAddr(next.local_addr),
+        #[cfg(not(target_family = "wasm"))]
+        RemoteAddr(next.initial_remote_addr),
+        #[cfg(not(target_family = "wasm"))]
+        RawRtt(next.initial_rtt),
+    ));
+    Frontend::Finished
 }
 
 async fn backend(
@@ -214,12 +223,13 @@ async fn backend(
     let initial_mtu = conn
         .max_datagram_size()
         .ok_or(SessionError::DatagramsNotSupported)?;
-    debug!(initial_mtu, "Connected");
+    debug!("Connected");
 
     let (send_meta, recv_meta) = mpsc::channel::<SessionMeta>(1);
-    let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
     let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<Bytes>(PACKET_BUF_CAP);
-
+    let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
+    let (send_dc_b2f, recv_dc_b2f) = oneshot::channel::<DisconnectReason>();
+    let (send_dc_f2b, recv_dc_f2b) = oneshot::channel::<String>();
     let next = ToConnected {
         #[cfg(not(target_family = "wasm"))]
         local_addr: endpoint.local_addr().map_err(SessionError::GetLocalAddr)?,
@@ -231,13 +241,17 @@ async fn backend(
         recv_meta,
         recv_packet_b2f,
         send_packet_f2b,
+        recv_dc: recv_dc_b2f,
+        send_user_dc: send_dc_f2b,
     };
     let backend = SessionBackend {
         runtime,
         conn,
         send_meta,
-        recv_packet_f2b,
         send_packet_b2f,
+        recv_packet_f2b,
+        send_dc: send_dc_b2f,
+        recv_user_dc: recv_dc_f2b,
     };
     send_next
         .send(next)
