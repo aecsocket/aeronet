@@ -8,8 +8,8 @@
 //! used to transmit their packets.
 //!
 //! The main types used at the IO layer are:
-//! - [`PacketBuffers`] - for sending and receiving packets
-//! - [`PacketMtu`] - for checking how large one of your sent packets may be
+//! - [`PacketBuffers`] for sending and receiving packets
+//! - [`PacketMtu`] for checking how large one of your sent packets may be
 //!
 //! # Packets
 //!
@@ -45,10 +45,14 @@
 //!         }
 //!
 //!         info!("Sending out OK along {session:?}");
-//!         packet_bufs.send.push(&b"OK"[..].into());
+//!         packet_bufs.send.push(b"OK"[..].into());
 //!     }
 //! }
 //! ```
+//!
+//! Sent packets must have a length smaller than or equal to [`PacketMtu`],
+//! otherwise the packet may be discarded, and a warning may be logged (this is
+//! up to the implementation).
 //!
 //! [session]: crate::session
 //! [transport layer]: crate::transport
@@ -99,8 +103,8 @@ pub struct PacketBuffers {
     /// Buffer of packets that will be drained and sent out to the IO layer
     /// during [`IoSet::Send`].
     ///
-    /// Each packet pushed into this buffer must be smaller than or equal to
-    /// [`PacketMtu`] in length, otherwise the packet may be discarded.
+    /// Each packet pushed into this buffer must have a length smaller than or
+    /// equal to [`PacketMtu`].
     #[reflect(ignore)]
     pub send: Vec<Bytes>,
 }
@@ -108,8 +112,7 @@ pub struct PacketBuffers {
 /// Maximum transmissible unit (packet length) of outgoing packets on a
 /// [session].
 ///
-/// Packets pushed into [`PacketBuffers::send`] must have a length smaller than
-/// or equal to this value.
+/// Sent packets must have a length smaller than or equal to this value.
 ///
 /// [session]: crate::session
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deref, Component, Reflect)]
