@@ -88,6 +88,10 @@ fn recv(
         let span = trace_span!("session", ?session);
         let _span = span.enter();
 
+        match io.recv_dc.get_mut().try_recv() {
+            Ok(reason) => {}
+        }
+
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
         for packet in io.recv_packet.try_iter() {

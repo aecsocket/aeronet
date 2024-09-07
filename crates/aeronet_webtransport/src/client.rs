@@ -35,10 +35,11 @@ cfg_if::cfg_if! {
 
         pub type ClientConfig = wtransport::ClientConfig;
         type ClientEndpoint = xwt_wtransport::Endpoint<endpoint_side::Client>;
-        type ConnectError = <ClientEndpoint as Connect>::Error;
-        type AwaitConnectError = <<ClientEndpoint as Connect>::Connecting as Connecting>::Error;
     }
 }
+
+type ConnectError = <ClientEndpoint as Connect>::Error;
+type AwaitConnectError = <<ClientEndpoint as Connect>::Connecting as Connecting>::Error;
 
 #[derive(Debug)]
 pub struct WebTransportClientPlugin;
