@@ -64,28 +64,31 @@ pub struct SessionPlugin;
 
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<SessionConnecting>()
-            .add_event::<SessionConnected>()
-            .add_event::<SessionDisconnected>()
-            .register_type::<DisconnectSession>();
+        app.register_type::<DisconnectSession>();
     }
 }
 
-/// A [session] has been spawned and is now connecting to its peer.
-///
-/// By the time this event is triggered, the session may have already been
-/// [connected] or [disconnected].
-// TODO is this a good design decision?
+/// Marker component for an [`Entity`] which is a [session].
 ///
 /// [session]: crate::session
-/// [connected]: SessionConnected
-/// [disconnected]: SessionDisconnected
-#[derive(Debug, Event)]
-pub struct SessionConnecting {
-    /// Session entity.
-    pub session: Entity,
-}
+#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
+#[reflect(Component)]
+pub struct Session;
 
+/// A [session] has been spawned and is now connecting to its peer.
+///
+/// To listen for this event, use an [`Observer`].
+///
+/// [session]: crate::session
+#[derive(Debug, Event)]
+pub struct SessionConnecting;
+
+/// A [session] has finalized the connection to its peer and will now send and
+/// receive packets.
+///
+/// To listen for this event, use an [`Observer`].
+///
+/// [session]: crate::session
 #[derive(Debug, Event)]
 pub struct SessionConnected {
     pub session: Entity,
@@ -93,11 +96,11 @@ pub struct SessionConnected {
 
 /// A [session] has lost connection to its peer and will be despawned.
 ///
+/// To listen for this event, use an [`Observer`].
+///
 /// [session]: crate::session
 #[derive(Debug, Event)]
 pub struct SessionDisconnected {
-    /// Session entity.
-    pub session: Entity,
     /// Why this session was disconnected from its peer.
     ///
     /// If you need access to the concrete error type, use
@@ -105,6 +108,7 @@ pub struct SessionDisconnected {
     pub reason: DisconnectReason<anyhow::Error>,
 }
 
+// todo how can we trigger a disconnect?
 #[derive(Debug, Clone, PartialEq, Eq, Event, Reflect)]
 #[reflect(Component)]
 pub struct DisconnectSession {

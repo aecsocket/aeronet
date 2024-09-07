@@ -9,9 +9,9 @@
 //! responsibility of the transport layer.
 //!
 //! The main types used at the IO layer are:
-//! - [`MessageBuffers`] - for sending and receiving messages, and receiving
+//! - [`MessageBuffers`] for sending and receiving messages, and receiving
 //!   acknowledgements
-//! - [`MessageMtu`] - for checking how large one of your sent messages may be
+//! - [`MessageMtu`] for checking how large one of your sent messages may be
 //!
 //! # Messages
 //!
@@ -19,21 +19,51 @@
 //! similar to a packet. However, a transport provides features and guarantees
 //! for sending and receiving messages which the IO layer does not provide.
 //! Notably, messages provide the following:
-//! - fragmentation - large messages will be split up into smaller fragments so
+//! - fragmentation: large messages will be split up into smaller fragments so
 //!   that they may fit into a packet, which will be reassembled back into a
 //!   single message by the peer
-//! - reliability - messages that are sent are guaranteed to be received by the
+//! - reliability: messages that are sent are guaranteed to be received by the
 //!   peer eventually - see [`SendMode`]
-//! - ordering - messages will be received in the order that they were sent by
+//! - ordering: messages will be received in the order that they were sent by
 //!   the peer - see [`SendMode`]
-//! - acknowledgements - you can be notified when the peer confirms that it has
+//! - acknowledgements: you can be notified when the peer confirms that it has
 //!   received one of your sent messages - see [`MessageKey`]
 //!
 //! # Sending and receiving
 //!
 //! TODO how does this work with message keys?
 //!
+//! ```
+//! use bevy::prelude::*;
+//! use aeronet::transport::MessageBuffers;
+//!
+//! fn print_all_messages(
+//!     mut sessions: Query<(Entity, &mut MessageBuffers)>,
+//! ) {
+//!     for (session, mut msg_bufs) in &mut sessions {
+//!         for msg in msg_bufs.recv.drain(..) {
+//!             info!("Received message from {session:?}: {msg:?}");
+//!         }
+//!
+//!         for msg_key in msg_bufs.acks.drain(..) {
+//!             info!("Received ack from {session:?} for message {msg_key:?}");
+//!         }
+//!
+//!         info!("Sending out OK along {session:?}");
+//!         msg_bufs.send.push(b"OK"[..].into());
+//!     }
+//! }
+//! ```
+//!
+//! Sent messages must have a length smaller than or equal to [`MessageMtu`],
+//! otherwise:
+//! - if the message is sent [reliably], the session must be disconnected, as
+//!   the reliabiliy guarantee has been broken
+//! - if the message is not sent [reliably], it may be discarded, and a warning
+//!   may be logged (this is up to the implementation)
+//!
 //! [IO layer]: crate::io
+//! [reliably]: crate::message::SendReliability::Reliable
 
 use bevy_app::prelude::*;
 use bevy_derive::Deref;
@@ -58,15 +88,22 @@ impl Plugin for TransportPlugin {
     }
 }
 
+/// Set for scheduling [transport layer] systems.
+///
+/// [transport layer]: crate::transport
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum TransportSet {
     /// Decoding packets received from the IO layer into messages, draining
     /// [`PacketBuffers::recv`] and filling up [`MessageBuffers::recv`].
     ///
+    /// By default, this happens after [`IoSet::Recv`].
+    ///
     /// [`PacketBuffers::recv`]: crate::io::PacketBuffers::recv
     Recv,
     /// Encoding messages into packets, draining [`MessageBuffers::send`] and
     /// filling up [`PacketBuffers::send`].
+    ///
+    /// By default, this happens before [`IoSet::Send`].
     ///
     /// [`PacketBuffers::send`]: crate::io::PacketBuffers::send
     Send,
@@ -99,8 +136,8 @@ pub struct MessageBuffers {
     /// any messages that you send.
     /// If you want to get the [`MessageKey`], !!! TODO how? !!!
     ///
-    /// Each packet pushed into this buffer must be smaller than or equal to
-    /// [`MessageMtu`] in length, otherwise the packet may be discarded.
+    /// Each message pushed into this buffer must have a length smaller than or
+    /// equal to [`MessageMtu`].
     #[reflect(ignore)]
     pub send: Vec<(SendMode, Bytes)>,
     /// Buffer of message acknowledgements received from the peer during
@@ -114,8 +151,7 @@ pub struct MessageBuffers {
 /// Maximum transmissible unit (message length) of outgoing messages on a
 /// [session].
 ///
-/// Messages pushed into [`MessageBuffers::send`] must have a length smaller
-/// than or equal to this value.
+/// Sent messages must have a length smaller than or equal to this value.
 ///
 /// [session]: crate::session
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deref, Component, Reflect)]
