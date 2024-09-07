@@ -1,4 +1,4 @@
-//! Core logic for sessions.
+//! Core items for sessions and session connections.
 //!
 //! # Session
 //!
@@ -32,6 +32,26 @@
 //! [IO layer]: crate::io
 //! [`SendMode`]: crate::message::SendMode
 //! [transport layer]: crate::transport
+//!
+//! # Lifecycle
+//!
+//! Your IO layer implementation of choice (i.e. [`aeronet_channel`],
+//! [`aeronet_webtransport`]) is responsible for spawning and despawning
+//! sessions. See the implementation's documentation on how to configure and
+//! spawn a session.
+//!
+//! Once a session has been spawned, [`SessionConnecting`] is emitted. The
+//! session may not be ready for transmitting packets immediately, and may go
+//! through a connection process. If this is successful, [`SessionConnected`]
+//! is emitted and the session is initialized with components for data transport
+//! such as [`PacketBuffers`]. If the session fails to connect, or is
+//! disconnected after establishing a successful connection,
+//! [`SessionDisconnected`] is emitted, and the session is despawned on the
+//! update afterwards.
+//!
+//! [`aeronet_channel`]: https://docs.rs/aeronet_channel
+//! [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport
+//! [`PacketBuffers`]: crate::io::PacketBuffers
 
 use std::fmt::Debug;
 
@@ -44,10 +64,26 @@ pub struct SessionPlugin;
 
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<SessionConnected>()
+        app.add_event::<SessionConnecting>()
+            .add_event::<SessionConnected>()
             .add_event::<SessionDisconnected>()
             .register_type::<DisconnectSession>();
     }
+}
+
+/// A [session] has been spawned and is now connecting to its peer.
+///
+/// By the time this event is triggered, the session may have already been
+/// [connected] or [disconnected].
+// TODO is this a good design decision?
+///
+/// [session]: crate::session
+/// [connected]: SessionConnected
+/// [disconnected]: SessionDisconnected
+#[derive(Debug, Event)]
+pub struct SessionConnecting {
+    /// Session entity.
+    pub session: Entity,
 }
 
 #[derive(Debug, Event)]
@@ -55,9 +91,17 @@ pub struct SessionConnected {
     pub session: Entity,
 }
 
+/// A [session] has lost connection to its peer and will be despawned.
+///
+/// [session]: crate::session
 #[derive(Debug, Event)]
 pub struct SessionDisconnected {
+    /// Session entity.
     pub session: Entity,
+    /// Why this session was disconnected from its peer.
+    ///
+    /// If you need access to the concrete error type, use
+    /// [`anyhow::Error::downcast_ref`].
     pub reason: DisconnectReason<anyhow::Error>,
 }
 
@@ -70,7 +114,9 @@ pub struct DisconnectSession {
     pub reason: String,
 }
 
-/// Why a session was disconnected from its peer.
+/// Why a [session] was disconnected from its peer.
+///
+/// [session]: crate::session
 #[derive(Debug)]
 pub enum DisconnectReason<E> {
     /// Session was disconnected by the user on our side, with a provided
@@ -95,10 +141,14 @@ pub enum DisconnectReason<E> {
     /// - the peer pretending like there are network errors to discreetly
     ///   force us to disconnect
     /// - ..and more
+    ///
+    /// [reliably]: crate::message::SendReliability::Reliable
     Error(E),
 }
 
 impl<E> DisconnectReason<E> {
+    /// Maps a [`DisconnectReason<E>`] to a [`DisconnectReason<F>`] by mapping
+    /// the [`DisconnectReason::Error`] variant.
     pub fn map_err<F>(self, f: impl FnOnce(E) -> F) -> DisconnectReason<F> {
         match self {
             Self::User(reason) => DisconnectReason::User(reason),

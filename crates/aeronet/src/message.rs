@@ -52,7 +52,8 @@ pub enum SendOrdering {
     /// as it is older than the latest received message (B). Duplicates will not
     /// be received.
     Sequenced,
-    /// Messages will be received in the order they are sent, with no gaps.
+    /// Messages will be received in the order they are sent, and all messages
+    /// are guaranteed to be delivered.
     Ordered,
 }
 
@@ -77,11 +78,13 @@ pub struct Seq(#[data_size(skip)] Wrapping<u16>);
 impl Seq {
     pub const ZERO: Seq = Seq::from_raw(0);
 
+    /// Creates a [`Seq`] from a raw sequence number.
     #[must_use]
     pub const fn from_raw(raw: u16) -> Self {
         Self(Wrapping(raw))
     }
 
+    /// Gets the raw sequence number.
     #[must_use]
     pub const fn into_raw(self) -> u16 {
         self.0 .0
@@ -125,5 +128,7 @@ impl PartialOrd for Seq {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect, Arbitrary, DataSize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Reflect, Arbitrary, DataSize,
+)]
 pub struct MessageKey(pub Seq);
