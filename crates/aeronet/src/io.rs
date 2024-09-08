@@ -65,6 +65,7 @@ use bevy_derive::Deref;
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
 use bytes::Bytes;
+use derive_more::{Add, AddAssign, Sub, SubAssign};
 use ringbuf::HeapRb;
 
 use crate::session::Session;
@@ -77,7 +78,7 @@ impl Plugin for IoPlugin {
         app.configure_sets(PreUpdate, IoSet::Poll)
             .configure_sets(PostUpdate, IoSet::Flush)
             .register_type::<PacketMtu>()
-            .register_type::<PacketStats>()
+            .register_type::<IoStats>()
             .observe(connecting);
     }
 }
@@ -164,13 +165,15 @@ impl Default for PacketBuffers {
 #[reflect(Component)]
 pub struct PacketMtu(pub usize);
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Component, Reflect)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Component, Reflect, Add, AddAssign, Sub, SubAssign,
+)]
 #[reflect(Component)]
-pub struct PacketStats {
-    pub packets_in: Saturating<usize>,
-    pub packets_out: Saturating<usize>,
-    pub bytes_in: Saturating<usize>,
-    pub bytes_out: Saturating<usize>,
+pub struct IoStats {
+    pub packets_recv: Saturating<usize>,
+    pub packets_sent: Saturating<usize>,
+    pub bytes_recv: Saturating<usize>,
+    pub bytes_sent: Saturating<usize>,
 }
 
 // TODO: required component on Session

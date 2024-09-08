@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/aeronet", "crates/aeronet_webtransport"]
+members = ["crates/aeronet"]
 resolver = "2"
 
 [workspace.package]
@@ -13,7 +13,7 @@ rust-version = "1.80.0"
 version = "0.9.0-dev"
 
 [workspace.lints.rust]
-# missing_docs = "warn"
+missing_docs = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
