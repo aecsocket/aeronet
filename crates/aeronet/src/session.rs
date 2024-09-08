@@ -53,18 +53,29 @@
 //! [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport
 //! [`PacketBuffers`]: crate::io::PacketBuffers
 
-use std::fmt::Debug;
+use std::{any::type_name, fmt::Debug};
 
 use bevy_app::prelude::*;
+use bevy_core::Name;
+use bevy_derive::Deref;
 use bevy_ecs::prelude::*;
+use bevy_hierarchy::DespawnRecursiveExt;
 use bevy_reflect::prelude::*;
+use tracing::{error, info, warn};
+
+use crate::util::display_name;
 
 #[derive(Debug)]
 pub struct SessionPlugin;
 
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<DisconnectSession>();
+        app.register_type::<Session>()
+            .register_type::<Connected>()
+            .observe(connecting)
+            .observe(connected)
+            .observe(disconnect)
+            .observe(on_disconnected);
     }
 }
 
@@ -75,53 +86,23 @@ impl Plugin for SessionPlugin {
 #[reflect(Component)]
 pub struct Session;
 
-/// A [session] has been spawned and is now connecting to its peer.
-///
-/// To listen for this event, use an [`Observer`].
-///
-/// [session]: crate::session
-#[derive(Debug, Event)]
-pub struct SessionConnecting;
-
-/// A [session] has finalized the connection to its peer and will now send and
-/// receive packets.
-///
-/// To listen for this event, use an [`Observer`].
-///
-/// [session]: crate::session
-#[derive(Debug, Event)]
-pub struct SessionConnected {
-    pub session: Entity,
-}
-
-/// A [session] has lost connection to its peer and will be despawned.
-///
-/// To listen for this event, use an [`Observer`].
-///
-/// [session]: crate::session
-#[derive(Debug, Event)]
-pub struct SessionDisconnected {
-    /// Why this session was disconnected from its peer.
-    ///
-    /// If you need access to the concrete error type, use
-    /// [`anyhow::Error::downcast_ref`].
-    pub reason: DisconnectReason<anyhow::Error>,
-}
-
-// todo how can we trigger a disconnect?
-#[derive(Debug, Clone, PartialEq, Eq, Event, Reflect)]
+#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
-pub struct DisconnectSession {
-    /// User-specified message on why this session should be disconnected.
-    ///
-    /// This will be available in the [`DisconnectReason`].
-    pub reason: String,
-}
+pub struct Connected;
+
+#[derive(Debug, Deref, Component)]
+#[component(storage = "SparseSet")]
+pub struct Disconnected(pub DisconnectReason<anyhow::Error>);
+
+#[derive(Debug, Clone, PartialEq, Eq, Component, Reflect)]
+#[reflect(Component)]
+#[component(storage = "SparseSet")]
+pub struct Disconnect(pub String);
 
 /// Why a [session] was disconnected from its peer.
 ///
 /// [session]: crate::session
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DisconnectReason<E> {
     /// Session was disconnected by the user on our side, with a provided
     /// reason.
@@ -169,3 +150,93 @@ impl<E> From<E> for DisconnectReason<E> {
 }
 
 pub const DROP_DISCONNECT_REASON: &str = "dropped";
+
+pub trait DisconnectSessionExt {
+    fn disconnect_session(&mut self, session: Entity, reason: impl Into<String>);
+}
+
+impl DisconnectSessionExt for Commands<'_, '_> {
+    fn disconnect_session(&mut self, session: Entity, reason: impl Into<String>) {
+        self.entity(session).insert(Disconnect(reason.into()));
+    }
+}
+
+fn connecting(trigger: Trigger<OnAdd, Session>, names: Query<Option<&Name>>) {
+    let session = trigger.entity();
+    let name = names
+        .get(session)
+        .expect("`session` should exist because we are adding a component to it");
+
+    let display_name = display_name(session, name);
+    info!("Session {display_name} connecting");
+}
+
+fn connected(
+    trigger: Trigger<OnAdd, Connected>,
+    names: Query<Option<&Name>>,
+    with_session: Query<(), With<Session>>,
+) {
+    let session = trigger.entity();
+    let name = names
+        .get(session)
+        .expect("`session` should exist because we are adding a component to it");
+
+    let display_name = display_name(session, name);
+    info!("Session {display_name} connected");
+
+    if with_session.get(session).is_err() {
+        error!(
+            "Session {display_name} does not have `{}`",
+            type_name::<Session>()
+        );
+    }
+}
+
+fn disconnect(
+    trigger: Trigger<OnAdd, Disconnect>,
+    disconnects: Query<&Disconnect>,
+    mut commands: Commands,
+) {
+    let session = trigger.entity();
+    let Disconnect(reason) = disconnects
+        .get(session)
+        .expect("`session` should exist because we are adding a component to it");
+
+    commands
+        .entity(session)
+        .insert(Disconnected(DisconnectReason::User(reason.clone())));
+}
+
+fn on_disconnected(
+    trigger: Trigger<OnAdd, Disconnected>,
+    names: Query<(&Disconnected, Option<&Name>)>,
+    with_session: Query<(), With<Session>>,
+    mut commands: Commands,
+) {
+    let session = trigger.entity();
+    let (Disconnected(dc_reason), name) = names
+        .get(session)
+        .expect("`session` should exist because we are adding a component to it");
+
+    let display_name = display_name(session, name);
+    match dc_reason {
+        DisconnectReason::User(reason) => {
+            info!("Session {display_name} disconnected by user: {reason}");
+        }
+        DisconnectReason::Peer(reason) => {
+            info!("Session {display_name} disconnected by peer: {reason}");
+        }
+        DisconnectReason::Error(err) => {
+            warn!("Session {display_name} disconnected due to error: {err:#}");
+        }
+    }
+
+    if with_session.get(session).is_err() {
+        error!(
+            "Session {display_name} does not have `{}`",
+            type_name::<Session>(),
+        );
+    }
+
+    commands.entity(session).despawn_recursive();
+}

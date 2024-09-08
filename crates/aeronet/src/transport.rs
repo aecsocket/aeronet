@@ -65,6 +65,8 @@
 //! [IO layer]: crate::io
 //! [reliably]: crate::message::SendReliability::Reliable
 
+use std::num::Saturating;
+
 use bevy_app::prelude::*;
 use bevy_derive::Deref;
 use bevy_ecs::prelude::*;
@@ -81,10 +83,11 @@ pub struct TransportPlugin;
 
 impl Plugin for TransportPlugin {
     fn build(&self, app: &mut App) {
-        app.configure_sets(PreUpdate, TransportSet::Recv.after(IoSet::Recv))
-            .configure_sets(PostUpdate, TransportSet::Send.before(IoSet::Send))
+        app.configure_sets(PreUpdate, TransportSet::Poll.after(IoSet::Poll))
+            .configure_sets(PostUpdate, TransportSet::Flush.before(IoSet::Flush))
             .register_type::<MessageBuffers>()
-            .register_type::<MessageMtu>();
+            .register_type::<MessageMtu>()
+            .register_type::<MessageStats>();
     }
 }
 
@@ -93,20 +96,15 @@ impl Plugin for TransportPlugin {
 /// [transport layer]: crate::transport
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum TransportSet {
-    /// Decoding packets received from the IO layer into messages, draining
-    /// [`PacketBuffers::recv`] and filling up [`MessageBuffers::recv`].
+    /// Reading packets from the IO layer and converting them into messages.
     ///
-    /// By default, this happens after [`IoSet::Recv`].
+    /// By default, this happens after [`IoSet::Poll`].
+    Poll,
+    /// Converting buffered messages into packets and sending them to the IO
+    /// layer.
     ///
-    /// [`PacketBuffers::recv`]: crate::io::PacketBuffers::recv
-    Recv,
-    /// Encoding messages into packets, draining [`MessageBuffers::send`] and
-    /// filling up [`PacketBuffers::send`].
-    ///
-    /// By default, this happens before [`IoSet::Send`].
-    ///
-    /// [`PacketBuffers::send`]: crate::io::PacketBuffers::send
-    Send,
+    /// By default, this happens before [`IoSet::Flush`].
+    Flush,
 }
 
 /// Buffers for incoming and outgoing messages on a [session], and incoming
@@ -157,3 +155,11 @@ pub struct MessageBuffers {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deref, Component, Reflect)]
 #[reflect(Component)]
 pub struct MessageMtu(pub usize);
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Component, Reflect)]
+#[reflect(Component)]
+pub struct MessageStats {
+    pub msgs_in: Saturating<usize>,
+    pub msgs_out: Saturating<usize>,
+    pub acks_in: Saturating<usize>,
+}
