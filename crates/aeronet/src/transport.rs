@@ -72,6 +72,7 @@ use bevy_derive::Deref;
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
 use bytes::Bytes;
+use derive_more::{Add, AddAssign, Sub, SubAssign};
 
 use crate::{
     io::IoSet,
@@ -87,7 +88,7 @@ impl Plugin for TransportPlugin {
             .configure_sets(PostUpdate, TransportSet::Flush.before(IoSet::Flush))
             .register_type::<MessageBuffers>()
             .register_type::<MessageMtu>()
-            .register_type::<MessageStats>();
+            .register_type::<TransportStats>();
     }
 }
 
@@ -156,10 +157,12 @@ pub struct MessageBuffers {
 #[reflect(Component)]
 pub struct MessageMtu(pub usize);
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Component, Reflect)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Component, Reflect, Add, AddAssign, Sub, SubAssign,
+)]
 #[reflect(Component)]
-pub struct MessageStats {
-    pub msgs_in: Saturating<usize>,
-    pub msgs_out: Saturating<usize>,
-    pub acks_in: Saturating<usize>,
+pub struct TransportStats {
+    pub msgs_recv: Saturating<usize>,
+    pub msgs_sent: Saturating<usize>,
+    pub acks_recv: Saturating<usize>,
 }

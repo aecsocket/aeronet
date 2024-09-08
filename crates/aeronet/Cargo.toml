@@ -21,18 +21,32 @@ all-features = true
 client = []
 server = []
 
+visualizer = [
+  "dep:bevy_egui",
+  "dep:egui_plot",
+  "dep:itertools",
+  "dep:size_format",
+]
+
 [dependencies]
 anyhow = { workspace = true }
 arbitrary = { workspace = true }
 bytes = { workspace = true }
 datasize = { workspace = true }
 derive_more = { workspace = true }
-tracing = { workspace = true }
 ringbuf = { workspace = true }
+tracing = { workspace = true }
+web-time = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_core = { workspace = true }
 bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true }
-bevy_reflect = { workspace = true }
 bevy_hierarchy = { workspace = true }
+bevy_reflect = { workspace = true }
+bevy_time = { workspace = true }
+
+bevy_egui = { workspace = true, optional = true }
+egui_plot = { workspace = true, optional = true }
+itertools = { workspace = true, optional = true }
+size_format = { workspace = true, optional = true }

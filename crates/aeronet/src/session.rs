@@ -62,8 +62,9 @@ use bevy_ecs::prelude::*;
 use bevy_hierarchy::DespawnRecursiveExt;
 use bevy_reflect::prelude::*;
 use tracing::{error, info, warn};
+use web_time::Instant;
 
-use crate::util::display_name;
+use crate::{stats::ConnectedAt, util::display_name};
 
 #[derive(Debug)]
 pub struct SessionPlugin;
@@ -173,6 +174,7 @@ fn connecting(trigger: Trigger<OnAdd, Session>, names: Query<Option<&Name>>) {
 
 fn connected(
     trigger: Trigger<OnAdd, Connected>,
+    mut commands: Commands,
     names: Query<Option<&Name>>,
     with_session: Query<(), With<Session>>,
 ) {
@@ -183,6 +185,8 @@ fn connected(
 
     let display_name = display_name(session, name);
     info!("Session {display_name} connected");
+
+    commands.entity(session).insert(ConnectedAt(Instant::now()));
 
     if with_session.get(session).is_err() {
         error!(

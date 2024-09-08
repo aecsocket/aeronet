@@ -9,3 +9,5 @@ pub mod session;
 pub mod stats;
 pub mod transport;
 mod util;
+#[cfg(feature = "visualizer")]
+pub mod visualizer;
