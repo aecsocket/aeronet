@@ -6,6 +6,32 @@ use {
     xwt_core::utils::maybe,
 };
 
+/// Provides a platform-agnostic way to spawn futures for driving the
+/// WebTransport IO layer.
+///
+/// Using WebTransport sessions requires spawning tasks on an async runtime.
+/// However, which runtime to use exactly, and how that runtime is provided, is
+/// target-dependent. This resource exists to provide a platform-agnostic way of
+/// spawning these tasks.
+///
+/// # Platforms
+///
+/// ## Native
+///
+/// On a native target, this holds a handle to a `tokio` runtime, because
+/// `wtransport` currently only supports this async runtime. The [`Default`]
+/// impl will create and leak a new `tokio` runtime, and store a handle to this
+/// leaked runtime.
+///
+/// If you already have a runtime handle, you can use
+/// `WebTransportRuntime::from(handle)` to create a runtime from that handle.
+///
+/// ## WASM
+///
+/// On a WASM target, this uses `wasm-bindgen-futures` to spawn the future via
+/// `wasm-bindgen`.
+///
+/// Use the [`Default`] impl to create a new [`WebTransportRuntime`] on WASM.
 #[derive(Debug, Clone, Resource)]
 pub struct WebTransportRuntime {
     #[cfg(target_family = "wasm")]
@@ -44,16 +70,6 @@ impl From<tokio::runtime::Handle> for WebTransportRuntime {
 }
 
 impl WebTransportRuntime {
-    /// Gets a handle to the underlying [`tokio`] runtime.
-    ///
-    /// This function only exists on platforms which use [`tokio`] as their
-    /// underlying runtime (i.e. not on WASM).
-    #[cfg(not(target_family = "wasm"))]
-    #[must_use]
-    pub fn handle(&self) -> tokio::runtime::Handle {
-        self.handle.clone()
-    }
-
     /// Spawns a future on the task runtime.
     pub fn spawn<F>(&self, future: F)
     where

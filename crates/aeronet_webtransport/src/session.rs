@@ -64,8 +64,6 @@ pub enum SessionError {
 #[reflect(Component)]
 pub struct RawRtt(pub Duration);
 
-pub(crate) const PACKET_BUF_CAP: usize = 16;
-
 #[derive(Debug, Component)]
 pub(crate) struct WebTransportIo {
     pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,

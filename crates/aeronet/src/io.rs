@@ -35,17 +35,18 @@
 //! ```
 //! use bevy::prelude::*;
 //! use aeronet::io::PacketBuffers;
+//! use aeronet::ringbuf::traits::{Consumer, Producer};
 //!
 //! fn print_all_packets(
 //!     mut sessions: Query<(Entity, &mut PacketBuffers)>,
 //! ) {
 //!     for (session, mut packet_bufs) in &mut sessions {
-//!         for packet in packet_bufs.recv.drain(..) {
+//!         for packet in packet_bufs.recv.pop_iter() {
 //!             info!("Received packet from {session:?}: {packet:?}");
 //!         }
 //!
 //!         info!("Sending out OK along {session:?}");
-//!         packet_bufs.send.push(b"OK"[..].into());
+//!         packet_bufs.send.push_overwrite(b"OK"[..].into());
 //!     }
 //! }
 //! ```
@@ -57,56 +58,98 @@
 //! [session]: crate::session
 //! [transport layer]: crate::transport
 
+use std::num::Saturating;
+
 use bevy_app::prelude::*;
 use bevy_derive::Deref;
 use bevy_ecs::prelude::*;
 use bevy_reflect::prelude::*;
 use bytes::Bytes;
+use ringbuf::HeapRb;
+
+use crate::session::Session;
 
 #[derive(Debug)]
 pub struct IoPlugin;
 
 impl Plugin for IoPlugin {
     fn build(&self, app: &mut App) {
-        app.configure_sets(PreUpdate, IoSet::Recv)
-            .configure_sets(PostUpdate, IoSet::Send)
-            .register_type::<PacketBuffers>()
-            .register_type::<PacketMtu>();
+        app.configure_sets(PreUpdate, IoSet::Poll)
+            .configure_sets(PostUpdate, IoSet::Flush)
+            .register_type::<PacketMtu>()
+            .register_type::<PacketStats>()
+            .observe(connecting);
     }
 }
 
+/// Set for scheduling [IO layer] systems.
+///
+/// [IO layer]: crate::io
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum IoSet {
-    /// Receiving packets from the IO layer, filling up [`PacketBuffers::recv`].
-    Recv,
-    /// Sending packets to the IO layer, draining [`PacketBuffers::send`].
-    Send,
+    /// Progressing the connection, handling disconnects, and receiving packets
+    /// from the IO layer.
+    Poll,
+    /// Sending buffered packets out over the IO layer.
+    Flush,
 }
 
 /// Buffers for incoming and outgoing packets on a [session].
 ///
-/// See the [IO layer].
+/// See the [IO layer] on info for how sending and receiving packets is handled.
+///
+/// Internally, the buffers are implemented as ring buffers from the [`ringbuf`]
+/// crate. This is used instead of a [`Vec`] or other dynamically resizable
+/// collection type to avoid unbounded growth, and to avoid allocations in
+/// hot-path IO layer code. However, this means that if you do not consume
+/// packets from [`PacketBuffers::recv`] often enough using [`pop_iter`], or
+/// buffer too many packets into [`PacketBuffers::send`], then you will lose
+/// some packets.
+///
+/// You can think of the capacity of each buffer in this struct as an upper
+/// bound on how many packets we can send and receive per [`Update`]. However,
+/// the actual capacity is chosen effectively arbitrarily, since we have no
+/// hints on how many packets we will be sending/receiving. It's better to
+/// overestimate the capacity and allocate some extra memory which is never used
+/// rather than to underestimate and drop some packets.
 ///
 /// [session]: crate::session
 /// [IO layer]: crate::io
-#[derive(Debug, Clone, Default, Component, Reflect)]
-#[reflect(Component)]
+/// [`pop_iter`]: ringbuf::traits::Consumer::pop_iter
+#[derive(Component)]
 pub struct PacketBuffers {
     /// Buffer of packets received from the IO layer during [`IoSet::Recv`].
     ///
-    /// If this buffer is not drained regularly, it will grow unbounded.
-    ///
     /// Each packet in this buffer may be of arbitrary size - it may be 0 bytes
     /// or larger than the [`PacketMtu`] on this session.
-    #[reflect(ignore)]
-    pub recv: Vec<Bytes>,
+    pub recv: HeapRb<Bytes>,
     /// Buffer of packets that will be drained and sent out to the IO layer
     /// during [`IoSet::Send`].
     ///
     /// Each packet pushed into this buffer must have a length smaller than or
     /// equal to [`PacketMtu`].
-    #[reflect(ignore)]
-    pub send: Vec<Bytes>,
+    pub send: HeapRb<Bytes>,
+}
+
+impl PacketBuffers {
+    /// Creates a new set of buffers with the same capacity for both receive
+    /// and send buffers.
+    #[must_use]
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            recv: HeapRb::new(capacity),
+            send: HeapRb::new(capacity),
+        }
+    }
+}
+
+/// Default capacity for the size of the buffers in [`PacketBuffers`].
+pub const PACKET_BUF_CAP: usize = 64;
+
+impl Default for PacketBuffers {
+    fn default() -> Self {
+        Self::new(PACKET_BUF_CAP)
+    }
 }
 
 /// Maximum transmissible unit (packet length) of outgoing packets on a
@@ -114,7 +157,28 @@ pub struct PacketBuffers {
 ///
 /// Sent packets must have a length smaller than or equal to this value.
 ///
+/// This component must only be mutated by the IO layer.
+///
 /// [session]: crate::session
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deref, Component, Reflect)]
 #[reflect(Component)]
 pub struct PacketMtu(pub usize);
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Component, Reflect)]
+#[reflect(Component)]
+pub struct PacketStats {
+    pub packets_in: Saturating<usize>,
+    pub packets_out: Saturating<usize>,
+    pub bytes_in: Saturating<usize>,
+    pub bytes_out: Saturating<usize>,
+}
+
+// TODO: required component on Session
+fn connecting(trigger: Trigger<OnAdd, Session>, mut commands: Commands) {
+    let session = trigger.entity();
+    commands.entity(session).add(|mut entity: EntityWorldMut| {
+        if !entity.contains::<PacketBuffers>() {
+            entity.insert(PacketBuffers::default());
+        }
+    });
+}
