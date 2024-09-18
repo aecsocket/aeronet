@@ -1,10 +1,10 @@
 use aeronet::{
     io::PacketBuffers,
-    session::{Connected, DisconnectReason, DisconnectSessionExt, Disconnected, Session},
+    session::{Connected, DisconnectReason, DisconnectSessionsExt, Disconnected, Session},
+    AeronetPlugins,
 };
 use aeronet_channel::{ChannelIo, ChannelIoPlugin};
 use bevy::{log::LogPlugin, prelude::*};
-use ringbuf::traits::{Consumer, RingBuffer};
 
 fn app() -> App {
     let mut app = App::new();
@@ -13,6 +13,7 @@ fn app() -> App {
             level: tracing::Level::TRACE,
             ..Default::default()
         },
+        AeronetPlugins,
         ChannelIoPlugin,
     ));
     app
@@ -21,7 +22,7 @@ fn app() -> App {
 fn setup() -> (App, Entity, Entity) {
     let mut app = app();
     let world = app.world_mut();
-    let (io_a, io_b) = ChannelIo::new();
+    let (io_a, io_b) = ChannelIo::open();
     let a = world.spawn((Name::new("Session A"), io_a)).id();
     let b = world.spawn((Name::new("Session B"), io_b)).id();
     app.update();
@@ -49,7 +50,7 @@ fn events_connect() {
     );
 
     let world = app.world_mut();
-    let (io_a, io_b) = ChannelIo::new();
+    let (io_a, io_b) = ChannelIo::open();
     let a = world.spawn(io_a).id();
     let b = world.spawn(io_b).id();
     app.update();
@@ -66,23 +67,23 @@ fn transport() {
     let (mut app, a, b) = setup();
 
     let mut packet_bufs = app.world_mut().get_mut::<PacketBuffers>(a).unwrap();
-    packet_bufs.send.push_overwrite(MSG1.into());
+    packet_bufs.push_send(MSG1.into());
     app.update(); // B receives nothing, A flushes
     app.update(); // B receives packet
 
     let mut packet_bufs = app.world_mut().get_mut::<PacketBuffers>(b).unwrap();
     {
-        let mut recv = packet_bufs.recv.pop_iter();
+        let mut recv = packet_bufs.drain_recv();
         assert_eq!(MSG1, recv.next().unwrap());
         assert!(recv.next().is_none());
     }
-    packet_bufs.send.push_overwrite(MSG2.into());
+    packet_bufs.push_send(MSG2.into());
     app.update(); // A receives nothing, B flushes
     app.update(); // A receives packet
 
     let mut packet_bufs = app.world_mut().get_mut::<PacketBuffers>(a).unwrap();
     {
-        let mut recv = packet_bufs.recv.pop_iter();
+        let mut recv = packet_bufs.drain_recv();
         assert_eq!(MSG2, recv.next().unwrap());
         assert!(recv.next().is_none());
     }
@@ -112,7 +113,7 @@ fn events_disconnect() {
         },
     );
 
-    app.world_mut().commands().disconnect_session(a, DC_REASON);
+    app.world_mut().commands().disconnect_sessions(DC_REASON, a);
     app.update();
 
     assert_eq!(

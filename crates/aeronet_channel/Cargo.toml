@@ -17,15 +17,15 @@ workspace = true
 all-features = true
 
 [dependencies]
-aeronet = { workspace = true, features = ["client", "server"] }
+aeronet = { workspace = true }
 
 bytes = { workspace = true }
 flume = { workspace = true }
 oneshot = { workspace = true }
+ringbuf = { workspace = true }
 sync_wrapper = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-ringbuf = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_derive = { workspace = true }
@@ -34,10 +34,6 @@ bevy_reflect = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+
 bevy = { workspace = true }
 bevy_egui = { workspace = true }
-
-[[example]]
-name = "echo"
-path = "examples/echo.rs"
-required-features = ["bevy"]
