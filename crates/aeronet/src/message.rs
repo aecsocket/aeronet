@@ -19,6 +19,8 @@ pub enum SendMode {
 }
 
 impl SendMode {
+    /// Gets the reliability of this send mode.
+    #[must_use]
     pub const fn reliability(&self) -> SendReliability {
         match self {
             Self::UnreliableUnordered | Self::UnreliableSequenced => SendReliability::Unreliable,
@@ -36,25 +38,6 @@ pub enum SendReliability {
     Unreliable,
     /// Messages are guaranteed to be delivered.
     Reliable,
-}
-
-/// Ordering of a [`SendMode`].
-///
-/// See [`SendMode`] for more info on ordering.
-pub enum SendOrdering {
-    /// Messages have no guarantees on ordering, and duplicates may be received.
-    Unordered,
-    /// Messages will be received in the order they are sent, however if a
-    /// message is received out of order, it will be discarded.
-    ///
-    /// For example, if messages A and B are sent in that order, and the
-    /// receiver receives B then A, B will be received and A will be discarded
-    /// as it is older than the latest received message (B). Duplicates will not
-    /// be received.
-    Sequenced,
-    /// Messages will be received in the order they are sent, and all messages
-    /// are guaranteed to be delivered.
-    Ordered,
 }
 
 #[derive(
@@ -96,14 +79,15 @@ impl Ord for Seq {
     /// of sequence numbers, treating e.g. `0 cmp 1` as [`Less`] (as expected),
     /// but `0 cmp 65535` as [`Greater`].
     ///
-    /// See <https://gafferongames.com/post/reliability_ordering_and_congestion_avoidance_over_udp/>,
-    /// *Handling Sequence Number Wrap-Around*.
+    /// See [*Gaffer On Games*].
     ///
     /// If the two values compared have a real difference equal to or larger
     /// than `u16::MAX / 2`, no guarantees are upheld.
     ///
     /// [`Greater`]: Ordering::Greater
     /// [`Less`]: Ordering::Less
+    ///
+    /// [*Gaffer On Games*]: https://gafferongames.com/post/reliability_ordering_and_congestion_avoidance_over_udp/#handling-sequence-number-wrap-around
     fn cmp(&self, other: &Self) -> Ordering {
         // The implementation used is a variant of `slotmap`'s generation
         // comparison function:
@@ -115,9 +99,6 @@ impl Ord for Seq {
 
         let s1 = self.into_raw();
         let s2 = other.into_raw();
-
-        // alternate impl
-        // s1.wrapping_add(HALF.wrapping_sub(s2)).cmp(&(u16::MAX / 2))
         (s1 as i16).wrapping_sub(s2 as i16).cmp(&0)
     }
 }

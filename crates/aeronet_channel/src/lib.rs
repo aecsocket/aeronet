@@ -1,19 +1,18 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
-use std::{num::Saturating, usize};
+use std::num::Saturating;
 
 use aeronet::{
-    io::{IoPlugin, IoSet, PacketBuffers, PacketMtu, PacketStats, PACKET_BUF_CAP},
+    io::{IoSet, IoStats, PacketBuffers, PacketMtu, PACKET_BUF_CAP},
     session::{
-        Connected, Disconnect, DisconnectReason, Disconnected, Session, SessionPlugin,
+        Connected, Disconnect, DisconnectReason, Disconnected, SessionBundle,
         DROP_DISCONNECT_REASON,
     },
 };
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bytes::Bytes;
-use ringbuf::traits::{Consumer, RingBuffer};
 use sync_wrapper::SyncWrapper;
 use thiserror::Error;
 use tracing::{debug, debug_span, trace, trace_span};
@@ -23,17 +22,10 @@ pub struct ChannelIoPlugin;
 
 impl Plugin for ChannelIoPlugin {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<SessionPlugin>() {
-            app.add_plugins(SessionPlugin);
-        }
-        if !app.is_plugin_added::<IoPlugin>() {
-            app.add_plugins(IoPlugin);
-        }
-
         app.add_systems(PreUpdate, poll.in_set(IoSet::Poll))
             .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
-            .observe(connect)
-            .observe(disconnect);
+            .observe(start_connecting)
+            .observe(on_disconnect);
     }
 }
 
@@ -51,7 +43,7 @@ pub struct ChannelIo {
 
 impl ChannelIo {
     #[must_use]
-    pub fn new() -> (Self, Self) {
+    pub fn open() -> (Self, Self) {
         Self::with_capacity(PACKET_BUF_CAP)
     }
 
@@ -87,7 +79,7 @@ impl Drop for ChannelIo {
     }
 }
 
-fn connect(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
+fn start_connecting(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
     let session = trigger.entity();
 
     let span = debug_span!("connect", ?session);
@@ -96,19 +88,18 @@ fn connect(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
     debug!("Connecting");
 
     commands.entity(session).insert((
-        Session,
+        SessionBundle {
+            packet_mtu: PacketMtu(usize::MAX),
+            ..Default::default()
+        },
         Connected,
-        PacketMtu(usize::MAX),
-        PacketStats::default(),
     ));
 }
 
-fn disconnect(
-    trigger: Trigger<OnAdd, Disconnect>,
-    mut sessions: Query<(&mut ChannelIo, &Disconnect)>,
-) {
+fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelIo>) {
     let session = trigger.entity();
-    let Ok((mut io, Disconnect(reason))) = sessions.get_mut(session) else {
+    let Disconnect(reason) = trigger.event();
+    let Ok(mut io) = sessions.get_mut(session) else {
         return;
     };
 
@@ -127,7 +118,7 @@ fn disconnect(
 
 fn poll(
     mut commands: Commands,
-    mut sessions: Query<(Entity, &mut ChannelIo, &mut PacketBuffers, &mut PacketStats)>,
+    mut sessions: Query<(Entity, &mut ChannelIo, &mut PacketBuffers, &mut IoStats)>,
 ) {
     for (session, mut io, mut bufs, mut stats) in &mut sessions {
         let span = trace_span!("poll", ?session);
@@ -149,12 +140,12 @@ fn poll(
         let mut num_bytes = Saturating(0);
         for packet in io.recv_packet.try_iter() {
             num_packets += 1;
-            stats.packets_in += 1;
+            stats.packets_recv += 1;
 
             num_bytes += packet.len();
-            stats.bytes_in += packet.len();
+            stats.bytes_recv += packet.len();
 
-            bufs.recv.push_overwrite(packet);
+            bufs.push_recv(packet);
         }
 
         trace!(
@@ -165,19 +156,19 @@ fn poll(
     }
 }
 
-fn flush(mut sessions: Query<(Entity, &ChannelIo, &mut PacketBuffers, &mut PacketStats)>) {
+fn flush(mut sessions: Query<(Entity, &ChannelIo, &mut PacketBuffers, &mut IoStats)>) {
     for (session, io, mut bufs, mut stats) in &mut sessions {
         let span = trace_span!("flush", ?session);
         let _span = span.enter();
 
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        for packet in bufs.send.pop_iter() {
+        for packet in bufs.drain_send() {
             num_packets += 1;
-            stats.packets_out += 1;
+            stats.packets_sent += 1;
 
             num_bytes += packet.len();
-            stats.bytes_out += packet.len();
+            stats.bytes_sent += packet.len();
 
             // handle connection errors in `poll`
             let _ = io.send_packet.try_send(packet);

@@ -1,17 +1,10 @@
 //! Layer for handling reliability, ordering, and fragmentation on top of the
-//! [IO layer] using packets.
+//! [IO layer].
 //!
 //! In most cases, you will want to interact with the transport layer, or some
 //! higher-level layer, rather than the [IO layer] itself. This is because the
-//! IO layer provides no guarantees on if sent packets will be delivered, if
-//! they will be received in the right order, or breaking down large blocks of
-//! data into smaller ones that fit into packets. These features are the
-//! responsibility of the transport layer.
-//!
-//! The main types used at the IO layer are:
-//! - [`MessageBuffers`] for sending and receiving messages, and receiving
-//!   acknowledgements
-//! - [`MessageMtu`] for checking how large one of your sent messages may be
+//! transport layer can provide guarantees on messages being delivered, and the
+//! order in which they're delivered, which packets can't.
 //!
 //! # Messages
 //!
@@ -30,8 +23,6 @@
 //!   received one of your sent messages - see [`MessageKey`]
 //!
 //! # Sending and receiving
-//!
-//! TODO how does this work with message keys?
 //!
 //! ```
 //! use bevy::prelude::*;
@@ -64,6 +55,7 @@
 //!
 //! [IO layer]: crate::io
 //! [reliably]: crate::message::SendReliability::Reliable
+// TODO how does sending work with message keys?
 
 use std::num::Saturating;
 
@@ -80,7 +72,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct TransportPlugin;
+pub(crate) struct TransportPlugin;
 
 impl Plugin for TransportPlugin {
     fn build(&self, app: &mut App) {
@@ -128,7 +120,8 @@ pub struct MessageBuffers {
     #[reflect(ignore)]
     pub recv: Vec<Bytes>,
     /// Buffer of packets that will be drained and sent out to the transport
-    /// layer during [`TransportSet::Send`].
+    /// layer during [`TransportSet::Send`], along with what [`SendMode`] they
+    /// are sent out with.
     ///
     /// Pushing into this buffer is the most efficient way to enqueue messages
     /// for sending, but you will not be able to access the [`MessageKey`] of
@@ -153,16 +146,28 @@ pub struct MessageBuffers {
 /// Sent messages must have a length smaller than or equal to this value.
 ///
 /// [session]: crate::session
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deref, Component, Reflect)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Deref, Component, Reflect,
+)]
 #[reflect(Component)]
 pub struct MessageMtu(pub usize);
 
+/// Statistics for the [transport layer] of a [session].
+///
+/// As a component, these represent the total values since this session was
+/// spawned.
+///
+/// [transport layer]: crate::transport
+/// [session]: crate::session
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, Component, Reflect, Add, AddAssign, Sub, SubAssign,
 )]
 #[reflect(Component)]
 pub struct TransportStats {
+    /// Number of messages received into [`MessageBuffers::recv`].
     pub msgs_recv: Saturating<usize>,
+    /// Number of messages sent out from [`MessageBuffers::send`].
     pub msgs_sent: Saturating<usize>,
+    /// Number of message keys received into [`MessageBuffers::acks`].
     pub acks_recv: Saturating<usize>,
 }

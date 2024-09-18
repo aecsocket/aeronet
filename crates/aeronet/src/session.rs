@@ -1,4 +1,4 @@
-//! Core items for sessions and session connections.
+//! Core items for sessions and connection.
 //!
 //! # Session
 //!
@@ -17,20 +17,12 @@
 //! different protocols, such as raw UDP datagrams alongside Steam networking
 //! sockets, so that you can e.g. support crossplay between different platforms.
 //!
-//! At the lowest level, sessions operate on packets. Sessions do not provide
-//! any guarantees of packet delivery, so they may be delayed, lost, or even
-//! duplicated. This is because when working with a network such as the internet
-//! we have effectively zero guarantees - network conditions are constantly
-//! changing, paths may change, or the computer might suddenly be disconnected
-//! from the network. Sessions pass down packets to, and receive packets from,
-//! the [IO layer].
-//!
-//! However, you will typically want guarantees when working with networking
-//! code, such as reliability or ordering (see [`SendMode`]). This is handled
-//! by the [transport layer].
+//! Connection and data transmission is handled by the [IO layer], however you
+//! will typically be working with a higher-level layer such as the
+//! [transport layer], or potentially some even more high-level networking
+//! features.
 //!
 //! [IO layer]: crate::io
-//! [`SendMode`]: crate::message::SendMode
 //! [transport layer]: crate::transport
 //!
 //! # Lifecycle
@@ -40,65 +32,109 @@
 //! sessions. See the implementation's documentation on how to configure and
 //! spawn a session.
 //!
-//! Once a session has been spawned, [`SessionConnecting`] is emitted. The
-//! session may not be ready for transmitting packets immediately, and may go
-//! through a connection process. If this is successful, [`SessionConnected`]
-//! is emitted and the session is initialized with components for data transport
-//! such as [`PacketBuffers`]. If the session fails to connect, or is
-//! disconnected after establishing a successful connection,
-//! [`SessionDisconnected`] is emitted, and the session is despawned on the
-//! update afterwards.
+//! Once [`Session`] is added to an entity, it is considered *connecting*, where
+//! it is not ready to transmit packets yet. Once [`Connected`] is added to this
+//! session, it is considered *connected*, and data transfer should be possible.
+//! If the session fails to connect, or loses connection after successfully
+//! connecting, [`Disconnected`] is emitted, and the session is despawned
+//! immediately afterwards.
 //!
 //! [`aeronet_channel`]: https://docs.rs/aeronet_channel
 //! [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport
-//! [`PacketBuffers`]: crate::io::PacketBuffers
 
-use std::{any::type_name, fmt::Debug};
+use std::{fmt::Debug, net::SocketAddr};
 
 use bevy_app::prelude::*;
-use bevy_core::Name;
-use bevy_derive::Deref;
-use bevy_ecs::prelude::*;
+use bevy_derive::{Deref, DerefMut};
+use bevy_ecs::{observer::TriggerTargets, prelude::*};
 use bevy_hierarchy::DespawnRecursiveExt;
 use bevy_reflect::prelude::*;
-use tracing::{error, info, warn};
 use web_time::Instant;
 
-use crate::{stats::ConnectedAt, util::display_name};
-
 #[derive(Debug)]
-pub struct SessionPlugin;
+pub(crate) struct SessionPlugin;
 
 impl Plugin for SessionPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Session>()
             .register_type::<Connected>()
-            .observe(connecting)
-            .observe(connected)
-            .observe(disconnect)
+            .observe(on_connected)
+            .observe(on_disconnect)
             .observe(on_disconnected);
     }
 }
 
-/// Marker component for an [`Entity`] which is a [session].
+/// Marker component for a [session].
+///
+/// If this component is present without [`Connected`], then this session is
+/// still connecting.
 ///
 /// [session]: crate::session
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct Session;
 
+/// Bundle for spawning a [session].
+///
+/// In Bevy 0.15, this will be removed in favour of required components.
+///
+/// [session]: crate::session
+#[derive(Default, Bundle)]
+#[allow(missing_docs)]
+pub struct SessionBundle {
+    pub session: Session,
+    pub packet_buffers: crate::io::PacketBuffers,
+    pub packet_mtu: crate::io::PacketMtu,
+    pub io_stats: crate::io::IoStats,
+    pub message_buffers: crate::transport::MessageBuffers,
+    pub message_mtu: crate::transport::MessageMtu,
+    pub transport_stats: crate::transport::TransportStats,
+}
+
+/// Marker component for a [session] which is connected to its peer, and data
+/// transmission should be possible.
+///
+/// Note that this is not a *guarantee* that the session is connected, since
+/// networking operations such as working with OS sockets may fail at any time.
+/// Packets may also be delayed or lost in transit.
+///
+/// To listen for when a session is connected, use [`Trigger<OnAdd, Connected>`].
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct Connected;
 
-#[derive(Debug, Deref, Component)]
-#[component(storage = "SparseSet")]
-pub struct Disconnected(pub DisconnectReason<anyhow::Error>);
-
-#[derive(Debug, Clone, PartialEq, Eq, Component, Reflect)]
-#[reflect(Component)]
-#[component(storage = "SparseSet")]
+/// Triggered when a user requests a [session] to gracefully disconnect from its
+/// peer with a given reason.
+///
+/// The string provided is used as the disconnection reason in
+/// [`DisconnectReason::User`].
+///
+/// Triggering this will guarantee that the session is disconnected and
+/// despawned immediately, however the disconnection reason will be transmitted
+/// to the peer as a best-effort attempt. If the IO layer does not support
+/// disconnection reasons, or it cannot send your given reason (if e.g. it is
+/// too long), the peer may not receive this disconnect reason.
+///
+/// If you have access to [`Commands`], consider using [`disconnect_sessions`]
+/// as a convenient alternative to manually triggering an event.
+///
+/// [session]: crate::session
+/// [`disconnect_sessions`]: DisconnectSessionsExt::disconnect_sessions
+#[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut, Event)]
 pub struct Disconnect(pub String);
+
+/// Triggered when a [session] loses connection for any reason.
+///
+/// Immediately after this, the session will be despawned.
+///
+/// This must only be triggered by the IO layer.
+///
+/// If you want to get the concrete error type of the [`DisconnectReason`],
+/// use [`anyhow::Error::downcast_ref`].
+///
+/// [session]: crate::session
+#[derive(Debug, Deref, DerefMut, Event)]
+pub struct Disconnected(pub DisconnectReason<anyhow::Error>);
 
 /// Why a [session] was disconnected from its peer.
 ///
@@ -150,97 +186,97 @@ impl<E> From<E> for DisconnectReason<E> {
     }
 }
 
+/// Disconnect reason to use when an IO layer is dropped.
+///
+/// IO layer implementations may use this as a default disconnection reason when
+/// their IO component is dropped, instead of being explicitly disconnected via
+/// [`Disconnect`].
 pub const DROP_DISCONNECT_REASON: &str = "dropped";
 
-pub trait DisconnectSessionExt {
-    fn disconnect_session(&mut self, session: Entity, reason: impl Into<String>);
+/// Provides [`DisconnectSessionsExt::disconnect_sessions`]
+pub trait DisconnectSessionsExt {
+    /// Requests [sessions] to gracefully disconnect from their peers with a
+    /// given reason.
+    ///
+    /// See [`Disconnect`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bevy_ecs::prelude::*;
+    /// use aeronet::session::DisconnectSessionsExt;
+    ///
+    /// # fn run(mut commands: Commands, session: Entity, session1: Entity, session2: Entity) {
+    /// // disconnect a single session
+    /// commands.disconnect_sessions("show's over, go home", session);
+    ///
+    /// // disconnect multiple sessions at once
+    /// commands.disconnect_sessions("show's over everyone, go home", [session1, session2]);
+    /// # }
+    /// ```
+    ///
+    /// [sessions]: crate::session
+    fn disconnect_sessions(&mut self, reason: impl Into<String>, targets: impl TriggerTargets);
 }
 
-impl DisconnectSessionExt for Commands<'_, '_> {
-    fn disconnect_session(&mut self, session: Entity, reason: impl Into<String>) {
-        self.entity(session).insert(Disconnect(reason.into()));
+impl DisconnectSessionsExt for Commands<'_, '_> {
+    fn disconnect_sessions(&mut self, reason: impl Into<String>, targets: impl TriggerTargets) {
+        self.trigger_targets(Disconnect(reason.into()), targets);
     }
 }
 
-fn connecting(trigger: Trigger<OnAdd, Session>, names: Query<Option<&Name>>) {
+/// Instant at which a [session] connected to its peer.
+///
+/// This is automatically added to the session when [`Connected`] is added.
+///
+/// [session]: crate::session
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component, Reflect)]
+#[reflect(Component)]
+pub struct ConnectedAt(pub Instant);
+
+/// Local socket address that this entity uses for connections.
+///
+/// Sessions or servers which use a network will use an OS socket for
+/// communication. This component stores the local [`SocketAddr`] of this
+/// socket.
+///
+/// This component may not be present in environments where there is no access
+/// to OS sockets (i.e. WASM).
+///
+/// To access the remote socket address of a session, see [`RemoteAddr`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component)]
+pub struct LocalAddr(pub SocketAddr);
+
+/// Remote socket address that this [session] is connected to.
+///
+/// Sessions which use a network will use an OS socket for communication. This
+/// component stores the [`SocketAddr`] of the peer, which this session is
+/// connected to.
+///
+/// This component may not be present in environments where there is no access
+/// to OS sockets (i.e. WASM).
+///
+/// To access the local socket address of a session, see [`LocalAddr`].
+///
+/// [session]: crate::session
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component)]
+pub struct RemoteAddr(pub SocketAddr);
+
+fn on_connected(trigger: Trigger<OnAdd, Connected>, mut commands: Commands) {
     let session = trigger.entity();
-    let name = names
-        .get(session)
-        .expect("`session` should exist because we are adding a component to it");
-
-    let display_name = display_name(session, name);
-    info!("Session {display_name} connecting");
-}
-
-fn connected(
-    trigger: Trigger<OnAdd, Connected>,
-    mut commands: Commands,
-    names: Query<Option<&Name>>,
-    with_session: Query<(), With<Session>>,
-) {
-    let session = trigger.entity();
-    let name = names
-        .get(session)
-        .expect("`session` should exist because we are adding a component to it");
-
-    let display_name = display_name(session, name);
-    info!("Session {display_name} connected");
 
     commands.entity(session).insert(ConnectedAt(Instant::now()));
-
-    if with_session.get(session).is_err() {
-        error!(
-            "Session {display_name} does not have `{}`",
-            type_name::<Session>()
-        );
-    }
 }
 
-fn disconnect(
-    trigger: Trigger<OnAdd, Disconnect>,
-    disconnects: Query<&Disconnect>,
-    mut commands: Commands,
-) {
+fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
     let session = trigger.entity();
-    let Disconnect(reason) = disconnects
-        .get(session)
-        .expect("`session` should exist because we are adding a component to it");
+    let reason = DisconnectReason::User(trigger.event().0.clone());
 
-    commands
-        .entity(session)
-        .insert(Disconnected(DisconnectReason::User(reason.clone())));
+    commands.trigger_targets(Disconnected(reason), session);
 }
 
-fn on_disconnected(
-    trigger: Trigger<OnAdd, Disconnected>,
-    names: Query<(&Disconnected, Option<&Name>)>,
-    with_session: Query<(), With<Session>>,
-    mut commands: Commands,
-) {
+fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
     let session = trigger.entity();
-    let (Disconnected(dc_reason), name) = names
-        .get(session)
-        .expect("`session` should exist because we are adding a component to it");
-
-    let display_name = display_name(session, name);
-    match dc_reason {
-        DisconnectReason::User(reason) => {
-            info!("Session {display_name} disconnected by user: {reason}");
-        }
-        DisconnectReason::Peer(reason) => {
-            info!("Session {display_name} disconnected by peer: {reason}");
-        }
-        DisconnectReason::Error(err) => {
-            warn!("Session {display_name} disconnected due to error: {err:#}");
-        }
-    }
-
-    if with_session.get(session).is_err() {
-        error!(
-            "Session {display_name} does not have `{}`",
-            type_name::<Session>(),
-        );
-    }
 
     commands.entity(session).despawn_recursive();
 }
