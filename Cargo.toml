@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/aeronet", "crates/aeronet_channel"]
+members = ["crates/aeronet", "crates/aeronet_io", "crates/aeronet_channel"]
 resolver = "2"
 
 [workspace.package]
@@ -33,6 +33,7 @@ struct_excessive_bools = "allow"
 [workspace.dependencies]
 aeronet = { version = "0.9.0-dev", path = "crates/aeronet" }
 aeronet_channel = { version = "0.9.0-dev", path = "crates/aeronet_channel" }
+aeronet_io = { version = "0.9.0-dev", path = "crates/aeronet_io" }
 aeronet_proto = { version = "0.9.0-dev", path = "crates/aeronet_proto" }
 aeronet_replicon = { version = "0.9.0-dev", path = "crates/aeronet_replicon" }
 aeronet_steam = { version = "0.9.0-dev", path = "crates/aeronet_steam" }

@@ -1,21 +1,20 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
-use std::num::Saturating;
-
-use aeronet::{
-    io::{IoSet, IoStats, PacketBuffers, PacketMtu, PACKET_BUF_CAP},
-    session::{
-        Connected, Disconnect, DisconnectReason, Disconnected, SessionBundle,
+use {
+    aeronet_io::{
+        AeronetIoPlugin, Connected, DefaultPacketBuffersCapacity, Disconnect, DisconnectReason,
+        Disconnected, IoSet, PacketBuffers, PacketMtu, PacketStats, Session,
         DROP_DISCONNECT_REASON,
     },
+    bevy_app::prelude::*,
+    bevy_ecs::prelude::*,
+    bytes::Bytes,
+    std::{num::Saturating, usize},
+    sync_wrapper::SyncWrapper,
+    thiserror::Error,
+    tracing::{debug, debug_span, trace, trace_span},
 };
-use bevy_app::prelude::*;
-use bevy_ecs::prelude::*;
-use bytes::Bytes;
-use sync_wrapper::SyncWrapper;
-use thiserror::Error;
-use tracing::{debug, debug_span, trace, trace_span};
 
 /// Allows using [`ChannelIo`].
 #[derive(Debug)]
@@ -23,6 +22,10 @@ pub struct ChannelIoPlugin;
 
 impl Plugin for ChannelIoPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<AeronetIoPlugin>() {
+            app.add_plugins(AeronetIoPlugin);
+        }
+
         app.add_systems(PreUpdate, poll.in_set(IoSet::Poll))
             .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
             .observe(start_connecting)
@@ -41,19 +44,7 @@ pub struct ChannelIo {
     recv_dc: SyncWrapper<oneshot::Receiver<String>>,
 }
 
-/// [`ChannelIo`] error when the peer drops its channel.
-#[derive(Debug, Clone, Error)]
-#[error("channel disconnected")]
-pub struct ChannelDisconnected;
-
 impl ChannelIo {
-    /// Creates a [`ChannelIo`] pair linked via MPSC channels, with the default
-    /// packet buffer capacity.
-    #[must_use]
-    pub fn open() -> (Self, Self) {
-        Self::with_capacity(PACKET_BUF_CAP)
-    }
-
     /// Creates a [`ChannelIo`] pair linked via MPSC channels, with a given
     /// packet buffer capacity.
     #[must_use]
@@ -78,6 +69,15 @@ impl ChannelIo {
             },
         )
     }
+
+    /// Creates a [`ChannelIo`] pair linked via MPSC channels, with the capacity
+    /// determined by the [`DefaultPacketBuffersCapacity`] value in the given
+    /// [`World`].
+    #[must_use]
+    pub fn from_world(world: &World) -> (Self, Self) {
+        let capacity = **world.resource::<DefaultPacketBuffersCapacity>();
+        Self::with_capacity(capacity)
+    }
 }
 
 impl Drop for ChannelIo {
@@ -88,6 +88,11 @@ impl Drop for ChannelIo {
     }
 }
 
+/// [`ChannelIo`] error when the peer drops its channel.
+#[derive(Debug, Clone, Error)]
+#[error("channel disconnected")]
+pub struct ChannelDisconnected;
+
 fn start_connecting(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
     let session = trigger.entity();
 
@@ -96,13 +101,9 @@ fn start_connecting(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) 
 
     debug!("Connecting");
 
-    commands.entity(session).insert((
-        SessionBundle {
-            packet_mtu: PacketMtu(usize::MAX),
-            ..Default::default()
-        },
-        Connected,
-    ));
+    commands
+        .entity(session)
+        .insert((Session, Connected, PacketMtu(usize::MAX)));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelIo>) {
@@ -127,7 +128,7 @@ fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelI
 
 fn poll(
     mut commands: Commands,
-    mut sessions: Query<(Entity, &mut ChannelIo, &mut PacketBuffers, &mut IoStats)>,
+    mut sessions: Query<(Entity, &mut ChannelIo, &mut PacketBuffers, &mut PacketStats)>,
 ) {
     for (session, mut io, mut bufs, mut stats) in &mut sessions {
         let span = trace_span!("poll", %session);
@@ -165,7 +166,7 @@ fn poll(
     }
 }
 
-fn flush(mut sessions: Query<(Entity, &ChannelIo, &mut PacketBuffers, &mut IoStats)>) {
+fn flush(mut sessions: Query<(Entity, &ChannelIo, &mut PacketBuffers, &mut PacketStats)>) {
     for (session, io, mut bufs, mut stats) in &mut sessions {
         let span = trace_span!("flush", %session);
         let _span = span.enter();

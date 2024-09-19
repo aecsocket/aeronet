@@ -1,129 +1,60 @@
-//! Core items for sessions and connection.
-//!
-//! # Session
-//!
-//! A session is an [`Entity`] which can be used to transfer sequences of bytes
-//! over to the other side of a connection - to the session's peer. The peer may
-//! be located on a different machine and connected over a network such as the
-//! internet, and may use any protocol for communication. The peer can also be
-//! located on the same machine, or even within the same app - these details are
-//! deliberately left unspecified and abstracted away.
-//!
-//! The session API is agnostic to the networking model used: it can be used to
-//! represent a client-server, peer-to-peer, or any other kind of network
-//! topology. The only constraint is that one session talks to one and only one
-//! peer for its lifetime, however you can have multiple sessions within the
-//! same world. These different sessions may even be communicating over
-//! different protocols, such as raw UDP datagrams alongside Steam networking
-//! sockets, so that you can e.g. support crossplay between different platforms.
-//!
-//! Connection and data transmission is handled by the [IO layer], however you
-//! will typically be working with a higher-level layer such as the
-//! [transport layer], or potentially some even more high-level networking
-//! features.
-//!
-//! [IO layer]: crate::io
-//! [transport layer]: crate::transport
-//!
-//! # Lifecycle
-//!
-//! Your IO layer implementation of choice (i.e. [`aeronet_channel`],
-//! [`aeronet_webtransport`]) is responsible for spawning and despawning
-//! sessions. See the implementation's documentation on how to configure and
-//! spawn a session.
-//!
-//! Once [`Session`] is added to an entity, it is considered *connecting*, where
-//! it is not ready to transmit packets yet. Once [`Connected`] is added to this
-//! session, it is considered *connected*, and data transfer should be possible.
-//! If the session fails to connect, or loses connection after successfully
-//! connecting, [`Disconnected`] is emitted, and the session is despawned
-//! immediately afterwards.
-//!
-//! [`aeronet_channel`]: https://docs.rs/aeronet_channel
-//! [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport
-
-use std::{fmt::Debug, net::SocketAddr};
-
-use bevy_app::prelude::*;
-use bevy_derive::{Deref, DerefMut};
-use bevy_ecs::{observer::TriggerTargets, prelude::*};
-use bevy_hierarchy::DespawnRecursiveExt;
-use bevy_reflect::prelude::*;
-use web_time::Instant;
+use {
+    bevy_app::prelude::*,
+    bevy_derive::{Deref, DerefMut},
+    bevy_ecs::{observer::TriggerTargets, prelude::*},
+    bevy_hierarchy::DespawnRecursiveExt,
+    bevy_reflect::prelude::*,
+    std::{fmt::Debug, net::SocketAddr},
+    web_time::Instant,
+};
 
 #[derive(Debug)]
-pub(crate) struct SessionPlugin;
+pub(crate) struct ConnectionPlugin;
 
-impl Plugin for SessionPlugin {
+impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Session>()
-            .register_type::<Connected>()
+        app.register_type::<Connected>()
             .observe(on_connected)
             .observe(on_disconnect)
             .observe(on_disconnected);
     }
 }
 
-/// Marker component for a [session].
-///
-/// If this component is present without [`Connected`], then this session is
-/// still connecting.
-///
-/// [session]: crate::session
-#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
-#[reflect(Component)]
-pub struct Session;
-
-/// Bundle for spawning a [session].
-///
-/// In Bevy 0.15, this will be removed in favour of required components.
-///
-/// [session]: crate::session
-#[derive(Default, Bundle)]
-#[allow(missing_docs)]
-pub struct SessionBundle {
-    pub session: Session,
-    pub packet_buffers: crate::io::PacketBuffers,
-    pub packet_mtu: crate::io::PacketMtu,
-    pub io_stats: crate::io::IoStats,
-    pub message_buffers: crate::transport::MessageBuffers,
-    pub message_mtu: crate::transport::MessageMtu,
-    pub transport_stats: crate::transport::TransportStats,
-}
-
-/// Marker component for a [session] which is connected to its peer, and data
+/// Marker component for a [`Session`] which is connected to its peer, and data
 /// transmission should be possible.
 ///
-/// Note that this is not a *guarantee* that the session is connected, since
+/// Note that this is not a guarantee that the session is connected, since
 /// networking operations such as working with OS sockets may fail at any time.
-/// Packets may also be delayed or lost in transit.
 ///
-/// To listen for when a session is connected, use [`Trigger<OnAdd, Connected>`].
+/// To listen for when a session is connected, add an observer listening for
+/// [`Trigger<OnAdd, Connected>`].
+///
+/// [`Session`]: crate::Session
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct Connected;
 
-/// Triggered when a user requests a [session] to gracefully disconnect from its
-/// peer with a given reason.
+/// Triggered when a user requests a [`Session`] to gracefully disconnect from
+/// its peer with a given reason.
 ///
 /// The string provided is used as the disconnection reason in
 /// [`DisconnectReason::User`].
 ///
 /// Triggering this will guarantee that the session is disconnected and
 /// despawned immediately, however the disconnection reason will be transmitted
-/// to the peer as a best-effort attempt. If the IO layer does not support
-/// disconnection reasons, or it cannot send your given reason (if e.g. it is
-/// too long), the peer may not receive this disconnect reason.
+/// to the peer as a best-effort attempt. If the IO layer implementation does
+/// not support disconnection reasons, or it cannot send your given reason (if
+/// e.g. it is too long), the peer may not receive this disconnect reason.
 ///
 /// If you have access to [`Commands`], consider using [`disconnect_sessions`]
 /// as a convenient alternative to manually triggering an event.
 ///
-/// [session]: crate::session
+/// [`Session`]: crate::Session
 /// [`disconnect_sessions`]: DisconnectSessionsExt::disconnect_sessions
 #[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut, Event)]
 pub struct Disconnect(pub String);
 
-/// Triggered when a [session] loses connection for any reason.
+/// Triggered when a [`Session`] loses connection for any reason.
 ///
 /// Immediately after this, the session will be despawned.
 ///
@@ -133,13 +64,13 @@ pub struct Disconnect(pub String);
 /// If you want to get the concrete error type of the
 /// [`DisconnectReason::Error`], use [`anyhow::Error::downcast_ref`].
 ///
-/// [session]: crate::session
+/// [`Session`]: crate::Session
 #[derive(Debug, Deref, DerefMut, Event)]
 pub struct Disconnected(pub DisconnectReason<anyhow::Error>);
 
-/// Why a [session] was disconnected from its peer.
+/// Why a [`Session`] was disconnected from its peer.
 ///
-/// [session]: crate::session
+/// [`Session`]: crate::Session
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DisconnectReason<E> {
     /// Session was disconnected by the user on our side, with a provided
@@ -161,8 +92,8 @@ pub enum DisconnectReason<E> {
     /// - a bad network condition for a prolonged period of time
     /// - a malicious or malfunctioning peer
     /// - failing to send a message [reliably]
-    /// - the peer pretending like there are network errors to discreetly
-    ///   force us to disconnect
+    /// - the peer pretending like there are network errors to discreetly force
+    ///   us to disconnect
     /// - ..and more
     ///
     /// [reliably]: crate::message::SendReliability::Reliable
@@ -187,7 +118,7 @@ impl<E> From<E> for DisconnectReason<E> {
     }
 }
 
-/// Disconnect reason to use when an IO layer is dropped.
+/// Disconnect reason to use when an IO layer component is dropped.
 ///
 /// IO layer implementations may use this as a default disconnection reason when
 /// their IO component is dropped, instead of being explicitly disconnected via
@@ -196,7 +127,7 @@ pub const DROP_DISCONNECT_REASON: &str = "dropped";
 
 /// Provides [`DisconnectSessionsExt::disconnect_sessions`]
 pub trait DisconnectSessionsExt {
-    /// Requests [sessions] to gracefully disconnect from their peers with a
+    /// Requests [`Session`]s to gracefully disconnect from their peers with a
     /// given reason.
     ///
     /// See [`Disconnect`].
@@ -204,8 +135,7 @@ pub trait DisconnectSessionsExt {
     /// # Examples
     ///
     /// ```
-    /// use bevy_ecs::prelude::*;
-    /// use aeronet::session::DisconnectSessionsExt;
+    /// use {aeronet::session::DisconnectSessionsExt, bevy_ecs::prelude::*};
     ///
     /// # fn run(mut commands: Commands, session: Entity, session1: Entity, session2: Entity) {
     /// // disconnect a single session
@@ -216,7 +146,7 @@ pub trait DisconnectSessionsExt {
     /// # }
     /// ```
     ///
-    /// [sessions]: crate::session
+    /// [`Session`]: crate::Session
     fn disconnect_sessions(&mut self, reason: impl Into<String>, targets: impl TriggerTargets);
 }
 

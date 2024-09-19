@@ -3,9 +3,9 @@
 
 pub use {anyhow, bytes, ringbuf};
 
-pub mod io;
+// pub mod io;
 pub mod message;
-pub mod session;
+// pub mod session;
 // pub mod stats;
 pub mod log;
 pub mod naive_transport;

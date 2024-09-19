@@ -3,12 +3,13 @@
 //!
 //! [transport layer]: crate::transport
 
-use std::{cmp::Ordering, num::Wrapping};
-
-use arbitrary::Arbitrary;
-use bevy_reflect::prelude::*;
-use datasize::DataSize;
-use derive_more::{Add, AddAssign, Sub, SubAssign};
+use {
+    arbitrary::Arbitrary,
+    bevy_reflect::prelude::*,
+    datasize::DataSize,
+    derive_more::{Add, AddAssign, Sub, SubAssign},
+    std::{cmp::Ordering, num::Wrapping},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect, Arbitrary, DataSize)]
 pub enum SendMode {
@@ -68,7 +69,7 @@ impl Seq {
     /// Gets the raw sequence number.
     #[must_use]
     pub const fn into_raw(self) -> u16 {
-        self.0 .0
+        self.0.0
     }
 }
 
@@ -108,8 +109,8 @@ impl PartialOrd for Seq {
     }
 }
 
-/// Pseudo-unique key for a [transport layer] message that has been sent out by us,
-/// used for detecting when the peer sent acknowledgement of this message.
+/// Pseudo-unique key for a [transport layer] message that has been sent out by
+/// us, used for detecting when the peer sent acknowledgement of this message.
 ///
 /// The underlying [`Seq`] should be treated as an opaque value, specific to the
 /// transport layer implementation.

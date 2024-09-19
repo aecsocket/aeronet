@@ -1,13 +1,13 @@
 //! See [`SessionLogPlugin`].
 
-use std::any::type_name;
-
-use bevy_app::prelude::*;
-use bevy_core::Name;
-use bevy_ecs::prelude::*;
-use tracing::{info, warn};
-
-use crate::session::{Connected, DisconnectReason, Disconnected, Session};
+use {
+    crate::session::{Connected, DisconnectReason, Disconnected, Session},
+    bevy_app::prelude::*,
+    bevy_core::Name,
+    bevy_ecs::prelude::*,
+    std::any::type_name,
+    tracing::{info, warn},
+};
 
 /// Uses [`tracing`] to log [session]-related events.
 ///
@@ -21,8 +21,10 @@ use crate::session::{Connected, DisconnectReason, Disconnected, Session};
 /// [`PluginGroupBuilder::disable`]:
 ///
 /// ```
-/// use bevy_app::prelude::*;
-/// use aeronet::{AeronetPlugins, log::SessionLogPlugin};
+/// use {
+///     aeronet::{log::SessionLogPlugin, AeronetPlugins},
+///     bevy_app::prelude::*,
+/// };
 ///
 /// # fn run(app: &mut App) {
 /// app.add_plugins(AeronetPlugins.build().disable::<SessionLogPlugin>());

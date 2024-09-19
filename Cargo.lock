@@ -115,7 +115,7 @@ dependencies = [
 name = "aeronet_channel"
 version = "0.9.0-dev"
 dependencies = [
- "aeronet",
+ "aeronet_io",
  "assert_matches",
  "bevy",
  "bevy_app",
@@ -130,6 +130,27 @@ dependencies = [
  "sync_wrapper",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "aeronet_io"
+version = "0.9.0-dev"
+dependencies = [
+ "anyhow",
+ "arbitrary",
+ "bevy_app",
+ "bevy_core",
+ "bevy_derive",
+ "bevy_ecs",
+ "bevy_hierarchy",
+ "bevy_reflect",
+ "bevy_time",
+ "bytes",
+ "datasize",
+ "derive_more",
+ "ringbuf",
+ "tracing",
+ "web-time",
 ]
 
 [[package]]
