@@ -1,9 +1,10 @@
-//! Example showing a WebTransport client which can send and receive strings.
+//! Example showing a WebTransport client which can send and receive UTF-8
+//! strings.
 
 use {
     aeronet_io::{
-        DisconnectSessionsExt, LocalAddr, PacketBuffers, PacketMtu, PacketRtt, PacketStats,
-        RemoteAddr,
+        Connected, DisconnectReason, DisconnectSessionsExt, Disconnected, LocalAddr, PacketBuffers,
+        PacketMtu, PacketRtt, PacketStats, RemoteAddr, Session,
     },
     aeronet_webtransport::client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
     bevy::prelude::*,
@@ -16,6 +17,9 @@ fn main() -> AppExit {
         .add_plugins((DefaultPlugins, EguiPlugin, WebTransportClientPlugin))
         .init_resource::<GlobalUi>()
         .add_systems(Update, (global_ui, session_ui))
+        .observe(on_connecting)
+        .observe(on_connected)
+        .observe(on_disconnected)
         .run()
 }
 
@@ -23,12 +27,54 @@ fn main() -> AppExit {
 struct GlobalUi {
     target: String,
     session_id: usize,
+    log: Vec<String>,
 }
 
 #[derive(Debug, Default, Component)]
 struct SessionUi {
     msg: String,
     log: Vec<String>,
+}
+
+fn on_connecting(
+    trigger: Trigger<OnAdd, Session>,
+    names: Query<&Name>,
+    mut ui_state: ResMut<GlobalUi>,
+) {
+    let session = trigger.entity();
+    let name = names.get(session).unwrap();
+    ui_state.log.push(format!("{name} connecting"));
+}
+
+fn on_connected(
+    trigger: Trigger<OnAdd, Connected>,
+    names: Query<&Name>,
+    mut ui_state: ResMut<GlobalUi>,
+) {
+    let session = trigger.entity();
+    let name = names.get(session).unwrap();
+    ui_state.log.push(format!("{name} connected"));
+}
+
+fn on_disconnected(
+    trigger: Trigger<Disconnected>,
+    names: Query<&Name>,
+    mut ui_state: ResMut<GlobalUi>,
+) {
+    let session = trigger.entity();
+    let Disconnected(reason) = trigger.event();
+    let name = names.get(session).unwrap();
+    ui_state.log.push(match reason {
+        DisconnectReason::User(reason) => {
+            format!("{name} disconnected by user: {reason}")
+        }
+        DisconnectReason::Peer(reason) => {
+            format!("{name} disconnected by peer: {reason}")
+        }
+        DisconnectReason::Error(err) => {
+            format!("{name} disconnected due to error: {err:#}")
+        }
+    });
 }
 
 const DEFAULT_TARGET: &str = "https://[::1]:25565";
@@ -60,6 +106,10 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
                 .spawn((Name::new(name), SessionUi::default()))
                 .add(WebTransportClient::connect(config, target));
         }
+
+        for msg in &ui_state.log {
+            ui.label(msg);
+        }
     });
 }
 
@@ -70,7 +120,7 @@ fn client_config() -> ClientConfig {
 
 #[cfg(not(target_family = "wasm"))]
 fn client_config() -> ClientConfig {
-    use web_time::Duration;
+    use std::time::Duration;
 
     ClientConfig::builder()
         .with_bind_default()
@@ -140,13 +190,11 @@ fn session_ui(
             }
 
             egui::Grid::new("stats").show(ui, |ui| {
-                let unknown = || "?".to_owned();
-
                 ui.label("Packet RTT");
                 ui.label(
                     packet_rtt
                         .map(|PacketRtt(rtt)| format!("{rtt:?}"))
-                        .unwrap_or_else(unknown),
+                        .unwrap_or_default(),
                 );
                 ui.end_row();
 
@@ -154,25 +202,31 @@ fn session_ui(
                 ui.label(
                     packet_mtu
                         .map(|PacketMtu(mtu)| format!("{mtu}"))
-                        .unwrap_or_else(unknown),
+                        .unwrap_or_default(),
                 );
                 ui.end_row();
 
-                let stats = packet_stats.copied().unwrap_or_default();
-
                 ui.label("Packets recv/sent");
-                ui.label(format!("{} / {}", stats.packets_recv, stats.packets_sent));
+                ui.label(
+                    packet_stats
+                        .map(|stats| format!("{} / {}", stats.packets_recv, stats.packets_sent))
+                        .unwrap_or_default(),
+                );
                 ui.end_row();
 
                 ui.label("Bytes recv/sent");
-                ui.label(format!("{} / {}", stats.bytes_recv, stats.bytes_sent));
+                ui.label(
+                    packet_stats
+                        .map(|stats| format!("{} / {}", stats.bytes_recv, stats.bytes_sent))
+                        .unwrap_or_default(),
+                );
                 ui.end_row();
 
                 ui.label("Local address");
                 ui.label(
                     local_addr
                         .map(|LocalAddr(addr)| format!("{addr:?}"))
-                        .unwrap_or_else(unknown),
+                        .unwrap_or_default(),
                 );
                 ui.end_row();
 
@@ -180,7 +234,7 @@ fn session_ui(
                 ui.label(
                     remote_addr
                         .map(|RemoteAddr(addr)| format!("{addr:?}"))
-                        .unwrap_or_else(unknown),
+                        .unwrap_or_default(),
                 );
                 ui.end_row();
             });

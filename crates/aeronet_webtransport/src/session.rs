@@ -1,8 +1,8 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        AeronetIoPlugin, Disconnect, DisconnectReason, IoSet, PacketBuffers, PacketMtu, PacketRtt,
-        PacketStats, RemoteAddr, DROP_DISCONNECT_REASON,
+        AeronetIoPlugin, Connected, Disconnect, DisconnectReason, IoSet, PacketBuffers, PacketMtu,
+        PacketRtt, PacketStats, RemoteAddr, DROP_DISCONNECT_REASON,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -39,6 +39,7 @@ impl Plugin for WebTransportSessionPlugin {
         app.init_resource::<WebTransportRuntime>()
             .add_systems(PreUpdate, poll.in_set(IoSet::Poll))
             .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
+            .observe(on_io_added)
             .observe(on_disconnect);
     }
 }
@@ -69,8 +70,8 @@ pub struct WebTransportIo {
 
 impl Drop for WebTransportIo {
     fn drop(&mut self) {
-        if let Some(sender) = self.send_user_dc.take() {
-            let _ = sender.send(DROP_DISCONNECT_REASON.to_owned());
+        if let Some(send_dc) = self.send_user_dc.take() {
+            let _ = send_dc.send(DROP_DISCONNECT_REASON.to_owned());
         }
     }
 }
@@ -82,6 +83,12 @@ pub(crate) struct SessionMeta {
     #[cfg(not(target_family = "wasm"))]
     raw_rtt: Duration,
     mtu: usize,
+}
+
+// TODO: required components
+fn on_io_added(trigger: Trigger<OnAdd, WebTransportIo>, mut commands: Commands) {
+    let session = trigger.entity();
+    commands.entity(session).insert(Connected);
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTransportIo>) {

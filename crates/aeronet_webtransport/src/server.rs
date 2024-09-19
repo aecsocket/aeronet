@@ -5,9 +5,10 @@ use {
             SessionBackend, SessionError, SessionMeta, WebTransportSessionPlugin, PACKET_BUF_CAP,
         },
     },
-    aeronet::{io::IoSet, session::DisconnectReason},
+    aeronet_io::IoSet,
     bevy_app::prelude::*,
-    bevy_ecs::prelude::*,
+    bevy_ecs::{prelude::*, system::EntityCommand},
+    bevy_reflect::Reflect,
     bytes::Bytes,
     futures::{
         channel::{mpsc, oneshot},
@@ -34,40 +35,46 @@ impl Plugin for WebTransportServerPlugin {
             app.add_plugins(WebTransportSessionPlugin);
         }
 
-        app.add_systems(PreUpdate, update_frontend.before(IoSet::Recv));
+        app.add_systems(PreUpdate, poll_frontend.before(IoSet::Poll));
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ConnectionResponse {
-    Accepted,
-    Forbidden,
-    NotFound,
+#[derive(Debug, Component)]
+pub struct WebTransportServer(Frontend);
+
+impl WebTransportServer {
+    pub fn open(config: ServerConfig) -> impl EntityCommand {
+        |server: Entity, world: &mut World| open(server, world, config)
+    }
 }
 
-#[derive(Debug, Error)]
-pub enum ServerError {
-    #[error("failed to await session request")]
-    AwaitSessionRequest(#[source] ConnectionError),
-    #[error("frontend rejected session")]
-    Rejected,
-    #[error("failed to accept session")]
-    AcceptSessionRequest(#[source] ConnectionError),
-    #[error(transparent)]
-    Session(#[from] SessionError),
-}
+fn open(server: Entity, world: &mut World, config: ServerConfig) {
+    let runtime = world.resource::<WebTransportRuntime>().clone();
 
-pub trait OpenWebTransportServerExt {
-    fn open_web_transport_server(&mut self, config: ServerConfig) -> Entity;
-}
+    let (send_closed, recv_closed) = oneshot::channel::<()>();
+    let (send_next, recv_next) = oneshot::channel::<ToOpen>();
+    runtime.spawn({
+        let runtime = runtime.clone();
+        async move {
+            let Err(reason) = backend(runtime, config, send_next) else {
+                unreachable!();
+            };
+        }
+        .instrument(debug_span!("server", %server))
+    });
 
-impl OpenWebTransportServerExt for Commands<'_, '_> {
-    fn open_web_transport_server(&mut self, config: ServerConfig) -> Entity {
-        let server = self.spawn_empty().id();
+    world
+        .entity_mut(server)
+        .insert(WebTransportServer(Frontend::Opening {
+            recv_err,
+            recv_next,
+        }));
+
+    /*
+
+    let server = self.spawn_empty().id();
         self.push(move |world: &mut World| {
             world.resource_scope(|world, runtime: Mut<WebTransportRuntime>| {
-                let (send_err, recv_err) = oneshot::channel::<anyhow::Error>();
-                let (send_next, recv_next) = oneshot::channel::<ToOpen>();
                 runtime.spawn({
                     let runtime = runtime.clone();
                     async move {
@@ -92,8 +99,26 @@ impl OpenWebTransportServerExt for Commands<'_, '_> {
                 });
             });
         });
-        server
-    }
+        server */
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+pub enum ConnectionResponse {
+    Accepted,
+    Forbidden,
+    NotFound,
+}
+
+#[derive(Debug, Error)]
+pub enum ServerError {
+    #[error("failed to await session request")]
+    AwaitSessionRequest(#[source] ConnectionError),
+    #[error("frontend rejected session")]
+    Rejected,
+    #[error("failed to accept session")]
+    AcceptSessionRequest(#[source] ConnectionError),
+    #[error(transparent)]
+    Session(#[from] SessionError),
 }
 
 #[derive(Debug, Component)]
@@ -135,7 +160,7 @@ struct ToConnected {
     send_dc_f2b: oneshot::Sender<String>,
 }
 
-fn update_frontend(mut commands: Commands, mut query: Query<Entity>) {
+fn poll_frontend(mut commands: Commands, mut query: Query<Entity>) {
     for session in &mut query {}
 }
 
