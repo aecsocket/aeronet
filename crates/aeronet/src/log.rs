@@ -29,6 +29,7 @@ use crate::session::{Connected, DisconnectReason, Disconnected, Session};
 /// # }
 /// ```
 ///
+/// [session]: crate::session
 /// [`PluginGroupBuilder::disable`]: bevy_app::PluginGroupBuilder::disable
 #[derive(Debug)]
 pub struct SessionLogPlugin;

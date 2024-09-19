@@ -17,6 +17,11 @@ pub mod transport;
 use bevy_app::{prelude::*, PluginGroupBuilder};
 
 /// Default plugin group for the core `aeronet` logic.
+///
+/// # Plugins
+///
+/// - (internal plugins)
+/// - [`log::SessionLogPlugin`]
 #[derive(Debug)]
 pub struct AeronetPlugins;
 
@@ -27,6 +32,5 @@ impl PluginGroup for AeronetPlugins {
             .add(io::IoPlugin)
             .add(transport::TransportPlugin)
             .add(log::SessionLogPlugin)
-            .add(naive_transport::NaiveTransportPlugin) // TODO for testing only
     }
 }

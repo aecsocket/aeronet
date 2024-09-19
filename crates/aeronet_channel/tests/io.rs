@@ -23,8 +23,8 @@ fn setup() -> (App, Entity, Entity) {
     let mut app = app();
     let world = app.world_mut();
     let (io_a, io_b) = ChannelIo::open();
-    let a = world.spawn((Name::new("Session A"), io_a)).id();
-    let b = world.spawn((Name::new("Session B"), io_b)).id();
+    let a = world.spawn(io_a).id();
+    let b = world.spawn(io_b).id();
     app.update();
     (app, a, b)
 }
@@ -101,10 +101,8 @@ fn events_disconnect() {
 
     let (mut app, a, b) = setup();
     app.init_resource::<WhoDisconnected>().observe(
-        |trigger: Trigger<OnAdd, Disconnected>,
-         disconnected: Query<&Disconnected>,
-         mut who: ResMut<WhoDisconnected>| {
-            let reason = match &**disconnected.get(trigger.entity()).unwrap() {
+        |trigger: Trigger<Disconnected>, mut who: ResMut<WhoDisconnected>| {
+            let reason = match &**trigger.event() {
                 DisconnectReason::User(reason) => DisconnectReason::User(reason.clone()),
                 DisconnectReason::Peer(reason) => DisconnectReason::Peer(reason.clone()),
                 DisconnectReason::Error(_) => panic!("should not disconnect with an error"),

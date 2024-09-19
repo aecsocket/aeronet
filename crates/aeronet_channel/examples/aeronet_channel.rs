@@ -1,5 +1,5 @@
-//! Example showing a session connected over channel IO, where each session
-//! echoes back what the other sends it.
+//! Example showing a session connected over [`aeronet_channel`]'s [`ChannelIo`]
+//! IO layer.
 
 use std::mem;
 
@@ -13,7 +13,13 @@ use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 fn main() -> AppExit {
     App::new()
-        .add_plugins((DefaultPlugins, EguiPlugin, AeronetPlugins, ChannelIoPlugin))
+        .add_plugins((
+            DefaultPlugins,
+            EguiPlugin,
+            AeronetPlugins,
+            ChannelIoPlugin,
+            aeronet::naive_transport::NaiveTransportPlugin, // TODO for testing only!
+        ))
         .add_systems(Startup, setup)
         .add_systems(Update, ui)
         .run()

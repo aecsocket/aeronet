@@ -1,4 +1,8 @@
-//! See [`RttEstimator`].
+//! Tools for estimating the round-trip time of data transfer along a [session].
+//!
+//! TODO rtt explanation
+//!
+//! [session]: crate::session
 
 use std::time::Duration;
 

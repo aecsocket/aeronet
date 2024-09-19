@@ -107,7 +107,7 @@ fn on_disconnect(
     mut disconnected: EventWriter<SessionDisconnected>,
 ) {
     let session = trigger.entity();
-    let span = debug_span!("disconnect", ?session);
+    let span = debug_span!("disconnect", %session);
     let _span = span.enter();
 
     let Ok(mut io) = sessions.get_mut(session) else {
@@ -148,7 +148,7 @@ fn recv(
 ) {
     for (session, mut io, mut bufs, mut mtu, mut stats, mut remote_addr, mut raw_rtt) in &mut query
     {
-        let span = trace_span!("recv", ?session);
+        let span = trace_span!("recv", %session);
         let _span = span.enter();
 
         while let Ok(Some(meta)) = io.recv_meta.try_next() {
@@ -194,7 +194,7 @@ fn send(
     )>,
 ) {
     for (session, io, mut bufs, mut stats) in &mut query {
-        let span = trace_span!("send", ?session);
+        let span = trace_span!("send", %session);
         let _span = span.enter();
 
         let mut num_packets = Saturating(0);

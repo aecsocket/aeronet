@@ -17,6 +17,7 @@ use sync_wrapper::SyncWrapper;
 use thiserror::Error;
 use tracing::{debug, debug_span, trace, trace_span};
 
+/// Allows using [`ChannelIo`].
 #[derive(Debug)]
 pub struct ChannelIoPlugin;
 
@@ -29,10 +30,9 @@ impl Plugin for ChannelIoPlugin {
     }
 }
 
-#[derive(Debug, Clone, Error)]
-#[error("channel disconnected")]
-pub struct ChannelDisconnected;
-
+/// [`aeronet`] IO layer using in-memory MPSC channels.
+///
+/// See the [`crate`] documentation.
 #[derive(Debug, Component)]
 pub struct ChannelIo {
     send_packet: flume::Sender<Bytes>,
@@ -41,12 +41,21 @@ pub struct ChannelIo {
     recv_dc: SyncWrapper<oneshot::Receiver<String>>,
 }
 
+/// [`ChannelIo`] error when the peer drops its channel.
+#[derive(Debug, Clone, Error)]
+#[error("channel disconnected")]
+pub struct ChannelDisconnected;
+
 impl ChannelIo {
+    /// Creates a [`ChannelIo`] pair linked via MPSC channels, with the default
+    /// packet buffer capacity.
     #[must_use]
     pub fn open() -> (Self, Self) {
         Self::with_capacity(PACKET_BUF_CAP)
     }
 
+    /// Creates a [`ChannelIo`] pair linked via MPSC channels, with a given
+    /// packet buffer capacity.
     #[must_use]
     pub fn with_capacity(capacity: usize) -> (Self, Self) {
         let (send_packet_a, recv_packet_a) = flume::bounded(capacity);
@@ -82,7 +91,7 @@ impl Drop for ChannelIo {
 fn start_connecting(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
     let session = trigger.entity();
 
-    let span = debug_span!("connect", ?session);
+    let span = debug_span!("connect", %session);
     let _span = span.enter();
 
     debug!("Connecting");
@@ -103,7 +112,7 @@ fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelI
         return;
     };
 
-    let span = debug_span!("disconnect", ?session);
+    let span = debug_span!("disconnect", %session);
     let _span = span.enter();
 
     debug!("Disconnecting: {reason}");
@@ -121,7 +130,7 @@ fn poll(
     mut sessions: Query<(Entity, &mut ChannelIo, &mut PacketBuffers, &mut IoStats)>,
 ) {
     for (session, mut io, mut bufs, mut stats) in &mut sessions {
-        let span = trace_span!("poll", ?session);
+        let span = trace_span!("poll", %session);
         let _span = span.enter();
 
         let dc_reason = match io.recv_dc.get_mut().try_recv() {
@@ -132,7 +141,7 @@ fn poll(
             Err(oneshot::TryRecvError::Empty) => None,
         };
         if let Some(dc_reason) = dc_reason {
-            commands.entity(session).insert(Disconnected(dc_reason));
+            commands.trigger_targets(Disconnected(dc_reason), session);
             continue;
         }
 
@@ -158,7 +167,7 @@ fn poll(
 
 fn flush(mut sessions: Query<(Entity, &ChannelIo, &mut PacketBuffers, &mut IoStats)>) {
     for (session, io, mut bufs, mut stats) in &mut sessions {
-        let span = trace_span!("flush", ?session);
+        let span = trace_span!("flush", %session);
         let _span = span.enter();
 
         let mut num_packets = Saturating(0);
