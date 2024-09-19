@@ -1,12 +1,13 @@
 //! Testing purposes only.
 
-use bevy_app::prelude::*;
-use bevy_ecs::prelude::*;
-use ringbuf::traits::Producer;
-
-use crate::{
-    io::PacketBuffers,
-    transport::{MessageBuffers, TransportSet},
+use {
+    crate::{
+        io::PacketBuffers,
+        transport::{MessageBuffers, TransportSet},
+    },
+    bevy_app::prelude::*,
+    bevy_ecs::prelude::*,
+    ringbuf::traits::Producer,
 };
 
 #[derive(Debug)]

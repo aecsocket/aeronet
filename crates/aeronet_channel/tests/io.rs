@@ -1,10 +1,10 @@
-use aeronet::{
-    io::PacketBuffers,
-    session::{Connected, DisconnectReason, DisconnectSessionsExt, Disconnected, Session},
-    AeronetPlugins,
+use {
+    aeronet_channel::{ChannelIo, ChannelIoPlugin},
+    aeronet_io::{
+        Connected, DisconnectReason, DisconnectSessionsExt, Disconnected, PacketBuffers, Session,
+    },
+    bevy::{log::LogPlugin, prelude::*},
 };
-use aeronet_channel::{ChannelIo, ChannelIoPlugin};
-use bevy::{log::LogPlugin, prelude::*};
 
 fn app() -> App {
     let mut app = App::new();
@@ -13,7 +13,6 @@ fn app() -> App {
             level: tracing::Level::TRACE,
             ..Default::default()
         },
-        AeronetPlugins,
         ChannelIoPlugin,
     ));
     app
@@ -22,7 +21,7 @@ fn app() -> App {
 fn setup() -> (App, Entity, Entity) {
     let mut app = app();
     let world = app.world_mut();
-    let (io_a, io_b) = ChannelIo::open();
+    let (io_a, io_b) = ChannelIo::from_world(world);
     let a = world.spawn(io_a).id();
     let b = world.spawn(io_b).id();
     app.update();

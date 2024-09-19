@@ -1,25 +1,17 @@
 //! Example showing a session connected over [`aeronet_channel`]'s [`ChannelIo`]
 //! IO layer.
 
-use std::mem;
-
-use aeronet::{
-    bytes::Bytes, message::SendMode, session::DisconnectSessionsExt, transport::MessageBuffers,
-    AeronetPlugins,
+use {
+    aeronet_channel::{ChannelIo, ChannelIoPlugin},
+    aeronet_io::{DisconnectSessionsExt, PacketBuffers},
+    bevy::prelude::*,
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    std::mem,
 };
-use aeronet_channel::{ChannelIo, ChannelIoPlugin};
-use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 fn main() -> AppExit {
     App::new()
-        .add_plugins((
-            DefaultPlugins,
-            EguiPlugin,
-            AeronetPlugins,
-            ChannelIoPlugin,
-            aeronet::naive_transport::NaiveTransportPlugin, // TODO for testing only!
-        ))
+        .add_plugins((DefaultPlugins, EguiPlugin, ChannelIoPlugin))
         .add_systems(Startup, setup)
         .add_systems(Update, ui)
         .run()
@@ -31,9 +23,9 @@ struct UiState {
     log: Vec<String>,
 }
 
-fn setup(mut commands: Commands) {
-    let (a, b) = ChannelIo::open();
-    commands.spawn_batch([
+fn setup(world: &mut World) {
+    let (a, b) = ChannelIo::from_world(world);
+    world.spawn_batch([
         (Name::new("A"), a, UiState::default()),
         (Name::new("B"), b, UiState::default()),
     ]);
@@ -42,10 +34,10 @@ fn setup(mut commands: Commands) {
 fn ui(
     mut egui: EguiContexts,
     mut commands: Commands,
-    mut sessions: Query<(Entity, &Name, &mut UiState, &mut MessageBuffers)>,
+    mut sessions: Query<(Entity, &Name, &mut UiState, &mut PacketBuffers)>,
 ) {
     for (session, name, mut ui_state, mut bufs) in &mut sessions {
-        for msg in bufs.recv.drain(..) {
+        for msg in bufs.drain_recv() {
             let msg = String::from_utf8(Vec::from(msg)).unwrap();
             ui_state.log.push(format!("> {msg}"));
         }
@@ -78,8 +70,7 @@ fn ui(
             if send_msg {
                 let msg = mem::take(&mut ui_state.msg);
                 ui_state.log.push(format!("< {msg}"));
-                bufs.send
-                    .push((SendMode::UnreliableUnordered, Bytes::from(msg)));
+                bufs.push_send(msg.into());
                 ui.memory_mut(|m| m.request_focus(msg_resp.id));
             }
         });

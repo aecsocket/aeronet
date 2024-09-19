@@ -1,6 +1,6 @@
 [package]
-description = "In-memory MPSC channel transport implementation for aeronet"
-name = "aeronet_channel"
+description = "IO abstraction primitives for aeronet"
+name = "aeronet_io"
 
 authors.workspace = true
 categories.workspace = true
@@ -8,32 +8,26 @@ edition.workspace = true
 keywords.workspace = true
 license.workspace = true
 repository.workspace = true
+rust-version.workspace = true
 version.workspace = true
 
 [lints]
 workspace = true
 
-[package.metadata.docs.rs]
-all-features = true
-
 [dependencies]
-aeronet_io = { workspace = true }
-
+anyhow = { workspace = true }
+arbitrary = { workspace = true }
 bytes = { workspace = true }
-flume = { workspace = true }
-oneshot = { workspace = true }
+datasize = { workspace = true }
+derive_more = { workspace = true }
 ringbuf = { workspace = true }
-sync_wrapper = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
+web-time = { workspace = true }
 
 bevy_app = { workspace = true }
+bevy_core = { workspace = true }
 bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true }
+bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }
-
-[dev-dependencies]
-assert_matches = { workspace = true }
-
-bevy = { workspace = true }
-bevy_egui = { workspace = true }
+bevy_time = { workspace = true }

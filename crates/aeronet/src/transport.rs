@@ -25,12 +25,9 @@
 //! # Sending and receiving
 //!
 //! ```
-//! use bevy::prelude::*;
-//! use aeronet::transport::MessageBuffers;
+//! use {aeronet::transport::MessageBuffers, bevy::prelude::*};
 //!
-//! fn print_all_messages(
-//!     mut sessions: Query<(Entity, &mut MessageBuffers)>,
-//! ) {
+//! fn print_all_messages(mut sessions: Query<(Entity, &mut MessageBuffers)>) {
 //!     for (session, mut msg_bufs) in &mut sessions {
 //!         for msg in msg_bufs.recv.drain(..) {
 //!             info!("Received message from {session:?}: {msg:?}");
@@ -57,18 +54,18 @@
 //! [reliably]: crate::message::SendReliability::Reliable
 // TODO how does sending work with message keys?
 
-use std::num::Saturating;
-
-use bevy_app::prelude::*;
-use bevy_derive::Deref;
-use bevy_ecs::prelude::*;
-use bevy_reflect::prelude::*;
-use bytes::Bytes;
-use derive_more::{Add, AddAssign, Sub, SubAssign};
-
-use crate::{
-    io::IoSet,
-    message::{MessageKey, SendMode},
+use {
+    crate::{
+        io::IoSet,
+        message::{MessageKey, SendMode},
+    },
+    bevy_app::prelude::*,
+    bevy_derive::Deref,
+    bevy_ecs::prelude::*,
+    bevy_reflect::prelude::*,
+    bytes::Bytes,
+    derive_more::{Add, AddAssign, Sub, SubAssign},
+    std::num::Saturating,
 };
 
 #[derive(Debug)]

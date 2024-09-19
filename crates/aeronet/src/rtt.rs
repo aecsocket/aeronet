@@ -4,9 +4,7 @@
 //!
 //! [session]: crate::session
 
-use std::time::Duration;
-
-use bevy_reflect::prelude::*;
+use {bevy_reflect::prelude::*, std::time::Duration};
 
 #[derive(Debug, Clone, Reflect)]
 #[doc(alias = "ping")]
