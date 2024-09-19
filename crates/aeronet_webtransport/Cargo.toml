@@ -40,9 +40,7 @@ tracing = { workspace = true }
 web-time = { workspace = true }
 
 bevy_app = { workspace = true }
-bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true }
-bevy_reflect = { workspace = true }
 
 # xwt
 

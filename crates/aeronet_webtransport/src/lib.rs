@@ -14,7 +14,11 @@ pub mod session;
 // pub mod server;
 
 pub use runtime::WebTransportRuntime;
-#[cfg(not(target_family = "wasm"))]
-pub use wtransport;
-#[cfg(target_family = "wasm")]
-pub use xwt_web_sys;
+
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+        pub use xwt_web_sys;
+    } else {
+        pub use wtransport;
+    }
+}

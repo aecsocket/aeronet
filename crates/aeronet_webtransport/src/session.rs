@@ -1,3 +1,7 @@
+//! Implementation for WebTransport sessions.
+//!
+//! This logic is shared between clients and servers.
+
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
@@ -44,28 +48,45 @@ impl Plugin for WebTransportSessionPlugin {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum SessionError {
-    #[error("frontend closed")]
-    FrontendClosed,
-    #[error("backend closed")]
-    BackendClosed,
-    #[error("failed to create endpoint")]
-    CreateEndpoint(#[source] io::Error),
-    #[error("failed to get local socket address")]
-    GetLocalAddr(#[source] io::Error),
-    #[error("datagrams not supported")]
-    DatagramsNotSupported,
-    #[error("connection lost")]
-    Connection(#[source] ConnectionError),
-}
-
+/// Manages a WebTransport session's connection.
+///
+/// This may represent either an outgoing client connection (this session is
+/// connecting to a server), or an incoming client connection (this session is
+/// a child of a server that the user has spawned).
+///
+/// You should not add or remove this component directly - it is managed
+/// entirely by the client and server implementations.
 #[derive(Debug, Component)]
 pub struct WebTransportIo {
     pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,
     pub(crate) recv_packet_b2f: mpsc::Receiver<Bytes>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
+}
+
+/// Error that occurs when polling a session using the [`WebTransportIo`]
+/// IO layer implementation.
+#[derive(Debug, Error)]
+pub enum SessionError {
+    /// Frontend ([`WebTransportIo`]) was dropped.
+    #[error("frontend closed")]
+    FrontendClosed,
+    /// Backend async task was unexpectedly cancelled and dropped.
+    #[error("backend closed")]
+    BackendClosed,
+    /// Failed to create endpoint.
+    #[error("failed to create endpoint")]
+    CreateEndpoint(#[source] io::Error),
+    /// Failed to read the local socket address of the endpoint.
+    #[error("failed to get local socket address")]
+    GetLocalAddr(#[source] io::Error),
+    /// Successfully connected to the peer, but this connection does not support
+    /// datagrams.
+    #[error("datagrams not supported")]
+    DatagramsNotSupported,
+    /// Unexpectedly lost connection from the peer.
+    #[error("connection lost")]
+    Connection(#[source] ConnectionError),
 }
 
 impl Drop for WebTransportIo {
@@ -93,7 +114,7 @@ fn on_io_added(trigger: Trigger<OnAdd, WebTransportIo>, mut commands: Commands) 
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTransportIo>) {
     let session = trigger.entity();
-    let Disconnect(reason) = trigger.event();
+    let Disconnect { reason } = trigger.event();
     let Ok(mut io) = sessions.get_mut(session) else {
         return;
     };

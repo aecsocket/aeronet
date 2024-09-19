@@ -46,15 +46,15 @@ impl Plugin for PacketPlugin {
 ///   equivalent to [`push_overwrite`] on [`PacketBuffers::send`]
 ///
 /// ```
-/// use {aeronet_io::PacketBuffers, bevy::prelude::*};
+/// use {aeronet_io::PacketBuffers, bevy_ecs::prelude::*};
 ///
 /// fn print_all_packets(mut sessions: Query<(Entity, &mut PacketBuffers)>) {
 ///     for (session, mut packet_bufs) in &mut sessions {
 ///         for packet in packet_bufs.drain_recv() {
-///             info!("Received packet from {session}: {packet:?}");
+///             println!("Received packet from {session}: {packet:?}");
 ///         }
 ///
-///         info!("Sending out OK along {session}");
+///         println!("Sending out OK along {session}");
 ///         packet_bufs.push_send(b"OK"[..].into());
 ///     }
 /// }

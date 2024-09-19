@@ -1,3 +1,8 @@
+//! Allows creating a dedicated client session, which connects to a server
+//! endpoint.
+//!
+//! See [`WebTransportClient`].
+
 use {
     crate::{
         runtime::WebTransportRuntime,
@@ -27,10 +32,12 @@ use {
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
+        /// Configuration for the [`WebTransportClient`] on WASM platforms.
         pub type ClientConfig = xwt_web_sys::WebTransportOptions;
     } else {
         use wtransport::endpoint::endpoint_side;
 
+        /// Configuration for the [`WebTransportClient`] on non-WASM platforms.
         pub type ClientConfig = wtransport::ClientConfig;
         type ClientEndpoint = xwt_wtransport::Endpoint<endpoint_side::Client>;
     }
@@ -196,9 +203,9 @@ fn should_disconnect(
         Ok(Some(dc_reason)) => Some(dc_reason),
         Err(_) => Some(ClientError::Session(SessionError::BackendClosed).into()),
     };
-    if let Some(dc_reason) = dc_reason {
-        let dc_reason = dc_reason.map_err(anyhow::Error::new);
-        commands.trigger_targets(Disconnected(dc_reason), session);
+    if let Some(reason) = dc_reason {
+        let reason = reason.map_err(anyhow::Error::new);
+        commands.trigger_targets(Disconnected { reason }, session);
         true
     } else {
         false
