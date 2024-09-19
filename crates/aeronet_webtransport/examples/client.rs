@@ -62,7 +62,7 @@ fn on_disconnected(
     mut ui_state: ResMut<GlobalUi>,
 ) {
     let session = trigger.entity();
-    let Disconnected(reason) = trigger.event();
+    let Disconnected { reason } = trigger.event();
     let name = names.get(session).unwrap();
     ui_state.log.push(match reason {
         DisconnectReason::User(reason) => {

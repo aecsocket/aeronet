@@ -38,9 +38,6 @@ pub struct Connected;
 /// Triggered when a user requests a [`Session`] to gracefully disconnect from
 /// its peer with a given reason.
 ///
-/// The string provided is used as the disconnection reason in
-/// [`DisconnectReason::User`].
-///
 /// Triggering this will guarantee that the session is disconnected and
 /// despawned immediately, however the disconnection reason will be transmitted
 /// to the peer as a best-effort attempt. If the IO layer implementation does
@@ -51,8 +48,13 @@ pub struct Connected;
 /// as a convenient alternative to manually triggering an event.
 ///
 /// [`disconnect_sessions`]: DisconnectSessionsExt::disconnect_sessions
-#[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut, Event)]
-pub struct Disconnect(pub String);
+#[derive(Debug, Clone, PartialEq, Eq, Event)]
+pub struct Disconnect {
+    /// User-provided disconnection reason.
+    ///
+    /// Will be used as the reason in [`DisconnectReason::User`].
+    pub reason: String,
+}
 
 /// Triggered when a [`Session`] loses connection for any reason.
 ///
@@ -64,7 +66,10 @@ pub struct Disconnect(pub String);
 /// If you want to get the concrete error type of the
 /// [`DisconnectReason::Error`], use [`anyhow::Error::downcast_ref`].
 #[derive(Debug, Deref, DerefMut, Event)]
-pub struct Disconnected(pub DisconnectReason<anyhow::Error>);
+pub struct Disconnected {
+    /// Why the session was disconnected.
+    pub reason: DisconnectReason<anyhow::Error>,
+}
 
 /// Why a [`Session`] was disconnected from its peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,7 +136,7 @@ pub trait DisconnectSessionsExt {
     /// # Examples
     ///
     /// ```
-    /// use {aeronet::session::DisconnectSessionsExt, bevy_ecs::prelude::*};
+    /// use {aeronet_io::DisconnectSessionsExt, bevy_ecs::prelude::*};
     ///
     /// # fn run(mut commands: Commands, session: Entity, session1: Entity, session2: Entity) {
     /// // disconnect a single session
@@ -146,7 +151,12 @@ pub trait DisconnectSessionsExt {
 
 impl DisconnectSessionsExt for Commands<'_, '_> {
     fn disconnect_sessions(&mut self, reason: impl Into<String>, targets: impl TriggerTargets) {
-        self.trigger_targets(Disconnect(reason.into()), targets);
+        self.trigger_targets(
+            Disconnect {
+                reason: reason.into(),
+            },
+            targets,
+        );
     }
 }
 
@@ -196,8 +206,8 @@ fn on_connected(trigger: Trigger<OnAdd, Connected>, mut commands: Commands) {
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
     let session = trigger.entity();
-    let reason = DisconnectReason::User(trigger.event().0.clone());
-    commands.trigger_targets(Disconnected(reason), session);
+    let reason = DisconnectReason::User(trigger.event().reason.clone());
+    commands.trigger_targets(Disconnected { reason }, session);
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {

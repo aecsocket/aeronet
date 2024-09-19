@@ -22,15 +22,12 @@ aeronet_io = { workspace = true }
 bytes = { workspace = true }
 flume = { workspace = true }
 oneshot = { workspace = true }
-ringbuf = { workspace = true }
 sync_wrapper = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
 bevy_app = { workspace = true }
-bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true }
-bevy_reflect = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

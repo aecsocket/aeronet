@@ -16,16 +16,14 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-arbitrary = { workspace = true }
 bytes = { workspace = true }
-datasize = { workspace = true }
 derive_more = { workspace = true }
 ringbuf = { workspace = true }
 tracing = { workspace = true }
 web-time = { workspace = true }
 
-bevy_app = { workspace = true }
+bevy_app = { workspace = true, features = ["bevy_reflect"] }
 bevy_derive = { workspace = true }
-bevy_ecs = { workspace = true }
+bevy_ecs = { workspace = true, features = ["bevy_reflect"] }
 bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }

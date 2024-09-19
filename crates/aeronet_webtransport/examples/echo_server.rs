@@ -2,7 +2,8 @@
 //! and sends back a string reply.
 
 cfg_if::cfg_if! {
-    if #[cfg(target_family = "wasm")] {
+    // if #[cfg(target_family = "wasm")] { // TODO
+    if #[cfg(all())] {
         fn main() {
             eprintln!("this example is not for WASM");
         }

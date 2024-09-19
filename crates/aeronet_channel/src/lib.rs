@@ -171,7 +171,7 @@ fn on_io_added(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelIo>) {
     let session = trigger.entity();
-    let Disconnect(reason) = trigger.event();
+    let Disconnect { reason } = trigger.event();
     let Ok(mut io) = sessions.get_mut(session) else {
         return;
     };
@@ -196,8 +196,8 @@ fn poll(
             }
             Err(oneshot::TryRecvError::Empty) => None,
         };
-        if let Some(dc_reason) = dc_reason {
-            commands.trigger_targets(Disconnected(dc_reason), session);
+        if let Some(reason) = dc_reason {
+            commands.trigger_targets(Disconnected { reason }, session);
             continue;
         }
 
