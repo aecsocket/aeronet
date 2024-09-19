@@ -60,19 +60,19 @@ impl WebTransportClient {
     #[must_use]
     pub fn connect(config: ClientConfig, target: impl Into<String>) -> impl EntityCommand {
         let target = target.into();
-        |entity: Entity, world: &mut World| connect(entity, world, config, target)
+        |session: Entity, world: &mut World| connect(session, world, config, target)
     }
 }
 
 fn connect(session: Entity, world: &mut World, config: ClientConfig, target: String) {
-    let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
-    let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     let runtime = world.resource::<WebTransportRuntime>().clone();
     let packet_buf_cap = world
         .get::<PacketBuffers>(session)
         .map(PacketBuffers::capacity)
         .unwrap_or_else(|| **world.resource::<DefaultPacketBuffersCapacity>());
 
+    let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
+    let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     runtime.spawn({
         let runtime = runtime.clone();
         async move {
