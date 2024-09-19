@@ -1,5 +1,9 @@
 [workspace]
-members = ["crates/aeronet", "crates/aeronet_io", "crates/aeronet_channel"]
+members = [
+  "crates/aeronet_io",
+  "crates/aeronet_channel",
+  "crates/aeronet_webtransport",
+]
 resolver = "2"
 
 [workspace.package]

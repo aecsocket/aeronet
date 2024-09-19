@@ -5,15 +5,16 @@
 )]
 #![doc = include_str!("../README.md")]
 
+pub mod cert;
+// #[cfg(feature = "client")]
+pub mod client;
+mod runtime;
+pub mod session;
+// #[cfg(all(feature = "server", not(target_family = "wasm")))]
+// pub mod server;
+
+pub use runtime::WebTransportRuntime;
 #[cfg(not(target_family = "wasm"))]
 pub use wtransport;
 #[cfg(target_family = "wasm")]
 pub use xwt_web_sys;
-
-pub mod cert;
-// #[cfg(feature = "client")]
-pub mod client;
-pub mod runtime;
-pub mod session;
-// #[cfg(all(feature = "server", not(target_family = "wasm")))]
-pub mod server;

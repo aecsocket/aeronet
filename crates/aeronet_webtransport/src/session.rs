@@ -1,28 +1,22 @@
-use std::{any::type_name, io, net::SocketAddr, num::Saturating, sync::Arc, time::Duration};
-
-use aeronet::{
-    io::{IoSet, PacketBuffers, PacketMtu},
-    session::{
-        DisconnectReason, DisconnectSession, SessionConnected, SessionDisconnected,
-        DROP_DISCONNECT_REASON,
+use {
+    crate::runtime::WebTransportRuntime,
+    aeronet_io::{
+        AeronetIoPlugin, Disconnect, DisconnectReason, IoSet, PacketBuffers, PacketMtu, PacketRtt,
+        PacketStats, RemoteAddr, Session, DROP_DISCONNECT_REASON,
     },
-    stats::{RemoteAddr, SessionStats},
+    bevy_app::prelude::*,
+    bevy_ecs::prelude::*,
+    bytes::Bytes,
+    futures::{
+        channel::{mpsc, oneshot},
+        never::Never,
+        FutureExt, SinkExt, StreamExt,
+    },
+    std::{io, net::SocketAddr, num::Saturating, sync::Arc, time::Duration},
+    thiserror::Error,
+    tracing::{debug, trace, trace_span},
+    xwt_core::prelude::*,
 };
-use bevy_app::prelude::*;
-use bevy_derive::Deref;
-use bevy_ecs::prelude::*;
-use bevy_reflect::prelude::*;
-use bytes::Bytes;
-use futures::{
-    channel::{mpsc, oneshot},
-    never::Never,
-    FutureExt, SinkExt, StreamExt,
-};
-use thiserror::Error;
-use tracing::{debug, debug_span, trace, trace_span};
-use xwt_core::prelude::*;
-
-use crate::runtime::WebTransportRuntime;
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
@@ -38,9 +32,14 @@ pub struct WebTransportSessionPlugin;
 
 impl Plugin for WebTransportSessionPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<AeronetIoPlugin>() {
+            app.add_plugins(AeronetIoPlugin);
+        }
+
         app.init_resource::<WebTransportRuntime>()
-            .add_systems(PreUpdate, (setup_session, recv).chain().in_set(IoSet::Recv))
-            .add_systems(PostUpdate, send.in_set(IoSet::Send));
+            .add_systems(PreUpdate, poll.in_set(IoSet::Poll))
+            .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
+            .observe(on_disconnect);
     }
 }
 
@@ -60,12 +59,8 @@ pub enum SessionError {
     Connection(#[source] ConnectionError),
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deref, Component, Reflect)]
-#[reflect(Component)]
-pub struct RawRtt(pub Duration);
-
 #[derive(Debug, Component)]
-pub(crate) struct WebTransportIo {
+pub struct WebTransportIo {
     pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,
     pub(crate) recv_packet_b2f: mpsc::Receiver<Bytes>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
@@ -89,78 +84,45 @@ pub(crate) struct SessionMeta {
     mtu: usize,
 }
 
-fn setup_session(
-    mut commands: Commands,
-    query: Query<Entity, Added<WebTransportIo>>,
-    mut connected: EventWriter<SessionConnected>,
-) {
-    for session in &query {
-        connected.send(SessionConnected { session });
-        commands.entity(session).observe(on_disconnect);
-    }
-}
-
-fn on_disconnect(
-    trigger: Trigger<DisconnectSession>,
-    mut sessions: Query<&mut WebTransportIo>,
-    mut commands: Commands,
-    mut disconnected: EventWriter<SessionDisconnected>,
-) {
+fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTransportIo>) {
     let session = trigger.entity();
-    let span = debug_span!("disconnect", %session);
-    let _span = span.enter();
-
+    let Disconnect(reason) = trigger.event();
     let Ok(mut io) = sessions.get_mut(session) else {
-        trace!(
-            "Ignoring disconnect request because session doesn't have `{}`",
-            type_name::<WebTransportIo>()
-        );
         return;
     };
 
-    if let Some(sender) = io.send_user_dc.take() {
-        let reason = trigger.event().reason.clone();
-        debug!("Disconnecting: {reason}");
-
-        let _ = sender.send(reason.clone());
-        disconnected.send(SessionDisconnected {
-            session,
-            reason: DisconnectReason::User(reason),
-        });
-        commands.entity(session).despawn();
-    } else {
-        trace!(
-            "Ignoring disconnect request because session has already sent its disconnect reason"
-        );
+    if let Some(send_dc) = io.send_user_dc.take() {
+        let _ = send_dc.send(reason.clone());
     }
 }
 
-fn recv(
-    mut query: Query<(
+fn poll(
+    mut sessions: Query<(
         Entity,
         &mut WebTransportIo,
         &mut PacketBuffers,
         &mut PacketMtu,
-        &mut SessionStats,
+        &mut PacketStats,
         Option<&mut RemoteAddr>,
-        Option<&mut RawRtt>,
+        Option<&mut PacketRtt>,
     )>,
 ) {
-    for (session, mut io, mut bufs, mut mtu, mut stats, mut remote_addr, mut raw_rtt) in &mut query
+    for (session, mut io, mut bufs, mut mtu, mut stats, mut remote_addr, mut packet_rtt) in
+        &mut sessions
     {
-        let span = trace_span!("recv", %session);
+        let span = trace_span!("poll", %session);
         let _span = span.enter();
 
         while let Ok(Some(meta)) = io.recv_meta.try_next() {
-            mtu.0 = meta.mtu;
+            **mtu = meta.mtu;
             #[cfg(not(target_family = "wasm"))]
             {
                 if let Some(ref mut remote_addr) = remote_addr {
-                    remote_addr.0 = meta.remote_addr;
+                    ***remote_addr = meta.remote_addr;
                 }
 
-                if let Some(ref mut raw_rtt) = raw_rtt {
-                    raw_rtt.0 = meta.raw_rtt;
+                if let Some(ref mut raw_rtt) = packet_rtt {
+                    ***raw_rtt = meta.raw_rtt;
                 }
             }
         }
@@ -174,7 +136,7 @@ fn recv(
             num_bytes += packet.len();
             stats.bytes_recv += packet.len();
 
-            bufs.recv.push(packet);
+            bufs.push_recv(packet);
         }
 
         trace!(
@@ -185,35 +147,35 @@ fn recv(
     }
 }
 
-fn send(
-    mut query: Query<(
+fn flush(
+    mut sessions: Query<(
         Entity,
         &WebTransportIo,
         &mut PacketBuffers,
-        &mut SessionStats,
+        &mut PacketStats,
     )>,
 ) {
-    for (session, io, mut bufs, mut stats) in &mut query {
-        let span = trace_span!("send", %session);
+    for (session, io, mut bufs, mut stats) in &mut sessions {
+        let span = trace_span!("flush", %session);
         let _span = span.enter();
 
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        for packet in bufs.send.drain(..) {
+        for packet in bufs.drain_send() {
             num_packets += 1;
             stats.packets_sent += 1;
 
             num_bytes += packet.len();
             stats.bytes_sent += packet.len();
 
-            // handle errors in `recv`
+            // handle connection errors in `poll`
             let _ = io.send_packet_f2b.unbounded_send(packet);
         }
 
         trace!(
             num_packets = num_packets.0,
             num_bytes = num_bytes.0,
-            "Sent packets",
+            "Flushed packets",
         );
     }
 }
@@ -442,8 +404,7 @@ async fn disconnect(conn: Arc<Connection>, reason: &str) {
 
     #[cfg(target_family = "wasm")]
     {
-        use wasm_bindgen_futures::JsFuture;
-        use xwt_web_sys::sys::WebTransportCloseInfo;
+        use {wasm_bindgen_futures::JsFuture, xwt_web_sys::sys::WebTransportCloseInfo};
 
         let mut close_info = WebTransportCloseInfo::new();
         close_info.close_code(DISCONNECT_ERROR_CODE);

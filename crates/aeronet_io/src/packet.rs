@@ -93,6 +93,7 @@ pub struct PacketBuffers {
     ///
     /// [`IoSet::Flush`]: crate::IoSet::Flush
     pub send: HeapRb<Bytes>,
+    capacity: usize,
 }
 
 impl PacketBuffers {
@@ -103,7 +104,14 @@ impl PacketBuffers {
         Self {
             recv: HeapRb::new(capacity),
             send: HeapRb::new(capacity),
+            capacity,
         }
+    }
+
+    /// Gets the capacity which these buffers were initialized with.
+    #[must_use]
+    pub const fn capacity(&self) -> usize {
+        self.capacity
     }
 
     /// Pushes a packet into [`PacketBuffers::recv`], potentially overwriting

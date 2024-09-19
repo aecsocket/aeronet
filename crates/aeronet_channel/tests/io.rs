@@ -21,9 +21,9 @@ fn app() -> App {
 fn setup() -> (App, Entity, Entity) {
     let mut app = app();
     let world = app.world_mut();
-    let (io_a, io_b) = ChannelIo::from_world(world);
-    let a = world.spawn(io_a).id();
-    let b = world.spawn(io_b).id();
+    let a = world.spawn_empty().id();
+    let b = world.spawn_empty().id();
+    world.commands().add(ChannelIo::open(a, b));
     app.update();
     (app, a, b)
 }
@@ -49,9 +49,9 @@ fn events_connect() {
     );
 
     let world = app.world_mut();
-    let (io_a, io_b) = ChannelIo::open();
-    let a = world.spawn(io_a).id();
-    let b = world.spawn(io_b).id();
+    let a = world.spawn_empty().id();
+    let b = world.spawn_empty().id();
+    world.commands().add(ChannelIo::open(a, b));
     app.update();
 
     assert_eq!(vec![a, b], app.world().resource::<WhoConnecting>().0);
