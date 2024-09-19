@@ -127,10 +127,11 @@ pub struct Disconnect(pub String);
 ///
 /// Immediately after this, the session will be despawned.
 ///
-/// This must only be triggered by the IO layer.
+/// This must only be triggered by the IO layer when it detects that the peer
+/// has disconnected from us, or when it detects a connection error.
 ///
-/// If you want to get the concrete error type of the [`DisconnectReason`],
-/// use [`anyhow::Error::downcast_ref`].
+/// If you want to get the concrete error type of the
+/// [`DisconnectReason::Error`], use [`anyhow::Error::downcast_ref`].
 ///
 /// [session]: crate::session
 #[derive(Debug, Deref, DerefMut, Event)]

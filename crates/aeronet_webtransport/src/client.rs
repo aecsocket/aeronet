@@ -111,7 +111,7 @@ fn connect_web_transport_client(
                     }
                     let _ = send_dc.send(reason);
                 }
-                .instrument(debug_span!("client", ?session))
+                .instrument(debug_span!("client", %session))
             });
             world
                 .entity_mut(session)

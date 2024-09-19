@@ -84,7 +84,7 @@ impl OpenWebTransportServerExt for Commands<'_, '_> {
                         }
                         let _ = send_err.send(err.into());
                     }
-                    .instrument(debug_span!("server", ?server))
+                    .instrument(debug_span!("server", %server))
                 });
                 world.entity_mut(server).insert(Frontend::Opening {
                     recv_err,
@@ -216,7 +216,7 @@ async fn accept_session(
         }
         err
     }
-    .instrument(debug_span!("session", session = ?session_entity))
+    .instrument(debug_span!("session", session = %session_entity))
     .await;
     Ok(())
 }

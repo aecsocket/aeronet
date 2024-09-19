@@ -143,7 +143,9 @@ pub struct MessageBuffers {
 /// Maximum transmissible unit (message length) of outgoing messages on a
 /// [session].
 ///
-/// Sent messages must have a length smaller than or equal to this value.
+/// Sent messages must have a length smaller than or equal to this value. Note
+/// that this value may be arbitrarily large, and may even be [`usize::MAX`],
+/// so you should not attempt to preallocate buffers of size [`MessageMtu`].
 ///
 /// [session]: crate::session
 #[derive(

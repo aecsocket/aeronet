@@ -15,7 +15,7 @@ pub enum SendMode {
     UnreliableUnordered,
     UnreliableSequenced,
     ReliableUnordered,
-    ReliableOrdered(usize),
+    ReliableOrdered(u32),
 }
 
 impl SendMode {
@@ -59,8 +59,6 @@ pub enum SendReliability {
 pub struct Seq(#[data_size(skip)] Wrapping<u16>);
 
 impl Seq {
-    pub const ZERO: Seq = Seq::from_raw(0);
-
     /// Creates a [`Seq`] from a raw sequence number.
     #[must_use]
     pub const fn from_raw(raw: u16) -> Self {
@@ -88,6 +86,7 @@ impl Ord for Seq {
     /// [`Less`]: Ordering::Less
     ///
     /// [*Gaffer On Games*]: https://gafferongames.com/post/reliability_ordering_and_congestion_avoidance_over_udp/#handling-sequence-number-wrap-around
+    #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
         // The implementation used is a variant of `slotmap`'s generation
         // comparison function:
@@ -109,6 +108,21 @@ impl PartialOrd for Seq {
     }
 }
 
+/// Pseudo-unique key for a [transport layer] message that has been sent out by us,
+/// used for detecting when the peer sent acknowledgement of this message.
+///
+/// The underlying [`Seq`] should be treated as an opaque value, specific to the
+/// transport layer implementation.
+///
+/// # Uniqueness
+///
+/// The underlying type is a [`Seq`], which may overflow during the lifetime of
+/// the session. Uniqueness is only guaranteed up until the overflow, so you
+/// should not store [`MessageKey`]s for a long time (around [RTT] plus a safety
+/// margin).
+///
+/// [transport layer]: crate::transport
+/// [RTT]: crate::rtt
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Reflect, Arbitrary, DataSize,
 )]

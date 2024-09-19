@@ -3,7 +3,8 @@
 [![crates.io](https://img.shields.io/crates/v/aeronet.svg)](https://crates.io/crates/aeronet)
 [![docs.rs](https://img.shields.io/docsrs/aeronet)](https://docs.rs/aeronet)
 
-A [Bevy]-native network crate, focused on robust and rock-solid data transfer primitives.
+A set of [Bevy]-native networking crates, focused on providing robust and rock-solid data transfer
+primitives.
 
 # Overview
 
@@ -12,18 +13,18 @@ A [Bevy]-native network crate, focused on robust and rock-solid data transfer pr
 - Native to Bevy ECS
   - Network state is represented as entities, making them easily queryable
   - React to connections and disconnections via observers
+  - Send and receive data by mutating components
 - Correct and non-panicking
   - Explicit error handling, where failure conditions are clear and documented
   - No `unwrap`s - all panicking paths are a bug unless explicitly documented
-- Swappable IO layer
-  - Use whatever you like as the underlying byte transfer mechanism - UDP sockets, WebTransport,
-    Steam sockets
-- Swappable transport layer
-  - Use the first-party [`aeronet_proto`] for reliable-ordered message transport with fragmentation
-  - Or write your own transport layer protocol
 - Support for any network topology
   - Dedicated server/client, listen server, peer-to-peer
-- Comfortable for non-async code
+- Swappable IO layer
+  - Use whatever you like as the underlying byte transfer mechanism
+- First-party IO layer implementations
+  - [`aeronet_channel`]: MPSC channels (native + WASM)
+  - [`aeronet_webtransport`]: WebTransport (native + WASM)
+  - [`aeronet_steam`]: Steam networking sockets (native)
 
 High-level networking features such as replication, rollback, and prediction are explicit
 **non-goals** for this crate. Instead, this crate aims to provide a solid foundation for
@@ -36,26 +37,22 @@ implementing these features.
 - *peer*: The other side of who a session is talking to.
 - *packet*: Sequence of bytes transmitted between a session and a peer which has no guarantees
   on delivery, managed by the IO layer.
-  - It MAY be delayed, lost, or even duplicated.
-  - A packet MUST NOT be corrupted, extended, or truncated - these MUST all be treated as if the
-    packet was lost.
-- *message*: Sequence of bytes sent down to, and received by, the transport layer, which may be
-  converted into, and reassembled from, multiple packets.
+  - A packet may be delayed, lost, or even duplicated.
+  - A packet must not be corrupted, extended, or truncated.
+- *message*: Sequence of bytes sent to/from the transport layer, which may be split into
+  and reassembled from packets.
 
 ## Layers
 
-This crate is fundamentally split into multiple layers. The core `aeronet` crate does not provide an
-implementation for any layer (apart from the session layer) - it just provides primitives to allow
-each layer to operate with the ones above and below it.
-
+This crate is fundamentally split into multiple layers:
 - [session layer](crate::session)
+  - Handles core dis/connection logic, shared among all IO implementations
   - Performs setup for the layers above
-  - Non-swappable - the bedrock of this crate
 - [IO layer](crate::io)
   - Establishes and maintains a connection to a peer
   - Detects connection and disconnection, and reports it to the session layer
   - Allows sending and receiving packets unreliably
-  - Example implementations: [`aeronet_channel`], [`aeronet_webtransport`]
+  - User-swappable - example implementations: [`aeronet_channel`], [`aeronet_webtransport`]
 - [transport layer](crate::transport)
   - Allows sending and receiving messages with acknowledgements and guarantees
   - Provides fragmentation, reliability, and ordering guarantees
@@ -65,3 +62,4 @@ each layer to operate with the ones above and below it.
 [`aeronet_proto`]: https://docs.rs/aeronet_proto
 [`aeronet_channel`]: https://docs.rs/aeronet_channel
 [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport
+[`aeronet_steam`]: https://docs.rs/aeronet_steam

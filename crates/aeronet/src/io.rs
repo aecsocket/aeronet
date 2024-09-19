@@ -19,8 +19,7 @@
 //! This layer is only really useful to you if you are implementing your own IO
 //! layer, or you are implementing your own transport layer. For most purposes,
 //! you should be using a higher-level API than just packets, since you probably
-//! need reliability, ordering and fragmentation. For this, see the
-//! [transport layer].
+//! need reliability, ordering and fragmentation.
 //!
 //! # Sending and receiving
 //!
@@ -54,7 +53,6 @@
 //! up to the implementation).
 //!
 //! [session]: crate::session
-//! [transport layer]: crate::transport
 //! [`pop_iter`]: ringbuf::traits::Consumer::pop_iter
 //! [`push_overwrite`]: ringbuf::traits::RingBuffer::push_overwrite
 
@@ -188,7 +186,9 @@ impl Default for PacketBuffers {
 /// Maximum transmissible unit (packet length) of outgoing packets on a
 /// [session].
 ///
-/// Sent packets must have a length smaller than or equal to this value.
+/// Sent packets must have a length smaller than or equal to this value. Note
+/// that this value may be arbitrarily large, and may even be [`usize::MAX`],
+/// so you should not attempt to preallocate buffers of size [`PacketMtu`].
 ///
 /// This component must only be mutated by the IO layer.
 ///
@@ -201,7 +201,7 @@ pub struct PacketMtu(pub usize);
 
 /// Round-trip time of packets on a [session] as computed by the [IO layer].
 ///
-/// See [`RttEstimator`] for an explanation of round-trip time.
+/// See [RTT] for an explanation of round-trip time.
 ///
 /// This component may not be present on sessions whose IO layers don't provide
 /// an RTT estimate.
@@ -210,6 +210,7 @@ pub struct PacketMtu(pub usize);
 ///
 /// [session]: crate::session
 /// [IO layer]: crate::io
+/// [RTT]: crate::rtt
 #[derive(Debug, Clone, Deref, DerefMut, Component, Reflect)]
 #[reflect(Component)]
 pub struct PacketRtt(pub Duration);
