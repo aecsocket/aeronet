@@ -103,7 +103,9 @@ impl ChannelIo {
         }
     }
 
-    /// Creates a [`ChannelIo`] pair with a given capacity.
+    /// Creates a [`ChannelIo`] pair with a given packet buffer capacity.
+    ///
+    /// See [`PacketBuffers`] for how to choose a capacity value.
     ///
     /// If the target entities already exist in the same world, prefer using
     /// [`ChannelIo::open`] and applying the resulting command. However, if your

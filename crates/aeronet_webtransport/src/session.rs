@@ -2,7 +2,7 @@ use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
         AeronetIoPlugin, Disconnect, DisconnectReason, IoSet, PacketBuffers, PacketMtu, PacketRtt,
-        PacketStats, RemoteAddr, Session, DROP_DISCONNECT_REASON,
+        PacketStats, RemoteAddr, DROP_DISCONNECT_REASON,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -28,7 +28,7 @@ cfg_if::cfg_if! {
 }
 
 #[derive(Debug)]
-pub struct WebTransportSessionPlugin;
+pub(crate) struct WebTransportSessionPlugin;
 
 impl Plugin for WebTransportSessionPlugin {
     fn build(&self, app: &mut App) {

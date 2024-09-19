@@ -1,66 +1,75 @@
-//! Example client using WebTransport which allows sending a string to a server
-//! and reading a string back.
+//! Example showing a WebTransport client which can send and receive strings.
 
 use {
-    aeronet::{
-        client::{client_connected, ClientEvent, ClientState, MessageSink},
-        error::pretty_error,
-        lane::{LaneIndex, LaneKind},
-        stats::{Rtt, SessionStats},
+    aeronet_io::{
+        DisconnectSessionsExt, LocalAddr, PacketBuffers, PacketMtu, PacketRtt, PacketStats,
+        RemoteAddr,
     },
-    aeronet_proto::session::SessionConfig,
-    aeronet_webtransport::{
-        client::{ClientConfig, WebTransportClient},
-        runtime::WebTransportRuntime,
-    },
+    aeronet_webtransport::client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
     bevy::prelude::*,
     bevy_egui::{egui, EguiContexts, EguiPlugin},
+    std::mem,
 };
 
-#[derive(Debug, Clone, Copy)]
-struct AppLane;
-
-impl From<AppLane> for LaneKind {
-    fn from(_: AppLane) -> Self {
-        LaneKind::ReliableOrdered
-    }
-}
-
-impl From<AppLane> for LaneIndex {
-    fn from(_: AppLane) -> Self {
-        Self::from_raw(0)
-    }
+fn main() -> AppExit {
+    App::new()
+        .add_plugins((DefaultPlugins, EguiPlugin, WebTransportClientPlugin))
+        .init_resource::<GlobalUi>()
+        .add_systems(Update, (global_ui, session_ui))
+        .run()
 }
 
 #[derive(Debug, Default, Resource)]
-struct UiState {
-    log: Vec<String>,
+struct GlobalUi {
     target: String,
-    msg: String,
+    session_id: usize,
 }
 
-fn main() {
-    App::new()
-        .add_plugins((DefaultPlugins, EguiPlugin))
-        .init_resource::<WebTransportRuntime>()
-        .init_resource::<UiState>()
-        .init_resource::<WebTransportClient>()
-        .add_systems(PreUpdate, poll_client)
-        .add_systems(Update, ui)
-        .add_systems(
-            PostUpdate,
-            flush_client.run_if(client_connected::<WebTransportClient>),
-        )
-        .run();
+#[derive(Debug, Default, Component)]
+struct SessionUi {
+    msg: String,
+    log: Vec<String>,
+}
+
+const DEFAULT_TARGET: &str = "https://[::1]:25565";
+
+fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMut<GlobalUi>) {
+    egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
+        let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
+
+        let mut connect = false;
+        ui.horizontal(|ui| {
+            let connect_resp = ui.add(
+                egui::TextEdit::singleline(&mut ui_state.target)
+                    .hint_text(format!("{DEFAULT_TARGET} | [enter] to connect")),
+            );
+            connect |= connect_resp.lost_focus() && enter_pressed;
+            connect |= ui.button("Connect").clicked();
+        });
+
+        if connect {
+            let config = client_config();
+            let mut target = mem::take(&mut ui_state.target);
+            if target.is_empty() {
+                target = DEFAULT_TARGET.to_owned();
+            }
+
+            ui_state.session_id += 1;
+            let name = format!("{}. {target}", ui_state.session_id);
+            commands
+                .spawn((Name::new(name), SessionUi::default()))
+                .add(WebTransportClient::connect(config, target));
+        }
+    });
 }
 
 #[cfg(target_family = "wasm")]
-fn net_config() -> ClientConfig {
+fn client_config() -> ClientConfig {
     ClientConfig::default()
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn net_config() -> ClientConfig {
+fn client_config() -> ClientConfig {
     use web_time::Duration;
 
     ClientConfig::builder()
@@ -72,150 +81,115 @@ fn net_config() -> ClientConfig {
         .build()
 }
 
-fn session_config() -> SessionConfig {
-    SessionConfig::default().with_lanes([AppLane])
-}
-
-fn poll_client(
-    time: Res<Time>,
-    mut client: ResMut<WebTransportClient>,
-    mut ui_state: ResMut<UiState>,
-) {
-    for event in client.poll(time.delta()) {
-        match event {
-            ClientEvent::Connected => {
-                ui_state.log.push(format!("Connected"));
-            }
-            ClientEvent::Disconnected { reason } => {
-                ui_state
-                    .log
-                    .push(format!("Disconnected: {:#}", pretty_error(&reason)));
-            }
-            ClientEvent::Recv { msg, .. } => {
-                let msg =
-                    String::from_utf8(msg.into()).unwrap_or_else(|_| format!("<invalid UTF-8>"));
-                ui_state.log.push(format!("> {msg}"));
-            }
-            ClientEvent::Ack { .. } | ClientEvent::Nack { .. } => {}
-        }
-    }
-}
-
-fn flush_client(mut client: ResMut<WebTransportClient>) {
-    client.flush();
-}
-
-fn ui(
+fn session_ui(
     mut egui: EguiContexts,
-    mut ui_state: ResMut<UiState>,
-    mut client: ResMut<WebTransportClient>,
-    runtime: Res<WebTransportRuntime>,
+    mut commands: Commands,
+    mut sessions: Query<(
+        Entity,
+        &Name,
+        &mut SessionUi,
+        &mut PacketBuffers,
+        Option<&PacketRtt>,
+        Option<&PacketMtu>,
+        Option<&PacketStats>,
+        Option<&LocalAddr>,
+        Option<&RemoteAddr>,
+    )>,
 ) {
-    egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
-        let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+    for (
+        session,
+        name,
+        mut ui_state,
+        mut bufs,
+        packet_rtt,
+        packet_mtu,
+        packet_stats,
+        local_addr,
+        remote_addr,
+    ) in &mut sessions
+    {
+        for msg in bufs.drain_recv() {
+            let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+            ui_state.log.push(format!("> {msg}"));
+        }
 
-        let mut do_connect = false;
-        let mut do_disconnect = false;
-        ui.horizontal(|ui| {
-            let target_resp = ui.add_enabled(
-                client.state().is_disconnected(),
-                egui::TextEdit::singleline(&mut ui_state.target).hint_text("https://[::1]:25565"),
-            );
+        egui::Window::new(format!("{name}")).show(egui.ctx_mut(), |ui| {
+            let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
-            if client.state().is_disconnected() {
-                do_connect |= target_resp.lost_focus() && pressed_enter;
-                do_connect |= ui.button("Connect").clicked();
-            } else {
-                do_disconnect |= ui.button("Disconnect").clicked();
-            }
-        });
-
-        let mut do_send = false;
-        let msg_resp = ui
-            .add_enabled_ui(client.state().is_connected(), |ui| {
-                ui.horizontal(|ui| {
+            let mut send_msg = false;
+            let msg_resp = ui
+                .horizontal(|ui| {
                     let msg_resp = ui.add(
                         egui::TextEdit::singleline(&mut ui_state.msg).hint_text("[enter] to send"),
                     );
-                    do_send |= msg_resp.lost_focus() && pressed_enter;
-                    do_send |= ui.button("Send").clicked();
+                    send_msg |= msg_resp.lost_focus() && enter_pressed;
+                    send_msg |= ui.button("Send").clicked();
                     msg_resp
                 })
-                .inner
-            })
-            .inner;
+                .inner;
 
-        if do_connect {
-            ui.memory_mut(|m| m.request_focus(msg_resp.id));
-            let target = ui_state.target.clone();
-            ui_state.log.push(format!("Connecting to {target}"));
-            if let Err(err) =
-                client.connect(runtime.as_ref(), net_config(), session_config(), target)
-            {
-                ui_state.log.push(format!(
-                    "Failed to start connecting: {:#}",
-                    pretty_error(&err)
-                ));
-            }
-        }
-
-        if do_disconnect {
-            ui_state.log.push(format!("Disconnected by user"));
-            client.disconnect("user pressed disconnect button");
-        }
-
-        if do_send {
-            ui.memory_mut(|m| m.request_focus(msg_resp.id));
-            let msg = std::mem::take(&mut ui_state.msg);
-            if !msg.is_empty() {
+            if send_msg {
+                let msg = mem::take(&mut ui_state.msg);
                 ui_state.log.push(format!("< {msg}"));
-                let _ = client.send(msg, AppLane);
+                bufs.push_send(msg.into());
+                ui.memory_mut(|m| m.request_focus(msg_resp.id));
             }
-        }
 
-        if let ClientState::Connected(client) = client.state() {
-            egui::Grid::new("meta").num_columns(2).show(ui, |ui| {
-                ui.label("RTT");
-                ui.label(format!("{:?}", client.rtt()));
+            if ui.button("Disconnect").clicked() {
+                commands.disconnect_sessions("disconnected by user", session);
+            }
+
+            egui::Grid::new("stats").show(ui, |ui| {
+                let unknown = || "?".to_owned();
+
+                ui.label("Packet RTT");
+                ui.label(
+                    packet_rtt
+                        .map(|PacketRtt(rtt)| format!("{rtt:?}"))
+                        .unwrap_or_else(unknown),
+                );
                 ui.end_row();
 
-                ui.label("Bytes sent/recv");
-                ui.label(format!("{} / {}", client.bytes_sent(), client.bytes_recv()));
+                ui.label("Packet MTU");
+                ui.label(
+                    packet_mtu
+                        .map(|PacketMtu(mtu)| format!("{mtu}"))
+                        .unwrap_or_else(unknown),
+                );
                 ui.end_row();
 
-                ui.label("Bytes left / cap");
-                ui.label(format!(
-                    "{} / {}",
-                    client.session().bytes_left().get(),
-                    client.session().bytes_left().cap()
-                ));
+                let stats = packet_stats.copied().unwrap_or_default();
+
+                ui.label("Packets recv/sent");
+                ui.label(format!("{} / {}", stats.packets_recv, stats.packets_sent));
                 ui.end_row();
 
-                ui.label("MTU min / current");
-                ui.label(format!(
-                    "{} / {}",
-                    client.session().min_mtu(),
-                    client.session().mtu()
-                ));
+                ui.label("Bytes recv/sent");
+                ui.label(format!("{} / {}", stats.bytes_recv, stats.bytes_sent));
                 ui.end_row();
 
-                #[cfg(not(target_family = "wasm"))]
-                {
-                    ui.label("Local/remote addr");
-                    ui.label(format!(
-                        "{} / {}",
-                        aeronet::stats::LocalAddr::local_addr(client),
-                        aeronet::stats::RemoteAddr::remote_addr(client),
-                    ));
-                    ui.end_row();
+                ui.label("Local address");
+                ui.label(
+                    local_addr
+                        .map(|LocalAddr(addr)| format!("{addr:?}"))
+                        .unwrap_or_else(unknown),
+                );
+                ui.end_row();
+
+                ui.label("Remote address");
+                ui.label(
+                    remote_addr
+                        .map(|RemoteAddr(addr)| format!("{addr:?}"))
+                        .unwrap_or_else(unknown),
+                );
+                ui.end_row();
+            });
+
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for msg in &ui_state.log {
+                    ui.label(msg);
                 }
             });
-        }
-
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for line in &ui_state.log {
-                ui.label(egui::RichText::new(line).font(egui::FontId::monospace(14.0)));
-            }
         });
-    });
+    }
 }

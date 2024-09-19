@@ -6,7 +6,8 @@ use {
         },
     },
     aeronet_io::{
-        DisconnectReason, Disconnected, IoSet, LocalAddr, PacketMtu, PacketRtt, RemoteAddr, Session,
+        DefaultPacketBuffersCapacity, DisconnectReason, Disconnected, IoSet, LocalAddr,
+        PacketBuffers, PacketMtu, PacketRtt, RemoteAddr, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -47,7 +48,8 @@ impl Plugin for WebTransportClientPlugin {
             app.add_plugins(WebTransportSessionPlugin);
         }
 
-        app.add_systems(PreUpdate, poll_frontend.before(IoSet::Poll));
+        app.add_systems(PreUpdate, poll_frontend.before(IoSet::Poll))
+            .observe(on_client_added);
     }
 }
 
@@ -55,32 +57,40 @@ impl Plugin for WebTransportClientPlugin {
 pub struct WebTransportClient(Frontend);
 
 impl WebTransportClient {
+    #[must_use]
     pub fn connect(config: ClientConfig, target: impl Into<String>) -> impl EntityCommand {
         let target = target.into();
         |entity: Entity, world: &mut World| connect(entity, world, config, target)
     }
 }
 
-fn connect(entity: Entity, world: &mut World, config: ClientConfig, target: String) {
+fn connect(session: Entity, world: &mut World, config: ClientConfig, target: String) {
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
+    let runtime = world.resource::<WebTransportRuntime>().clone();
+    let packet_buf_cap = world
+        .get::<PacketBuffers>(session)
+        .map(PacketBuffers::capacity)
+        .unwrap_or_else(|| **world.resource::<DefaultPacketBuffersCapacity>());
 
-    world.resource_scope(|world, runtime: Mut<WebTransportRuntime>| {
-        runtime.spawn({
-            let runtime = runtime.clone();
-            async move {
-                let Err(reason) = backend(runtime, config, target, send_next).await else {
-                    unreachable!();
-                };
-                let _ = send_dc.send(reason);
-            }
-            .instrument(debug_span!("client", %session))
-        });
-        world.spawn((
-            Session,
-            WebTransportClient(Frontend::Connecting { recv_dc, recv_next }),
-        ))
+    runtime.spawn({
+        let runtime = runtime.clone();
+        async move {
+            let Err(reason) = backend(runtime, config, target, send_next, packet_buf_cap).await
+            else {
+                unreachable!();
+            };
+            let _ = send_dc.send(reason);
+        }
+        .instrument(debug_span!("client", %session))
     });
+
+    world
+        .entity_mut(session)
+        .insert(WebTransportClient(Frontend::Connecting {
+            recv_dc,
+            recv_next,
+        }));
 }
 
 #[derive(Debug, Error)]
@@ -118,6 +128,12 @@ struct ToConnected {
     recv_packet_b2f: mpsc::Receiver<Bytes>,
     send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     send_user_dc: oneshot::Sender<String>,
+}
+
+// TODO: required components
+fn on_client_added(trigger: Trigger<OnAdd, WebTransportClient>, mut commands: Commands) {
+    let session = trigger.entity();
+    commands.entity(session).insert(Session);
 }
 
 fn poll_frontend(mut commands: Commands, mut query: Query<(Entity, &mut WebTransportClient)>) {
