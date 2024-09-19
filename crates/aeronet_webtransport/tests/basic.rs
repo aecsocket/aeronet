@@ -1,9 +1,10 @@
-use std::time::{Duration, Instant};
-
-use aeronet_webtransport::client::{
-    ClientConfig, ConnectWebTransportClientExt, WebTransportClientPlugin,
+use {
+    aeronet_webtransport::client::{
+        ClientConfig, ConnectWebTransportClientExt, WebTransportClientPlugin,
+    },
+    bevy::{log::LogPlugin, prelude::*},
+    std::time::{Duration, Instant},
 };
-use bevy::{log::LogPlugin, prelude::*};
 
 #[test]
 fn basic() {

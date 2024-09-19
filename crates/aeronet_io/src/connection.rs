@@ -1,10 +1,12 @@
 use {
+    crate::Session,
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::{observer::TriggerTargets, prelude::*},
     bevy_hierarchy::DespawnRecursiveExt,
     bevy_reflect::prelude::*,
     std::{fmt::Debug, net::SocketAddr},
+    tracing::debug,
     web_time::Instant,
 };
 
@@ -14,6 +16,7 @@ pub(crate) struct ConnectionPlugin;
 impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Connected>()
+            .observe(on_connecting)
             .observe(on_connected)
             .observe(on_disconnect)
             .observe(on_disconnected);
@@ -28,8 +31,6 @@ impl Plugin for ConnectionPlugin {
 ///
 /// To listen for when a session is connected, add an observer listening for
 /// [`Trigger<OnAdd, Connected>`].
-///
-/// [`Session`]: crate::Session
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct Connected;
@@ -49,7 +50,6 @@ pub struct Connected;
 /// If you have access to [`Commands`], consider using [`disconnect_sessions`]
 /// as a convenient alternative to manually triggering an event.
 ///
-/// [`Session`]: crate::Session
 /// [`disconnect_sessions`]: DisconnectSessionsExt::disconnect_sessions
 #[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut, Event)]
 pub struct Disconnect(pub String);
@@ -63,14 +63,10 @@ pub struct Disconnect(pub String);
 ///
 /// If you want to get the concrete error type of the
 /// [`DisconnectReason::Error`], use [`anyhow::Error::downcast_ref`].
-///
-/// [`Session`]: crate::Session
 #[derive(Debug, Deref, DerefMut, Event)]
 pub struct Disconnected(pub DisconnectReason<anyhow::Error>);
 
 /// Why a [`Session`] was disconnected from its peer.
-///
-/// [`Session`]: crate::Session
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DisconnectReason<E> {
     /// Session was disconnected by the user on our side, with a provided
@@ -145,8 +141,6 @@ pub trait DisconnectSessionsExt {
     /// commands.disconnect_sessions("show's over everyone, go home", [session1, session2]);
     /// # }
     /// ```
-    ///
-    /// [`Session`]: crate::Session
     fn disconnect_sessions(&mut self, reason: impl Into<String>, targets: impl TriggerTargets);
 }
 
@@ -156,16 +150,14 @@ impl DisconnectSessionsExt for Commands<'_, '_> {
     }
 }
 
-/// Instant at which a [session] connected to its peer.
+/// Instant at which a [`Session`] connected to its peer.
 ///
 /// This is automatically added to the session when [`Connected`] is added.
-///
-/// [session]: crate::session
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component, Reflect)]
 #[reflect(Component)]
 pub struct ConnectedAt(pub Instant);
 
-/// Local socket address that this entity uses for connections.
+/// Local socket address that this [`Session`] uses for connections.
 ///
 /// Sessions or servers which use a network will use an OS socket for
 /// communication. This component stores the local [`SocketAddr`] of this
@@ -178,7 +170,7 @@ pub struct ConnectedAt(pub Instant);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component)]
 pub struct LocalAddr(pub SocketAddr);
 
-/// Remote socket address that this [session] is connected to.
+/// Remote socket address that this [`Session`] is connected to.
 ///
 /// Sessions which use a network will use an OS socket for communication. This
 /// component stores the [`SocketAddr`] of the peer, which this session is
@@ -188,26 +180,38 @@ pub struct LocalAddr(pub SocketAddr);
 /// to OS sockets (i.e. WASM).
 ///
 /// To access the local socket address of a session, see [`LocalAddr`].
-///
-/// [session]: crate::session
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component)]
 pub struct RemoteAddr(pub SocketAddr);
 
+fn on_connecting(trigger: Trigger<OnAdd, Session>) {
+    let session = trigger.entity();
+    debug!("{session} connecting");
+}
+
 fn on_connected(trigger: Trigger<OnAdd, Connected>, mut commands: Commands) {
     let session = trigger.entity();
-
     commands.entity(session).insert(ConnectedAt(Instant::now()));
+    debug!("{session} connected");
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
     let session = trigger.entity();
     let reason = DisconnectReason::User(trigger.event().0.clone());
-
     commands.trigger_targets(Disconnected(reason), session);
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
     let session = trigger.entity();
-
     commands.entity(session).despawn_recursive();
+    match &**trigger.event() {
+        DisconnectReason::User(reason) => {
+            debug!("{session} disconnected by user: {reason}");
+        }
+        DisconnectReason::Peer(reason) => {
+            debug!("{session} disconnected by user: {reason}");
+        }
+        DisconnectReason::Error(err) => {
+            debug!("{session} disconnected due to error: {err:#}");
+        }
+    }
 }

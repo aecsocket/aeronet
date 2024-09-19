@@ -4,14 +4,21 @@
 use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
     aeronet_io::{DisconnectSessionsExt, PacketBuffers},
-    bevy::prelude::*,
+    bevy::{log::LogPlugin, prelude::*},
     bevy_egui::{egui, EguiContexts, EguiPlugin},
     std::mem,
 };
 
 fn main() -> AppExit {
     App::new()
-        .add_plugins((DefaultPlugins, EguiPlugin, ChannelIoPlugin))
+        .add_plugins((
+            DefaultPlugins.set(LogPlugin {
+                level: tracing::Level::DEBUG,
+                ..default()
+            }),
+            EguiPlugin,
+            ChannelIoPlugin,
+        ))
         .add_systems(Startup, setup)
         .add_systems(Update, ui)
         .run()
@@ -23,12 +30,10 @@ struct UiState {
     log: Vec<String>,
 }
 
-fn setup(world: &mut World) {
-    let (a, b) = ChannelIo::from_world(world);
-    world.spawn_batch([
-        (Name::new("A"), a, UiState::default()),
-        (Name::new("B"), b, UiState::default()),
-    ]);
+fn setup(mut commands: Commands) {
+    let a = commands.spawn((Name::new("A"), UiState::default())).id();
+    let b = commands.spawn((Name::new("B"), UiState::default())).id();
+    commands.add(ChannelIo::open(a, b));
 }
 
 fn ui(

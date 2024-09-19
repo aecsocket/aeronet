@@ -8,12 +8,12 @@ use {
         DROP_DISCONNECT_REASON,
     },
     bevy_app::prelude::*,
-    bevy_ecs::prelude::*,
+    bevy_ecs::{prelude::*, world::Command},
     bytes::Bytes,
     std::{num::Saturating, usize},
     sync_wrapper::SyncWrapper,
     thiserror::Error,
-    tracing::{debug, debug_span, trace, trace_span},
+    tracing::{trace, trace_span},
 };
 
 /// Allows using [`ChannelIo`].
@@ -28,14 +28,14 @@ impl Plugin for ChannelIoPlugin {
 
         app.add_systems(PreUpdate, poll.in_set(IoSet::Poll))
             .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
-            .observe(start_connecting)
+            .observe(on_io_added)
             .observe(on_disconnect);
     }
 }
 
 /// [`aeronet`] IO layer using in-memory MPSC channels.
 ///
-/// See the [`crate`] documentation.
+/// Use [`ChannelIo::open`] to open a connection between two entities.
 #[derive(Debug, Component)]
 pub struct ChannelIo {
     send_packet: flume::Sender<Bytes>,
@@ -45,8 +45,84 @@ pub struct ChannelIo {
 }
 
 impl ChannelIo {
-    /// Creates a [`ChannelIo`] pair linked via MPSC channels, with a given
-    /// packet buffer capacity.
+    /// Creates a [`Command`] to open a [`ChannelIo`] pair between two entities.
+    ///
+    /// When the command is applied, entities `a` and `b` must exist in the
+    /// world, otherwise the command will panic. If your entities are in
+    /// separate worlds, use [`ChannelIo::with_capacity`] to manually create
+    /// a [`ChannelIo`] pair, and add the components to the target entities
+    /// manually.
+    ///
+    /// The buffer capacity used when creating the IO pair is the maximum of
+    /// each entity's [`PacketBuffers::capacity`]. If either entity does not
+    /// have this component yet, the value in [`DefaultPacketBuffersCapacity`]
+    /// is used.
+    ///
+    /// # Examples
+    ///
+    /// Using [`Commands`]:
+    ///
+    /// ```
+    /// use bevy_ecs::prelude::*;
+    /// use aeronet_channel::ChannelIo;
+    ///
+    /// # fn run(mut commands: Commands) {
+    /// let a = commands.spawn_empty().id();
+    /// let b = commands.spawn_empty().id();
+    /// commands.add(ChannelIo::open(a, b));
+    /// # }
+    /// ```
+    ///
+    /// Using mutable [`World`] access:
+    ///
+    /// ```
+    /// use bevy_ecs::prelude::*;
+    /// use aeronet_channel::ChannelIo;
+    ///
+    /// # fn run(world: &mut World) {
+    /// let a = world.spawn_empty().id();
+    /// let b = world.spawn_empty().id();
+    /// ChannelIo::open(a, b).apply(world);
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn open(a: Entity, b: Entity) -> impl Command {
+        move |world: &mut World| {
+            let get_default_capacity = || **world.resource::<DefaultPacketBuffersCapacity>();
+            let get_capacity = |entity: Entity| {
+                world
+                    .get::<PacketBuffers>(entity)
+                    .map(PacketBuffers::capacity)
+                    .unwrap_or_else(get_default_capacity)
+            };
+            let capacity = get_capacity(a).max(get_capacity(b));
+            let (io_a, io_b) = Self::with_capacity(capacity);
+
+            world.entity_mut(a).insert(io_a);
+            world.entity_mut(b).insert(io_b);
+        }
+    }
+
+    /// Creates a [`ChannelIo`] pair with a given capacity.
+    ///
+    /// If the target entities already exist in the same world, prefer using
+    /// [`ChannelIo::open`] and applying the resulting command. However, if your
+    /// entities exist in separate worlds (e.g. a client and a server world, as
+    /// part of a sub-app), you may want to create the IO pair and set up your
+    /// entities manually.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bevy_ecs::prelude::*;
+    /// use aeronet_channel::ChannelIo;
+    ///
+    /// # fn run(client_world: &mut World, server_world: &mut World) {
+    /// let (client_io, server_io) = ChannelIo::with_capacity(64);
+    /// client_world.spawn(client_io);
+    /// server_world.spawn(server_io);
+    /// # }
+    /// ```
     #[must_use]
     pub fn with_capacity(capacity: usize) -> (Self, Self) {
         let (send_packet_a, recv_packet_a) = flume::bounded(capacity);
@@ -69,15 +145,6 @@ impl ChannelIo {
             },
         )
     }
-
-    /// Creates a [`ChannelIo`] pair linked via MPSC channels, with the capacity
-    /// determined by the [`DefaultPacketBuffersCapacity`] value in the given
-    /// [`World`].
-    #[must_use]
-    pub fn from_world(world: &World) -> (Self, Self) {
-        let capacity = **world.resource::<DefaultPacketBuffersCapacity>();
-        Self::with_capacity(capacity)
-    }
 }
 
 impl Drop for ChannelIo {
@@ -93,14 +160,8 @@ impl Drop for ChannelIo {
 #[error("channel disconnected")]
 pub struct ChannelDisconnected;
 
-fn start_connecting(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
+fn on_io_added(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
     let session = trigger.entity();
-
-    let span = debug_span!("connect", %session);
-    let _span = span.enter();
-
-    debug!("Connecting");
-
     commands
         .entity(session)
         .insert((Session, Connected, PacketMtu(usize::MAX)));
@@ -113,16 +174,8 @@ fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelI
         return;
     };
 
-    let span = debug_span!("disconnect", %session);
-    let _span = span.enter();
-
-    debug!("Disconnecting: {reason}");
-
     if let Some(send_dc) = io.send_dc.take() {
         let _ = send_dc.into_inner().send(reason.clone());
-        debug!("Sent disconnect reason");
-    } else {
-        debug!("Disconnect reason has already been sent, ignoring this one");
     }
 }
 
