@@ -1,7 +1,8 @@
 use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
     aeronet_io::{
-        Connected, DisconnectReason, DisconnectSessionsExt, Disconnected, PacketBuffers, Session,
+        connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
+        packet::PacketBuffers,
     },
     bevy::{log::LogPlugin, prelude::*},
 };
@@ -110,7 +111,8 @@ fn events_disconnect() {
         },
     );
 
-    app.world_mut().commands().disconnect_sessions(DC_REASON, a);
+    app.world_mut()
+        .trigger_targets(Disconnect::new(DC_REASON), a);
     app.update();
 
     assert_eq!(

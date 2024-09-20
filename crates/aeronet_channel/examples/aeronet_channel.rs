@@ -3,7 +3,7 @@
 
 use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
-    aeronet_io::{DisconnectSessionsExt, PacketBuffers},
+    aeronet_io::{connection::Disconnect, packet::PacketBuffers},
     bevy::{log::LogPlugin, prelude::*},
     bevy_egui::{egui, EguiContexts, EguiPlugin},
     std::mem,
@@ -70,7 +70,7 @@ fn session_ui(
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.disconnect_sessions("disconnected by user", session);
+                commands.trigger_targets(Disconnect::new("disconnected by user"), session);
             }
 
             egui::ScrollArea::vertical().show(ui, |ui| {
