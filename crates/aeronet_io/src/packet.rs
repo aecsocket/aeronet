@@ -18,8 +18,8 @@ pub(crate) struct PacketPlugin;
 
 impl Plugin for PacketPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<DefaultPacketBuffersCapacity>()
-            .register_type::<DefaultPacketBuffersCapacity>()
+        app.init_resource::<PacketBuffersCapacity>()
+            .register_type::<PacketBuffersCapacity>()
             .register_type::<PacketMtu>()
             .register_type::<PacketRtt>()
             .register_type::<PacketStats>()
@@ -93,7 +93,6 @@ pub struct PacketBuffers {
     ///
     /// [`IoSet::Flush`]: crate::IoSet::Flush
     pub send: HeapRb<Bytes>,
-    capacity: usize,
 }
 
 impl PacketBuffers {
@@ -104,14 +103,7 @@ impl PacketBuffers {
         Self {
             recv: HeapRb::new(capacity),
             send: HeapRb::new(capacity),
-            capacity,
         }
-    }
-
-    /// Gets the capacity which these buffers were initialized with.
-    #[must_use]
-    pub const fn capacity(&self) -> usize {
-        self.capacity
     }
 
     /// Pushes a packet into [`PacketBuffers::recv`], potentially overwriting
@@ -147,8 +139,13 @@ impl PacketBuffers {
     }
 }
 
-/// Default capacity of the buffers when creating a [`PacketBuffers`] via its
-/// [`FromWorld`] implementation.
+/// Capacity provided to [`PacketBuffers::with_capacity`] when creating the
+/// component on a session.
+///
+/// If this component is present on an entity before [`PacketBuffers`] is
+/// created, this component's value will be used as the capacity. Otherwise,
+/// this type is looked up as a resource, and that value is used as the
+/// capacity.
 ///
 /// By default, this is effectively an arbitrary value, since we have no hints
 /// on how many packets may be sent or received per [`Update`]. If you have an
@@ -156,20 +153,28 @@ impl PacketBuffers {
 ///
 /// If in doubt, it's better to overestimate the capacity and use a bit of extra
 /// memory, rather than drop packets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Resource, Reflect)]
-#[reflect(Resource)]
-pub struct DefaultPacketBuffersCapacity(pub usize);
+///
+/// This value may also be used by implementations which need a buffer capacity
+/// internally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component, Resource, Reflect)]
+#[reflect(Component, Resource)]
+pub struct PacketBuffersCapacity(pub usize);
 
-impl Default for DefaultPacketBuffersCapacity {
+impl Default for PacketBuffersCapacity {
     fn default() -> Self {
         Self(64)
     }
 }
 
-impl FromWorld for PacketBuffers {
-    fn from_world(world: &mut World) -> Self {
-        let capacity = **world.resource::<DefaultPacketBuffersCapacity>();
-        Self::with_capacity(capacity)
+impl PacketBuffersCapacity {
+    /// Computes the value passed to [`PacketBuffers::with_capacity`] when
+    /// creating buffers for a given session.
+    #[must_use]
+    pub fn compute_from(world: &World, session: Entity) -> usize {
+        world
+            .get::<Self>(session)
+            .unwrap_or_else(|| world.resource::<PacketBuffersCapacity>())
+            .0
     }
 }
 
@@ -225,7 +230,16 @@ fn on_connecting(trigger: Trigger<OnAdd, Session>, mut commands: Commands) {
     let session = trigger.entity();
     commands
         .entity(session)
-        .init_component::<PacketBuffers>()
+        .add(|entity: Entity, world: &mut World| {
+            if world.entity(entity).contains::<PacketBuffers>() {
+                return;
+            }
+
+            let capacity = PacketBuffersCapacity::compute_from(world, entity);
+            world
+                .entity_mut(entity)
+                .insert(PacketBuffers::with_capacity(capacity));
+        })
         .init_component::<PacketMtu>()
         .init_component::<PacketStats>();
 }

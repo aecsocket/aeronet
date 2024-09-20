@@ -1,4 +1,4 @@
-//! Utilities for working with X509 certificates.
+//! Utilities for working with X.509 certificates.
 
 #[cfg(not(target_family = "wasm"))]
 mod native;

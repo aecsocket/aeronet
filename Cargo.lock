@@ -100,7 +100,6 @@ name = "aeronet_channel"
 version = "0.9.0-dev"
 dependencies = [
  "aeronet_io",
- "assert_matches",
  "bevy",
  "bevy_app",
  "bevy_ecs",
@@ -147,7 +146,6 @@ dependencies = [
  "futures",
  "gloo-timers",
  "js-sys",
- "rand",
  "replace_with",
  "slotmap",
  "spki",

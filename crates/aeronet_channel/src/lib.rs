@@ -3,14 +3,14 @@
 
 use {
     aeronet_io::{
-        AeronetIoPlugin, Connected, DefaultPacketBuffersCapacity, Disconnect, DisconnectReason,
-        Disconnected, IoSet, PacketBuffers, PacketMtu, PacketStats, Session,
+        AeronetIoPlugin, Connected, Disconnect, DisconnectReason, Disconnected, IoSet,
+        PacketBuffers, PacketBuffersCapacity, PacketMtu, PacketStats, Session,
         DROP_DISCONNECT_REASON,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
     bytes::Bytes,
-    std::{num::Saturating, usize},
+    std::{cmp, num::Saturating, usize},
     sync_wrapper::SyncWrapper,
     thiserror::Error,
     tracing::{trace, trace_span},
@@ -54,48 +54,32 @@ impl ChannelIo {
     /// manually.
     ///
     /// The buffer capacity used when creating the IO pair is the maximum of
-    /// each entity's [`PacketBuffers::capacity`]. If either entity does not
-    /// have this component yet, the value in [`DefaultPacketBuffersCapacity`]
-    /// is used.
+    /// the capacities computed by [`PacketBuffersCapacity::compute_from`] for
+    /// each entity.
     ///
     /// # Examples
     ///
-    /// Using [`Commands`]:
-    ///
     /// ```
-    /// use bevy_ecs::prelude::*;
-    /// use aeronet_channel::ChannelIo;
+    /// use {aeronet_channel::ChannelIo, bevy_ecs::prelude::*};
     ///
-    /// # fn run(mut commands: Commands) {
+    /// # fn run(mut commands: Commands, world: &mut World) {
     /// let a = commands.spawn_empty().id();
     /// let b = commands.spawn_empty().id();
+    ///
+    /// // using `Commands`
     /// commands.add(ChannelIo::open(a, b));
-    /// # }
-    /// ```
     ///
-    /// Using mutable [`World`] access:
-    ///
-    /// ```
-    /// use bevy_ecs::prelude::*;
-    /// use aeronet_channel::ChannelIo;
-    ///
-    /// # fn run(world: &mut World) {
-    /// let a = world.spawn_empty().id();
-    /// let b = world.spawn_empty().id();
+    /// // using mutable `World` access
     /// ChannelIo::open(a, b).apply(world);
     /// # }
     /// ```
     #[must_use]
     pub fn open(a: Entity, b: Entity) -> impl Command {
         move |world: &mut World| {
-            let get_default_capacity = || **world.resource::<DefaultPacketBuffersCapacity>();
-            let get_capacity = |entity: Entity| {
-                world
-                    .get::<PacketBuffers>(entity)
-                    .map(PacketBuffers::capacity)
-                    .unwrap_or_else(get_default_capacity)
-            };
-            let capacity = get_capacity(a).max(get_capacity(b));
+            let capacity = cmp::max(
+                PacketBuffersCapacity::compute_from(world, a),
+                PacketBuffersCapacity::compute_from(world, b),
+            );
             let (io_a, io_b) = Self::with_capacity(capacity);
 
             world.entity_mut(a).insert(io_a);
@@ -116,8 +100,7 @@ impl ChannelIo {
     /// # Examples
     ///
     /// ```
-    /// use bevy_ecs::prelude::*;
-    /// use aeronet_channel::ChannelIo;
+    /// use {aeronet_channel::ChannelIo, bevy_ecs::prelude::*};
     ///
     /// # fn run(client_world: &mut World, server_world: &mut World) {
     /// let (client_io, server_io) = ChannelIo::with_capacity(64);
