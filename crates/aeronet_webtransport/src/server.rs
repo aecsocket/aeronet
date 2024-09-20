@@ -1,14 +1,11 @@
 use {
     crate::{
         runtime::WebTransportRuntime,
-        session::{
-            SessionBackend, SessionError, SessionMeta, WebTransportSessionPlugin, PACKET_BUF_CAP,
-        },
+        session::{SessionBackend, SessionError, SessionMeta, WebTransportSessionPlugin},
     },
-    aeronet_io::IoSet,
+    aeronet_io::{DisconnectReason, IoSet},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
-    bevy_reflect::Reflect,
     bytes::Bytes,
     futures::{
         channel::{mpsc, oneshot},
@@ -43,6 +40,7 @@ impl Plugin for WebTransportServerPlugin {
 pub struct WebTransportServer(Frontend);
 
 impl WebTransportServer {
+    #[must_use]
     pub fn open(config: ServerConfig) -> impl EntityCommand {
         |server: Entity, world: &mut World| open(server, world, config)
     }
@@ -124,7 +122,7 @@ pub enum ServerError {
 #[derive(Debug, Component)]
 enum Frontend {
     Opening {
-        recv_err: oneshot::Receiver<anyhow::Error>,
+        recv_err: oneshot::Receiver<ServerError>,
         recv_next: oneshot::Receiver<ToOpen>,
     },
     Finished,
@@ -156,7 +154,7 @@ struct ToConnected {
     recv_meta: mpsc::Receiver<SessionMeta>,
     recv_packet_b2f: mpsc::Receiver<Bytes>,
     send_packet_f2b: mpsc::UnboundedSender<Bytes>,
-    recv_dc_b2f: oneshot::Receiver<DisconnectReason>,
+    recv_dc_b2f: oneshot::Receiver<DisconnectReason<ServerError>>,
     send_dc_f2b: oneshot::Sender<String>,
 }
 

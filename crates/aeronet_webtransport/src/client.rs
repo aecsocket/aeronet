@@ -11,8 +11,8 @@ use {
         },
     },
     aeronet_io::{
-        DefaultPacketBuffersCapacity, DisconnectReason, Disconnected, IoSet, LocalAddr,
-        PacketBuffers, PacketMtu, PacketRtt, RemoteAddr, Session,
+        DisconnectReason, Disconnected, IoSet, LocalAddr, PacketBuffersCapacity, PacketMtu,
+        PacketRtt, RemoteAddr, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -46,6 +46,7 @@ cfg_if::cfg_if! {
 type ConnectError = <ClientEndpoint as Connect>::Error;
 type AwaitConnectError = <<ClientEndpoint as Connect>::Connecting as Connecting>::Error;
 
+/// Allows using [`WebTransportClient`].
 #[derive(Debug)]
 pub struct WebTransportClientPlugin;
 
@@ -60,10 +61,39 @@ impl Plugin for WebTransportClientPlugin {
     }
 }
 
+/// TODO
+///
+/// Use [`WebTransportClient::connect`] to start a connection.
 #[derive(Debug, Component)]
 pub struct WebTransportClient(Frontend);
 
 impl WebTransportClient {
+    /// Creates an [`EntityCommand`] to set up a session and connect it to the
+    /// `target`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use {
+    ///     aeronet_webtransport::client::{ClientConfig, WebTransportClient},
+    ///     bevy_ecs::prelude::*,
+    /// };
+    ///
+    /// # fn run(mut commands: Commands, world: &mut World) {
+    /// let config = ClientConfig::default();
+    /// let target = "https://[::1]:1234";
+    ///
+    /// // using `Commands`
+    /// commands
+    ///     .spawn_empty()
+    ///     .add(WebTransportClient::connect(config, target));
+    ///
+    /// // using mutable `World` access
+    /// # let config = ClientConfig::default();
+    /// let session = world.spawn_empty().id();
+    /// WebTransportClient::connect(config, target).apply(session, world);
+    /// # }
+    /// ```
     #[must_use]
     pub fn connect(config: ClientConfig, target: impl Into<String>) -> impl EntityCommand {
         let target = target.into();
@@ -73,10 +103,7 @@ impl WebTransportClient {
 
 fn connect(session: Entity, world: &mut World, config: ClientConfig, target: String) {
     let runtime = world.resource::<WebTransportRuntime>().clone();
-    let packet_buf_cap = world
-        .get::<PacketBuffers>(session)
-        .map(PacketBuffers::capacity)
-        .unwrap_or_else(|| **world.resource::<DefaultPacketBuffersCapacity>());
+    let packet_buf_cap = PacketBuffersCapacity::compute_from(world, session);
 
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
@@ -100,12 +127,16 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Str
         }));
 }
 
+/// [`WebTransportClient`] error.
 #[derive(Debug, Error)]
 pub enum ClientError {
+    /// Failed to start connecting to the target.
     #[error("failed to connect")]
     Connect(#[source] ConnectError),
+    /// Failed to await the connection to the target.
     #[error("failed to await connection")]
     AwaitConnect(#[source] AwaitConnectError),
+    /// Generic session error.
     #[error(transparent)]
     Session(#[from] SessionError),
 }

@@ -30,7 +30,5 @@ bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 
 [dev-dependencies]
-assert_matches = { workspace = true }
-
 bevy = { workspace = true }
 bevy_egui = { workspace = true }
