@@ -5,8 +5,9 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        AeronetIoPlugin, Connected, Disconnect, DisconnectReason, IoSet, PacketBuffers, PacketMtu,
-        PacketRtt, PacketStats, RemoteAddr, DROP_DISCONNECT_REASON,
+        connection::{Connected, Disconnect, DisconnectReason, RemoteAddr, DROP_DISCONNECT_REASON},
+        packet::{PacketBuffers, PacketMtu, PacketRtt, PacketStats},
+        AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,

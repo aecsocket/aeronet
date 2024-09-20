@@ -11,7 +11,7 @@ pub mod client;
 mod runtime;
 pub mod session;
 // #[cfg(all(feature = "server", not(target_family = "wasm")))]
-// pub mod server;
+pub mod server;
 
 pub use runtime::WebTransportRuntime;
 

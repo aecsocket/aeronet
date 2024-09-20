@@ -1,8 +1,9 @@
+//! Logic for connection and disconnection of a [`Session`].
+
 use {
-    crate::Session,
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
-    bevy_ecs::{observer::TriggerTargets, prelude::*},
+    bevy_ecs::prelude::*,
     bevy_hierarchy::DespawnRecursiveExt,
     bevy_reflect::prelude::*,
     std::{fmt::Debug, net::SocketAddr},
@@ -15,13 +16,46 @@ pub(crate) struct ConnectionPlugin;
 
 impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Connected>()
+        app.register_type::<Session>()
+            .register_type::<Connected>()
             .observe(on_connecting)
             .observe(on_connected)
             .observe(on_disconnect)
             .observe(on_disconnected);
     }
 }
+
+/// Marker component for an [`Entity`] used to transfer sequences of bytes over
+/// a connection, potentially over a network.
+///
+/// A session can send data over to the other side of its connection - to its
+/// peer. The peer may be located on a different machine, on the same machine as
+/// this session, or even within the same app.
+///
+/// The session API is agnostic to the networking model used: it can be used to
+/// represent a client-server, peer-to-peer, or any other kind of network
+/// topology. The only constraint is that one session talks to one and only one
+/// peer for its lifetime, however you can have multiple sessions within the
+/// same world. These different sessions may even be communicating over
+/// different protocols, such as raw UDP datagrams alongside Steam networking
+/// sockets, so that you can e.g. support crossplay between different platforms.
+///
+/// You should not add this component to entities yourself - your chosen IO
+/// layer implementation is responsible for this. Once added, the session is
+/// considered connecting, but it may not be connected yet, and therefore you
+/// cannot send data across this session. Once [`Connected`] is added, you can
+/// start sending and receiving data.
+///
+/// If the session fails to connect, or loses connection after successfully
+/// connecting (this may be a graceful disconnect or a connection error),
+/// [`Disconnected`] is [triggered][trigger] on the session entity, and the
+/// session is despawned immediately afterwards. You may also [trigger] your own
+/// disconnection with a string reason by triggering [`Disconnect`].
+///
+/// [trigger]: Trigger
+#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
+#[reflect(Component)]
+pub struct Session;
 
 /// Marker component for a [`Session`] which is connected to its peer, and data
 /// transmission should be possible.
@@ -44,16 +78,35 @@ pub struct Connected;
 /// not support disconnection reasons, or it cannot send your given reason (if
 /// e.g. it is too long), the peer may not receive this disconnect reason.
 ///
-/// If you have access to [`Commands`], consider using [`disconnect_sessions`]
-/// as a convenient alternative to manually triggering an event.
+/// # Examples
 ///
-/// [`disconnect_sessions`]: DisconnectSessionsExt::disconnect_sessions
+/// ```
+/// use {aeronet_io::connection::Disconnect, bevy_ecs::prelude::*};
+///
+/// # fn run(mut commands: Commands, session: Entity, session1: Entity, session2: Entity) {
+/// // disconnect a single session
+/// commands.trigger_targets(Disconnect::new("show's over, go home"), session);
+///
+/// // disconnect multiple sessions at once
+/// commands.trigger_targets(Disconnect::new("show's over everyone, go home"), [session1, session2]);
+/// # }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Event)]
 pub struct Disconnect {
     /// User-provided disconnection reason.
     ///
     /// Will be used as the reason in [`DisconnectReason::User`].
     pub reason: String,
+}
+
+impl Disconnect {
+    /// Creates a [`Disconnect`] with the given reason.
+    #[must_use]
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self {
+            reason: reason.into(),
+        }
+    }
 }
 
 /// Triggered when a [`Session`] loses connection for any reason.
@@ -126,40 +179,6 @@ impl<E> From<E> for DisconnectReason<E> {
 /// [`Disconnect`].
 pub const DROP_DISCONNECT_REASON: &str = "dropped";
 
-/// Provides [`DisconnectSessionsExt::disconnect_sessions`]
-pub trait DisconnectSessionsExt {
-    /// Requests [`Session`]s to gracefully disconnect from their peers with a
-    /// given reason.
-    ///
-    /// See [`Disconnect`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use {aeronet_io::DisconnectSessionsExt, bevy_ecs::prelude::*};
-    ///
-    /// # fn run(mut commands: Commands, session: Entity, session1: Entity, session2: Entity) {
-    /// // disconnect a single session
-    /// commands.disconnect_sessions("show's over, go home", session);
-    ///
-    /// // disconnect multiple sessions at once
-    /// commands.disconnect_sessions("show's over everyone, go home", [session1, session2]);
-    /// # }
-    /// ```
-    fn disconnect_sessions(&mut self, reason: impl Into<String>, targets: impl TriggerTargets);
-}
-
-impl DisconnectSessionsExt for Commands<'_, '_> {
-    fn disconnect_sessions(&mut self, reason: impl Into<String>, targets: impl TriggerTargets) {
-        self.trigger_targets(
-            Disconnect {
-                reason: reason.into(),
-            },
-            targets,
-        );
-    }
-}
-
 /// Instant at which a [`Session`] connected to its peer.
 ///
 /// This is automatically added to the session when [`Connected`] is added.
@@ -167,7 +186,7 @@ impl DisconnectSessionsExt for Commands<'_, '_> {
 #[reflect(Component)]
 pub struct ConnectedAt(pub Instant);
 
-/// Local socket address that this [`Session`] uses for connections.
+/// Local socket address that this entity uses for connections.
 ///
 /// Sessions or servers which use a network will use an OS socket for
 /// communication. This component stores the local [`SocketAddr`] of this
@@ -200,8 +219,9 @@ fn on_connecting(trigger: Trigger<OnAdd, Session>) {
 
 fn on_connected(trigger: Trigger<OnAdd, Connected>, mut commands: Commands) {
     let session = trigger.entity();
-    commands.entity(session).insert(ConnectedAt(Instant::now()));
     debug!("{session} connected");
+
+    commands.entity(session).insert(ConnectedAt(Instant::now()));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
@@ -212,7 +232,6 @@ fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
 
 fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
     let session = trigger.entity();
-    commands.entity(session).despawn_recursive();
     match &**trigger.event() {
         DisconnectReason::User(reason) => {
             debug!("{session} disconnected by user: {reason}");
@@ -224,4 +243,6 @@ fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
             debug!("{session} disconnected due to error: {err:#}");
         }
     }
+
+    commands.entity(session).despawn_recursive();
 }

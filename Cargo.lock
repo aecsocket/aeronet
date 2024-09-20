@@ -141,6 +141,8 @@ dependencies = [
  "bevy_app",
  "bevy_ecs",
  "bevy_egui",
+ "bevy_hierarchy",
+ "bevy_reflect",
  "bytes",
  "cfg-if",
  "futures",

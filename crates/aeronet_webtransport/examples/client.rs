@@ -3,8 +3,10 @@
 
 use {
     aeronet_io::{
-        Connected, DisconnectReason, DisconnectSessionsExt, Disconnected, LocalAddr, PacketBuffers,
-        PacketMtu, PacketRtt, PacketStats, RemoteAddr, Session,
+        connection::{
+            Connected, Disconnect, DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session,
+        },
+        packet::{PacketBuffers, PacketMtu, PacketRtt, PacketStats},
     },
     aeronet_webtransport::client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
     bevy::prelude::*,
@@ -186,7 +188,7 @@ fn session_ui(
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.disconnect_sessions("disconnected by user", session);
+                commands.trigger_targets(Disconnect::new("disconnected by user"), session);
             }
 
             egui::Grid::new("stats").show(ui, |ui| {

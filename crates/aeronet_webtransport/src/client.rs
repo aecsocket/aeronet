@@ -11,8 +11,9 @@ use {
         },
     },
     aeronet_io::{
-        DisconnectReason, Disconnected, IoSet, LocalAddr, PacketBuffersCapacity, PacketMtu,
-        PacketRtt, RemoteAddr, Session,
+        connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
+        packet::{PacketBuffersCapacity, PacketMtu, PacketRtt},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -56,7 +57,7 @@ impl Plugin for WebTransportClientPlugin {
             app.add_plugins(WebTransportSessionPlugin);
         }
 
-        app.add_systems(PreUpdate, poll_frontend.before(IoSet::Poll))
+        app.add_systems(PreUpdate, poll_clients.before(IoSet::Poll))
             .observe(on_client_added);
     }
 }
@@ -66,7 +67,7 @@ impl Plugin for WebTransportClientPlugin {
 ///
 /// Use [`WebTransportClient::connect`] to start a connection.
 #[derive(Debug, Component)]
-pub struct WebTransportClient(Frontend);
+pub struct WebTransportClient(ClientFrontend);
 
 impl WebTransportClient {
     /// Creates an [`EntityCommand`] to set up a session and connect it to the
@@ -111,7 +112,7 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Str
     runtime.spawn({
         let runtime = runtime.clone();
         async move {
-            let Err(reason) = backend(runtime, config, target, send_next, packet_buf_cap).await
+            let Err(reason) = backend(runtime, packet_buf_cap, config, target, send_next).await
             else {
                 unreachable!();
             };
@@ -122,7 +123,7 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Str
 
     world
         .entity_mut(session)
-        .insert(WebTransportClient(Frontend::Connecting {
+        .insert(WebTransportClient(ClientFrontend::Connecting {
             recv_dc,
             recv_next,
         }));
@@ -143,7 +144,7 @@ pub enum ClientError {
 }
 
 #[derive(Debug)]
-enum Frontend {
+enum ClientFrontend {
     Connecting {
         recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
         recv_next: oneshot::Receiver<ToConnected>,
@@ -175,20 +176,20 @@ fn on_client_added(trigger: Trigger<OnAdd, WebTransportClient>, mut commands: Co
     commands.entity(session).insert(Session);
 }
 
-fn poll_frontend(mut commands: Commands, mut query: Query<(Entity, &mut WebTransportClient)>) {
-    for (session, mut client) in &mut query {
-        replace_with::replace_with_or_abort(&mut client.0, |state| match state {
-            Frontend::Connecting { recv_dc, recv_next } => {
+fn poll_clients(mut commands: Commands, mut frontends: Query<(Entity, &mut WebTransportClient)>) {
+    for (session, mut frontend) in &mut frontends {
+        replace_with::replace_with_or_abort(&mut frontend.0, |state| match state {
+            ClientFrontend::Connecting { recv_dc, recv_next } => {
                 poll_connecting(&mut commands, session, recv_dc, recv_next)
             }
-            Frontend::Connected { mut recv_dc } => {
+            ClientFrontend::Connected { mut recv_dc } => {
                 if should_disconnect(&mut commands, session, &mut recv_dc) {
-                    Frontend::Disconnected
+                    ClientFrontend::Disconnected
                 } else {
-                    Frontend::Connected { recv_dc }
+                    ClientFrontend::Connected { recv_dc }
                 }
             }
-            Frontend::Disconnected => state,
+            ClientFrontend::Disconnected => state,
         });
     }
 }
@@ -198,13 +199,13 @@ fn poll_connecting(
     session: Entity,
     mut recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
     mut recv_next: oneshot::Receiver<ToConnected>,
-) -> Frontend {
+) -> ClientFrontend {
     if should_disconnect(commands, session, &mut recv_dc) {
-        return Frontend::Disconnected;
+        return ClientFrontend::Disconnected;
     }
 
     let Ok(Some(next)) = recv_next.try_recv() else {
-        return Frontend::Connecting { recv_dc, recv_next };
+        return ClientFrontend::Connecting { recv_dc, recv_next };
     };
 
     commands.entity(session).insert((
@@ -222,7 +223,7 @@ fn poll_connecting(
         #[cfg(not(target_family = "wasm"))]
         PacketRtt(next.initial_rtt),
     ));
-    Frontend::Connected { recv_dc }
+    ClientFrontend::Connected { recv_dc }
 }
 
 fn should_disconnect(
@@ -246,10 +247,10 @@ fn should_disconnect(
 
 async fn backend(
     runtime: WebTransportRuntime,
+    packet_buf_cap: usize,
     config: ClientConfig,
     target: String,
     send_next: oneshot::Sender<ToConnected>,
-    packet_buf_cap: usize,
 ) -> Result<Never, DisconnectReason<ClientError>> {
     debug!("Spawning backend task to connect to {target:?}");
 

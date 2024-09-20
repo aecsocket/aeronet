@@ -1,5 +1,7 @@
+//! Transmission of unreliable byte sequences (packets) along a [`Session`].
+
 use {
-    crate::{util::InitComponentExt, Session},
+    crate::{connection::Session, util::InitComponentExt},
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
