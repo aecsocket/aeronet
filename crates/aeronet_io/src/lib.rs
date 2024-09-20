@@ -3,6 +3,7 @@
 
 mod connection;
 mod packet;
+mod server;
 mod util;
 
 pub use {

@@ -61,7 +61,8 @@ impl Plugin for WebTransportClientPlugin {
     }
 }
 
-/// TODO
+/// WebTransport session implementation which acts as a dedicated client,
+/// connecting to a target endpoint.
 ///
 /// Use [`WebTransportClient::connect`] to start a connection.
 #[derive(Debug, Component)]
