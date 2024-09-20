@@ -23,6 +23,7 @@ use {
     xwt_core::prelude::*,
 };
 
+/// Allows using [`WebTransportServer`].
 #[derive(Debug)]
 pub struct WebTransportServerPlugin;
 
@@ -67,37 +68,6 @@ fn open(server: Entity, world: &mut World, config: ServerConfig) {
             recv_err,
             recv_next,
         }));
-
-    /*
-
-    let server = self.spawn_empty().id();
-        self.push(move |world: &mut World| {
-            world.resource_scope(|world, runtime: Mut<WebTransportRuntime>| {
-                runtime.spawn({
-                    let runtime = runtime.clone();
-                    async move {
-                        let Err(err) = backend(runtime, config, send_next).await else {
-                            unreachable!();
-                        };
-                        match &err {
-                            ServerError::Session(SessionError::FrontendClosed) => {
-                                debug!("Closing due to frontend closing");
-                            }
-                            err => {
-                                debug!("Closing: {err:?}");
-                            }
-                        }
-                        let _ = send_err.send(err.into());
-                    }
-                    .instrument(debug_span!("server", %server))
-                });
-                world.entity_mut(server).insert(Frontend::Opening {
-                    recv_err,
-                    recv_next,
-                });
-            });
-        });
-        server */
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
@@ -107,14 +77,19 @@ pub enum ConnectionResponse {
     NotFound,
 }
 
+/// [`WebTransportServer`] error.
 #[derive(Debug, Error)]
 pub enum ServerError {
+    /// Failed to await an incoming session request.
     #[error("failed to await session request")]
     AwaitSessionRequest(#[source] ConnectionError),
-    #[error("frontend rejected session")]
+    /// User rejected this incoming session request.
+    #[error("user rejected session request")]
     Rejected,
+    /// Failed to accept the incoming session request.
     #[error("failed to accept session")]
     AcceptSessionRequest(#[source] ConnectionError),
+    /// Generic session error.
     #[error(transparent)]
     Session(#[from] SessionError),
 }
