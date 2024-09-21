@@ -20,7 +20,7 @@ fn main() -> AppExit {
             ChannelIoPlugin,
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, session_ui)
+        .add_systems(Update, (add_msgs_to_ui, session_ui))
         .run()
 }
 
@@ -36,17 +36,21 @@ fn setup(mut commands: Commands) {
     commands.add(ChannelIo::open(a, b));
 }
 
+fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
+    for (mut ui_state, mut bufs) in &mut sessions {
+        for msg in bufs.drain_recv() {
+            let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+            ui_state.log.push(format!("> {msg}"));
+        }
+    }
+}
+
 fn session_ui(
     mut egui: EguiContexts,
     mut commands: Commands,
     mut sessions: Query<(Entity, &Name, &mut SessionUi, &mut PacketBuffers)>,
 ) {
     for (session, name, mut ui_state, mut bufs) in &mut sessions {
-        for msg in bufs.drain_recv() {
-            let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
-            ui_state.log.push(format!("> {msg}"));
-        }
-
         egui::Window::new(format!("Session {name}")).show(egui.ctx_mut(), |ui| {
             let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 

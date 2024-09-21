@@ -18,7 +18,7 @@ fn main() -> AppExit {
     App::new()
         .add_plugins((DefaultPlugins, EguiPlugin, WebTransportClientPlugin))
         .init_resource::<GlobalUi>()
-        .add_systems(Update, (global_ui, session_ui))
+        .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
         .observe(on_connecting)
         .observe(on_connected)
         .observe(on_disconnected)
@@ -133,6 +133,15 @@ fn client_config() -> ClientConfig {
         .build()
 }
 
+fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
+    for (mut ui_state, mut bufs) in &mut sessions {
+        for msg in bufs.drain_recv() {
+            let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+            ui_state.log.push(format!("> {msg}"));
+        }
+    }
+}
+
 fn session_ui(
     mut egui: EguiContexts,
     mut commands: Commands,
@@ -160,11 +169,6 @@ fn session_ui(
         remote_addr,
     ) in &mut sessions
     {
-        for msg in bufs.drain_recv() {
-            let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
-            ui_state.log.push(format!("> {msg}"));
-        }
-
         egui::Window::new(format!("{name}")).show(egui.ctx_mut(), |ui| {
             let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
