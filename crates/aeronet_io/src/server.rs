@@ -39,6 +39,12 @@ pub struct Server;
 #[reflect(Component)]
 pub struct Opened;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Component, Reflect)]
+#[reflect(Component)]
+pub struct RemoteClient {
+    pub server: Entity,
+}
+
 /// Triggered when a user requests a [`Server`] to gracefully shut down and
 /// disconnect all of its connected clients.
 ///
@@ -56,7 +62,10 @@ pub struct Opened;
 /// commands.trigger_targets(Close::new("show's over, go home"), server);
 ///
 /// // disconnect multiple sessions at once
-/// commands.trigger_targets(Close::new("show's over everyone, go home"), [server1, server2]);
+/// commands.trigger_targets(
+///     Close::new("show's over everyone, go home"),
+///     [server1, server2],
+/// );
 /// # }
 /// ```
 ///

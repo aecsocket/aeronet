@@ -88,7 +88,10 @@ pub struct Connected;
 /// commands.trigger_targets(Disconnect::new("show's over, go home"), session);
 ///
 /// // disconnect multiple sessions at once
-/// commands.trigger_targets(Disconnect::new("show's over everyone, go home"), [session1, session2]);
+/// commands.trigger_targets(
+///     Disconnect::new("show's over everyone, go home"),
+///     [session1, session2],
+/// );
 /// # }
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Event)]

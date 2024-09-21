@@ -4,11 +4,10 @@
 //! See [`WebTransportClient`].
 
 use {
+    super::{backend, ClientConfig, ClientError, ToConnected},
     crate::{
         runtime::WebTransportRuntime,
-        session::{
-            SessionBackend, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
-        },
+        session::{SessionError, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
@@ -17,35 +16,9 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
-    bytes::Bytes,
-    futures::{
-        channel::{mpsc, oneshot},
-        never::Never,
-    },
-    std::{net::SocketAddr, time::Duration},
-    thiserror::Error,
-    tracing::{debug, debug_span, Instrument},
-    xwt_core::{
-        endpoint::{connect::Connecting, Connect},
-        prelude::*,
-    },
+    futures::channel::oneshot,
+    tracing::{debug_span, Instrument},
 };
-
-cfg_if::cfg_if! {
-    if #[cfg(target_family = "wasm")] {
-        /// Configuration for the [`WebTransportClient`] on WASM platforms.
-        pub type ClientConfig = xwt_web_sys::WebTransportOptions;
-    } else {
-        use wtransport::endpoint::endpoint_side;
-
-        /// Configuration for the [`WebTransportClient`] on non-WASM platforms.
-        pub type ClientConfig = wtransport::ClientConfig;
-        type ClientEndpoint = xwt_wtransport::Endpoint<endpoint_side::Client>;
-    }
-}
-
-type ConnectError = <ClientEndpoint as Connect>::Error;
-type AwaitConnectError = <<ClientEndpoint as Connect>::Connecting as Connecting>::Error;
 
 /// Allows using [`WebTransportClient`].
 #[derive(Debug)]
@@ -112,7 +85,8 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Str
     runtime.spawn({
         let runtime = runtime.clone();
         async move {
-            let Err(reason) = backend(runtime, packet_buf_cap, config, target, send_next).await
+            let Err(reason) =
+                backend::start(runtime, packet_buf_cap, config, target, send_next).await
             else {
                 unreachable!();
             };
@@ -129,20 +103,6 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Str
         }));
 }
 
-/// [`WebTransportClient`] error.
-#[derive(Debug, Error)]
-pub enum ClientError {
-    /// Failed to start connecting to the target.
-    #[error("failed to connect")]
-    Connect(#[source] ConnectError),
-    /// Failed to await the connection to the target.
-    #[error("failed to await connection")]
-    AwaitConnect(#[source] AwaitConnectError),
-    /// Generic session error.
-    #[error(transparent)]
-    Session(#[from] SessionError),
-}
-
 #[derive(Debug)]
 enum ClientFrontend {
     Connecting {
@@ -153,21 +113,6 @@ enum ClientFrontend {
         recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
     },
     Disconnected,
-}
-
-#[derive(Debug)]
-struct ToConnected {
-    #[cfg(not(target_family = "wasm"))]
-    local_addr: SocketAddr,
-    #[cfg(not(target_family = "wasm"))]
-    initial_remote_addr: SocketAddr,
-    #[cfg(not(target_family = "wasm"))]
-    initial_rtt: Duration,
-    initial_mtu: usize,
-    recv_meta: mpsc::Receiver<SessionMeta>,
-    recv_packet_b2f: mpsc::Receiver<Bytes>,
-    send_packet_f2b: mpsc::UnboundedSender<Bytes>,
-    send_user_dc: oneshot::Sender<String>,
 }
 
 // TODO: required components
@@ -243,78 +188,4 @@ fn should_disconnect(
     } else {
         false
     }
-}
-
-async fn backend(
-    runtime: WebTransportRuntime,
-    packet_buf_cap: usize,
-    config: ClientConfig,
-    target: String,
-    send_next: oneshot::Sender<ToConnected>,
-) -> Result<Never, DisconnectReason<ClientError>> {
-    debug!("Spawning backend task to connect to {target:?}");
-
-    let endpoint = {
-        #[cfg(target_family = "wasm")]
-        {
-            todo!()
-        }
-
-        #[cfg(not(target_family = "wasm"))]
-        {
-            wtransport::Endpoint::client(config)
-                .map(xwt_wtransport::Endpoint)
-                .map_err(SessionError::CreateEndpoint)
-                .map_err(ClientError::Session)?
-        }
-    };
-    debug!("Created endpoint");
-
-    let conn = endpoint
-        .connect(&target)
-        .await
-        .map_err(|err| ClientError::Connect(err.into()))?
-        .wait_connect()
-        .await
-        .map_err(|err| ClientError::AwaitConnect(err.into()))?;
-    debug!("Connected");
-
-    let (send_meta, recv_meta) = mpsc::channel::<SessionMeta>(1);
-    let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<Bytes>(packet_buf_cap);
-    let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
-    let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
-    let next = ToConnected {
-        #[cfg(not(target_family = "wasm"))]
-        local_addr: endpoint
-            .local_addr()
-            .map_err(SessionError::GetLocalAddr)
-            .map_err(ClientError::Session)?,
-        #[cfg(not(target_family = "wasm"))]
-        initial_remote_addr: conn.0.remote_address(),
-        #[cfg(not(target_family = "wasm"))]
-        initial_rtt: conn.0.rtt(),
-        initial_mtu: conn
-            .max_datagram_size()
-            .ok_or(SessionError::DatagramsNotSupported.into())
-            .map_err(ClientError::Session)?,
-        recv_meta,
-        recv_packet_b2f,
-        send_packet_f2b,
-        send_user_dc,
-    };
-    let backend = SessionBackend {
-        runtime,
-        conn,
-        send_meta,
-        send_packet_b2f,
-        recv_packet_f2b,
-        recv_user_dc,
-    };
-    send_next
-        .send(next)
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ClientError::Session)?;
-
-    debug!("Starting session loop");
-    Err(backend.start().await.map_err(ClientError::Session))
 }
