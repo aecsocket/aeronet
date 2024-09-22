@@ -1,5 +1,5 @@
 [package]
-description = "Steam networking sockets transport implementation for aeronet"
+description = "Steam networking sockets IO layer implementation for aeronet"
 name = "aeronet_steam"
 
 authors.workspace = true
@@ -14,36 +14,36 @@ version.workspace = true
 [lints]
 workspace = true
 
-[features]
-## Enables the `SteamClient`.
-client = []
+[package.metadata.docs.rs]
+all-features = true
 
-## Enables the `SteamServer`.
+[features]
+client = []
 server = []
 
-## Enables [`bevy`](https://docs.rs/bevy) support by deriving `Resource` on certain types.
-bevy = ["dep:bevy_ecs", "aeronet/bevy", "aeronet_proto/bevy"]
-
-## Enables [`aeronet_proto`]'s [`egui`](https://docs.rs/egui) network statistics visualizer.
-visualizer = ["aeronet_proto/visualizer"]
-
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-aeronet = { workspace = true }
-aeronet_proto = { workspace = true }
+aeronet_io = { workspace = true }
 
 replace_with = { workspace = true }
-slotmap = { workspace = true }
 steamworks = { workspace = true }
 thiserror = { workspace = true }
 
-bevy_ecs = { workspace = true, optional = true }
+bevy-steamworks = { workspace = true }
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_hierarchy = { workspace = true }
+bevy_reflect = { workspace = true }
 
-# [[example]]
-# name = "echo_client"
-# path = "examples/echo_client.rs"
-# required-features = ["bevy", "dangerous-configuration"]
+[dev-dependencies]
+bevy = { workspace = true }
+bevy_egui = { workspace = true }
 
-# [[example]]
-# name = "echo_server"
-# path = "examples/echo_server.rs"
-# required-features = ["bevy"]
+[[example]]
+name = "steam_client"
+path = "examples/steam_client.rs"
+required-features = ["client"]
+
+[[example]]
+name = "steam_server"
+path = "examples/steam_server.rs"
+required-features = ["server"]

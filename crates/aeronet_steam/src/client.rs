@@ -1,122 +1,90 @@
-use {
-    aeronet::{
-        bytes::Bytes,
-        client::{ClientEvent, ClientState, ClientTransport, DisconnectReason},
-        lane::LaneIndex,
-        shared::DROP_DISCONNECT_REASON,
-    },
-    aeronet_proto::session::{MessageKey, Session, SessionBacked},
-    std::{mem, time::Duration},
+use std::net::SocketAddr;
+
+use aeronet_io::connection::{DisconnectReason, Disconnected, Session};
+use bevy_ecs::{prelude::*, system::EntityCommand};
+use steamworks::{
+    networking_sockets::InvalidHandle, networking_types::NetworkingIdentity, SteamId,
 };
+use thiserror::Error;
 
-#[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct SteamClient {
-    state: State,
+use crate::session::SteamIo;
+
+#[derive(Debug, Component)]
+pub struct SteamClient {}
+
+#[derive(Debug, Clone)]
+pub enum ConnectTarget {
+    Addr(SocketAddr),
+    Peer {
+        identity: NetworkingIdentity,
+        virtual_port: i32,
+    },
 }
 
-#[derive(Debug)]
-enum State {
-    Disconnected,
-    Connecting(Connecting),
-    Connected(Connected),
-    Disconnecting { reason: String },
-}
-
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum ClientError {
-    /// Client is not connected.
-    #[error("not connected")]
-    NotConnected,
-}
-
-#[derive(Debug)]
-pub struct Connecting {}
-
-#[derive(Debug)]
-pub struct Connected {}
-
-impl ClientTransport for SteamClient {
-    type Error = ClientError;
-
-    type Connecting<'this> = &'this Connecting;
-
-    type Connected<'this> = &'this Connected;
-
-    type MessageKey = MessageKey;
-
-    fn state(&self) -> ClientState<Self::Connecting<'_>, Self::Connected<'_>> {
-        match &self.state {
-            State::Disconnected | State::Disconnecting { .. } => ClientState::Disconnected,
-            State::Connecting(client) => ClientState::Connecting(client),
-            State::Connected(client) => ClientState::Connected(client),
+impl ConnectTarget {
+    #[must_use]
+    pub fn peer(steam_id: SteamId, virtual_port: i32) -> Self {
+        Self::Peer {
+            identity: NetworkingIdentity::new_steam_id(steam_id),
+            virtual_port,
         }
     }
+}
 
-    fn poll(&mut self, delta_time: Duration) -> impl Iterator<Item = ClientEvent<Self>> {
-        let mut events = Vec::new();
-        replace_with::replace_with_or_abort(&mut self.state, |state| match state {
-            State::Disconnected => State::Disconnected,
-            State::Connecting(client) => Self::poll_connecting(client, &mut events),
-            State::Connected(client) => Self::poll_connected(client, &mut events, delta_time),
-            State::Disconnecting { reason } => {
-                events.push(ClientEvent::Disconnected {
-                    reason: DisconnectReason::Local(reason),
-                });
-                State::Disconnected
-            }
-        });
-        events.into_iter()
-    }
-
-    fn send(
-        &mut self,
-        msg: impl Into<Bytes>,
-        lane: impl Into<LaneIndex>,
-    ) -> Result<Self::MessageKey, Self::Error> {
-        let State::Connected(client) = &mut self.state else {
-            return Err(ClientError::NotConnected);
-        };
-
-        todo!()
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        let State::Connected(client) = &mut self.state else {
-            return Err(ClientError::NotConnected);
-        };
-
-        todo!()
-    }
-
-    fn disconnect(&mut self, reason: impl Into<String>) -> Result<(), Self::Error> {
-        let reason = reason.into();
-        todo!()
+impl From<SocketAddr> for ConnectTarget {
+    fn from(value: SocketAddr) -> Self {
+        Self::Addr(value)
     }
 }
+
+impl From<SteamId> for ConnectTarget {
+    fn from(value: SteamId) -> Self {
+        Self::peer(value, 0)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Error)]
+#[error("steam error")]
+pub struct SteamError;
 
 impl SteamClient {
-    fn poll_connecting(mut client: Connecting, events: &mut Vec<ClientEvent<Self>>) -> State {
-        todo!()
-    }
-
-    fn poll_connected(
-        mut client: Connected,
-        events: &mut Vec<ClientEvent<Self>>,
-        delta_time: Duration,
-    ) -> State {
-        todo!()
+    #[must_use]
+    pub fn connect(target: impl Into<ConnectTarget>) -> impl EntityCommand {
+        let target = target.into();
+        move |session: Entity, world: &mut World| connect(session, world, target)
     }
 }
 
-impl SessionBacked for SteamClient {
-    fn get_session(&self) -> Option<&Session> {
-        todo!()
-    }
-}
+fn connect(session: Entity, world: &mut World, target: ConnectTarget) {
+    world.resource_scope(|world, steam: Mut<bevy_steamworks::Client>| {
+        world.entity_mut(session).insert(Session);
 
-impl Drop for SteamClient {
-    fn drop(&mut self) {
-        self.disconnect(DROP_DISCONNECT_REASON);
-    }
+        let options = [];
+        let result = match target {
+            ConnectTarget::Addr(addr) => steam
+                .networking_sockets()
+                .connect_by_ip_address(addr, options),
+            ConnectTarget::Peer {
+                identity,
+                virtual_port,
+            } => steam
+                .networking_sockets()
+                .connect_p2p(identity, virtual_port, options),
+        };
+
+        let conn = match result {
+            Ok(conn) => conn,
+            Err(InvalidHandle) => {
+                world.trigger_targets(
+                    Disconnected {
+                        reason: DisconnectReason::Error(SteamError.into()),
+                    },
+                    session,
+                );
+                return;
+            }
+        };
+
+        world.entity_mut(session).insert(SteamIo { conn });
+    })
 }

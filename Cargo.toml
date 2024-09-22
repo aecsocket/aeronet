@@ -1,9 +1,5 @@
 [workspace]
-members = [
-  "crates/aeronet_io",
-  "crates/aeronet_channel",
-  "crates/aeronet_webtransport",
-]
+members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
@@ -103,6 +99,8 @@ flume = "0.11.0"
 # aeronet_steam
 
 steamworks = "0.11.0"
+
+bevy-steamworks = "0.12.0"
 
 # aeronet_webtransport
 

@@ -130,12 +130,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "aeronet_steam"
+version = "0.9.0-dev"
+dependencies = [
+ "aeronet_io",
+ "bevy",
+ "bevy-steamworks",
+ "bevy_app",
+ "bevy_ecs",
+ "bevy_egui",
+ "bevy_hierarchy",
+ "bevy_reflect",
+ "replace_with",
+ "steamworks",
+ "thiserror",
+]
+
+[[package]]
 name = "aeronet_webtransport"
 version = "0.9.0-dev"
 dependencies = [
  "aeronet_io",
  "anyhow",
- "assert_matches",
  "base64 0.22.1",
  "bevy",
  "bevy_app",
@@ -149,14 +165,12 @@ dependencies = [
  "gloo-timers",
  "js-sys",
  "replace_with",
- "slotmap",
  "spki",
  "thiserror",
  "tokio",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "web-time",
  "wtransport",
  "x509-cert",
  "xwt-core",
@@ -356,12 +370,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "assert_matches"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
-
-[[package]]
 name = "async-broadcast"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -476,6 +484,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8ece0d8dde51890fb52dcba5b04fd1c657617a4022908c327b2d6e83d173a32"
 dependencies = [
  "bevy_internal",
+]
+
+[[package]]
+name = "bevy-steamworks"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5ec26731a50695824bf6d75ccf76c770dec5def1ced72bbfd032508b109d407"
+dependencies = [
+ "bevy_app",
+ "bevy_ecs",
+ "bevy_log",
+ "bevy_utils",
+ "steamworks",
 ]
 
 [[package]]
@@ -4311,6 +4332,24 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "steamworks"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a79d6f059322f73a4586cc2d0ca595ce1583104b2b1574ae1bb87f2c05bf4c67"
+dependencies = [
+ "bitflags 1.3.2",
+ "lazy_static",
+ "steamworks-sys",
+ "thiserror",
+]
+
+[[package]]
+name = "steamworks-sys"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ef6b00f8fe8eaaaff22cb9b70822a48c1a5d772bc682c202a57c0b438175845"
 
 [[package]]
 name = "strict-num"
