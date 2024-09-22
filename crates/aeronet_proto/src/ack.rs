@@ -5,7 +5,6 @@ use {
     std::fmt,
 };
 
-#[allow(clippy::trivially_copy_pass_by_ref)] // requires exact type sig
 pub(crate) fn fmt(value: &u32, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     write!(fmt, "{value:032b}")
 }
@@ -45,7 +44,6 @@ impl Acknowledge {
     /// acks.ack(PacketSeq::new(2));
     /// assert_eq!(acks, acks_clone);
     /// ```
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn ack(&mut self, seq: PacketSeq) {
         let dist = seq.dist_to(*self.last_recv);
         if let Ok(dist) = u32::try_from(dist) {
@@ -96,7 +94,6 @@ impl Acknowledge {
     #[must_use]
     pub fn is_acked(&self, seq: PacketSeq) -> bool {
         let dist = seq.dist_to(*self.last_recv);
-        #[allow(clippy::option_if_let_else)] // makes the code clearer
         match u32::try_from(dist) {
             Ok(delta) => {
                 // `seq` is before or equal to `last_recv`,

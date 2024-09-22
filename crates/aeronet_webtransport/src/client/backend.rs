@@ -26,7 +26,9 @@ pub async fn start(
     let endpoint = {
         #[cfg(target_family = "wasm")]
         {
-            todo!()
+            xwt_web_sys::Endpoint {
+                options: config.to_js(),
+            }
         }
 
         #[cfg(not(target_family = "wasm"))]
@@ -66,13 +68,9 @@ pub async fn start(
         initial_remote_addr: conn.0.remote_address(),
         #[cfg(not(target_family = "wasm"))]
         initial_rtt: conn.0.rtt(),
-        #[cfg_attr(
-            not(target_family = "wasm"),
-            expect(clippy::useless_conversion, reason = "conversion required for WASM")
-        )]
         initial_mtu: conn
             .max_datagram_size()
-            .ok_or(SessionError::DatagramsNotSupported.into())
+            .ok_or(SessionError::DatagramsNotSupported)
             .map_err(ClientError::Session)?,
         recv_meta,
         recv_packet_b2f,

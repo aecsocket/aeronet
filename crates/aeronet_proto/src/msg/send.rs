@@ -73,7 +73,7 @@ impl MessageSplitter {
     /// Errors if the message is too large.
     ///
     /// [`FragmentReceiver`]: crate::msg::FragmentReceiver
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
+    #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
     pub fn split(
         &self,
         msg: impl Into<Bytes>,

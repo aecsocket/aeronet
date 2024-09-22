@@ -150,7 +150,7 @@ impl FragmentReceiver {
     ///
     /// Since transmission errors occur such as duplicated and dropped packets,
     /// it is perfectly safe to ignore these errors.
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
+    #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
     pub fn reassemble(
         &mut self,
         now: Instant,
@@ -301,11 +301,10 @@ mod tests {
     #[test]
     fn one_half_frags_opposite_order() {
         let mut r = FragmentReceiver::new(2);
-        assert!(
-            r.reassemble(now(), SEQ, non_last(0), [1, 2])
-                .unwrap()
-                .is_none()
-        );
+        assert!(r
+            .reassemble(now(), SEQ, non_last(0), [1, 2])
+            .unwrap()
+            .is_none());
         assert!(data_size(&r) > 0);
         assert_eq!(
             Bytes::from(vec![1, 2, 3]),
@@ -331,11 +330,10 @@ mod tests {
     #[test]
     fn already_received() {
         let mut r = FragmentReceiver::new(2);
-        assert!(
-            r.reassemble(now(), SEQ, non_last(0), [1, 2])
-                .unwrap()
-                .is_none()
-        );
+        assert!(r
+            .reassemble(now(), SEQ, non_last(0), [1, 2])
+            .unwrap()
+            .is_none());
         assert_eq!(
             ReassembleError::AlreadyReceived,
             r.reassemble(now(), SEQ, non_last(0), [1, 2]).unwrap_err()
@@ -360,11 +358,10 @@ mod tests {
     #[test]
     fn invalid_last_frag() {
         let mut r = FragmentReceiver::new(2);
-        assert!(
-            r.reassemble(now(), SEQ, non_last(1), [1, 2])
-                .unwrap()
-                .is_none()
-        );
+        assert!(r
+            .reassemble(now(), SEQ, non_last(1), [1, 2])
+            .unwrap()
+            .is_none());
         assert_eq!(
             ReassembleError::InvalidLastFragment,
             r.reassemble(now(), SEQ, last(0), []).unwrap_err()
@@ -374,11 +371,10 @@ mod tests {
     #[test]
     fn lower_index_last_frag() {
         let mut r = FragmentReceiver::new(2);
-        assert!(
-            r.reassemble(now(), SEQ, non_last(10), [1, 2])
-                .unwrap()
-                .is_none()
-        );
+        assert!(r
+            .reassemble(now(), SEQ, non_last(10), [1, 2])
+            .unwrap()
+            .is_none());
         assert_eq!(
             ReassembleError::InvalidLastFragment,
             r.reassemble(now(), SEQ, last(0), [3]).unwrap_err()
@@ -408,11 +404,10 @@ mod tests {
     fn max_frags() {
         let mut r = FragmentReceiver::new(2);
         for index in 0..=(MAX_FRAG_INDEX - 1) {
-            assert!(
-                r.reassemble(now(), SEQ, non_last(index), [1, 1])
-                    .unwrap()
-                    .is_none()
-            );
+            assert!(r
+                .reassemble(now(), SEQ, non_last(index), [1, 1])
+                .unwrap()
+                .is_none());
         }
         assert_eq!(
             Bytes::from(vec![1; MAX_FRAGS * 2]),
@@ -439,16 +434,14 @@ mod tests {
     #[test]
     fn two_msgs_two_frags() {
         let mut r = FragmentReceiver::new(2);
-        assert!(
-            r.reassemble(now(), SEQ1, non_last(0), [1, 2])
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            r.reassemble(now(), SEQ2, non_last(0), [4, 5])
-                .unwrap()
-                .is_none()
-        );
+        assert!(r
+            .reassemble(now(), SEQ1, non_last(0), [1, 2])
+            .unwrap()
+            .is_none());
+        assert!(r
+            .reassemble(now(), SEQ2, non_last(0), [4, 5])
+            .unwrap()
+            .is_none());
         let data_size_1 = data_size(&r);
         assert!(data_size_1 > 0);
 

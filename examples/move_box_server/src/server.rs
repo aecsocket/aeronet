@@ -78,7 +78,6 @@ pub fn main() {
         .run();
 }
 
-#[allow(clippy::cognitive_complexity)] // this isn't complex
 fn open_server(
     mut server: ResMut<WebTransportServer>,
     runtime: Res<WebTransportRuntime>,

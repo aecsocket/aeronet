@@ -12,24 +12,27 @@ use {
     bytes::Bytes,
     futures::channel::{mpsc, oneshot},
     thiserror::Error,
-    xwt_core::endpoint::{Connect, connect::Connecting},
 };
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         /// Configuration for the [`WebTransportClient`] on WASM platforms.
         pub type ClientConfig = xwt_web_sys::WebTransportOptions;
+
+        type ConnectError = crate::JsError;
+        type AwaitConnectError = crate::JsError;
     } else {
         use wtransport::endpoint::endpoint_side;
+        use xwt_core::endpoint::{Connect, connect::Connecting};
 
         /// Configuration for the [`WebTransportClient`] on non-WASM platforms.
         pub type ClientConfig = wtransport::ClientConfig;
         type ClientEndpoint = xwt_wtransport::Endpoint<endpoint_side::Client>;
+
+        type ConnectError = <ClientEndpoint as Connect>::Error;
+        type AwaitConnectError = <<ClientEndpoint as Connect>::Connecting as Connecting>::Error;
     }
 }
-
-type ConnectError = <ClientEndpoint as Connect>::Error;
-type AwaitConnectError = <<ClientEndpoint as Connect>::Connecting as Connecting>::Error;
 
 /// [`WebTransportClient`] error.
 #[derive(Debug, Error)]

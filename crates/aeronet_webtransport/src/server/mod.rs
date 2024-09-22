@@ -93,9 +93,9 @@ pub struct SessionRequest {
     pub authority: String,
     /// `:path` header.
     pub path: String,
-    /// `:origin` header.
+    /// `origin` header.
     pub origin: Option<String>,
-    /// `:user-agent` header.
+    /// `user-agent` header.
     pub user_agent: Option<String>,
     /// Full map of request headers.
     pub headers: HashMap<String, String>,

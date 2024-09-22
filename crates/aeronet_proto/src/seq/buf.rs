@@ -77,7 +77,6 @@ impl<T, const N: usize> SeqBuf<T, N> {
     /// Gets a reference to the item at the given key.
     #[must_use]
     #[inline]
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn get(&self, key: u16) -> Option<&T> {
         let index = Self::index(key);
         let index_u = usize::from(index);
@@ -95,7 +94,6 @@ impl<T, const N: usize> SeqBuf<T, N> {
     /// Gets a mutable reference to the item at the given key.
     #[must_use]
     #[inline]
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn get_mut(&mut self, key: u16) -> Option<&mut T> {
         let index = Self::index(key);
         let index_u = usize::from(index);
@@ -114,7 +112,6 @@ impl<T, const N: usize> SeqBuf<T, N> {
     ///
     /// Returns a reference to the newly inserted value.
     #[inline]
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn insert(&mut self, key: u16, value: T) -> &mut T {
         let index = Self::index(key);
         let index_u = usize::from(index);
@@ -137,7 +134,6 @@ impl<T, const N: usize> SeqBuf<T, N> {
     ///
     /// If `T: Default`, consider using [`SeqBuf::remove`].
     #[inline]
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
     pub fn remove_with(&mut self, key: u16, default: T) -> Option<T> {
         let index = Self::index(key);
         let index_u = usize::from(index);

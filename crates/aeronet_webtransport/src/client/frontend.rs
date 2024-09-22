@@ -1,18 +1,18 @@
 use {
-    super::{backend, ClientConfig, ClientError, ToConnected},
+    super::{ClientConfig, ClientError, ToConnected, backend},
     crate::{
         runtime::WebTransportRuntime,
         session::{SessionError, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
-        connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
-        packet::{PacketBuffersCapacity, PacketMtu, PacketRtt},
         IoSet,
+        connection::{DisconnectReason, Disconnected, Session},
+        packet::{PacketBuffersCapacity, PacketMtu},
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     futures::channel::oneshot,
-    tracing::{debug_span, Instrument},
+    tracing::{Instrument, debug_span},
 };
 
 /// Allows using [`WebTransportClient`].
@@ -157,11 +157,11 @@ fn poll_connecting(
         },
         PacketMtu(next.initial_mtu),
         #[cfg(not(target_family = "wasm"))]
-        LocalAddr(next.local_addr),
+        aeronet_io::connection::LocalAddr(next.local_addr),
         #[cfg(not(target_family = "wasm"))]
-        RemoteAddr(next.initial_remote_addr),
+        aeronet_io::connection::RemoteAddr(next.initial_remote_addr),
         #[cfg(not(target_family = "wasm"))]
-        PacketRtt(next.initial_rtt),
+        aeronet_io::packet::PacketRtt(next.initial_rtt),
     ));
     ClientFrontend::Connected { recv_dc }
 }

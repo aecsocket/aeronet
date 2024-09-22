@@ -180,7 +180,7 @@ impl Session {
     ///
     /// Each message produced by this iterator must be immediately sent out
     /// along the transport.
-    #[allow(clippy::missing_panics_doc)] // shouldn't panic
+    #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
     pub fn flush(&mut self, now: Instant) -> impl Iterator<Item = Bytes> + '_ {
         // collect the paths of the frags to send, along with how old they are
         let mut frag_paths = self
@@ -223,7 +223,7 @@ impl Session {
                 })
                 .expect("BytesMut should grow the buffer when writing over capacity");
 
-            let span = trace_span!("flush", packet = packet_seq.0.0);
+            let span = trace_span!("flush", packet = packet_seq.0 .0);
             let _span = span.enter();
 
             // collect the paths of the frags we want to put into this packet
@@ -261,7 +261,7 @@ impl Session {
 
             trace!(num_frags = packet_frags.len(), "Flushed packet");
             self.flushed_packets.insert(
-                packet_seq.0.0,
+                packet_seq.0 .0,
                 FlushedPacket {
                     flushed_at: now,
                     frags: packet_frags.into_boxed_slice(),
