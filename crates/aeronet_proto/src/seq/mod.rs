@@ -59,7 +59,6 @@ impl Seq {
     /// ```
     #[must_use]
     pub const fn dist_to(self, rhs: Self) -> i16 {
-        #[allow(clippy::cast_possible_wrap)] // that's exactly what we want
         (rhs.0.wrapping_sub(self.0) as i16)
     }
 }

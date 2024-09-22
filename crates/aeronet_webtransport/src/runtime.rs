@@ -39,7 +39,13 @@ pub struct WebTransportRuntime {
     handle: tokio::runtime::Handle,
 }
 
-#[allow(clippy::derivable_impls)] // no it can't because conditional cfg logic
+#[cfg_attr(
+    target_family = "wasm",
+    allow(
+        clippy::derivable_impls,
+        reason = "constructor has conditional cfg logic"
+    )
+)]
 impl Default for WebTransportRuntime {
     fn default() -> Self {
         #[cfg(target_family = "wasm")]

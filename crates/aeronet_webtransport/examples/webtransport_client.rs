@@ -8,7 +8,10 @@ use {
         },
         packet::{PacketBuffers, PacketMtu, PacketRtt, PacketStats},
     },
-    aeronet_webtransport::client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
+    aeronet_webtransport::{
+        cert,
+        client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
+    },
     bevy::prelude::*,
     bevy_egui::{EguiContexts, EguiPlugin, egui},
     std::mem,
@@ -28,6 +31,7 @@ fn main() -> AppExit {
 #[derive(Debug, Default, Resource)]
 struct GlobalUi {
     target: String,
+    cert_hash: String,
     session_id: usize,
     log: Vec<String>,
 }
@@ -95,12 +99,20 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
             connect |= ui.button("Connect").clicked();
         });
 
+        let cert_hash_resp = ui.add(
+            egui::TextEdit::singleline(&mut ui_state.cert_hash)
+                .hint_text("(optional) certificate hash"),
+        );
+        connect |= cert_hash_resp.lost_focus() && enter_pressed;
+
         if connect {
-            let config = client_config();
-            let mut target = mem::take(&mut ui_state.target);
+            let mut target = ui_state.target.clone();
             if target.is_empty() {
                 target = DEFAULT_TARGET.to_owned();
             }
+
+            let cert_hash = ui_state.cert_hash.clone();
+            let config = client_config(cert_hash);
 
             ui_state.session_id += 1;
             let name = format!("{}. {target}", ui_state.session_id);
@@ -116,17 +128,45 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
 }
 
 #[cfg(target_family = "wasm")]
-fn client_config() -> ClientConfig {
-    ClientConfig::default()
+fn client_config(cert_hash: String) -> ClientConfig {
+    use aeronet_webtransport::xwt_web_sys::{CertificateHash, HashAlgorithm};
+
+    let server_certificate_hashes = match cert::hash_from_b64(&cert_hash) {
+        Ok(hash) => vec![CertificateHash {
+            algorithm: HashAlgorithm::Sha256,
+            value: Vec::from(hash),
+        }],
+        Err(err) => {
+            warn!("Failed to read certificate hash from string: {err:?}",);
+            Vec::new()
+        }
+    };
+
+    ClientConfig {
+        server_certificate_hashes,
+        ..Default::default()
+    }
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn client_config() -> ClientConfig {
-    use std::time::Duration;
+fn client_config(cert_hash: String) -> ClientConfig {
+    use {std::time::Duration, wtransport::tls::Sha256Digest};
 
-    ClientConfig::builder()
-        .with_bind_default()
-        .with_no_cert_validation()
+    let config = ClientConfig::builder().with_bind_default();
+
+    let config = if cert_hash.is_empty() {
+        config.with_no_cert_validation()
+    } else {
+        match cert::hash_from_b64(&cert_hash) {
+            Ok(hash) => config.with_server_certificate_hashes([Sha256Digest::new(hash)]),
+            Err(err) => {
+                warn!("Failed to read certificate hash from string: {err:?}");
+                config.with_server_certificate_hashes([])
+            }
+        }
+    };
+
+    config
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
         .unwrap()

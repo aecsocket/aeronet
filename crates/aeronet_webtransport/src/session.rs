@@ -17,15 +17,16 @@ use {
         channel::{mpsc, oneshot},
         never::Never,
     },
-    std::{io, net::SocketAddr, num::Saturating, sync::Arc, time::Duration},
+    std::{io, num::Saturating, sync::Arc, time::Duration},
     thiserror::Error,
-    tracing::{debug, trace, trace_span},
+    tracing::{trace, trace_span},
     xwt_core::prelude::*,
 };
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
-        type ConnectionError = ();
+        type Connection = xwt_web_sys::Session;
+        type ConnectionError = crate::JsError;
     } else {
         type Connection = xwt_wtransport::Connection;
         type ConnectionError = wtransport::error::ConnectionError;
@@ -101,7 +102,7 @@ impl Drop for WebTransportIo {
 #[derive(Debug)]
 pub(crate) struct SessionMeta {
     #[cfg(not(target_family = "wasm"))]
-    remote_addr: SocketAddr,
+    remote_addr: std::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
     raw_rtt: Duration,
     mtu: usize,
@@ -136,6 +137,14 @@ fn poll(
         Option<&mut PacketRtt>,
     )>,
 ) {
+    #[cfg_attr(
+        target_family = "wasm",
+        expect(
+            unused_variables,
+            unused_mut,
+            reason = "`remote_addr` and `packet_rtt` are not used on WASM"
+        )
+    )]
     for (session, mut io, mut bufs, mut mtu, mut stats, mut remote_addr, mut packet_rtt) in
         &mut sessions
     {
@@ -326,7 +335,10 @@ async fn recv_loop(
     mut send_packet_b2f: mpsc::Sender<Bytes>,
 ) -> Result<Never, SessionError> {
     loop {
-        #[allow(clippy::useless_conversion)] // multi-target support
+        #[cfg_attr(
+            not(target_family = "wasm"),
+            allow(clippy::useless_conversion, reason = "conversion required for WASM")
+        )]
         let packet = futures::select! {
             x = conn.receive_datagram().fuse() => x,
             _ = recv_closed => return Err(SessionError::FrontendClosed),
@@ -368,7 +380,7 @@ async fn send_loop(
         {
             conn.send_datagram(packet)
                 .await
-                .map_err(|err| InternalError::ConnectionLost(err.into()))?;
+                .map_err(|err| SessionError::Connection(err.into()))?;
         }
 
         #[cfg(not(target_family = "wasm"))]
@@ -388,9 +400,10 @@ async fn send_loop(
                     // so hopefully the frontend will realise its packets are exceeding MTU,
                     // and shrink them accordingly; therefore this is just a one-off error
                     let mtu = conn.max_datagram_size();
-                    debug!(
+                    tracing::debug!(
                         packet_len,
-                        mtu, "Attempted to send datagram larger than MTU"
+                        mtu,
+                        "Attempted to send datagram larger than MTU"
                     );
                     Ok(())
                 }
@@ -410,6 +423,8 @@ fn get_disconnect_reason(err: SessionError) -> DisconnectReason<SessionError> {
         // TODO: I don't know how the app-initiated disconnect message looks
         // I suspect we need this fixed first
         // https://github.com/BiagioFesta/wtransport/issues/182
+        //
+        // Tested: when the server disconnects us, all we get is "Connection lost."
         DisconnectReason::Error(err)
     }
 
@@ -441,6 +456,9 @@ async fn disconnect(conn: Arc<Connection>, reason: &str) {
         // TODO: This seems to not close the connection properly
         // Could it be because of this?
         // https://github.com/BiagioFesta/wtransport/issues/182
+        //
+        // Tested: the server times us out instead of actually
+        // reading the disconnect
         conn.transport.close_with_close_info(&close_info);
         let _ = JsFuture::from(conn.transport.closed()).await;
     }

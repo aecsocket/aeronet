@@ -79,7 +79,7 @@ fn on_session_request(
         info!("  {header_key}: {header_value}");
     }
 
-    commands.trigger_targets(SessionResponse::Forbidden, client);
+    commands.trigger_targets(SessionResponse::Accepted, client);
 }
 
 fn on_connected(trigger: Trigger<OnAdd, Connected>, clients: Query<&Parent>) {

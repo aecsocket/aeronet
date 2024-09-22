@@ -9,8 +9,8 @@ use {
     bytes::Bytes,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     ringbuf::{
-        traits::{Consumer, RingBuffer},
         HeapRb,
+        traits::{Consumer, RingBuffer},
     },
     std::{num::Saturating, time::Duration},
 };
