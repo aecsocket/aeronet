@@ -1,12 +1,12 @@
 //! Example server using WebTransport which listens for clients sending strings
 //! and sends back a string reply.
 
-// cfg_if::cfg_if! {
-//     if #[cfg(target_family = "wasm")] {
-//         fn main() {
-//             eprintln!("this example is not for WASM");
-//         }
-//     } else {
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+        fn main() {
+            eprintln!("this example is not for WASM");
+        }
+    } else {
 
 use {
     aeronet_io::{
@@ -129,4 +129,4 @@ fn reply(mut clients: Query<(Entity, &mut PacketBuffers), With<Parent>>) {
     }
 }
 
-// }}
+}}
