@@ -43,7 +43,7 @@ pub type ServerConfig = wtransport::ServerConfig;
 ///
 /// fn on_session_request(trigger: Trigger<SessionRequest>, mut commands: Commands) {
 ///     let client = trigger.entity();
-///     commands.trigger_entities(SessionResponse::Accepted, client);
+///     commands.trigger_targets(SessionResponse::Accepted, client);
 /// }
 /// ```
 ///
@@ -66,7 +66,7 @@ pub type ServerConfig = wtransport::ServerConfig;
 ///         }
 ///     }
 ///
-///     commands.trigger_entities(response, client);
+///     commands.trigger_targets(response, client);
 /// }
 /// # fn validate_auth_token(_: &str) -> bool { unimplemented!() }
 /// ```
