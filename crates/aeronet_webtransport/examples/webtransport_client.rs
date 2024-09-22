@@ -13,7 +13,7 @@ use {
         client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
     },
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     std::mem,
 };
 
@@ -209,7 +209,7 @@ fn session_ui(
         remote_addr,
     ) in &mut sessions
     {
-        egui::Window::new(format!("{name}")).show(egui.ctx_mut(), |ui| {
+        egui::Window::new(name.to_string()).show(egui.ctx_mut(), |ui| {
             let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
             let mut send_msg = false;

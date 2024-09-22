@@ -3,4 +3,5 @@
 // #![cfg(not(target_family = "wasm"))]
 
 pub mod client;
+pub mod config;
 pub mod session;
