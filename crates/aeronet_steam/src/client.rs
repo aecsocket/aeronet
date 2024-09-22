@@ -1,34 +1,27 @@
 use std::net::SocketAddr;
 
-use aeronet_io::connection::{DisconnectReason, Disconnected, Session};
+use aeronet_io::{
+    connection::{DisconnectReason, Disconnected, Session},
+    packet::PacketMtu,
+};
 use bevy_ecs::{prelude::*, system::EntityCommand};
 use steamworks::{
     networking_sockets::InvalidHandle, networking_types::NetworkingIdentity, SteamId,
 };
 use thiserror::Error;
 
-use crate::session::SteamIo;
+use crate::{config::SteamSessionConfig, session::SteamIo};
 
 #[derive(Debug, Component)]
 pub struct SteamClient {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConnectTarget {
     Addr(SocketAddr),
     Peer {
-        identity: NetworkingIdentity,
+        steam_id: SteamId,
         virtual_port: i32,
     },
-}
-
-impl ConnectTarget {
-    #[must_use]
-    pub fn peer(steam_id: SteamId, virtual_port: i32) -> Self {
-        Self::Peer {
-            identity: NetworkingIdentity::new_steam_id(steam_id),
-            virtual_port,
-        }
-    }
 }
 
 impl From<SocketAddr> for ConnectTarget {
@@ -38,8 +31,11 @@ impl From<SocketAddr> for ConnectTarget {
 }
 
 impl From<SteamId> for ConnectTarget {
-    fn from(value: SteamId) -> Self {
-        Self::peer(value, 0)
+    fn from(steam_id: SteamId) -> Self {
+        Self::Peer {
+            steam_id,
+            virtual_port: 0,
+        }
     }
 }
 
@@ -49,42 +45,49 @@ pub struct SteamError;
 
 impl SteamClient {
     #[must_use]
-    pub fn connect(target: impl Into<ConnectTarget>) -> impl EntityCommand {
+    pub fn connect(
+        config: SteamSessionConfig,
+        target: impl Into<ConnectTarget>,
+    ) -> impl EntityCommand {
         let target = target.into();
-        move |session: Entity, world: &mut World| connect(session, world, target)
+        move |session: Entity, world: &mut World| connect(session, world, config, target)
     }
 }
 
-fn connect(session: Entity, world: &mut World, target: ConnectTarget) {
-    world.resource_scope(|world, steam: Mut<bevy_steamworks::Client>| {
-        world.entity_mut(session).insert(Session);
+fn connect(session: Entity, world: &mut World, config: SteamSessionConfig, target: ConnectTarget) {
+    let steam = world.resource::<bevy_steamworks::Client>().clone();
 
-        let options = [];
-        let result = match target {
-            ConnectTarget::Addr(addr) => steam
-                .networking_sockets()
-                .connect_by_ip_address(addr, options),
-            ConnectTarget::Peer {
-                identity,
-                virtual_port,
-            } => steam
-                .networking_sockets()
-                .connect_p2p(identity, virtual_port, options),
-        };
+    world.entity_mut(session).insert(Session);
 
-        let conn = match result {
-            Ok(conn) => conn,
-            Err(InvalidHandle) => {
-                world.trigger_targets(
-                    Disconnected {
-                        reason: DisconnectReason::Error(SteamError.into()),
-                    },
-                    session,
-                );
-                return;
-            }
-        };
+    let options = config.to_options();
+    let result = match target {
+        ConnectTarget::Addr(addr) => steam
+            .networking_sockets()
+            .connect_by_ip_address(addr, options),
+        ConnectTarget::Peer {
+            steam_id,
+            virtual_port,
+        } => steam.networking_sockets().connect_p2p(
+            NetworkingIdentity::new_steam_id(steam_id),
+            virtual_port,
+            options,
+        ),
+    };
 
-        world.entity_mut(session).insert(SteamIo { conn });
-    })
+    let conn = match result {
+        Ok(conn) => conn,
+        Err(InvalidHandle) => {
+            world.trigger_targets(
+                Disconnected {
+                    reason: DisconnectReason::Error(SteamError.into()),
+                },
+                session,
+            );
+            return;
+        }
+    };
+
+    world
+        .entity_mut(session)
+        .insert((SteamIo { conn }, PacketMtu(config.send_buffer_size)));
 }

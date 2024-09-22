@@ -1,22 +1,22 @@
 use {
     super::{
-        ServerError, SessionRequest, SessionResponse, ToConnected, ToConnecting, ToOpen, backend,
+        backend, ServerError, SessionRequest, SessionResponse, ToConnected, ToConnecting, ToOpen,
     },
     crate::{
         runtime::WebTransportRuntime,
         session::{SessionError, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
         packet::{PacketBuffersCapacity, PacketMtu, PacketRtt},
         server::{CloseReason, Closed, Opened, RemoteClient, Server},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
     wtransport::ServerConfig,
 };
 
@@ -211,6 +211,7 @@ fn poll_open(
         // TODO: there may be a way to trigger SessionRequest on &mut World,
         // immediately get a SessionResponse, and respond immediately
         // without having to store send_session_response in Connecting
+        // https://github.com/bevyengine/bevy/pull/14894
         let request = SessionRequest {
             authority: connecting.authority,
             path: connecting.path,

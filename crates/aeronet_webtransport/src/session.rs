@@ -67,7 +67,7 @@ pub struct WebTransportIo {
 }
 
 /// Error that occurs when polling a session using the [`WebTransportIo`]
-/// IO layer implementation.
+/// IO layer.
 #[derive(Debug, Error)]
 pub enum SessionError {
     /// Frontend ([`WebTransportIo`]) was dropped.

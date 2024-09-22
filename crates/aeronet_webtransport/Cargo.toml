@@ -36,15 +36,12 @@ futures = { workspace = true }
 replace_with = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+xwt-core = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }
-
-# xwt
-
-xwt-core = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gloo-timers = { workspace = true }

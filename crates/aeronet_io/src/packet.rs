@@ -9,8 +9,8 @@ use {
     bytes::Bytes,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     ringbuf::{
-        HeapRb,
         traits::{Consumer, RingBuffer},
+        HeapRb,
     },
     std::{num::Saturating, time::Duration},
 };
@@ -114,7 +114,7 @@ impl PacketBuffers {
     /// Pushes a packet into [`PacketBuffers::recv`], potentially overwriting
     /// the last packet if the buffer is full.
     ///
-    /// This should only be called by the IO layer implementation.
+    /// This should only be called by the IO layer.
     pub fn push_recv(&mut self, packet: Bytes) {
         self.recv.push_overwrite(packet);
     }
@@ -138,7 +138,7 @@ impl PacketBuffers {
     /// Returns an iterator that removes packets one by one from
     /// [`PacketBuffers::recv`].
     ///
-    /// This should only be called by the IO layer implementation.
+    /// This should only be called by the IO layer.
     pub fn drain_send(&mut self) -> impl Iterator<Item = Bytes> + '_ {
         self.send.pop_iter()
     }
@@ -190,7 +190,7 @@ impl PacketBuffersCapacity {
 /// that this value may be arbitrarily large, and may even be [`usize::MAX`],
 /// so you should not attempt to preallocate buffers of size [`PacketMtu`].
 ///
-/// This component must only be mutated by the IO layer implementation.
+/// This component must only be mutated by the IO layer.
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Deref, DerefMut, Component, Reflect,
 )]

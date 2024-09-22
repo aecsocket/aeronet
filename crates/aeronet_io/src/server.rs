@@ -33,7 +33,9 @@ impl Plugin for ServerPlugin {
 ///
 /// This represents the "server" part of the client/server networking model (a
 /// client is represented as just a [`Session`]). Its responsibility is to
-/// accept and coordinate connections between multiple clients.
+/// accept and coordinate connections between multiple clients. Note, however,
+/// that this does not have to represent a *dedicated* server - you may run
+/// a server, and connect a client to that server, in the same app.
 ///
 /// The server starts in an opening state (when [`Server`] has been added but
 /// [`Opened`] is not yet present), and transitions to either an [`Opened`]

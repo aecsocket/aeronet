@@ -21,12 +21,13 @@ all-features = true
 client = []
 server = []
 
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
+[dependencies]
 aeronet_io = { workspace = true }
 
 replace_with = { workspace = true }
 steamworks = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 
 bevy-steamworks = { workspace = true }
 bevy_app = { workspace = true }
