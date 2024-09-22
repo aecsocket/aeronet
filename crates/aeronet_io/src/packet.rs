@@ -9,8 +9,8 @@ use {
     bytes::Bytes,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     ringbuf::{
-        HeapRb,
         traits::{Consumer, RingBuffer},
+        HeapRb,
     },
     std::{num::Saturating, time::Duration},
 };
@@ -48,7 +48,7 @@ impl Plugin for PacketPlugin {
 ///   equivalent to [`push_overwrite`] on [`PacketBuffers::send`]
 ///
 /// ```
-/// use {aeronet_io::PacketBuffers, bevy_ecs::prelude::*};
+/// use {aeronet_io::packet::PacketBuffers, bevy_ecs::prelude::*};
 ///
 /// fn print_all_packets(mut sessions: Query<(Entity, &mut PacketBuffers)>) {
 ///     for (session, mut packet_bufs) in &mut sessions {

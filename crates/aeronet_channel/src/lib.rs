@@ -3,11 +3,11 @@
 
 use {
     aeronet_io::{
-        AeronetIoPlugin, IoSet,
         connection::{
-            Connected, DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected, Session,
+            Connected, Disconnect, DisconnectReason, Disconnected, Session, DROP_DISCONNECT_REASON,
         },
         packet::{PacketBuffers, PacketBuffersCapacity, PacketMtu, PacketStats},
+        AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
@@ -62,7 +62,7 @@ impl ChannelIo {
     /// # Examples
     ///
     /// ```
-    /// use {aeronet_channel::ChannelIo, bevy_ecs::prelude::*};
+    /// use {aeronet_channel::ChannelIo, bevy_ecs::{prelude::*, world::Command}};
     ///
     /// # fn run(mut commands: Commands, world: &mut World) {
     /// let a = commands.spawn_empty().id();

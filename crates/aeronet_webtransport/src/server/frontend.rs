@@ -1,22 +1,22 @@
 use {
     super::{
-        ServerError, SessionRequest, SessionResponse, ToConnected, ToConnecting, ToOpen, backend,
+        backend, ServerError, SessionRequest, SessionResponse, ToConnected, ToConnecting, ToOpen,
     },
     crate::{
         runtime::WebTransportRuntime,
         session::{SessionError, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
         packet::{PacketBuffersCapacity, PacketMtu, PacketRtt},
         server::{CloseReason, Closed, Opened, RemoteClient, Server},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
     wtransport::ServerConfig,
 };
 
@@ -54,8 +54,8 @@ impl WebTransportServer {
     /// ```
     /// use {
     ///     aeronet_webtransport::server::{ServerConfig, WebTransportServer},
-    ///     bevy_ecs::prelude::*,
-    /// }
+    ///     bevy_ecs::{prelude::*, system::EntityCommand},
+    /// };
     ///
     /// # fn run(mut commands: Commands, world: &mut World) {
     /// // set up a self-signed certificate to identify this server
