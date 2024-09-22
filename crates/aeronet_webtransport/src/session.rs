@@ -5,17 +5,17 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        AeronetIoPlugin, IoSet,
-        connection::{Connected, DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, RemoteAddr},
+        connection::{Connected, Disconnect, DisconnectReason, RemoteAddr, DROP_DISCONNECT_REASON},
         packet::{PacketBuffers, PacketMtu, PacketRtt, PacketStats},
+        AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
-        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
+        FutureExt, SinkExt, StreamExt,
     },
     std::{io, num::Saturating, sync::Arc, time::Duration},
     thiserror::Error,
@@ -417,6 +417,13 @@ async fn send_loop(
     }
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    expect(
+        clippy::missing_const_for_fn,
+        reason = "the current implementation is temporary"
+    )
+)]
 fn get_disconnect_reason(err: SessionError) -> DisconnectReason<SessionError> {
     #[cfg(target_family = "wasm")]
     {
