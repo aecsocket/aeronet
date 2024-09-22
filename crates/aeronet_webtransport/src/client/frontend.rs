@@ -1,18 +1,18 @@
 use {
-    super::{backend, ClientConfig, ClientError, ToConnected},
+    super::{ClientConfig, ClientError, ToConnected, backend},
     crate::{
         runtime::WebTransportRuntime,
         session::{SessionError, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
+        IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
         packet::{PacketBuffersCapacity, PacketMtu, PacketRtt},
-        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     futures::channel::oneshot,
-    tracing::{debug_span, Instrument},
+    tracing::{Instrument, debug_span},
 };
 
 /// Allows using [`WebTransportClient`].

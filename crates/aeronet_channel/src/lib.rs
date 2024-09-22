@@ -3,11 +3,11 @@
 
 use {
     aeronet_io::{
+        AeronetIoPlugin, IoSet,
         connection::{
-            Connected, Disconnect, DisconnectReason, Disconnected, Session, DROP_DISCONNECT_REASON,
+            Connected, DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected, Session,
         },
         packet::{PacketBuffers, PacketBuffersCapacity, PacketMtu, PacketStats},
-        AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
