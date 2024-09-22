@@ -109,9 +109,9 @@ steamworks = "0.11.0"
 xwt-core = "0.5.0"
 
 spki = { version = "0.7.3", features = ["fingerprint"] }
-wtransport = "0.1.14"
+wtransport = "0.3.1"
 x509-cert = "0.2.5"
-xwt-wtransport = "0.9.0"
+xwt-wtransport = "0.10.0"
 
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 js-sys = "0.3.69"

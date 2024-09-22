@@ -194,7 +194,11 @@ fn poll_open(
 
     while let Ok(Some(connecting)) = recv_connecting.try_next() {
         let session = commands
-            .spawn((
+            // spawn -> parent -> insert, so that Parent is available
+            // as soon as other components are added
+            .spawn_empty()
+            .set_parent(server)
+            .insert((
                 Session,
                 RemoteClient,
                 ClientFrontend::Connecting {
@@ -203,7 +207,6 @@ fn poll_open(
                     recv_next: connecting.recv_next,
                 },
             ))
-            .set_parent(server)
             .id();
         let _ = connecting.send_session_entity.send(session);
 
