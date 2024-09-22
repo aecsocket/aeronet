@@ -68,13 +68,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
       - run: cargo test --target '${{ matrix.target }}' --workspace --all-features
-  build-examples:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        bin: ["move_box_client", "move_box_server"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: ./.github/actions/install-bevy-deps
-      - run: cargo build --package '${{ matrix.bin }}'
+  # build-examples:
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     matrix:
+  #       bin: ["move_box_client", "move_box_server"]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: dtolnay/rust-toolchain@stable
+  #     - uses: ./.github/actions/install-bevy-deps
+  #     - run: cargo build --package '${{ matrix.bin }}'

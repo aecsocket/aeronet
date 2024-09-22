@@ -14,7 +14,7 @@ use {
 /// This will emit:
 /// - a connecting message when [`Session`] is added to an session
 /// - a connected message when [`Connected`] is added to an session
-/// - a disconnected message when [`Disconected`] is triggered on a session
+/// - a disconnected message when [`Disconnected`] is triggered on a session
 ///
 /// This is included by default as part of [`AeronetPlugins`]. If you do not
 /// want the log messages, you can disable the plugin via
