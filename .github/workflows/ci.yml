@@ -15,7 +15,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
-      - run: cargo fmt --check
+      - run: cargo +nightly fmt --check
   taplo:
     runs-on: ubuntu-latest
     steps:
