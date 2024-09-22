@@ -3,7 +3,7 @@
 #[cfg(not(target_family = "wasm"))]
 mod native;
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 #[cfg(not(target_family = "wasm"))]
 pub use native::*;
 

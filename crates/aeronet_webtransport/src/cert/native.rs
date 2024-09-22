@@ -1,5 +1,5 @@
 use {
-    super::{CertificateHash, BASE64},
+    super::{BASE64, CertificateHash},
     base64::Engine,
     spki::der::Decode,
     wtransport::tls::Sha256Digest,

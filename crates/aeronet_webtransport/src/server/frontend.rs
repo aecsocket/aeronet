@@ -1,5 +1,7 @@
 use {
-    super::{backend, ConnectionResponse, ServerError, ToConnected, ToConnecting, ToOpen},
+    super::{
+        backend, ServerError, SessionRequest, SessionResponse, ToConnected, ToConnecting, ToOpen,
+    },
     crate::{
         runtime::WebTransportRuntime,
         session::{SessionError, WebTransportIo, WebTransportSessionPlugin},
@@ -13,9 +15,7 @@ use {
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
-    bevy_reflect::prelude::*,
     futures::channel::{mpsc, oneshot},
-    std::collections::HashMap,
     tracing::{debug_span, Instrument},
     wtransport::ServerConfig,
 };
@@ -30,18 +30,53 @@ impl Plugin for WebTransportServerPlugin {
             app.add_plugins(WebTransportSessionPlugin);
         }
 
-        app.register_type::<WebTransportSessionRequest>()
-            .register_type::<ConnectionResponse>()
+        app.register_type::<SessionRequest>()
+            .register_type::<SessionResponse>()
             .add_systems(PreUpdate, (poll_servers, poll_clients).before(IoSet::Poll))
             .observe(on_server_added)
             .observe(on_connection_response);
     }
 }
 
+/// WebTransport server implementation which listens for client connections,
+/// and coordinates messaging between multiple clients.
+///
+/// Use [`WebTransportServer::open`] to start opening a server.
 #[derive(Debug, Component)]
 pub struct WebTransportServer(Frontend);
 
 impl WebTransportServer {
+    /// Creates an [`EntityCommand`] to set up a server and have it start
+    /// listening for connections.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use {
+    ///     aeronet_webtransport::server::{ServerConfig, WebTransportServer},
+    ///     bevy_ecs::prelude::*,
+    /// }
+    ///
+    /// # fn run(mut commands: Commands, world: &mut World) {
+    /// // set up a self-signed certificate to identify this server
+    /// let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
+    ///
+    /// let config = ServerConfig::builder()
+    ///     .with_bind_default(12345) // server port
+    ///     .with_identity(&identity)
+    ///     .build();
+    ///
+    /// // using `Commands`
+    /// commands
+    ///     .spawn_empty()
+    ///     .add(WebTransportServer::open(config));
+    ///
+    /// // using mutable `World` access
+    /// # let config = unimplemented!();
+    /// let server = world.spawn_empty().id();
+    /// WebTransportServer::open(config).apply(server, world);
+    /// # }
+    /// ```
     #[must_use]
     pub fn open(config: ServerConfig) -> impl EntityCommand {
         |server: Entity, world: &mut World| open(server, world, config)
@@ -73,16 +108,6 @@ fn open(server: Entity, world: &mut World, config: ServerConfig) {
         }));
 }
 
-#[derive(Debug, Component, Clone, PartialEq, Eq, Reflect)]
-#[reflect(Component)]
-pub struct WebTransportSessionRequest {
-    pub authority: String,
-    pub path: String,
-    pub origin: Option<String>,
-    pub user_agent: Option<String>,
-    pub headers: HashMap<String, String>,
-}
-
 #[derive(Debug, Component)]
 enum Frontend {
     Opening {
@@ -99,7 +124,7 @@ enum Frontend {
 #[derive(Debug, Component)]
 enum ClientFrontend {
     Connecting {
-        send_conn_response: Option<oneshot::Sender<ConnectionResponse>>,
+        send_session_response: Option<oneshot::Sender<SessionResponse>>,
         recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
         recv_next: oneshot::Receiver<ToConnected>,
     },
@@ -171,16 +196,9 @@ fn poll_open(
         let session = commands
             .spawn((
                 Session,
-                RemoteClient { server },
-                WebTransportSessionRequest {
-                    authority: connecting.authority,
-                    path: connecting.path,
-                    origin: connecting.origin,
-                    user_agent: connecting.user_agent,
-                    headers: connecting.headers,
-                },
+                RemoteClient,
                 ClientFrontend::Connecting {
-                    send_conn_response: Some(connecting.send_conn_response),
+                    send_session_response: Some(connecting.send_session_response),
                     recv_dc: connecting.recv_dc,
                     recv_next: connecting.recv_next,
                 },
@@ -188,6 +206,18 @@ fn poll_open(
             .set_parent(server)
             .id();
         let _ = connecting.send_session_entity.send(session);
+
+        // TODO: there may be a way to trigger SessionRequest on &mut World,
+        // immediately get a SessionResponse, and respond immediately
+        // without having to store send_session_response in Connecting
+        let request = SessionRequest {
+            authority: connecting.authority,
+            path: connecting.path,
+            origin: connecting.origin,
+            user_agent: connecting.user_agent,
+            headers: connecting.headers,
+        };
+        commands.trigger_targets(request, session);
     }
 
     Frontend::Open {
@@ -206,17 +236,15 @@ fn should_close(
         Ok(Some(close_reason)) => Some(close_reason),
         Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
     };
-    if let Some(reason) = close_reason {
+    close_reason.map_or(false, |reason| {
         let reason = reason.map_err(anyhow::Error::new);
         commands.trigger_targets(Closed { reason }, server);
         true
-    } else {
-        false
-    }
+    })
 }
 
 fn on_connection_response(
-    trigger: Trigger<ConnectionResponse>,
+    trigger: Trigger<SessionResponse>,
     mut clients: Query<&mut ClientFrontend>,
 ) {
     let client = trigger.entity();
@@ -224,12 +252,13 @@ fn on_connection_response(
         return;
     };
     let ClientFrontend::Connecting {
-        send_conn_response, ..
+        send_session_response,
+        ..
     } = frontend.as_mut()
     else {
         return;
     };
-    let Some(sender) = send_conn_response.take() else {
+    let Some(sender) = send_session_response.take() else {
         return;
     };
 
@@ -240,13 +269,13 @@ fn poll_clients(mut commands: Commands, mut clients: Query<(Entity, &mut ClientF
     for (client, mut frontend) in &mut clients {
         replace_with::replace_with_or_abort(&mut *frontend, |state| match state {
             ClientFrontend::Connecting {
-                send_conn_response,
+                send_session_response,
                 recv_dc,
                 recv_next,
             } => poll_connecting(
                 &mut commands,
                 client,
-                send_conn_response,
+                send_session_response,
                 recv_dc,
                 recv_next,
             ),
@@ -265,7 +294,7 @@ fn poll_clients(mut commands: Commands, mut clients: Query<(Entity, &mut ClientF
 fn poll_connecting(
     commands: &mut Commands,
     client: Entity,
-    send_conn_response: Option<oneshot::Sender<ConnectionResponse>>,
+    send_session_response: Option<oneshot::Sender<SessionResponse>>,
     mut recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
     mut recv_next: oneshot::Receiver<ToConnected>,
 ) -> ClientFrontend {
@@ -275,7 +304,7 @@ fn poll_connecting(
 
     let Ok(Some(next)) = recv_next.try_recv() else {
         return ClientFrontend::Connecting {
-            send_conn_response,
+            send_session_response,
             recv_dc,
             recv_next,
         };
@@ -305,11 +334,9 @@ fn should_disconnect(
         Ok(Some(dc_reason)) => Some(dc_reason),
         Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
     };
-    if let Some(reason) = dc_reason {
+    dc_reason.map_or(false, |reason| {
         let reason = reason.map_err(anyhow::Error::new);
         commands.trigger_targets(Disconnected { reason }, client);
         true
-    } else {
-        false
-    }
+    })
 }

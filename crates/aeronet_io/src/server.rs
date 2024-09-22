@@ -2,7 +2,7 @@
 //! connecting to it.
 
 use {
-    crate::connection::Disconnect,
+    crate::connection::{Disconnect, Session},
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
@@ -19,6 +19,8 @@ impl Plugin for ServerPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Server>()
             .register_type::<Opened>()
+            .register_type::<OpenedAt>()
+            .register_type::<RemoteClient>()
             .observe(on_opening)
             .observe(on_opened)
             .observe(on_close)
@@ -26,6 +28,27 @@ impl Plugin for ServerPlugin {
     }
 }
 
+/// Marker component for an [`Entity`] which listens for client connections, and
+/// spawns [`Session`]s to communicate with those clients.
+///
+/// This represents the "server" part of the client/server networking model (a
+/// client is represented as just a [`Session`]). Its responsibility is to
+/// accept and coordinate connections between multiple clients.
+///
+/// The server starts in an opening state (when [`Server`] has been added but
+/// [`Opened`] is not yet present), and transitions to either an [`Opened`]
+/// state, or fails to open and is [`Closed`]. After the server is opened, the
+/// server should not close unless there is a fatal server-internal error which
+/// affects all connected clients - if a single client causes issues e.g.
+/// sending illegal data or breaking some invariant, that single client will be
+/// disconnected instead of the entire server being torn down.
+///
+/// When a client connects, it is spawned as a [child] of the server entity,
+/// along with [`RemoteClient`]. The rest of the connection process is the
+/// same as [`Session`]. If the server is [`Close`]d with a user-given reason,
+/// all connected clients will be disconnected with the same reason.
+///
+/// [child]: Children
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct Server;
@@ -39,11 +62,20 @@ pub struct Server;
 #[reflect(Component)]
 pub struct Opened;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Component, Reflect)]
+/// Instant at which a [`Server`] opened.
+///
+/// This is automatically added to the server when [`Opened`] is added.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component, Reflect)]
 #[reflect(Component)]
-pub struct RemoteClient {
-    pub server: Entity,
-}
+pub struct OpenedAt(pub Instant);
+
+/// Marks which [`Server`] a client [`Session`] is connected to.
+///
+/// To listen for when a client starts connecting to a server, add an observer
+/// listening for [`Trigger<OnAdd, RemoteClient>`].
+#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
+#[reflect(Component)]
+pub struct RemoteClient;
 
 /// Triggered when a user requests a [`Server`] to gracefully shut down and
 /// disconnect all of its connected clients.
@@ -62,10 +94,9 @@ pub struct RemoteClient {
 /// commands.trigger_targets(Close::new("show's over, go home"), server);
 ///
 /// // disconnect multiple sessions at once
-/// commands.trigger_targets(
-///     Close::new("show's over everyone, go home"),
-///     [server1, server2],
-/// );
+/// commands.trigger_targets(Close::new("show's over everyone, go home"), [
+///     server1, server2,
+/// ]);
 /// # }
 /// ```
 ///
@@ -89,8 +120,20 @@ impl Close {
     }
 }
 
+/// Triggered when a [`Server`] is no longer able to accept or manage client
+/// connections.
+///
+/// Immediately after this, the server and its clients will be despawned.
+///
+/// This must only be triggered by the IO layer when it detects a fatal server
+/// error. If the error only concerns a single client, that client must be
+/// disconnected instead of the entire server.
+///
+/// If you want to get the concrete error type of the
+/// [`CloseReason::Error`], use [`anyhow::Error::downcast_ref`].
 #[derive(Debug, Deref, DerefMut, Event)]
 pub struct Closed {
+    /// Why the server was closed.
     pub reason: CloseReason<anyhow::Error>,
 }
 
@@ -129,10 +172,6 @@ impl<E> From<E> for CloseReason<E> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component, Reflect)]
-#[reflect(Component)]
-pub struct OpenedAt(pub Instant);
-
 fn on_opening(trigger: Trigger<OnAdd, Server>) {
     let server = trigger.entity();
     debug!("{server} opening");
@@ -150,11 +189,22 @@ fn on_close(trigger: Trigger<Close>, mut commands: Commands) {
     commands.trigger_targets(Closed { reason }, server);
 }
 
-fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands: Commands) {
+fn on_closed(
+    trigger: Trigger<Closed>,
+    children: Query<&Children>,
+    with_session: Query<(), With<Session>>,
+    mut commands: Commands,
+) {
     let server = trigger.entity();
     let children = children
         .get(server)
-        .map(|children| children.iter().copied().collect::<Vec<_>>())
+        .map(|children| {
+            children
+                .iter()
+                .copied()
+                .filter(|child| with_session.get(*child).is_ok())
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
     match &**trigger.event() {
         CloseReason::User(reason) => {

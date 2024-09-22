@@ -32,7 +32,7 @@ cast_sign_loss = "allow"
 module_name_repetitions = "allow"
 needless_pass_by_value = "allow"
 similar_names = "allow"
-struct_excessive_bools = "allow"
+type_complexity = "allow"
 
 [workspace.dependencies]
 aeronet = { version = "0.9.0-dev", path = "crates/aeronet" }

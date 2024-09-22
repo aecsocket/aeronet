@@ -18,6 +18,7 @@ impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Session>()
             .register_type::<Connected>()
+            .register_type::<ConnectedAt>()
             .observe(on_connecting)
             .observe(on_connected)
             .observe(on_disconnect)
@@ -69,6 +70,13 @@ pub struct Session;
 #[reflect(Component)]
 pub struct Connected;
 
+/// Instant at which a [`Session`] connected to its peer.
+///
+/// This is automatically added to the session when [`Connected`] is added.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component, Reflect)]
+#[reflect(Component)]
+pub struct ConnectedAt(pub Instant);
+
 /// Triggered when a user requests a [`Session`] to gracefully disconnect from
 /// its peer with a given reason.
 ///
@@ -88,10 +96,9 @@ pub struct Connected;
 /// commands.trigger_targets(Disconnect::new("show's over, go home"), session);
 ///
 /// // disconnect multiple sessions at once
-/// commands.trigger_targets(
-///     Disconnect::new("show's over everyone, go home"),
-///     [session1, session2],
-/// );
+/// commands.trigger_targets(Disconnect::new("show's over everyone, go home"), [
+///     session1, session2,
+/// ]);
 /// # }
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Event)]
@@ -148,12 +155,10 @@ pub enum DisconnectReason<E> {
     /// This may be caused by:
     /// - a bad network condition for a prolonged period of time
     /// - a malicious or malfunctioning peer
-    /// - failing to send a message [reliably]
+    /// - failing to send a message reliably
     /// - the peer pretending like there are network errors to discreetly force
     ///   us to disconnect
     /// - ..and more
-    ///
-    /// [reliably]: crate::message::SendReliability::Reliable
     Error(E),
 }
 
@@ -181,13 +186,6 @@ impl<E> From<E> for DisconnectReason<E> {
 /// their IO component is dropped, instead of being explicitly disconnected via
 /// [`Disconnect`].
 pub const DROP_DISCONNECT_REASON: &str = "dropped";
-
-/// Instant at which a [`Session`] connected to its peer.
-///
-/// This is automatically added to the session when [`Connected`] is added.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component, Reflect)]
-#[reflect(Component)]
-pub struct ConnectedAt(pub Instant);
 
 /// Local socket address that this entity uses for connections.
 ///
@@ -223,7 +221,6 @@ fn on_connecting(trigger: Trigger<OnAdd, Session>) {
 fn on_connected(trigger: Trigger<OnAdd, Connected>, mut commands: Commands) {
     let session = trigger.entity();
     debug!("{session} connected");
-
     commands.entity(session).insert(ConnectedAt(Instant::now()));
 }
 
