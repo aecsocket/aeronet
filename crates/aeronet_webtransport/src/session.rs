@@ -419,9 +419,8 @@ fn get_disconnect_reason(err: SessionError) -> DisconnectReason<SessionError> {
 
         match err {
             SessionError::Connection(ConnectionError::ApplicationClosed(err)) => {
-                // TODO: wtransport doesn't expose the disconnect reason message
-                // https://github.com/BiagioFesta/wtransport/issues/193
-                DisconnectReason::Peer(err.to_string())
+                let reason = String::from_utf8_lossy(err.reason()).into_owned();
+                DisconnectReason::Peer(reason)
             }
             err => DisconnectReason::Error(err),
         }

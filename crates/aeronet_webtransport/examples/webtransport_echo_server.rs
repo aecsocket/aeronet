@@ -10,7 +10,7 @@
 
 use {
     aeronet_io::{
-        connection::{DisconnectReason, Disconnected, Session},
+        connection::{Connected, DisconnectReason, Disconnected},
         packet::PacketBuffers,
     },
     aeronet_webtransport::{
@@ -79,10 +79,10 @@ fn on_session_request(
         info!("  {header_key}: {header_value}");
     }
 
-    commands.trigger_targets(SessionResponse::Accepted, client);
+    commands.trigger_targets(SessionResponse::Forbidden, client);
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>) {
+fn on_connected(trigger: Trigger<OnAdd, Connected>, clients: Query<&Parent>) {
     let client = trigger.entity();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
