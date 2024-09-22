@@ -76,8 +76,11 @@ impl Plugin for PacketPlugin {
 ///
 /// You can think of the capacity of each buffer in this struct as an upper
 /// bound on how many packets we can send and receive per [`Update`]. By
-/// default, when creating this component using [`FromWorld`], the capacity is
-/// given by the value in [`DefaultPacketBuffersCapacity`].
+/// default, when creating this component, the capacity is given by
+/// [`PacketBuffersCapacity::compute_from`].
+///
+/// [`pop_iter`]: ringbuf::traits::Consumer::pop_iter
+/// [`push_overwrite`]: ringbuf::traits::RingBuffer::push_overwrite
 #[derive(Component)]
 pub struct PacketBuffers {
     /// Buffer of packets received along the IO layer during [`IoSet::Poll`].
@@ -175,7 +178,7 @@ impl PacketBuffersCapacity {
     pub fn compute_from(world: &World, session: Entity) -> usize {
         world
             .get::<Self>(session)
-            .unwrap_or_else(|| world.resource::<PacketBuffersCapacity>())
+            .unwrap_or_else(|| world.resource::<Self>())
             .0
     }
 }

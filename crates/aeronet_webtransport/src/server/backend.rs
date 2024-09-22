@@ -1,24 +1,24 @@
-use aeronet_io::connection::DisconnectReason;
-use bevy_ecs::prelude::*;
-use bytes::Bytes;
-use futures::{
-    channel::{mpsc, oneshot},
-    never::Never,
-    SinkExt,
+use {
+    super::{ServerError, SessionResponse, ToConnected, ToConnecting, ToOpen},
+    crate::{
+        session::{SessionBackend, SessionError, SessionMeta},
+        WebTransportRuntime,
+    },
+    aeronet_io::connection::DisconnectReason,
+    bevy_ecs::prelude::*,
+    bytes::Bytes,
+    futures::{
+        channel::{mpsc, oneshot},
+        never::Never,
+        SinkExt,
+    },
+    tracing::{debug, debug_span, Instrument},
+    wtransport::{
+        endpoint::{IncomingSession, SessionRequest},
+        Endpoint, ServerConfig,
+    },
+    xwt_core::prelude::*,
 };
-use tracing::{debug, debug_span, Instrument};
-use wtransport::{
-    endpoint::{IncomingSession, SessionRequest},
-    Endpoint, ServerConfig,
-};
-use xwt_core::prelude::*;
-
-use crate::{
-    session::{SessionBackend, SessionError, SessionMeta},
-    WebTransportRuntime,
-};
-
-use super::{ConnectionResponse, ServerError, ToConnected, ToConnecting, ToOpen};
 
 pub async fn start(
     runtime: WebTransportRuntime,
@@ -68,7 +68,7 @@ async fn accept_session(
     let request = session.await.map_err(ServerError::AwaitSessionRequest)?;
 
     let (send_session_entity, recv_session_entity) = oneshot::channel::<Entity>();
-    let (send_conn_response, recv_conn_response) = oneshot::channel::<ConnectionResponse>();
+    let (send_session_response, recv_session_response) = oneshot::channel::<SessionResponse>();
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ServerError>>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     send_connecting
@@ -79,7 +79,7 @@ async fn accept_session(
             user_agent: request.user_agent().map(ToOwned::to_owned),
             headers: request.headers().clone(),
             send_session_entity,
-            send_conn_response,
+            send_session_response,
             recv_dc,
             recv_next,
         })
@@ -93,7 +93,7 @@ async fn accept_session(
         runtime,
         packet_buf_cap,
         request,
-        recv_conn_response,
+        recv_session_response,
         send_next,
     )
     .instrument(debug_span!("session", session = %session))
@@ -109,7 +109,7 @@ async fn handle_session(
     runtime: WebTransportRuntime,
     packet_buf_cap: usize,
     request: SessionRequest,
-    recv_conn_response: oneshot::Receiver<ConnectionResponse>,
+    recv_session_response: oneshot::Receiver<SessionResponse>,
     send_connected: oneshot::Sender<ToConnected>,
 ) -> Result<Never, DisconnectReason<ServerError>> {
     debug!(
@@ -118,19 +118,19 @@ async fn handle_session(
         request.path()
     );
 
-    let conn_response = recv_conn_response
+    let session_response = recv_session_response
         .await
-        .map_err(|_| SessionError::FrontendClosed.into())
+        .map_err(|_| SessionError::FrontendClosed)
         .map_err(ServerError::Session)?;
-    debug!("Frontend responded to this request with {conn_response:?}");
+    debug!("Frontend responded to this session request with {session_response:?}");
 
-    let conn = match conn_response {
-        ConnectionResponse::Accepted => request.accept(),
-        ConnectionResponse::Forbidden => {
+    let conn = match session_response {
+        SessionResponse::Accepted => request.accept(),
+        SessionResponse::Forbidden => {
             request.forbidden().await;
             return Err(ServerError::Rejected.into());
         }
-        ConnectionResponse::NotFound => {
+        SessionResponse::NotFound => {
             request.not_found().await;
             return Err(ServerError::Rejected.into());
         }
@@ -149,7 +149,7 @@ async fn handle_session(
         initial_rtt: conn.0.rtt(),
         initial_mtu: conn
             .max_datagram_size()
-            .ok_or(SessionError::DatagramsNotSupported.into())
+            .ok_or(SessionError::DatagramsNotSupported)
             .map_err(ServerError::Session)?,
         recv_meta,
         recv_packet_b2f,

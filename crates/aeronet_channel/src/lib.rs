@@ -12,7 +12,7 @@ use {
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
     bytes::Bytes,
-    std::{cmp, num::Saturating, usize},
+    std::{cmp, num::Saturating},
     sync_wrapper::SyncWrapper,
     thiserror::Error,
     tracing::{trace, trace_span},
@@ -35,7 +35,7 @@ impl Plugin for ChannelIoPlugin {
     }
 }
 
-/// [`aeronet`] IO layer using in-memory MPSC channels.
+/// [`aeronet_io`] layer using in-memory MPSC channels.
 ///
 /// Use [`ChannelIo::open`] to open a connection between two entities.
 #[derive(Debug, Component)]
@@ -118,13 +118,13 @@ impl ChannelIo {
         let (send_dc_b, recv_dc_b) = oneshot::channel();
 
         (
-            ChannelIo {
+            Self {
                 send_packet: send_packet_a,
                 recv_packet: recv_packet_b,
                 send_dc: Some(SyncWrapper::new(send_dc_a)),
                 recv_dc: SyncWrapper::new(recv_dc_b),
             },
-            ChannelIo {
+            Self {
                 send_packet: send_packet_b,
                 recv_packet: recv_packet_a,
                 send_dc: Some(SyncWrapper::new(send_dc_b)),

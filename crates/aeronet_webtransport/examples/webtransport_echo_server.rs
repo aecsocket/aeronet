@@ -8,22 +8,21 @@
 //         }
 //     } else {
 
-use std::time::Duration;
-
-use aeronet_io::{
-    connection::{DisconnectReason, Disconnected, Session},
-    packet::PacketBuffers,
-    server::RemoteClient,
-};
-use aeronet_webtransport::{
-    cert,
-    server::{
-        ConnectionResponse, WebTransportServer, WebTransportServerPlugin,
-        WebTransportSessionRequest,
+use {
+    aeronet_io::{
+        connection::{DisconnectReason, Disconnected, Session},
+        packet::PacketBuffers,
     },
+    aeronet_webtransport::{
+        cert,
+        server::{
+            ServerConfig, SessionRequest, SessionResponse, WebTransportServer,
+            WebTransportServerPlugin,
+        },
+    },
+    bevy::{log::LogPlugin, prelude::*},
+    std::time::Duration,
 };
-use bevy::{log::LogPlugin, prelude::*};
-use wtransport::ServerConfig;
 
 fn main() -> AppExit {
     App::new()
@@ -67,33 +66,34 @@ fn open_server(mut commands: Commands) {
 }
 
 fn on_session_request(
-    trigger: Trigger<OnAdd, WebTransportSessionRequest>,
-    clients: Query<(&RemoteClient, &WebTransportSessionRequest)>,
+    trigger: Trigger<SessionRequest>,
+    clients: Query<&Parent>,
     mut commands: Commands,
 ) {
     let client = trigger.entity();
-    let (&RemoteClient { server }, request) = clients.get(client).unwrap();
+    let request = trigger.event();
+    let server = clients.get(client).map(Parent::get).unwrap();
 
     info!("{client} connecting to {server} with headers:");
     for (header_key, header_value) in &request.headers {
         info!("  {header_key}: {header_value}");
     }
 
-    commands.trigger_targets(ConnectionResponse::Accepted, client);
+    commands.trigger_targets(SessionResponse::Accepted, client);
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&RemoteClient>) {
+fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>) {
     let client = trigger.entity();
-    let Ok(&RemoteClient { server }) = clients.get(client) else {
+    let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
     };
 
     info!("{client} connected to {server}");
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&RemoteClient>) {
+fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
     let client = trigger.entity();
-    let Ok(&RemoteClient { server }) = clients.get(client) else {
+    let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
     };
 

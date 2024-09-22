@@ -39,6 +39,10 @@ pub async fn start(
     };
     debug!("Created endpoint");
 
+    #[cfg_attr(
+        not(target_family = "wasm"),
+        expect(clippy::useless_conversion, reason = "conversion required for WASM")
+    )]
     let conn = endpoint
         .connect(&target)
         .await
@@ -62,6 +66,10 @@ pub async fn start(
         initial_remote_addr: conn.0.remote_address(),
         #[cfg(not(target_family = "wasm"))]
         initial_rtt: conn.0.rtt(),
+        #[cfg_attr(
+            not(target_family = "wasm"),
+            expect(clippy::useless_conversion, reason = "conversion required for WASM")
+        )]
         initial_mtu: conn
             .max_datagram_size()
             .ok_or(SessionError::DatagramsNotSupported.into())

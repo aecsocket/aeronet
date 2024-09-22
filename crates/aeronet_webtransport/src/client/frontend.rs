@@ -1,8 +1,3 @@
-//! Allows creating a dedicated client session, which connects to a server
-//! endpoint.
-//!
-//! See [`WebTransportClient`].
-
 use {
     super::{backend, ClientConfig, ClientError, ToConnected},
     crate::{
@@ -181,11 +176,9 @@ fn should_disconnect(
         Ok(Some(dc_reason)) => Some(dc_reason),
         Err(_) => Some(ClientError::Session(SessionError::BackendClosed).into()),
     };
-    if let Some(reason) = dc_reason {
+    dc_reason.map_or(false, |reason| {
         let reason = reason.map_err(anyhow::Error::new);
         commands.trigger_targets(Disconnected { reason }, session);
         true
-    } else {
-        false
-    }
+    })
 }

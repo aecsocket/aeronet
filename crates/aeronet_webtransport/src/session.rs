@@ -221,7 +221,7 @@ pub(crate) struct SessionBackend {
 
 impl SessionBackend {
     pub async fn start(self) -> DisconnectReason<SessionError> {
-        let SessionBackend {
+        let Self {
             runtime,
             conn,
             send_meta,
@@ -311,7 +311,7 @@ async fn meta_loop(
                 .ok_or(SessionError::DatagramsNotSupported)?,
         };
         match send_meta.try_send(meta) {
-            Ok(_) => {}
+            Ok(()) => {}
             Err(err) if err.is_full() => {}
             Err(_) => {
                 return Err(SessionError::FrontendClosed);

@@ -1,3 +1,8 @@
+//! Allows creating a dedicated client session, which connects to a server
+//! endpoint.
+//!
+//! See [`WebTransportClient`].
+
 mod backend;
 mod frontend;
 
@@ -7,7 +12,7 @@ use {
     bytes::Bytes,
     futures::channel::{mpsc, oneshot},
     thiserror::Error,
-    xwt_core::endpoint::{connect::Connecting, Connect},
+    xwt_core::endpoint::{Connect, connect::Connecting},
 };
 
 cfg_if::cfg_if! {
