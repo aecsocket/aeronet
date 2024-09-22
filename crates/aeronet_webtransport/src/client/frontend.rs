@@ -1,18 +1,18 @@
 use {
-    super::{ClientConfig, ClientError, ToConnected, backend},
+    super::{backend, ClientConfig, ClientError, ToConnected},
     crate::{
         runtime::WebTransportRuntime,
         session::{SessionError, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     futures::channel::oneshot,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
 };
 
 /// Allows using [`WebTransportClient`].
@@ -67,7 +67,7 @@ impl WebTransportClient {
     #[must_use]
     pub fn connect(config: ClientConfig, target: impl Into<String>) -> impl EntityCommand {
         let target = target.into();
-        |session: Entity, world: &mut World| connect(session, world, config, target)
+        move |session: Entity, world: &mut World| connect(session, world, config, target)
     }
 }
 
