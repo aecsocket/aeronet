@@ -17,11 +17,12 @@ use {
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
     } else {
-        pub(crate) mod native_backend;
-
         type ConnectionError = crate::tungstenite::Error;
     }
 }
+
+mod backend;
+pub(crate) use backend::*;
 
 #[derive(Debug)]
 pub(crate) struct WebSocketSessionPlugin;

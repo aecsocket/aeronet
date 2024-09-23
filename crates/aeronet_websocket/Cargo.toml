@@ -34,6 +34,7 @@ rustls-tls-native-roots = [
 rustls-tls-webpki-roots = [
   "__rustls-tls",
   "tokio-tungstenite/rustls-tls-webpki-roots",
+  "dep:webpki-roots",
 ]
 
 [dependencies]
@@ -55,11 +56,10 @@ bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-gloo-timers = { workspace = true }
 js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
-xwt-web-sys = { workspace = true }
+web-sys = { workspace = true, features = ["WebSocket", "BinaryType"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }
@@ -67,6 +67,7 @@ tokio-tungstenite = { workspace = true }
 
 rustls = { workspace = true, optional = true }
 rustls-native-certs = { workspace = true, optional = true }
+webpki-roots = { workspace = true, optional = true }
 
 [dev-dependencies]
 bevy = { workspace = true }

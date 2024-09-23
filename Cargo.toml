@@ -79,6 +79,7 @@ gloo-timers = { version = "0.3.0", features = ["futures"] }
 js-sys = "0.3.69"
 wasm-bindgen = "0.2.92"
 wasm-bindgen-futures = "0.4.42"
+web-sys = "0.3.70"
 
 # bevy
 
@@ -99,6 +100,7 @@ bevy_egui = "0.28.0"
 
 rustls = "0.23.13"
 rustls-native-certs = "0.8.0"
+webpki-roots = "0.26.6"
 
 # aeronet_channel
 

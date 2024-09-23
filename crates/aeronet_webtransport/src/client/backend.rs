@@ -1,8 +1,8 @@
 use {
-    super::{ClientConfig, ClientError, ToConnected},
+    super::{ClientConfig, ClientError, ConnectTarget, ToConnected},
     crate::{
-        WebTransportRuntime,
         session::{SessionBackend, SessionError, SessionMeta},
+        WebTransportRuntime,
     },
     aeronet_io::connection::DisconnectReason,
     bytes::Bytes,
@@ -18,9 +18,12 @@ pub async fn start(
     runtime: WebTransportRuntime,
     packet_buf_cap: usize,
     config: ClientConfig,
-    target: String,
+    target: ConnectTarget,
     send_next: oneshot::Sender<ToConnected>,
 ) -> Result<Never, DisconnectReason<ClientError>> {
+    // TODO: On native, debug log the target after this is merged:
+    // https://github.com/BiagioFesta/wtransport/pull/226
+    #[cfg(target_family = "wasm")]
     debug!("Spawning backend task to connect to {target:?}");
 
     let endpoint = {
@@ -41,17 +44,28 @@ pub async fn start(
     };
     debug!("Created endpoint");
 
-    #[cfg_attr(
-        not(target_family = "wasm"),
-        expect(clippy::useless_conversion, reason = "conversion required for WASM")
-    )]
-    let conn = endpoint
-        .connect(&target)
-        .await
-        .map_err(|err| ClientError::Connect(err.into()))?
-        .wait_connect()
-        .await
-        .map_err(|err| ClientError::AwaitConnect(err.into()))?;
+    let conn = {
+        #[cfg(target_family = "wasm")]
+        {
+            endpoint
+                .connect(&target)
+                .await
+                .map_err(|err| ClientError::Connect(err.into()))?
+                .wait_connect()
+                .await
+                .map_err(|err| ClientError::AwaitConnect(err.into()))?
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            endpoint
+                .0
+                .connect(target)
+                .await
+                .map(xwt_wtransport::Connection)
+                .map_err(ClientError::Connect)?
+        }
+    };
     debug!("Connected");
 
     let (send_meta, recv_meta) = mpsc::channel::<SessionMeta>(1);

@@ -1,5 +1,5 @@
 use {
-    super::{backend, ClientConfig, ClientError, ToConnected},
+    super::{backend, ClientConfig, ClientError, ConnectTarget, ToConnected},
     crate::{
         runtime::WebTransportRuntime,
         session::{self, SessionError, WebTransportIo, WebTransportSessionPlugin},
@@ -68,13 +68,27 @@ impl WebTransportClient {
     /// # }
     /// ```
     #[must_use]
-    pub fn connect(config: ClientConfig, target: impl Into<String>) -> impl EntityCommand {
-        let target = target.into();
+    pub fn connect(
+        config: ClientConfig,
+        #[cfg(target_family = "wasm")] target: impl Into<String>,
+        #[cfg(not(target_family = "wasm"))] target: impl wtransport::endpoint::IntoConnectOptions,
+    ) -> impl EntityCommand {
+        let target = {
+            #[cfg(target_family = "wasm")]
+            {
+                target.into()
+            }
+
+            #[cfg(not(target_family = "wasm"))]
+            {
+                target.into_options()
+            }
+        };
         move |session: Entity, world: &mut World| connect(session, world, config, target)
     }
 }
 
-fn connect(session: Entity, world: &mut World, config: ClientConfig, target: String) {
+fn connect(session: Entity, world: &mut World, config: ClientConfig, target: ConnectTarget) {
     let runtime = world.resource::<WebTransportRuntime>().clone();
     let packet_buf_cap = PacketBuffersCapacity::compute_from(world, session);
 

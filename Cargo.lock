@@ -145,7 +145,6 @@ dependencies = [
  "bytes",
  "cfg-if",
  "futures",
- "gloo-timers",
  "js-sys",
  "replace_with",
  "rustls",
@@ -156,8 +155,9 @@ dependencies = [
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "web-sys",
+ "webpki-roots",
  "xwt-core",
- "xwt-web-sys",
 ]
 
 [[package]]
