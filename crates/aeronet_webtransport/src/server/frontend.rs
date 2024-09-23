@@ -1,22 +1,22 @@
 use {
     super::{
-        ServerError, SessionRequest, SessionResponse, ToConnected, ToConnecting, ToOpen, backend,
+        backend, ServerError, SessionRequest, SessionResponse, ToConnected, ToConnecting, ToOpen,
     },
     crate::{
         runtime::WebTransportRuntime,
-        session::{SessionError, WebTransportIo, WebTransportSessionPlugin},
+        session::{self, SessionError, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
         packet::{PacketBuffersCapacity, PacketMtu, PacketRtt},
         server::{CloseReason, Closed, Opened, RemoteClient, Server},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
     wtransport::ServerConfig,
 };
 
@@ -32,7 +32,12 @@ impl Plugin for WebTransportServerPlugin {
 
         app.register_type::<SessionRequest>()
             .register_type::<SessionResponse>()
-            .add_systems(PreUpdate, (poll_servers, poll_clients).before(IoSet::Poll))
+            .add_systems(
+                PreUpdate,
+                (poll_servers, poll_clients)
+                    .in_set(IoSet::Poll)
+                    .before(session::poll),
+            )
             .observe(on_server_added)
             .observe(on_connection_response);
     }

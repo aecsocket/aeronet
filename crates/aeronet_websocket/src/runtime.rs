@@ -1,12 +1,9 @@
-use {
-    bevy_ecs::prelude::*,
-    std::{future::Future, time::Duration},
-};
+use {bevy_ecs::prelude::*, std::future::Future};
 
 /// Provides a platform-agnostic way to spawn futures for driving the
-/// WebTransport IO layer.
+/// WebSocket IO layer.
 ///
-/// Using WebTransport sessions requires spawning tasks on an async runtime.
+/// Using WebSocket sessions requires spawning tasks on an async runtime.
 /// However, which runtime to use exactly, and how that runtime is provided, is
 /// target-dependent. This resource exists to provide a platform-agnostic way of
 /// spawning these tasks.
@@ -15,23 +12,23 @@ use {
 ///
 /// ## Native
 ///
-/// On a native target, this holds a handle to a `tokio` runtime, because
-/// `wtransport` currently only supports this async runtime.
+/// On a native target, this holds a handle to a `tokio` runtime, because this
+/// is the underlying async runtime of `tokio-tungstenite`.
 ///
 /// Use the [`Default`] impl to create and leak a new `tokio` runtime, and that
-/// as the [`WebTransportRuntime`] handle.
+/// as the [`WebSocketRuntime`] handle.
 ///
 /// If you already have a runtime handle, you can use
-/// `WebTransportRuntime::from(handle)` to create a runtime from that handle.
+/// `WebSocketRuntime::from(handle)` to create a runtime from that handle.
 ///
 /// ## WASM
 ///
 /// On a WASM target, this uses `wasm-bindgen-futures` to spawn the future via
 /// `wasm-bindgen`.
 ///
-/// Use the [`Default`] impl to create a new [`WebTransportRuntime`] on WASM.
+/// Use the [`Default`] impl to create a new [`WebSocketRuntime`] on WASM.
 #[derive(Debug, Clone, Resource)]
-pub struct WebTransportRuntime {
+pub struct WebSocketRuntime {
     #[cfg(target_family = "wasm")]
     _priv: (),
     #[cfg(not(target_family = "wasm"))]
@@ -57,7 +54,7 @@ mod maybe {
         reason = "constructor has conditional cfg logic"
     )
 )]
-impl Default for WebTransportRuntime {
+impl Default for WebSocketRuntime {
     fn default() -> Self {
         #[cfg(target_family = "wasm")]
         {
@@ -79,13 +76,13 @@ impl Default for WebTransportRuntime {
 }
 
 #[cfg(not(target_family = "wasm"))]
-impl From<tokio::runtime::Handle> for WebTransportRuntime {
+impl From<tokio::runtime::Handle> for WebSocketRuntime {
     fn from(value: tokio::runtime::Handle) -> Self {
         Self { handle: value }
     }
 }
 
-impl WebTransportRuntime {
+impl WebSocketRuntime {
     /// Spawns a future on the task runtime.
     pub fn spawn<F>(&self, future: F)
     where
@@ -99,19 +96,6 @@ impl WebTransportRuntime {
         #[cfg(not(target_family = "wasm"))]
         {
             self.handle.spawn(future);
-        }
-    }
-
-    /// Pauses execution for the given duration.
-    pub async fn sleep(duration: Duration) {
-        #[cfg(target_family = "wasm")]
-        {
-            gloo_timers::future::sleep(duration).await;
-        }
-
-        #[cfg(not(target_family = "wasm"))]
-        {
-            tokio::time::sleep(duration).await;
         }
     }
 }

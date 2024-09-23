@@ -1,18 +1,18 @@
 use {
-    super::{ClientConfig, ClientError, ToConnected, backend},
+    super::{backend, ClientConfig, ClientError, ToConnected},
     crate::{
         runtime::WebTransportRuntime,
-        session::{SessionError, WebTransportIo, WebTransportSessionPlugin},
+        session::{self, SessionError, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     futures::channel::oneshot,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
 };
 
 /// Allows using [`WebTransportClient`].
@@ -25,8 +25,11 @@ impl Plugin for WebTransportClientPlugin {
             app.add_plugins(WebTransportSessionPlugin);
         }
 
-        app.add_systems(PreUpdate, poll_clients.before(IoSet::Poll))
-            .observe(on_client_added);
+        app.add_systems(
+            PreUpdate,
+            poll_clients.in_set(IoSet::Poll).before(session::poll),
+        )
+        .observe(on_client_added);
     }
 }
 

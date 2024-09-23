@@ -1,3 +1,7 @@
+# 0.9.0
+
+- Redesigned to be Bevy native
+
 # 0.8.0
 
 - Split the associated type `Transport::Error` into `::SendError` and `::PollError`

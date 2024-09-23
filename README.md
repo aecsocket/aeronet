@@ -21,18 +21,55 @@ primitives.
   - Dedicated server/client, listen server, peer-to-peer
 - Swappable IO layer
   - Use whatever you like as the underlying byte transfer mechanism
-- First-party IO layer implementations
-  - [`aeronet_channel`]: MPSC channels (native + WASM)
-  - [`aeronet_webtransport`]: WebTransport (native + WASM)
-  - [`aeronet_steam`]: Steam networking sockets (native)
 
 High-level networking features such as replication, rollback, and prediction are explicit
 **non-goals** for this crate. Instead, this crate aims to provide a solid foundation for
 implementing these features.
 
+## IO layer implementations
+
+- [`aeronet_channel`]: MPSC channels
+  - Native + WASM
+
+```sh
+cargo run --example channel
+```
+
+- [`aeronet_steam`]: Steam networking sockets
+  - Native
+
+```sh
+cargo run --example steam_server -F server
+cargo run --example steam_client -F client
+```
+
+- [`aeronet_websocket`]: WebSocket implementation
+  - Native + WASM
+
+```sh
+cargo run --example websocket_server -F server
+cargo run --example websocket_client -F client
+
+# WASM
+cargo install wasm-server-runner
+cargo run --example websocket_client -F client --target wasm32-unknown-unknown
+```
+
+- [`aeronet_webtransport`]: WebTransport implementation (over QUIC)
+  - Native + WASM
+
+```sh
+cargo run --example webtransport_server -F server
+cargo run --example webtransport_client -F client,dangerous-configuration
+
+# WASM
+cargo install wasm-server-runner
+cargo run --example webtransport_client -F client,dangerous-configuration --target wasm32-unknown-unknown
+```
+
 ## Terminology
 
-- *session*: Entity which may be able to send data to, and receive data from, a *peer*
+- *session*: Entity which may be able to send data to, and receive data from, a peer
   - This may or may not be over a network connection.
 - *peer*: The other side of who a session is talking to.
 - *packet*: Sequence of bytes transmitted between a session and a peer which has no guarantees
@@ -53,13 +90,11 @@ This crate is fundamentally split into multiple layers:
   - Detects connection and disconnection, and reports it to the session layer
   - Allows sending and receiving packets unreliably
   - User-swappable - example implementations: [`aeronet_channel`], [`aeronet_webtransport`]
-- [transport layer](crate::transport)
-  - Allows sending and receiving messages with acknowledgements and guarantees
-  - Provides fragmentation, reliability, and ordering guarantees
-  - Standard implementation: [`aeronet_proto`]
+- transport layer
+  - TODO
 
 [Bevy]: https://bevyengine.org
-[`aeronet_proto`]: https://docs.rs/aeronet_proto
 [`aeronet_channel`]: https://docs.rs/aeronet_channel
+[`aeronet_websocket`]: https://docs.rs/aeronet_websocket
 [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport
 [`aeronet_steam`]: https://docs.rs/aeronet_steam
