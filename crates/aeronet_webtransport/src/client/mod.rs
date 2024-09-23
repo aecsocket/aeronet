@@ -19,6 +19,8 @@ cfg_if::cfg_if! {
         /// Configuration for the [`WebTransportClient`] on WASM platforms.
         pub type ClientConfig = xwt_web_sys::WebTransportOptions;
 
+        type ConnectTarget = String;
+
         type ConnectError = crate::JsError;
         type AwaitConnectError = crate::JsError;
     } else {
@@ -27,6 +29,8 @@ cfg_if::cfg_if! {
 
         /// Configuration for the [`WebTransportClient`] on non-WASM platforms.
         pub type ClientConfig = wtransport::ClientConfig;
+
+        type ConnectTarget = wtransport::endpoint::ConnectOptions;
         type ClientEndpoint = xwt_wtransport::Endpoint<endpoint_side::Client>;
 
         type ConnectError = <ClientEndpoint as Connect>::Error;

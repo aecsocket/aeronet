@@ -7,18 +7,25 @@ use futures::{
     never::Never,
     SinkExt, StreamExt,
 };
-use tokio::net::TcpStream;
-use tokio_tungstenite::{
-    tungstenite::{
-        protocol::{frame::coding::CloseCode, CloseFrame},
-        Message,
-    },
-    MaybeTlsStream,
-};
 
 use super::SessionError;
 
-type WebSocketStream = tokio_tungstenite::WebSocketStream<MaybeTlsStream<TcpStream>>;
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+        pub type WebSocketStream = web_sys::WebSocket;
+    } else {
+        use tokio::net::TcpStream;
+        use tokio_tungstenite::{
+            tungstenite::{
+                protocol::{frame::coding::CloseCode, CloseFrame},
+                Message,
+            },
+            MaybeTlsStream,
+        };
+
+        pub type WebSocketStream = tokio_tungstenite::WebSocketStream<MaybeTlsStream<TcpStream>>;
+    }
+}
 
 #[derive(Debug)]
 pub struct SessionBackend {

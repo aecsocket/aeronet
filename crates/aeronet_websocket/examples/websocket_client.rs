@@ -16,7 +16,7 @@ use {
 
 fn main() -> AppExit {
     #[cfg(not(target_family = "wasm"))]
-    rustls::crypto::aws_lc_rs::default_provider()
+    aeronet_websocket::rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .expect("failed to install default crypto provider");
 
@@ -146,12 +146,30 @@ fn client_config() -> ClientConfig {
 fn client_config() -> ClientConfig {
     use std::sync::Arc;
 
-    use aeronet_websocket::{rustls, rustls_native_certs, tokio_tungstenite::Connector};
+    use aeronet_websocket::{rustls, tokio_tungstenite::Connector};
 
     let mut root_certs = rustls::RootCertStore::empty();
-    for cert in rustls_native_certs::load_native_certs().expect("failed to load platform certs") {
-        root_certs.add(cert).unwrap();
-    }
+    {
+        #[cfg(feature = "rustls-tls-native-roots")]
+        {
+            info!("Using native certificate roots");
+
+            let native_certs = aeronet_websocket::rustls_native_certs::load_native_certs()
+                .expect("failed to load platform certs");
+            for cert in native_certs {
+                root_certs.add(cert).unwrap();
+            }
+        }
+
+        #[cfg(feature = "rustls-tls-webpki-roots")]
+        {
+            info!("Using webpki certificate roots");
+
+            root_certs
+                .roots
+                .extend_from_slice(webpki_roots::TLS_SERVER_ROOTS);
+        }
+    };
 
     let rustls_config = Arc::new(
         rustls::ClientConfig::builder()
@@ -182,7 +200,6 @@ fn session_ui(
         &Name,
         &mut SessionUi,
         &mut PacketBuffers,
-        Option<&PacketRtt>,
         Option<&PacketMtu>,
         Option<&PacketStats>,
         Option<&LocalAddr>,
@@ -194,7 +211,6 @@ fn session_ui(
         name,
         mut ui_state,
         mut bufs,
-        packet_rtt,
         packet_mtu,
         packet_stats,
         local_addr,
@@ -228,14 +244,6 @@ fn session_ui(
             }
 
             egui::Grid::new("stats").show(ui, |ui| {
-                ui.label("Packet RTT");
-                ui.label(
-                    packet_rtt
-                        .map(|PacketRtt(rtt)| format!("{rtt:?}"))
-                        .unwrap_or_default(),
-                );
-                ui.end_row();
-
                 ui.label("Packet MTU");
                 ui.label(
                     packet_mtu
