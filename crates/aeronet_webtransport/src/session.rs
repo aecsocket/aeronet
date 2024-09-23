@@ -5,17 +5,17 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        AeronetIoPlugin, IoSet,
-        connection::{Connected, DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, RemoteAddr},
+        connection::{Connected, Disconnect, DisconnectReason, RemoteAddr, DROP_DISCONNECT_REASON},
         packet::{PacketBuffers, PacketMtu, PacketRtt, PacketStats},
+        AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
-        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
+        FutureExt, SinkExt, StreamExt,
     },
     std::{io, num::Saturating, sync::Arc, time::Duration},
     thiserror::Error,
@@ -126,7 +126,7 @@ fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTrans
     }
 }
 
-fn poll(
+pub(crate) fn poll(
     mut sessions: Query<(
         Entity,
         &mut WebTransportIo,
@@ -244,23 +244,10 @@ impl SessionBackend {
 
         let (_send_meta_closed, recv_meta_closed) = oneshot::channel();
         runtime.spawn({
-            let runtime = runtime.clone();
             let conn = conn.clone();
             let mut send_err = send_err.clone();
             async move {
-                let Err(err) = meta_loop(runtime, conn, recv_meta_closed, send_meta).await else {
-                    unreachable!();
-                };
-                let _ = send_err.try_send(err);
-            }
-        });
-
-        let (_send_sending_closed, recv_sending_closed) = oneshot::channel();
-        runtime.spawn({
-            let conn = conn.clone();
-            let mut send_err = send_err.clone();
-            async move {
-                let Err(err) = send_loop(conn, recv_sending_closed, recv_packet_f2b).await else {
+                let Err(err) = meta_loop(conn, recv_meta_closed, send_meta).await else {
                     unreachable!();
                 };
                 let _ = send_err.try_send(err);
@@ -273,6 +260,18 @@ impl SessionBackend {
             let mut send_err = send_err.clone();
             async move {
                 let Err(err) = recv_loop(conn, recv_receiving_closed, send_packet_b2f).await else {
+                    unreachable!();
+                };
+                let _ = send_err.try_send(err);
+            }
+        });
+
+        let (_send_sending_closed, recv_sending_closed) = oneshot::channel();
+        runtime.spawn({
+            let conn = conn.clone();
+            let mut send_err = send_err.clone();
+            async move {
+                let Err(err) = send_loop(conn, recv_sending_closed, recv_packet_f2b).await else {
                     unreachable!();
                 };
                 let _ = send_err.try_send(err);
@@ -297,7 +296,6 @@ impl SessionBackend {
 }
 
 async fn meta_loop(
-    runtime: WebTransportRuntime,
     conn: Arc<Connection>,
     mut recv_closed: oneshot::Receiver<()>,
     mut send_meta: mpsc::Sender<SessionMeta>,
@@ -306,7 +304,7 @@ async fn meta_loop(
 
     loop {
         futures::select! {
-            () = runtime.sleep(META_UPDATE_INTERVAL).fuse() => {},
+            () = WebTransportRuntime::sleep(META_UPDATE_INTERVAL).fuse() => {},
             _ = recv_closed => return Err(SessionError::FrontendClosed),
         };
 

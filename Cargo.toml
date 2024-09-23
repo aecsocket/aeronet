@@ -2,6 +2,7 @@
 members = [
   "crates/aeronet_io",
   "crates/aeronet_channel",
+  "crates/aeronet_websocket",
   "crates/aeronet_webtransport",
 ]
 resolver = "2"
@@ -38,6 +39,7 @@ type_complexity = "allow"
 aeronet_channel = { version = "0.9.0-dev", path = "crates/aeronet_channel" }
 aeronet_io = { version = "0.9.0-dev", path = "crates/aeronet_io" }
 aeronet_steam = { version = "0.9.0-dev", path = "crates/aeronet_steam" }
+aeronet_websocket = { version = "0.9.0-dev", path = "crates/aeronet_websocket" }
 aeronet_webtransport = { version = "0.9.0-dev", path = "crates/aeronet_webtransport" }
 
 anyhow = "1.0.86"
@@ -71,8 +73,16 @@ tokio = { version = "1.39.2", default-features = false }
 tracing = "0.1.40"
 web-time = "1.1.0"
 
+# wasm
+
+gloo-timers = { version = "0.3.0", features = ["futures"] }
+js-sys = "0.3.69"
+wasm-bindgen = "0.2.92"
+wasm-bindgen-futures = "0.4.42"
+
 # bevy
 
+bevy = { version = "0.14.1", features = ["wayland"] }
 bevy_app = { version = "0.14.1", default-features = false }
 bevy_core = { version = "0.14.1", default-features = false }
 bevy_derive = { version = "0.14.1", default-features = false }
@@ -81,9 +91,14 @@ bevy_hierarchy = { version = "0.14.1", default-features = false }
 bevy_reflect = { version = "0.14.1", default-features = false }
 bevy_time = { version = "0.14.1", default-features = false }
 
-bevy = { version = "0.14.1", features = ["wayland"] }
+bevy-tokio-tasks = "0.14.0"
 
 bevy_egui = "0.28.0"
+
+# tls
+
+rustls = "0.23.13"
+rustls-native-certs = "0.8.0"
 
 # aeronet_channel
 
@@ -95,6 +110,10 @@ steamworks = "0.11.0"
 
 bevy-steamworks = "0.12.0"
 
+# aeronet_websocket
+
+tokio-tungstenite = "0.24.0"
+
 # aeronet_webtransport
 
 xwt-core = "0.5.0"
@@ -104,8 +123,4 @@ wtransport = "0.3.1"
 x509-cert = "0.2.5"
 xwt-wtransport = "0.10.0"
 
-gloo-timers = { version = "0.3.0", features = ["futures"] }
-js-sys = "0.3.69"
-wasm-bindgen = "0.2.92"
-wasm-bindgen-futures = "0.4.42"
 xwt-web-sys = "0.12.0"
