@@ -1,18 +1,18 @@
 use {
-    super::{ClientConfig, ClientError, ConnectTarget, ToConnected, backend},
+    super::{backend, ClientConfig, ClientError, ConnectTarget, ToConnected},
     crate::{
         runtime::WebTransportRuntime,
         session::{self, SessionError, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     futures::channel::oneshot,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
 };
 
 /// Allows using [`WebTransportClient`].
@@ -94,18 +94,16 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
 
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
-    runtime.spawn({
-        let runtime = runtime.clone();
+    runtime.spawn_on_self(
         async move {
-            let Err(reason) =
-                backend::start(runtime, packet_buf_cap, config, target, send_next).await
+            let Err(reason) = backend::start(packet_buf_cap, config, target, send_next).await
             else {
                 unreachable!();
             };
             let _ = send_dc.send(reason);
         }
-        .instrument(debug_span!("client", %session))
-    });
+        .instrument(debug_span!("client", %session)),
+    );
 
     world
         .entity_mut(session)

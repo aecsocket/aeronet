@@ -21,6 +21,8 @@ cfg_if::cfg_if! {
         type ConnectionError = crate::JsError;
         type SendError = crate::JsError;
     } else {
+        use futures::never::Never;
+
         type ConnectionError = crate::tungstenite::Error;
         type SendError = Never;
     }
@@ -81,9 +83,9 @@ impl Drop for WebSocketIo {
 #[derive(Debug)]
 pub(crate) struct SessionFrontend {
     #[cfg(not(target_family = "wasm"))]
-    local_addr: std::net::SocketAddr,
+    pub local_addr: std::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
-    remote_addr: std::net::SocketAddr,
+    pub remote_addr: std::net::SocketAddr,
     pub recv_packet_b2f: mpsc::Receiver<Bytes>,
     pub send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub send_user_dc: oneshot::Sender<String>,

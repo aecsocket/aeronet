@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
+#[cfg(feature = "client")]
 pub mod client;
 pub mod session;
 
@@ -12,6 +13,9 @@ cfg_if::cfg_if! {
         mod js_error;
         pub use js_error::JsError;
     } else {
+        #[cfg(feature = "server")]
+        pub mod server;
+
         pub use {tokio_tungstenite, tokio_tungstenite::tungstenite};
 
         #[cfg(feature = "__rustls-tls")]

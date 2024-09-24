@@ -2,12 +2,12 @@ mod backend;
 
 use {
     crate::{
-        session::{SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
+        session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
         WebSocketRuntime,
     },
     aeronet_io::{
         connection::{DisconnectReason, Disconnected, Session},
-        packet::PacketMtu,
+        packet::{PacketBuffersCapacity, PacketMtu},
         IoSet,
     },
     bevy_app::prelude::*,
@@ -64,8 +64,11 @@ impl Plugin for WebSocketClientPlugin {
             app.add_plugins(WebSocketSessionPlugin);
         }
 
-        app.add_systems(PreUpdate, poll_clients.before(IoSet::Poll))
-            .observe(on_client_added);
+        app.add_systems(
+            PreUpdate,
+            poll_clients.in_set(IoSet::Poll).before(session::poll),
+        )
+        .observe(on_client_added);
     }
 }
 
@@ -89,7 +92,7 @@ impl WebSocketClient {
     pub fn connect(
         config: ClientConfig,
         #[cfg(target_family = "wasm")] target: impl Into<String>,
-        #[cfg(not(target_family = "wasm"))] target: impl crate::tungstenite::client::IntoClientRequest,
+        #[cfg(not(target_family = "wasm"))] target: impl tungstenite::client::IntoClientRequest,
     ) -> impl EntityCommand {
         let target = {
             #[cfg(target_family = "wasm")]
@@ -108,6 +111,7 @@ impl WebSocketClient {
 
 fn connect(session: Entity, world: &mut World, config: ClientConfig, target: ConnectTarget) {
     let runtime = world.resource::<WebSocketRuntime>().clone();
+    let packet_buf_cap = PacketBuffersCapacity::compute_from(world, session);
     let packet_mtu = {
         #[cfg(target_family = "wasm")]
         {
@@ -129,9 +133,9 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
 
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
     let (send_next, recv_next) = oneshot::channel::<SessionFrontend>();
-    runtime.spawn(
+    runtime.spawn_on_self(
         async move {
-            let Err(reason) = backend::start(1024 /* todo */, config, target, send_next).await
+            let Err(reason) = backend::start(packet_buf_cap, config, target, send_next).await
             else {
                 unreachable!();
             };

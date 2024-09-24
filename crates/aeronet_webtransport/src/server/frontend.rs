@@ -1,22 +1,22 @@
 use {
     super::{
-        ServerError, SessionRequest, SessionResponse, ToConnected, ToConnecting, ToOpen, backend,
+        backend, ServerError, SessionRequest, SessionResponse, ToConnected, ToConnecting, ToOpen,
     },
     crate::{
         runtime::WebTransportRuntime,
         session::{self, SessionError, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
         packet::{PacketBuffersCapacity, PacketMtu, PacketRtt},
         server::{CloseReason, Closed, Opened, RemoteClient, Server},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
     wtransport::ServerConfig,
 };
 
@@ -92,16 +92,15 @@ fn open(server: Entity, world: &mut World, config: ServerConfig) {
 
     let (send_closed, recv_closed) = oneshot::channel::<CloseReason<ServerError>>();
     let (send_next, recv_next) = oneshot::channel::<ToOpen>();
-    runtime.spawn({
-        let runtime = runtime.clone();
+    runtime.spawn_on_self(
         async move {
-            let Err(err) = backend::start(runtime, packet_buf_cap, config, send_next).await else {
+            let Err(err) = backend::start(config, packet_buf_cap, send_next).await else {
                 unreachable!();
             };
             let _ = send_closed.send(CloseReason::Error(err));
         }
-        .instrument(debug_span!("server", %server))
-    });
+        .instrument(debug_span!("server", %server)),
+    );
 
     world
         .entity_mut(server)
