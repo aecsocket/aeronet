@@ -24,9 +24,6 @@ cfg_if::cfg_if! {
         type CreateTargetError = Never;
         type CreateSocketError = crate::JsError;
         type ConnectError = crate::JsError;
-
-        #[derive(Debug, Clone, Default)]
-        pub struct ClientConfig;
     } else {
         use {crate::tungstenite, tokio_tungstenite::Connector, tungstenite::protocol::WebSocketConfig};
 
@@ -35,23 +32,6 @@ cfg_if::cfg_if! {
         type CreateTargetError = tungstenite::Error;
         type CreateSocketError = Never;
         type ConnectError = tungstenite::Error;
-
-        #[derive(Clone)]
-        pub struct ClientConfig {
-            pub socket: WebSocketConfig,
-            pub nagle: bool,
-            pub connector: Connector,
-        }
-
-        impl Default for ClientConfig {
-            fn default() -> Self {
-                Self {
-                    socket: WebSocketConfig::default(),
-                    nagle: true,
-                    connector: Connector::Plain,
-                }
-            }
-        }
     }
 }
 
@@ -75,16 +55,27 @@ impl Plugin for WebSocketClientPlugin {
 #[derive(Debug, Component)]
 pub struct WebSocketClient(ClientFrontend);
 
-#[derive(Debug, Error)]
-pub enum ClientError {
-    #[error("failed to create request target")]
-    CreateTarget(#[source] CreateTargetError),
-    #[error("failed to create socket")]
-    CreateSocket(#[source] CreateSocketError),
-    #[error("failed to connect")]
-    Connect(#[source] ConnectError),
-    #[error(transparent)]
-    Session(#[from] SessionError),
+#[cfg(target_family = "wasm")]
+#[derive(Debug, Clone, Default)]
+pub struct ClientConfig;
+
+#[cfg(not(target_family = "wasm"))]
+#[derive(Clone)]
+pub struct ClientConfig {
+    pub socket: WebSocketConfig,
+    pub nagle: bool,
+    pub connector: Connector,
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl Default for ClientConfig {
+    fn default() -> Self {
+        Self {
+            socket: WebSocketConfig::default(),
+            nagle: true,
+            connector: Connector::Plain,
+        }
+    }
 }
 
 impl WebSocketClient {
@@ -148,6 +139,18 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
         WebSocketClient(ClientFrontend::Connecting { recv_dc, recv_next }),
         PacketMtu(packet_mtu),
     ));
+}
+
+#[derive(Debug, Error)]
+pub enum ClientError {
+    #[error("failed to create request target")]
+    CreateTarget(#[source] CreateTargetError),
+    #[error("failed to create socket")]
+    CreateSocket(#[source] CreateSocketError),
+    #[error("failed to connect")]
+    Connect(#[source] ConnectError),
+    #[error(transparent)]
+    Session(#[from] SessionError),
 }
 
 #[derive(Debug)]

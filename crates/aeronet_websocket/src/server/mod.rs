@@ -1,22 +1,21 @@
+mod backend;
+
 use std::{io, net::SocketAddr};
 
 use aeronet_io::{
-    connection::DisconnectReason,
+    connection::{DisconnectReason, LocalAddr, Session},
     packet::PacketBuffersCapacity,
-    server::{CloseReason, Server},
+    server::{CloseReason, Closed, Opened, RemoteClient, Server},
     IoSet,
 };
 use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, system::EntityCommand};
-use futures::{
-    channel::{mpsc, oneshot},
-    never::Never,
-    SinkExt, TryFutureExt,
-};
+use bevy_hierarchy::BuildChildren;
+use bytes::Bytes;
+use futures::channel::{mpsc, oneshot};
 use thiserror::Error;
-use tokio::net::{TcpListener, TcpStream};
-use tokio_tungstenite::{tungstenite::protocol::WebSocketConfig, MaybeTlsStream};
-use tracing::{debug, debug_span, Instrument};
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use tracing::{debug_span, Instrument};
 
 use crate::{
     session::{self, SessionError, SessionFrontend, WebSocketSessionPlugin},
@@ -51,18 +50,6 @@ pub struct ServerConfig {
     pub socket: WebSocketConfig,
 }
 
-#[derive(Debug, Error)]
-pub enum ServerError {
-    #[error("failed to bind socket")]
-    BindSocket(#[source] io::Error),
-    #[error("failed to accept connection")]
-    AcceptConnection(#[source] io::Error),
-    #[error("failed to accept client")]
-    AcceptClient(#[source] tungstenite::Error),
-    #[error(transparent)]
-    Session(#[from] SessionError),
-}
-
 impl WebSocketServer {
     #[must_use]
     pub fn open(config: ServerConfig) -> impl EntityCommand {
@@ -78,7 +65,7 @@ fn open(server: Entity, world: &mut World, config: ServerConfig) {
     let (send_next, recv_next) = oneshot::channel::<ToOpen>();
     runtime.spawn_on_self(
         async move {
-            let Err(err) = start(config, packet_buf_cap, send_next).await else {
+            let Err(err) = backend::start(config, packet_buf_cap, send_next).await else {
                 unreachable!();
             };
             let _ = send_closed.send(CloseReason::Error(err));
@@ -92,6 +79,43 @@ fn open(server: Entity, world: &mut World, config: ServerConfig) {
             recv_closed,
             recv_next,
         }));
+}
+
+#[derive(Debug, Error)]
+pub enum ServerError {
+    #[error("failed to bind socket")]
+    BindSocket(#[source] io::Error),
+    #[error("failed to accept connection")]
+    AcceptConnection(#[source] io::Error),
+    #[error("failed to accept client")]
+    AcceptClient(#[source] tungstenite::Error),
+    #[error(transparent)]
+    Session(#[from] SessionError),
+}
+
+#[derive(Debug, Component)]
+enum Frontend {
+    Opening {
+        recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+        recv_next: oneshot::Receiver<ToOpen>,
+    },
+    Open {
+        recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+        recv_connecting: mpsc::Receiver<ToConnecting>,
+    },
+    Closed,
+}
+
+#[derive(Debug, Component)]
+enum ClientFrontend {
+    Connecting {
+        recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+        recv_next: oneshot::Receiver<SessionFrontend>,
+    },
+    Connected {
+        recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+    },
+    Disconnected,
 }
 
 #[derive(Debug)]
@@ -108,19 +132,7 @@ struct ToConnecting {
     recv_next: oneshot::Receiver<SessionFrontend>,
 }
 
-#[derive(Debug, Component)]
-enum Frontend {
-    Opening {
-        recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
-        recv_next: oneshot::Receiver<ToOpen>,
-    },
-    Open {
-        recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
-        recv_connecting: mpsc::Receiver<ToConnecting>,
-    },
-    Closed,
-}
-
+// TODO: required components
 fn on_server_added(trigger: Trigger<OnAdd, WebSocketServer>, mut commands: Commands) {
     let server = trigger.entity();
     commands.entity(server).insert(Server);
@@ -148,113 +160,72 @@ fn poll_opening(
     mut recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
     mut recv_next: oneshot::Receiver<ToOpen>,
 ) -> Frontend {
-}
+    if should_close(commands, server, &mut recv_closed) {
+        return Frontend::Closed;
+    }
 
-async fn start(
-    config: ServerConfig,
-    packet_buf_cap: usize,
-    send_next: oneshot::Sender<ToOpen>,
-) -> Result<Never, ServerError> {
-    let listener = TcpListener::bind(config.addr)
-        .await
-        .map_err(ServerError::BindSocket)?;
-    debug!("Listening on {}", config.addr);
-
-    let (send_connecting, recv_connecting) = mpsc::channel::<ToConnecting>(1);
-
-    let local_addr = listener.local_addr().map_err(SessionError::GetLocalAddr)?;
-    let next = ToOpen {
-        local_addr,
-        recv_connecting,
+    let Ok(Some(next)) = recv_next.try_recv() else {
+        return Frontend::Opening {
+            recv_closed,
+            recv_next,
+        };
     };
-    send_next
-        .send(next)
-        .map_err(|_| SessionError::FrontendClosed)?;
 
-    debug!("Starting server loop");
-    loop {
-        let (stream, remote_addr) = listener
-            .accept()
-            .await
-            .map_err(ServerError::AcceptConnection)?;
-        tokio::spawn({
-            let send_connecting = send_connecting.clone();
-            async move {
-                if let Err(err) = accept_session(
-                    stream,
-                    remote_addr,
-                    config.socket.clone(),
-                    packet_buf_cap,
-                    send_connecting,
-                )
-                .await
-                {
-                    debug!("Failed to accept session: {err:?}");
-                }
-            }
-        });
+    commands
+        .entity(server)
+        .insert((Opened, LocalAddr(next.local_addr)));
+    Frontend::Open {
+        recv_closed,
+        recv_connecting: next.recv_connecting,
     }
 }
 
-async fn accept_session(
-    stream: TcpStream,
-    remote_addr: SocketAddr,
-    socket_config: WebSocketConfig,
-    packet_buf_cap: usize,
-    mut send_connecting: mpsc::Sender<ToConnecting>,
-) -> Result<(), DisconnectReason<ServerError>> {
-    let (send_session_entity, recv_session_entity) = oneshot::channel::<Entity>();
-    let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ServerError>>();
-    let (send_next, recv_next) = oneshot::channel::<SessionFrontend>();
-    send_connecting
-        .send(ToConnecting {
-            remote_addr,
-            send_session_entity,
-            recv_dc,
-            recv_next,
-        })
-        .await
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ServerError::Session)?;
-    let session = recv_session_entity
-        .await
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ServerError::Session)?;
+fn poll_open(
+    commands: &mut Commands,
+    server: Entity,
+    mut recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+    mut recv_connecting: mpsc::Receiver<ToConnecting>,
+) -> Frontend {
+    if should_close(commands, server, &mut recv_closed) {
+        return Frontend::Closed;
+    }
 
-    let Err(dc_reason) = handle_session(stream, socket_config, packet_buf_cap, send_next)
-        .instrument(debug_span!("session", %session))
-        .await
-    else {
-        unreachable!();
-    };
-    let _ = send_dc.send(dc_reason);
-    Ok(())
+    while let Ok(Some(connecting)) = recv_connecting.try_next() {
+        let session = commands
+            // spawn -> parent -> insert, so that Parent is available
+            // as soon as other components are added
+            .spawn_empty()
+            .set_parent(server)
+            .insert((
+                Session,
+                ClientFrontend::Connecting {
+                    recv_dc: connecting.recv_dc,
+                    recv_next: connecting.recv_next,
+                }
+            ))
+            .id();
+        let _ = connecting.send_session_entity.send(session);
+    }
+
+    Frontend::Open {
+        recv_closed,
+        recv_connecting,
+    }
 }
 
-async fn handle_session(
-    stream: TcpStream,
-    socket_config: WebSocketConfig,
-    packet_buf_cap: usize,
-    send_next: oneshot::Sender<SessionFrontend>,
-) -> Result<Never, DisconnectReason<ServerError>> {
-    // TODO TLS
-    // TODO accept hdr: find some way to pass control of headers over to user
-    let stream = MaybeTlsStream::Plain(stream);
-    let stream = tokio_tungstenite::accept_async_with_config(stream, Some(socket_config))
-        .await
-        .map_err(ServerError::AcceptClient)?;
-    let (frontend, backend) = crate::session::backend::native::split(stream, packet_buf_cap)
-        .map_err(ServerError::Session)?;
-    debug!("Connected");
-
-    send_next
-        .send(frontend)
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ServerError::Session)?;
-
-    debug!("Starting session loop");
-    backend
-        .start()
-        .await
-        .map_err(|reason| reason.map_err(ServerError::Session))
+fn should_close(
+    commands: &mut Commands,
+    server: Entity,
+    recv_closed: &mut oneshot::Receiver<CloseReason<ServerError>>,
+) -> bool {
+    let close_reason = match recv_closed.try_recv() {
+        Ok(None) => None,
+        Ok(Some(close_reason)) => Some(close_reason),
+        Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
+    };
+    close_reason.map_or(false, |reason| {
+        let reason = reason.map_err(anyhow::Error::new);
+        commands.trigger_targets(Closed { reason }, server);
+        true
+    })
 }
