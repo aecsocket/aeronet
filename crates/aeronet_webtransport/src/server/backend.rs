@@ -1,29 +1,28 @@
 use {
     super::{ServerError, SessionResponse, ToConnected, ToConnecting, ToOpen},
     crate::{
-        WebTransportRuntime,
         session::{SessionBackend, SessionError, SessionMeta},
+        WebTransportRuntime,
     },
     aeronet_io::connection::DisconnectReason,
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
-        SinkExt,
         channel::{mpsc, oneshot},
         never::Never,
+        SinkExt,
     },
-    tracing::{Instrument, debug, debug_span},
+    tracing::{debug, debug_span, Instrument},
     wtransport::{
-        Endpoint, ServerConfig,
         endpoint::{IncomingSession, SessionRequest},
+        Endpoint, ServerConfig,
     },
     xwt_core::prelude::*,
 };
 
 pub async fn start(
-    runtime: WebTransportRuntime,
-    packet_buf_cap: usize,
     config: ServerConfig,
+    packet_buf_cap: usize,
     send_next: oneshot::Sender<ToOpen>,
 ) -> Result<Never, ServerError> {
     debug!("Spawning backend task to open server");
@@ -33,8 +32,9 @@ pub async fn start(
 
     let (send_connecting, recv_connecting) = mpsc::channel(1);
 
+    let local_addr = endpoint.local_addr().map_err(SessionError::GetLocalAddr)?;
     let next = ToOpen {
-        local_addr: endpoint.local_addr().map_err(SessionError::GetLocalAddr)?,
+        local_addr,
         recv_connecting,
     };
     send_next
@@ -45,13 +45,10 @@ pub async fn start(
     loop {
         let session = endpoint.accept().await;
 
-        runtime.spawn({
-            let runtime = runtime.clone();
+        WebTransportRuntime::spawn({
             let send_connecting = send_connecting.clone();
             async move {
-                if let Err(err) =
-                    accept_session(runtime, packet_buf_cap, session, send_connecting).await
-                {
+                if let Err(err) = accept_session(packet_buf_cap, session, send_connecting).await {
                     debug!("Failed to accept session: {err:?}");
                 };
             }
@@ -60,7 +57,6 @@ pub async fn start(
 }
 
 async fn accept_session(
-    runtime: WebTransportRuntime,
     packet_buf_cap: usize,
     session: IncomingSession,
     mut send_connecting: mpsc::Sender<ToConnecting>,
@@ -89,15 +85,9 @@ async fn accept_session(
         .await
         .map_err(|_| SessionError::FrontendClosed)?;
 
-    let Err(dc_reason) = handle_session(
-        runtime,
-        packet_buf_cap,
-        request,
-        recv_session_response,
-        send_next,
-    )
-    .instrument(debug_span!("session", session = %session))
-    .await
+    let Err(dc_reason) = handle_session(packet_buf_cap, request, recv_session_response, send_next)
+        .instrument(debug_span!("session", %session))
+        .await
     else {
         unreachable!()
     };
@@ -106,7 +96,6 @@ async fn accept_session(
 }
 
 async fn handle_session(
-    runtime: WebTransportRuntime,
     packet_buf_cap: usize,
     request: SessionRequest,
     recv_session_response: oneshot::Receiver<SessionResponse>,
@@ -157,7 +146,6 @@ async fn handle_session(
         send_user_dc,
     };
     let backend = SessionBackend {
-        runtime,
         conn,
         send_meta,
         send_packet_b2f,

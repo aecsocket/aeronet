@@ -7,8 +7,6 @@ cfg_if::cfg_if! {
     }
 }
 
-const CLOSE_CODE: u16 = 0;
-
 #[cfg(target_family = "wasm")]
 pub mod wasm {
     use {
@@ -111,6 +109,10 @@ pub mod wasm {
         }
     }
 
+    // normal closure
+    // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
+    const CLOSE_CODE: u16 = 1000;
+
     impl SessionBackend {
         pub async fn start(self) -> Result<Never, DisconnectReason<SessionError>> {
             let Self {
@@ -136,6 +138,70 @@ pub mod wasm {
 
 #[cfg(not(target_family = "wasm"))]
 pub mod native {
+    use std::borrow::Cow;
+
+    use aeronet_io::connection::DisconnectReason;
+    use bytes::Bytes;
+    use futures::{
+        channel::{mpsc, oneshot},
+        never::Never,
+        SinkExt, StreamExt,
+    };
+    use tokio_tungstenite::{
+        tungstenite::{
+            protocol::{frame::coding::CloseCode, CloseFrame},
+            Message,
+        },
+        MaybeTlsStream,
+    };
+
+    use crate::session::{SessionError, SessionFrontend};
+
+    use super::WebSocketStream;
+
+    #[derive(Debug)]
+    pub struct SessionBackend {
+        stream: WebSocketStream,
+        send_packet_b2f: mpsc::Sender<Bytes>,
+        recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
+        recv_user_dc: oneshot::Receiver<String>,
+    }
+
+    pub fn split(
+        stream: WebSocketStream,
+        packet_buf_cap: usize,
+    ) -> Result<(SessionFrontend, SessionBackend), SessionError> {
+        let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<Bytes>(packet_buf_cap);
+        let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
+        let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
+        let socket = match stream.get_ref() {
+            MaybeTlsStream::Plain(stream) => stream,
+            #[cfg(feature = "native-tls")]
+            MaybeTlsStream::NativeTls(stream) => stream.get_ref().get_ref().get_ref(),
+            #[cfg(feature = "__rustls-tls")]
+            MaybeTlsStream::Rustls(stream) => stream.get_ref().0,
+            _ => unreachable!("should only be one of these variants"),
+        };
+        let local_addr = socket.local_addr().map_err(SessionError::GetLocalAddr)?;
+        let remote_addr = socket.peer_addr().map_err(SessionError::GetRemoteAddr)?;
+
+        Ok((
+            SessionFrontend {
+                local_addr,
+                remote_addr,
+                recv_packet_b2f,
+                send_packet_f2b,
+                send_user_dc,
+            },
+            SessionBackend {
+                stream,
+                send_packet_b2f,
+                recv_packet_f2b,
+                recv_user_dc,
+            },
+        ))
+    }
+
     impl SessionBackend {
         pub async fn start(self) -> Result<Never, DisconnectReason<SessionError>> {
             let Self {
@@ -149,8 +215,8 @@ pub mod native {
                 futures::select! {
                     msg = stream.next() => {
                         let msg = msg
-                                .ok_or(SessionError::RecvStreamClosed)?
-                                .map_err(SessionError::Connection)?;
+                            .ok_or(SessionError::RecvStreamClosed)?
+                            .map_err(SessionError::Connection)?;
                         recv(&mut send_packet_b2f, msg).await?;
                     }
                     packet = recv_packet_f2b.next() => {

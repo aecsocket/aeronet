@@ -86,8 +86,11 @@ impl From<tokio::runtime::Handle> for WebTransportRuntime {
 }
 
 impl WebTransportRuntime {
-    /// Spawns a future on the task runtime.
-    pub fn spawn<F>(&self, future: F)
+    /// Spawns a future on the task runtime `self`.
+    ///
+    /// If you are already in a task context, use [`WebTransportRuntime::spawn`]
+    /// to avoid having to pass around [`WebTransportRuntime`].
+    pub fn spawn_on_self<F>(&self, future: F)
     where
         F: Future<Output = ()> + maybe::Send + 'static,
     {
@@ -99,6 +102,25 @@ impl WebTransportRuntime {
         #[cfg(not(target_family = "wasm"))]
         {
             self.handle.spawn(future);
+        }
+    }
+
+    /// Spawns a future on the task runtime running on this thread.
+    ///
+    /// You must call this from a context where are you already running a task
+    /// on the reactor.
+    pub fn spawn<F>(future: F)
+    where
+        F: Future<Output = ()> + maybe::Send + 'static,
+    {
+        #[cfg(target_family = "wasm")]
+        {
+            wasm_bindgen_futures::spawn_local(future);
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            tokio::spawn(future);
         }
     }
 

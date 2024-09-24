@@ -1,4 +1,7 @@
-use {bevy_ecs::prelude::*, std::future::Future};
+use {
+    bevy_ecs::prelude::*,
+    std::{future::Future, time::Duration},
+};
 
 /// Provides a platform-agnostic way to spawn futures for driving the
 /// WebSocket IO layer.
@@ -12,8 +15,8 @@ use {bevy_ecs::prelude::*, std::future::Future};
 ///
 /// ## Native
 ///
-/// On a native target, this holds a handle to a `tokio` runtime, because this
-/// is the underlying async runtime of `tokio-tungstenite`.
+/// On a native target, this holds a handle to a `tokio` runtime, because
+/// `tokio-tungstenite` only supports this async runtime.
 ///
 /// Use the [`Default`] impl to create and leak a new `tokio` runtime, and that
 /// as the [`WebSocketRuntime`] handle.
@@ -83,8 +86,11 @@ impl From<tokio::runtime::Handle> for WebSocketRuntime {
 }
 
 impl WebSocketRuntime {
-    /// Spawns a future on the task runtime.
-    pub fn spawn<F>(&self, future: F)
+    /// Spawns a future on the task runtime `self`.
+    ///
+    /// If you are already in a task context, use [`WebSocketRuntime::spawn`]
+    /// to avoid having to pass around [`WebSocketRuntime`].
+    pub fn spawn_on_self<F>(&self, future: F)
     where
         F: Future<Output = ()> + maybe::Send + 'static,
     {
@@ -96,6 +102,38 @@ impl WebSocketRuntime {
         #[cfg(not(target_family = "wasm"))]
         {
             self.handle.spawn(future);
+        }
+    }
+
+    /// Spawns a future on the task runtime running on this thread.
+    ///
+    /// You must call this from a context where are you already running a task
+    /// on the reactor.
+    pub fn spawn<F>(future: F)
+    where
+        F: Future<Output = ()> + maybe::Send + 'static,
+    {
+        #[cfg(target_family = "wasm")]
+        {
+            wasm_bindgen_futures::spawn_local(future);
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            tokio::spawn(future);
+        }
+    }
+
+    /// Pauses execution for the given duration.
+    pub async fn sleep(duration: Duration) {
+        #[cfg(target_family = "wasm")]
+        {
+            gloo_timers::future::sleep(duration).await;
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            tokio::time::sleep(duration).await;
         }
     }
 }

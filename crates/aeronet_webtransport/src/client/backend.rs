@@ -1,9 +1,6 @@
 use {
     super::{ClientConfig, ClientError, ConnectTarget, ToConnected},
-    crate::{
-        WebTransportRuntime,
-        session::{SessionBackend, SessionError, SessionMeta},
-    },
+    crate::session::{SessionBackend, SessionError, SessionMeta},
     aeronet_io::connection::DisconnectReason,
     bytes::Bytes,
     futures::{
@@ -15,7 +12,6 @@ use {
 };
 
 pub async fn start(
-    runtime: WebTransportRuntime,
     packet_buf_cap: usize,
     config: ClientConfig,
     target: ConnectTarget,
@@ -92,7 +88,6 @@ pub async fn start(
         send_user_dc,
     };
     let backend = SessionBackend {
-        runtime,
         conn,
         send_meta,
         send_packet_b2f,

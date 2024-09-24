@@ -219,18 +219,16 @@ fn flush(
 
 #[derive(Debug)]
 pub(crate) struct SessionBackend {
-    pub(crate) runtime: WebTransportRuntime,
-    pub(crate) conn: Connection,
-    pub(crate) send_meta: mpsc::Sender<SessionMeta>,
-    pub(crate) send_packet_b2f: mpsc::Sender<Bytes>,
-    pub(crate) recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
-    pub(crate) recv_user_dc: oneshot::Receiver<String>,
+    pub conn: Connection,
+    pub send_meta: mpsc::Sender<SessionMeta>,
+    pub send_packet_b2f: mpsc::Sender<Bytes>,
+    pub recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
+    pub recv_user_dc: oneshot::Receiver<String>,
 }
 
 impl SessionBackend {
     pub async fn start(self) -> DisconnectReason<SessionError> {
         let Self {
-            runtime,
             conn,
             send_meta,
             send_packet_b2f,
@@ -242,7 +240,7 @@ impl SessionBackend {
         let (send_err, mut recv_err) = mpsc::channel::<SessionError>(1);
 
         let (_send_meta_closed, recv_meta_closed) = oneshot::channel();
-        runtime.spawn({
+        WebTransportRuntime::spawn({
             let conn = conn.clone();
             let mut send_err = send_err.clone();
             async move {
@@ -254,7 +252,7 @@ impl SessionBackend {
         });
 
         let (_send_receiving_closed, recv_receiving_closed) = oneshot::channel();
-        runtime.spawn({
+        WebTransportRuntime::spawn({
             let conn = conn.clone();
             let mut send_err = send_err.clone();
             async move {
@@ -266,7 +264,7 @@ impl SessionBackend {
         });
 
         let (_send_sending_closed, recv_sending_closed) = oneshot::channel();
-        runtime.spawn({
+        WebTransportRuntime::spawn({
             let conn = conn.clone();
             let mut send_err = send_err.clone();
             async move {
