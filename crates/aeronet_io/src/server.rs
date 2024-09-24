@@ -20,7 +20,6 @@ impl Plugin for ServerPlugin {
         app.register_type::<Server>()
             .register_type::<Opened>()
             .register_type::<OpenedAt>()
-            .register_type::<RemoteClient>()
             .observe(on_opening)
             .observe(on_opened)
             .observe(on_close)
@@ -45,8 +44,9 @@ impl Plugin for ServerPlugin {
 /// sending illegal data or breaking some invariant, that single client will be
 /// disconnected instead of the entire server being torn down.
 ///
-/// When a client connects, it is spawned as a [child] of the server entity,
-/// along with [`RemoteClient`]. The rest of the connection process is the
+/// When a client connects, it is spawned as a [child] of the server entity.
+/// Therefore, to query for sessions spawned under a server, use
+/// [`Query<Session, With<Parent>>`]. The rest of the connection process is the
 /// same as [`Session`]. If the server is [`Close`]d with a user-given reason,
 /// all connected clients will be disconnected with the same reason.
 ///
@@ -70,14 +70,6 @@ pub struct Opened;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component, Reflect)]
 #[reflect(Component)]
 pub struct OpenedAt(pub Instant);
-
-/// Marks which [`Server`] a client [`Session`] is connected to.
-///
-/// To listen for when a client starts connecting to a server, add an observer
-/// listening for [`Trigger<OnAdd, RemoteClient>`].
-#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
-#[reflect(Component)]
-pub struct RemoteClient;
 
 /// Triggered when a user requests a [`Server`] to gracefully shut down and
 /// disconnect all of its connected clients.
