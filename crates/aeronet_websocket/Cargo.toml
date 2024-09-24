@@ -59,7 +59,7 @@ bevy_reflect = { workspace = true }
 js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
-web-sys = { workspace = true, features = ["WebSocket", "BinaryType"] }
+web-sys = { workspace = true, features = ["WebSocket", "BinaryType", "MessageEvent"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }

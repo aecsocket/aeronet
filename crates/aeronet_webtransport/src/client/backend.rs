@@ -1,8 +1,8 @@
 use {
     super::{ClientConfig, ClientError, ConnectTarget, ToConnected},
     crate::{
-        session::{SessionBackend, SessionError, SessionMeta},
         WebTransportRuntime,
+        session::{SessionBackend, SessionError, SessionMeta},
     },
     aeronet_io::connection::DisconnectReason,
     bytes::Bytes,

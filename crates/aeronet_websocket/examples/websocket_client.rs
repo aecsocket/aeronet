@@ -6,7 +6,7 @@ use {
         connection::{
             Connected, Disconnect, DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session,
         },
-        packet::{PacketBuffers, PacketMtu, PacketRtt, PacketStats},
+        packet::{PacketBuffers, PacketMtu, PacketStats},
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
@@ -123,30 +123,15 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
 
 #[cfg(target_family = "wasm")]
 fn client_config() -> ClientConfig {
-    use aeronet_webtransport::xwt_web_sys::{CertificateHash, HashAlgorithm};
-
-    let server_certificate_hashes = match cert::hash_from_b64(&cert_hash) {
-        Ok(hash) => vec![CertificateHash {
-            algorithm: HashAlgorithm::Sha256,
-            value: Vec::from(hash),
-        }],
-        Err(err) => {
-            warn!("Failed to read certificate hash from string: {err:?}",);
-            Vec::new()
-        }
-    };
-
-    ClientConfig {
-        server_certificate_hashes,
-        ..Default::default()
-    }
+    ClientConfig::default()
 }
 
 #[cfg(not(target_family = "wasm"))]
 fn client_config() -> ClientConfig {
-    use std::sync::Arc;
-
-    use aeronet_websocket::{rustls, tokio_tungstenite::Connector};
+    use {
+        aeronet_websocket::{rustls, tokio_tungstenite::Connector},
+        std::sync::Arc,
+    };
 
     let mut root_certs = rustls::RootCertStore::empty();
     {
