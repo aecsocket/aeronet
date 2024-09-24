@@ -137,17 +137,16 @@ pub(crate) fn poll(
         Option<&mut PacketRtt>,
     )>,
 ) {
-    #[cfg_attr(
-        target_family = "wasm",
-        expect(
-            unused_variables,
-            unused_mut,
-            reason = "`remote_addr` and `packet_rtt` are not used on WASM"
-        )
-    )]
     for (session, mut io, mut bufs, mut mtu, mut stats, mut remote_addr, mut packet_rtt) in
         &mut sessions
     {
+        #[cfg(target_family = "wasm")]
+        {
+            // suppress `unused_variables`, `unused_mut`
+            let _ = &mut remote_addr;
+            let _ = &mut packet_rtt;
+        }
+
         let span = trace_span!("poll", %session);
         let _span = span.enter();
 

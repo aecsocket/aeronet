@@ -1,23 +1,20 @@
 mod backend;
 
-use aeronet_io::{
-    connection::{DisconnectReason, Disconnected, Session},
-    packet::PacketMtu,
-    IoSet,
-};
-use bevy_app::prelude::*;
-use bevy_ecs::{prelude::*, system::EntityCommand};
-use bytes::Bytes;
-use futures::{
-    channel::{mpsc, oneshot},
-    never::Never,
-};
-use thiserror::Error;
-use tracing::{debug_span, Instrument};
-
-use crate::{
-    session::{SessionError, WebSocketIo, WebSocketSessionPlugin},
-    WebSocketRuntime,
+use {
+    crate::{
+        session::{SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
+        WebSocketRuntime,
+    },
+    aeronet_io::{
+        connection::{DisconnectReason, Disconnected, Session},
+        packet::PacketMtu,
+        IoSet,
+    },
+    bevy_app::prelude::*,
+    bevy_ecs::{prelude::*, system::EntityCommand},
+    futures::{channel::oneshot, never::Never},
+    thiserror::Error,
+    tracing::{debug_span, Instrument},
 };
 
 cfg_if::cfg_if! {
@@ -28,10 +25,8 @@ cfg_if::cfg_if! {
         type CreateSocketError = crate::JsError;
         type ConnectError = crate::JsError;
 
-        #[derive(Clone, Default)]
-        pub struct ClientConfig {
-            pub protocols: Vec<String>,
-        }
+        #[derive(Debug, Clone, Default)]
+        pub struct ClientConfig;
     } else {
         use {crate::tungstenite, tokio_tungstenite::Connector, tungstenite::protocol::WebSocketConfig};
 
@@ -114,6 +109,12 @@ impl WebSocketClient {
 fn connect(session: Entity, world: &mut World, config: ClientConfig, target: ConnectTarget) {
     let runtime = world.resource::<WebSocketRuntime>().clone();
     let packet_mtu = {
+        #[cfg(target_family = "wasm")]
+        {
+            // we really don't know :(
+            usize::MAX
+        }
+
         #[cfg(not(target_family = "wasm"))]
         {
             use crate::tungstenite::protocol::WebSocketConfig;
@@ -127,17 +128,17 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
     };
 
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
-    let (send_next, recv_next) = oneshot::channel::<ToConnected>();
-    runtime.spawn({
-        let runtime = runtime.clone();
+    let (send_next, recv_next) = oneshot::channel::<SessionFrontend>();
+    runtime.spawn(
         async move {
-            let Err(reason) = backend::start(runtime, 0, config, target, send_next).await else {
+            let Err(reason) = backend::start(1024 /* todo */, config, target, send_next).await
+            else {
                 unreachable!();
             };
             let _ = send_dc.send(reason);
         }
-        .instrument(debug_span!("client", %session))
-    });
+        .instrument(debug_span!("client", %session)),
+    );
 
     world.entity_mut(session).insert((
         WebSocketClient(ClientFrontend::Connecting { recv_dc, recv_next }),
@@ -149,23 +150,12 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
 enum ClientFrontend {
     Connecting {
         recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
-        recv_next: oneshot::Receiver<ToConnected>,
+        recv_next: oneshot::Receiver<SessionFrontend>,
     },
     Connected {
         recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
     },
     Disconnected,
-}
-
-#[derive(Debug)]
-struct ToConnected {
-    #[cfg(not(target_family = "wasm"))]
-    local_addr: std::net::SocketAddr,
-    #[cfg(not(target_family = "wasm"))]
-    remote_addr: std::net::SocketAddr,
-    recv_packet_b2f: mpsc::Receiver<Bytes>,
-    send_packet_f2b: mpsc::UnboundedSender<Bytes>,
-    send_user_dc: oneshot::Sender<String>,
 }
 
 // TODO: required components
@@ -196,7 +186,7 @@ fn poll_connecting(
     commands: &mut Commands,
     session: Entity,
     mut recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
-    mut recv_next: oneshot::Receiver<ToConnected>,
+    mut recv_next: oneshot::Receiver<SessionFrontend>,
 ) -> ClientFrontend {
     if should_disconnect(commands, session, &mut recv_dc) {
         return ClientFrontend::Disconnected;

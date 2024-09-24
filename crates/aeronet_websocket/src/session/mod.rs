@@ -1,3 +1,5 @@
+pub(crate) mod backend;
+
 use {
     crate::WebSocketRuntime,
     aeronet_io::{
@@ -16,13 +18,13 @@ use {
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
+        type ConnectionError = crate::JsError;
+        type SendError = crate::JsError;
     } else {
         type ConnectionError = crate::tungstenite::Error;
+        type SendError = Never;
     }
 }
-
-mod backend;
-pub(crate) use backend::*;
 
 #[derive(Debug)]
 pub(crate) struct WebSocketSessionPlugin;
@@ -64,6 +66,8 @@ pub enum SessionError {
     Connection(#[source] ConnectionError),
     #[error("peer disconnected without reason")]
     DisconnectedWithoutReason,
+    #[error("failed to send data")]
+    Send(#[source] SendError),
 }
 
 impl Drop for WebSocketIo {
@@ -72,6 +76,17 @@ impl Drop for WebSocketIo {
             let _ = send_dc.send(DROP_DISCONNECT_REASON.to_owned());
         }
     }
+}
+
+#[derive(Debug)]
+pub(crate) struct SessionFrontend {
+    #[cfg(not(target_family = "wasm"))]
+    local_addr: std::net::SocketAddr,
+    #[cfg(not(target_family = "wasm"))]
+    remote_addr: std::net::SocketAddr,
+    pub recv_packet_b2f: mpsc::Receiver<Bytes>,
+    pub send_packet_f2b: mpsc::UnboundedSender<Bytes>,
+    pub send_user_dc: oneshot::Sender<String>,
 }
 
 // TODO: required components

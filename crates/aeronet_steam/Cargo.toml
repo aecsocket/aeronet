@@ -21,15 +21,24 @@ all-features = true
 client = []
 server = []
 
+# so that this crate can still compile but be useless under WASM,
+# we put the native-only dependencies under a `target` block
+# but we still need `bevy_ecs` to be under the regular `dependencies`
+# so that, when building for native, the `Component` macro realizes that
+# it should use `::bevy_ecs` instead of `::bevy`
+# (the macro reads the crate dependencies to figure out which to use)
+
 [dependencies]
+bevy_ecs = { workspace = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
 aeronet_io = { workspace = true }
 
-steamworks = { workspace = true }
 thiserror = { workspace = true }
+steamworks = { workspace = true }
 
-bevy-steamworks = { workspace = true }
 bevy_app = { workspace = true }
-bevy_ecs = { workspace = true }
+bevy-steamworks = { workspace = true }
 
 [dev-dependencies]
 bevy = { workspace = true }
@@ -41,6 +50,6 @@ path = "examples/steam_client.rs"
 required-features = ["client"]
 
 [[example]]
-name = "steam_server"
-path = "examples/steam_server.rs"
+name = "steam_echo_server"
+path = "examples/steam_echo_server.rs"
 required-features = ["server"]

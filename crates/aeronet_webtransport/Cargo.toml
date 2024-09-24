@@ -44,14 +44,14 @@ bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-gloo-timers = { workspace = true }
+gloo-timers = { workspace = true, features = ["futures"] }
 js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 xwt-web-sys = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-spki = { workspace = true }
+spki = { workspace = true, features = ["fingerprint"] }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 wtransport = { workspace = true }
 x509-cert = { workspace = true }
