@@ -13,6 +13,7 @@ cfg_if::cfg_if! {
         mod js_error;
         pub use js_error::JsError;
     } else {
+        pub mod crypto;
         #[cfg(feature = "server")]
         pub mod server;
 
@@ -24,5 +25,7 @@ cfg_if::cfg_if! {
         pub use rustls_native_certs;
         #[cfg(feature = "rustls-tls-webpki-roots")]
         pub use webpki_roots;
+        #[cfg(feature = "__native-tls")]
+        pub use native_tls;
     }
 }

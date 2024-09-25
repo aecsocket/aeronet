@@ -13,7 +13,7 @@ use {
         client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
     },
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     std::mem,
 };
 
@@ -83,9 +83,9 @@ fn on_disconnected(
     });
 }
 
-const DEFAULT_TARGET: &str = "https://[::1]:25565";
-
 fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMut<GlobalUi>) {
+    const DEFAULT_TARGET: &str = "https://[::1]:25565";
+
     egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
@@ -150,7 +150,7 @@ fn client_config(cert_hash: String) -> ClientConfig {
 
 #[cfg(not(target_family = "wasm"))]
 fn client_config(cert_hash: String) -> ClientConfig {
-    use {std::time::Duration, wtransport::tls::Sha256Digest};
+    use {aeronet_webtransport::wtransport::tls::Sha256Digest, std::time::Duration};
 
     let config = ClientConfig::builder().with_bind_default();
 

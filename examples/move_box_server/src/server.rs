@@ -1,44 +1,40 @@
 use {
     aeronet::{
-        client::ClientState,
-        error::pretty_error,
-        server::{
-            RemoteClientConnecting, RemoteClientDisconnected, ServerClosed, ServerOpened,
-            ServerTransport, ServerTransportSet,
-        },
-        stats::{ConnectedAt, Rtt},
+        connection::{DisconnectReason, Disconnected, LocalAddr},
+        server::Opened,
     },
-    aeronet_replicon::server::{ClientKeys, RepliconServerPlugin},
+    aeronet_replicon::server::{AeronetRepliconServer, AeronetRepliconServerPlugin, RepliconId},
+    aeronet_websocket::{
+        server::{WebSocketServer, WebSocketServerPlugin},
+        tungstenite::protocol::WebSocketConfig,
+    },
     aeronet_webtransport::{
         cert,
-        runtime::WebTransportRuntime,
-        server::{ConnectionResponse, ServerConfig, WebTransportServer},
-        shared::RawRtt,
+        server::{SessionRequest, SessionResponse, WebTransportServer, WebTransportServerPlugin},
         wtransport,
     },
-    ascii_table::AsciiTable,
-    bevy::{
-        log::LogPlugin, prelude::*, state::app::StatesPlugin, time::common_conditions::on_timer,
-    },
+    bevy::{log::LogPlugin, prelude::*, state::app::StatesPlugin},
     bevy_replicon::prelude::*,
     move_box::{
-        ClientPlayer, GameState, MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition,
-        TICK_RATE,
+        ClientPlayer, MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition, TICK_RATE,
     },
-    size_format::{BinaryPrefixes, PointSeparated, SizeFormatter},
-    web_time::{Duration, Instant},
+    std::net::{Ipv6Addr, SocketAddr},
+    web_time::Duration,
 };
 
-const DEFAULT_PORT: u16 = 25565;
+const WEB_TRANSPORT_PORT: u16 = 25565;
 
-const PRINT_STATS_INTERVAL: Duration = Duration::from_millis(500);
+const WEB_SOCKET_PORT: u16 = 25566;
 
 /// `move_box` demo server
 #[derive(Debug, Resource, clap::Parser)]
 struct Args {
-    /// Port to listen on
-    #[arg(long, default_value_t = DEFAULT_PORT)]
-    port: u16,
+    /// Port to listen for WebTransport connections on
+    #[arg(long, default_value_t = WEB_TRANSPORT_PORT)]
+    wt_port: u16,
+    /// Port to listen for WebSocket connections on
+    #[arg(long, default_value_t = WEB_SOCKET_PORT)]
+    ws_port: u16,
 }
 
 impl FromWorld for Args {
@@ -47,48 +43,42 @@ impl FromWorld for Args {
     }
 }
 
-pub fn main() {
+pub fn main() -> AppExit {
     App::new()
         .init_resource::<Args>()
         .add_plugins((
+            // core
             LogPlugin::default(),
             MinimalPlugins,
             StatesPlugin,
-            RepliconPlugins.build().set(ServerPlugin {
+            // transport
+            WebTransportServerPlugin,
+            WebSocketServerPlugin,
+            // replication
+            RepliconPlugins.set(ServerPlugin {
                 tick_policy: TickPolicy::MaxTickRate(TICK_RATE),
                 ..Default::default()
             }),
-            RepliconServerPlugin::<WebTransportServer>::with_tick_rate(TICK_RATE),
+            AeronetRepliconServerPlugin,
+            // game
             MoveBoxPlugin,
         ))
-        .init_resource::<WebTransportServer>()
-        .add_systems(Startup, open_server)
-        .add_systems(
-            PreUpdate,
-            (
-                on_opened,
-                on_closed,
-                on_connecting,
-                on_disconnected,
-                on_server_event,
-            )
-                .after(ServerTransportSet::Recv),
-        )
-        .add_systems(Update, print_stats.run_if(on_timer(PRINT_STATS_INTERVAL)))
-        .run();
+        .add_systems(Startup, (open_web_transport_server, open_web_socket_server))
+        .observe(on_opened)
+        .observe(on_session_request)
+        .observe(on_connected)
+        .observe(on_disconnected)
+        .run()
 }
 
-fn open_server(
-    mut server: ResMut<WebTransportServer>,
-    runtime: Res<WebTransportRuntime>,
-    args: Res<Args>,
-    channels: Res<RepliconChannels>,
-) {
-    let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"])
-        .expect("should be able to generate self-signed certs");
+//
+// WebTransport
+//
+
+fn open_web_transport_server(mut commands: Commands, args: Res<Args>) {
+    let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
     let cert = &identity.certificate_chain().as_slice()[0];
-    let spki_fingerprint =
-        cert::spki_fingerprint_b64(cert).expect("should be able to get SPKI fingerprint of cert");
+    let spki_fingerprint = cert::spki_fingerprint_b64(cert).unwrap();
     let cert_hash = cert::hash_to_b64(cert.hash());
     info!("************************");
     info!("SPKI FINGERPRINT");
@@ -97,148 +87,171 @@ fn open_server(
     info!("  {cert_hash}");
     info!("************************");
 
-    let net_config = ServerConfig::builder()
-        .with_bind_default(args.port)
+    let config = web_transport_config(&identity, &args);
+    let server = commands
+        .spawn(AeronetRepliconServer)
+        .add(WebTransportServer::open(config))
+        .id();
+    info!("Opening WebTransport server {server}");
+}
+
+type WebTransportServerConfig = aeronet_webtransport::server::ServerConfig;
+
+fn web_transport_config(identity: &wtransport::Identity, args: &Args) -> WebTransportServerConfig {
+    WebTransportServerConfig::builder()
+        .with_bind_default(args.wt_port)
         .with_identity(&identity)
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
-        .expect("should be a valid max idle timeout")
-        .build();
-
-    let session_config = move_box::session_config(channels.as_ref());
-
-    server
-        .open(runtime.as_ref(), net_config, session_config)
-        .expect("server should be closed");
+        .unwrap()
+        .build()
 }
 
-fn on_opened(
-    mut events: EventReader<ServerOpened<WebTransportServer>>,
-    mut game_state: ResMut<NextState<GameState>>,
-) {
-    for ServerOpened { .. } in events.read() {
-        info!("Server opened");
-        game_state.set(GameState::Playing);
-    }
-}
-
-fn on_closed(mut events: EventReader<ServerClosed<WebTransportServer>>) {
-    for ServerClosed { reason } in events.read() {
-        info!("Server closed: {:#}", pretty_error(reason));
-    }
-}
-
-fn on_connecting(
-    mut events: EventReader<RemoteClientConnecting<WebTransportServer>>,
-    mut server: ResMut<WebTransportServer>,
-) {
-    for RemoteClientConnecting { client_key } in events.read() {
-        info!("{client_key:?} connecting");
-        server.respond_to_request(*client_key, ConnectionResponse::Accepted);
-    }
-}
-
-fn on_disconnected(mut events: EventReader<RemoteClientDisconnected<WebTransportServer>>) {
-    for RemoteClientDisconnected { client_key, reason } in events.read() {
-        info!("{client_key:?} disconnected: {:#}", pretty_error(reason));
-    }
-}
-
-fn on_server_event(
+fn on_session_request(
+    trigger: Trigger<SessionRequest>,
+    clients: Query<&Parent>,
     mut commands: Commands,
-    mut events: EventReader<ServerEvent>,
-    client_keys: Res<ClientKeys<WebTransportServer>>,
-    players: Query<(Entity, &ClientPlayer)>,
 ) {
-    for event in events.read() {
-        match event {
-            &ServerEvent::ClientConnected { client_id } => {
-                let Some(client_key) = client_keys.get_by_right(&client_id) else {
-                    continue;
-                };
-                info!("{client_id:?} controlled by {client_key:?} connected");
+    let client = trigger.entity();
+    let request = trigger.event();
+    let server = clients.get(client).map(Parent::get).unwrap();
 
-                let color = Color::srgb(rand::random(), rand::random(), rand::random());
-                commands.spawn((
-                    Player,
-                    ClientPlayer(client_id),
-                    PlayerPosition(Vec2::ZERO),
-                    PlayerColor(color),
-                    PlayerInput::default(),
-                    Replicated,
-                ));
-            }
-            &ServerEvent::ClientDisconnected {
-                client_id,
-                ref reason,
-            } => {
-                info!("{client_id:?} disconnected: {reason}");
-                for (entity, &ClientPlayer(test_id)) in &players {
-                    if test_id == client_id {
-                        commands.entity(entity).despawn();
-                    }
-                }
-            }
+    info!("{client} connecting to {server} with headers:");
+    for (header_key, header_value) in &request.headers {
+        info!("  {header_key}: {header_value}");
+    }
+
+    commands.trigger_targets(SessionResponse::Accepted, client);
+}
+
+//
+// WebSocket
+//
+
+type WebSocketServerConfig = aeronet_websocket::server::ServerConfig;
+
+fn open_web_socket_server(mut commands: Commands, args: Res<Args>) {
+    let config = web_socket_config(&args);
+    let server = commands
+        .spawn(AeronetRepliconServer)
+        .add(WebSocketServer::open(config))
+        .id();
+    info!("Opening WebSocket server {server}");
+}
+
+fn web_socket_config(args: &Args) -> WebSocketServerConfig {
+    WebSocketServerConfig {
+        addr: SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), args.ws_port),
+        socket: WebSocketConfig::default(),
+    }
+}
+
+//
+// server logic
+//
+
+fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
+    let server = trigger.entity();
+    let local_addr = servers.get(server).unwrap();
+    info!("{server} opened on {}", **local_addr);
+}
+
+fn on_connected(
+    trigger: Trigger<OnAdd, RepliconId>,
+    clients: Query<(&Parent, &RepliconId)>,
+    mut commands: Commands,
+) {
+    let client = trigger.entity();
+    let (server, client_id) = clients.get(client).unwrap();
+    let (server, client_id) = (server.get(), client_id.get());
+    info!("{client} ({client_id:?}) connected to {server:?}");
+
+    let color = Color::srgb(rand::random(), rand::random(), rand::random());
+    commands.spawn((
+        Player,
+        ClientPlayer(client_id),
+        PlayerPosition(Vec2::ZERO),
+        PlayerColor(color),
+        PlayerInput::default(),
+        Replicated,
+    ));
+}
+
+fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
+    let client = trigger.entity();
+    let Ok(server) = clients.get(client).map(Parent::get) else {
+        return;
+    };
+
+    match &trigger.event().reason {
+        DisconnectReason::User(reason) => {
+            info!("{client} disconnected from {server} by user: {reason}");
+        }
+        DisconnectReason::Peer(reason) => {
+            info!("{client} disconnected from {server} by peer: {reason}");
+        }
+        DisconnectReason::Error(err) => {
+            warn!("{client} disconnected from {server} due to error: {err:#}");
         }
     }
 }
 
-fn print_stats(server: Res<WebTransportServer>) {
-    let now = Instant::now();
-    let mut total_mem_used = 0usize;
-    let cells = server
-        .client_keys()
-        .filter_map(|client_key| match server.client_state(client_key) {
-            ClientState::Disconnected | ClientState::Connecting(_) => None,
-            ClientState::Connected(client) => {
-                let mem_used = client.session().memory_usage();
-                total_mem_used += mem_used;
-                let time = now - client.connected_at();
-                Some(vec![
-                    format!("{:?}", slotmap::Key::data(&client_key)),
-                    format!("{:.1?}", time),
-                    format!("{:.1?}", client.rtt()),
-                    format!("{:.1?}", client.raw_rtt()),
-                    format!(
-                        "{}",
-                        fmt_bytes(
-                            (client.session().bytes_sent() as f64 / time.as_secs_f64()) as usize
-                        ),
-                    ),
-                    format!(
-                        "{}",
-                        fmt_bytes(
-                            (client.session().bytes_recv() as f64 / time.as_secs_f64()) as usize
-                        ),
-                    ),
-                    format!("{}", fmt_bytes(mem_used)),
-                ])
-            }
-        })
-        .collect::<Vec<_>>();
+// fn print_stats(server: Res<WebTransportServer>) {
+//     let now = Instant::now();
+//     let mut total_mem_used = 0usize;
+//     let cells = server
+//         .client_keys()
+//         .filter_map(|client_key| match server.client_state(client_key) {
+//             ClientState::Disconnected | ClientState::Connecting(_) => None,
+//             ClientState::Connected(client) => {
+//                 let mem_used = client.session().memory_usage();
+//                 total_mem_used += mem_used;
+//                 let time = now - client.connected_at();
+//                 Some(vec![
+//                     format!("{:?}", slotmap::Key::data(&client_key)),
+//                     format!("{:.1?}", time),
+//                     format!("{:.1?}", client.rtt()),
+//                     format!("{:.1?}", client.raw_rtt()),
+//                     format!(
+//                         "{}",
+//                         fmt_bytes(
+//                             (client.session().bytes_sent() as f64 / time.as_secs_f64()) as usize
+//                         ),
+//                     ),
+//                     format!(
+//                         "{}",
+//                         fmt_bytes(
+//                             (client.session().bytes_recv() as f64 / time.as_secs_f64()) as usize
+//                         ),
+//                     ),
+//                     format!("{}", fmt_bytes(mem_used)),
+//                 ])
+//             }
+//         })
+//         .collect::<Vec<_>>();
 
-    if cells.is_empty() {
-        return;
-    }
+//     if cells.is_empty() {
+//         return;
+//     }
 
-    let mut table = AsciiTable::default();
-    for (index, header) in ["client", "time", "rtt", "raw rtt", "tx/s", "rx/s", "mem"]
-        .iter()
-        .enumerate()
-    {
-        table.column(index).set_header(*header);
-    }
+//     let mut table = AsciiTable::default();
+//     for (index, header) in ["client", "time", "rtt", "raw rtt", "tx/s", "rx/s", "mem"]
+//         .iter()
+//         .enumerate()
+//     {
+//         table.column(index).set_header(*header);
+//     }
 
-    for line in table.format(&cells).lines() {
-        info!("{line}");
-    }
+//     for line in table.format(&cells).lines() {
+//         info!("{line}");
+//     }
 
-    info!("{}B of memory used", fmt_bytes(total_mem_used));
-}
+//     info!("{}B of memory used", fmt_bytes(total_mem_used));
+// }
 
-fn fmt_bytes(n: usize) -> String {
-    format!(
-        "{:.1}",
-        SizeFormatter::<usize, BinaryPrefixes, PointSeparated>::new(n)
-    )
-}
+// fn fmt_bytes(n: usize) -> String {
+//     format!(
+//         "{:.1}",
+//         SizeFormatter::<usize, BinaryPrefixes, PointSeparated>::new(n)
+//     )
+// }

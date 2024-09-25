@@ -1,8 +1,6 @@
 #![doc = include_str!("../README.md")]
 
 use {
-    aeronet_replicon::channel::IntoLanes,
-    aeronet_webtransport::{proto::session::SessionConfig, runtime::WebTransportRuntime},
     bevy::prelude::*,
     bevy_replicon::prelude::*,
     serde::{Deserialize, Serialize},
@@ -28,29 +26,21 @@ pub enum GameState {
     Playing,
 }
 
-/// Creates a [`SessionConfig`] from [`RepliconChannels`], customized for this
-/// app.
-///
-/// Both the client and server should have the same [`SessionConfig`].
-#[must_use]
-pub fn session_config(channels: &RepliconChannels) -> SessionConfig {
-    SessionConfig::default()
-        .with_client_lanes(channels.client_channels().into_lanes())
-        .with_server_lanes(channels.server_channels().into_lanes())
-}
-
 impl Plugin for MoveBoxPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<GameState>()
             .enable_state_scoped_entities::<GameState>()
-            // use the convenience resource WebTransportRuntime for spawning tasks
-            // platform-independently (native using tokio, or WASM using wasm-bindgen-futures)
-            .init_resource::<WebTransportRuntime>()
             .replicate::<Player>()
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
             .add_client_event::<PlayerInput>(ChannelKind::Ordered)
-            .add_systems(FixedUpdate, (recv_input, apply_movement).chain().run_if(has_authority));
+            .add_systems(
+                FixedUpdate,
+                (recv_input, apply_movement)
+                    .chain()
+                    .run_if(server_or_singleplayer),
+            )
+            .observe(on_player_added);
     }
 }
 
@@ -80,6 +70,14 @@ pub struct PlayerInput {
     /// unnormalized vector! Authorities must ensure that they normalize or
     /// zero this vector before using it for movement updates.
     pub movement: Vec2,
+}
+
+// TODO: required components
+fn on_player_added(trigger: Trigger<OnAdd, Player>, mut commands: Commands) {
+    let player = trigger.entity();
+    commands
+        .entity(player)
+        .insert(StateScoped(GameState::Playing));
 }
 
 fn recv_input(

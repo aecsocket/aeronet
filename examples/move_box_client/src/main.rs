@@ -1,102 +1,207 @@
 #![doc = include_str!("../README.md")]
 
 use {
-    aeronet::{
-        client::{ClientState, LocalClientConnected, LocalClientDisconnected, MessageSink},
-        error::pretty_error,
-    },
-    aeronet_replicon::client::RepliconClientPlugin,
-    aeronet_webtransport::{
-        cert,
-        client::{ClientConfig, WebTransportClient},
-        proto::{
-            stats::{ClientSessionStats, ClientSessionStatsPlugin},
-            visualizer::SessionStatsVisualizer,
-        },
-        runtime::WebTransportRuntime,
-    },
-    bevy::{ecs::system::SystemId, prelude::*},
+    aeronet::connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
+    aeronet_replicon::client::{AeronetRepliconClient, AeronetRepliconClientPlugin},
+    aeronet_websocket::client::{WebSocketClient, WebSocketClientPlugin},
+    aeronet_webtransport::client::{WebTransportClient, WebTransportClientPlugin},
+    bevy::{ecs::query::QuerySingleError, prelude::*},
     bevy_egui::{egui, EguiContexts, EguiPlugin},
-    bevy_replicon::{client::ClientSet, prelude::*},
-    move_box::{
-        GameState, MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition, TICK_RATE,
-    },
+    bevy_replicon::prelude::*,
+    move_box::{GameState, MoveBoxPlugin, PlayerColor, PlayerInput, PlayerPosition},
 };
 
-/// State of the [`egui`] interface used for connecting and disconnecting.
-#[derive(Debug, Default, Resource)]
-struct UiState {
-    /// HTTPS URL of the server to connect to.
-    target: String,
-    /// Optional hash of a certificate that we want to ignore validation for.
-    ///
-    /// See the readme for why this is necessary.
-    cert_hash: String,
-}
-
-/// One-shot system for connecting to a remote server.
-///
-/// Accepts a tuple of `(target, cert_hash)`.
-#[derive(Debug, Clone, Copy, Deref, Resource)]
-struct ConnectToRemote(SystemId<(String, String)>);
-
-const DEFAULT_TARGET: &str = "https://[::1]:25565";
-
-fn main() {
+fn main() -> AppExit {
     App::new()
         .add_plugins((
+            // core
             DefaultPlugins,
-            RepliconPlugins,
-            RepliconClientPlugin::<WebTransportClient>::with_tick_rate(TICK_RATE),
-            MoveBoxPlugin,
-            ClientSessionStatsPlugin::<WebTransportClient>::default(),
             EguiPlugin,
+            // transport
+            WebTransportClientPlugin,
+            #[cfg(not(target_family = "wasm"))]
+            aeronet_websocket::crypto::WebSocketCryptoPlugin,
+            WebSocketClientPlugin,
+            // replication
+            RepliconPlugins,
+            AeronetRepliconClientPlugin,
+            // game
+            MoveBoxPlugin,
         ))
-        .init_resource::<WebTransportClient>()
-        .init_resource::<SessionStatsVisualizer>()
-        .init_resource::<UiState>()
-        .add_systems(Startup, (setup_level, setup_systems))
-        .add_systems(
-            PreUpdate,
-            (on_connected, on_disconnected, init_player).after(ClientSet::Receive),
-        )
+        .init_resource::<GlobalUi>()
+        .init_resource::<WebTransportUi>()
+        .init_resource::<WebSocketUi>()
+        .add_systems(Startup, setup_level)
         .add_systems(
             Update,
             (
-                ui,
-                draw_stats,
+                global_ui,
+                web_transport_ui,
+                web_socket_ui,
                 draw_boxes,
                 handle_inputs.run_if(in_state(GameState::Playing)),
             ),
         )
-        .run();
+        .observe(on_connecting)
+        .observe(on_connected)
+        .observe(on_disconnected)
+        .run()
+}
+
+#[derive(Debug, Default, Resource)]
+struct GlobalUi {
+    session_id: usize,
+    log: Vec<String>,
+}
+
+#[derive(Debug, Default, Resource)]
+struct WebTransportUi {
+    target: String,
+    cert_hash: String,
+}
+
+#[derive(Debug, Default, Resource)]
+struct WebSocketUi {
+    target: String,
 }
 
 fn setup_level(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
 }
 
-fn setup_systems(world: &mut World) {
-    let connect_to_remote = world.register_system(connect_to_remote);
-    world.insert_resource(ConnectToRemote(connect_to_remote));
-}
-
-fn connect_to_remote(
-    In((target, spki_hash)): In<(String, String)>,
-    mut client: ResMut<WebTransportClient>,
-    channels: Res<RepliconChannels>,
-    runtime: Res<WebTransportRuntime>,
+fn on_connecting(
+    trigger: Trigger<OnAdd, Session>,
+    names: Query<&Name>,
+    mut ui_state: ResMut<GlobalUi>,
 ) {
-    let net_config = net_config(spki_hash);
-    let session_config = move_box::session_config(channels.as_ref());
-
-    if let Err(err) = client.connect(runtime.as_ref(), net_config, session_config, target) {
-        warn!("Failed to start connecting: {:#}", pretty_error(&err));
-    }
+    let session = trigger.entity();
+    let name = names.get(session).unwrap();
+    ui_state.log.push(format!("{name} connecting"));
 }
+
+fn on_connected(
+    trigger: Trigger<OnAdd, Connected>,
+    names: Query<&Name>,
+    mut ui_state: ResMut<GlobalUi>,
+) {
+    let session = trigger.entity();
+    let name = names.get(session).unwrap();
+    ui_state.log.push(format!("{name} connected"));
+}
+
+fn on_disconnected(
+    trigger: Trigger<Disconnected>,
+    names: Query<&Name>,
+    mut ui_state: ResMut<GlobalUi>,
+) {
+    let session = trigger.entity();
+    let Disconnected { reason } = trigger.event();
+    let name = names.get(session).unwrap();
+    ui_state.log.push(match reason {
+        DisconnectReason::User(reason) => {
+            format!("{name} disconnected by user: {reason}")
+        }
+        DisconnectReason::Peer(reason) => {
+            format!("{name} disconnected by peer: {reason}")
+        }
+        DisconnectReason::Error(err) => {
+            format!("{name} disconnected due to error: {err:#}")
+        }
+    });
+}
+
+fn global_ui(
+    mut commands: Commands,
+    mut egui: EguiContexts,
+    global_ui: Res<GlobalUi>,
+    sessions: Query<(Entity, &Name, Option<&Connected>), With<Session>>,
+) {
+    egui::Window::new("Session Log").show(egui.ctx_mut(), |ui| {
+        match sessions.get_single() {
+            Ok((session, name, connected)) => {
+                if connected.is_some() {
+                    ui.label(format!("{name} connected"));
+                } else {
+                    ui.label(format!("{name} connecting"));
+                }
+                if ui.button("Disconnect").clicked() {
+                    commands.trigger_targets(Disconnect::new("disconnected by user"), session);
+                }
+            }
+            Err(QuerySingleError::NoEntities(_)) => {
+                ui.label("No sessions active");
+            }
+            Err(QuerySingleError::MultipleEntities(_)) => {
+                ui.label("Multiple sessions active");
+            }
+        }
+
+        ui.separator();
+
+        for msg in &global_ui.log {
+            ui.label(msg);
+        }
+    });
+}
+
+//
+// WebTransport
+//
+
+fn web_transport_ui(
+    mut commands: Commands,
+    mut egui: EguiContexts,
+    mut global_ui: ResMut<GlobalUi>,
+    mut ui_state: ResMut<WebTransportUi>,
+    sessions: Query<(), With<Session>>,
+) {
+    const DEFAULT_TARGET: &str = "https://[::1]:25565";
+
+    egui::Window::new("WebTransport").show(egui.ctx_mut(), |ui| {
+        if sessions.iter().next().is_some() {
+            ui.disable();
+        }
+
+        let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
+
+        let mut connect = false;
+        ui.horizontal(|ui| {
+            let connect_resp = ui.add(
+                egui::TextEdit::singleline(&mut ui_state.target)
+                    .hint_text(format!("{DEFAULT_TARGET} | [enter] to connect")),
+            );
+            connect |= connect_resp.lost_focus() && enter_pressed;
+            connect |= ui.button("Connect").clicked();
+        });
+
+        let cert_hash_resp = ui.add(
+            egui::TextEdit::singleline(&mut ui_state.cert_hash)
+                .hint_text("(optional) certificate hash"),
+        );
+        connect |= cert_hash_resp.lost_focus() && enter_pressed;
+
+        if connect {
+            let mut target = ui_state.target.clone();
+            if target.is_empty() {
+                target = DEFAULT_TARGET.to_owned();
+            }
+
+            let cert_hash = ui_state.cert_hash.clone();
+            let config = web_transport_config(cert_hash);
+
+            global_ui.session_id += 1;
+            let name = format!("{}. {target}", global_ui.session_id);
+            commands
+                .spawn((Name::new(name), AeronetRepliconClient))
+                .add(WebTransportClient::connect(config, target));
+        }
+    });
+}
+
+type WebTransportClientConfig = aeronet_webtransport::client::ClientConfig;
 
 #[cfg(target_family = "wasm")]
-fn net_config(cert_hash: String) -> ClientConfig {
+fn web_transport_config(cert_hash: String) -> WebTransportClientConfig {
     use aeronet_webtransport::xwt_web_sys::{CertificateHash, HashAlgorithm, WebTransportOptions};
 
     let server_certificate_hashes = match cert::hash_from_b64(&cert_hash) {
@@ -113,29 +218,25 @@ fn net_config(cert_hash: String) -> ClientConfig {
         }
     };
 
-    WebTransportOptions {
+    WebTransportClientConfig {
         server_certificate_hashes,
         ..Default::default()
     }
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn net_config(cert_hash: String) -> ClientConfig {
-    use {aeronet_webtransport::wtransport::tls::Sha256Digest, web_time::Duration};
+fn web_transport_config(cert_hash: String) -> WebTransportClientConfig {
+    use {aeronet_webtransport::wtransport::tls::Sha256Digest, std::time::Duration};
 
-    let config = ClientConfig::builder().with_bind_default();
+    let config = WebTransportClientConfig::builder().with_bind_default();
 
     let config = if cert_hash.is_empty() {
-        info!("*** Connecting with no certificate validation! ***");
         config.with_no_cert_validation()
     } else {
-        match cert::hash_from_b64(&cert_hash) {
+        match aeronet_webtransport::cert::hash_from_b64(&cert_hash) {
             Ok(hash) => config.with_server_certificate_hashes([Sha256Digest::new(hash)]),
             Err(err) => {
-                warn!(
-                    "Failed to read certificate hash from string: {:#}",
-                    pretty_error(&err)
-                );
+                warn!("Failed to read certificate hash from string: {err:?}");
                 config.with_server_certificate_hashes([])
             }
         }
@@ -144,94 +245,76 @@ fn net_config(cert_hash: String) -> ClientConfig {
     config
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
-        .expect("should be a valid max idle timeout")
+        .unwrap()
         .build()
 }
 
-fn ui(
+//
+// WebSocket
+//
+
+fn web_socket_ui(
     mut commands: Commands,
     mut egui: EguiContexts,
-    mut ui_state: ResMut<UiState>,
-    mut client: ResMut<WebTransportClient>,
-    connect_to_remote: Res<ConnectToRemote>,
+    mut global_ui: ResMut<GlobalUi>,
+    mut ui_state: ResMut<WebSocketUi>,
+    sessions: Query<(), With<Session>>,
 ) {
-    egui::Window::new("Client").show(egui.ctx_mut(), |ui| {
-        let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+    const DEFAULT_TARGET: &str = "ws://[::1]:25566";
 
-        let mut do_connect = false;
-        let mut do_disconnect = false;
-        ui.horizontal(|ui| {
-            let target_resp = ui.add_enabled(
-                client.state().is_disconnected(),
-                egui::TextEdit::singleline(&mut ui_state.target).hint_text(DEFAULT_TARGET),
-            );
-
-            if client.state().is_disconnected() {
-                do_connect |= target_resp.lost_focus() && pressed_enter;
-                do_connect |= ui.button("Connect").clicked();
-            } else {
-                do_disconnect |= ui.button("Disconnect").clicked();
-            }
-        });
-
-        ui.horizontal(|ui| {
-            let cert_hash_resp = ui.add_enabled(
-                client.state().is_disconnected(),
-                egui::TextEdit::singleline(&mut ui_state.cert_hash)
-                    .hint_text("Certificate hash (optional)"),
-            );
-
-            if client.state().is_disconnected() {
-                do_connect |= cert_hash_resp.lost_focus() && pressed_enter;
-            }
-        });
-
-        if do_connect {
-            let target = if ui_state.target.is_empty() {
-                DEFAULT_TARGET.to_owned()
-            } else {
-                ui_state.target.clone()
-            };
-            let cert_hash = ui_state.cert_hash.clone();
-            commands.run_system_with_input(**connect_to_remote, (target, cert_hash));
+    egui::Window::new("WebSocket").show(egui.ctx_mut(), |ui| {
+        if sessions.iter().next().is_some() {
+            ui.disable();
         }
 
-        if do_disconnect {
-            client.disconnect("pressed disconnect button");
+        let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
+
+        let mut connect = false;
+        ui.horizontal(|ui| {
+            let connect_resp = ui.add(
+                egui::TextEdit::singleline(&mut ui_state.target)
+                    .hint_text(format!("{DEFAULT_TARGET} | [enter] to connect")),
+            );
+            connect |= connect_resp.lost_focus() && enter_pressed;
+            connect |= ui.button("Connect").clicked();
+        });
+
+        if connect {
+            let mut target = ui_state.target.clone();
+            if target.is_empty() {
+                target = DEFAULT_TARGET.to_owned();
+            }
+
+            let config = web_socket_config();
+
+            global_ui.session_id += 1;
+            let name = format!("{}. {target}", global_ui.session_id);
+            commands
+                .spawn((Name::new(name), AeronetRepliconClient))
+                .add(WebSocketClient::connect(config, target));
         }
     });
 }
 
-fn on_connected(
-    mut events: EventReader<LocalClientConnected<WebTransportClient>>,
-    mut game_state: ResMut<NextState<GameState>>,
-) {
-    for LocalClientConnected { .. } in events.read() {
-        info!("Client connected");
-        game_state.set(GameState::Playing);
+type WebSocketClientConfig = aeronet_websocket::client::ClientConfig;
+
+#[cfg(target_family = "wasm")]
+fn web_socket_config() -> WebSocketClientConfig {
+    WebSocketClientConfig::default()
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn web_socket_config() -> WebSocketClientConfig {
+    let connector = aeronet_websocket::crypto::tls_connector();
+    WebSocketClientConfig {
+        connector,
+        ..Default::default()
     }
 }
 
-fn on_disconnected(
-    mut events: EventReader<LocalClientDisconnected<WebTransportClient>>,
-    mut game_state: ResMut<NextState<GameState>>,
-) {
-    for LocalClientDisconnected { reason } in events.read() {
-        info!("Client disconnected: {:#}", pretty_error(reason));
-        game_state.set(GameState::None);
-    }
-}
-
-fn init_player(
-    mut commands: Commands,
-    query: Query<Entity, (With<Player>, Without<StateScoped<GameState>>)>,
-) {
-    for entity in &query {
-        commands
-            .entity(entity)
-            .insert(StateScoped(GameState::Playing));
-    }
-}
+//
+// game logic
+//
 
 fn handle_inputs(mut inputs: EventWriter<PlayerInput>, input: Res<ButtonInput<KeyCode>>) {
     let mut movement = Vec2::ZERO;
@@ -255,16 +338,5 @@ fn handle_inputs(mut inputs: EventWriter<PlayerInput>, input: Res<ButtonInput<Ke
 fn draw_boxes(mut gizmos: Gizmos, players: Query<(&PlayerPosition, &PlayerColor)>) {
     for (PlayerPosition(pos), PlayerColor(color)) in &players {
         gizmos.rect(pos.extend(0.0), Quat::IDENTITY, Vec2::ONE * 50.0, *color);
-    }
-}
-
-fn draw_stats(
-    mut egui: EguiContexts,
-    client: Res<WebTransportClient>,
-    stats: Res<ClientSessionStats<WebTransportClient>>,
-    mut stats_visualizer: ResMut<SessionStatsVisualizer>,
-) {
-    if let ClientState::Connected(client) = client.state() {
-        stats_visualizer.draw(egui.ctx_mut(), client.session(), &stats);
     }
 }

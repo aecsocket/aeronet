@@ -15,13 +15,14 @@ use {
 };
 
 fn main() -> AppExit {
-    #[cfg(not(target_family = "wasm"))]
-    aeronet_websocket::rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .expect("failed to install default crypto provider");
-
     App::new()
-        .add_plugins((DefaultPlugins, EguiPlugin, WebSocketClientPlugin))
+        .add_plugins((
+            DefaultPlugins,
+            EguiPlugin,
+            #[cfg(not(target_family = "wasm"))]
+            aeronet_websocket::crypto::WebSocketCryptoPlugin,
+            WebSocketClientPlugin,
+        ))
         .init_resource::<GlobalUi>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
         .observe(on_connecting)
@@ -84,9 +85,9 @@ fn on_disconnected(
     });
 }
 
-const DEFAULT_TARGET: &str = "ws://[::1]:25565";
-
 fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMut<GlobalUi>) {
+    const DEFAULT_TARGET: &str = "ws://[::1]:25565";
+
     egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
@@ -128,42 +129,18 @@ fn client_config() -> ClientConfig {
 
 #[cfg(not(target_family = "wasm"))]
 fn client_config() -> ClientConfig {
-    use {
-        aeronet_websocket::{rustls, tokio_tungstenite::Connector},
-        std::sync::Arc,
-    };
+    use aeronet_websocket::tokio_tungstenite::Connector;
 
-    let mut root_certs = rustls::RootCertStore::empty();
-    {
-        #[cfg(feature = "rustls-tls-native-roots")]
-        {
-            info!("Using native certificate roots");
-
-            let native_certs = aeronet_websocket::rustls_native_certs::load_native_certs()
-                .expect("failed to load platform certs");
-            for cert in native_certs {
-                root_certs.add(cert).unwrap();
-            }
-        }
-
-        #[cfg(feature = "rustls-tls-webpki-roots")]
-        {
-            info!("Using webpki certificate roots");
-
-            root_certs
-                .roots
-                .extend_from_slice(webpki_roots::TLS_SERVER_ROOTS);
-        }
-    };
-
-    let rustls_config = Arc::new(
-        rustls::ClientConfig::builder()
-            .with_root_certificates(root_certs)
-            .with_no_client_auth(),
-    );
+    let connector = aeronet_websocket::crypto::tls_connector();
+    match connector {
+        Connector::Plain => warn!("Using plain connector - no encryption support"),
+        Connector::Rustls(_) => info!("Using `rustls` connector"),
+        Connector::NativeTls(_) => info!("Using `native-tls` connector"),
+        _ => {}
+    }
 
     ClientConfig {
-        connector: Connector::Rustls(rustls_config),
+        connector,
         ..Default::default()
     }
 }

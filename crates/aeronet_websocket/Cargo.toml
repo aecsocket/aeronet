@@ -22,10 +22,13 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 client = []
 server = []
 
-__rustls-tls = ["__tls", "tokio-tungstenite/__rustls-tls", "dep:rustls"]
 __tls = []
-native-tls = ["__tls", "tokio-tungstenite/native-tls"]
-native-tls-vendored = ["__tls", "tokio-tungstenite/native-tls-vendored"]
+
+__native-tls = ["__tls", "dep:native-tls"]
+native-tls = ["__native-tls", "tokio-tungstenite/native-tls"]
+native-tls-vendored = ["__native-tls", "tokio-tungstenite/native-tls-vendored"]
+
+__rustls-tls = ["__tls", "tokio-tungstenite/__rustls-tls", "dep:rustls"]
 rustls-tls-native-roots = [
   "__rustls-tls",
   "tokio-tungstenite/rustls-tls-native-roots",
@@ -59,7 +62,11 @@ bevy_reflect = { workspace = true }
 js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
-web-sys = { workspace = true, features = ["WebSocket", "BinaryType", "MessageEvent"] }
+web-sys = { workspace = true, features = [
+  "WebSocket",
+  "BinaryType",
+  "MessageEvent",
+] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }
@@ -68,6 +75,8 @@ tokio-tungstenite = { workspace = true }
 rustls = { workspace = true, optional = true }
 rustls-native-certs = { workspace = true, optional = true }
 webpki-roots = { workspace = true, optional = true }
+
+native-tls = { workspace = true, optional = true }
 
 [dev-dependencies]
 bevy = { workspace = true }

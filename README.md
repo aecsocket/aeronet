@@ -21,6 +21,7 @@ primitives.
   - Dedicated server/client, listen server, peer-to-peer
 - Swappable IO layer
   - Use whatever you like as the underlying byte transfer mechanism
+  - You can use multiple IO layers at the same time, e.g. Steam + WebTransport
 
 High-level networking features such as replication, rollback, and prediction are explicit
 **non-goals** for this crate. Instead, this crate aims to provide a solid foundation for
