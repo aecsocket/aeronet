@@ -64,7 +64,7 @@ bevy_egui = { workspace = true }
 [[example]]
 name = "webtransport_client"
 path = "examples/webtransport_client.rs"
-required-features = ["client", "dangerous-configuration"]
+required-features = ["client"]
 
 [[example]]
 name = "webtransport_echo_server"

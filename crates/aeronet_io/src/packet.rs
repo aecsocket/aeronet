@@ -9,8 +9,8 @@ use {
     bytes::Bytes,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     ringbuf::{
-        HeapRb,
         traits::{Consumer, RingBuffer},
+        HeapRb,
     },
     std::{num::Saturating, time::Duration},
 };
@@ -206,7 +206,7 @@ pub struct PacketMtu(pub usize);
 /// an RTT estimate.
 ///
 /// This component must only be mutated by the IO layer.
-#[derive(Debug, Clone, Deref, DerefMut, Component, Reflect)]
+#[derive(Debug, Clone, Copy, Deref, DerefMut, Component, Reflect)]
 #[reflect(Component)]
 #[doc(alias = "ping")]
 #[doc(alias = "latency")]
