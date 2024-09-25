@@ -20,12 +20,11 @@ impl Plugin for MessagePlugin {
             PreUpdate,
             (|mut q: Query<(&mut PacketBuffers, &mut MessageBuffers)>| {
                 for (mut packet_bufs, mut msg_bufs) in &mut q {
-                    msg_bufs
-                        .recv
-                        .extend(packet_bufs.drain_recv().filter_map(|mut packet| {
-                            let lane_index = packet.read::<u64>().map(LaneIndex::from_raw).ok()?;
-                            Some((lane_index, packet))
-                        }));
+                    let msgs = packet_bufs.drain_recv().filter_map(|mut packet| {
+                        let lane_index = packet.read::<u64>().map(LaneIndex::from_raw).ok()?;
+                        Some((lane_index, packet))
+                    });
+                    msg_bufs.recv.extend(msgs);
                 }
             })
             .in_set(ProtoSet::Poll),

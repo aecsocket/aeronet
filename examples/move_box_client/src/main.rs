@@ -38,8 +38,7 @@ fn main() -> AppExit {
                 global_ui,
                 web_transport_ui,
                 web_socket_ui,
-                draw_boxes,
-                handle_inputs.run_if(in_state(GameState::Playing)),
+                (draw_boxes, handle_inputs).run_if(in_state(GameState::Playing)),
             ),
         )
         .observe(on_connecting)
@@ -83,16 +82,19 @@ fn on_connected(
     trigger: Trigger<OnAdd, Connected>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
+    mut game_state: ResMut<NextState<GameState>>,
 ) {
     let session = trigger.entity();
     let name = names.get(session).unwrap();
     ui_state.log.push(format!("{name} connected"));
+    game_state.set(GameState::Playing);
 }
 
 fn on_disconnected(
     trigger: Trigger<Disconnected>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
+    mut game_state: ResMut<NextState<GameState>>,
 ) {
     let session = trigger.entity();
     let Disconnected { reason } = trigger.event();
@@ -108,6 +110,7 @@ fn on_disconnected(
             format!("{name} disconnected due to error: {err:#}")
         }
     });
+    game_state.set(GameState::None);
 }
 
 fn global_ui(

@@ -26,6 +26,7 @@ aeronet_io = { workspace = true }
 aeronet_proto = { workspace = true }
 
 ahash = { workspace = true }
+tracing = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_derive = { workspace = true }

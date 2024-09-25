@@ -1,9 +1,9 @@
 use {
     aeronet::{
-        connection::{DisconnectReason, Disconnected, LocalAddr},
+        connection::{Connected, DisconnectReason, Disconnected, LocalAddr},
         server::Opened,
     },
-    aeronet_replicon::server::{AeronetRepliconServer, AeronetRepliconServerPlugin, RepliconId},
+    aeronet_replicon::server::{AeronetRepliconServer, AeronetRepliconServerPlugin},
     aeronet_websocket::{
         server::{WebSocketServer, WebSocketServerPlugin},
         tungstenite::protocol::WebSocketConfig,
@@ -15,9 +15,7 @@ use {
     },
     bevy::{log::LogPlugin, prelude::*, state::app::StatesPlugin},
     bevy_replicon::prelude::*,
-    move_box::{
-        ClientPlayer, MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition, TICK_RATE,
-    },
+    move_box::{MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition, TICK_RATE},
     std::net::{Ipv6Addr, SocketAddr},
     web_time::Duration,
 };
@@ -157,19 +155,17 @@ fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
 }
 
 fn on_connected(
-    trigger: Trigger<OnAdd, RepliconId>,
-    clients: Query<(&Parent, &RepliconId)>,
+    trigger: Trigger<OnAdd, Connected>,
+    clients: Query<&Parent>,
     mut commands: Commands,
 ) {
     let client = trigger.entity();
-    let (server, client_id) = clients.get(client).unwrap();
-    let (server, client_id) = (server.get(), client_id.get());
-    info!("{client} ({client_id:?}) connected to {server:?}");
+    let server = clients.get(client).map(Parent::get).unwrap();
+    info!("{client} connected to {server}");
 
     let color = Color::srgb(rand::random(), rand::random(), rand::random());
-    commands.spawn((
+    commands.entity(client).insert((
         Player,
-        ClientPlayer(client_id),
         PlayerPosition(Vec2::ZERO),
         PlayerColor(color),
         PlayerInput::default(),
@@ -195,63 +191,3 @@ fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
         }
     }
 }
-
-// fn print_stats(server: Res<WebTransportServer>) {
-//     let now = Instant::now();
-//     let mut total_mem_used = 0usize;
-//     let cells = server
-//         .client_keys()
-//         .filter_map(|client_key| match server.client_state(client_key) {
-//             ClientState::Disconnected | ClientState::Connecting(_) => None,
-//             ClientState::Connected(client) => {
-//                 let mem_used = client.session().memory_usage();
-//                 total_mem_used += mem_used;
-//                 let time = now - client.connected_at();
-//                 Some(vec![
-//                     format!("{:?}", slotmap::Key::data(&client_key)),
-//                     format!("{:.1?}", time),
-//                     format!("{:.1?}", client.rtt()),
-//                     format!("{:.1?}", client.raw_rtt()),
-//                     format!(
-//                         "{}",
-//                         fmt_bytes(
-//                             (client.session().bytes_sent() as f64 / time.as_secs_f64()) as usize
-//                         ),
-//                     ),
-//                     format!(
-//                         "{}",
-//                         fmt_bytes(
-//                             (client.session().bytes_recv() as f64 / time.as_secs_f64()) as usize
-//                         ),
-//                     ),
-//                     format!("{}", fmt_bytes(mem_used)),
-//                 ])
-//             }
-//         })
-//         .collect::<Vec<_>>();
-
-//     if cells.is_empty() {
-//         return;
-//     }
-
-//     let mut table = AsciiTable::default();
-//     for (index, header) in ["client", "time", "rtt", "raw rtt", "tx/s", "rx/s", "mem"]
-//         .iter()
-//         .enumerate()
-//     {
-//         table.column(index).set_header(*header);
-//     }
-
-//     for line in table.format(&cells).lines() {
-//         info!("{line}");
-//     }
-
-//     info!("{}B of memory used", fmt_bytes(total_mem_used));
-// }
-
-// fn fmt_bytes(n: usize) -> String {
-//     format!(
-//         "{:.1}",
-//         SizeFormatter::<usize, BinaryPrefixes, PointSeparated>::new(n)
-//     )
-// }

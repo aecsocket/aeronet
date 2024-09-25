@@ -31,6 +31,7 @@ aeronet_io = { workspace = true }
 derive_more = { workspace = true }
 octs = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_derive = { workspace = true }

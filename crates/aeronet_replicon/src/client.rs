@@ -3,11 +3,12 @@ use {
         connection::{Connected, Session},
         IoSet,
     },
-    aeronet_proto::{lane::LaneIndex, message::MessageBuffers},
+    aeronet_proto::{lane::LaneIndex, message::MessageBuffers, AeronetProtoPlugin, ProtoTransport},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
+    tracing::info,
 };
 
 #[derive(Debug)]
@@ -15,6 +16,10 @@ pub struct AeronetRepliconClientPlugin;
 
 impl Plugin for AeronetRepliconClientPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<AeronetProtoPlugin>() {
+            app.add_plugins(AeronetProtoPlugin);
+        }
+
         app.register_type::<AeronetRepliconClient>()
             .configure_sets(
                 PreUpdate,
@@ -36,7 +41,8 @@ impl Plugin for AeronetRepliconClientPlugin {
                 flush
                     .in_set(ClientIoSet::Flush)
                     .run_if(resource_exists::<RepliconClient>),
-            );
+            )
+            .observe(on_client_added);
     }
 }
 
@@ -49,6 +55,12 @@ pub enum ClientIoSet {
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct AeronetRepliconClient;
+
+// TODO: required components
+fn on_client_added(trigger: Trigger<OnAdd, AeronetRepliconClient>, mut commands: Commands) {
+    let client = trigger.entity();
+    commands.entity(client).insert(ProtoTransport);
+}
 
 type ConnectedClient = (With<Session>, With<Connected>, With<AeronetRepliconClient>);
 
@@ -100,7 +112,6 @@ fn flush(
 ) {
     for (channel_id, msg) in replicon_client.drain_sent() {
         let lane_index = LaneIndex::from_raw(u64::from(channel_id));
-
         for mut msg_bufs in &mut clients {
             msg_bufs.send(lane_index, msg.clone());
         }
