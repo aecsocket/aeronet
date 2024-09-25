@@ -20,18 +20,17 @@ move_box = { path = "../move_box" }
 
 # core
 
-ascii_table = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
 rand = { workspace = true }
 size_format = { workspace = true }
-slotmap = { workspace = true }
 web-time = { workspace = true }
 
 # transport
 
 aeronet = { workspace = true }
-aeronet_webtransport = { workspace = true, features = ["bevy", "server"] }
+aeronet_websocket = { workspace = true, features = ["server"] }
+aeronet_webtransport = { workspace = true, features = ["server"] }
 
 # replication
 

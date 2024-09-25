@@ -1,11 +1,12 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
+pub mod lane;
 pub mod message;
 
-pub use aeronet_io;
 use bevy_app::prelude::*;
 use bevy_ecs::schedule::SystemSet;
+pub use {aeronet_io, octs};
 
 #[derive(Debug)]
 pub struct AeronetProtoPlugin;

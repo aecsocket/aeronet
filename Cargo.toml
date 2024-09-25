@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*"]
+members = ["crates/*", "examples/*"]
 resolver = "2"
 
 [workspace.package]
@@ -31,13 +31,16 @@ similar_names = "allow"
 type_complexity = "allow"
 
 [workspace.dependencies]
+aeronet = { version = "0.9.0-dev", path = "crates/aeronet" }
 aeronet_channel = { version = "0.9.0-dev", path = "crates/aeronet_channel" }
 aeronet_io = { version = "0.9.0-dev", path = "crates/aeronet_io" }
 aeronet_proto = { version = "0.9.0-dev", path = "crates/aeronet_proto" }
+aeronet_replicon = { version = "0.9.0-dev", path = "crates/aeronet_replicon" }
 aeronet_steam = { version = "0.9.0-dev", path = "crates/aeronet_steam" }
 aeronet_websocket = { version = "0.9.0-dev", path = "crates/aeronet_websocket" }
 aeronet_webtransport = { version = "0.9.0-dev", path = "crates/aeronet_webtransport" }
 
+ahash = "0.8.11"
 anyhow = "1.0.89"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 assert_matches = "1.5.0"
@@ -93,6 +96,7 @@ bevy_egui = "0.29.0"
 
 # tls
 
+native-tls = "0.2.12"
 rustls = "0.23.13"
 rustls-native-certs = "0.8.0"
 webpki-roots = "0.26.6"
@@ -120,3 +124,7 @@ x509-cert = "0.2.5"
 xwt-wtransport = "0.10.0"
 
 xwt-web-sys = "0.12.0"
+
+# aeronet_replicon
+
+bevy_replicon = { version = "0.28.3", default-features = false }
