@@ -217,6 +217,7 @@ fn poll_open(
                     recv_dc: connecting.recv_dc,
                     recv_next: connecting.recv_next,
                 },
+                RemoteAddr(connecting.remote_addr),
                 packet_mtu,
             ))
             .id();

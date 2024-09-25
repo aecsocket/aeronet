@@ -51,7 +51,7 @@ pub async fn start(
                 if let Err(err) = accept_session(
                     stream,
                     remote_addr,
-                    config.socket.clone(),
+                    config.socket,
                     packet_buf_cap,
                     send_connecting,
                 )
