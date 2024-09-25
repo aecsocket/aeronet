@@ -84,7 +84,7 @@ fn on_disconnected(
     });
 }
 
-const DEFAULT_TARGET: &str = "https://[::1]:25565";
+const DEFAULT_TARGET: &str = "ws://[::1]:25565";
 
 fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMut<GlobalUi>) {
     egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {

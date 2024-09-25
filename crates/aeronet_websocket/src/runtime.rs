@@ -1,7 +1,4 @@
-use {
-    bevy_ecs::prelude::*,
-    std::{future::Future, time::Duration},
-};
+use {bevy_ecs::prelude::*, std::future::Future};
 
 /// Provides a platform-agnostic way to spawn futures for driving the
 /// WebSocket IO layer.
@@ -102,38 +99,6 @@ impl WebSocketRuntime {
         #[cfg(not(target_family = "wasm"))]
         {
             self.handle.spawn(future);
-        }
-    }
-
-    /// Spawns a future on the task runtime running on this thread.
-    ///
-    /// You must call this from a context where are you already running a task
-    /// on the reactor.
-    pub fn spawn<F>(future: F)
-    where
-        F: Future<Output = ()> + maybe::Send + 'static,
-    {
-        #[cfg(target_family = "wasm")]
-        {
-            wasm_bindgen_futures::spawn_local(future);
-        }
-
-        #[cfg(not(target_family = "wasm"))]
-        {
-            tokio::spawn(future);
-        }
-    }
-
-    /// Pauses execution for the given duration.
-    pub async fn sleep(duration: Duration) {
-        #[cfg(target_family = "wasm")]
-        {
-            gloo_timers::future::sleep(duration).await;
-        }
-
-        #[cfg(not(target_family = "wasm"))]
-        {
-            tokio::time::sleep(duration).await;
         }
     }
 }
