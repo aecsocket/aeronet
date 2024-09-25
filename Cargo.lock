@@ -159,6 +159,7 @@ dependencies = [
  "octs",
  "size_format",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -174,6 +175,7 @@ dependencies = [
  "bevy_hierarchy",
  "bevy_reflect",
  "bevy_replicon",
+ "tracing",
 ]
 
 [[package]]

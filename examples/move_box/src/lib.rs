@@ -48,11 +48,6 @@ impl Plugin for MoveBoxPlugin {
 #[derive(Debug, Clone, Component, Serialize, Deserialize)]
 pub struct Player;
 
-/// Player who is being controlled by a specific [`ClientId`] connected to our
-/// server.
-#[derive(Debug, Clone, Component, Deref, DerefMut, Serialize, Deserialize)]
-pub struct ClientPlayer(pub ClientId);
-
 /// Player's box position.
 #[derive(Debug, Clone, Component, Deref, DerefMut, Serialize, Deserialize)]
 pub struct PlayerPosition(pub Vec2);
@@ -82,18 +77,20 @@ fn on_player_added(trigger: Trigger<OnAdd, Player>, mut commands: Commands) {
 
 fn recv_input(
     mut inputs: EventReader<FromClient<PlayerInput>>,
-    mut players: Query<(&ClientPlayer, &mut PlayerInput)>,
+    mut players: Query<&mut PlayerInput>,
 ) {
     for &FromClient {
         client_id,
         event: ref new_input,
     } in inputs.read()
     {
-        for (player, mut old_input) in &mut players {
-            if client_id == **player {
-                *old_input = new_input.clone();
-            }
-        }
+        let Ok(client) = Entity::try_from_bits(client_id.get()) else {
+            continue;
+        };
+        let Ok(mut input) = players.get_mut(client) else {
+            continue;
+        };
+        *input = new_input.clone();
     }
 }
 
