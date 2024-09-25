@@ -1,0 +1,29 @@
+[package]
+description = "Low-level networking for Bevy"
+name = "aeronet"
+
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+visualizer = ["aeronet_proto/visualizer"]
+
+[dependencies]
+aeronet_io = { workspace = true }
+aeronet_proto = { workspace = true }
+
+anyhow = { workspace = true }
+bytes = { workspace = true }
+ringbuf = { workspace = true }
+
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }

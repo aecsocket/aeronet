@@ -10,7 +10,6 @@ cfg_if::cfg_if! {
 #[cfg(target_family = "wasm")]
 pub mod wasm {
     use {
-        super::CLOSE_CODE,
         crate::{
             session::{SessionError, SessionFrontend},
             JsError,

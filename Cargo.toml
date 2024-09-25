@@ -1,11 +1,5 @@
 [workspace]
-members = [
-  "crates/aeronet_io",
-  "crates/aeronet_channel",
-  "crates/aeronet_websocket",
-  "crates/aeronet_webtransport",
-  # "crates/aeronet_steam",
-]
+members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
@@ -39,6 +33,7 @@ type_complexity = "allow"
 [workspace.dependencies]
 aeronet_channel = { version = "0.9.0-dev", path = "crates/aeronet_channel" }
 aeronet_io = { version = "0.9.0-dev", path = "crates/aeronet_io" }
+aeronet_proto = { version = "0.9.0-dev", path = "crates/aeronet_proto" }
 aeronet_steam = { version = "0.9.0-dev", path = "crates/aeronet_steam" }
 aeronet_websocket = { version = "0.9.0-dev", path = "crates/aeronet_websocket" }
 aeronet_webtransport = { version = "0.9.0-dev", path = "crates/aeronet_webtransport" }
@@ -94,7 +89,6 @@ bevy_reflect = { version = "0.14.2", default-features = false }
 bevy_time = { version = "0.14.2", default-features = false }
 
 bevy-tokio-tasks = "0.14.0"
-
 bevy_egui = "0.29.0"
 
 # tls
@@ -109,8 +103,8 @@ flume = "0.11.0"
 
 # aeronet_steam
 
-steamworks = "0.11.0"
 bevy-steamworks = "0.12.0"
+steamworks = "0.11.0"
 
 # aeronet_websocket
 

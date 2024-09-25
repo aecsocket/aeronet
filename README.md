@@ -28,43 +28,48 @@ implementing these features.
 
 ## IO layer implementations
 
-- [`aeronet_channel`]: MPSC channels
+- [`aeronet_channel`]: over MPSC channels
   - Native + WASM
+  - ✅ Complete
 
 ```sh
 cargo run --example channel
 ```
 
-- [`aeronet_steam`]: Steam networking sockets
-  - Native
+- [`aeronet_webtransport`]: over WebTransport (using QUIC)
+  - Native + WASM
+  - ✅ Complete
 
 ```sh
-cargo run --example steam_server -F server
-cargo run --example steam_client -F client
+cargo run --example webtransport_echo_server -F server
+cargo run --example webtransport_client -F client,dangerous-configuration
+
+# WASM
+cargo install wasm-server-runner
+cargo run --example webtransport_client -F client --target wasm32-unknown-unknown
 ```
 
-- [`aeronet_websocket`]: WebSocket implementation
+- [`aeronet_websocket`]: over WebSockets (using TCP)
   - Native + WASM
+  - 🛠️ Working - missing:
+    - TLS + HDR support for server
 
 ```sh
-cargo run --example websocket_server -F server
-cargo run --example websocket_client -F client
+cargo run --example websocket_echo_server -F server
+cargo run --example websocket_client -F client,rustls-tls-native-roots
 
 # WASM
 cargo install wasm-server-runner
 cargo run --example websocket_client -F client --target wasm32-unknown-unknown
 ```
 
-- [`aeronet_webtransport`]: WebTransport implementation (over QUIC)
-  - Native + WASM
+- [`aeronet_steam`]: over Steam's networking sockets
+  - Native
+  - 🛠️ WIP
 
 ```sh
-cargo run --example webtransport_server -F server
-cargo run --example webtransport_client -F client,dangerous-configuration
-
-# WASM
-cargo install wasm-server-runner
-cargo run --example webtransport_client -F client,dangerous-configuration --target wasm32-unknown-unknown
+cargo run --example steam_echo_server -F server
+cargo run --example steam_client -F client
 ```
 
 ## Terminology
