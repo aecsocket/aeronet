@@ -1,12 +1,3 @@
-cfg_if::cfg_if! {
-    if #[cfg(target_family = "wasm")] {
-    } else {
-        pub type WebSocketStream = tokio_tungstenite::WebSocketStream<
-            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-        >;
-    }
-}
-
 #[cfg(target_family = "wasm")]
 pub mod wasm {
     use {
@@ -23,7 +14,7 @@ pub mod wasm {
         },
         js_sys::Uint8Array,
         wasm_bindgen::{prelude::Closure, JsCast},
-        web_sys::{BinaryType, MessageEvent, WebSocket},
+        web_sys::{BinaryType, CloseEvent, ErrorEvent, MessageEvent, WebSocket},
     };
 
     #[derive(Debug)]
@@ -69,11 +60,39 @@ pub mod wasm {
             });
         });
 
+        let on_close = {
+            let mut send_dc_reason = send_dc_reason.clone();
+            Closure::<dyn FnMut(_)>::new(move |event: CloseEvent| {
+                let dc_reason = if event.was_clean() {
+                    event.reason()
+                } else {
+                    // TODO friendly error messages
+                    // https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent/code/coding.rs#L119
+                    format!("error code {}", event.code())
+                };
+                let _ = send_dc_reason.try_send(DisconnectReason::Peer(dc_reason));
+            })
+        };
+
+        let on_error = {
+            let mut send_dc_reason = send_dc_reason.clone();
+            Closure::<dyn FnMut(_)>::new(move |event: ErrorEvent| {
+                let err = SessionError::Connection(JsError(event.message()));
+                let _ = send_dc_reason.try_send(DisconnectReason::Error(err));
+            })
+        };
+
         socket.set_onopen(Some(on_open.as_ref().unchecked_ref()));
         on_open.forget();
 
         socket.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
         on_message.forget();
+
+        socket.set_onclose(Some(on_close.as_ref().unchecked_ref()));
+        on_close.forget();
+
+        socket.set_onerror(Some(on_error.as_ref().unchecked_ref()));
+        on_error.forget();
 
         (
             SessionFrontend {
@@ -137,54 +156,44 @@ pub mod wasm {
 
 #[cfg(not(target_family = "wasm"))]
 pub mod native {
-    use std::borrow::Cow;
-
-    use aeronet_io::connection::DisconnectReason;
-    use bytes::Bytes;
-    use futures::{
-        channel::{mpsc, oneshot},
-        never::Never,
-        SinkExt, StreamExt,
-    };
-    use tokio_tungstenite::{
-        tungstenite::{
-            protocol::{frame::coding::CloseCode, CloseFrame},
-            Message,
+    use {
+        crate::session::{SessionError, SessionFrontend},
+        aeronet_io::connection::DisconnectReason,
+        bytes::Bytes,
+        futures::{
+            channel::{mpsc, oneshot},
+            never::Never,
+            SinkExt, StreamExt,
         },
-        MaybeTlsStream,
+        std::borrow::Cow,
+        tokio::io::{AsyncRead, AsyncWrite},
+        tokio_tungstenite::{
+            tungstenite::{
+                protocol::{frame::coding::CloseCode, CloseFrame},
+                Message,
+            },
+            WebSocketStream,
+        },
     };
-
-    use crate::session::{SessionError, SessionFrontend};
-
-    use super::WebSocketStream;
 
     #[derive(Debug)]
-    pub struct SessionBackend {
-        stream: WebSocketStream,
+    pub struct SessionBackend<S> {
+        stream: WebSocketStream<S>,
         send_packet_b2f: mpsc::Sender<Bytes>,
         recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
         recv_user_dc: oneshot::Receiver<String>,
     }
 
-    pub fn split(
-        stream: WebSocketStream,
+    pub fn split<S: AsyncRead + AsyncWrite + Unpin>(
+        stream: WebSocketStream<S>,
         packet_buf_cap: usize,
-    ) -> Result<(SessionFrontend, SessionBackend), SessionError> {
+    ) -> (SessionFrontend, SessionBackend<S>) {
         let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<Bytes>(packet_buf_cap);
         let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
         let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
-        let socket = match stream.get_ref() {
-            MaybeTlsStream::Plain(stream) => stream,
-            MaybeTlsStream::Rustls(stream) => stream.get_ref().0,
-            _ => unreachable!("unsupported connector"),
-        };
-        let local_addr = socket.local_addr().map_err(SessionError::GetLocalAddr)?;
-        let remote_addr = socket.peer_addr().map_err(SessionError::GetRemoteAddr)?;
 
-        Ok((
+        (
             SessionFrontend {
-                local_addr,
-                remote_addr,
                 recv_packet_b2f,
                 send_packet_f2b,
                 send_user_dc,
@@ -195,10 +204,10 @@ pub mod native {
                 recv_packet_f2b,
                 recv_user_dc,
             },
-        ))
+        )
     }
 
-    impl SessionBackend {
+    impl<S: AsyncRead + AsyncWrite + Unpin> SessionBackend<S> {
         pub async fn start(self) -> Result<Never, DisconnectReason<SessionError>> {
             let Self {
                 mut stream,
@@ -213,64 +222,64 @@ pub mod native {
                         let msg = msg
                             .ok_or(SessionError::RecvStreamClosed)?
                             .map_err(SessionError::Connection)?;
-                        recv(&mut send_packet_b2f, msg).await?;
+                        Self::recv(&mut send_packet_b2f, msg).await?;
                     }
                     packet = recv_packet_f2b.next() => {
                         let packet = packet.ok_or(SessionError::FrontendClosed)?;
-                        send(&mut stream, packet).await?;
+                        Self::send(&mut stream, packet).await?;
                     }
                     reason = recv_user_dc => {
                         let reason = reason.map_err(|_| SessionError::FrontendClosed)?;
-                        close(&mut stream, reason.clone()).await?;
+                        Self::close(&mut stream, reason.clone()).await?;
                         return Err(DisconnectReason::User(reason));
                     }
                 }
             }
         }
-    }
 
-    async fn recv(
-        send_packet_b2f: &mut mpsc::Sender<Bytes>,
-        msg: Message,
-    ) -> Result<(), DisconnectReason<SessionError>> {
-        let packet = match msg {
-            Message::Close(None) => {
-                return Err(SessionError::DisconnectedWithoutReason.into());
-            }
-            Message::Close(Some(frame)) => {
-                return Err(DisconnectReason::Peer(frame.reason.into_owned()));
-            }
-            msg => Bytes::from(msg.into_data()),
-        };
+        async fn recv(
+            send_packet_b2f: &mut mpsc::Sender<Bytes>,
+            msg: Message,
+        ) -> Result<(), DisconnectReason<SessionError>> {
+            let packet = match msg {
+                Message::Close(None) => {
+                    return Err(SessionError::DisconnectedWithoutReason.into());
+                }
+                Message::Close(Some(frame)) => {
+                    return Err(DisconnectReason::Peer(frame.reason.into_owned()));
+                }
+                msg => Bytes::from(msg.into_data()),
+            };
 
-        send_packet_b2f
-            .send(packet)
-            .await
-            .map_err(|_| SessionError::BackendClosed)?;
-        Ok(())
-    }
+            send_packet_b2f
+                .send(packet)
+                .await
+                .map_err(|_| SessionError::BackendClosed)?;
+            Ok(())
+        }
 
-    async fn send(
-        stream: &mut WebSocketStream,
-        packet: Bytes,
-    ) -> Result<(), DisconnectReason<SessionError>> {
-        let msg = Message::binary(packet);
-        stream.send(msg).await.map_err(SessionError::Connection)?;
-        Ok(())
-    }
+        async fn send(
+            stream: &mut WebSocketStream<S>,
+            packet: Bytes,
+        ) -> Result<(), DisconnectReason<SessionError>> {
+            let msg = Message::binary(packet);
+            stream.send(msg).await.map_err(SessionError::Connection)?;
+            Ok(())
+        }
 
-    async fn close(
-        stream: &mut WebSocketStream,
-        reason: String,
-    ) -> Result<(), DisconnectReason<SessionError>> {
-        let close_frame = CloseFrame {
-            code: CloseCode::Normal,
-            reason: Cow::Owned(reason),
-        };
-        stream
-            .close(Some(close_frame))
-            .await
-            .map_err(SessionError::Connection)?;
-        Ok(())
+        async fn close(
+            stream: &mut WebSocketStream<S>,
+            reason: String,
+        ) -> Result<(), DisconnectReason<SessionError>> {
+            let close_frame = CloseFrame {
+                code: CloseCode::Normal,
+                reason: Cow::Owned(reason),
+            };
+            stream
+                .close(Some(close_frame))
+                .await
+                .map_err(SessionError::Connection)?;
+            Ok(())
+        }
     }
 }

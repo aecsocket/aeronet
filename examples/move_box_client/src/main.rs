@@ -4,7 +4,10 @@ use {
     aeronet::connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
     aeronet_replicon::client::{AeronetRepliconClient, AeronetRepliconClientPlugin},
     aeronet_websocket::client::{WebSocketClient, WebSocketClientPlugin},
-    aeronet_webtransport::client::{WebTransportClient, WebTransportClientPlugin},
+    aeronet_webtransport::{
+        cert,
+        client::{WebTransportClient, WebTransportClientPlugin},
+    },
     bevy::{ecs::query::QuerySingleError, prelude::*},
     bevy_egui::{egui, EguiContexts, EguiPlugin},
     bevy_replicon::prelude::*,
@@ -211,10 +214,7 @@ fn web_transport_config(cert_hash: String) -> WebTransportClientConfig {
             value: Vec::from(hash),
         }],
         Err(err) => {
-            warn!(
-                "Failed to read certificate hash from string: {:#}",
-                pretty_error(&err)
-            );
+            warn!("Failed to read certificate hash from string: {err:?}");
             Vec::new()
         }
     };
@@ -235,7 +235,7 @@ fn web_transport_config(cert_hash: String) -> WebTransportClientConfig {
         warn!("Connecting without certificate validation");
         config.with_no_cert_validation()
     } else {
-        match aeronet_webtransport::cert::hash_from_b64(&cert_hash) {
+        match cert::hash_from_b64(&cert_hash) {
             Ok(hash) => config.with_server_certificate_hashes([Sha256Digest::new(hash)]),
             Err(err) => {
                 warn!("Failed to read certificate hash from string: {err:?}");
@@ -310,7 +310,6 @@ fn web_socket_config() -> WebSocketClientConfig {
     WebSocketClientConfig::builder()
         .with_no_cert_validation()
         .with_default_socket_config()
-        .build()
 }
 
 //

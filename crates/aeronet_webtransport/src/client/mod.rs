@@ -11,16 +11,16 @@ use {
         session::{self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
+        IoSet,
         connection::{DisconnectReason, Disconnected, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
-        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bytes::Bytes,
     futures::channel::{mpsc, oneshot},
     thiserror::Error,
-    tracing::{debug_span, Instrument},
+    tracing::{Instrument, debug_span},
 };
 
 cfg_if::cfg_if! {

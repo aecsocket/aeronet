@@ -1,5 +1,5 @@
 use {
-    crate::{lane::LaneIndex, ProtoSet},
+    crate::{ProtoSet, lane::LaneIndex},
     aeronet_io::packet::PacketBuffers,
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},

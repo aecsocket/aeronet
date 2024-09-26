@@ -1,17 +1,18 @@
-use crate::session::{SessionError, SessionFrontend};
-use aeronet_io::connection::DisconnectReason;
-use futures::{channel::oneshot, never::Never};
-use tracing::debug;
-
-use super::{ClientConfig, ClientError, ConnectTarget};
+use {
+    super::{ClientConfig, ClientError, ConnectTarget},
+    crate::{client::ToConnected, session::SessionError},
+    aeronet_io::connection::DisconnectReason,
+    futures::{channel::oneshot, never::Never},
+    tracing::debug,
+};
 
 pub async fn start(
     packet_buf_cap: usize,
     config: ClientConfig,
     target: ConnectTarget,
-    send_connected: oneshot::Sender<SessionFrontend>,
+    send_connected: oneshot::Sender<ToConnected>,
 ) -> Result<Never, DisconnectReason<ClientError>> {
-    let (frontend, backend) = {
+    let (connected, backend) = {
         #[cfg(target_family = "wasm")]
         {
             // suppress `unused_variables`
@@ -24,11 +25,14 @@ pub async fn start(
                 .map_err(ClientError::CreateSocket)?;
             debug!("Created socket");
 
-            crate::session::backend::wasm::split(socket, packet_buf_cap)
+            let (frontend, backend) = crate::session::backend::wasm::split(socket, packet_buf_cap);
+            (ToConnected { frontend }, backend)
         }
 
         #[cfg(not(target_family = "wasm"))]
         {
+            use tokio_tungstenite::MaybeTlsStream;
+
             let target = target.map_err(ClientError::CreateTarget)?;
 
             debug!("Spawning backend task to connect to {:?}", target.uri());
@@ -46,15 +50,39 @@ pub async fn start(
             }
             .await
             .map_err(ClientError::Connect)?;
+
+            let socket = match stream.get_ref() {
+                MaybeTlsStream::Plain(socket) => socket,
+                MaybeTlsStream::Rustls(stream) => stream.get_ref().0,
+                _ => {
+                    return Err(ClientError::InvalidConnector.into());
+                }
+            };
+            let local_addr = socket
+                .local_addr()
+                .map_err(SessionError::GetLocalAddr)
+                .map_err(ClientError::Session)?;
+            let remote_addr = socket
+                .peer_addr()
+                .map_err(SessionError::GetRemoteAddr)
+                .map_err(ClientError::Session)?;
             debug!("Created stream");
 
-            crate::session::backend::native::split(stream, packet_buf_cap)
-                .map_err(ClientError::Session)?
+            let (frontend, backend) =
+                crate::session::backend::native::split(stream, packet_buf_cap);
+            (
+                ToConnected {
+                    local_addr,
+                    remote_addr,
+                    frontend,
+                },
+                backend,
+            )
         }
     };
 
     send_connected
-        .send(frontend)
+        .send(connected)
         .map_err(|_| SessionError::FrontendClosed)
         .map_err(ClientError::Session)?;
 

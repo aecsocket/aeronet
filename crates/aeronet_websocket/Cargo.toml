@@ -19,8 +19,12 @@ all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [features]
+default = ["self-signed"]
+
 client = []
-server = []
+server = ["dep:tokio-rustls"]
+
+self-signed = ["dep:rcgen"]
 
 [dependencies]
 aeronet_io = { workspace = true }
@@ -48,14 +52,18 @@ web-sys = { workspace = true, features = [
   "WebSocket",
   "BinaryType",
   "MessageEvent",
+  "CloseEvent",
+  "ErrorEvent",
 ] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+rustls = { workspace = true }
+rustls-native-certs = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-tungstenite = { workspace = true, features = ["rustls-tls-native-roots"] }
 
-rustls = { workspace = true }
-rustls-native-certs = { workspace = true }
+rcgen = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
 
 [dev-dependencies]
 bevy = { workspace = true }

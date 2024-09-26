@@ -1,9 +1,9 @@
 use {
     aeronet_io::{
-        connection::{Connected, Session},
         IoSet,
+        connection::{Connected, Session},
     },
-    aeronet_proto::{lane::LaneIndex, message::MessageBuffers, AeronetProtoPlugin, ProtoTransport},
+    aeronet_proto::{AeronetProtoPlugin, ProtoTransport, lane::LaneIndex, message::MessageBuffers},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
