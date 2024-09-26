@@ -13,7 +13,7 @@ use {
     futures::channel::{mpsc, oneshot},
     std::{io, num::Saturating},
     thiserror::Error,
-    tracing::{debug, trace, trace_span},
+    tracing::{trace, trace_span},
 };
 
 cfg_if::cfg_if! {
@@ -39,6 +39,8 @@ impl Plugin for WebSocketSessionPlugin {
 
         #[cfg(not(target_family = "wasm"))]
         {
+            use tracing::debug;
+
             match rustls::crypto::aws_lc_rs::default_provider().install_default() {
                 Ok(_) => debug!("Installed default `aws-lc-rs` CryptoProvider"),
                 Err(_) => debug!("CryptoProvider is already installed"),
@@ -90,10 +92,6 @@ impl Drop for WebSocketIo {
 
 #[derive(Debug)]
 pub(crate) struct SessionFrontend {
-    #[cfg(not(target_family = "wasm"))]
-    pub local_addr: std::net::SocketAddr,
-    #[cfg(not(target_family = "wasm"))]
-    pub remote_addr: std::net::SocketAddr,
     pub recv_packet_b2f: mpsc::Receiver<Bytes>,
     pub send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub send_user_dc: oneshot::Sender<String>,

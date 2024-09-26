@@ -1,11 +1,12 @@
-use std::sync::Arc;
-
-use rustls::{
-    client::danger::{ServerCertVerified, ServerCertVerifier},
-    crypto::WebPkiSupportedAlgorithms,
-    RootCertStore,
+use {
+    rustls::{
+        RootCertStore,
+        client::danger::{ServerCertVerified, ServerCertVerifier},
+        crypto::WebPkiSupportedAlgorithms,
+    },
+    std::sync::Arc,
+    tokio_tungstenite::{Connector, tungstenite::protocol::WebSocketConfig},
 };
-use tokio_tungstenite::{tungstenite::protocol::WebSocketConfig, Connector};
 
 #[derive(Clone)]
 pub struct ClientConfig {
@@ -31,28 +32,20 @@ pub struct WantsSocketConfig {
     connector: Connector,
 }
 
-pub struct ConfigDone {
-    connector: Connector,
-    socket: WebSocketConfig,
-    nagle: bool,
-}
-
 impl ClientConfigBuilder<WantsConnector> {
-    pub fn with_crypto_config(
+    pub fn with_tls_config(
         self,
         config: impl Into<Arc<rustls::ClientConfig>>,
     ) -> ClientConfigBuilder<WantsSocketConfig> {
         let config = config.into();
-        ClientConfigBuilder(WantsSocketConfig {
-            connector: Connector::Rustls(config),
-        })
+        self.with_connector(Connector::Rustls(config))
     }
 
     pub fn with_native_certs(self) -> ClientConfigBuilder<WantsSocketConfig> {
         let config = rustls::ClientConfig::builder()
             .with_root_certificates(native_root_cert_store())
             .with_no_client_auth();
-        self.with_crypto_config(config)
+        self.with_tls_config(config)
     }
 
     pub fn with_no_cert_validation(self) -> ClientConfigBuilder<WantsSocketConfig> {
@@ -60,7 +53,7 @@ impl ClientConfigBuilder<WantsConnector> {
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(NoServerVerification::default()))
             .with_no_client_auth();
-        self.with_crypto_config(config)
+        self.with_tls_config(config)
     }
 
     pub const fn with_connector(
@@ -71,42 +64,28 @@ impl ClientConfigBuilder<WantsConnector> {
     }
 }
 
-const NAGLE_DEFAULT: bool = true;
-
 impl ClientConfigBuilder<WantsSocketConfig> {
-    pub fn with_default_socket_config(self) -> ClientConfigBuilder<ConfigDone> {
-        ClientConfigBuilder(ConfigDone {
-            connector: self.0.connector,
-            socket: WebSocketConfig::default(),
-            nagle: NAGLE_DEFAULT,
-        })
+    pub fn with_default_socket_config(self) -> ClientConfig {
+        self.with_socket_config(WebSocketConfig::default())
     }
 
-    pub fn with_socket_config(self, socket: WebSocketConfig) -> ClientConfigBuilder<ConfigDone> {
-        ClientConfigBuilder(ConfigDone {
+    pub fn with_socket_config(self, socket: WebSocketConfig) -> ClientConfig {
+        ClientConfig {
             connector: self.0.connector,
             socket,
-            nagle: NAGLE_DEFAULT,
-        })
+            nagle: true,
+        }
     }
 }
 
-impl ClientConfigBuilder<ConfigDone> {
+impl ClientConfig {
     pub fn with_nagle(mut self, nagle: bool) -> Self {
-        self.0.nagle = nagle;
+        self.nagle = nagle;
         self
     }
 
     pub fn disable_nagle(self) -> Self {
         self.with_nagle(false)
-    }
-
-    pub fn build(self) -> ClientConfig {
-        ClientConfig {
-            connector: self.0.connector,
-            socket: self.0.socket,
-            nagle: self.0.nagle,
-        }
     }
 }
 
@@ -118,18 +97,11 @@ pub fn native_root_cert_store() -> RootCertStore {
     root_certs
 }
 
-impl Into<ClientConfig> for ClientConfigBuilder<ConfigDone> {
-    fn into(self) -> ClientConfig {
-        self.build()
-    }
-}
-
 impl Default for ClientConfig {
     fn default() -> Self {
         Self::builder()
             .with_native_certs()
             .with_default_socket_config()
-            .build()
     }
 }
 

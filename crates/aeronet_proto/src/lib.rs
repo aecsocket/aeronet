@@ -4,11 +4,13 @@
 pub mod lane;
 pub mod message;
 
-use bevy_app::prelude::*;
-use bevy_ecs::{prelude::*, schedule::SystemSet};
-use bevy_reflect::prelude::*;
-use message::MessageBuffers;
 pub use {aeronet_io, octs};
+use {
+    bevy_app::prelude::*,
+    bevy_ecs::{prelude::*, schedule::SystemSet},
+    bevy_reflect::prelude::*,
+    message::MessageBuffers,
+};
 
 #[derive(Debug)]
 pub struct AeronetProtoPlugin;

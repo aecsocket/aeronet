@@ -1,10 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
-use bevy_app::{prelude::*, PluginGroupBuilder};
+use bevy_app::{PluginGroupBuilder, prelude::*};
 pub use {
-    aeronet_io::{self as io, connection, packet, server, AeronetIoPlugin, IoSet},
-    aeronet_proto::{self as proto, message, AeronetProtoPlugin, ProtoSet},
+    aeronet_io::{self as io, AeronetIoPlugin, IoSet, connection, packet, server},
+    aeronet_proto::{self as proto, AeronetProtoPlugin, ProtoSet, message},
     anyhow, bytes, ringbuf,
 };
 

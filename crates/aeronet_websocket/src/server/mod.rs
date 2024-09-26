@@ -1,24 +1,27 @@
 mod backend;
+mod config;
 
-use std::{io, net::SocketAddr};
-
-use aeronet_io::{
-    connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
-    packet::{PacketBuffersCapacity, PacketMtu},
-    server::{CloseReason, Closed, Opened, Server},
-    IoSet,
-};
-use bevy_app::prelude::*;
-use bevy_ecs::{prelude::*, system::EntityCommand};
-use bevy_hierarchy::BuildChildren;
-use futures::channel::{mpsc, oneshot};
-use thiserror::Error;
-use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
-use tracing::{debug_span, Instrument};
-
-use crate::{
-    session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
-    tungstenite, WebSocketRuntime,
+pub use config::*;
+use {
+    crate::{
+        WebSocketRuntime,
+        session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
+        tungstenite,
+    },
+    aeronet_io::{
+        IoSet,
+        connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
+        packet::{PacketBuffersCapacity, PacketMtu},
+        server::{CloseReason, Closed, Opened, Server},
+    },
+    bevy_app::prelude::*,
+    bevy_ecs::{prelude::*, system::EntityCommand},
+    bevy_hierarchy::BuildChildren,
+    futures::channel::{mpsc, oneshot},
+    std::{io, net::SocketAddr},
+    thiserror::Error,
+    tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
+    tracing::{Instrument, debug_span},
 };
 
 #[derive(Debug)]
@@ -42,12 +45,6 @@ impl Plugin for WebSocketServerPlugin {
 
 #[derive(Debug, Component)]
 pub struct WebSocketServer(Frontend);
-
-#[derive(Debug, Clone)]
-pub struct ServerConfig {
-    pub addr: SocketAddr,
-    pub socket: WebSocketConfig,
-}
 
 impl WebSocketServer {
     #[must_use]
@@ -93,6 +90,8 @@ pub enum ServerError {
     BindSocket(#[source] io::Error),
     #[error("failed to accept connection")]
     AcceptConnection(#[source] io::Error),
+    #[error("failed to perform TLS handshake")]
+    TlsHandshake(#[source] io::Error),
     #[error("failed to accept client")]
     AcceptClient(#[source] tungstenite::Error),
     #[error(transparent)]
@@ -116,7 +115,7 @@ enum Frontend {
 enum ClientFrontend {
     Connecting {
         recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
-        recv_next: oneshot::Receiver<SessionFrontend>,
+        recv_next: oneshot::Receiver<ToConnected>,
     },
     Connected {
         recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
@@ -135,7 +134,13 @@ struct ToConnecting {
     remote_addr: SocketAddr,
     send_session_entity: oneshot::Sender<Entity>,
     recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
-    recv_next: oneshot::Receiver<SessionFrontend>,
+    recv_next: oneshot::Receiver<ToConnected>,
+}
+
+#[derive(Debug)]
+struct ToConnected {
+    remote_addr: SocketAddr,
+    frontend: SessionFrontend,
 }
 
 // TODO: required components
@@ -270,7 +275,7 @@ fn poll_connecting(
     commands: &mut Commands,
     client: Entity,
     mut recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
-    mut recv_next: oneshot::Receiver<SessionFrontend>,
+    mut recv_next: oneshot::Receiver<ToConnected>,
 ) -> ClientFrontend {
     if should_disconnect(commands, client, &mut recv_dc) {
         return ClientFrontend::Disconnected;
@@ -282,9 +287,9 @@ fn poll_connecting(
 
     commands.entity(client).insert((
         WebSocketIo {
-            recv_packet_b2f: next.recv_packet_b2f,
-            send_packet_f2b: next.send_packet_f2b,
-            send_user_dc: Some(next.send_user_dc),
+            recv_packet_b2f: next.frontend.recv_packet_b2f,
+            send_packet_f2b: next.frontend.send_packet_f2b,
+            send_user_dc: Some(next.frontend.send_user_dc),
         },
         RemoteAddr(next.remote_addr),
     ));

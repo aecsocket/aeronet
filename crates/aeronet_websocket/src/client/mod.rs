@@ -2,19 +2,19 @@ mod backend;
 
 use {
     crate::{
-        session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
         WebSocketRuntime,
+        session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
     },
     aeronet_io::{
+        IoSet,
         connection::{DisconnectReason, Disconnected, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
-        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     futures::{channel::oneshot, never::Never},
     thiserror::Error,
-    tracing::{debug_span, Instrument},
+    tracing::{Instrument, debug_span},
 };
 
 cfg_if::cfg_if! {
@@ -31,7 +31,7 @@ cfg_if::cfg_if! {
         mod config;
         pub use config::*;
 
-        use {crate::tungstenite, tokio_tungstenite::Connector, tungstenite::protocol::WebSocketConfig};
+        use crate::tungstenite;
 
         type ConnectTarget = Result<tungstenite::handshake::client::Request, tungstenite::Error>;
 
@@ -107,7 +107,7 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
     };
 
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
-    let (send_next, recv_next) = oneshot::channel::<SessionFrontend>();
+    let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     runtime.spawn_on_self(
         async move {
             let Err(reason) = backend::start(packet_buf_cap, config, target, send_next).await
@@ -133,6 +133,8 @@ pub enum ClientError {
     CreateSocket(#[source] CreateSocketError),
     #[error("failed to connect")]
     Connect(#[source] ConnectError),
+    #[error("invalid socket connector")]
+    InvalidConnector,
     #[error(transparent)]
     Session(#[from] SessionError),
 }
@@ -141,12 +143,21 @@ pub enum ClientError {
 enum ClientFrontend {
     Connecting {
         recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
-        recv_next: oneshot::Receiver<SessionFrontend>,
+        recv_next: oneshot::Receiver<ToConnected>,
     },
     Connected {
         recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
     },
     Disconnected,
+}
+
+#[derive(Debug)]
+struct ToConnected {
+    #[cfg(not(target_family = "wasm"))]
+    local_addr: std::net::SocketAddr,
+    #[cfg(not(target_family = "wasm"))]
+    remote_addr: std::net::SocketAddr,
+    frontend: SessionFrontend,
 }
 
 // TODO: required components
@@ -177,7 +188,7 @@ fn poll_connecting(
     commands: &mut Commands,
     session: Entity,
     mut recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
-    mut recv_next: oneshot::Receiver<SessionFrontend>,
+    mut recv_next: oneshot::Receiver<ToConnected>,
 ) -> ClientFrontend {
     if should_disconnect(commands, session, &mut recv_dc) {
         return ClientFrontend::Disconnected;
@@ -189,9 +200,9 @@ fn poll_connecting(
 
     commands.entity(session).insert((
         WebSocketIo {
-            recv_packet_b2f: next.recv_packet_b2f,
-            send_packet_f2b: next.send_packet_f2b,
-            send_user_dc: Some(next.send_user_dc),
+            recv_packet_b2f: next.frontend.recv_packet_b2f,
+            send_packet_f2b: next.frontend.send_packet_f2b,
+            send_user_dc: Some(next.frontend.send_user_dc),
         },
         #[cfg(not(target_family = "wasm"))]
         aeronet_io::connection::LocalAddr(next.local_addr),

@@ -10,7 +10,7 @@ use {
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    bevy_egui::{EguiContexts, EguiPlugin, egui},
     std::mem,
 };
 
@@ -80,7 +80,7 @@ fn on_disconnected(
 }
 
 fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMut<GlobalUi>) {
-    const DEFAULT_TARGET: &str = "ws://[::1]:25565";
+    const DEFAULT_TARGET: &str = "wss://[::1]:25565";
 
     egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -126,7 +126,6 @@ fn client_config() -> ClientConfig {
     ClientConfig::builder()
         .with_no_cert_validation()
         .with_default_socket_config()
-        .build()
 }
 
 fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {

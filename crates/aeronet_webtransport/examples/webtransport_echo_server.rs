@@ -1,19 +1,18 @@
 //! Example server using WebTransport which listens for clients sending strings
 //! and sends back a string reply.
 
-use aeronet_io::{connection::LocalAddr, server::Opened};
-
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         fn main() {
-            eprintln!("this example is not for WASM");
+            eprintln!("this example is not available on WASM");
         }
     } else {
 
 use {
     aeronet_io::{
-        connection::{Connected, DisconnectReason, Disconnected},
+        connection::{Connected, DisconnectReason, Disconnected, LocalAddr},
         packet::PacketBuffers,
+        server::Opened,
     },
     aeronet_webtransport::{
         cert,
@@ -42,16 +41,6 @@ fn main() -> AppExit {
         .run()
 }
 
-fn server_config(identity: &wtransport::Identity) -> ServerConfig {
-    wtransport::ServerConfig::builder()
-        .with_bind_default(25565)
-        .with_identity(&identity)
-        .keep_alive_interval(Some(Duration::from_secs(1)))
-        .max_idle_timeout(Some(Duration::from_secs(5)))
-        .unwrap()
-        .build()
-}
-
 fn open_server(mut commands: Commands) {
     let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
     let cert = &identity.certificate_chain().as_slice()[0];
@@ -66,6 +55,16 @@ fn open_server(mut commands: Commands) {
 
     let config = server_config(&identity);
     commands.spawn_empty().add(WebTransportServer::open(config));
+}
+
+fn server_config(identity: &wtransport::Identity) -> ServerConfig {
+    wtransport::ServerConfig::builder()
+        .with_bind_default(25565)
+        .with_identity(&identity)
+        .keep_alive_interval(Some(Duration::from_secs(1)))
+        .max_idle_timeout(Some(Duration::from_secs(5)))
+        .unwrap()
+        .build()
 }
 
 fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {

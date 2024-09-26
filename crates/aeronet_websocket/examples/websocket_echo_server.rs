@@ -1,39 +1,30 @@
 //! Example server using WebSocket which listens for clients sending strings
 //! and sends back a string reply.
 
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-
-use aeronet_io::{
-    connection::{LocalAddr, Session},
-    server::Opened,
-};
-use aeronet_websocket::{
-    server::{ServerConfig, WebSocketServer, WebSocketServerPlugin},
-    tungstenite::protocol::WebSocketConfig,
-};
-
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         fn main() {
-            eprintln!("this example is not for WASM");
+            eprintln!("this example is not available on WASM");
         }
     } else {
 
 use {
     aeronet_io::{
-        connection::{Connected, DisconnectReason, Disconnected},
+        connection::{Connected, DisconnectReason, Disconnected, LocalAddr, Session},
         packet::PacketBuffers,
+        server::Opened,
+    },
+    aeronet_websocket::{
+        server::{Identity, ServerConfig, WebSocketServer, WebSocketServerPlugin},
+        tungstenite::protocol::WebSocketConfig,
     },
     bevy::{log::LogPlugin, prelude::*},
+    std::net::{Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
 fn main() -> AppExit {
     App::new()
-        .add_plugins((
-            MinimalPlugins,
-            LogPlugin::default(),
-            WebSocketServerPlugin,
-        ))
+        .add_plugins((MinimalPlugins, LogPlugin::default(), WebSocketServerPlugin))
         .add_systems(Startup, open_server)
         .add_systems(Update, reply)
         .observe(on_opened)
@@ -44,10 +35,11 @@ fn main() -> AppExit {
 }
 
 fn server_config() -> ServerConfig {
-    ServerConfig {
-        addr: SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 25565),
-        socket: WebSocketConfig::default(),
-    }
+    let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
+    ServerConfig::builder()
+        .with_bind_default(25565)
+        .with_identity(identity)
+        .with_default_socket_config()
 }
 
 fn open_server(mut commands: Commands) {

@@ -96,10 +96,9 @@ bevy_egui = "0.29.0"
 
 # tls
 
-native-tls = "0.2.12"
 rustls = "0.23.13"
 rustls-native-certs = "0.8.0"
-webpki-roots = "0.26.6"
+tokio-rustls = "0.26.0"
 
 # aeronet_channel
 
@@ -112,6 +111,7 @@ steamworks = "0.11.0"
 
 # aeronet_websocket
 
+rcgen = "0.13.1"
 tokio-tungstenite = "0.24.0"
 
 # aeronet_webtransport

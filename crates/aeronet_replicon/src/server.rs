@@ -1,11 +1,11 @@
 use {
     crate::convert::{IntoClientId, IntoLaneIndex, TryIntoChannelId, TryIntoEntity},
     aeronet_io::{
+        IoSet,
         connection::{Connected, DisconnectReason, Disconnected},
         server::{Opened, Server},
-        IoSet,
     },
-    aeronet_proto::{lane::LaneIndex, message::MessageBuffers, AeronetProtoPlugin, ProtoTransport},
+    aeronet_proto::{AeronetProtoPlugin, ProtoTransport, lane::LaneIndex, message::MessageBuffers},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_hierarchy::Parent,
