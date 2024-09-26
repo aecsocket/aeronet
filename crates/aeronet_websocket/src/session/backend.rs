@@ -175,11 +175,8 @@ pub mod native {
         let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
         let socket = match stream.get_ref() {
             MaybeTlsStream::Plain(stream) => stream,
-            #[cfg(feature = "native-tls")]
-            MaybeTlsStream::NativeTls(stream) => stream.get_ref().get_ref().get_ref(),
-            #[cfg(feature = "__rustls-tls")]
             MaybeTlsStream::Rustls(stream) => stream.get_ref().0,
-            _ => unreachable!("should only be one of these variants"),
+            _ => unreachable!("unsupported connector"),
         };
         let local_addr = socket.local_addr().map_err(SessionError::GetLocalAddr)?;
         let remote_addr = socket.peer_addr().map_err(SessionError::GetRemoteAddr)?;

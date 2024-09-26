@@ -3,5 +3,6 @@
 
 #[cfg(feature = "client")]
 pub mod client;
+pub mod convert;
 #[cfg(feature = "server")]
 pub mod server;

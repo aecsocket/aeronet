@@ -13,7 +13,7 @@ use {
     futures::channel::{mpsc, oneshot},
     std::{io, num::Saturating},
     thiserror::Error,
-    tracing::{trace, trace_span},
+    tracing::{debug, trace, trace_span},
 };
 
 cfg_if::cfg_if! {
@@ -35,6 +35,14 @@ impl Plugin for WebSocketSessionPlugin {
     fn build(&self, app: &mut App) {
         if !app.is_plugin_added::<AeronetIoPlugin>() {
             app.add_plugins(AeronetIoPlugin);
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            match rustls::crypto::aws_lc_rs::default_provider().install_default() {
+                Ok(_) => debug!("Installed default `aws-lc-rs` CryptoProvider"),
+                Err(_) => debug!("CryptoProvider is already installed"),
+            }
         }
 
         app.init_resource::<WebSocketRuntime>()

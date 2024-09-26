@@ -1,4 +1,5 @@
 use {
+    crate::convert::{IntoClientId, IntoLaneIndex, TryIntoChannelId, TryIntoEntity},
     aeronet_io::{
         connection::{Connected, DisconnectReason, Disconnected},
         server::{Opened, Server},
@@ -14,7 +15,6 @@ use {
         prelude::RepliconServer,
         server::{ServerEvent, ServerSet},
     },
-    tracing::info,
 };
 
 #[derive(Debug)]
@@ -90,7 +90,7 @@ fn on_connected(
         return;
     }
 
-    let client_id = ClientId::new(client.to_bits());
+    let client_id = client.into_client_id();
     events.send(ServerEvent::ClientConnected { client_id });
     // TODO: required components
     commands.entity(client).insert(ProtoTransport);
@@ -110,7 +110,7 @@ fn on_disconnected(
         return;
     }
 
-    let client_id = ClientId::new(client.to_bits());
+    let client_id = client.into_client_id();
     let reason = match &**trigger.event() {
         DisconnectReason::User(reason) => reason.clone(),
         DisconnectReason::Peer(reason) => reason.clone(),
@@ -129,9 +129,9 @@ fn poll(
             continue;
         }
 
-        let client_id = ClientId::new(client.to_bits());
+        let client_id = client.into_client_id();
         for (lane_index, msg) in msg_bufs.recv.drain(..) {
-            let Ok(channel_id) = u8::try_from(lane_index.into_raw()) else {
+            let Some(channel_id) = lane_index.try_into_channel_id() else {
                 continue;
             };
             replicon_server.insert_received(client_id, channel_id, msg);
@@ -141,13 +141,13 @@ fn poll(
 
 fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut MessageBuffers>) {
     for (client_id, channel_id, msg) in replicon_server.drain_sent() {
-        let Ok(client) = Entity::try_from_bits(client_id.get()) else {
+        let Some(mut msg_bufs) = client_id
+            .try_into_entity()
+            .and_then(|client| clients.get_mut(client).ok())
+        else {
             continue;
         };
-        let Ok(mut msg_bufs) = clients.get_mut(client) else {
-            continue;
-        };
-        let lane_index = LaneIndex::from_raw(u64::from(channel_id));
+        let lane_index = channel_id.into_lane_index();
         msg_bufs.send(lane_index, msg);
     }
 }

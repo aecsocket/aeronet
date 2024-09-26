@@ -105,21 +105,31 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
         );
         connect |= cert_hash_resp.lost_focus() && enter_pressed;
 
-        if connect {
-            let mut target = ui_state.target.clone();
-            if target.is_empty() {
-                target = DEFAULT_TARGET.to_owned();
+        (|| {
+            if connect {
+                let mut target = ui_state.target.clone();
+                if target.is_empty() {
+                    target = DEFAULT_TARGET.to_owned();
+                }
+
+                let cert_hash = ui_state.cert_hash.clone();
+                let config = match client_config(cert_hash) {
+                    Ok(config) => config,
+                    Err(err) => {
+                        ui_state
+                            .log
+                            .push(format!("Failed to create client config: {err:#}"));
+                        return;
+                    }
+                };
+
+                ui_state.session_id += 1;
+                let name = format!("{}. {target}", ui_state.session_id);
+                commands
+                    .spawn((Name::new(name), SessionUi::default()))
+                    .add(WebTransportClient::connect(config, target));
             }
-
-            let cert_hash = ui_state.cert_hash.clone();
-            let config = client_config(cert_hash);
-
-            ui_state.session_id += 1;
-            let name = format!("{}. {target}", ui_state.session_id);
-            commands
-                .spawn((Name::new(name), SessionUi::default()))
-                .add(WebTransportClient::connect(config, target));
-        }
+        })();
 
         for msg in &ui_state.log {
             ui.label(msg);
@@ -128,7 +138,7 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
 }
 
 #[cfg(target_family = "wasm")]
-fn client_config(cert_hash: String) -> ClientConfig {
+fn client_config(cert_hash: String) -> Result<ClientConfig, anyhow::Error> {
     use aeronet_webtransport::xwt_web_sys::{CertificateHash, HashAlgorithm};
 
     let server_certificate_hashes = match cert::hash_from_b64(&cert_hash) {
@@ -142,35 +152,38 @@ fn client_config(cert_hash: String) -> ClientConfig {
         }
     };
 
-    ClientConfig {
+    Ok(ClientConfig {
         server_certificate_hashes,
         ..Default::default()
-    }
+    })
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn client_config(cert_hash: String) -> ClientConfig {
+fn client_config(cert_hash: String) -> Result<ClientConfig, anyhow::Error> {
     use {aeronet_webtransport::wtransport::tls::Sha256Digest, std::time::Duration};
 
     let config = ClientConfig::builder().with_bind_default();
 
     let config = if cert_hash.is_empty() {
-        config.with_no_cert_validation()
-    } else {
-        match cert::hash_from_b64(&cert_hash) {
-            Ok(hash) => config.with_server_certificate_hashes([Sha256Digest::new(hash)]),
-            Err(err) => {
-                warn!("Failed to read certificate hash from string: {err:?}");
-                config.with_server_certificate_hashes([])
-            }
+        #[cfg(feature = "dangerous-configuration")]
+        {
+            warn!("Connecting with no certificate validation");
+            config.with_no_cert_validation()
         }
+        #[cfg(not(feature = "dangerous-configuration"))]
+        {
+            config.with_server_certificate_hashes([])
+        }
+    } else {
+        let hash = cert::hash_from_b64(&cert_hash)?;
+        config.with_server_certificate_hashes([Sha256Digest::new(hash)])
     };
 
-    config
+    Ok(config
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
         .unwrap()
-        .build()
+        .build())
 }
 
 fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
@@ -190,6 +203,7 @@ fn session_ui(
         &Name,
         &mut SessionUi,
         &mut PacketBuffers,
+        Option<&Connected>,
         Option<&PacketRtt>,
         Option<&PacketMtu>,
         Option<&PacketStats>,
@@ -202,6 +216,7 @@ fn session_ui(
         name,
         mut ui_state,
         mut bufs,
+        connected,
         packet_rtt,
         packet_mtu,
         packet_stats,
@@ -215,6 +230,10 @@ fn session_ui(
             let mut send_msg = false;
             let msg_resp = ui
                 .horizontal(|ui| {
+                    if connected.is_none() {
+                        ui.disable();
+                    }
+
                     let msg_resp = ui.add(
                         egui::TextEdit::singleline(&mut ui_state.msg).hint_text("[enter] to send"),
                     );

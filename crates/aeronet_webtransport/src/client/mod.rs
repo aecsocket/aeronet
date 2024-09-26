@@ -101,10 +101,11 @@ impl WebTransportClient {
     /// ```
     #[must_use]
     pub fn connect(
-        config: ClientConfig,
+        config: impl Into<ClientConfig>,
         #[cfg(target_family = "wasm")] target: impl Into<String>,
         #[cfg(not(target_family = "wasm"))] target: impl wtransport::endpoint::IntoConnectOptions,
     ) -> impl EntityCommand {
+        let config = config.into();
         let target = {
             #[cfg(target_family = "wasm")]
             {
