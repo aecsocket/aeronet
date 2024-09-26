@@ -16,13 +16,7 @@ use {
 
 fn main() -> AppExit {
     App::new()
-        .add_plugins((
-            DefaultPlugins,
-            EguiPlugin,
-            #[cfg(not(target_family = "wasm"))]
-            aeronet_websocket::crypto::WebSocketCryptoPlugin,
-            WebSocketClientPlugin,
-        ))
+        .add_plugins((DefaultPlugins, EguiPlugin, WebSocketClientPlugin))
         .init_resource::<GlobalUi>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
         .observe(on_connecting)
@@ -129,20 +123,10 @@ fn client_config() -> ClientConfig {
 
 #[cfg(not(target_family = "wasm"))]
 fn client_config() -> ClientConfig {
-    use aeronet_websocket::tokio_tungstenite::Connector;
-
-    let connector = aeronet_websocket::crypto::tls_connector();
-    match connector {
-        Connector::Plain => warn!("Using plain connector - no encryption support"),
-        Connector::Rustls(_) => info!("Using `rustls` connector"),
-        Connector::NativeTls(_) => info!("Using `native-tls` connector"),
-        _ => {}
-    }
-
-    ClientConfig {
-        connector,
-        ..Default::default()
-    }
+    ClientConfig::builder()
+        .with_no_cert_validation()
+        .with_default_socket_config()
+        .build()
 }
 
 fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
@@ -162,6 +146,7 @@ fn session_ui(
         &Name,
         &mut SessionUi,
         &mut PacketBuffers,
+        Option<&Connected>,
         Option<&PacketMtu>,
         Option<&PacketStats>,
         Option<&LocalAddr>,
@@ -173,6 +158,7 @@ fn session_ui(
         name,
         mut ui_state,
         mut bufs,
+        connected,
         packet_mtu,
         packet_stats,
         local_addr,
@@ -185,6 +171,10 @@ fn session_ui(
             let mut send_msg = false;
             let msg_resp = ui
                 .horizontal(|ui| {
+                    if connected.is_none() {
+                        ui.disable();
+                    }
+
                     let msg_resp = ui.add(
                         egui::TextEdit::singleline(&mut ui_state.msg).hint_text("[enter] to send"),
                     );

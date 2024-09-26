@@ -92,7 +92,8 @@ impl WebTransportServer {
     /// # }
     /// ```
     #[must_use]
-    pub fn open(config: ServerConfig) -> impl EntityCommand {
+    pub fn open(config: impl Into<ServerConfig>) -> impl EntityCommand {
+        let config = config.into();
         |server: Entity, world: &mut World| open(server, world, config)
     }
 }

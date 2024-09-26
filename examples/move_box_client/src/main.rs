@@ -19,8 +19,6 @@ fn main() -> AppExit {
             EguiPlugin,
             // transport
             WebTransportClientPlugin,
-            #[cfg(not(target_family = "wasm"))]
-            aeronet_websocket::crypto::WebSocketCryptoPlugin,
             WebSocketClientPlugin,
             // replication
             RepliconPlugins,
@@ -234,6 +232,7 @@ fn web_transport_config(cert_hash: String) -> WebTransportClientConfig {
     let config = WebTransportClientConfig::builder().with_bind_default();
 
     let config = if cert_hash.is_empty() {
+        warn!("Connecting without certificate validation");
         config.with_no_cert_validation()
     } else {
         match aeronet_webtransport::cert::hash_from_b64(&cert_hash) {
@@ -308,11 +307,10 @@ fn web_socket_config() -> WebSocketClientConfig {
 
 #[cfg(not(target_family = "wasm"))]
 fn web_socket_config() -> WebSocketClientConfig {
-    let connector = aeronet_websocket::crypto::tls_connector();
-    WebSocketClientConfig {
-        connector,
-        ..Default::default()
-    }
+    WebSocketClientConfig::builder()
+        .with_no_cert_validation()
+        .with_default_socket_config()
+        .build()
 }
 
 //

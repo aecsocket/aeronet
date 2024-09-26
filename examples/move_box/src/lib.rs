@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 use {
+    aeronet_replicon::convert::TryIntoEntity,
     bevy::prelude::*,
     bevy_replicon::prelude::*,
     serde::{Deserialize, Serialize},
@@ -84,10 +85,10 @@ fn recv_input(
         event: ref new_input,
     } in inputs.read()
     {
-        let Ok(client) = Entity::try_from_bits(client_id.get()) else {
-            continue;
-        };
-        let Ok(mut input) = players.get_mut(client) else {
+        let Some(mut input) = client_id
+            .try_into_entity()
+            .and_then(|client| players.get_mut(client).ok())
+        else {
             continue;
         };
         *input = new_input.clone();
@@ -96,7 +97,7 @@ fn recv_input(
 
 fn apply_movement(time: Res<Time>, mut players: Query<(&PlayerInput, &mut PlayerPosition)>) {
     for (input, mut position) in &mut players {
-        // make sure to validate inputs and normalize on the server side,
+        // make sure to validate inputs and normalize on the authority (server) side,
         // since we're accepting arbitrary client input
         if let Some(movement) = input.movement.try_normalize() {
             // only change `position` if we actually have a movement vector to apply

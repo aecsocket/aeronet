@@ -19,7 +19,7 @@ use {
     },
     std::{io, num::Saturating, sync::Arc, time::Duration},
     thiserror::Error,
-    tracing::{trace, trace_span},
+    tracing::{debug, trace, trace_span},
     xwt_core::prelude::*,
 };
 
@@ -40,6 +40,14 @@ impl Plugin for WebTransportSessionPlugin {
     fn build(&self, app: &mut App) {
         if !app.is_plugin_added::<AeronetIoPlugin>() {
             app.add_plugins(AeronetIoPlugin);
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            match wtransport::tls::rustls::crypto::ring::default_provider().install_default() {
+                Ok(_) => debug!("Installed default `ring` CryptoProvider"),
+                Err(_) => debug!("CryptoProvider is already installed"),
+            }
         }
 
         app.init_resource::<WebTransportRuntime>()

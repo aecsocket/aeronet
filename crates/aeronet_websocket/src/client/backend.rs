@@ -37,24 +37,12 @@ pub async fn start(
                 let socket_config = Some(config.socket);
                 let disable_nagle = !config.nagle;
 
-                #[cfg(feature = "__tls")]
-                {
-                    tokio_tungstenite::connect_async_tls_with_config(
-                        target,
-                        socket_config,
-                        disable_nagle,
-                        Some(config.connector),
-                    )
-                }
-
-                #[cfg(not(feature = "__tls"))]
-                {
-                    tokio_tungstenite::connect_async_with_config(
-                        target,
-                        socket_config,
-                        disable_nagle,
-                    )
-                }
+                tokio_tungstenite::connect_async_tls_with_config(
+                    target,
+                    socket_config,
+                    disable_nagle,
+                    Some(config.connector),
+                )
             }
             .await
             .map_err(ClientError::Connect)?;

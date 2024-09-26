@@ -25,10 +25,7 @@ bevy_egui = { workspace = true }
 # transport
 
 aeronet = { workspace = true }
-aeronet_websocket = { workspace = true, features = [
-  "client",
-  "rustls-tls-native-roots",
-] }
+aeronet_websocket = { workspace = true, features = ["client"] }
 aeronet_webtransport = { workspace = true, features = [
   "client",
   "dangerous-configuration",

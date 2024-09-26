@@ -24,7 +24,13 @@ cfg_if::cfg_if! {
         type CreateTargetError = Never;
         type CreateSocketError = crate::JsError;
         type ConnectError = crate::JsError;
+
+        #[derive(Debug, Clone, Default)]
+        pub struct ClientConfig;
     } else {
+        mod config;
+        pub use config::*;
+
         use {crate::tungstenite, tokio_tungstenite::Connector, tungstenite::protocol::WebSocketConfig};
 
         type ConnectTarget = Result<tungstenite::handshake::client::Request, tungstenite::Error>;
@@ -55,36 +61,14 @@ impl Plugin for WebSocketClientPlugin {
 #[derive(Debug, Component)]
 pub struct WebSocketClient(ClientFrontend);
 
-#[cfg(target_family = "wasm")]
-#[derive(Debug, Clone, Default)]
-pub struct ClientConfig;
-
-#[cfg(not(target_family = "wasm"))]
-#[derive(Clone)]
-pub struct ClientConfig {
-    pub socket: WebSocketConfig,
-    pub nagle: bool,
-    pub connector: Connector,
-}
-
-#[cfg(not(target_family = "wasm"))]
-impl Default for ClientConfig {
-    fn default() -> Self {
-        Self {
-            socket: WebSocketConfig::default(),
-            nagle: true,
-            connector: Connector::Plain,
-        }
-    }
-}
-
 impl WebSocketClient {
     #[must_use]
     pub fn connect(
-        config: ClientConfig,
+        config: impl Into<ClientConfig>,
         #[cfg(target_family = "wasm")] target: impl Into<String>,
         #[cfg(not(target_family = "wasm"))] target: impl tungstenite::client::IntoClientRequest,
     ) -> impl EntityCommand {
+        let config = config.into();
         let target = {
             #[cfg(target_family = "wasm")]
             {
