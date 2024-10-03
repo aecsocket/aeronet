@@ -4,10 +4,7 @@ use {
         server::Opened,
     },
     aeronet_replicon::server::{AeronetRepliconServer, AeronetRepliconServerPlugin},
-    aeronet_websocket::{
-        server::{WebSocketServer, WebSocketServerPlugin},
-        tungstenite::protocol::WebSocketConfig,
-    },
+    aeronet_websocket::server::{WebSocketServer, WebSocketServerPlugin},
     aeronet_webtransport::{
         cert,
         server::{SessionRequest, SessionResponse, WebTransportServer, WebTransportServerPlugin},
@@ -16,7 +13,6 @@ use {
     bevy::{log::LogPlugin, prelude::*, state::app::StatesPlugin},
     bevy_replicon::prelude::*,
     move_box::{MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition, TICK_RATE},
-    std::net::{Ipv6Addr, SocketAddr},
     web_time::Duration,
 };
 
@@ -138,10 +134,13 @@ fn open_web_socket_server(mut commands: Commands, args: Res<Args>) {
 }
 
 fn web_socket_config(args: &Args) -> WebSocketServerConfig {
-    WebSocketServerConfig {
-        addr: SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), args.ws_port),
-        socket: WebSocketConfig::default(),
-    }
+    let identity =
+        aeronet_websocket::server::Identity::self_signed(["localhost", "127.0.0.1", "::1"])
+            .unwrap();
+    WebSocketServerConfig::builder()
+        .with_bind_default(args.ws_port)
+        .with_identity(identity)
+        .with_default_socket_config()
 }
 
 //

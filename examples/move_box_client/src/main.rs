@@ -262,7 +262,7 @@ fn web_socket_ui(
     mut ui_state: ResMut<WebSocketUi>,
     sessions: Query<(), With<Session>>,
 ) {
-    const DEFAULT_TARGET: &str = "ws://[::1]:25566";
+    const DEFAULT_TARGET: &str = "wss://[::1]:25566";
 
     egui::Window::new("WebSocket").show(egui.ctx_mut(), |ui| {
         if sessions.iter().next().is_some() {
