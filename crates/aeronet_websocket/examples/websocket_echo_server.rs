@@ -16,10 +16,8 @@ use {
     },
     aeronet_websocket::{
         server::{Identity, ServerConfig, WebSocketServer, WebSocketServerPlugin},
-        tungstenite::protocol::WebSocketConfig,
     },
     bevy::{log::LogPlugin, prelude::*},
-    std::net::{Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
 fn main() -> AppExit {

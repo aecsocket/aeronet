@@ -1,17 +1,16 @@
 use {
     crate::convert::{IntoClientId, IntoLaneIndex, TryIntoChannelId, TryIntoEntity},
     aeronet_io::{
-        IoSet,
         connection::{Connected, DisconnectReason, Disconnected},
         server::{Opened, Server},
+        IoSet,
     },
-    aeronet_proto::{AeronetProtoPlugin, ProtoTransport, lane::LaneIndex, message::MessageBuffers},
+    aeronet_proto::{message::MessageBuffers, AeronetProtoPlugin, ProtoTransport},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_hierarchy::Parent,
     bevy_reflect::Reflect,
     bevy_replicon::{
-        core::ClientId,
         prelude::RepliconServer,
         server::{ServerEvent, ServerSet},
     },
@@ -98,7 +97,7 @@ fn on_connected(
 
 fn on_disconnected(
     trigger: Trigger<Disconnected>,
-    clients: Query<&Parent>,
+    clients: Query<&Parent, With<Connected>>,
     open_servers: Query<(), OpenedServer>,
     mut events: EventWriter<ServerEvent>,
 ) {
@@ -116,6 +115,7 @@ fn on_disconnected(
         DisconnectReason::Peer(reason) => reason.clone(),
         DisconnectReason::Error(err) => format!("{err:#}"),
     };
+    // only disconnect already-connected clients, otherwise replicon panics
     events.send(ServerEvent::ClientDisconnected { client_id, reason });
 }
 
