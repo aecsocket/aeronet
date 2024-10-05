@@ -5,17 +5,17 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        AeronetIoPlugin, IoSet,
-        connection::{Connected, DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, RemoteAddr},
+        connection::{Connected, Disconnect, DisconnectReason, RemoteAddr, DROP_DISCONNECT_REASON},
         packet::{PacketBuffers, PacketMtu, PacketRtt, PacketStats},
+        AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
-        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
+        FutureExt, SinkExt, StreamExt,
     },
     std::{io, num::Saturating, sync::Arc, time::Duration},
     thiserror::Error,
@@ -77,6 +77,7 @@ pub struct WebTransportIo {
 /// Error that occurs when polling a session using the [`WebTransportIo`]
 /// IO layer.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum SessionError {
     /// Frontend ([`WebTransportIo`]) was dropped.
     #[error("frontend closed")]

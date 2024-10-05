@@ -1,14 +1,14 @@
+//! Client-side [`bevy_replicon`] support.
+
 use {
-    aeronet_io::{
-        IoSet,
-        connection::{Connected, Session},
+    aeronet_io::connection::{Connected, Session},
+    aeronet_proto::{
+        lane::LaneIndex, message::MessageBuffers, AeronetProtoPlugin, ProtoSet, ProtoTransport,
     },
-    aeronet_proto::{AeronetProtoPlugin, ProtoTransport, lane::LaneIndex, message::MessageBuffers},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
-    tracing::info,
 };
 
 #[derive(Debug)]
@@ -23,11 +23,11 @@ impl Plugin for AeronetRepliconClientPlugin {
         app.register_type::<AeronetRepliconClient>()
             .configure_sets(
                 PreUpdate,
-                (IoSet::Poll, ClientIoSet::Poll, ClientSet::ReceivePackets).chain(),
+                (ProtoSet::Poll, ClientIoSet::Poll, ClientSet::ReceivePackets).chain(),
             )
             .configure_sets(
                 PostUpdate,
-                (ClientSet::SendPackets, ClientIoSet::Flush, IoSet::Flush).chain(),
+                (ClientSet::SendPackets, ClientIoSet::Flush, ProtoSet::Flush).chain(),
             )
             .add_systems(
                 PreUpdate,
@@ -46,12 +46,30 @@ impl Plugin for AeronetRepliconClientPlugin {
     }
 }
 
+/// Set for scheduling systems in between the [`ProtoSet`] and
+/// [`bevy_replicon`]'s [`ClientSet`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum ClientIoSet {
+    /// Passing incoming messages into [`bevy_replicon`].
     Poll,
+    /// Passing outgoing [`bevy_replicon`] packets to the transport layer.
     Flush,
 }
 
+/// Marker component for a client which uses a [`Session`] as the messaging
+/// backend for a [`RepliconClient`].
+///
+/// Sessions with this component automatically get [`ProtoTransport`].
+///
+/// Any session entity with this component will be used for:
+/// - receiving messages
+/// - sending messages (all Replicon messages are sent to all sessions)
+/// - determining connected status
+///   - if at least 1 session is [`Connected`], [`RepliconClient`] is
+///     [`RepliconClientStatus::Connected`]
+///   - if at least 1 session exists, [`RepliconClient`] is
+///     [`RepliconClientStatus::Connecting`]
+///   - else, [`RepliconClientStatus::Disconnected`]
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct AeronetRepliconClient;

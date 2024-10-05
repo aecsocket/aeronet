@@ -1,20 +1,22 @@
+//! See [`WebSocketClient`].
+
 mod backend;
 
 use {
     crate::{
-        WebSocketRuntime,
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
+        WebSocketRuntime,
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     futures::{channel::oneshot, never::Never},
     thiserror::Error,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
 };
 
 cfg_if::cfg_if! {
@@ -41,6 +43,7 @@ cfg_if::cfg_if! {
     }
 }
 
+/// Allows using [`WebSocketClient`].
 #[derive(Debug)]
 pub struct WebSocketClientPlugin;
 
@@ -58,10 +61,40 @@ impl Plugin for WebSocketClientPlugin {
     }
 }
 
+/// WebSocket session implementation which acts as a dedicated client,
+/// connecting to a target socket.
+///
+/// Use [`WebSocketClient::connect`] to start a connection.
 #[derive(Debug, Component)]
 pub struct WebSocketClient(ClientFrontend);
 
 impl WebSocketClient {
+    /// Creates an [`EntityCommand`] to set up a session and connect it to the
+    /// `target`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use {
+    ///     aeronet_websocket::client::{ClientConfig, WebSocketClient},
+    ///     bevy_ecs::{prelude::*, system::EntityCommand},
+    /// };
+    ///
+    /// # fn run(mut commands: Commands, world: &mut World) {
+    /// let config = ClientConfig::default();
+    /// let target = "wss://[::1]:1234";
+    ///
+    /// // using `Commands`
+    /// commands
+    ///     .spawn_empty()
+    ///     .add(WebSocketClient::connect(config, target));
+    ///
+    /// // using mutable `World` access
+    /// # let config = ClientConfig::default();
+    /// let session = world.spawn_empty().id();
+    /// WebSocketClient::connect(config, target).apply(session, world);
+    /// # }
+    /// ```
     #[must_use]
     pub fn connect(
         config: impl Into<ClientConfig>,
@@ -125,16 +158,21 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
     ));
 }
 
+/// [`WebSocketClient`] error.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ClientError {
+    /// Failed to convert the `target` passed into [`WebSocketClient::connect`]
+    /// into an actual connection target.
     #[error("failed to create request target")]
     CreateTarget(#[source] CreateTargetError),
+    /// Failed to create the socket used for connecting.
     #[error("failed to create socket")]
     CreateSocket(#[source] CreateSocketError),
+    /// Failed to connect to the target.
     #[error("failed to connect")]
     Connect(#[source] ConnectError),
-    #[error("invalid socket connector")]
-    InvalidConnector,
+    /// Generic session error.
     #[error(transparent)]
     Session(#[from] SessionError),
 }

@@ -10,36 +10,50 @@ use {
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
 };
 
+/// Configuration for a [`WebSocketServer`].
+///
+/// Use [`builder`] to start creating one.
+///
+/// [`WebSocketServer`]: crate::server::WebSocketServer
+/// [`builder`]: ServerConfig::builder
 #[derive(Clone)]
 pub struct ServerConfig {
     pub(crate) bind_address: SocketAddr,
-    pub(crate) crypto: Arc<rustls::ServerConfig>,
+    pub(crate) tls: Option<Arc<rustls::ServerConfig>>,
     pub(crate) socket: WebSocketConfig,
 }
 
 impl ServerConfig {
+    /// Starts creating a configuration.
     pub const fn builder() -> ServerConfigBuilder<WantsBindAddress> {
-        ServerConfigBuilder(WantsBindAddress { _priv: () })
+        ServerConfigBuilder(WantsBindAddress(()))
     }
 }
 
+/// Builds a [`ServerConfig`].
 #[must_use]
 pub struct ServerConfigBuilder<S>(S);
 
-pub struct WantsBindAddress {
-    _priv: (),
-}
+/// [`ServerConfigBuilder`] wants the [`SocketAddr`] to bind to when creating
+/// the listen socket.
+pub struct WantsBindAddress(());
 
+/// [`ServerConfigBuilder`] wants the [`rustls::ServerConfig`] for configuring
+/// TLS encryption.
 pub struct WantsTlsConfig {
     bind_address: SocketAddr,
 }
 
+/// [`ServerConfigBuilder`] wants the [`WebSocketConfig`] to configure incoming
+/// client connections with.
 pub struct WantsSocketConfig {
     bind_address: SocketAddr,
-    crypto: Arc<rustls::ServerConfig>,
+    tls: Option<Arc<rustls::ServerConfig>>,
 }
 
 impl ServerConfigBuilder<WantsBindAddress> {
+    /// Configures this to listen on [`Ipv6Addr::UNSPECIFIED`] on the given
+    /// port.
     pub fn with_bind_default(self, listening_port: u16) -> ServerConfigBuilder<WantsTlsConfig> {
         self.with_bind_address(SocketAddr::new(
             Ipv6Addr::UNSPECIFIED.into(),
@@ -47,6 +61,7 @@ impl ServerConfigBuilder<WantsBindAddress> {
         ))
     }
 
+    /// Configures this to listen on the given socket address.
     pub fn with_bind_address(
         self,
         bind_address: SocketAddr,
@@ -56,6 +71,10 @@ impl ServerConfigBuilder<WantsBindAddress> {
 }
 
 impl ServerConfigBuilder<WantsTlsConfig> {
+    /// Configures this to use a single certificate and private key for
+    /// encryption, given by [`Identity`].
+    ///
+    /// Use [`Identity::self_signed`] to generate a self-signed certificate.
     pub fn with_identity(self, identity: Identity) -> ServerConfigBuilder<WantsSocketConfig> {
         let crypto = rustls::ServerConfig::builder()
             .with_no_client_auth()
@@ -64,39 +83,62 @@ impl ServerConfigBuilder<WantsTlsConfig> {
         self.with_tls_config(crypto)
     }
 
+    /// Configures this to use the given [`rustls::ServerConfig`] for
+    /// encryption.
     pub fn with_tls_config(
         self,
-        crypto: impl Into<Arc<rustls::ServerConfig>>,
+        tls: impl Into<Arc<rustls::ServerConfig>>,
     ) -> ServerConfigBuilder<WantsSocketConfig> {
-        let crypto = crypto.into();
+        let tls = tls.into();
         ServerConfigBuilder(WantsSocketConfig {
             bind_address: self.0.bind_address,
-            crypto,
+            tls: Some(tls),
+        })
+    }
+
+    /// Configures this to not use any encryption for connecting clients.
+    ///
+    /// **You should not use this in a production build** - this is only
+    /// provided for testing purposes.
+    ///
+    /// Encrypted clients (over `wss`) will not be able to connect at all. They
+    /// must connect over `ws` instead.
+    pub fn with_no_encryption(self) -> ServerConfigBuilder<WantsSocketConfig> {
+        ServerConfigBuilder(WantsSocketConfig {
+            bind_address: self.0.bind_address,
+            tls: None,
         })
     }
 }
 
 impl ServerConfigBuilder<WantsSocketConfig> {
+    /// Uses [`WebSocketConfig::default`].
     pub fn with_default_socket_config(self) -> ServerConfig {
         self.with_socket_config(WebSocketConfig::default())
     }
 
+    /// Uses the given socket configuration.
     pub fn with_socket_config(self, socket: WebSocketConfig) -> ServerConfig {
         ServerConfig {
             bind_address: self.0.bind_address,
-            crypto: self.0.crypto,
+            tls: self.0.tls,
             socket,
         }
     }
 }
 
+/// Single pair of certificate chain and private key used for configuring a
+/// [`ServerConfig`].
 #[derive(Debug)]
 pub struct Identity {
+    /// Certificate chain.
     pub cert_chain: Vec<CertificateDer<'static>>,
+    /// Private key.
     pub key_der: PrivateKeyDer<'static>,
 }
 
 impl Identity {
+    /// Creates a new identity from the given parts.
     #[must_use]
     pub fn new(
         cert_chain: impl IntoIterator<Item = CertificateDer<'static>>,
@@ -108,6 +150,23 @@ impl Identity {
         }
     }
 
+    /// Generates an identity using a self-signed certificate and private key.
+    ///
+    /// Clients will not be able to connect to a server with this identity
+    /// unless they have this certificate in their certificate store.
+    ///
+    /// `subject_alt_names` is iterator of strings representing subject
+    /// alternative names (SANs). They can be both hostnames or IP addresses.
+    /// An error is returned if one of them is not a valid ASN.1 string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aeronet_websocket::server::Identity;
+    ///
+    /// let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"])
+    ///     .unwrap();
+    /// ```
     #[cfg(feature = "self-signed")]
     pub fn self_signed(
         subject_alt_names: impl IntoIterator<Item = impl AsRef<str>>,
@@ -130,12 +189,12 @@ impl Identity {
         dname.push(DnType::CommonName, "aeronet self-signed");
 
         let key_pair = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256)
-            .expect("algorithm for key pair is supported");
+            .expect("algorithm for key pair should be supported");
 
         let cert = CertificateParams::new(subject_alt_names)
             .map_err(|_| InvalidSan)?
             .self_signed(&key_pair)
-            .expect("inner params are valid");
+            .expect("inner params should be valid");
 
         Ok(Self::new(
             [cert.der().clone()],
@@ -144,6 +203,7 @@ impl Identity {
     }
 }
 
+/// Provided a subject alternative name which is not a valid DNS string.
 #[cfg(feature = "self-signed")]
 #[derive(Debug, thiserror::Error)]
 #[error("invalid SANs for self-signed certificate")]

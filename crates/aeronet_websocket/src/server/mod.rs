@@ -1,18 +1,19 @@
+//! See [`WebSocketServer`].
+
 mod backend;
 mod config;
 
 pub use config::*;
 use {
     crate::{
-        WebSocketRuntime,
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
-        tungstenite,
+        tungstenite, WebSocketRuntime,
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
         server::{CloseReason, Closed, Opened, Server},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -21,9 +22,10 @@ use {
     std::{io, net::SocketAddr},
     thiserror::Error,
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
 };
 
+/// Allows using [`WebSocketServer`].
 #[derive(Debug)]
 pub struct WebSocketServerPlugin;
 
@@ -43,10 +45,43 @@ impl Plugin for WebSocketServerPlugin {
     }
 }
 
+/// WebSocket server implementation which listens for client connections,
+/// and coordinates messaging between multiple clients.
+///
+/// Use [`WebSocketServer::open`] to start opening a server.
 #[derive(Debug, Component)]
 pub struct WebSocketServer(Frontend);
 
 impl WebSocketServer {
+    /// Creates an [`EntityCommand`] to set up a server and have it start
+    /// listening for connections.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use {
+    ///     aeronet_websocket::server::{ServerConfig, WebSocketServer, Identity},
+    ///     bevy_ecs::{prelude::*, system::EntityCommand},
+    /// };
+    ///
+    /// # fn run(mut commands: Commands, world: &mut World) {
+    /// // set up a self-signed certificate to identify this server
+    /// let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
+    ///
+    /// let config = ServerConfig::builder()
+    ///     .with_bind_default(12345) // server port
+    ///     .with_identity(identity)
+    ///     .build();
+    ///
+    /// // using `Commands`
+    /// commands.spawn_empty().add(WebSocketServer::open(config));
+    ///
+    /// // using mutable `World` access
+    /// # let config = unimplemented!();
+    /// let server = world.spawn_empty().id();
+    /// WebSocketServer::open(config).apply(server, world);
+    /// # }
+    /// ```
     #[must_use]
     pub fn open(config: impl Into<ServerConfig>) -> impl EntityCommand {
         let config = config.into();
@@ -84,16 +119,23 @@ fn open(server: Entity, world: &mut World, config: ServerConfig) {
     ));
 }
 
+/// [`WebSocketServer`] error.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ServerError {
+    /// Failed to bind a socket to the address given in [`ServerConfig`].
     #[error("failed to bind socket")]
     BindSocket(#[source] io::Error),
+    /// Failed to accept a connection.
     #[error("failed to accept connection")]
     AcceptConnection(#[source] io::Error),
+    /// Failed to perform a TLS handshake over this connection.
     #[error("failed to perform TLS handshake")]
     TlsHandshake(#[source] io::Error),
+    /// Failed to accept the client due to a WebSocket protocol error.
     #[error("failed to accept client")]
     AcceptClient(#[source] tungstenite::Error),
+    /// Generic session error.
     #[error(transparent)]
     Session(#[from] SessionError),
 }
