@@ -140,7 +140,6 @@ fn web_socket_config(args: &Args) -> WebSocketServerConfig {
     WebSocketServerConfig::builder()
         .with_bind_default(args.ws_port)
         .with_identity(identity)
-        .with_default_socket_config()
 }
 
 //

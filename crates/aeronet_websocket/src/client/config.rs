@@ -36,12 +36,6 @@ pub struct ClientConfigBuilder<S>(S);
 /// connections.
 pub struct WantsConnector(());
 
-/// [`ClientConfigBuilder`] wants the [`WebSocketConfig`] to configure the
-/// socket with.
-pub struct WantsSocketConfig {
-    connector: Connector,
-}
-
 impl ClientConfigBuilder<WantsConnector> {
     /// Configures this to use the platform's native certificates for verifying
     /// server certificates.
@@ -50,7 +44,7 @@ impl ClientConfigBuilder<WantsConnector> {
     ///
     /// This uses [`native_root_cert_store`] to build up the root certificate
     /// store.
-    pub fn with_native_certs(self) -> ClientConfigBuilder<WantsSocketConfig> {
+    pub fn with_native_certs(self) -> ClientConfig {
         let config = rustls::ClientConfig::builder()
             .with_root_certificates(native_root_cert_store())
             .with_no_client_auth();
@@ -65,14 +59,9 @@ impl ClientConfigBuilder<WantsConnector> {
     /// any configuration yet, prefer [`with_native_certs`].
     ///
     /// [`with_native_certs`]: ClientConfigBuilder::with_native_certs
-    pub fn with_tls_config(
-        self,
-        config: impl Into<Arc<rustls::ClientConfig>>,
-    ) -> ClientConfigBuilder<WantsSocketConfig> {
+    pub fn with_tls_config(self, config: impl Into<Arc<rustls::ClientConfig>>) -> ClientConfig {
         let config = config.into();
-        ClientConfigBuilder(WantsSocketConfig {
-            connector: Connector::Rustls(config),
-        })
+        self.with_connector(Connector::Rustls(config))
     }
 
     /// Configures this to not verify any server certificates when connecting.
@@ -83,7 +72,7 @@ impl ClientConfigBuilder<WantsConnector> {
     /// This will allow connecting to both encrypted and unencrypted peers (both
     /// `ws` and `wss), whereas [`with_no_encryption`] will only allow you to
     /// connect to unencrypted peers.
-    pub fn with_no_cert_validation(self) -> ClientConfigBuilder<WantsSocketConfig> {
+    pub fn with_no_cert_validation(self) -> ClientConfig {
         let config = rustls::ClientConfig::builder()
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(NoServerVerification::default()))
@@ -97,36 +86,30 @@ impl ClientConfigBuilder<WantsConnector> {
     /// provided for testing purposes.
     ///
     /// This will not allow you to connect to encrypted peers (`wss`) at all.
-    pub const fn with_no_encryption(self) -> ClientConfigBuilder<WantsSocketConfig> {
-        ClientConfigBuilder(WantsSocketConfig {
-            connector: Connector::Plain,
-        })
-    }
-}
-
-impl ClientConfigBuilder<WantsSocketConfig> {
-    /// Uses [`WebSocketConfig::default`].
-    pub fn with_default_socket_config(self) -> ClientConfig {
-        self.with_socket_config(WebSocketConfig::default())
+    pub fn with_no_encryption(self) -> ClientConfig {
+        self.with_connector(Connector::Plain)
     }
 
-    /// Uses the given socket configuration.
-    pub fn with_socket_config(self, socket: WebSocketConfig) -> ClientConfig {
+    fn with_connector(self, connector: Connector) -> ClientConfig {
         ClientConfig {
-            connector: self.0.connector,
-            socket,
+            connector,
+            socket: WebSocketConfig::default(),
             nagle: true,
         }
     }
 }
 
 impl ClientConfig {
+    /// Configures this to use the given socket configuration.
+    pub fn with_socket_config(self, socket: WebSocketConfig) -> Self {
+        Self { socket, ..self }
+    }
+
     /// Sets whether [Nagle's algorithm][Nagle] is enabled or not.
     ///
     /// [Nagle]: https://en.wikipedia.org/wiki/Nagle%27s_algorithm
-    pub fn with_nagle(mut self, nagle: bool) -> Self {
-        self.nagle = nagle;
-        self
+    pub fn with_nagle(self, nagle: bool) -> Self {
+        Self { nagle, ..self }
     }
 
     /// Disables [Nagle's algorithm][Nagle].
@@ -150,9 +133,7 @@ pub fn native_root_cert_store() -> RootCertStore {
 
 impl Default for ClientConfig {
     fn default() -> Self {
-        Self::builder()
-            .with_native_certs()
-            .with_default_socket_config()
+        Self::builder().with_native_certs()
     }
 }
 

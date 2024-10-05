@@ -44,13 +44,6 @@ pub struct WantsTlsConfig {
     bind_address: SocketAddr,
 }
 
-/// [`ServerConfigBuilder`] wants the [`WebSocketConfig`] to configure incoming
-/// client connections with.
-pub struct WantsSocketConfig {
-    bind_address: SocketAddr,
-    tls: Option<Arc<rustls::ServerConfig>>,
-}
-
 impl ServerConfigBuilder<WantsBindAddress> {
     /// Configures this to listen on [`Ipv6Addr::UNSPECIFIED`] on the given
     /// port.
@@ -75,7 +68,7 @@ impl ServerConfigBuilder<WantsTlsConfig> {
     /// encryption, given by [`Identity`].
     ///
     /// Use [`Identity::self_signed`] to generate a self-signed certificate.
-    pub fn with_identity(self, identity: Identity) -> ServerConfigBuilder<WantsSocketConfig> {
+    pub fn with_identity(self, identity: Identity) -> ServerConfig {
         let crypto = rustls::ServerConfig::builder()
             .with_no_client_auth()
             .with_single_cert(identity.cert_chain, identity.key_der)
@@ -85,15 +78,9 @@ impl ServerConfigBuilder<WantsTlsConfig> {
 
     /// Configures this to use the given [`rustls::ServerConfig`] for
     /// encryption.
-    pub fn with_tls_config(
-        self,
-        tls: impl Into<Arc<rustls::ServerConfig>>,
-    ) -> ServerConfigBuilder<WantsSocketConfig> {
+    pub fn with_tls_config(self, tls: impl Into<Arc<rustls::ServerConfig>>) -> ServerConfig {
         let tls = tls.into();
-        ServerConfigBuilder(WantsSocketConfig {
-            bind_address: self.0.bind_address,
-            tls: Some(tls),
-        })
+        self.with_tls(Some(tls))
     }
 
     /// Configures this to not use any encryption for connecting clients.
@@ -103,27 +90,23 @@ impl ServerConfigBuilder<WantsTlsConfig> {
     ///
     /// Encrypted clients (over `wss`) will not be able to connect at all. They
     /// must connect over `ws` instead.
-    pub fn with_no_encryption(self) -> ServerConfigBuilder<WantsSocketConfig> {
-        ServerConfigBuilder(WantsSocketConfig {
+    pub fn with_no_encryption(self) -> ServerConfig {
+        self.with_tls(None)
+    }
+
+    fn with_tls(self, tls: Option<Arc<rustls::ServerConfig>>) -> ServerConfig {
+        ServerConfig {
             bind_address: self.0.bind_address,
-            tls: None,
-        })
+            tls,
+            socket: WebSocketConfig::default(),
+        }
     }
 }
 
-impl ServerConfigBuilder<WantsSocketConfig> {
-    /// Uses [`WebSocketConfig::default`].
-    pub fn with_default_socket_config(self) -> ServerConfig {
-        self.with_socket_config(WebSocketConfig::default())
-    }
-
-    /// Uses the given socket configuration.
-    pub fn with_socket_config(self, socket: WebSocketConfig) -> ServerConfig {
-        ServerConfig {
-            bind_address: self.0.bind_address,
-            tls: self.0.tls,
-            socket,
-        }
+impl ServerConfig {
+    /// Configures this to use the given socket configuration.
+    pub fn with_socket_config(self, socket: WebSocketConfig) -> Self {
+        Self { socket, ..self }
     }
 }
 

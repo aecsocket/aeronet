@@ -37,7 +37,6 @@ fn server_config() -> ServerConfig {
     ServerConfig::builder()
         .with_bind_default(25565)
         .with_identity(identity)
-        .with_default_socket_config()
 }
 
 fn open_server(mut commands: Commands) {

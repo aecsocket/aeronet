@@ -70,14 +70,13 @@ impl WebSocketServer {
     ///
     /// let config = ServerConfig::builder()
     ///     .with_bind_default(12345) // server port
-    ///     .with_identity(identity)
-    ///     .build();
+    ///     .with_identity(identity);
     ///
     /// // using `Commands`
     /// commands.spawn_empty().add(WebSocketServer::open(config));
     ///
     /// // using mutable `World` access
-    /// # let config = unimplemented!();
+    /// # let config: ServerConfig = unimplemented!();
     /// let server = world.spawn_empty().id();
     /// WebSocketServer::open(config).apply(server, world);
     /// # }

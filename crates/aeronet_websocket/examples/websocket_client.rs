@@ -10,7 +10,7 @@ use {
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     std::mem,
 };
 
@@ -123,9 +123,7 @@ fn client_config() -> ClientConfig {
 
 #[cfg(not(target_family = "wasm"))]
 fn client_config() -> ClientConfig {
-    ClientConfig::builder()
-        .with_no_cert_validation()
-        .with_default_socket_config()
+    ClientConfig::builder().with_no_cert_validation()
 }
 
 fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {

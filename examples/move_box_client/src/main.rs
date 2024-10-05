@@ -307,9 +307,7 @@ fn web_socket_config() -> WebSocketClientConfig {
 
 #[cfg(not(target_family = "wasm"))]
 fn web_socket_config() -> WebSocketClientConfig {
-    WebSocketClientConfig::builder()
-        .with_no_cert_validation()
-        .with_default_socket_config()
+    WebSocketClientConfig::builder().with_no_cert_validation()
 }
 
 //
