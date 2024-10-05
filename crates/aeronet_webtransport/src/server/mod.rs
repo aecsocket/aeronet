@@ -83,7 +83,7 @@ impl WebTransportServer {
     /// commands.spawn_empty().add(WebTransportServer::open(config));
     ///
     /// // using mutable `World` access
-    /// # let config = unimplemented!();
+    /// # let config: ServerConfig = unimplemented!();
     /// let server = world.spawn_empty().id();
     /// WebTransportServer::open(config).apply(server, world);
     /// # }
