@@ -1,6 +1,6 @@
 [package]
-description = "Protocol layer implementation for aeronet"
-name = "aeronet_proto"
+description = "Transport layer implementation for aeronet"
+name = "aeronet_transport"
 
 authors.workspace = true
 categories.workspace = true

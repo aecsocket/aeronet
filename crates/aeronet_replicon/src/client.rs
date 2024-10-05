@@ -2,8 +2,8 @@
 
 use {
     aeronet_io::connection::{Connected, Session},
-    aeronet_proto::{
-        lane::LaneIndex, message::MessageBuffers, AeronetProtoPlugin, ProtoSet, ProtoTransport,
+    aeronet_transport::{
+        lane::LaneIndex, message::MessageBuffers, AeronetTransportPlugin, Transport, TransportSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -16,40 +16,50 @@ pub struct AeronetRepliconClientPlugin;
 
 impl Plugin for AeronetRepliconClientPlugin {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<AeronetProtoPlugin>() {
-            app.add_plugins(AeronetProtoPlugin);
+        if !app.is_plugin_added::<AeronetTransportPlugin>() {
+            app.add_plugins(AeronetTransportPlugin);
         }
 
         app.register_type::<AeronetRepliconClient>()
             .configure_sets(
                 PreUpdate,
-                (ProtoSet::Poll, ClientIoSet::Poll, ClientSet::ReceivePackets).chain(),
+                (
+                    TransportSet::Poll,
+                    ClientTransportSet::Poll,
+                    ClientSet::ReceivePackets,
+                )
+                    .chain(),
             )
             .configure_sets(
                 PostUpdate,
-                (ClientSet::SendPackets, ClientIoSet::Flush, ProtoSet::Flush).chain(),
+                (
+                    ClientSet::SendPackets,
+                    ClientTransportSet::Flush,
+                    TransportSet::Flush,
+                )
+                    .chain(),
             )
             .add_systems(
                 PreUpdate,
                 (update_state, poll)
                     .chain()
-                    .in_set(ClientIoSet::Poll)
+                    .in_set(ClientTransportSet::Poll)
                     .run_if(resource_exists::<RepliconClient>),
             )
             .add_systems(
                 PostUpdate,
                 flush
-                    .in_set(ClientIoSet::Flush)
+                    .in_set(ClientTransportSet::Flush)
                     .run_if(resource_exists::<RepliconClient>),
             )
             .observe(on_client_added);
     }
 }
 
-/// Set for scheduling systems in between the [`ProtoSet`] and
+/// Set for scheduling systems in between the [`TransportSet`] and
 /// [`bevy_replicon`]'s [`ClientSet`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum ClientIoSet {
+pub enum ClientTransportSet {
     /// Passing incoming messages into [`bevy_replicon`].
     Poll,
     /// Passing outgoing [`bevy_replicon`] packets to the transport layer.
@@ -77,7 +87,7 @@ pub struct AeronetRepliconClient;
 // TODO: required components
 fn on_client_added(trigger: Trigger<OnAdd, AeronetRepliconClient>, mut commands: Commands) {
     let client = trigger.entity();
-    commands.entity(client).insert(ProtoTransport);
+    commands.entity(client).insert(Transport);
 }
 
 type ConnectedClient = (With<Session>, With<Connected>, With<AeronetRepliconClient>);

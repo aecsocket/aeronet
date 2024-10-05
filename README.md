@@ -37,6 +37,19 @@ implementing these features.
 cargo run --example channel
 ```
 
+- [`aeronet_websocket`]: over WebSockets (using TCP)
+  - Native + WASM
+  - ✅ Complete
+
+```sh
+cargo run --example websocket_echo_server -F server
+cargo run --example websocket_client -F client
+
+# WASM
+cargo install wasm-server-runner
+cargo run --example websocket_client -F client --target wasm32-unknown-unknown
+```
+
 - [`aeronet_webtransport`]: over WebTransport (using QUIC)
   - Native + WASM
   - ✅ Complete
@@ -48,20 +61,6 @@ cargo run --example webtransport_client -F client,dangerous-configuration
 # WASM
 cargo install wasm-server-runner
 cargo run --example webtransport_client -F client --target wasm32-unknown-unknown
-```
-
-- [`aeronet_websocket`]: over WebSockets (using TCP)
-  - Native + WASM
-  - 🛠️ Working - missing:
-    - TLS + HDR support for server
-
-```sh
-cargo run --example websocket_echo_server -F server
-cargo run --example websocket_client -F client,rustls-tls-native-roots
-
-# WASM
-cargo install wasm-server-runner
-cargo run --example websocket_client -F client --target wasm32-unknown-unknown
 ```
 
 - [`aeronet_steam`]: over Steam's networking sockets

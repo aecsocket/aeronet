@@ -1,11 +1,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
-use bevy_app::{PluginGroupBuilder, prelude::*};
+use bevy_app::{prelude::*, PluginGroupBuilder};
 pub use {
-    aeronet_io::{self as io, AeronetIoPlugin, IoSet, connection, packet, server},
-    aeronet_proto::{self as proto, AeronetProtoPlugin, ProtoSet, message},
-    anyhow, bytes, ringbuf,
+    aeronet_io::{self as io, connection, packet, server},
+    aeronet_transport::{self as transport, message},
+    anyhow, bytes, octs, ringbuf,
 };
 
 /// Adds the default networking plugins.
@@ -13,14 +13,14 @@ pub use {
 /// # Plugins
 ///
 /// - [`AeronetIoPlugin`]
-/// - [`AeronetProtoPlugin`]
+/// - [`AeronetTransportPlugin`]
 #[derive(Debug)]
 pub struct AeronetPlugins;
 
 impl PluginGroup for AeronetPlugins {
     fn build(self) -> PluginGroupBuilder {
         PluginGroupBuilder::start::<Self>()
-            .add(AeronetIoPlugin)
-            .add(AeronetProtoPlugin)
+            .add(io::AeronetIoPlugin)
+            .add(transport::AeronetTransportPlugin)
     }
 }

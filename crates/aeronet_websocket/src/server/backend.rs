@@ -131,11 +131,11 @@ async fn handle_session(
     } else {
         MaybeTlsStream::Plain(stream)
     };
+    // TODO accept hdr: find some way to pass control of headers over to user
     let stream = tokio_tungstenite::accept_async_with_config(stream, Some(socket_config))
         .await
         .map_err(ServerError::AcceptClient)?;
 
-    // TODO accept hdr: find some way to pass control of headers over to user
     let (frontend, backend) = crate::session::backend::native::split(stream, packet_buf_cap);
     let connected = ToConnected {
         remote_addr,

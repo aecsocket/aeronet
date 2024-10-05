@@ -3,9 +3,8 @@ use {
     aeronet_io::{
         connection::{Connected, DisconnectReason, Disconnected},
         server::{Opened, Server},
-        IoSet,
     },
-    aeronet_proto::{message::MessageBuffers, AeronetProtoPlugin, ProtoTransport},
+    aeronet_transport::{message::MessageBuffers, AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_hierarchy::Parent,
@@ -21,29 +20,39 @@ pub struct AeronetRepliconServerPlugin;
 
 impl Plugin for AeronetRepliconServerPlugin {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<AeronetProtoPlugin>() {
-            app.add_plugins(AeronetProtoPlugin);
+        if !app.is_plugin_added::<AeronetTransportPlugin>() {
+            app.add_plugins(AeronetTransportPlugin);
         }
 
         app.configure_sets(
             PreUpdate,
-            (IoSet::Poll, ServerIoSet::Poll, ServerSet::ReceivePackets).chain(),
+            (
+                TransportSet::Poll,
+                ServerTransportSet::Poll,
+                ServerSet::ReceivePackets,
+            )
+                .chain(),
         )
         .configure_sets(
             PostUpdate,
-            (ServerSet::SendPackets, ServerIoSet::Flush, IoSet::Flush).chain(),
+            (
+                ServerSet::SendPackets,
+                ServerTransportSet::Flush,
+                TransportSet::Flush,
+            )
+                .chain(),
         )
         .add_systems(
             PreUpdate,
             (poll, update_state)
                 .chain()
-                .in_set(ServerIoSet::Poll)
+                .in_set(ServerTransportSet::Poll)
                 .run_if(resource_exists::<RepliconServer>),
         )
         .add_systems(
             PostUpdate,
             flush
-                .in_set(ServerIoSet::Flush)
+                .in_set(ServerTransportSet::Flush)
                 .run_if(resource_exists::<RepliconServer>),
         )
         .observe(on_connected)
@@ -52,7 +61,7 @@ impl Plugin for AeronetRepliconServerPlugin {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum ServerIoSet {
+pub enum ServerTransportSet {
     Poll,
     Flush,
 }
@@ -91,8 +100,7 @@ fn on_connected(
 
     let client_id = client.into_client_id();
     events.send(ServerEvent::ClientConnected { client_id });
-    // TODO: required components
-    commands.entity(client).insert(ProtoTransport);
+    commands.entity(client).insert(Transport);
 }
 
 fn on_disconnected(

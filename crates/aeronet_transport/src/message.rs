@@ -1,5 +1,5 @@
 use {
-    crate::{ProtoSet, lane::LaneIndex},
+    crate::{lane::LaneIndex, TransportSet},
     aeronet_io::packet::PacketBuffers,
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
@@ -27,7 +27,7 @@ impl Plugin for MessagePlugin {
                     msg_bufs.recv.extend(msgs);
                 }
             })
-            .in_set(ProtoSet::Poll),
+            .in_set(TransportSet::Poll),
         )
         .add_systems(
             PostUpdate,
@@ -41,7 +41,7 @@ impl Plugin for MessagePlugin {
                     }
                 }
             })
-            .in_set(ProtoSet::Flush),
+            .in_set(TransportSet::Flush),
         );
     }
 }

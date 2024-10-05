@@ -4,7 +4,7 @@
 pub mod lane;
 pub mod message;
 
-pub use {aeronet_io, octs};
+pub use {aeronet_io as io, octs};
 use {
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
@@ -13,29 +13,29 @@ use {
 };
 
 #[derive(Debug)]
-pub struct AeronetProtoPlugin;
+pub struct AeronetTransportPlugin;
 
-impl Plugin for AeronetProtoPlugin {
+impl Plugin for AeronetTransportPlugin {
     fn build(&self, app: &mut App) {
-        app.configure_sets(PreUpdate, ProtoSet::Poll)
-            .configure_sets(PostUpdate, ProtoSet::Flush)
+        app.configure_sets(PreUpdate, TransportSet::Poll)
+            .configure_sets(PostUpdate, TransportSet::Flush)
             .add_plugins(message::MessagePlugin)
             .observe(on_transport_added);
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum ProtoSet {
+pub enum TransportSet {
     Poll,
     Flush,
 }
 
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
-pub struct ProtoTransport;
+pub struct Transport;
 
 // TODO: required components
-fn on_transport_added(trigger: Trigger<OnAdd, ProtoTransport>, mut commands: Commands) {
+fn on_transport_added(trigger: Trigger<OnAdd, Transport>, mut commands: Commands) {
     let session = trigger.entity();
     commands.entity(session).insert(MessageBuffers::default());
 }

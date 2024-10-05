@@ -18,14 +18,15 @@ workspace = true
 all-features = true
 
 [features]
-visualizer = ["aeronet_proto/visualizer"]
+visualizer = ["aeronet_transport/visualizer"]
 
 [dependencies]
 aeronet_io = { workspace = true }
-aeronet_proto = { workspace = true }
+aeronet_transport = { workspace = true }
 
 anyhow = { workspace = true }
 bytes = { workspace = true }
+octs = { workspace = true }
 ringbuf = { workspace = true }
 
 bevy_app = { workspace = true }
