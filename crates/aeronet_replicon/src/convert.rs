@@ -1,4 +1,4 @@
-use {aeronet_proto::lane::LaneIndex, bevy_ecs::prelude::*, bevy_replicon::prelude::*};
+use {aeronet_transport::lane::LaneIndex, bevy_ecs::prelude::*, bevy_replicon::prelude::*};
 
 // ClientId <-> Entity
 

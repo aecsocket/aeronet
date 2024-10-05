@@ -32,10 +32,11 @@ type_complexity = "allow"
 
 [workspace.dependencies]
 aeronet = { version = "0.9.0-dev", path = "crates/aeronet" }
-aeronet_channel = { version = "0.9.0-dev", path = "crates/aeronet_channel" }
 aeronet_io = { version = "0.9.0-dev", path = "crates/aeronet_io" }
-aeronet_proto = { version = "0.9.0-dev", path = "crates/aeronet_proto" }
 aeronet_replicon = { version = "0.9.0-dev", path = "crates/aeronet_replicon" }
+aeronet_transport = { version = "0.9.0-dev", path = "crates/aeronet_transport" }
+
+aeronet_channel = { version = "0.9.0-dev", path = "crates/aeronet_channel" }
 aeronet_steam = { version = "0.9.0-dev", path = "crates/aeronet_steam" }
 aeronet_websocket = { version = "0.9.0-dev", path = "crates/aeronet_websocket" }
 aeronet_webtransport = { version = "0.9.0-dev", path = "crates/aeronet_webtransport" }

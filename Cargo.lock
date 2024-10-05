@@ -100,11 +100,12 @@ name = "aeronet"
 version = "0.9.0-dev"
 dependencies = [
  "aeronet_io",
- "aeronet_proto",
+ "aeronet_transport",
  "anyhow",
  "bevy_app",
  "bevy_ecs",
  "bytes",
+ "octs",
  "ringbuf",
 ]
 
@@ -143,7 +144,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "aeronet_proto"
+name = "aeronet_replicon"
+version = "0.9.0-dev"
+dependencies = [
+ "aeronet_io",
+ "aeronet_transport",
+ "ahash",
+ "bevy_app",
+ "bevy_derive",
+ "bevy_ecs",
+ "bevy_hierarchy",
+ "bevy_reflect",
+ "bevy_replicon",
+ "tracing",
+]
+
+[[package]]
+name = "aeronet_transport"
 version = "0.9.0-dev"
 dependencies = [
  "aeronet_io",
@@ -159,22 +176,6 @@ dependencies = [
  "octs",
  "size_format",
  "thiserror",
- "tracing",
-]
-
-[[package]]
-name = "aeronet_replicon"
-version = "0.9.0-dev"
-dependencies = [
- "aeronet_io",
- "aeronet_proto",
- "ahash",
- "bevy_app",
- "bevy_derive",
- "bevy_ecs",
- "bevy_hierarchy",
- "bevy_reflect",
- "bevy_replicon",
  "tracing",
 ]
 

@@ -23,7 +23,7 @@ server = ["bevy_replicon/server"]
 
 [dependencies]
 aeronet_io = { workspace = true }
-aeronet_proto = { workspace = true }
+aeronet_transport = { workspace = true }
 
 ahash = { workspace = true }
 tracing = { workspace = true }
