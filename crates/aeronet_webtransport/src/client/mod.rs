@@ -1,6 +1,3 @@
-//! Allows creating a dedicated client session, which connects to a server
-//! endpoint.
-//!
 //! See [`WebTransportClient`].
 
 mod backend;
@@ -11,16 +8,16 @@ use {
         session::{self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bytes::Bytes,
     futures::channel::{mpsc, oneshot},
     thiserror::Error,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
 };
 
 cfg_if::cfg_if! {
@@ -148,6 +145,7 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
 
 /// [`WebTransportClient`] error.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ClientError {
     /// Failed to start connecting to the target.
     #[error("failed to connect")]

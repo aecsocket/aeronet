@@ -4,15 +4,22 @@ use {
     aeronet_io::connection::DisconnectReason,
     bevy_ecs::prelude::*,
     futures::{
-        SinkExt,
         channel::{mpsc, oneshot},
         never::Never,
+        SinkExt,
     },
-    std::net::SocketAddr,
-    tokio::net::{TcpListener, TcpStream},
+    std::{
+        net::SocketAddr,
+        pin::Pin,
+        task::{Context, Poll},
+    },
+    tokio::{
+        io::{AsyncRead, AsyncWrite, ReadBuf},
+        net::{TcpListener, TcpStream},
+    },
     tokio_rustls::TlsAcceptor,
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
-    tracing::{Instrument, debug, debug_span},
+    tracing::{debug, debug_span, Instrument},
 };
 
 pub async fn start(
@@ -20,7 +27,7 @@ pub async fn start(
     packet_buf_cap: usize,
     send_next: oneshot::Sender<ToOpen>,
 ) -> Result<Never, ServerError> {
-    let tls_acceptor = TlsAcceptor::from(config.crypto);
+    let tls_acceptor = config.tls.map(TlsAcceptor::from);
     let listener = TcpListener::bind(config.bind_address)
         .await
         .map_err(ServerError::BindSocket)?;
@@ -69,7 +76,7 @@ async fn accept_session(
     remote_addr: SocketAddr,
     socket_config: WebSocketConfig,
     packet_buf_cap: usize,
-    tls_acceptor: TlsAcceptor,
+    tls_acceptor: Option<TlsAcceptor>,
     mut send_connecting: mpsc::Sender<ToConnecting>,
 ) -> Result<(), DisconnectReason<ServerError>> {
     let (send_session_entity, recv_session_entity) = oneshot::channel::<Entity>();
@@ -112,13 +119,18 @@ async fn handle_session(
     remote_addr: SocketAddr,
     socket_config: WebSocketConfig,
     packet_buf_cap: usize,
-    tls_acceptor: TlsAcceptor,
+    tls_acceptor: Option<TlsAcceptor>,
     send_next: oneshot::Sender<ToConnected>,
 ) -> Result<Never, DisconnectReason<ServerError>> {
-    let stream = tls_acceptor
-        .accept(stream)
-        .await
-        .map_err(ServerError::TlsHandshake)?;
+    let stream = if let Some(tls_acceptor) = tls_acceptor {
+        tls_acceptor
+            .accept(stream)
+            .await
+            .map(MaybeTlsStream::Rustls)
+            .map_err(ServerError::TlsHandshake)?
+    } else {
+        MaybeTlsStream::Plain(stream)
+    };
     let stream = tokio_tungstenite::accept_async_with_config(stream, Some(socket_config))
         .await
         .map_err(ServerError::AcceptClient)?;
@@ -141,4 +153,53 @@ async fn handle_session(
         .start()
         .await
         .map_err(|reason| reason.map_err(ServerError::Session))
+}
+
+#[derive(Debug)]
+enum MaybeTlsStream<S> {
+    Plain(S),
+    Rustls(tokio_rustls::server::TlsStream<S>),
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for MaybeTlsStream<S> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            MaybeTlsStream::Plain(ref mut s) => Pin::new(s).poll_read(cx, buf),
+            MaybeTlsStream::Rustls(s) => Pin::new(s).poll_read(cx, buf),
+        }
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<S> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, std::io::Error>> {
+        match self.get_mut() {
+            MaybeTlsStream::Plain(ref mut s) => Pin::new(s).poll_write(cx, buf),
+            MaybeTlsStream::Rustls(s) => Pin::new(s).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
+        match self.get_mut() {
+            MaybeTlsStream::Plain(ref mut s) => Pin::new(s).poll_flush(cx),
+            MaybeTlsStream::Rustls(s) => Pin::new(s).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), std::io::Error>> {
+        match self.get_mut() {
+            MaybeTlsStream::Plain(ref mut s) => Pin::new(s).poll_shutdown(cx),
+            MaybeTlsStream::Rustls(s) => Pin::new(s).poll_shutdown(cx),
+        }
+    }
 }

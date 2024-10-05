@@ -1,13 +1,19 @@
 use {
     rustls::{
-        RootCertStore,
         client::danger::{ServerCertVerified, ServerCertVerifier},
         crypto::WebPkiSupportedAlgorithms,
+        RootCertStore,
     },
     std::sync::Arc,
-    tokio_tungstenite::{Connector, tungstenite::protocol::WebSocketConfig},
+    tokio_tungstenite::{tungstenite::protocol::WebSocketConfig, Connector},
 };
 
+/// Configuration for a [`WebSocketClient`] using [`tokio_tungstenite`].
+///
+/// Use [`builder`] to start creating one.
+///
+/// [`WebSocketClient`]: crate::client::WebSocketClient
+/// [`builder`]: ClientConfig::builder
 #[derive(Clone)]
 pub struct ClientConfig {
     pub(crate) connector: Connector,
@@ -16,31 +22,34 @@ pub struct ClientConfig {
 }
 
 impl ClientConfig {
+    /// Starts creating a configuration.
     pub const fn builder() -> ClientConfigBuilder<WantsConnector> {
-        ClientConfigBuilder(WantsConnector { _priv: () })
+        ClientConfigBuilder(WantsConnector(()))
     }
 }
 
+/// Builds a [`ClientConfig`].
 #[must_use]
 pub struct ClientConfigBuilder<S>(S);
 
-pub struct WantsConnector {
-    _priv: (),
-}
+/// [`ClientConfigBuilder`] wants the [`Connector`] to use when establishing
+/// connections.
+pub struct WantsConnector(());
 
+/// [`ClientConfigBuilder`] wants the [`WebSocketConfig`] to configure the
+/// socket with.
 pub struct WantsSocketConfig {
     connector: Connector,
 }
 
 impl ClientConfigBuilder<WantsConnector> {
-    pub fn with_tls_config(
-        self,
-        config: impl Into<Arc<rustls::ClientConfig>>,
-    ) -> ClientConfigBuilder<WantsSocketConfig> {
-        let config = config.into();
-        self.with_connector(Connector::Rustls(config))
-    }
-
+    /// Configures this to use the platform's native certificates for verifying
+    /// server certificates.
+    ///
+    /// If you're not sure what function to use, use this one.
+    ///
+    /// This uses [`native_root_cert_store`] to build up the root certificate
+    /// store.
     pub fn with_native_certs(self) -> ClientConfigBuilder<WantsSocketConfig> {
         let config = rustls::ClientConfig::builder()
             .with_root_certificates(native_root_cert_store())
@@ -48,6 +57,32 @@ impl ClientConfigBuilder<WantsConnector> {
         self.with_tls_config(config)
     }
 
+    /// Configures this to use a [`Connector::Rustls`] with the given
+    /// [`rustls::ClientConfig`].
+    ///
+    /// If you already have an [`Arc<rustls::ClientConfig>`], use this function
+    /// so that you can reuse the configuration. Otherwise, if you don't have
+    /// any configuration yet, prefer [`with_native_certs`].
+    ///
+    /// [`with_native_certs`]: ClientConfigBuilder::with_native_certs
+    pub fn with_tls_config(
+        self,
+        config: impl Into<Arc<rustls::ClientConfig>>,
+    ) -> ClientConfigBuilder<WantsSocketConfig> {
+        let config = config.into();
+        ClientConfigBuilder(WantsSocketConfig {
+            connector: Connector::Rustls(config),
+        })
+    }
+
+    /// Configures this to not verify any server certificates when connecting.
+    ///
+    /// **You should not use this in a production build** - this is only
+    /// provided for testing purposes.
+    ///
+    /// This will allow connecting to both encrypted and unencrypted peers (both
+    /// `ws` and `wss), whereas [`with_no_encryption`] will only allow you to
+    /// connect to unencrypted peers.
     pub fn with_no_cert_validation(self) -> ClientConfigBuilder<WantsSocketConfig> {
         let config = rustls::ClientConfig::builder()
             .dangerous()
@@ -56,19 +91,26 @@ impl ClientConfigBuilder<WantsConnector> {
         self.with_tls_config(config)
     }
 
-    pub const fn with_connector(
-        self,
-        connector: Connector,
-    ) -> ClientConfigBuilder<WantsSocketConfig> {
-        ClientConfigBuilder(WantsSocketConfig { connector })
+    /// Configures this to not use any encryption when connecting.
+    ///
+    /// **You should not use this in a production build** - this is only
+    /// provided for testing purposes.
+    ///
+    /// This will not allow you to connect to encrypted peers (`wss`) at all.
+    pub const fn with_no_encryption(self) -> ClientConfigBuilder<WantsSocketConfig> {
+        ClientConfigBuilder(WantsSocketConfig {
+            connector: Connector::Plain,
+        })
     }
 }
 
 impl ClientConfigBuilder<WantsSocketConfig> {
+    /// Uses [`WebSocketConfig::default`].
     pub fn with_default_socket_config(self) -> ClientConfig {
         self.with_socket_config(WebSocketConfig::default())
     }
 
+    /// Uses the given socket configuration.
     pub fn with_socket_config(self, socket: WebSocketConfig) -> ClientConfig {
         ClientConfig {
             connector: self.0.connector,
@@ -79,16 +121,25 @@ impl ClientConfigBuilder<WantsSocketConfig> {
 }
 
 impl ClientConfig {
+    /// Sets whether [Nagle's algorithm][Nagle] is enabled or not.
+    ///
+    /// [Nagle]: https://en.wikipedia.org/wiki/Nagle%27s_algorithm
     pub fn with_nagle(mut self, nagle: bool) -> Self {
         self.nagle = nagle;
         self
     }
 
+    /// Disables [Nagle's algorithm][Nagle].
+    ///
+    /// [Nagle]: https://en.wikipedia.org/wiki/Nagle%27s_algorithm
     pub fn disable_nagle(self) -> Self {
         self.with_nagle(false)
     }
 }
 
+/// Helper function for creating a [`RootCertStore`] with
+/// [`rustls_native_certs::load_native_certs`] automatically added to it,
+/// ignoring all invalid certificates.
 #[must_use]
 pub fn native_root_cert_store() -> RootCertStore {
     let mut root_certs = RootCertStore::empty();

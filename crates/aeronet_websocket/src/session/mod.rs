@@ -1,3 +1,7 @@
+//! Implementation for WebSocket sessions.
+//!
+//! This logic is shared between clients and servers.
+
 pub(crate) mod backend;
 
 use {
@@ -55,6 +59,14 @@ impl Plugin for WebSocketSessionPlugin {
     }
 }
 
+/// Manages a WebSocket session's connection.
+///
+/// This may represent either an outgoing client connection (this session is
+/// connecting to a server), or an incoming client connection (this session is
+/// a child of a server that the user has spawned).
+///
+/// You should not add or remove this component directly - it is managed
+/// entirely by the client and server implementations.
 #[derive(Debug, Component)]
 pub struct WebSocketIo {
     pub(crate) recv_packet_b2f: mpsc::Receiver<Bytes>,
@@ -62,22 +74,35 @@ pub struct WebSocketIo {
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
 }
 
+/// Error that occurs when polling a session using the [`WebSocketIo`] IO
+/// layer.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum SessionError {
+    /// Frontend ([`WebSocketIo`]) was dropped.
     #[error("frontend closed")]
     FrontendClosed,
+    /// Backend async task was unexpectedly cancelled and dropped.
     #[error("backend closed")]
     BackendClosed,
+    /// Failed to read the local socket address of the endpoint.
     #[error("failed to get local socket address")]
     GetLocalAddr(#[source] io::Error),
+    /// Failed to read the peer socket address of the endpoint.
     #[error("failed to get remote socket address")]
     GetRemoteAddr(#[source] io::Error),
+    /// Receiver stream was unexpectedly closed.
     #[error("receiver stream closed")]
     RecvStreamClosed,
+    /// Unexpectedly lost connection from the peer.
     #[error("connection lost")]
     Connection(#[source] ConnectionError),
+    /// The peer sent us a close frame, but it did not include a reason.
+    ///
+    /// [`WebSocketIo`] will always send a reason when closing a connection.
     #[error("peer disconnected without reason")]
     DisconnectedWithoutReason,
+    /// Failed to send data across the socket.
     #[error("failed to send data")]
     Send(#[source] SendError),
 }

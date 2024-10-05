@@ -54,9 +54,7 @@ pub async fn start(
             let socket = match stream.get_ref() {
                 MaybeTlsStream::Plain(socket) => socket,
                 MaybeTlsStream::Rustls(stream) => stream.get_ref().0,
-                _ => {
-                    return Err(ClientError::InvalidConnector.into());
-                }
+                _ => panic!("should not be using this kind of stream - {stream:?}"),
             };
             let local_addr = socket
                 .local_addr()

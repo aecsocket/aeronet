@@ -1,6 +1,3 @@
-//! Allows creating a dedicated server, which listens for client connections
-//! and coordinates messaging between multiple clients.
-//!
 //! See [`WebTransportServer`].
 
 mod backend;
@@ -11,10 +8,10 @@ use {
         session::{self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
         packet::{PacketBuffersCapacity, PacketMtu, PacketRtt},
         server::{CloseReason, Closed, Opened, Server},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -24,7 +21,7 @@ use {
     futures::channel::{mpsc, oneshot},
     std::{collections::HashMap, net::SocketAddr, time::Duration},
     thiserror::Error,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
     wtransport::error::ConnectionError,
 };
 
@@ -203,6 +200,7 @@ pub struct SessionRequest {
 
 /// [`WebTransportServer`] error.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ServerError {
     /// Failed to await an incoming session request.
     #[error("failed to await session request")]
