@@ -145,7 +145,7 @@ struct NoServerVerification {
 impl Default for NoServerVerification {
     fn default() -> Self {
         Self {
-            supported_algorithms: rustls::crypto::ring::default_provider()
+            supported_algorithms: rustls::crypto::aws_lc_rs::default_provider()
                 .signature_verification_algorithms,
         }
     }
