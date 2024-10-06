@@ -99,8 +99,8 @@ This crate is fundamentally split into multiple layers:
   - Technically user-swappable, but most code above this layer relies on this specific transport
     layer implementation
 - Component replication, rollback, etc.
-  - This is not provided as part of `aeronet`, but [`aeronet_replicon`] provides an integration
-    with [`bevy_replicon`]
+  - This is not provided as part of `aeronet`, but you can use a crate which integrates `aeronet`
+    with one of these e.g. [`aeronet_replicon`]
 
 ## Getting started
 

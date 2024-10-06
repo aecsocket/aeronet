@@ -65,7 +65,7 @@ struct UiState {
 // keep the example simple, so we have to connect explicitly without encryption
 // as well. Obviously, your app should use encryption properly - we explain how
 // to do that in the server example.
-const DEFAULT_TARGET: &str = "ws://[::1]:25565";
+const DEFAULT_TARGET: &str = "ws://[::1]:25566";
 
 fn setup(mut commands: Commands) {
     // Let's start a connection to a WebSocket server.
