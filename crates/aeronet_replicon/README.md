@@ -1,6 +1,10 @@
-# `aeronet_websocket`
+# `aeronet_replicon`
 
-[![crates.io](https://img.shields.io/crates/v/aeronet_websocket.svg)](https://crates.io/crates/aeronet_websocket)
-[![docs.rs](https://img.shields.io/docsrs/aeronet_websocket)](https://docs.rs/aeronet_websocket)
+[![crates.io](https://img.shields.io/crates/v/aeronet_replicon.svg)](https://crates.io/crates/aeronet_replicon)
+[![docs.rs](https://img.shields.io/docsrs/aeronet_replicon)](https://docs.rs/aeronet_replicon)
 
-TODO
+[`bevy_replicon`] backend implementation using [`aeronet_io`] + [`aeronet_transport`].
+
+[`bevy_replicon`]: https://docs.rs/bevy_replicon
+[`aeronet_io`]: https://docs.rs/aeronet_io
+[`aeronet_transport`]: https://docs.rs/aeronet_transport

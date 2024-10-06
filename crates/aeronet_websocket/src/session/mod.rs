@@ -97,6 +97,9 @@ pub enum SessionError {
     /// Unexpectedly lost connection from the peer.
     #[error("connection lost")]
     Connection(#[source] ConnectionError),
+    /// Connection closed with an error code which wasn't `1000`.
+    #[error("connection closed with code {0}")]
+    Closed(u16),
     /// The peer sent us a close frame, but it did not include a reason.
     ///
     /// [`WebSocketIo`] will always send a reason when closing a connection.

@@ -5,9 +5,11 @@ use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
     aeronet_io::{connection::Disconnect, packet::PacketBuffers},
     bevy::{log::LogPlugin, prelude::*},
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     std::mem,
 };
+
+// Standard app setup.
 
 fn main() -> AppExit {
     App::new()
@@ -17,6 +19,8 @@ fn main() -> AppExit {
                 ..default()
             }),
             EguiPlugin,
+            // Add the IO plugin for the IO layer implementation you want to use.
+            // This will automatically add the `AeronetIoPlugin`.
             ChannelIoPlugin,
         ))
         .add_systems(Startup, setup)
@@ -31,6 +35,13 @@ struct SessionUi {
 }
 
 fn setup(mut commands: Commands) {
+    // Typically, you'll use commands to create a session.
+    // With other implementations, you spawn an entity and push an
+    // `EntityCommand` onto it to set up the session.
+    // This `EntityCommand` is created from info such as the configuration,
+    // the URL to connect to, etc.
+    // However, `aeronet_channel` is special, and uses a `Command` instead,
+    // since it affects two entities at the same time.
     let a = commands.spawn((Name::new("A"), SessionUi::default())).id();
     let b = commands.spawn((Name::new("B"), SessionUi::default())).id();
     commands.add(ChannelIo::open(a, b));
@@ -38,6 +49,8 @@ fn setup(mut commands: Commands) {
 
 fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
     for (mut ui_state, mut bufs) in &mut sessions {
+        // Use `PacketBuffers` to read and write packets directly.
+        // Typically, you'll be using a higher-level feature such as messages.
         for msg in bufs.drain_recv() {
             let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             ui_state.log.push(format!("> {msg}"));

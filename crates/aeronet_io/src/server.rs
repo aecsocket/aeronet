@@ -1,5 +1,9 @@
 //! Logic for a [`Server`] entity which accepts and manages client [`Session`]s
 //! connecting to it.
+//!
+//! Although the core logic of this crate is topology-agnostic, this module
+//! provides an abstraction over the "server" part of the very common
+//! server/client topology.
 
 use {
     crate::connection::{Disconnect, Session},
