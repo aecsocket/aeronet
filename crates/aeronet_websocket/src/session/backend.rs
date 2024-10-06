@@ -24,6 +24,9 @@ pub mod wasm {
         recv_dc_reason: mpsc::Receiver<DisconnectReason<SessionError>>,
     }
 
+    // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
+    const NORMAL_CLOSE_CODE: u16 = 1000;
+
     pub fn split(socket: WebSocket, packet_buf_cap: usize) -> (SessionFrontend, SessionBackend) {
         socket.set_binary_type(BinaryType::Arraybuffer);
 
@@ -63,7 +66,7 @@ pub mod wasm {
         let on_close = {
             let mut send_dc_reason = send_dc_reason.clone();
             Closure::<dyn FnMut(_)>::new(move |event: CloseEvent| {
-                let dc_reason = if event.code() == 1000 {
+                let dc_reason = if event.code() == NORMAL_CLOSE_CODE {
                     DisconnectReason::Peer(event.reason())
                 } else {
                     // TODO friendly error messages
@@ -127,10 +130,6 @@ pub mod wasm {
         }
     }
 
-    // normal closure
-    // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
-    const CLOSE_CODE: u16 = 1000;
-
     impl SessionBackend {
         pub async fn start(self) -> Result<Never, DisconnectReason<SessionError>> {
             let Self {
@@ -146,7 +145,7 @@ pub mod wasm {
                 }
                 reason = recv_user_dc => {
                     let reason = reason.map_err(|_| SessionError::FrontendClosed)?;
-                    let _ = socket.close_with_code_and_reason(CLOSE_CODE, &reason);
+                    let _ = socket.close_with_code_and_reason(NORMAL_CLOSE_CODE, &reason);
                     Err(DisconnectReason::User(reason))
                 }
             }
