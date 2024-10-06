@@ -5,21 +5,24 @@
 )]
 #![doc = include_str!("../README.md")]
 
-pub use aeronet_proto as proto;
-
-#[cfg(not(target_family = "wasm"))]
-pub use wtransport;
-#[cfg(target_family = "wasm")]
-pub use xwt_web_sys;
-
 pub mod cert;
-pub mod runtime;
-pub mod shared;
-
-mod internal;
-
 #[cfg(feature = "client")]
 pub mod client;
+pub mod session;
 
-#[cfg(all(feature = "server", not(target_family = "wasm")))]
-pub mod server;
+mod runtime;
+pub use runtime::WebTransportRuntime;
+
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+        mod js_error;
+        pub use js_error::JsError;
+
+        pub use xwt_web_sys;
+    } else {
+        #[cfg(feature = "server")]
+        pub mod server;
+
+        pub use wtransport;
+    }
+}

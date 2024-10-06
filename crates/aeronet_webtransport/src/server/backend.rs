@@ -1,170 +1,162 @@
-use aeronet::{client::DisconnectReason, error::pretty_error};
-use aeronet_proto::session::{Session, SessionConfig};
-use bytes::Bytes;
-use futures::{
-    channel::{mpsc, oneshot},
-    never::Never,
-    FutureExt, SinkExt,
-};
-use slotmap::Key;
-use tracing::{debug, debug_span, Instrument};
-use web_time::Instant;
-use wtransport::endpoint::{IncomingSession, SessionRequest};
-use xwt_core::prelude::*;
-
-use crate::{
-    internal::{self, ConnectionMeta, MIN_MTU},
-    runtime::WebTransportRuntime,
-};
-
-use super::{
-    ClientKey, ConnectionResponse, ServerConfig, ServerError, ToConnected, ToConnecting, ToOpen,
+use {
+    super::{ServerError, SessionResponse, ToConnected, ToConnecting, ToOpen},
+    crate::{
+        WebTransportRuntime,
+        session::{SessionBackend, SessionError, SessionMeta},
+    },
+    aeronet_io::connection::DisconnectReason,
+    bevy_ecs::prelude::*,
+    bytes::Bytes,
+    futures::{
+        SinkExt,
+        channel::{mpsc, oneshot},
+        never::Never,
+    },
+    tracing::{Instrument, debug, debug_span},
+    wtransport::{
+        Endpoint, ServerConfig,
+        endpoint::{IncomingSession, SessionRequest},
+    },
+    xwt_core::prelude::*,
 };
 
 pub async fn start(
-    runtime: WebTransportRuntime,
-    net_config: ServerConfig,
-    session_config: SessionConfig,
-    send_open: oneshot::Sender<ToOpen>,
+    config: ServerConfig,
+    packet_buf_cap: usize,
+    send_next: oneshot::Sender<ToOpen>,
 ) -> Result<Never, ServerError> {
-    let endpoint = wtransport::Endpoint::server(net_config).map_err(ServerError::CreateEndpoint)?;
-    let local_addr = endpoint.local_addr().map_err(ServerError::GetLocalAddr)?;
+    debug!("Spawning backend task to open server");
 
-    let (send_closed, mut recv_closed) = oneshot::channel::<()>();
-    let (send_connecting, recv_connecting) = mpsc::channel::<ToConnecting>(4);
-    send_open
-        .send(ToOpen {
-            local_addr,
-            recv_connecting,
-            send_closed,
-        })
-        .map_err(|_| ServerError::FrontendClosed)?;
+    let endpoint = Endpoint::server(config).map_err(SessionError::CreateEndpoint)?;
+    debug!("Created endpoint");
 
+    let (send_connecting, recv_connecting) = mpsc::channel(1);
+
+    let local_addr = endpoint.local_addr().map_err(SessionError::GetLocalAddr)?;
+    let next = ToOpen {
+        local_addr,
+        recv_connecting,
+    };
+    send_next
+        .send(next)
+        .map_err(|_| SessionError::FrontendClosed)?;
+
+    debug!("Starting server loop");
     loop {
-        let session = futures::select! {
-            _ = recv_closed => return Err(ServerError::FrontendClosed),
-            x = endpoint.accept().fuse() => x,
-        };
-        let runtime_clone = runtime.clone();
-        let send_connecting = send_connecting.clone();
-        let session_config = session_config.clone();
-        runtime.spawn(async move {
-            if let Err(err) =
-                start_handle_session(runtime_clone, session_config, send_connecting, session).await
-            {
-                debug!("Failed to start handling session: {:#}", pretty_error(&err));
+        let session = endpoint.accept().await;
+
+        WebTransportRuntime::spawn({
+            let send_connecting = send_connecting.clone();
+            async move {
+                if let Err(err) = accept_session(packet_buf_cap, session, send_connecting).await {
+                    debug!("Failed to accept session: {err:?}");
+                };
             }
         });
     }
 }
 
-async fn start_handle_session(
-    runtime: WebTransportRuntime,
-    session_config: SessionConfig,
-    mut send_connecting: mpsc::Sender<ToConnecting>,
+async fn accept_session(
+    packet_buf_cap: usize,
     session: IncomingSession,
+    mut send_connecting: mpsc::Sender<ToConnecting>,
 ) -> Result<(), ServerError> {
-    let req = session.await.map_err(ServerError::AwaitSessionRequest)?;
+    let request = session.await.map_err(ServerError::AwaitSessionRequest)?;
 
-    let (send_key, recv_key) = oneshot::channel::<ClientKey>();
-    let (send_conn_resp, recv_conn_resp) = oneshot::channel::<ConnectionResponse>();
+    let (send_session_entity, recv_session_entity) = oneshot::channel::<Entity>();
+    let (send_session_response, recv_session_response) = oneshot::channel::<SessionResponse>();
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ServerError>>();
-    let (send_connected, recv_connected) = oneshot::channel::<ToConnected>();
+    let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     send_connecting
         .send(ToConnecting {
-            authority: req.authority().to_string(),
-            path: req.path().to_string(),
-            origin: req.origin().map(ToOwned::to_owned),
-            user_agent: req.user_agent().map(ToOwned::to_owned),
-            headers: req.headers().clone(),
-            send_key,
-            send_conn_resp,
+            authority: request.authority().to_owned(),
+            path: request.path().to_owned(),
+            origin: request.origin().map(ToOwned::to_owned),
+            user_agent: request.user_agent().map(ToOwned::to_owned),
+            headers: request.headers().clone(),
+            send_session_entity,
+            send_session_response,
             recv_dc,
-            recv_connected,
+            recv_next,
         })
         .await
-        .map_err(|_| ServerError::FrontendClosed)?;
-    let client_key = recv_key.await.map_err(|_| ServerError::FrontendClosed)?;
+        .map_err(|_| SessionError::FrontendClosed)?;
+    let session = recv_session_entity
+        .await
+        .map_err(|_| SessionError::FrontendClosed)?;
 
-    let err = async move {
-        let Err(err) =
-            handle_session(runtime, session_config, req, recv_conn_resp, send_connected).await
-        else {
-            unreachable!()
-        };
-        match &err {
-            DisconnectReason::Error(ServerError::FrontendClosed) => {
-                debug!("Session closed");
-            }
-            err => {
-                debug!("Session closed: {:#}", pretty_error(err));
-            }
-        }
-        err
-    }
-    .instrument(debug_span!("client", key = ?client_key.data()))
-    .await;
-    let _ = send_dc.send(err);
+    let Err(dc_reason) = handle_session(packet_buf_cap, request, recv_session_response, send_next)
+        .instrument(debug_span!("session", %session))
+        .await
+    else {
+        unreachable!()
+    };
+    let _ = send_dc.send(dc_reason);
     Ok(())
 }
 
 async fn handle_session(
-    runtime: WebTransportRuntime,
-    session_config: SessionConfig,
-    req: SessionRequest,
-    recv_conn_resp: oneshot::Receiver<ConnectionResponse>,
+    packet_buf_cap: usize,
+    request: SessionRequest,
+    recv_session_response: oneshot::Receiver<SessionResponse>,
     send_connected: oneshot::Sender<ToConnected>,
 ) -> Result<Never, DisconnectReason<ServerError>> {
-    debug!("New session request from {}{}", req.authority(), req.path());
+    debug!(
+        "New session request from {}{}",
+        request.authority(),
+        request.path()
+    );
 
-    let conn_resp = recv_conn_resp
+    let session_response = recv_session_response
         .await
-        .map_err(|_| ServerError::FrontendClosed)?;
-    debug!("Frontend responded to this request with {conn_resp:?}");
+        .map_err(|_| SessionError::FrontendClosed)
+        .map_err(ServerError::Session)?;
+    debug!("Frontend responded to this session request with {session_response:?}");
 
-    let conn = match conn_resp {
-        ConnectionResponse::Accepted => req.accept(),
-        ConnectionResponse::Forbidden => {
-            req.forbidden().await;
+    let conn = match session_response {
+        SessionResponse::Accepted => request.accept(),
+        SessionResponse::Forbidden => {
+            request.forbidden().await;
             return Err(ServerError::Rejected.into());
         }
-        ConnectionResponse::NotFound => {
-            req.not_found().await;
+        SessionResponse::NotFound => {
+            request.not_found().await;
             return Err(ServerError::Rejected.into());
         }
     }
     .await
+    .map(xwt_wtransport::Connection)
     .map_err(ServerError::AcceptSessionRequest)?;
+    debug!("Connected");
 
-    let conn = xwt_wtransport::Connection(conn);
-    let Some(mtu) = conn.max_datagram_size() else {
-        return Err(ServerError::DatagramsNotSupported.into());
+    let (send_meta, recv_meta) = mpsc::channel::<SessionMeta>(1);
+    let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<Bytes>(packet_buf_cap);
+    let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
+    let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
+    let next = ToConnected {
+        initial_remote_addr: conn.0.remote_address(),
+        initial_rtt: conn.0.rtt(),
+        initial_mtu: conn
+            .max_datagram_size()
+            .ok_or(SessionError::DatagramsNotSupported)
+            .map_err(ServerError::Session)?,
+        recv_meta,
+        recv_packet_b2f,
+        send_packet_f2b,
+        send_user_dc,
     };
-    let conn = conn.0;
-    let session = Session::server(Instant::now(), session_config, MIN_MTU, mtu)
-        .map_err(ServerError::MtuTooSmall)?;
-
-    debug!("Connection opened, forwarding to frontend");
-
-    let (send_meta, recv_meta) = mpsc::channel::<ConnectionMeta>(1);
-    let (send_c2s, recv_c2s) = mpsc::channel::<Bytes>(internal::MSG_BUF_CAP);
-    let (send_s2c, recv_s2c) = mpsc::unbounded::<Bytes>();
-    let (send_local_dc, recv_local_dc) = oneshot::channel::<String>();
+    let backend = SessionBackend {
+        conn,
+        send_meta,
+        send_packet_b2f,
+        recv_packet_f2b,
+        recv_user_dc,
+    };
     send_connected
-        .send(ToConnected {
-            remote_addr: conn.remote_address(),
-            initial_rtt: conn.rtt(),
-            recv_meta,
-            recv_c2s,
-            send_s2c,
-            send_local_dc,
-            session,
-        })
-        .map_err(|_| ServerError::FrontendClosed)?;
-    let conn = xwt_wtransport::Connection(conn);
+        .send(next)
+        .map_err(|_| SessionError::FrontendClosed)
+        .map_err(ServerError::Session)?;
 
-    debug!("Starting connection loop");
-    internal::handle_connection(runtime, conn, recv_s2c, send_c2s, send_meta, recv_local_dc)
-        .await
-        .map_err(|err| err.map_err(From::from))
+    debug!("Starting session loop");
+    Err(backend.start().await.map_err(ServerError::Session))
 }

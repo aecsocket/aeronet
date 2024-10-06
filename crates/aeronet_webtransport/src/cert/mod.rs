@@ -1,19 +1,20 @@
-//! Utilities for working with X509 certificates.
+//! Utilities for working with X.509 certificates.
 
 #[cfg(not(target_family = "wasm"))]
 mod native;
+
 #[cfg(not(target_family = "wasm"))]
 pub use native::*;
-
-use base64::Engine;
-
-pub(crate) use base64::engine::general_purpose::STANDARD as BASE64;
+use {
+    base64::{Engine, engine::general_purpose::STANDARD as BASE64},
+    thiserror::Error,
+};
 
 /// Bytes representing the SHA-256 digest of the DER encoding of a certificate.
 pub type CertificateHash = [u8; 32];
 
 /// Failed to decode a [`CertificateHash`] from a base 64 string.
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, Clone, Error)]
 pub enum DecodeHashError {
     /// Failed to decode the string from base 64.
     #[error("failed to decode into base 64")]

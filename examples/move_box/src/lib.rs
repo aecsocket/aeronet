@@ -1,13 +1,14 @@
 #![doc = include_str!("../README.md")]
 
-use aeronet_replicon::channel::IntoLanes;
-use aeronet_webtransport::{proto::session::SessionConfig, runtime::WebTransportRuntime};
-use bevy::prelude::*;
-use bevy_replicon::prelude::*;
-use serde::{Deserialize, Serialize};
+use {
+    aeronet_replicon::convert::TryIntoEntity,
+    bevy::prelude::*,
+    bevy_replicon::prelude::*,
+    serde::{Deserialize, Serialize},
+};
 
 /// How many units a player may move in a single second.
-const MOVE_SPEED: f32 = 5000.0;
+const MOVE_SPEED: f32 = 250.0;
 
 /// How many times per second we will replicate entity components.
 pub const TICK_RATE: u16 = 128;
@@ -26,40 +27,27 @@ pub enum GameState {
     Playing,
 }
 
-/// Creates a [`SessionConfig`] from [`RepliconChannels`], customized for this
-/// app.
-///
-/// Both the client and server should have the same [`SessionConfig`].
-#[must_use]
-pub fn session_config(channels: &RepliconChannels) -> SessionConfig {
-    SessionConfig::default()
-        .with_client_lanes(channels.client_channels().into_lanes())
-        .with_server_lanes(channels.server_channels().into_lanes())
-}
-
 impl Plugin for MoveBoxPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<GameState>()
             .enable_state_scoped_entities::<GameState>()
-            // use the convenience resource WebTransportRuntime for spawning tasks
-            // platform-independently (native using tokio, or WASM using wasm-bindgen-futures)
-            .init_resource::<WebTransportRuntime>()
             .replicate::<Player>()
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
-            .add_client_event::<PlayerMove>(ChannelKind::Ordered)
-            .add_systems(Update, apply_movement.run_if(has_authority));
+            .add_client_event::<PlayerInput>(ChannelKind::Ordered)
+            .add_systems(
+                FixedUpdate,
+                (recv_input, apply_movement)
+                    .chain()
+                    .run_if(server_or_singleplayer),
+            )
+            .observe(on_player_added);
     }
 }
 
 /// Marker component for a player in the game.
 #[derive(Debug, Clone, Component, Serialize, Deserialize)]
 pub struct Player;
-
-/// Player who is being controlled by a specific [`ClientId`] connected to our
-/// server.
-#[derive(Debug, Clone, Component, Serialize, Deserialize)]
-pub struct ClientPlayer(pub ClientId);
 
 /// Player's box position.
 #[derive(Debug, Clone, Component, Deref, DerefMut, Serialize, Deserialize)]
@@ -69,27 +57,52 @@ pub struct PlayerPosition(pub Vec2);
 #[derive(Debug, Clone, Component, Deref, DerefMut, Serialize, Deserialize)]
 pub struct PlayerColor(pub Color);
 
-/// Player sent an input to move their box.
-#[derive(Debug, Clone, Event, Serialize, Deserialize)]
-pub struct PlayerMove(pub Vec2);
+/// Player's inputs that they send to control their box.
+#[derive(Debug, Clone, Default, Event, Serialize, Deserialize)]
+pub struct PlayerInput {
+    /// Lateral movement vector.
+    ///
+    /// The client has full control over this field, and may send an
+    /// unnormalized vector! Authorities must ensure that they normalize or
+    /// zero this vector before using it for movement updates.
+    pub movement: Vec2,
+}
 
-fn apply_movement(
-    time: Res<Time>,
-    mut move_events: EventReader<FromClient<PlayerMove>>,
-    mut players: Query<(&ClientPlayer, &mut PlayerPosition)>,
+// TODO: required components
+fn on_player_added(trigger: Trigger<OnAdd, Player>, mut commands: Commands) {
+    let player = trigger.entity();
+    commands
+        .entity(player)
+        .insert(StateScoped(GameState::Playing));
+}
+
+fn recv_input(
+    mut inputs: EventReader<FromClient<PlayerInput>>,
+    mut players: Query<&mut PlayerInput>,
 ) {
-    for FromClient {
+    for &FromClient {
         client_id,
-        event: PlayerMove(delta),
-    } in move_events.read()
+        event: ref new_input,
+    } in inputs.read()
     {
-        for (player, mut position) in &mut players {
-            if *client_id == player.0 {
-                // make sure to normalize on the server side;
-                // since we're accepting arbitrary client input,
-                // we have to do input validation on the server side
-                **position += delta.normalize_or_zero() * time.delta_seconds() * MOVE_SPEED;
-            }
+        let Some(mut input) = client_id
+            .try_into_entity()
+            .and_then(|client| players.get_mut(client).ok())
+        else {
+            continue;
+        };
+        *input = new_input.clone();
+    }
+}
+
+fn apply_movement(time: Res<Time>, mut players: Query<(&PlayerInput, &mut PlayerPosition)>) {
+    for (input, mut position) in &mut players {
+        // make sure to validate inputs and normalize on the authority (server) side,
+        // since we're accepting arbitrary client input
+        if let Some(movement) = input.movement.try_normalize() {
+            // only change `position` if we actually have a movement vector to apply
+            // this saves bandwidth; we don't replicate position if we don't change it
+            **position += movement * time.delta_seconds() * MOVE_SPEED;
         }
     }
 }

@@ -1,5 +1,5 @@
 [package]
-description = "Lightweight client/server transport abstraction"
+description = "Low-level networking for Bevy"
 name = "aeronet"
 
 authors.workspace = true
@@ -18,29 +18,16 @@ workspace = true
 all-features = true
 
 [features]
-## Enables client-side items.
-client = []
-
-## Enables server-side items.
-server = []
-
-## Enables the [`condition`] module.
-condition = ["dep:rand", "dep:rand_distr"]
-
-## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = ["dep:bevy_ecs"]
+visualizer = ["aeronet_transport/visualizer"]
 
 [dependencies]
-arbitrary = { workspace = true }
+aeronet_io = { workspace = true }
+aeronet_transport = { workspace = true }
+
+anyhow = { workspace = true }
 bytes = { workspace = true }
-derivative = { workspace = true }
-thiserror = { workspace = true }
-web-time = { workspace = true }
+octs = { workspace = true }
+ringbuf = { workspace = true }
 
-rand = { workspace = true, optional = true }
-rand_distr = { workspace = true, optional = true }
-
-bevy_ecs = { workspace = true, optional = true }
-
-[dev-dependencies]
 bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }

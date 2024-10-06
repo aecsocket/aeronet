@@ -1,336 +1,161 @@
-//! Server-side traits and items.
-
-use std::{marker::PhantomData, ops::Deref, time::Duration};
-
-use aeronet::{
-    client::DisconnectReason,
-    error::pretty_error,
-    lane::LaneIndex,
-    server::{
-        server_open, RemoteClientConnected, RemoteClientConnecting, RemoteClientDisconnected,
-        ServerClosed, ServerEvent, ServerOpened, ServerState, ServerTransport, ServerTransportSet,
+use {
+    crate::convert::{IntoClientId, IntoLaneIndex, TryIntoChannelId, TryIntoEntity},
+    aeronet_io::{
+        connection::{Connected, DisconnectReason, Disconnected},
+        server::{Opened, Server},
+    },
+    aeronet_transport::{message::MessageBuffers, AeronetTransportPlugin, Transport, TransportSet},
+    bevy_app::prelude::*,
+    bevy_ecs::prelude::*,
+    bevy_hierarchy::Parent,
+    bevy_reflect::Reflect,
+    bevy_replicon::{
+        prelude::RepliconServer,
+        server::{ServerEvent, ServerSet},
     },
 };
-use bevy_app::prelude::*;
-use bevy_ecs::{prelude::*, system::SystemParam};
-use bevy_replicon::{core::ClientId, prelude::RepliconServer, server::ServerSet};
-use bevy_time::{common_conditions::on_real_timer, prelude::*};
-use bimap::{BiHashMap, Overwritten};
-use bytes::Bytes;
-use derivative::Derivative;
-use tracing::{debug, warn};
 
-/// Provides a [`bevy_replicon`] server backend using the given [`aeronet`]
-/// transport.
-///
-/// You must use [`RepliconServerPlugin`] and Replicon's [`ServerPlugin`]
-/// together.
-///
-/// System sets:
-/// * [`ServerTransportSet::Recv`]
-/// * [`ServerTransportSet::Send`]
-///
-/// Events:
-/// * [`ServerOpened`]
-/// * [`ServerClosed`]
-/// * [`RemoteClientConnecting`]
-/// * [`RemoteClientConnected`]
-/// * [`RemoteRepliconClientConnected`]
-/// * [`RemoteClientDisconnected`]
-///
-/// [`ServerPlugin`]: bevy_replicon::server::ServerPlugin
-#[derive(Derivative)]
-#[derivative(Debug(bound = ""), Clone(bound = ""), Default(bound = ""))]
-pub struct RepliconServerPlugin<T> {
-    /// Interval between when the networking loop will be updated, receiving and
-    /// flushing packets.
-    pub update_interval: Duration,
-    #[derivative(Debug = "ignore")]
-    #[doc = "hidden"]
-    pub _phantom: PhantomData<T>,
-}
+#[derive(Debug)]
+pub struct AeronetRepliconServerPlugin;
 
-impl<T> RepliconServerPlugin<T> {
-    /// Creates the plugin with a given tick rate, in hertz.
-    ///
-    /// This should match the Replicon server's tick rate.
-    #[must_use]
-    pub fn with_tick_rate(tick_rate: u16) -> Self {
-        Self {
-            update_interval: Duration::from_millis(1000 / u64::from(tick_rate)),
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<T: ServerTransport + Resource> Plugin for RepliconServerPlugin<T> {
+impl Plugin for AeronetRepliconServerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<ServerOpened<T>>()
-            .add_event::<ServerClosed<T>>()
-            .add_event::<RemoteClientConnecting<T>>()
-            .add_event::<RemoteClientConnected<T>>()
-            .add_event::<RemoteRepliconClientConnected<T>>()
-            .add_event::<RemoteClientDisconnected<T>>()
-            .init_resource::<ClientKeys<T>>()
-            .configure_sets(
-                PreUpdate,
-                (
-                    ServerTransportSet::Recv,
-                    ServerSet::ReceivePackets.after(ServerTransportSet::Recv),
-                ),
+        if !app.is_plugin_added::<AeronetTransportPlugin>() {
+            app.add_plugins(AeronetTransportPlugin);
+        }
+
+        app.configure_sets(
+            PreUpdate,
+            (
+                TransportSet::Poll,
+                ServerTransportSet::Poll,
+                ServerSet::ReceivePackets,
             )
-            .configure_sets(
-                PostUpdate,
-                (
-                    ServerTransportSet::Send,
-                    ServerSet::SendPackets.before(ServerTransportSet::Send),
-                ),
+                .chain(),
+        )
+        .configure_sets(
+            PostUpdate,
+            (
+                ServerSet::SendPackets,
+                ServerTransportSet::Flush,
+                TransportSet::Flush,
             )
-            .add_systems(
-                PreUpdate,
-                (
-                    Self::recv.run_if(
-                        resource_exists::<T>
-                            .and_then(resource_exists::<ClientKeys<T>>)
-                            .and_then(resource_exists::<RepliconServer>)
-                            .and_then(on_real_timer(self.update_interval)),
-                    ),
-                    Self::update_state.run_if(resource_exists::<RepliconServer>),
-                )
-                    .chain()
-                    .in_set(ServerSet::ReceivePackets),
-            )
-            .add_systems(
-                PostUpdate,
-                Self::flush
-                    .run_if(
-                        server_open::<T>
-                            .and_then(resource_exists::<RepliconServer>)
-                            .and_then(on_real_timer(self.update_interval)),
-                    )
-                    .in_set(ServerSet::SendPackets),
-            );
+                .chain(),
+        )
+        .add_systems(
+            PreUpdate,
+            (poll, update_state)
+                .chain()
+                .in_set(ServerTransportSet::Poll)
+                .run_if(resource_exists::<RepliconServer>),
+        )
+        .add_systems(
+            PostUpdate,
+            flush
+                .in_set(ServerTransportSet::Flush)
+                .run_if(resource_exists::<RepliconServer>),
+        )
+        .observe(on_connected)
+        .observe(on_disconnected);
     }
 }
 
-/// Variant of [`RemoteClientConnected`] which also provides what [`ClientId`]
-/// this `T::ClientKey` maps to.
-///
-/// This is called *in addition to* [`RemoteClientConnected`], so you should
-/// listen for one or the other, not both.
-#[derive(Derivative, Event)]
-#[derivative(Debug(bound = ""), Clone(bound = ""))]
-pub struct RemoteRepliconClientConnected<T: ServerTransport> {
-    /// Key of the client on the [`aeronet`] side.
-    pub client_key: T::ClientKey,
-    /// Key of the client on the [`bevy_replicon`] side.
-    pub client_id: ClientId,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
+pub enum ServerTransportSet {
+    Poll,
+    Flush,
 }
 
-type ClientMap<K> = BiHashMap<K, ClientId, ahash::RandomState, ahash::RandomState>;
+#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
+#[reflect(Component)]
+pub struct AeronetRepliconServer;
 
-/// Stores mappings between `T::ClientKey`s and [`ClientId`]s as a bidirectional
-/// map.
-#[derive(Derivative, Resource)]
-#[derivative(Debug(bound = ""), Clone(bound = ""))]
-pub struct ClientKeys<T: ServerTransport> {
-    id_map: ClientMap<T::ClientKey>,
-    next_id: ClientId,
-}
+type OpenedServer = (With<Server>, With<Opened>, With<AeronetRepliconServer>);
 
-impl<T: ServerTransport> Deref for ClientKeys<T> {
-    type Target = ClientMap<T::ClientKey>;
+fn update_state(
+    mut replicon_server: ResMut<RepliconServer>,
+    open_servers: Query<(), OpenedServer>,
+) {
+    let running = open_servers.iter().next().is_some();
 
-    fn deref(&self) -> &Self::Target {
-        &self.id_map
+    if replicon_server.is_running() != running {
+        replicon_server.set_running(running);
     }
 }
 
-impl<T: ServerTransport> ClientKeys<T> {
-    /// Gets the mappings between `T::ClientKey`s and [`ClientId`]s.
-    #[must_use]
-    pub const fn map(&self) -> &ClientMap<T::ClientKey> {
-        &self.id_map
+fn on_connected(
+    trigger: Trigger<OnAdd, Connected>,
+    clients: Query<&Parent>,
+    open_servers: Query<(), OpenedServer>,
+    mut events: EventWriter<ServerEvent>,
+    mut commands: Commands,
+) {
+    let client = trigger.entity();
+    let Ok(server) = clients.get(client).map(Parent::get) else {
+        return;
+    };
+    if open_servers.get(server).is_err() {
+        return;
     }
 
-    fn next_id(&mut self) -> ClientId {
-        let id = self.next_id;
-        self.next_id = ClientId::new(self.next_id.get().wrapping_add(1));
-        id
-    }
+    let client_id = client.into_client_id();
+    events.send(ServerEvent::ClientConnected { client_id });
+    commands.entity(client).insert(Transport);
 }
 
-impl<T: ServerTransport> Default for ClientKeys<T> {
-    fn default() -> Self {
-        Self {
-            id_map: BiHashMap::with_hashers(ahash::RandomState::new(), ahash::RandomState::new()),
-            // start at 1, because 0 is ClientId::SERVER
-            next_id: ClientId::new(1),
+fn on_disconnected(
+    trigger: Trigger<Disconnected>,
+    clients: Query<&Parent, With<Connected>>,
+    open_servers: Query<(), OpenedServer>,
+    mut events: EventWriter<ServerEvent>,
+) {
+    let client = trigger.entity();
+    let Ok(server) = clients.get(client).map(Parent::get) else {
+        return;
+    };
+    if open_servers.get(server).is_err() {
+        return;
+    }
+
+    let client_id = client.into_client_id();
+    let reason = match &**trigger.event() {
+        DisconnectReason::User(reason) => reason.clone(),
+        DisconnectReason::Peer(reason) => reason.clone(),
+        DisconnectReason::Error(err) => format!("{err:#}"),
+    };
+    // only disconnect already-connected clients, otherwise replicon panics
+    events.send(ServerEvent::ClientDisconnected { client_id, reason });
+}
+
+fn poll(
+    mut replicon_server: ResMut<RepliconServer>,
+    mut clients: Query<(Entity, &mut MessageBuffers, &Parent)>,
+    open_servers: Query<(), OpenedServer>,
+) {
+    for (client, mut msg_bufs, server) in &mut clients {
+        if open_servers.get(server.get()).is_err() {
+            continue;
         }
-    }
-}
 
-type RepliconEvent = bevy_replicon::server::ServerEvent;
-
-#[derive(SystemParam)]
-struct Events<'w, T: ServerTransport + Resource> {
-    replicon: EventWriter<'w, RepliconEvent>,
-    opened: EventWriter<'w, ServerOpened<T>>,
-    closed: EventWriter<'w, ServerClosed<T>>,
-    connecting: EventWriter<'w, RemoteClientConnecting<T>>,
-    connected: EventWriter<'w, RemoteClientConnected<T>>,
-    replicon_connected: EventWriter<'w, RemoteRepliconClientConnected<T>>,
-    disconnected: EventWriter<'w, RemoteClientDisconnected<T>>,
-}
-
-impl<T: ServerTransport + Resource> RepliconServerPlugin<T> {
-    fn recv(
-        time: Res<Time>,
-        mut server: ResMut<T>,
-        mut replicon_server: ResMut<RepliconServer>,
-        mut client_keys: ResMut<ClientKeys<T>>,
-        mut events: Events<T>,
-    ) {
-        for event in server.poll(time.delta()) {
-            match event {
-                ServerEvent::Opened => {
-                    events.opened.send(ServerOpened::default());
-                }
-                ServerEvent::Closed { reason: error } => {
-                    events.closed.send(ServerClosed { error });
-                }
-                ServerEvent::Connecting { client_key } => {
-                    events
-                        .connecting
-                        .send(RemoteClientConnecting { client_key });
-                }
-                ServerEvent::Connected { client_key } => {
-                    Self::on_connected(client_keys.as_mut(), &mut events, client_key);
-                }
-                ServerEvent::Disconnected { client_key, reason } => {
-                    Self::on_disconnected(client_keys.as_mut(), &mut events, client_key, reason);
-                }
-                ServerEvent::Recv {
-                    client_key,
-                    msg,
-                    lane,
-                } => Self::on_recv(
-                    client_keys.as_ref(),
-                    replicon_server.as_mut(),
-                    client_key,
-                    msg,
-                    lane,
-                ),
-                ServerEvent::Ack { .. } | ServerEvent::Nack { .. } => {}
-            }
-        }
-    }
-
-    fn on_connected(
-        client_keys: &mut ClientKeys<T>,
-        events: &mut Events<T>,
-        client_key: T::ClientKey,
-    ) {
-        events.connected.send(RemoteClientConnected {
-            client_key: client_key.clone(),
-        });
-
-        let client_id = client_keys.next_id();
-        debug!("Associating {client_key:?} with {client_id:?}");
-        match client_keys.id_map.insert(client_key.clone(), client_id) {
-            Overwritten::Neither => {}
-            overwritten => {
-                warn!("Inserted duplicate client key/ID pair: {overwritten:?}");
-            }
-        }
-        events
-            .replicon
-            .send(RepliconEvent::ClientConnected { client_id });
-        events
-            .replicon_connected
-            .send(RemoteRepliconClientConnected {
-                client_key,
-                client_id,
-            });
-    }
-
-    fn on_disconnected(
-        client_keys: &mut ClientKeys<T>,
-        events: &mut Events<T>,
-        client_key: T::ClientKey,
-        reason: DisconnectReason<T::Error>,
-    ) {
-        let reason_str = format!("{:#}", aeronet::error::pretty_error(&reason));
-        events.disconnected.send(RemoteClientDisconnected {
-            client_key: client_key.clone(),
-            reason,
-        });
-
-        let Some((_, client_id)) = client_keys.id_map.remove_by_left(&client_key) else {
-            // this may happen if the client started connecting,
-            // but disconnected before fully connecting,
-            // leaving behind no replicon client ID
-            debug!("Disconnected client {client_key:?} which does not have a client ID");
-            return;
-        };
-        debug!("Removed {client_key:?} associated with {client_id:?}");
-        events.replicon.send(RepliconEvent::ClientDisconnected {
-            client_id,
-            reason: reason_str,
-        });
-    }
-
-    fn on_recv(
-        client_keys: &ClientKeys<T>,
-        replicon_server: &mut RepliconServer,
-        client_key: T::ClientKey,
-        msg: Bytes,
-        lane: LaneIndex,
-    ) {
-        let Ok(channel) = u8::try_from(lane.into_raw()) else {
-            warn!("Received message on {lane:?}, which is not a valid Replicon channel");
-            return;
-        };
-        let Some(client_id) = client_keys.id_map.get_by_left(&client_key) else {
-            warn!("Received message from client {client_key:?} which does not have a client ID");
-            return;
-        };
-        replicon_server.insert_received(*client_id, channel, msg);
-    }
-
-    fn update_state(server: Option<Res<T>>, mut replicon: ResMut<RepliconServer>) {
-        let running = server.map_or(false, |server| match server.state() {
-            ServerState::Closed | ServerState::Opening(_) => false,
-            ServerState::Open(_) => true,
-        });
-
-        if running != replicon.is_running() {
-            replicon.set_running(running);
-        }
-    }
-
-    fn flush(
-        mut server: ResMut<T>,
-        mut replicon: ResMut<RepliconServer>,
-        client_keys: Res<ClientKeys<T>>,
-    ) {
-        for (client_id, channel_id, payload) in replicon.drain_sent() {
-            let Some(client_key) = client_keys.id_map.get_by_right(&client_id) else {
-                warn!(
-                    "Sending message to client with ID {client_id:?} with no associated client key"
-                );
+        let client_id = client.into_client_id();
+        for (lane_index, msg) in msg_bufs.recv.drain(..) {
+            let Some(channel_id) = lane_index.try_into_channel_id() else {
                 continue;
             };
-
-            let _ = server.send(
-                client_key.clone(),
-                payload,
-                LaneIndex::from_raw(u64::from(channel_id)),
-            );
+            replicon_server.insert_received(client_id, channel_id, msg);
         }
+    }
+}
 
-        if let Err(error) = server.flush() {
-            warn!("Failed to flush data: {:#}", pretty_error(&error));
-        }
+fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut MessageBuffers>) {
+    for (client_id, channel_id, msg) in replicon_server.drain_sent() {
+        let Some(mut msg_bufs) = client_id
+            .try_into_entity()
+            .and_then(|client| clients.get_mut(client).ok())
+        else {
+            continue;
+        };
+        let lane_index = channel_id.into_lane_index();
+        msg_bufs.send(lane_index, msg);
     }
 }
