@@ -27,6 +27,8 @@ cfg_if::cfg_if! {
         type CreateSocketError = crate::JsError;
         type ConnectError = crate::JsError;
 
+        /// Dummy configuration type for [`WebSocketClient`], used to keep
+        /// parity between native and WASM APIs.
         #[derive(Debug, Clone, Default)]
         pub struct ClientConfig;
     } else {

@@ -31,7 +31,8 @@ impl Plugin for ConnectionPlugin {
 ///
 /// A session can send data over to the other side of its connection - to its
 /// peer. The peer may be located on a different machine, on the same machine as
-/// this session, or even within the same app.
+/// this session, or even within the same app. This data is sent in the form of
+/// packets - [`PacketBuffers`] stores the incoming and outgoing packets.
 ///
 /// The session API is agnostic to the networking model used: it can be used to
 /// represent a client-server, peer-to-peer, or any other kind of network
@@ -53,6 +54,7 @@ impl Plugin for ConnectionPlugin {
 /// session is despawned immediately afterwards. You may also [trigger] your own
 /// disconnection with a string reason by triggering [`Disconnect`].
 ///
+/// [`PacketBuffers`]: crate::packet::PacketBuffers
 /// [trigger]: Trigger
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
@@ -63,6 +65,9 @@ pub struct Session;
 ///
 /// Note that this is not a guarantee that the session is connected, since
 /// networking operations such as working with OS sockets may fail at any time.
+///
+/// The IO layer will add this component to a [`Session`] once it has completed
+/// connection.
 ///
 /// To listen for when a session is connected, add an observer listening for
 /// [`Trigger<OnAdd, Connected>`].

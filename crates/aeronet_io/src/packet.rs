@@ -9,8 +9,8 @@ use {
     bytes::Bytes,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     ringbuf::{
-        HeapRb,
         traits::{Consumer, RingBuffer},
+        HeapRb,
     },
     std::{num::Saturating, time::Duration},
 };
@@ -145,7 +145,7 @@ impl PacketBuffers {
 }
 
 /// Capacity provided to [`PacketBuffers::with_capacity`] when creating the
-/// component on a session.
+/// component on a [`Session`].
 ///
 /// If this component is present on an entity before [`PacketBuffers`] is
 /// created, this component's value will be used as the capacity. Otherwise,
@@ -216,6 +216,9 @@ pub struct PacketRtt(pub Duration);
 ///
 /// As a component, these represent the total values since this session was
 /// spawned.
+///
+/// This component is added alongside [`PacketBuffers`] automatically, but the
+/// IO layer must mutate these values by itself.
 #[derive(Debug, Clone, Copy, Default, Component, Reflect, Add, AddAssign, Sub, SubAssign)]
 #[reflect(Component)]
 pub struct PacketStats {

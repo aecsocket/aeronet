@@ -63,14 +63,14 @@ pub mod wasm {
         let on_close = {
             let mut send_dc_reason = send_dc_reason.clone();
             Closure::<dyn FnMut(_)>::new(move |event: CloseEvent| {
-                let dc_reason = if event.was_clean() {
-                    event.reason()
+                let dc_reason = if event.code() == 1000 {
+                    DisconnectReason::Peer(event.reason())
                 } else {
                     // TODO friendly error messages
-                    // https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent/code/coding.rs#L119
-                    format!("error code {}", event.code())
+                    // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
+                    DisconnectReason::Error(SessionError::Closed(event.code()))
                 };
-                let _ = send_dc_reason.try_send(DisconnectReason::Peer(dc_reason));
+                let _ = send_dc_reason.try_send(dc_reason);
             })
         };
 
