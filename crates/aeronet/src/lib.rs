@@ -3,9 +3,8 @@
 
 use bevy_app::{prelude::*, PluginGroupBuilder};
 pub use {
-    aeronet_io::{self as io, connection, packet, server},
-    aeronet_transport::{self as transport, message},
-    anyhow, bytes, octs, ringbuf,
+    aeronet_io::{self as io, anyhow, bytes, connection, packet, ringbuf, server},
+    aeronet_transport::{self as transport, message, octs},
 };
 
 /// Adds the default networking plugins.

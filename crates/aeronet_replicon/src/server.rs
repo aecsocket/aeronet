@@ -1,3 +1,5 @@
+//! Server-side [`bevy_replicon`] support.
+
 use {
     crate::convert::{IntoClientId, IntoLaneIndex, TryIntoChannelId, TryIntoEntity},
     aeronet_io::{
@@ -15,6 +17,11 @@ use {
     },
 };
 
+/// Provides a [`bevy_replicon`] server backend using [`Server`]s and
+/// [`Session`]s for communication.
+///
+/// To make a [`Server`] be used by [`bevy_replicon`], add the
+/// [`AeronetRepliconServer`] component.
 #[derive(Debug)]
 pub struct AeronetRepliconServerPlugin;
 
@@ -60,12 +67,48 @@ impl Plugin for AeronetRepliconServerPlugin {
     }
 }
 
+/// Sets for systems which provide communication between [`bevy_replicon`] and
+/// [`Server`]s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum ServerTransportSet {
+    /// Passing incoming messages into [`bevy_replicon`].
+    ///
+    /// # Ordering
+    ///
+    /// - [`TransportSet::Poll`]
+    /// - **[`ServerTransportSet::Poll`]**
+    /// - [`ServerSet::ReceivePackets`]
     Poll,
+    /// Passing outgoing [`bevy_replicon`] packets to the transport layer.
+    ///
+    /// # Ordering
+    ///
+    /// - [`ServerSet::SendPackets`]
+    /// - **[`ServerTransportSet::Flush`]**
+    /// - [`TransportSet::Flush`]
     Flush,
 }
 
+/// Marker component for a [`Server`] which is used as the messaging backend
+/// for a [`RepliconServer`].
+///
+/// Any server entity with this component will be used for:
+/// - receiving and sending messages
+///   - the child [`Entity`] (which has [`Session`]) is used as the identifier
+///     for the client which sent/receives the message (see [`convert`])
+/// - determining server [running] status
+///   - if at least 1 server is [`Opened`], [`RepliconServer`] is [running]
+///
+/// Although you can only have one [`RepliconServer`] at a time, it actually
+/// makes sense to have multiple [`AeronetRepliconServer`] entities (unlike
+/// with clients). This is so you can support clients from multiple different
+/// types of connections - for example, if you open one server over a WebSocket
+/// IO layer, and another server over a Steam networking socket IO layer,
+/// clients can connect to either server, and they will both be treated as
+/// connected to the [`RepliconServer`].
+///
+/// [`convert`]: crate::convert
+/// [running]: RepliconServer::is_running
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct AeronetRepliconServer;
@@ -119,8 +162,7 @@ fn on_disconnected(
 
     let client_id = client.into_client_id();
     let reason = match &**trigger.event() {
-        DisconnectReason::User(reason) => reason.clone(),
-        DisconnectReason::Peer(reason) => reason.clone(),
+        DisconnectReason::User(reason) | DisconnectReason::Peer(reason) => reason.clone(),
         DisconnectReason::Error(err) => format!("{err:#}"),
     };
     // only disconnect already-connected clients, otherwise replicon panics

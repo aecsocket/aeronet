@@ -1,16 +1,20 @@
 //! Client-side [`bevy_replicon`] support.
 
 use {
+    crate::convert::{IntoLaneIndex, TryIntoChannelId},
     aeronet_io::connection::{Connected, Session},
-    aeronet_transport::{
-        lane::LaneIndex, message::MessageBuffers, AeronetTransportPlugin, Transport, TransportSet,
-    },
+    aeronet_transport::{message::MessageBuffers, AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
 };
 
+/// Provides a [`bevy_replicon`] client backend using [`Session`]s for
+/// communication.
+///
+/// To make a [`Session`] be used by [`bevy_replicon`], add the
+/// [`AeronetRepliconClient`] component.
 #[derive(Debug)]
 pub struct AeronetRepliconClientPlugin;
 
@@ -56,30 +60,50 @@ impl Plugin for AeronetRepliconClientPlugin {
     }
 }
 
-/// Set for scheduling systems in between the [`TransportSet`] and
-/// [`bevy_replicon`]'s [`ClientSet`].
+/// Sets for systems which provide communication between [`bevy_replicon`] and
+/// [`Session`]s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum ClientTransportSet {
     /// Passing incoming messages into [`bevy_replicon`].
+    ///
+    /// # Ordering
+    ///
+    /// - [`TransportSet::Poll`]
+    /// - **[`ClientTransportSet::Poll`]**
+    /// - [`ClientSet::ReceivePackets`]
     Poll,
     /// Passing outgoing [`bevy_replicon`] packets to the transport layer.
+    ///
+    /// # Ordering
+    ///
+    /// - [`ClientSet::SendPackets`]
+    /// - **[`ClientTransportSet::Flush`]**
+    /// - [`TransportSet::Flush`]
     Flush,
 }
 
-/// Marker component for a client which uses a [`Session`] as the messaging
-/// backend for a [`RepliconClient`].
+/// Marker component for a [`Session`] which is used as the messaging backend
+/// for a [`RepliconClient`].
 ///
-/// Sessions with this component automatically get [`ProtoTransport`].
+/// Sessions with this component automatically get [`Transport`].
 ///
 /// Any session entity with this component will be used for:
 /// - receiving messages
-/// - sending messages (all Replicon messages are sent to all sessions)
+///   - on the `replicon` side, you can't differentiate which session received
+///     which message
+/// - sending messages
+///   - all outgoing `replicon` are cloned and sent to all sessions
 /// - determining connected status
 ///   - if at least 1 session is [`Connected`], [`RepliconClient`] is
 ///     [`RepliconClientStatus::Connected`]
 ///   - if at least 1 session exists, [`RepliconClient`] is
 ///     [`RepliconClientStatus::Connecting`]
 ///   - else, [`RepliconClientStatus::Disconnected`]
+///
+/// Since [`RepliconClient`] is a resource, there can only be up to one at a
+/// time in the app, and you can only connect to one "logical" server at a time
+/// (that is, the server which holds the actual app state). Therefore, your app
+/// should only have one [`AeronetRepliconClient`].
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct AeronetRepliconClient;
@@ -126,7 +150,7 @@ fn poll(
 ) {
     for mut msg_bufs in &mut clients {
         for (lane_index, msg) in msg_bufs.recv.drain(..) {
-            let Ok(channel_id) = u8::try_from(lane_index.into_raw()) else {
+            let Some(channel_id) = lane_index.try_into_channel_id() else {
                 continue;
             };
             replicon_client.insert_received(channel_id, msg);
@@ -139,7 +163,7 @@ fn flush(
     mut clients: Query<&mut MessageBuffers, ConnectedClient>,
 ) {
     for (channel_id, msg) in replicon_client.drain_sent() {
-        let lane_index = LaneIndex::from_raw(u64::from(channel_id));
+        let lane_index = channel_id.into_lane_index();
         for mut msg_bufs in &mut clients {
             msg_bufs.send(lane_index, msg.clone());
         }

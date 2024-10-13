@@ -1,1 +1,8 @@
-doc-valid-idents = ["WebTransport", "WebSocket", "LibreWolf", "MacOS", ".."]
+doc-valid-idents = [
+  "WebTransport",
+  "WebSocket",
+  "WebSockets",
+  "LibreWolf",
+  "MacOS",
+  "..",
+]
