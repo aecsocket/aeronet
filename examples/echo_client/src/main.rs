@@ -118,13 +118,13 @@ fn recv_msgs(
 fn on_connecting(trigger: Trigger<OnAdd, Session>, mut sessions: Query<&mut UiState>) {
     let session = trigger.entity();
     let mut ui_state = sessions.get_mut(session).unwrap();
-    ui_state.log.push(format!("Connecting"));
+    ui_state.log.push("Connecting".into());
 }
 
 fn on_connected(trigger: Trigger<OnAdd, Connected>, mut sessions: Query<&mut UiState>) {
     let session = trigger.entity();
     let mut ui_state = sessions.get_mut(session).unwrap();
-    ui_state.log.push(format!("Connected"));
+    ui_state.log.push("Connected".into());
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>) {

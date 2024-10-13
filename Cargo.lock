@@ -101,12 +101,7 @@ version = "0.9.0-dev"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
- "anyhow",
  "bevy_app",
- "bevy_ecs",
- "bytes",
- "octs",
- "ringbuf",
 ]
 
 [[package]]
@@ -149,14 +144,11 @@ version = "0.9.0-dev"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
- "ahash",
  "bevy_app",
- "bevy_derive",
  "bevy_ecs",
  "bevy_hierarchy",
  "bevy_reflect",
  "bevy_replicon",
- "tracing",
 ]
 
 [[package]]
@@ -185,13 +177,11 @@ version = "0.9.0-dev"
 dependencies = [
  "aeronet_io",
  "anyhow",
- "base64 0.22.1",
  "bevy",
  "bevy_app",
  "bevy_ecs",
  "bevy_egui",
  "bevy_hierarchy",
- "bevy_reflect",
  "bytes",
  "cfg-if",
  "futures",
@@ -208,7 +198,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "xwt-core",
 ]
 
 [[package]]
@@ -3401,7 +3390,6 @@ dependencies = [
  "clap",
  "move_box",
  "rand",
- "size_format",
  "web-time",
 ]
 

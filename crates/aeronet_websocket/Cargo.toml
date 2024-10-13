@@ -30,19 +30,16 @@ self-signed = ["dep:rcgen"]
 aeronet_io = { workspace = true }
 
 anyhow = { workspace = true }
-base64 = { workspace = true }
 bytes = { workspace = true }
 cfg-if = { workspace = true }
 futures = { workspace = true }
 replace_with = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-xwt-core = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_hierarchy = { workspace = true }
-bevy_reflect = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 js-sys = { workspace = true }

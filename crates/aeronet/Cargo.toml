@@ -24,10 +24,4 @@ visualizer = ["aeronet_transport/visualizer"]
 aeronet_io = { workspace = true }
 aeronet_transport = { workspace = true }
 
-anyhow = { workspace = true }
-bytes = { workspace = true }
-octs = { workspace = true }
-ringbuf = { workspace = true }
-
 bevy_app = { workspace = true }
-bevy_ecs = { workspace = true }

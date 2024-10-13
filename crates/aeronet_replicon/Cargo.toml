@@ -25,11 +25,7 @@ server = ["bevy_replicon/server"]
 aeronet_io = { workspace = true }
 aeronet_transport = { workspace = true }
 
-ahash = { workspace = true }
-tracing = { workspace = true }
-
 bevy_app = { workspace = true }
-bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }
