@@ -156,6 +156,7 @@ async fn handle_session(
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant, reason = "most users will use `Rustls`")]
 enum MaybeTlsStream<S> {
     Plain(S),
     Rustls(tokio_rustls::server::TlsStream<S>),
@@ -168,8 +169,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for MaybeTlsStream<S> {
         buf: &mut ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
-            MaybeTlsStream::Plain(ref mut s) => Pin::new(s).poll_read(cx, buf),
-            MaybeTlsStream::Rustls(s) => Pin::new(s).poll_read(cx, buf),
+            Self::Plain(ref mut s) => Pin::new(s).poll_read(cx, buf),
+            Self::Rustls(s) => Pin::new(s).poll_read(cx, buf),
         }
     }
 }
@@ -181,15 +182,15 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<S> {
         buf: &[u8],
     ) -> Poll<Result<usize, std::io::Error>> {
         match self.get_mut() {
-            MaybeTlsStream::Plain(ref mut s) => Pin::new(s).poll_write(cx, buf),
-            MaybeTlsStream::Rustls(s) => Pin::new(s).poll_write(cx, buf),
+            Self::Plain(ref mut s) => Pin::new(s).poll_write(cx, buf),
+            Self::Rustls(s) => Pin::new(s).poll_write(cx, buf),
         }
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
         match self.get_mut() {
-            MaybeTlsStream::Plain(ref mut s) => Pin::new(s).poll_flush(cx),
-            MaybeTlsStream::Rustls(s) => Pin::new(s).poll_flush(cx),
+            Self::Plain(ref mut s) => Pin::new(s).poll_flush(cx),
+            Self::Rustls(s) => Pin::new(s).poll_flush(cx),
         }
     }
 
@@ -198,8 +199,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<S> {
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
         match self.get_mut() {
-            MaybeTlsStream::Plain(ref mut s) => Pin::new(s).poll_shutdown(cx),
-            MaybeTlsStream::Rustls(s) => Pin::new(s).poll_shutdown(cx),
+            Self::Plain(ref mut s) => Pin::new(s).poll_shutdown(cx),
+            Self::Rustls(s) => Pin::new(s).poll_shutdown(cx),
         }
     }
 }

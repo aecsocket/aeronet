@@ -1,8 +1,4 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-#![cfg_attr(
-    target_family = "wasm",
-    allow(clippy::future_not_send, clippy::arc_with_non_send_sync)
-)]
 #![doc = include_str!("../README.md")]
 
 pub mod cert;

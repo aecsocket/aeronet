@@ -117,13 +117,17 @@ fn recv_msgs(
 // Observe state change events using `Trigger`s
 fn on_connecting(trigger: Trigger<OnAdd, Session>, mut sessions: Query<&mut UiState>) {
     let session = trigger.entity();
-    let mut ui_state = sessions.get_mut(session).unwrap();
+    let mut ui_state = sessions
+        .get_mut(session)
+        .expect("our session should have a `UiState`");
     ui_state.log.push("Connecting".into());
 }
 
 fn on_connected(trigger: Trigger<OnAdd, Connected>, mut sessions: Query<&mut UiState>) {
     let session = trigger.entity();
-    let mut ui_state = sessions.get_mut(session).unwrap();
+    let mut ui_state = sessions
+        .get_mut(session)
+        .expect("our session should have a `UiState`");
     ui_state.log.push("Connected".into());
 }
 

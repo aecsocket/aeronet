@@ -44,7 +44,9 @@ fn on_connecting(
     mut ui_state: ResMut<GlobalUi>,
 ) {
     let session = trigger.entity();
-    let name = names.get(session).unwrap();
+    let name = names
+        .get(session)
+        .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connecting"));
 }
 
@@ -54,7 +56,9 @@ fn on_connected(
     mut ui_state: ResMut<GlobalUi>,
 ) {
     let session = trigger.entity();
-    let name = names.get(session).unwrap();
+    let name = names
+        .get(session)
+        .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connected"));
 }
 
@@ -65,7 +69,9 @@ fn on_disconnected(
 ) {
     let session = trigger.entity();
     let Disconnected { reason } = trigger.event();
-    let name = names.get(session).unwrap();
+    let name = names
+        .get(session)
+        .expect("our session entity should have a name");
     ui_state.log.push(match reason {
         DisconnectReason::User(reason) => {
             format!("{name} disconnected by user: {reason}")
@@ -98,7 +104,7 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
         if connect {
             let mut target = ui_state.target.clone();
             if target.is_empty() {
-                target = DEFAULT_TARGET.to_owned();
+                DEFAULT_TARGET.clone_into(&mut target);
             }
 
             let config = client_config();

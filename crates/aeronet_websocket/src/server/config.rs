@@ -17,6 +17,7 @@ use {
 /// [`WebSocketServer`]: crate::server::WebSocketServer
 /// [`builder`]: ServerConfig::builder
 #[derive(Clone)]
+#[must_use]
 pub struct ServerConfig {
     pub(crate) bind_address: SocketAddr,
     pub(crate) tls: Option<Arc<rustls::ServerConfig>>,
@@ -55,7 +56,7 @@ impl ServerConfigBuilder<WantsBindAddress> {
     }
 
     /// Configures this to listen on the given socket address.
-    pub fn with_bind_address(
+    pub const fn with_bind_address(
         self,
         bind_address: SocketAddr,
     ) -> ServerConfigBuilder<WantsTlsConfig> {
@@ -68,6 +69,12 @@ impl ServerConfigBuilder<WantsTlsConfig> {
     /// encryption, given by [`Identity`].
     ///
     /// Use [`Identity::self_signed`] to generate a self-signed certificate.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the certificate chain and private key of the given
+    /// [`Identity`] is not valid - see
+    /// [`rustls::ConfigBuilder::with_single_cert`].
     pub fn with_identity(self, identity: Identity) -> ServerConfig {
         let crypto = rustls::ServerConfig::builder()
             .with_no_client_auth()
@@ -150,7 +157,13 @@ impl Identity {
     /// let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"])
     ///     .unwrap();
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Errors if one of the entries in `subject_alt_names` is not a valid DNS
+    /// string.
     #[cfg(feature = "self-signed")]
+    #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
     pub fn self_signed(
         subject_alt_names: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Result<Self, InvalidSan> {

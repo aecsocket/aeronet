@@ -42,9 +42,9 @@ fn main() -> AppExit {
 }
 
 fn open_server(mut commands: Commands) {
-    let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
+    let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).expect("all given SANs should be valid DNS names");
     let cert = &identity.certificate_chain().as_slice()[0];
-    let spki_fingerprint = cert::spki_fingerprint_b64(cert).unwrap();
+    let spki_fingerprint = cert::spki_fingerprint_b64(cert).expect("should be a valid certificate");
     let cert_hash = cert::hash_to_b64(cert.hash());
     info!("************************");
     info!("SPKI FINGERPRINT");
@@ -60,16 +60,17 @@ fn open_server(mut commands: Commands) {
 fn server_config(identity: &wtransport::Identity) -> ServerConfig {
     wtransport::ServerConfig::builder()
         .with_bind_default(25565)
-        .with_identity(&identity)
+        .with_identity(identity)
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
-        .unwrap()
+        .expect("should be a valid idle timeout")
         .build()
 }
 
 fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
     let server = trigger.entity();
-    let local_addr = servers.get(server).unwrap();
+    let local_addr = servers.get(server)
+        .expect("spawned session entity should have a name");
     info!("{server} opened on {}", **local_addr);
 }
 
@@ -80,7 +81,9 @@ fn on_session_request(
 ) {
     let client = trigger.entity();
     let request = trigger.event();
-    let server = clients.get(client).map(Parent::get).unwrap();
+    let Ok(server) = clients.get(client).map(Parent::get) else {
+        return;
+    };
 
     info!("{client} connecting to {server} with headers:");
     for (header_key, header_value) in &request.headers {

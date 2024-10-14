@@ -34,11 +34,11 @@ bevy_ecs = { workspace = true }
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 aeronet_io = { workspace = true }
 
-thiserror = { workspace = true }
 steamworks = { workspace = true }
+thiserror = { workspace = true }
 
-bevy_app = { workspace = true }
 bevy-steamworks = { workspace = true }
+bevy_app = { workspace = true }
 
 [dev-dependencies]
 bevy = { workspace = true }
