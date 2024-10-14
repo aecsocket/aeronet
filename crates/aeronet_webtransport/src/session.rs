@@ -44,9 +44,13 @@ impl Plugin for WebTransportSessionPlugin {
 
         #[cfg(not(target_family = "wasm"))]
         {
-            match wtransport::tls::rustls::crypto::ring::default_provider().install_default() {
-                Ok(_) => debug!("Installed default `ring` CryptoProvider"),
-                Err(_) => debug!("CryptoProvider is already installed"),
+            if wtransport::tls::rustls::crypto::ring::default_provider()
+                .install_default()
+                .is_ok()
+            {
+                debug!("Installed default `ring` CryptoProvider");
+            } else {
+                debug!("CryptoProvider is already installed");
             }
         }
 

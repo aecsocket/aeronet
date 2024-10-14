@@ -33,7 +33,7 @@ fn main() -> AppExit {
 }
 
 fn server_config() -> ServerConfig {
-    let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
+    let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"]).expect("all given SANs should be valid DNS names");
     ServerConfig::builder()
         .with_bind_default(25565)
         .with_identity(identity)
@@ -46,13 +46,15 @@ fn open_server(mut commands: Commands) {
 
 fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
     let server = trigger.entity();
-    let local_addr = servers.get(server).unwrap();
+    let local_addr = servers.get(server).expect("opened server should have a binding socket `LocalAddr`");
     info!("{server} opened on {}", **local_addr);
 }
 
 fn on_connecting(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>) {
     let client = trigger.entity();
-    let server = clients.get(client).map(Parent::get).unwrap();
+    let Ok(server) = clients.get(client).map(Parent::get) else {
+        return;
+    };
 
     info!("{client} connecting to {server}");
 }

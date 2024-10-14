@@ -45,9 +45,13 @@ impl Plugin for WebSocketSessionPlugin {
         {
             use tracing::debug;
 
-            match rustls::crypto::aws_lc_rs::default_provider().install_default() {
-                Ok(_) => debug!("Installed default `aws-lc-rs` CryptoProvider"),
-                Err(_) => debug!("CryptoProvider is already installed"),
+            if rustls::crypto::aws_lc_rs::default_provider()
+                .install_default()
+                .is_ok()
+            {
+                debug!("Installed default `aws-lc-rs` CryptoProvider");
+            } else {
+                debug!("CryptoProvider is already installed");
             }
         }
 

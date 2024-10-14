@@ -1,3 +1,5 @@
+#![expect(clippy::unwrap_used, reason = "testing")]
+
 use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
     aeronet_io::{

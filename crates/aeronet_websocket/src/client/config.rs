@@ -15,6 +15,7 @@ use {
 /// [`WebSocketClient`]: crate::client::WebSocketClient
 /// [`builder`]: ClientConfig::builder
 #[derive(Clone)]
+#[must_use]
 pub struct ClientConfig {
     pub(crate) connector: Connector,
     pub(crate) socket: WebSocketConfig,
@@ -70,7 +71,7 @@ impl ClientConfigBuilder<WantsConnector> {
     /// provided for testing purposes.
     ///
     /// This will allow connecting to both encrypted and unencrypted peers (both
-    /// `ws` and `wss), whereas [`with_no_encryption`] will only allow you to
+    /// `ws` and `wss`), whereas [`with_no_encryption`] will only allow you to
     /// connect to unencrypted peers.
     pub fn with_no_cert_validation(self) -> ClientConfig {
         let config = rustls::ClientConfig::builder()
@@ -90,6 +91,7 @@ impl ClientConfigBuilder<WantsConnector> {
         self.with_connector(Connector::Plain)
     }
 
+    #[expect(clippy::unused_self, reason = "builder pattern")]
     fn with_connector(self, connector: Connector) -> ClientConfig {
         ClientConfig {
             connector,

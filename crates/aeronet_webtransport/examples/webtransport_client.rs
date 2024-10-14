@@ -13,7 +13,7 @@ use {
         client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
     },
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     std::mem,
 };
 
@@ -48,7 +48,9 @@ fn on_connecting(
     mut ui_state: ResMut<GlobalUi>,
 ) {
     let session = trigger.entity();
-    let name = names.get(session).unwrap();
+    let name = names
+        .get(session)
+        .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connecting"));
 }
 
@@ -58,7 +60,9 @@ fn on_connected(
     mut ui_state: ResMut<GlobalUi>,
 ) {
     let session = trigger.entity();
-    let name = names.get(session).unwrap();
+    let name = names
+        .get(session)
+        .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connected"));
 }
 
@@ -69,7 +73,9 @@ fn on_disconnected(
 ) {
     let session = trigger.entity();
     let Disconnected { reason } = trigger.event();
-    let name = names.get(session).unwrap();
+    let name = names
+        .get(session)
+        .expect("our session entity should have a name");
     ui_state.log.push(match reason {
         DisconnectReason::User(reason) => {
             format!("{name} disconnected by user: {reason}")
@@ -109,7 +115,7 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
             if connect {
                 let mut target = ui_state.target.clone();
                 if target.is_empty() {
-                    target = DEFAULT_TARGET.to_owned();
+                    DEFAULT_TARGET.clone_into(&mut target);
                 }
 
                 let cert_hash = ui_state.cert_hash.clone();
@@ -182,7 +188,7 @@ fn client_config(cert_hash: String) -> Result<ClientConfig, anyhow::Error> {
     Ok(config
         .keep_alive_interval(Some(Duration::from_secs(1)))
         .max_idle_timeout(Some(Duration::from_secs(5)))
-        .unwrap()
+        .expect("should be a valid idle timeout")
         .build())
 }
 
