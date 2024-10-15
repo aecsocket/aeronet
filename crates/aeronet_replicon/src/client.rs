@@ -165,7 +165,7 @@ fn flush(
     for (channel_id, msg) in replicon_client.drain_sent() {
         let lane_index = channel_id.into_lane_index();
         for mut msg_bufs in &mut clients {
-            msg_bufs.send(lane_index, msg.clone());
+            msg_bufs.send.push(lane_index, msg.clone());
         }
     }
 }

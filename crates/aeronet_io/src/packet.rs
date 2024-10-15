@@ -40,24 +40,20 @@ impl Plugin for PacketPlugin {
 ///
 /// # Sending and receiving
 ///
-/// [`PacketBuffers`] has two [`ringbuf`] packet ring buffers. Since these
-/// require importing traits to use, convenience functions are provided:
-/// - use [`PacketBuffers::drain_recv`] to drain the received packets,
-///   equivalent to [`pop_iter`] on [`PacketBuffers::recv`]
-/// - use [`PacketBuffers::push_send`] to enqueue a packet for sending,
-///   equivalent to [`push_overwrite`] on [`PacketBuffers::send`]
+/// [`PacketBuffers`] has two [`PacketBuffer`]s which are thin wrappers over
+/// ring buffers from [`ringbuf`]:
 ///
 /// ```
 /// use {aeronet_io::packet::PacketBuffers, bevy_ecs::prelude::*};
 ///
 /// fn print_all_packets(mut sessions: Query<(Entity, &mut PacketBuffers)>) {
 ///     for (session, mut packet_bufs) in &mut sessions {
-///         for packet in packet_bufs.drain_recv() {
+///         for packet in packet_bufs.recv.drain() {
 ///             println!("Received packet from {session}: {packet:?}");
 ///         }
 ///
 ///         println!("Sending out OK along {session}");
-///         packet_bufs.push_send(b"OK"[..].into());
+///         packet_bufs.send.push(b"OK"[..].into());
 ///     }
 /// }
 /// ```
@@ -78,9 +74,6 @@ impl Plugin for PacketPlugin {
 /// bound on how many packets we can send and receive per [`Update`]. By
 /// default, when creating this component, the capacity is given by
 /// [`PacketBuffersCapacity::compute_from`].
-///
-/// [`pop_iter`]: ringbuf::traits::Consumer::pop_iter
-/// [`push_overwrite`]: ringbuf::traits::RingBuffer::push_overwrite
 #[derive(Component)]
 pub struct PacketBuffers {
     /// Buffer of packets received along the IO layer during [`IoSet::Poll`].
@@ -89,7 +82,7 @@ pub struct PacketBuffers {
     /// or larger than the [`PacketMtu`] on this session.
     ///
     /// [`IoSet::Poll`]: crate::IoSet::Poll
-    pub recv: HeapRb<Bytes>,
+    pub recv: PacketBuffer,
     /// Buffer of packets that will be drained and sent out along the IO layer
     /// during [`IoSet::Flush`].
     ///
@@ -97,7 +90,7 @@ pub struct PacketBuffers {
     /// equal to [`PacketMtu`].
     ///
     /// [`IoSet::Flush`]: crate::IoSet::Flush
-    pub send: HeapRb<Bytes>,
+    pub send: PacketBuffer,
 }
 
 impl PacketBuffers {
@@ -106,41 +99,56 @@ impl PacketBuffers {
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            recv: HeapRb::new(capacity),
-            send: HeapRb::new(capacity),
+            recv: PacketBuffer::new(capacity),
+            send: PacketBuffer::new(capacity),
         }
     }
+}
 
-    /// Pushes a packet into [`PacketBuffers::recv`], potentially overwriting
-    /// the last packet if the buffer is full.
-    ///
-    /// This should only be called by the IO layer.
-    pub fn push_recv(&mut self, packet: Bytes) {
-        self.recv.push_overwrite(packet);
+/// Buffer of packets, either incoming or outgoing, on a [`PacketBuffers`].
+///
+/// We expose a wrapper type as the API instead of the [`HeapRb`] directly, as
+/// [`ringbuf`] buffers require importing traits to use its types. To avoid
+/// API consumers having to also import those traits, we expose this wrapper
+/// type.
+///
+/// We also use a wrapper type instead of functions on the [`PacketBuffers`]
+/// directly, as a function there would have to take a mutable reference to the
+/// entire [`PacketBuffers`] value, which is overly restrictive when e.g.
+/// reading from one and pushing into the other.
+#[derive(Deref, DerefMut)]
+pub struct PacketBuffer(pub HeapRb<Bytes>);
+
+impl PacketBuffer {
+    /// Creates a new buffer with capacity for the given number of packets.
+    #[must_use]
+    pub fn new(capacity: usize) -> Self {
+        Self(HeapRb::new(capacity))
     }
 
-    /// Returns an iterator that removes packets one by one from
-    /// [`PacketBuffers::recv`].
+    /// Pushes a packet in, potentially overwriting the last packet if the
+    /// buffer is full.
     ///
-    /// This should only be called by code above the IO layer.
-    pub fn drain_recv(&mut self) -> impl Iterator<Item = Bytes> + '_ {
-        self.recv.pop_iter()
+    /// This is equivalent to [`push_overwrite`].
+    ///
+    /// - `recv.push` should only be called by the IO layer.
+    /// - `send.push` should only be called by code above the IO layer.
+    ///
+    /// [`push_overwrite`]: ringbuf::traits::RingBuffer::push_overwrite
+    pub fn push(&mut self, packet: Bytes) {
+        self.push_overwrite(packet);
     }
 
-    /// Pushes a packet into [`PacketBuffers::send`], potentially overwriting
-    /// the last packet if the buffer is full.
+    /// Returns an iterator that removes packets one by one from this buffer.
     ///
-    /// This should only be called by code above the IO layer.
-    pub fn push_send(&mut self, packet: Bytes) {
-        self.send.push_overwrite(packet);
-    }
-
-    /// Returns an iterator that removes packets one by one from
-    /// [`PacketBuffers::recv`].
+    /// This is equivalent to [`pop_iter`].
     ///
-    /// This should only be called by the IO layer.
-    pub fn drain_send(&mut self) -> impl Iterator<Item = Bytes> + '_ {
-        self.send.pop_iter()
+    /// - `recv.drain` should only be called by code above the IO layer.
+    /// - `send.drain` should only be called by the IO layer.
+    ///
+    /// [`pop_iter`]: ringbuf::traits::Consumer::pop_iter
+    pub fn drain(&mut self) -> impl Iterator<Item = Bytes> + '_ {
+        self.pop_iter()
     }
 }
 

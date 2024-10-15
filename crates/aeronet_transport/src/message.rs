@@ -1,6 +1,6 @@
 use {
     crate::{lane::LaneIndex, TransportSet},
-    aeronet_io::packet::PacketBuffers,
+    aeronet_io::{packet::PacketBuffers, ringbuf::traits::Consumer},
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
@@ -16,45 +16,26 @@ pub(crate) struct MessagePlugin;
 impl Plugin for MessagePlugin {
     fn build(&self, app: &mut App) {
         // TODO naive impl
-        app.add_systems(
-            PreUpdate,
-            (|mut q: Query<(&mut PacketBuffers, &mut MessageBuffers)>| {
-                for (mut packet_bufs, mut msg_bufs) in &mut q {
-                    let msgs = packet_bufs.drain_recv().filter_map(|mut packet| {
-                        let lane_index = packet.read::<u64>().map(LaneIndex::from_raw).ok()?;
-                        Some((lane_index, packet))
-                    });
-                    msg_bufs.recv.extend(msgs);
-                }
-            })
-            .in_set(TransportSet::Poll),
-        )
-        .add_systems(
-            PostUpdate,
-            (|mut q: Query<(&mut PacketBuffers, &mut MessageBuffers)>| {
-                for (mut packet_bufs, mut msg_bufs) in &mut q {
-                    for (lane_index, msg) in msg_bufs.send.drain(..) {
-                        let mut packet = BytesMut::new();
-                        packet.put_u64(lane_index.into_raw());
-                        packet.extend_from_slice(&msg);
-                        packet_bufs.push_send(packet.freeze());
-                    }
-                }
-            })
-            .in_set(TransportSet::Flush),
-        );
+        app.add_systems(PreUpdate, naive_poll.in_set(TransportSet::Poll))
+            .add_systems(PostUpdate, naive_send.in_set(TransportSet::Flush));
     }
 }
 
 #[derive(Debug, Clone, Default, Component)]
 pub struct MessageBuffers {
     pub recv: Vec<(LaneIndex, Bytes)>,
-    send: Vec<(LaneIndex, Bytes)>,
+    pub send: MessageBuffersSend,
 }
 
-impl MessageBuffers {
-    pub fn send(&mut self, lane_index: LaneIndex, msg: Bytes) {
-        self.send.push((lane_index, msg));
+#[derive(Debug, Clone, Default)]
+pub struct MessageBuffersSend {
+    buf: Vec<(LaneIndex, Bytes)>,
+}
+
+impl MessageBuffersSend {
+    pub fn push(&mut self, lane: impl Into<LaneIndex>, msg: Bytes) {
+        let lane = lane.into();
+        self.buf.push((lane, msg));
     }
 }
 
@@ -75,4 +56,25 @@ pub struct MessageStats {
     pub msgs_recv: Saturating<usize>,
     pub msgs_sent: Saturating<usize>,
     pub acks_recv: Saturating<usize>,
+}
+
+fn naive_poll(mut sessions: Query<(&mut PacketBuffers, &mut MessageBuffers)>) {
+    for (mut packet_bufs, mut msg_bufs) in &mut sessions {
+        let msgs = packet_bufs.recv.pop_iter().filter_map(|mut packet| {
+            let lane_index = packet.read::<u64>().map(LaneIndex::from_raw).ok()?;
+            Some((lane_index, packet))
+        });
+        msg_bufs.send.buf.extend(msgs);
+    }
+}
+
+fn naive_send(mut sessions: Query<(&mut PacketBuffers, &mut MessageBuffers)>) {
+    for (mut packet_bufs, mut msg_bufs) in &mut sessions {
+        for (lane_index, msg) in msg_bufs.send.buf.drain(..) {
+            let mut packet = BytesMut::new();
+            packet.put_u64(lane_index.into_raw());
+            packet.extend_from_slice(&msg);
+            packet_bufs.send.push(packet.freeze());
+        }
+    }
 }

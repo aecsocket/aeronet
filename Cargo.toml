@@ -13,7 +13,7 @@ rust-version = "1.81.0"
 version = "0.9.0-dev"
 
 [workspace.lints.rust]
-# missing_docs = "warn"
+missing_docs = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

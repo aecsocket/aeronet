@@ -91,7 +91,7 @@ fn reply(mut clients: Query<(Entity, &mut PacketBuffers), With<Parent>>) {
     for (client, mut bufs) in &mut clients {
         let mut to_send = Vec::new();
 
-        for msg in bufs.drain_recv() {
+        for msg in bufs.recv.drain() {
             let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             info!("{client} > {msg}");
 
@@ -101,7 +101,7 @@ fn reply(mut clients: Query<(Entity, &mut PacketBuffers), With<Parent>>) {
         }
 
         for msg in to_send {
-            bufs.push_send(msg);
+            bufs.send.push(msg);
         }
     }
 }
