@@ -78,14 +78,15 @@ fn setup(mut commands: Commands) {
 
     // Spawn an entity to represent this session.
     let mut entity = commands.spawn((
-        UiState::default(), // Add `UiState` so that we can log what messages we've received
+        // Add `UiState` so that we can log what messages we've received
+        UiState::default(),
+        // Because we're using `aeronet_transport`, we also need to set up the
+        // transport-layer components.
+        Transport,
     ));
     // Make an `EntityCommand` via `connect`, which will set up this
     // session, and push that command onto the entity.
     entity.add(WebSocketClient::connect(config, target));
-    // Because we're using `aeronet_transport`, we also need to set up the
-    // transport-layer components.
-    entity.insert(Transport);
 }
 
 fn recv_msgs(
@@ -167,7 +168,7 @@ fn ui(
                 ui_state.log.push(format!("< {msg}"));
 
                 let msg = Bytes::from(msg);
-                msg_bufs.send(SEND_LANE, msg);
+                msg_bufs.send.push(SEND_LANE, msg);
             }
 
             if ui.button("Disconnect").clicked() {

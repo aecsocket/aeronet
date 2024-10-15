@@ -69,23 +69,23 @@ fn transport() {
     let (mut app, a, b) = setup();
 
     let mut packet_bufs = app.world_mut().get_mut::<PacketBuffers>(a).unwrap();
-    packet_bufs.push_send(MSG1.into());
+    packet_bufs.send.push(MSG1.into());
     app.update(); // B receives nothing, A flushes
     app.update(); // B receives packet
 
     let mut packet_bufs = app.world_mut().get_mut::<PacketBuffers>(b).unwrap();
     {
-        let mut recv = packet_bufs.drain_recv();
+        let mut recv = packet_bufs.recv.drain();
         assert_eq!(MSG1, recv.next().unwrap());
         assert!(recv.next().is_none());
     }
-    packet_bufs.push_send(MSG2.into());
+    packet_bufs.send.push(MSG2.into());
     app.update(); // A receives nothing, B flushes
     app.update(); // A receives packet
 
     let mut packet_bufs = app.world_mut().get_mut::<PacketBuffers>(a).unwrap();
     {
-        let mut recv = packet_bufs.drain_recv();
+        let mut recv = packet_bufs.recv.drain();
         assert_eq!(MSG2, recv.next().unwrap());
         assert!(recv.next().is_none());
     }

@@ -134,7 +134,7 @@ fn client_config() -> ClientConfig {
 
 fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
     for (mut ui_state, mut bufs) in &mut sessions {
-        for msg in bufs.drain_recv() {
+        for msg in bufs.recv.drain() {
             let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             ui_state.log.push(format!("> {msg}"));
         }
@@ -190,7 +190,7 @@ fn session_ui(
             if send_msg {
                 let msg = mem::take(&mut ui_state.msg);
                 ui_state.log.push(format!("< {msg}"));
-                bufs.push_send(msg.into());
+                bufs.send.push(msg.into());
                 ui.memory_mut(|m| m.request_focus(msg_resp.id));
             }
 

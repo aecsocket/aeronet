@@ -123,19 +123,14 @@ fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
 
 fn reply(mut clients: Query<(Entity, &mut PacketBuffers), With<Parent>>) {
     for (client, mut bufs) in &mut clients {
-        let mut to_send = Vec::new();
-
-        for msg in bufs.drain_recv() {
+        let PacketBuffers { recv, send } = &mut *bufs;
+        for msg in recv.drain() {
             let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             info!("{client} > {msg}");
 
             let reply = format!("You sent: {msg}");
             info!("{client} < {reply}");
-            to_send.push(reply.into());
-        }
-
-        for msg in to_send {
-            bufs.push_send(msg);
+            send.push(reply.into());
         }
     }
 }

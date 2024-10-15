@@ -3,11 +3,11 @@
 
 use {
     aeronet_io::{
-        AeronetIoPlugin, IoSet,
         connection::{
-            Connected, DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected, Session,
+            Connected, Disconnect, DisconnectReason, Disconnected, Session, DROP_DISCONNECT_REASON,
         },
         packet::{PacketBuffers, PacketBuffersCapacity, PacketMtu, PacketStats},
+        AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
@@ -198,7 +198,7 @@ fn poll(
             num_bytes += packet.len();
             stats.bytes_recv += packet.len();
 
-            bufs.push_recv(packet);
+            bufs.recv.push(packet);
         }
 
         trace!(
@@ -216,7 +216,7 @@ fn flush(mut sessions: Query<(Entity, &ChannelIo, &mut PacketBuffers, &mut Packe
 
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        for packet in bufs.drain_send() {
+        for packet in bufs.send.drain() {
             num_packets += 1;
             stats.packets_sent += 1;
 

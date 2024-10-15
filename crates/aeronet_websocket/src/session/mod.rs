@@ -168,7 +168,7 @@ pub(crate) fn poll(
             num_bytes += packet.len();
             stats.bytes_recv += packet.len();
 
-            bufs.push_recv(packet);
+            bufs.recv.push(packet);
         }
 
         trace!(
@@ -186,7 +186,7 @@ fn flush(mut sessions: Query<(Entity, &WebSocketIo, &mut PacketBuffers, &mut Pac
 
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        for packet in bufs.drain_send() {
+        for packet in bufs.send.drain() {
             num_packets += 1;
             stats.packets_sent += 1;
 

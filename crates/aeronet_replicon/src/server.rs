@@ -198,6 +198,6 @@ fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Me
             continue;
         };
         let lane_index = channel_id.into_lane_index();
-        msg_bufs.send(lane_index, msg);
+        msg_bufs.send.push(lane_index, msg);
     }
 }
