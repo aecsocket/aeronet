@@ -7,8 +7,8 @@ pub mod message;
 pub use {aeronet_io as io, octs};
 use {
     bevy_app::prelude::*,
-    bevy_ecs::{prelude::*, schedule::SystemSet},
-    bevy_reflect::prelude::*,
+    bevy_ecs::{prelude::*, schedule::SystemSet, system::EntityCommand},
+    lane::LaneKind,
     message::MessageBuffers,
 };
 
@@ -30,9 +30,39 @@ pub enum TransportSet {
     Flush,
 }
 
-#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
-#[reflect(Component)]
-pub struct Transport;
+pub struct TransportConfig {
+    pub recv_lanes: Vec<LaneKind>,
+    pub send_lanes: Vec<LaneKind>,
+    pub max_memory_usage: usize,
+    pub send_bytes_per_sec: usize,
+}
+
+impl Default for TransportConfig {
+    fn default() -> Self {
+        Self {
+            recv_lanes: Vec::new(),
+            send_lanes: Vec::new(),
+            max_memory_usage: 4 * 1024 * 1024,
+            send_bytes_per_sec: usize::MAX,
+        }
+    }
+}
+
+#[derive(Debug, Component)]
+pub struct Transport {
+    recv_lanes: Box<()>,
+    send_lanes: Box<()>,
+}
+
+impl Transport {
+    #[must_use]
+    pub fn new(config: TransportConfig) -> Self {
+        Self {
+            recv_lanes: Box::new(()),
+            send_lanes: Box::new(()),
+        }
+    }
+}
 
 // TODO: required components
 fn on_transport_added(trigger: Trigger<OnAdd, Transport>, mut commands: Commands) {

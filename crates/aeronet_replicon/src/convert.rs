@@ -46,6 +46,10 @@ impl TryIntoEntity for ClientId {
     }
 }
 
+// LaneKind <-> RepliconChannel
+
+impl
+
 // LaneIndex <-> channel ID
 
 /// Attempts to convert a [`LaneIndex`] into a channel ID.

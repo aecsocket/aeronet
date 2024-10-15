@@ -64,7 +64,7 @@ fn naive_poll(mut sessions: Query<(&mut PacketBuffers, &mut MessageBuffers)>) {
             let lane_index = packet.read::<u64>().map(LaneIndex::from_raw).ok()?;
             Some((lane_index, packet))
         });
-        msg_bufs.send.buf.extend(msgs);
+        msg_bufs.recv.extend(msgs);
     }
 }
 
