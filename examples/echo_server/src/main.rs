@@ -3,9 +3,8 @@
 //!
 //! This example shows you how to create a server, accept client connections,
 //! and handle incoming messages. This example uses:
-//! - `aeronet_websocket` as the IO layer, using WebSockets under the hood.
-//!   This is what actually receives and sends packets of `[u8]`s across the
-//!   network.
+//! - `aeronet_websocket` as the IO layer, using WebSockets under the hood. This
+//!   is what actually receives and sends packets of `[u8]`s across the network.
 //! - `aeronet_transport` as the transport layer, the default implementation.
 //!   This manages reliability, ordering, and fragmentation of packets - meaning
 //!   that all you have to worry about is the actual data payloads that you want

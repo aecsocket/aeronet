@@ -154,8 +154,7 @@ impl Identity {
     /// ```
     /// use aeronet_websocket::server::Identity;
     ///
-    /// let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"])
-    ///     .unwrap();
+    /// let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
     /// ```
     ///
     /// # Errors

@@ -8,10 +8,10 @@ use {
         session::{self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
+        IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
         packet::{PacketBuffersCapacity, PacketMtu, PacketRtt},
         server::{CloseReason, Closed, Opened, Server},
-        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -21,7 +21,7 @@ use {
     futures::channel::{mpsc, oneshot},
     std::{collections::HashMap, net::SocketAddr, time::Duration},
     thiserror::Error,
-    tracing::{debug_span, Instrument},
+    tracing::{Instrument, debug_span},
     wtransport::error::ConnectionError,
 };
 

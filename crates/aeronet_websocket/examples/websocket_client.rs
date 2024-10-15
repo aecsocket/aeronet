@@ -10,7 +10,7 @@ use {
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    bevy_egui::{EguiContexts, EguiPlugin, egui},
     std::mem,
 };
 

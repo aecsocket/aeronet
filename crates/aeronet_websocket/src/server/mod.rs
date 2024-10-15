@@ -6,14 +6,15 @@ mod config;
 pub use config::*;
 use {
     crate::{
+        WebSocketRuntime,
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
-        tungstenite, WebSocketRuntime,
+        tungstenite,
     },
     aeronet_io::{
+        IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
         server::{CloseReason, Closed, Opened, Server},
-        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -22,7 +23,7 @@ use {
     std::{io, net::SocketAddr},
     thiserror::Error,
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
-    tracing::{debug_span, Instrument},
+    tracing::{Instrument, debug_span},
 };
 
 /// Allows using [`WebSocketServer`].
@@ -60,7 +61,7 @@ impl WebSocketServer {
     ///
     /// ```
     /// use {
-    ///     aeronet_websocket::server::{ServerConfig, WebSocketServer, Identity},
+    ///     aeronet_websocket::server::{Identity, ServerConfig, WebSocketServer},
     ///     bevy_ecs::{prelude::*, system::EntityCommand},
     /// };
     ///

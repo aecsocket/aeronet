@@ -1,5 +1,5 @@
 use {
-    crate::{lane::LaneIndex, TransportSet},
+    crate::{TransportSet, lane::LaneIndex},
     aeronet_io::{packet::PacketBuffers, ringbuf::traits::Consumer},
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},

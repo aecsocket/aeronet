@@ -3,7 +3,7 @@ use {
         connection::{Connected, DisconnectReason, Disconnected, LocalAddr, Session},
         message::MessageBuffers,
         server::Opened,
-        transport::{lane::LaneKind, AeronetTransportPlugin, Transport},
+        transport::{AeronetTransportPlugin, Transport, lane::LaneKind},
     },
     aeronet_websocket::server::{ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},
@@ -125,7 +125,8 @@ fn echo_messages(
         (
             With<Session>,   // ..for all sessions (this isn't strictly necessary)
             With<Connected>, // which are connected (this isn't strictly necessary)
-            With<Parent>, // ..which are connected to one of our servers (excludes local dedicated clients)
+            With<Parent>,    /* ..which are connected to one of our servers (excludes local
+                              * dedicated clients) */
         ),
     >,
 ) {

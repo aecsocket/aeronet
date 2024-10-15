@@ -7,7 +7,7 @@ pub mod message;
 pub use {aeronet_io as io, octs};
 use {
     bevy_app::prelude::*,
-    bevy_ecs::{prelude::*, schedule::SystemSet, system::EntityCommand},
+    bevy_ecs::{prelude::*, schedule::SystemSet},
     lane::LaneKind,
     message::MessageBuffers,
 };
@@ -34,6 +34,8 @@ pub enum TransportSet {
 pub struct Transport {
     recv_lanes: Box<()>,
     send_lanes: Box<()>,
+    pub max_memory_usage: usize,
+    pub send_bytes_per_sec: usize,
 }
 
 impl Transport {
@@ -45,6 +47,8 @@ impl Transport {
         Self {
             recv_lanes: Box::new(()),
             send_lanes: Box::new(()),
+            max_memory_usage: 4 * 1024 * 1024,
+            send_bytes_per_sec: usize::MAX,
         }
     }
 }

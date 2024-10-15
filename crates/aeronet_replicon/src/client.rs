@@ -3,7 +3,7 @@
 use {
     crate::convert,
     aeronet_io::connection::{Connected, Session},
-    aeronet_transport::{message::MessageBuffers, AeronetTransportPlugin, Transport, TransportSet},
+    aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet, message::MessageBuffers},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
