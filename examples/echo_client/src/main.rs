@@ -1,9 +1,10 @@
-//! Client which connects to an echo server, and sends/receives plain UTF-8 strings.
+//! Client which connects to an echo server, and sends/receives plain UTF-8
+//! strings.
 //!
 //! This example shows you how to create a client, establish a connection to a
 //! server, and send and receive messages. This example uses:
-//! - `aeronet_websocket` as the IO layer, using WebSockets under the hood.
-//!   This is what actually sends packets of `[u8]`s across the network.
+//! - `aeronet_websocket` as the IO layer, using WebSockets under the hood. This
+//!   is what actually sends packets of `[u8]`s across the network.
 //! - `aeronet_transport` as the transport layer, the default implementation.
 //!   This manages reliability, ordering, and fragmentation of packets - meaning
 //!   that all you have to worry about is the actual data payloads that you want
@@ -12,20 +13,21 @@
 //! This example only works on native due to certificate validation, but the
 //! general ideas are the same on WASM.
 
-use std::mem;
-
-use aeronet::{
-    connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
-    message::MessageBuffers,
-    octs::Bytes,
-    transport::{
-        lane::{LaneIndex, LaneKind},
-        AeronetTransportPlugin, Transport,
+use {
+    aeronet::{
+        connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
+        message::MessageBuffers,
+        octs::Bytes,
+        transport::{
+            AeronetTransportPlugin, Transport,
+            lane::{LaneIndex, LaneKind},
+        },
     },
+    aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
+    bevy::prelude::*,
+    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    std::mem,
 };
-use aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin};
-use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
 
 // Let's set up the app.
 

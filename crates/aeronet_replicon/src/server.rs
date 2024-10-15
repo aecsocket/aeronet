@@ -6,7 +6,7 @@ use {
         connection::{Connected, DisconnectReason, Disconnected},
         server::{Opened, Server},
     },
-    aeronet_transport::{message::MessageBuffers, AeronetTransportPlugin, Transport, TransportSet},
+    aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet, message::MessageBuffers},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_hierarchy::Parent,

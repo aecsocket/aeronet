@@ -4,19 +4,19 @@ mod backend;
 
 use {
     crate::{
-        session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
         WebSocketRuntime,
+        session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
     },
     aeronet_io::{
+        IoSet,
         connection::{DisconnectReason, Disconnected, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
-        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     futures::{channel::oneshot, never::Never},
     thiserror::Error,
-    tracing::{debug_span, Instrument},
+    tracing::{Instrument, debug_span},
 };
 
 cfg_if::cfg_if! {

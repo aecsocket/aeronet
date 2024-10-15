@@ -4,9 +4,9 @@ use {
     aeronet_io::connection::DisconnectReason,
     bevy_ecs::prelude::*,
     futures::{
+        SinkExt,
         channel::{mpsc, oneshot},
         never::Never,
-        SinkExt,
     },
     std::{
         net::SocketAddr,
@@ -19,7 +19,7 @@ use {
     },
     tokio_rustls::TlsAcceptor,
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
-    tracing::{debug, debug_span, Instrument},
+    tracing::{Instrument, debug, debug_span},
 };
 
 pub async fn start(
