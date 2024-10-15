@@ -1,79 +1,104 @@
-use aeronet::client::DisconnectReason;
-use aeronet_proto::session::{Session, SessionConfig};
-use bytes::Bytes;
-use futures::{
-    channel::{mpsc, oneshot},
-    never::Never,
+use {
+    super::{ClientConfig, ClientError, ConnectTarget, ToConnected},
+    crate::session::{SessionBackend, SessionError, SessionMeta},
+    aeronet_io::connection::DisconnectReason,
+    bytes::Bytes,
+    futures::{
+        channel::{mpsc, oneshot},
+        never::Never,
+    },
+    tracing::debug,
+    xwt_core::prelude::*,
 };
-use tracing::debug;
-use web_time::Instant;
-use xwt_core::prelude::*;
-
-use crate::{
-    client::ToConnected,
-    internal::{self, ConnectionMeta, MIN_MTU},
-    runtime::WebTransportRuntime,
-};
-
-use super::{ClientConfig, ClientError};
 
 pub async fn start(
-    runtime: WebTransportRuntime,
-    net_config: ClientConfig,
-    session_config: SessionConfig,
-    target: String,
-    send_connected: oneshot::Sender<ToConnected>,
+    packet_buf_cap: usize,
+    config: ClientConfig,
+    target: ConnectTarget,
+    send_next: oneshot::Sender<ToConnected>,
 ) -> Result<Never, DisconnectReason<ClientError>> {
-    let endpoint = internal::create_client_endpoint(net_config)?;
-
-    debug!("Created endpoint, connecting to {target:?}");
-    #[allow(clippy::useless_conversion)] // multi-target support
-    let conn = endpoint
-        .connect(&target)
-        .await
-        .map_err(|err| ClientError::Connect(err.into()))?
-        .wait_connect()
-        .await
-        .map_err(|err| ClientError::AwaitConnect(err.into()))?;
-
-    let Some(mtu) = conn.max_datagram_size() else {
-        return Err(ClientError::DatagramsNotSupported.into());
-    };
-    let session = Session::client(Instant::now(), session_config, MIN_MTU, mtu)
-        .map_err(ClientError::MtuTooSmall)?;
-
+    // TODO: On native, debug log the target after this is merged:
+    // https://github.com/BiagioFesta/wtransport/pull/226
     #[cfg(target_family = "wasm")]
-    {
-        // I don't know how the high water mark works exactly,
-        // but you need it so that WASM transport works.
-        // Don't believe me? Change this to 1.0 and see what happens
-        let datagrams = conn.transport.datagrams();
-        datagrams.set_incoming_high_water_mark(1_000_000.0);
-        datagrams.set_outgoing_high_water_mark(1_000_000.0);
-    }
+    debug!("Spawning backend task to connect to {target:?}");
 
-    let (send_meta, recv_meta) = mpsc::channel::<ConnectionMeta>(1);
-    let (send_c2s, recv_c2s) = mpsc::unbounded::<Bytes>();
-    let (send_s2c, recv_s2c) = mpsc::channel::<Bytes>(internal::MSG_BUF_CAP);
-    let (send_local_dc, recv_local_dc) = oneshot::channel::<String>();
-    send_connected
-        .send(ToConnected {
-            #[cfg(not(target_family = "wasm"))]
-            local_addr: endpoint.0.local_addr().map_err(ClientError::GetLocalAddr)?,
-            #[cfg(not(target_family = "wasm"))]
-            initial_remote_addr: conn.0.remote_address(),
-            #[cfg(not(target_family = "wasm"))]
-            initial_rtt: conn.0.rtt(),
-            recv_meta,
-            send_c2s,
-            recv_s2c,
-            send_local_dc,
-            session,
-        })
-        .map_err(|_| ClientError::FrontendClosed)?;
+    let endpoint = {
+        #[cfg(target_family = "wasm")]
+        {
+            xwt_web_sys::Endpoint {
+                options: config.to_js(),
+            }
+        }
 
-    debug!("Starting connection loop");
-    internal::handle_connection(runtime, conn, recv_c2s, send_s2c, send_meta, recv_local_dc)
-        .await
-        .map_err(|reason| reason.map_err(From::from))
+        #[cfg(not(target_family = "wasm"))]
+        {
+            wtransport::Endpoint::client(config)
+                .map(xwt_wtransport::Endpoint)
+                .map_err(SessionError::CreateEndpoint)
+                .map_err(ClientError::Session)?
+        }
+    };
+    debug!("Created endpoint");
+
+    let conn = {
+        #[cfg(target_family = "wasm")]
+        {
+            endpoint
+                .connect(&target)
+                .await
+                .map_err(|err| ClientError::Connect(err.into()))?
+                .wait_connect()
+                .await
+                .map_err(|err| ClientError::AwaitConnect(err.into()))?
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            endpoint
+                .0
+                .connect(target)
+                .await
+                .map(xwt_wtransport::Connection)
+                .map_err(ClientError::Connect)?
+        }
+    };
+    debug!("Connected");
+
+    let (send_meta, recv_meta) = mpsc::channel::<SessionMeta>(1);
+    let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<Bytes>(packet_buf_cap);
+    let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
+    let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
+    let next = ToConnected {
+        #[cfg(not(target_family = "wasm"))]
+        local_addr: endpoint
+            .local_addr()
+            .map_err(SessionError::GetLocalAddr)
+            .map_err(ClientError::Session)?,
+        #[cfg(not(target_family = "wasm"))]
+        initial_remote_addr: conn.0.remote_address(),
+        #[cfg(not(target_family = "wasm"))]
+        initial_rtt: conn.0.rtt(),
+        initial_mtu: conn
+            .max_datagram_size()
+            .ok_or(SessionError::DatagramsNotSupported)
+            .map_err(ClientError::Session)?,
+        recv_meta,
+        recv_packet_b2f,
+        send_packet_f2b,
+        send_user_dc,
+    };
+    let backend = SessionBackend {
+        conn,
+        send_meta,
+        send_packet_b2f,
+        recv_packet_f2b,
+        recv_user_dc,
+    };
+    send_next
+        .send(next)
+        .map_err(|_| SessionError::FrontendClosed)
+        .map_err(ClientError::Session)?;
+
+    debug!("Starting session loop");
+    Err(backend.start().await.map_err(ClientError::Session))
 }

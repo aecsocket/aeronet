@@ -1,182 +1,252 @@
-//! Server-side transport implementation.
+//! See [`WebTransportServer`].
 
 mod backend;
-mod frontend;
 
-use std::{collections::HashMap, io, net::SocketAddr};
-
-use aeronet::{
-    client::{ClientState, DisconnectReason},
-    stats::{ConnectedAt, MessageStats, RemoteAddr, Rtt},
+use {
+    crate::{
+        runtime::WebTransportRuntime,
+        session::{self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin},
+    },
+    aeronet_io::{
+        connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
+        packet::{PacketBuffersCapacity, PacketMtu, PacketRtt},
+        server::{CloseReason, Closed, Opened, Server},
+        IoSet,
+    },
+    bevy_app::prelude::*,
+    bevy_ecs::{prelude::*, system::EntityCommand},
+    bevy_hierarchy::BuildChildren,
+    bevy_reflect::prelude::*,
+    bytes::Bytes,
+    futures::channel::{mpsc, oneshot},
+    std::{collections::HashMap, net::SocketAddr, time::Duration},
+    thiserror::Error,
+    tracing::{debug_span, Instrument},
+    wtransport::error::ConnectionError,
 };
-use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
-use bytes::Bytes;
-use futures::channel::{mpsc, oneshot};
-use slotmap::SlotMap;
-use web_time::{Duration, Instant};
-use wtransport::error::ConnectionError;
 
-use crate::{
-    internal::{self, ConnectionInner, ConnectionMeta, InternalError},
-    shared::RawRtt,
-};
-
-/// Server network configuration.
-pub type ServerConfig = wtransport::ServerConfig;
-
-/// WebTransport implementation of [`ServerTransport`].
-///
-/// See the [crate-level documentation](crate).
-///
-/// [`ServerTransport`]: aeronet::server::ServerTransport
+/// Allows using [`WebTransportServer`].
 #[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct WebTransportServer {
-    state: State,
-}
+pub struct WebTransportServerPlugin;
 
-#[derive(Debug)]
-enum State {
-    Closed,
-    Opening(Opening),
-    Open(Open),
-    Closing { reason: String },
-}
-
-/// How a [`WebTransportServer`] should respond to a client attempting to
-/// connect to it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ConnectionResponse {
-    /// Allow the client to connect.
-    Accepted,
-    /// 403 Forbidden.
-    Forbidden,
-    /// 404 Not Found.
-    NotFound,
-}
-
-/// Error type for operations on a [`WebTransportServer`].
-#[derive(Debug, thiserror::Error)]
-pub enum ServerError {
-    // frontend
-    /// Backend server task was cancelled, dropping the underlying connections.
-    #[error("backend closed")]
-    BackendClosed,
-    /// Server is already opening or open.
-    #[error("already opening or open")]
-    AlreadyOpen,
-    /// Server is already closed.
-    #[error("already closed")]
-    AlreadyClosed,
-    /// Server is not open.
-    #[error("not open")]
-    NotOpen,
-    /// Given client is not connected.
-    #[error("client not connected")]
-    ClientNotConnected,
-    /// Given client is not connecting.
-    #[error("client not connecting")]
-    ClientNotConnecting,
-    /// Already responded to this client's connection request.
-    #[error("already responded to this client's connection request")]
-    AlreadyResponded,
-    /// See [`SendError`].
-    #[error(transparent)]
-    Send(SendError),
-    /// See [`FatalSendError`].
-    #[error(transparent)]
-    FatalSend(FatalSendError),
-    /// See [`OutOfMemory`].
-    #[error(transparent)]
-    OutOfMemory(OutOfMemory),
-
-    // backend
-    /// Server frontend was closed.
-    #[error("frontend closed")]
-    FrontendClosed,
-    /// Failed to create the endpoint for listening to connections from.
-    #[error("failed to create endpoint")]
-    CreateEndpoint(#[source] io::Error),
-    /// Failed to get our endpoint's local socket address.
-    #[error("failed to get endpoint local address")]
-    GetLocalAddr(#[source] io::Error),
-    /// Failed to await the client's session request.
-    #[error("failed to await session request")]
-    AwaitSessionRequest(#[source] ConnectionError),
-    /// Failed to accept the client's session request.
-    #[error("failed to accept session request")]
-    AcceptSessionRequest(#[source] ConnectionError),
-    /// Established a connection with the client, but it does not support
-    /// datagrams.
-    #[error("datagrams are not supported on this peer")]
-    DatagramsNotSupported,
-    /// Client supports datagrams, but the maximum datagram size it supports is
-    /// too small for us.
-    #[error("connection MTU too small")]
-    MtuTooSmall(#[source] MtuTooSmall),
-    /// Frontend did not allow this client to complete the connection.
-    #[error("rejected by server")]
-    Rejected,
-
-    // connection
-    /// Lost connection.
-    #[error("connection lost")]
-    ConnectionLost(#[source] <internal::Connection as xwt_core::session::datagram::Receive>::Error),
-}
-
-impl From<InternalError<Self>> for ServerError {
-    fn from(value: InternalError<Self>) -> Self {
-        match value {
-            InternalError::Spec(err) => err,
-            InternalError::BackendClosed => Self::BackendClosed,
-            InternalError::MtuTooSmall(err) => Self::MtuTooSmall(err),
-            InternalError::OutOfMemory(err) => Self::OutOfMemory(err),
-            InternalError::Send(err) => Self::Send(err),
-            InternalError::FatalSend(err) => Self::FatalSend(err),
-            InternalError::FrontendClosed => Self::FrontendClosed,
-            InternalError::DatagramsNotSupported => Self::DatagramsNotSupported,
-            InternalError::ConnectionLost(err) => Self::ConnectionLost(err),
+impl Plugin for WebTransportServerPlugin {
+    fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<WebTransportSessionPlugin>() {
+            app.add_plugins(WebTransportSessionPlugin);
         }
+
+        app.register_type::<SessionRequest>()
+            .register_type::<SessionResponse>()
+            .add_systems(
+                PreUpdate,
+                (poll_servers, poll_clients)
+                    .in_set(IoSet::Poll)
+                    .before(session::poll),
+            )
+            .observe(on_server_added)
+            .observe(on_connection_response);
     }
 }
 
-slotmap::new_key_type! {
-    /// Key uniquely identifying a client in a [`WebTransportServer`].
+/// WebTransport server implementation which listens for client connections,
+/// and coordinates messaging between multiple clients.
+///
+/// Use [`WebTransportServer::open`] to start opening a server.
+#[derive(Debug, Component)]
+pub struct WebTransportServer(Frontend);
+
+/// Configuration for the [`WebTransportServer`].
+pub type ServerConfig = wtransport::ServerConfig;
+
+impl WebTransportServer {
+    /// Creates an [`EntityCommand`] to set up a server and have it start
+    /// listening for connections.
     ///
-    /// If the same physical client disconnects and reconnects (i.e. the same
-    /// process), this counts as a new client.
-    pub struct ClientKey;
+    /// # Examples
+    ///
+    /// ```
+    /// use {
+    ///     aeronet_webtransport::server::{ServerConfig, WebTransportServer},
+    ///     bevy_ecs::{prelude::*, system::EntityCommand},
+    /// };
+    ///
+    /// # fn run(mut commands: Commands, world: &mut World) {
+    /// // set up a self-signed certificate to identify this server
+    /// let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
+    ///
+    /// let config = ServerConfig::builder()
+    ///     .with_bind_default(12345) // server port
+    ///     .with_identity(&identity)
+    ///     .build();
+    ///
+    /// // using `Commands`
+    /// commands.spawn_empty().add(WebTransportServer::open(config));
+    ///
+    /// // using mutable `World` access
+    /// # let config: ServerConfig = unimplemented!();
+    /// let server = world.spawn_empty().id();
+    /// WebTransportServer::open(config).apply(server, world);
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn open(config: impl Into<ServerConfig>) -> impl EntityCommand {
+        let config = config.into();
+        |server: Entity, world: &mut World| open(server, world, config)
+    }
 }
 
-/// State of a [`WebTransportServer`] when it is [`ServerState::Opening`].
+fn open(server: Entity, world: &mut World, config: ServerConfig) {
+    let runtime = world.resource::<WebTransportRuntime>().clone();
+    let packet_buf_cap = PacketBuffersCapacity::compute_from(world, server);
+
+    let (send_closed, recv_closed) = oneshot::channel::<CloseReason<ServerError>>();
+    let (send_next, recv_next) = oneshot::channel::<ToOpen>();
+    runtime.spawn_on_self(
+        async move {
+            let Err(err) = backend::start(config, packet_buf_cap, send_next).await else {
+                unreachable!();
+            };
+            let _ = send_closed.send(CloseReason::Error(err));
+        }
+        .instrument(debug_span!("server", %server)),
+    );
+
+    world
+        .entity_mut(server)
+        .insert(WebTransportServer(Frontend::Opening {
+            recv_closed,
+            recv_next,
+        }));
+}
+
+/// How should a [`WebTransportServer`] respond to a client wishing to connect
+/// to the server?
 ///
-/// [`ServerState::Opening`]: aeronet::server::ServerState::Opening
-#[derive(Debug)]
-pub struct Opening {
-    recv_open: oneshot::Receiver<ToOpen>,
-    recv_err: oneshot::Receiver<ServerError>,
+/// After observing a [`Trigger<SessionRequest>`], trigger this event on the
+/// client to determine if the client should be allowed to connect or not.
+///
+/// If you do not trigger [`SessionResponse`], then the client will never
+/// connect.
+///
+/// # Examples
+///
+/// Accept all clients without any extra checks:
+///
+/// ```
+/// use {
+///     aeronet_webtransport::server::{SessionRequest, SessionResponse},
+///     bevy_ecs::prelude::*,
+/// };
+///
+/// fn on_session_request(trigger: Trigger<SessionRequest>, mut commands: Commands) {
+///     let client = trigger.entity();
+///     commands.trigger_targets(SessionResponse::Accepted, client);
+/// }
+/// ```
+///
+/// Check if the client has a given header before accepting them:
+///
+/// ```
+/// use {
+///     aeronet_webtransport::server::{SessionRequest, SessionResponse},
+///     bevy_ecs::prelude::*,
+/// };
+///
+/// fn on_session_request(trigger: Trigger<SessionRequest>, mut commands: Commands) {
+///     let client = trigger.entity();
+///     let request = trigger.event();
+///
+///     let mut response = SessionResponse::Forbidden;
+///     if let Some(auth_token) = request.headers.get(":auth-token") {
+///         if validate_auth_token(auth_token) {
+///             response = SessionResponse::Accepted;
+///         }
+///     }
+///
+///     commands.trigger_targets(response, client);
+/// }
+/// # fn validate_auth_token(_: &str) -> bool { unimplemented!() }
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Event, Reflect)]
+pub enum SessionResponse {
+    /// Allow the client to connect to the server.
+    Accepted,
+    /// Reject the client with a `403 Forbidden`.
+    Forbidden,
+    /// Reject the client with a `404 Not Found`.
+    NotFound,
+}
+
+/// Triggered when a client requests to connect to a [`WebTransportServer`].
+///
+/// Use the fields in this event to decide whether to accept the client's
+/// connection or not by triggering [`SessionResponse`] on this client.
+///
+/// If you do not trigger [`SessionResponse`], then the client will never
+/// connect.
+#[derive(Debug, Clone, PartialEq, Eq, Event, Reflect)]
+pub struct SessionRequest {
+    /// `:authority` header.
+    pub authority: String,
+    /// `:path` header.
+    pub path: String,
+    /// `origin` header.
+    pub origin: Option<String>,
+    /// `user-agent` header.
+    pub user_agent: Option<String>,
+    /// Full map of request headers.
+    pub headers: HashMap<String, String>,
+}
+
+/// [`WebTransportServer`] error.
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum ServerError {
+    /// Failed to await an incoming session request.
+    #[error("failed to await session request")]
+    AwaitSessionRequest(#[source] ConnectionError),
+    /// User rejected this incoming session request.
+    #[error("user rejected session request")]
+    Rejected,
+    /// Failed to accept the incoming session request.
+    #[error("failed to accept session")]
+    AcceptSessionRequest(#[source] ConnectionError),
+    /// Generic session error.
+    #[error(transparent)]
+    Session(#[from] SessionError),
+}
+
+#[derive(Debug, Component)]
+enum Frontend {
+    Opening {
+        recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+        recv_next: oneshot::Receiver<ToOpen>,
+    },
+    Open {
+        recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+        recv_connecting: mpsc::Receiver<ToConnecting>,
+    },
+    Closed,
+}
+
+#[derive(Debug, Component)]
+enum ClientFrontend {
+    Connecting {
+        send_session_response: Option<oneshot::Sender<SessionResponse>>,
+        recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+        recv_next: oneshot::Receiver<ToConnected>,
+    },
+    Connected {
+        recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+    },
+    Disconnected,
 }
 
 #[derive(Debug)]
 struct ToOpen {
     local_addr: SocketAddr,
     recv_connecting: mpsc::Receiver<ToConnecting>,
-    send_closed: oneshot::Sender<()>,
 }
-
-/// State of a [`WebTransportServer`] when it is [`ServerState::Open`].
-///
-/// [`ServerState::Open`]: aeronet::server::ServerState::Open
-#[derive(Debug)]
-pub struct Open {
-    /// Address of the local socket that this server's endpoint is bound to.
-    pub local_addr: SocketAddr,
-    recv_connecting: mpsc::Receiver<ToConnecting>,
-    clients: SlotMap<ClientKey, Client>,
-    _send_closed: oneshot::Sender<()>,
-}
-
-type Client = ClientState<Connecting, Connected>;
 
 #[derive(Debug)]
 struct ToConnecting {
@@ -185,95 +255,229 @@ struct ToConnecting {
     origin: Option<String>,
     user_agent: Option<String>,
     headers: HashMap<String, String>,
+    send_session_entity: oneshot::Sender<Entity>,
+    send_session_response: oneshot::Sender<SessionResponse>,
     recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
-    send_key: oneshot::Sender<ClientKey>,
-    send_conn_resp: oneshot::Sender<ConnectionResponse>,
-    recv_connected: oneshot::Receiver<ToConnected>,
-}
-
-/// State of a client connected to a [`WebTransportServer`] when it is
-/// [`ClientState::Connecting`].
-///
-/// After receiving a [`ServerEvent::Connecting`], use the information in this
-/// to determine whether to accept or to reject this client.
-///
-/// [`ServerEvent::Connecting`]: aeronet::server::ServerEvent::Connecting
-#[derive(Debug)]
-pub struct Connecting {
-    /// `:authority` field of the request.
-    pub authority: String,
-    /// `:path` field of the request.
-    pub path: String,
-    /// `origin` field of the request.
-    pub origin: Option<String>,
-    /// `user-agent` field of the request.
-    pub user_agent: Option<String>,
-    /// All headers present in the request.
-    pub headers: HashMap<String, String>,
-    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
-    send_conn_resp: Option<oneshot::Sender<ConnectionResponse>>,
-    recv_connected: oneshot::Receiver<ToConnected>,
+    recv_next: oneshot::Receiver<ToConnected>,
 }
 
 #[derive(Debug)]
 struct ToConnected {
-    remote_addr: SocketAddr,
+    initial_remote_addr: SocketAddr,
     initial_rtt: Duration,
-    recv_meta: mpsc::Receiver<ConnectionMeta>,
-    recv_c2s: mpsc::Receiver<Bytes>,
-    send_s2c: mpsc::UnboundedSender<Bytes>,
-    send_local_dc: oneshot::Sender<String>,
-    session: Session,
+    initial_mtu: usize,
+    recv_meta: mpsc::Receiver<SessionMeta>,
+    recv_packet_b2f: mpsc::Receiver<Bytes>,
+    send_packet_f2b: mpsc::UnboundedSender<Bytes>,
+    send_user_dc: oneshot::Sender<String>,
 }
 
-/// State of a client connected to a [`WebTransportServer`] when it is
-/// [`ClientState::Connected`].
-#[derive(Debug)]
-pub struct Connected {
-    inner: ConnectionInner<ServerError>,
+// TODO: required components
+fn on_server_added(trigger: Trigger<OnAdd, WebTransportServer>, mut commands: Commands) {
+    let server = trigger.entity();
+    commands.entity(server).insert(Server);
 }
 
-impl Connected {
-    /// Provides access to the underlying [`Session`] for reading more detailed
-    /// network statistics.
-    #[must_use]
-    pub const fn session(&self) -> &Session {
-        &self.inner.session
+fn poll_servers(mut commands: Commands, mut servers: Query<(Entity, &mut WebTransportServer)>) {
+    for (server, mut frontend) in &mut servers {
+        replace_with::replace_with_or_abort(&mut frontend.0, |state| match state {
+            Frontend::Opening {
+                recv_closed,
+                recv_next,
+            } => poll_opening(&mut commands, server, recv_closed, recv_next),
+            Frontend::Open {
+                recv_closed,
+                recv_connecting,
+            } => poll_open(&mut commands, server, recv_closed, recv_connecting),
+            Frontend::Closed => state,
+        });
     }
 }
 
-impl ConnectedAt for Connected {
-    fn connected_at(&self) -> Instant {
-        self.session().connected_at()
+fn poll_opening(
+    commands: &mut Commands,
+    server: Entity,
+    mut recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+    mut recv_next: oneshot::Receiver<ToOpen>,
+) -> Frontend {
+    if should_close(commands, server, &mut recv_closed) {
+        return Frontend::Closed;
+    }
+
+    let Ok(Some(next)) = recv_next.try_recv() else {
+        return Frontend::Opening {
+            recv_closed,
+            recv_next,
+        };
+    };
+
+    commands
+        .entity(server)
+        .insert((Opened, LocalAddr(next.local_addr)));
+    Frontend::Open {
+        recv_closed,
+        recv_connecting: next.recv_connecting,
     }
 }
 
-impl Rtt for Connected {
-    fn rtt(&self) -> Duration {
-        self.session().rtt().get()
+fn poll_open(
+    commands: &mut Commands,
+    server: Entity,
+    mut recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+    mut recv_connecting: mpsc::Receiver<ToConnecting>,
+) -> Frontend {
+    if should_close(commands, server, &mut recv_closed) {
+        return Frontend::Closed;
+    }
+
+    while let Ok(Some(connecting)) = recv_connecting.try_next() {
+        let session = commands
+            // spawn -> parent -> insert, so that Parent is available
+            // as soon as other components are added
+            .spawn_empty()
+            .set_parent(server)
+            .insert((
+                Session,
+                ClientFrontend::Connecting {
+                    send_session_response: Some(connecting.send_session_response),
+                    recv_dc: connecting.recv_dc,
+                    recv_next: connecting.recv_next,
+                },
+            ))
+            .id();
+        let _ = connecting.send_session_entity.send(session);
+
+        // TODO: there may be a way to trigger SessionRequest on &mut World,
+        // immediately get a SessionResponse, and respond immediately
+        // without having to store send_session_response in Connecting
+        // https://github.com/bevyengine/bevy/pull/14894
+        let request = SessionRequest {
+            authority: connecting.authority,
+            path: connecting.path,
+            origin: connecting.origin,
+            user_agent: connecting.user_agent,
+            headers: connecting.headers,
+        };
+        commands.trigger_targets(request, session);
+    }
+
+    Frontend::Open {
+        recv_closed,
+        recv_connecting,
     }
 }
 
-impl MessageStats for Connected {
-    fn bytes_sent(&self) -> usize {
-        self.session().bytes_sent()
-    }
+fn should_close(
+    commands: &mut Commands,
+    server: Entity,
+    recv_closed: &mut oneshot::Receiver<CloseReason<ServerError>>,
+) -> bool {
+    let close_reason = match recv_closed.try_recv() {
+        Ok(None) => None,
+        Ok(Some(close_reason)) => Some(close_reason),
+        Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
+    };
+    close_reason.map_or(false, |reason| {
+        let reason = reason.map_err(anyhow::Error::new);
+        commands.trigger_targets(Closed { reason }, server);
+        true
+    })
+}
 
-    fn bytes_recv(&self) -> usize {
-        self.session().bytes_recv()
+fn on_connection_response(
+    trigger: Trigger<SessionResponse>,
+    mut clients: Query<&mut ClientFrontend>,
+) {
+    let client = trigger.entity();
+    let Ok(mut frontend) = clients.get_mut(client) else {
+        return;
+    };
+    let ClientFrontend::Connecting {
+        send_session_response,
+        ..
+    } = frontend.as_mut()
+    else {
+        return;
+    };
+    let Some(sender) = send_session_response.take() else {
+        return;
+    };
+
+    let _ = sender.send(*trigger.event());
+}
+
+fn poll_clients(mut commands: Commands, mut clients: Query<(Entity, &mut ClientFrontend)>) {
+    for (client, mut frontend) in &mut clients {
+        replace_with::replace_with_or_abort(&mut *frontend, |state| match state {
+            ClientFrontend::Connecting {
+                send_session_response,
+                recv_dc,
+                recv_next,
+            } => poll_connecting(
+                &mut commands,
+                client,
+                send_session_response,
+                recv_dc,
+                recv_next,
+            ),
+            ClientFrontend::Connected { mut recv_dc } => {
+                if should_disconnect(&mut commands, client, &mut recv_dc) {
+                    ClientFrontend::Disconnected
+                } else {
+                    ClientFrontend::Connected { recv_dc }
+                }
+            }
+            ClientFrontend::Disconnected => state,
+        });
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
-impl RemoteAddr for Connected {
-    fn remote_addr(&self) -> SocketAddr {
-        self.inner.remote_addr
+fn poll_connecting(
+    commands: &mut Commands,
+    client: Entity,
+    send_session_response: Option<oneshot::Sender<SessionResponse>>,
+    mut recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+    mut recv_next: oneshot::Receiver<ToConnected>,
+) -> ClientFrontend {
+    if should_disconnect(commands, client, &mut recv_dc) {
+        return ClientFrontend::Disconnected;
     }
+
+    let Ok(Some(next)) = recv_next.try_recv() else {
+        return ClientFrontend::Connecting {
+            send_session_response,
+            recv_dc,
+            recv_next,
+        };
+    };
+
+    commands.entity(client).insert((
+        WebTransportIo {
+            recv_meta: next.recv_meta,
+            recv_packet_b2f: next.recv_packet_b2f,
+            send_packet_f2b: next.send_packet_f2b,
+            send_user_dc: Some(next.send_user_dc),
+        },
+        PacketMtu(next.initial_mtu),
+        RemoteAddr(next.initial_remote_addr),
+        PacketRtt(next.initial_rtt),
+    ));
+    ClientFrontend::Connected { recv_dc }
 }
 
-#[cfg(not(target_family = "wasm"))]
-impl RawRtt for Connected {
-    fn raw_rtt(&self) -> Duration {
-        self.inner.raw_rtt
-    }
+fn should_disconnect(
+    commands: &mut Commands,
+    client: Entity,
+    recv_dc: &mut oneshot::Receiver<DisconnectReason<ServerError>>,
+) -> bool {
+    let dc_reason = match recv_dc.try_recv() {
+        Ok(None) => None,
+        Ok(Some(dc_reason)) => Some(dc_reason),
+        Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
+    };
+    dc_reason.map_or(false, |reason| {
+        let reason = reason.map_err(anyhow::Error::new);
+        commands.trigger_targets(Disconnected { reason }, client);
+        true
+    })
 }

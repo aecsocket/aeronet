@@ -1,3 +1,15 @@
+# 0.9.0
+
+- Redesigned to be Bevy native
+
+# 0.8.0
+
+- Split the associated type `Transport::Error` into `::SendError` and `::PollError`
+- `Transport::send` now returns `Result<.., Self::SendError>`
+- `{Client,Server}Event`'s error type is now `PollError`
+- `flush`, `disconnect`, `close` are now infallible
+- Fixed how the `WebTransportServer` handles local disconnections
+
 # 0.7.0
 
 - Updated to Bevy 0.14.0
