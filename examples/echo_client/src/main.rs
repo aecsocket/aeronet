@@ -9,7 +9,8 @@
 //!   that all you have to worry about is the actual data payloads that you want
 //!   to send.
 //!
-//! This example will work on both native and WASM.
+//! This example only works on native due to certificate validation, but the
+//! general ideas are the same on WASM.
 
 use std::mem;
 
@@ -17,7 +18,7 @@ use aeronet::{
     connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
     message::MessageBuffers,
     octs::Bytes,
-    transport::{lane::LaneIndex, AeronetTransportPlugin, Transport},
+    transport::{lane::LaneIndex, AeronetTransportPlugin},
 };
 use aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin};
 use bevy::prelude::*;
@@ -44,7 +45,7 @@ fn main() -> AppExit {
         .add_systems(Startup, setup)
         // Every frame, we..
         .add_systems(Update, (
-            recv_msgs, // ..receive messages and push them into the session's `UiState`
+            recv_messages, // ..receive messages and push them into the session's `UiState`
             ui, // ..draw the UI for the session
         ))
         // Set up some observers to run when the session state changes
@@ -61,58 +62,33 @@ struct UiState {
 }
 
 // Default URL that we'll be connecting to.
-// Note the `ws` instead of `wss` - the demo server doesn't use encryption to
-// keep the example simple, so we have to connect explicitly without encryption
-// as well. Obviously, your app should use encryption properly - we explain how
-// to do that in the server example.
-const DEFAULT_TARGET: &str = "ws://[::1]:25566";
+// Note the `wss` - the demo server use encryption to demonstrate best practices
+// so we use a secure WebSocket connection to connect to it.
+// You should always use encryption, unless you're testing something, in which
+// case you can use `ws`.
+const DEFAULT_TARGET: &str = "wss://[::1]:25566";
 
 fn setup(mut commands: Commands) {
     // Let's start a connection to a WebSocket server.
+
     // First, make the configuration.
-    // You should use `ClientConfig::builder` to customize the configuration
-    // beforehand, but the defaults are OK for us.
-    let config = ClientConfig::default();
+    // Since our demo server uses self-signed certificates, we need to
+    // explicitly configure the client to accept those certificates.
+    // We can do this by disabling certificate validation entirely, but in
+    // production you should use the default certificate validation, and
+    // generate real certificates using a root CA.
+    let config = ClientConfig::builder().with_no_cert_validation();
     // And define what URL we want to connect to.
     let target = DEFAULT_TARGET;
 
     // Spawn an entity to represent this session.
     let mut entity = commands.spawn((
-        // Add `UiState` so that we can log what messages we've received
+        // Add `UiState` so that we can log what messages we've received.
         UiState::default(),
-        // Because we're using `aeronet_transport`, we also need to set up the
-        // transport-layer components.
-        Transport,
     ));
     // Make an `EntityCommand` via `connect`, which will set up this
     // session, and push that command onto the entity.
     entity.add(WebSocketClient::connect(config, target));
-}
-
-fn recv_msgs(
-    // Query..
-    mut sessions: Query<
-        (
-            &mut MessageBuffers, // ..the messages received
-            &mut UiState,        // ..and push the messages into `UiState::log`
-        ),
-        (
-            With<Session>,   // ..for all sessions
-            With<Connected>, // ..which are connected (this isn't strictly necessary)
-            Without<Parent>, // ..which aren't parented to a server (so only our own local clients)
-        ),
-    >,
-) {
-    for (mut msg_bufs, mut ui_state) in &mut sessions {
-        for (_lane_index, msg) in msg_bufs.recv.drain(..) {
-            // `msg` is a `bytes::Bytes` - a cheaply cloneable ref-counted byte buffer
-            // We'll turn it into a UTF-8 string
-            // We don't care about the lane index
-            let msg = Vec::from(msg);
-            let msg = String::from_utf8(msg).unwrap_or_else(|_| "(not UTF-8)".into());
-            ui_state.log.push(format!("> {msg}"));
-        }
-    }
 }
 
 // Observe state change events using `Trigger`s
@@ -138,6 +114,33 @@ fn on_disconnected(trigger: Trigger<Disconnected>) {
         DisconnectReason::User(reason) => info!("{session} disconnected by user: {reason}"),
         DisconnectReason::Peer(reason) => info!("{session} disconnected by peer: {reason}"),
         DisconnectReason::Error(err) => warn!("{session} disconnected due to error: {err:#}"),
+    }
+}
+
+// Receive messages and add them to the log.
+fn recv_messages(
+    // Query..
+    mut sessions: Query<
+        (
+            &mut MessageBuffers, // ..the messages received
+            &mut UiState,        // ..and push the messages into `UiState::log`
+        ),
+        (
+            With<Session>,   // ..for all sessions
+            With<Connected>, // ..which are connected (this isn't strictly necessary)
+            Without<Parent>, // ..which aren't parented to a server (so only our own local clients)
+        ),
+    >,
+) {
+    for (mut msg_bufs, mut ui_state) in &mut sessions {
+        for (_lane_index, msg) in msg_bufs.recv.drain(..) {
+            // `msg` is a `bytes::Bytes` - a cheaply cloneable ref-counted byte buffer
+            // We'll turn it into a UTF-8 string
+            // We don't care about the lane index
+            let msg = Vec::from(msg);
+            let msg = String::from_utf8(msg).unwrap_or_else(|_| "(not UTF-8)".into());
+            ui_state.log.push(format!("> {msg}"));
+        }
     }
 }
 

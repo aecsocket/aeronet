@@ -14,3 +14,11 @@ impl LaneIndex {
         self.0
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LaneKind {
+    UnreliableUnordered,
+    UnreliableSequenced,
+    ReliableUnordered,
+    ReliableOrdered,
+}

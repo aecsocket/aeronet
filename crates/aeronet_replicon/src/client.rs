@@ -109,7 +109,11 @@ pub enum ClientTransportSet {
 pub struct AeronetRepliconClient;
 
 // TODO: required components
-fn on_client_added(trigger: Trigger<OnAdd, AeronetRepliconClient>, mut commands: Commands) {
+fn on_client_added(
+    trigger: Trigger<OnAdd, AeronetRepliconClient>,
+    mut commands: Commands,
+    channels: Res<RepliconChannels>,
+) {
     let client = trigger.entity();
     commands.entity(client).insert(Transport);
 }
