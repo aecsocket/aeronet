@@ -18,7 +18,10 @@ use aeronet::{
     connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
     message::MessageBuffers,
     octs::Bytes,
-    transport::{lane::LaneIndex, AeronetTransportPlugin},
+    transport::{
+        lane::{LaneIndex, LaneKind},
+        AeronetTransportPlugin, Transport,
+    },
 };
 use aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin};
 use bevy::prelude::*;
@@ -68,6 +71,18 @@ struct UiState {
 // case you can use `ws`.
 const DEFAULT_TARGET: &str = "wss://[::1]:25566";
 
+// Define what `aeronet_transport` lanes will be used on this connection.
+// When using the transport layer, you must define in advance what lanes will be
+// available.
+// The receiving and sending lanes may be different, but in this example we will
+// use the same lane configuration for both.
+const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
+
+// When sending out messages, we have to specify what lane we're sending out on.
+// This determines the delivery guarantees e.g. reliability and ordering.
+// Since we configured only 1 lane (index 0), we'll send on that lane.
+const SEND_LANE: LaneIndex = LaneIndex::from_raw(0);
+
 fn setup(mut commands: Commands) {
     // Let's start a connection to a WebSocket server.
 
@@ -83,6 +98,9 @@ fn setup(mut commands: Commands) {
 
     // Spawn an entity to represent this session.
     let mut entity = commands.spawn((
+        // Add `Transport` and configure it with our lanes so that we can send
+        // and receive messages (not just packets).
+        Transport::new(LANES, LANES),
         // Add `UiState` so that we can log what messages we've received.
         UiState::default(),
     ));
@@ -126,7 +144,7 @@ fn recv_messages(
             &mut UiState,        // ..and push the messages into `UiState::log`
         ),
         (
-            With<Session>,   // ..for all sessions
+            With<Session>,   // ..for all sessions (this isn't strictly necessary)
             With<Connected>, // ..which are connected (this isn't strictly necessary)
             Without<Parent>, // ..which aren't parented to a server (so only our own local clients)
         ),
@@ -156,11 +174,6 @@ fn ui(
         (With<Session>, With<Connected>, Without<Parent>),
     >,
 ) {
-    // When sending out messages, we have to specify what lane we're sending out on.
-    // This determines the delivery guarantees e.g. reliability and ordering.
-    // Since we configured only 1 lane (index 0), we'll send on that lane.
-    const SEND_LANE: LaneIndex = LaneIndex::from_raw(0);
-
     for (session, mut msg_bufs, mut ui_state) in &mut sessions {
         egui::Window::new("Log").show(egui.ctx_mut(), |ui| {
             ui.text_edit_singleline(&mut ui_state.msg);

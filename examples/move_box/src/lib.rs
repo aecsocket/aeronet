@@ -1,7 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 use {
-    aeronet_replicon::convert::TryIntoEntity,
+    aeronet_replicon::convert,
     bevy::prelude::*,
     bevy_replicon::prelude::*,
     serde::{Deserialize, Serialize},
@@ -85,9 +85,8 @@ fn recv_input(
         event: ref new_input,
     } in inputs.read()
     {
-        let Some(mut input) = client_id
-            .try_into_entity()
-            .and_then(|client| players.get_mut(client).ok())
+        let Some(mut input) =
+            convert::to_entity(client_id).and_then(|client| players.get_mut(client).ok())
         else {
             continue;
         };

@@ -1,9 +1,9 @@
 use {
     aeronet::{
-        connection::{Connected, DisconnectReason, Disconnected, LocalAddr},
+        connection::{Connected, DisconnectReason, Disconnected, LocalAddr, Session},
         message::MessageBuffers,
         server::Opened,
-        transport::AeronetTransportPlugin,
+        transport::{lane::LaneKind, AeronetTransportPlugin, Transport},
     },
     aeronet_websocket::server::{ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},
@@ -41,6 +41,13 @@ pub fn main() -> AppExit {
 // `echo_client` connects to.
 const LISTEN_PORT: u16 = 25566;
 
+// Define what `aeronet_transport` lanes will be used on client connections.
+// When using the transport layer, you must define in advance what lanes will be
+// available.
+// The receiving and sending lanes may be different, but in this example we will
+// use the same lane configuration for both.
+const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
+
 fn setup(mut commands: Commands) {
     // Let's set up our WebSocket server.
 
@@ -71,13 +78,21 @@ fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
     info!("{server} opened on {}", **local_addr);
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Connected>, clients: Query<&Parent>) {
+fn on_connected(
+    trigger: Trigger<OnAdd, Connected>,
+    clients: Query<&Parent>,
+    mut commands: Commands,
+) {
     let client = trigger.entity();
     // A `Connected` `Session` which has a `Parent` is a client of a server.
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
     };
     info!("{client} connected to {server}");
+
+    // Add `Transport` and configure it with our lanes so that we can send
+    // and receive messages on this client.
+    commands.entity(client).insert(Transport::new(LANES, LANES));
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
@@ -107,13 +122,11 @@ fn echo_messages(
             Entity,              // ..the entity ID
             &mut MessageBuffers, // ..and the message buffers for sending/receiving
         ),
-        // (
-        /*
-        // With<Session>,   // ..for all sessions
-        // With<Connected>, // which are connected (this isn't strictly necessary)
-        // With<Parent>, // ..which are connected to one of our servers (excludes local dedicated clients)
-        //  * */
-        // ),
+        (
+            With<Session>,   // ..for all sessions (this isn't strictly necessary)
+            With<Connected>, // which are connected (this isn't strictly necessary)
+            With<Parent>, // ..which are connected to one of our servers (excludes local dedicated clients)
+        ),
     >,
 ) {
     for (client, mut msg_bufs) in &mut clients {

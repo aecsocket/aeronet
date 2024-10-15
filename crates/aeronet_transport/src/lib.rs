@@ -30,24 +30,6 @@ pub enum TransportSet {
     Flush,
 }
 
-pub struct TransportConfig {
-    pub recv_lanes: Vec<LaneKind>,
-    pub send_lanes: Vec<LaneKind>,
-    pub max_memory_usage: usize,
-    pub send_bytes_per_sec: usize,
-}
-
-impl Default for TransportConfig {
-    fn default() -> Self {
-        Self {
-            recv_lanes: Vec::new(),
-            send_lanes: Vec::new(),
-            max_memory_usage: 4 * 1024 * 1024,
-            send_bytes_per_sec: usize::MAX,
-        }
-    }
-}
-
 #[derive(Debug, Component)]
 pub struct Transport {
     recv_lanes: Box<()>,
@@ -56,7 +38,10 @@ pub struct Transport {
 
 impl Transport {
     #[must_use]
-    pub fn new(config: TransportConfig) -> Self {
+    pub fn new(
+        recv_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
+        send_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
+    ) -> Self {
         Self {
             recv_lanes: Box::new(()),
             send_lanes: Box::new(()),
