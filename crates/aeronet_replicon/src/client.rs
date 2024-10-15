@@ -1,7 +1,7 @@
 //! Client-side [`bevy_replicon`] support.
 
 use {
-    crate::convert::{IntoLaneIndex, TryIntoChannelId},
+    crate::convert,
     aeronet_io::connection::{Connected, Session},
     aeronet_transport::{message::MessageBuffers, AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
@@ -115,7 +115,18 @@ fn on_client_added(
     channels: Res<RepliconChannels>,
 ) {
     let client = trigger.entity();
-    commands.entity(client).insert(Transport);
+
+    let recv_lanes = channels
+        .server_channels()
+        .iter()
+        .map(|channel| convert::to_lane_kind(channel.kind));
+    let send_lanes = channels
+        .client_channels()
+        .iter()
+        .map(|channel| convert::to_lane_kind(channel.kind));
+    commands
+        .entity(client)
+        .insert(Transport::new(recv_lanes, send_lanes));
 }
 
 type ConnectedClient = (With<Session>, With<Connected>, With<AeronetRepliconClient>);
@@ -154,7 +165,7 @@ fn poll(
 ) {
     for mut msg_bufs in &mut clients {
         for (lane_index, msg) in msg_bufs.recv.drain(..) {
-            let Some(channel_id) = lane_index.try_into_channel_id() else {
+            let Some(channel_id) = convert::to_channel_id(lane_index) else {
                 continue;
             };
             replicon_client.insert_received(channel_id, msg);
@@ -167,7 +178,7 @@ fn flush(
     mut clients: Query<&mut MessageBuffers, ConnectedClient>,
 ) {
     for (channel_id, msg) in replicon_client.drain_sent() {
-        let lane_index = channel_id.into_lane_index();
+        let lane_index = convert::to_lane_index(channel_id);
         for mut msg_bufs in &mut clients {
             msg_bufs.send.push(lane_index, msg.clone());
         }

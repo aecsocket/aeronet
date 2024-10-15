@@ -1,7 +1,7 @@
 //! Server-side [`bevy_replicon`] support.
 
 use {
-    crate::convert::{IntoClientId, IntoLaneIndex, TryIntoChannelId, TryIntoEntity},
+    crate::convert,
     aeronet_io::{
         connection::{Connected, DisconnectReason, Disconnected},
         server::{Opened, Server},
@@ -12,7 +12,7 @@ use {
     bevy_hierarchy::Parent,
     bevy_reflect::Reflect,
     bevy_replicon::{
-        prelude::RepliconServer,
+        prelude::{RepliconChannels, RepliconServer},
         server::{ServerEvent, ServerSet},
     },
 };
@@ -131,6 +131,7 @@ fn on_connected(
     clients: Query<&Parent>,
     open_servers: Query<(), OpenedServer>,
     mut events: EventWriter<ServerEvent>,
+    channels: Res<RepliconChannels>,
     mut commands: Commands,
 ) {
     let client = trigger.entity();
@@ -141,9 +142,20 @@ fn on_connected(
         return;
     }
 
-    let client_id = client.into_client_id();
+    let client_id = convert::to_client_id(client);
     events.send(ServerEvent::ClientConnected { client_id });
-    commands.entity(client).insert(Transport);
+
+    let recv_lanes = channels
+        .client_channels()
+        .iter()
+        .map(|channel| convert::to_lane_kind(channel.kind));
+    let send_lanes = channels
+        .server_channels()
+        .iter()
+        .map(|channel| convert::to_lane_kind(channel.kind));
+    commands
+        .entity(client)
+        .insert(Transport::new(recv_lanes, send_lanes));
 }
 
 fn on_disconnected(
@@ -160,7 +172,7 @@ fn on_disconnected(
         return;
     }
 
-    let client_id = client.into_client_id();
+    let client_id = convert::to_client_id(client);
     let reason = match &**trigger.event() {
         DisconnectReason::User(reason) | DisconnectReason::Peer(reason) => reason.clone(),
         DisconnectReason::Error(err) => format!("{err:#}"),
@@ -179,9 +191,9 @@ fn poll(
             continue;
         }
 
-        let client_id = client.into_client_id();
+        let client_id = convert::to_client_id(client);
         for (lane_index, msg) in msg_bufs.recv.drain(..) {
-            let Some(channel_id) = lane_index.try_into_channel_id() else {
+            let Some(channel_id) = convert::to_channel_id(lane_index) else {
                 continue;
             };
             replicon_server.insert_received(client_id, channel_id, msg);
@@ -191,13 +203,12 @@ fn poll(
 
 fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut MessageBuffers>) {
     for (client_id, channel_id, msg) in replicon_server.drain_sent() {
-        let Some(mut msg_bufs) = client_id
-            .try_into_entity()
-            .and_then(|client| clients.get_mut(client).ok())
+        let Some(mut msg_bufs) =
+            convert::to_entity(client_id).and_then(|client| clients.get_mut(client).ok())
         else {
             continue;
         };
-        let lane_index = channel_id.into_lane_index();
+        let lane_index = convert::to_lane_index(channel_id);
         msg_bufs.send.push(lane_index, msg);
     }
 }
