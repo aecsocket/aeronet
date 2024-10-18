@@ -128,7 +128,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn zero_payload_len() {
-        let _ = MessageSplitter::new(0);
+        _ = MessageSplitter::new(0);
     }
 
     #[test]

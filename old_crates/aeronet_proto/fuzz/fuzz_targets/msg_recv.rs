@@ -13,5 +13,5 @@ fuzz_target!(|input: (usize, MessageSeq, FragmentMarker, &[u8])| {
     let max_payload_len = (max_payload_len % 1024).max(1);
 
     let mut r = FragmentReceiver::new(max_payload_len);
-    let _ = r.reassemble(Instant::now(), msg_seq, marker, payload);
+    _ = r.reassemble(Instant::now(), msg_seq, marker, payload);
 });

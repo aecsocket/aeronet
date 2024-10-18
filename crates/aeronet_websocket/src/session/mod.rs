@@ -7,9 +7,9 @@ pub(crate) mod backend;
 use {
     crate::WebSocketRuntime,
     aeronet_io::{
-        AeronetIoPlugin, IoSet,
-        connection::{Connected, DROP_DISCONNECT_REASON, Disconnect},
+        connection::{Connected, Disconnect, DROP_DISCONNECT_REASON},
         packet::{PacketBuffers, PacketStats},
+        AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -117,7 +117,7 @@ pub enum SessionError {
 impl Drop for WebSocketIo {
     fn drop(&mut self) {
         if let Some(send_dc) = self.send_user_dc.take() {
-            let _ = send_dc.send(DROP_DISCONNECT_REASON.to_owned());
+            _ = send_dc.send(DROP_DISCONNECT_REASON.to_owned());
         }
     }
 }
@@ -143,7 +143,7 @@ fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebSocke
     };
 
     if let Some(send_dc) = io.send_user_dc.take() {
-        let _ = send_dc.send(reason.clone());
+        _ = send_dc.send(reason.clone());
     }
 }
 
@@ -194,7 +194,7 @@ fn flush(mut sessions: Query<(Entity, &WebSocketIo, &mut PacketBuffers, &mut Pac
             stats.bytes_sent += packet.len();
 
             // handle connection errors in `poll`
-            let _ = io.send_packet_f2b.unbounded_send(packet);
+            _ = io.send_packet_f2b.unbounded_send(packet);
         }
 
         trace!(

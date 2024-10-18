@@ -3,11 +3,11 @@
 
 use {
     aeronet_io::{
-        AeronetIoPlugin, IoSet,
         connection::{
-            Connected, DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected, Session,
+            Connected, Disconnect, DisconnectReason, Disconnected, Session, DROP_DISCONNECT_REASON,
         },
         packet::{PacketBuffers, PacketBuffersCapacity, PacketMtu, PacketStats},
+        AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
@@ -140,7 +140,7 @@ impl ChannelIo {
 impl Drop for ChannelIo {
     fn drop(&mut self) {
         if let Some(send_dc) = self.send_dc.take() {
-            let _ = send_dc.into_inner().send(DROP_DISCONNECT_REASON.to_owned());
+            _ = send_dc.into_inner().send(DROP_DISCONNECT_REASON.to_owned());
         }
     }
 }
@@ -165,7 +165,7 @@ fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelI
     };
 
     if let Some(send_dc) = io.send_dc.take() {
-        let _ = send_dc.into_inner().send(reason.clone());
+        _ = send_dc.into_inner().send(reason.clone());
     }
 }
 
@@ -224,7 +224,7 @@ fn flush(mut sessions: Query<(Entity, &ChannelIo, &mut PacketBuffers, &mut Packe
             stats.bytes_sent += packet.len();
 
             // handle connection errors in `poll`
-            let _ = io.send_packet.try_send(packet);
+            _ = io.send_packet.try_send(packet);
         }
 
         trace!(

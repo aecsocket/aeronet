@@ -249,7 +249,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn zero_payload_len() {
-        let _ = FragmentReceiver::new(0);
+        _ = FragmentReceiver::new(0);
     }
 
     #[test]

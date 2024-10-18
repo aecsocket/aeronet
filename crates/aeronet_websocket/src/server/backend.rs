@@ -4,9 +4,9 @@ use {
     aeronet_io::connection::DisconnectReason,
     bevy_ecs::prelude::*,
     futures::{
-        SinkExt,
         channel::{mpsc, oneshot},
         never::Never,
+        SinkExt,
     },
     std::{
         net::SocketAddr,
@@ -19,7 +19,7 @@ use {
     },
     tokio_rustls::TlsAcceptor,
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
-    tracing::{Instrument, debug, debug_span},
+    tracing::{debug, debug_span, Instrument},
 };
 
 pub async fn start(
@@ -106,11 +106,8 @@ async fn accept_session(
         send_next,
     )
     .instrument(debug_span!("session", %session))
-    .await
-    else {
-        unreachable!();
-    };
-    let _ = send_dc.send(dc_reason);
+    .await;
+    _ = send_dc.send(dc_reason);
     Ok(())
 }
 

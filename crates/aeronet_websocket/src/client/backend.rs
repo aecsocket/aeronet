@@ -16,7 +16,7 @@ pub async fn start(
         #[cfg(target_family = "wasm")]
         {
             // suppress `unused_variables`
-            let _ = config;
+            _ = config;
 
             debug!("Spawning backend task to connect to {target:?}");
 

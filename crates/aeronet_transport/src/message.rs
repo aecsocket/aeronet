@@ -1,5 +1,5 @@
 use {
-    crate::{TransportSet, lane::LaneIndex},
+    crate::{lane::LaneIndex, TransportSet},
     aeronet_io::{packet::PacketBuffers, ringbuf::traits::Consumer},
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
@@ -61,7 +61,7 @@ pub struct MessageStats {
 fn naive_poll(mut sessions: Query<(&mut PacketBuffers, &mut MessageBuffers)>) {
     for (mut packet_bufs, mut msg_bufs) in &mut sessions {
         let msgs = packet_bufs.recv.pop_iter().filter_map(|mut packet| {
-            let lane_index = packet.read::<u64>().map(LaneIndex::from_raw).ok()?;
+            let lane_index = packet.read::<u32>().map(LaneIndex::from_raw).ok()?;
             Some((lane_index, packet))
         });
         msg_bufs.recv.extend(msgs);
@@ -72,7 +72,7 @@ fn naive_send(mut sessions: Query<(&mut PacketBuffers, &mut MessageBuffers)>) {
     for (mut packet_bufs, mut msg_bufs) in &mut sessions {
         for (lane_index, msg) in msg_bufs.send.buf.drain(..) {
             let mut packet = BytesMut::new();
-            packet.put_u64(lane_index.into_raw());
+            packet.put_u32(lane_index.into_raw());
             packet.extend_from_slice(&msg);
             packet_bufs.send.push(packet.freeze());
         }

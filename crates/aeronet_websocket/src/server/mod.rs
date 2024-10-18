@@ -6,15 +6,14 @@ mod config;
 pub use config::*;
 use {
     crate::{
-        WebSocketRuntime,
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
-        tungstenite,
+        tungstenite, WebSocketRuntime,
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
         server::{CloseReason, Closed, Opened, Server},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -23,7 +22,7 @@ use {
     std::{io, net::SocketAddr},
     thiserror::Error,
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
 };
 
 /// Allows using [`WebSocketServer`].
@@ -102,10 +101,8 @@ fn open(server: Entity, world: &mut World, config: ServerConfig) {
     let (send_next, recv_next) = oneshot::channel::<ToOpen>();
     runtime.spawn_on_self(
         async move {
-            let Err(err) = backend::start(config, packet_buf_cap, send_next).await else {
-                unreachable!();
-            };
-            let _ = send_closed.send(CloseReason::Error(err));
+            let Err(err) = backend::start(config, packet_buf_cap, send_next).await;
+            _ = send_closed.send(CloseReason::Error(err));
         }
         .instrument(debug_span!("server", %server)),
     );
@@ -269,7 +266,7 @@ fn poll_open(
                 packet_mtu,
             ))
             .id();
-        let _ = connecting.send_session_entity.send(session);
+        _ = connecting.send_session_entity.send(session);
     }
 
     Frontend::Open {

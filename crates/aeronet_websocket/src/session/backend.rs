@@ -2,18 +2,18 @@
 pub mod wasm {
     use {
         crate::{
-            JsError,
             session::{SessionError, SessionFrontend},
+            JsError,
         },
         aeronet_io::connection::DisconnectReason,
         bytes::Bytes,
         futures::{
-            SinkExt, StreamExt,
             channel::{mpsc, oneshot},
             never::Never,
+            SinkExt, StreamExt,
         },
         js_sys::Uint8Array,
-        wasm_bindgen::{JsCast, prelude::Closure},
+        wasm_bindgen::{prelude::Closure, JsCast},
         web_sys::{BinaryType, CloseEvent, ErrorEvent, MessageEvent, WebSocket},
     };
 
@@ -45,7 +45,7 @@ pub mod wasm {
                     let Err(err) = send_loop(socket, recv_packet_f2b, recv_dropped).await else {
                         unreachable!();
                     };
-                    let _ = send_dc_reason.send(err.into());
+                    _ = send_dc_reason.send(err.into());
                 });
             }
         });
@@ -59,7 +59,7 @@ pub mod wasm {
             let packet = Bytes::from(packet);
             let mut send_packet_b2f = send_packet_b2f.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                let _ = send_packet_b2f.send(packet).await;
+                _ = send_packet_b2f.send(packet).await;
             });
         });
 
@@ -73,7 +73,7 @@ pub mod wasm {
                     // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
                     DisconnectReason::Error(SessionError::Closed(event.code()))
                 };
-                let _ = send_dc_reason.try_send(dc_reason);
+                _ = send_dc_reason.try_send(dc_reason);
             })
         };
 
@@ -81,7 +81,7 @@ pub mod wasm {
             let mut send_dc_reason = send_dc_reason.clone();
             Closure::<dyn FnMut(_)>::new(move |event: ErrorEvent| {
                 let err = SessionError::Connection(JsError(event.message()));
-                let _ = send_dc_reason.try_send(DisconnectReason::Error(err));
+                _ = send_dc_reason.try_send(DisconnectReason::Error(err));
             })
         };
 
@@ -145,7 +145,7 @@ pub mod wasm {
                 }
                 reason = recv_user_dc => {
                     let reason = reason.map_err(|_| SessionError::FrontendClosed)?;
-                    let _ = socket.close_with_code_and_reason(NORMAL_CLOSE_CODE, &reason);
+                    _ = socket.close_with_code_and_reason(NORMAL_CLOSE_CODE, &reason);
                     Err(DisconnectReason::User(reason))
                 }
             }
@@ -160,18 +160,18 @@ pub mod native {
         aeronet_io::connection::DisconnectReason,
         bytes::Bytes,
         futures::{
-            SinkExt, StreamExt,
             channel::{mpsc, oneshot},
             never::Never,
+            SinkExt, StreamExt,
         },
         std::borrow::Cow,
         tokio::io::{AsyncRead, AsyncWrite},
         tokio_tungstenite::{
-            WebSocketStream,
             tungstenite::{
+                protocol::{frame::coding::CloseCode, CloseFrame},
                 Message,
-                protocol::{CloseFrame, frame::coding::CloseCode},
             },
+            WebSocketStream,
         },
     };
 
