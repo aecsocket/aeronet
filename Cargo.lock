@@ -119,6 +119,7 @@ dependencies = [
  "sync_wrapper",
  "thiserror",
  "tracing",
+ "web-time",
 ]
 
 [[package]]
@@ -157,15 +158,18 @@ version = "0.9.0-dev"
 dependencies = [
  "aeronet_io",
  "bevy_app",
+ "bevy_core",
  "bevy_derive",
  "bevy_ecs",
  "bevy_egui",
  "bevy_hierarchy",
  "bevy_reflect",
+ "bevy_time",
  "derive_more",
  "egui_plot",
  "itertools 0.13.0",
  "octs",
+ "ringbuf",
  "size_format",
  "thiserror",
  "tracing",
@@ -198,6 +202,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+ "web-time",
 ]
 
 [[package]]
@@ -225,6 +230,7 @@ dependencies = [
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "web-time",
  "wtransport",
  "x509-cert",
  "xwt-core",

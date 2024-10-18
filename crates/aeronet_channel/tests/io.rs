@@ -76,7 +76,7 @@ fn transport() {
     let mut packet_bufs = app.world_mut().get_mut::<PacketBuffers>(b).unwrap();
     {
         let mut recv = packet_bufs.recv.drain();
-        assert_eq!(MSG1, recv.next().unwrap());
+        assert_eq!(MSG1, recv.next().unwrap().1);
         assert!(recv.next().is_none());
     }
     packet_bufs.send.push(MSG2.into());
@@ -86,7 +86,7 @@ fn transport() {
     let mut packet_bufs = app.world_mut().get_mut::<PacketBuffers>(a).unwrap();
     {
         let mut recv = packet_bufs.recv.drain();
-        assert_eq!(MSG2, recv.next().unwrap());
+        assert_eq!(MSG2, recv.next().unwrap().1);
         assert!(recv.next().is_none());
     }
 }

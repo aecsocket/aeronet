@@ -6,7 +6,7 @@ pub mod packet;
 pub mod server;
 mod util;
 
-pub use {anyhow, bytes, ringbuf};
+pub use {anyhow, bytes, ringbuf, web_time};
 use {bevy_app::prelude::*, bevy_ecs::prelude::*};
 
 /// Sets up the IO layer functionality.

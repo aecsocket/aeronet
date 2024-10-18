@@ -124,8 +124,8 @@ fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
 fn reply(mut clients: Query<(Entity, &mut PacketBuffers), With<Parent>>) {
     for (client, mut bufs) in &mut clients {
         let PacketBuffers { recv, send } = &mut *bufs;
-        for msg in recv.drain() {
-            let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+        for (_, packet) in recv.drain() {
+            let msg = String::from_utf8(packet.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             info!("{client} > {msg}");
 
             let reply = format!("You sent: {msg}");

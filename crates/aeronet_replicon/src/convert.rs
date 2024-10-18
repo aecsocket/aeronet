@@ -6,6 +6,8 @@ use {
     bevy_replicon::prelude::*,
 };
 
+// Entity <-> ClientId
+
 /// Converts an [`Entity`] into a [`ClientId`].
 ///
 /// [`bevy_replicon`] requires a [`ClientId`] to identify clients connected to a

@@ -45,7 +45,7 @@ impl MessageBuffersSend {
 #[reflect(Component)]
 pub struct MessageMtu(pub usize);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Component)]
 #[doc(alias = "ping")]
 #[doc(alias = "latency")]
 pub struct MessageRtt {}
@@ -60,7 +60,7 @@ pub struct MessageStats {
 
 fn naive_poll(mut sessions: Query<(&mut PacketBuffers, &mut MessageBuffers)>) {
     for (mut packet_bufs, mut msg_bufs) in &mut sessions {
-        let msgs = packet_bufs.recv.pop_iter().filter_map(|mut packet| {
+        let msgs = packet_bufs.recv.pop_iter().filter_map(|(_, mut packet)| {
             let lane_index = packet.read::<u32>().map(LaneIndex::from_raw).ok()?;
             Some((lane_index, packet))
         });

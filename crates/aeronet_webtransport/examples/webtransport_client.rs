@@ -13,7 +13,7 @@ use {
         client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
     },
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     std::mem,
 };
 
@@ -194,8 +194,8 @@ fn client_config(cert_hash: String) -> Result<ClientConfig, anyhow::Error> {
 
 fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
     for (mut ui_state, mut bufs) in &mut sessions {
-        for msg in bufs.recv.drain() {
-            let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+        for (_, packet) in bufs.recv.drain() {
+            let msg = String::from_utf8(packet.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             ui_state.log.push(format!("> {msg}"));
         }
     }

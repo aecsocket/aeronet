@@ -20,6 +20,7 @@ use {
     std::{io, num::Saturating, sync::Arc, time::Duration},
     thiserror::Error,
     tracing::{debug, trace, trace_span},
+    web_time::Instant,
     xwt_core::prelude::*,
 };
 
@@ -186,7 +187,7 @@ pub(crate) fn poll(
             num_bytes += packet.len();
             stats.bytes_recv += packet.len();
 
-            bufs.recv.push(packet);
+            bufs.recv.push((Instant::now(), packet));
         }
 
         trace!(

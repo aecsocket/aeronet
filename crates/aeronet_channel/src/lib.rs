@@ -16,6 +16,7 @@ use {
     sync_wrapper::SyncWrapper,
     thiserror::Error,
     tracing::{trace, trace_span},
+    web_time::Instant,
 };
 
 /// Allows using [`ChannelIo`].
@@ -198,7 +199,7 @@ fn poll(
             num_bytes += packet.len();
             stats.bytes_recv += packet.len();
 
-            bufs.recv.push(packet);
+            bufs.recv.push((Instant::now(), packet));
         }
 
         trace!(

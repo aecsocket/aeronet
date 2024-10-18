@@ -18,7 +18,9 @@ workspace = true
 all-features = true
 
 [features]
+stats = []
 visualizer = [
+  "stats",
   "dep:bevy_egui",
   "dep:egui_plot",
   "dep:itertools",
@@ -30,14 +32,17 @@ aeronet_io = { workspace = true }
 
 derive_more = { workspace = true }
 octs = { workspace = true }
+ringbuf = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
 bevy_app = { workspace = true }
+bevy_core = { workspace = true }
 bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }
+bevy_time = { workspace = true }
 
 bevy_egui = { workspace = true, optional = true }
 egui_plot = { workspace = true, optional = true }

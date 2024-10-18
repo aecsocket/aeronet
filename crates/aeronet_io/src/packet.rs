@@ -9,10 +9,11 @@ use {
     bytes::Bytes,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     ringbuf::{
-        HeapRb,
         traits::{Consumer, RingBuffer},
+        HeapRb,
     },
     std::{num::Saturating, time::Duration},
+    web_time::Instant,
 };
 
 #[derive(Debug)]
@@ -81,8 +82,11 @@ pub struct PacketBuffers {
     /// Each packet in this buffer may be of arbitrary size - it may be 0 bytes
     /// or larger than the [`PacketMtu`] on this session.
     ///
+    /// The [`Instant`] represents the first instant at which this packet was
+    /// identified and effectively received.
+    ///
     /// [`IoSet::Poll`]: crate::IoSet::Poll
-    pub recv: PacketBuffer,
+    pub recv: PacketBuffer<(Instant, Bytes)>,
     /// Buffer of packets that will be drained and sent out along the IO layer
     /// during [`IoSet::Flush`].
     ///
@@ -90,7 +94,7 @@ pub struct PacketBuffers {
     /// equal to [`PacketMtu`].
     ///
     /// [`IoSet::Flush`]: crate::IoSet::Flush
-    pub send: PacketBuffer,
+    pub send: PacketBuffer<Bytes>,
 }
 
 impl PacketBuffers {
@@ -117,9 +121,9 @@ impl PacketBuffers {
 /// entire [`PacketBuffers`] value, which is overly restrictive when e.g.
 /// reading from one and pushing into the other.
 #[derive(Deref, DerefMut)]
-pub struct PacketBuffer(pub HeapRb<Bytes>);
+pub struct PacketBuffer<T>(pub HeapRb<T>);
 
-impl PacketBuffer {
+impl<T> PacketBuffer<T> {
     /// Creates a new buffer with capacity for the given number of packets.
     #[must_use]
     pub fn new(capacity: usize) -> Self {
@@ -135,7 +139,7 @@ impl PacketBuffer {
     /// - `send.push` should only be called by code above the IO layer.
     ///
     /// [`push_overwrite`]: ringbuf::traits::RingBuffer::push_overwrite
-    pub fn push(&mut self, packet: Bytes) {
+    pub fn push(&mut self, packet: T) {
         self.push_overwrite(packet);
     }
 
@@ -147,7 +151,7 @@ impl PacketBuffer {
     /// - `send.drain` should only be called by the IO layer.
     ///
     /// [`pop_iter`]: ringbuf::traits::Consumer::pop_iter
-    pub fn drain(&mut self) -> impl Iterator<Item = Bytes> + '_ {
+    pub fn drain(&mut self) -> impl Iterator<Item = T> + '_ {
         self.pop_iter()
     }
 }

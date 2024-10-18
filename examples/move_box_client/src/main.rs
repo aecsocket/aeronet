@@ -1,7 +1,10 @@
 #![doc = include_str!("../README.md")]
 
 use {
-    aeronet::connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
+    aeronet::{
+        connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
+        transport::visualizer::{SessionVisualizer, SessionVisualizerPlugin},
+    },
     aeronet_replicon::client::{AeronetRepliconClient, AeronetRepliconClientPlugin},
     aeronet_websocket::client::{WebSocketClient, WebSocketClientPlugin},
     aeronet_webtransport::{
@@ -9,7 +12,7 @@ use {
         client::{WebTransportClient, WebTransportClientPlugin},
     },
     bevy::{ecs::query::QuerySingleError, prelude::*},
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     bevy_replicon::prelude::*,
     move_box::{GameState, MoveBoxPlugin, PlayerColor, PlayerInput, PlayerPosition},
 };
@@ -23,6 +26,7 @@ fn main() -> AppExit {
             // transport
             WebTransportClientPlugin,
             WebSocketClientPlugin,
+            SessionVisualizerPlugin,
             // replication
             RepliconPlugins,
             AeronetRepliconClientPlugin,
@@ -73,12 +77,17 @@ fn on_connecting(
     trigger: Trigger<OnAdd, Session>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
+    mut commands: Commands,
 ) {
     let session = trigger.entity();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connecting"));
+
+    commands
+        .entity(session)
+        .insert(SessionVisualizer::default());
 }
 
 fn on_connected(
