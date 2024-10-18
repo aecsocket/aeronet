@@ -6,6 +6,9 @@ pub mod lane;
 pub mod message;
 pub mod packet;
 
+#[cfg(feature = "stats")]
+pub mod stats;
+
 #[cfg(feature = "visualizer")]
 pub mod visualizer;
 
@@ -14,7 +17,7 @@ use {
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
     lane::LaneKind,
-    message::MessageBuffers,
+    message::{MessageBuffers, MessageRtt, MessageStats},
 };
 
 #[derive(Debug)]
@@ -61,5 +64,9 @@ impl Transport {
 // TODO: required components
 fn on_transport_added(trigger: Trigger<OnAdd, Transport>, mut commands: Commands) {
     let session = trigger.entity();
-    commands.entity(session).insert(MessageBuffers::default());
+    commands.entity(session).insert((
+        MessageBuffers::default(),
+        MessageRtt {},
+        MessageStats::default(),
+    ));
 }

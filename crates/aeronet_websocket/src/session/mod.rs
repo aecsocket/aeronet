@@ -18,6 +18,7 @@ use {
     std::{io, num::Saturating},
     thiserror::Error,
     tracing::{trace, trace_span},
+    web_time::Instant,
 };
 
 cfg_if::cfg_if! {
@@ -168,7 +169,7 @@ pub(crate) fn poll(
             num_bytes += packet.len();
             stats.bytes_recv += packet.len();
 
-            bufs.recv.push(packet);
+            bufs.recv.push((Instant::now(), packet));
         }
 
         trace!(

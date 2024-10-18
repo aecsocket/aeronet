@@ -3,7 +3,7 @@
 use {
     crate::convert,
     aeronet_io::connection::{Connected, Session},
-    aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet, message::MessageBuffers},
+    aeronet_transport::{message::MessageBuffers, AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
@@ -92,7 +92,7 @@ pub enum ClientTransportSet {
 ///   - on the `replicon` side, you can't differentiate which session received
 ///     which message
 /// - sending messages
-///   - all outgoing `replicon` are cloned and sent to all sessions
+///   - all outgoing `replicon` messages are cloned and sent to all sessions
 /// - determining connected status
 ///   - if at least 1 session is [`Connected`], [`RepliconClient`] is
 ///     [`RepliconClientStatus::Connected`]

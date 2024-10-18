@@ -36,6 +36,7 @@ futures = { workspace = true }
 replace_with = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+web-time = { workspace = true }
 xwt-core = { workspace = true }
 
 bevy_app = { workspace = true }
