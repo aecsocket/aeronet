@@ -187,18 +187,18 @@ mod tests {
     #[test]
     #[should_panic]
     fn zero_cap() {
-        let _ = SeqBuf::<(), 0>::new();
+        _ = SeqBuf::<(), 0>::new();
     }
 
     #[test]
     #[should_panic]
     fn over_max_cap() {
-        let _ = SeqBuf::<(), { u16::MAX as usize }>::new();
+        _ = SeqBuf::<(), { u16::MAX as usize }>::new();
     }
 
     #[test]
     fn max_cap() {
-        let _ = SeqBuf::<(), { u16::MAX as usize - 1 }>::new();
+        _ = SeqBuf::<(), { u16::MAX as usize - 1 }>::new();
     }
 
     #[test]

@@ -163,7 +163,7 @@ impl<T: MessageSink + Resource> RepliconClientPlugin<T> {
         let mut bytes_sent = Saturating(0usize);
         for (channel_id, payload) in replicon.drain_sent() {
             bytes_sent += payload.len();
-            let _ = client.send(payload, LaneIndex::from_raw(u64::from(channel_id)));
+            _ = client.send(payload, LaneIndex::from_raw(u64::from(channel_id)));
         }
 
         client.flush();

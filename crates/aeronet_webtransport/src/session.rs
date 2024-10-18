@@ -5,17 +5,17 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        AeronetIoPlugin, IoSet,
-        connection::{Connected, DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, RemoteAddr},
+        connection::{Connected, Disconnect, DisconnectReason, RemoteAddr, DROP_DISCONNECT_REASON},
         packet::{PacketBuffers, PacketMtu, PacketRtt, PacketStats},
+        AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
-        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
+        FutureExt, SinkExt, StreamExt,
     },
     std::{io, num::Saturating, sync::Arc, time::Duration},
     thiserror::Error,
@@ -107,7 +107,7 @@ pub enum SessionError {
 impl Drop for WebTransportIo {
     fn drop(&mut self) {
         if let Some(send_dc) = self.send_user_dc.take() {
-            let _ = send_dc.send(DROP_DISCONNECT_REASON.to_owned());
+            _ = send_dc.send(DROP_DISCONNECT_REASON.to_owned());
         }
     }
 }
@@ -135,7 +135,7 @@ fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTrans
     };
 
     if let Some(send_dc) = io.send_user_dc.take() {
-        let _ = send_dc.send(reason.clone());
+        _ = send_dc.send(reason.clone());
     }
 }
 
@@ -156,8 +156,8 @@ pub(crate) fn poll(
         #[cfg(target_family = "wasm")]
         {
             // suppress `unused_variables`, `unused_mut`
-            let _ = &mut remote_addr;
-            let _ = &mut packet_rtt;
+            _ = &mut remote_addr;
+            _ = &mut packet_rtt;
         }
 
         let span = trace_span!("poll", %session);
@@ -219,7 +219,7 @@ fn flush(
             stats.bytes_sent += packet.len();
 
             // handle connection errors in `poll`
-            let _ = io.send_packet_f2b.unbounded_send(packet);
+            _ = io.send_packet_f2b.unbounded_send(packet);
         }
 
         trace!(
@@ -257,10 +257,8 @@ impl SessionBackend {
             let conn = conn.clone();
             let mut send_err = send_err.clone();
             async move {
-                let Err(err) = meta_loop(conn, recv_meta_closed, send_meta).await else {
-                    unreachable!();
-                };
-                let _ = send_err.try_send(err);
+                let Err(err) = meta_loop(conn, recv_meta_closed, send_meta).await;
+                _ = send_err.try_send(err);
             }
         });
 
@@ -269,10 +267,8 @@ impl SessionBackend {
             let conn = conn.clone();
             let mut send_err = send_err.clone();
             async move {
-                let Err(err) = recv_loop(conn, recv_receiving_closed, send_packet_b2f).await else {
-                    unreachable!();
-                };
-                let _ = send_err.try_send(err);
+                let Err(err) = recv_loop(conn, recv_receiving_closed, send_packet_b2f).await;
+                _ = send_err.try_send(err);
             }
         });
 
@@ -281,10 +277,8 @@ impl SessionBackend {
             let conn = conn.clone();
             let mut send_err = send_err.clone();
             async move {
-                let Err(err) = send_loop(conn, recv_sending_closed, recv_packet_f2b).await else {
-                    unreachable!();
-                };
-                let _ = send_err.try_send(err);
+                let Err(err) = send_loop(conn, recv_sending_closed, recv_packet_f2b).await;
+                _ = send_err.try_send(err);
             }
         });
 
@@ -475,7 +469,7 @@ async fn disconnect(conn: Arc<Connection>, reason: &str) {
         // Tested: the server times us out instead of actually
         // reading the disconnect
         conn.transport.close_with_close_info(&close_info);
-        let _ = JsFuture::from(conn.transport.closed()).await;
+        _ = JsFuture::from(conn.transport.closed()).await;
     }
 
     #[cfg(not(target_family = "wasm"))]

@@ -1,21 +1,21 @@
 use {
     super::{ServerError, SessionResponse, ToConnected, ToConnecting, ToOpen},
     crate::{
-        WebTransportRuntime,
         session::{SessionBackend, SessionError, SessionMeta},
+        WebTransportRuntime,
     },
     aeronet_io::connection::DisconnectReason,
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
-        SinkExt,
         channel::{mpsc, oneshot},
         never::Never,
+        SinkExt,
     },
-    tracing::{Instrument, debug, debug_span},
+    tracing::{debug, debug_span, Instrument},
     wtransport::{
-        Endpoint, ServerConfig,
         endpoint::{IncomingSession, SessionRequest},
+        Endpoint, ServerConfig,
     },
     xwt_core::prelude::*,
 };
@@ -87,11 +87,8 @@ async fn accept_session(
 
     let Err(dc_reason) = handle_session(packet_buf_cap, request, recv_session_response, send_next)
         .instrument(debug_span!("session", %session))
-        .await
-    else {
-        unreachable!()
-    };
-    let _ = send_dc.send(dc_reason);
+        .await;
+    _ = send_dc.send(dc_reason);
     Ok(())
 }
 

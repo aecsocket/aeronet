@@ -1,8 +1,13 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![allow(missing_docs, dead_code)] // TODO
 
 pub mod lane;
 pub mod message;
+pub mod packet;
+
+#[cfg(feature = "visualizer")]
+pub mod visualizer;
 
 pub use {aeronet_io as io, octs};
 use {

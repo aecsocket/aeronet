@@ -68,5 +68,5 @@ pub fn to_channel_id(lane_index: LaneIndex) -> Option<u8> {
 /// See [`to_channel_id`].
 #[must_use]
 pub fn to_lane_index(channel_id: u8) -> LaneIndex {
-    LaneIndex::from_raw(u64::from(channel_id))
+    LaneIndex::from_raw(u32::from(channel_id))
 }

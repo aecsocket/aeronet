@@ -4,19 +4,19 @@ mod backend;
 
 use {
     crate::{
-        WebSocketRuntime,
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
+        WebSocketRuntime,
     },
     aeronet_io::{
-        IoSet,
         connection::{DisconnectReason, Disconnected, Session},
         packet::{PacketBuffersCapacity, PacketMtu},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     futures::{channel::oneshot, never::Never},
     thiserror::Error,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
 };
 
 cfg_if::cfg_if! {
@@ -145,11 +145,8 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     runtime.spawn_on_self(
         async move {
-            let Err(reason) = backend::start(packet_buf_cap, config, target, send_next).await
-            else {
-                unreachable!();
-            };
-            let _ = send_dc.send(reason);
+            let Err(reason) = backend::start(packet_buf_cap, config, target, send_next).await;
+            _ = send_dc.send(reason);
         }
         .instrument(debug_span!("client", %session)),
     );
