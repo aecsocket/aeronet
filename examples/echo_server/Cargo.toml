@@ -1,0 +1,28 @@
+[package]
+description = "Demo server which echoes back what clients send it"
+name = "echo_server"
+publish = false
+
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+
+# core
+
+bevy = { workspace = true }
+bevy_egui = { workspace = true }
+
+# networking
+
+aeronet = { workspace = true }
+aeronet_websocket = { workspace = true, features = ["server"] }

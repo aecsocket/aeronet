@@ -1,5 +1,5 @@
 [package]
-description = "Demo app with moving boxes synced using replicon"
+description = "Demo app with moving boxes synced using bevy_replicon"
 name = "move_box"
 publish = false
 
@@ -16,15 +16,9 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-bevy = { workspace = true, features = ["wayland"] }
+aeronet_replicon = { workspace = true }
+
 serde = { workspace = true }
 
-aeronet_replicon = { workspace = true }
-aeronet_webtransport = { workspace = true }
+bevy = { workspace = true, features = ["wayland"] }
 bevy_replicon = { workspace = true }
-
-[target.'cfg(target_family = "wasm")'.dependencies]
-wasm-bindgen-futures = { workspace = true }
-
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-tokio = { workspace = true, features = ["full"] }
