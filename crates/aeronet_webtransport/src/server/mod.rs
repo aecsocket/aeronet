@@ -311,7 +311,7 @@ fn poll_opening(
 
     commands
         .entity(server)
-        .insert((Opened, LocalAddr(next.local_addr)));
+        .insert((Opened::now(), LocalAddr(next.local_addr)));
     Frontend::Open {
         recv_closed,
         recv_connecting: next.recv_connecting,

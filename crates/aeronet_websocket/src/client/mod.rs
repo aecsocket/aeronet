@@ -9,7 +9,7 @@ use {
     },
     aeronet_io::{
         connection::{DisconnectReason, Disconnected, Session},
-        packet::{PacketBuffersCapacity, PacketMtu},
+        packet::PacketBuffersCapacity,
         IoSet,
     },
     bevy_app::prelude::*,
@@ -122,24 +122,6 @@ impl WebSocketClient {
 fn connect(session: Entity, world: &mut World, config: ClientConfig, target: ConnectTarget) {
     let runtime = world.resource::<WebSocketRuntime>().clone();
     let packet_buf_cap = PacketBuffersCapacity::compute_from(world, session);
-    let packet_mtu = {
-        #[cfg(target_family = "wasm")]
-        {
-            // we really don't know :(
-            usize::MAX
-        }
-
-        #[cfg(not(target_family = "wasm"))]
-        {
-            use crate::tungstenite::protocol::WebSocketConfig;
-
-            config.socket.max_message_size.unwrap_or_else(|| {
-                WebSocketConfig::default()
-                    .max_message_size
-                    .expect("default impl has a value set")
-            })
-        }
-    };
 
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
@@ -151,10 +133,12 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
         .instrument(debug_span!("client", %session)),
     );
 
-    world.entity_mut(session).insert((
-        WebSocketClient(ClientFrontend::Connecting { recv_dc, recv_next }),
-        PacketMtu(packet_mtu),
-    ));
+    world
+        .entity_mut(session)
+        .insert(WebSocketClient(ClientFrontend::Connecting {
+            recv_dc,
+            recv_next,
+        }));
 }
 
 /// [`WebSocketClient`] error.

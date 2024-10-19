@@ -209,6 +209,15 @@ impl PacketBuffersCapacity {
 #[reflect(Component)]
 pub struct PacketMtu(pub usize);
 
+/// Safe estimate for the [maximum transmissible unit](PacketMtu) of a packet
+/// sent using IP.
+///
+/// This value comes from <https://blog.cloudflare.com/increasing-ipv6-mtu/>.
+///
+/// If an IO layer sends packets over the internet, it should use this value
+/// minus any overhead as its [`PacketMtu`].
+pub const IP_MTU: usize = 1400;
+
 /// Round-trip time of packets on a [`Session`] as computed by the IO layer.
 ///
 /// At the IO layer, the exact definition of round-trip time is left vague,

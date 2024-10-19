@@ -18,7 +18,6 @@ impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Session>()
             .register_type::<Connected>()
-            .register_type::<ConnectedAt>()
             .observe(on_connecting)
             .observe(on_connected)
             .observe(on_disconnect)
@@ -60,7 +59,7 @@ impl Plugin for ConnectionPlugin {
 #[reflect(Component)]
 pub struct Session;
 
-/// Marker component for a [`Session`] which is connected to its peer, and data
+/// Component for a [`Session`] which is connected to its peer, and data
 /// transmission should be possible.
 ///
 /// Note that this is not a guarantee that the session is connected, since
@@ -71,16 +70,21 @@ pub struct Session;
 ///
 /// To listen for when a session is connected, add an observer listening for
 /// [`Trigger<OnAdd, Connected>`].
-#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
+#[derive(Debug, Clone, Copy, Component, Reflect)]
 #[reflect(Component)]
-pub struct Connected;
+pub struct Connected {
+    /// Instant at which the session was connected.
+    pub at: Instant,
+}
 
-/// Instant at which a [`Session`] connected to its peer.
-///
-/// This is automatically added to the session when [`Connected`] is added.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component, Reflect)]
-#[reflect(Component)]
-pub struct ConnectedAt(pub Instant);
+impl Connected {
+    /// Creates a [`Connected`] which indicates that the session was connected
+    /// [`now`](Instant::now).
+    #[must_use]
+    pub fn now() -> Self {
+        Self { at: Instant::now() }
+    }
+}
 
 /// Triggered when a user requests a [`Session`] to gracefully disconnect from
 /// its peer with a given reason.
@@ -223,10 +227,9 @@ fn on_connecting(trigger: Trigger<OnAdd, Session>) {
     debug!("{session} connecting");
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Connected>, mut commands: Commands) {
+fn on_connected(trigger: Trigger<OnAdd, Connected>) {
     let session = trigger.entity();
     debug!("{session} connected");
-    commands.entity(session).insert(ConnectedAt(Instant::now()));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
