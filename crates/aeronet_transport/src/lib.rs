@@ -5,6 +5,7 @@
 pub mod lane;
 pub mod message;
 pub mod packet;
+pub mod rtt;
 
 #[cfg(feature = "stats")]
 pub mod stats;
@@ -18,6 +19,7 @@ use {
     bevy_ecs::{prelude::*, schedule::SystemSet},
     lane::LaneKind,
     message::{MessageBuffers, MessageRtt, MessageStats},
+    rtt::RttEstimator,
 };
 
 #[derive(Debug)]
@@ -66,7 +68,7 @@ fn on_transport_added(trigger: Trigger<OnAdd, Transport>, mut commands: Commands
     let session = trigger.entity();
     commands.entity(session).insert((
         MessageBuffers::default(),
-        MessageRtt {},
+        MessageRtt(RttEstimator::default()),
         MessageStats::default(),
     ));
 }

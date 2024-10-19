@@ -1,8 +1,8 @@
 use {
-    crate::{lane::LaneIndex, TransportSet},
+    crate::{lane::LaneIndex, rtt::RttEstimator, TransportSet},
     aeronet_io::{packet::PacketBuffers, ringbuf::traits::Consumer},
     bevy_app::prelude::*,
-    bevy_derive::{Deref, DerefMut},
+    bevy_derive::Deref,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     derive_more::{Add, AddAssign, Sub, SubAssign},
@@ -40,22 +40,22 @@ impl MessageBuffersSend {
 }
 
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Deref, DerefMut, Component, Reflect,
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Deref, Component, Reflect,
 )]
 #[reflect(Component)]
-pub struct MessageMtu(pub usize);
+pub struct MessageMtu(pub(crate) usize);
 
-#[derive(Debug, Clone, Copy, Component)]
+#[derive(Debug, Clone, Copy, Deref, Component)]
 #[doc(alias = "ping")]
 #[doc(alias = "latency")]
-pub struct MessageRtt {}
+pub struct MessageRtt(pub(crate) RttEstimator);
 
 #[derive(Debug, Clone, Copy, Default, Component, Reflect, Add, AddAssign, Sub, SubAssign)]
 #[reflect(Component)]
 pub struct MessageStats {
     pub msgs_recv: Saturating<usize>,
     pub msgs_sent: Saturating<usize>,
-    pub acks_recv: Saturating<usize>,
+    pub packet_acks_recv: Saturating<usize>,
 }
 
 fn naive_poll(mut sessions: Query<(&mut PacketBuffers, &mut MessageBuffers)>) {

@@ -11,7 +11,9 @@ use itertools::Itertools;
 use ringbuf::traits::Consumer;
 use size_format::{BinaryPrefixes, PointSeparated, SizeFormatter};
 
-use crate::stats::{SessionStats, SessionStatsPlugin, SessionStatsSample, SessionStatsSampling};
+use crate::stats::{
+    SampleSessionStats, SessionStats, SessionStatsPlugin, SessionStatsSample, SessionStatsSampling,
+};
 
 #[derive(Debug)]
 pub struct SessionVisualizerPlugin;
@@ -22,7 +24,7 @@ impl Plugin for SessionVisualizerPlugin {
             app.add_plugins(SessionStatsPlugin::default());
         }
 
-        app.configure_sets(Update, DrawSessionVisualizer)
+        app.configure_sets(Update, DrawSessionVisualizer.after(SampleSessionStats))
             .add_systems(Update, draw.in_set(DrawSessionVisualizer));
     }
 }
@@ -127,6 +129,33 @@ impl SessionVisualizer {
             })
     }
 
+    pub fn show_loss(
+        &self,
+        ui: &mut egui::Ui,
+        sampling: SessionStatsSampling,
+        samples: impl IntoIterator<Item = f64>,
+    ) -> egui_plot::PlotResponse<()> {
+        let sample_rate = sampling.rate();
+
+        let loss = samples
+            .into_iter()
+            .enumerate()
+            .map(|(index, loss)| {
+                let x = graph_x(index, sample_rate);
+                [x, loss * 100.0]
+            })
+            .collect::<Vec<_>>();
+
+        let color = ui.visuals().text_color();
+        plot(sampling.history_sec(), "loss")
+            .include_y(100.0)
+            .y_grid_spacer(egui_plot::uniform_grid_spacer(|_| [100.0, 25.0, 10.0]))
+            .custom_y_axes(vec![axis_hints("%")])
+            .show(ui, |ui| {
+                ui.line(egui_plot::Line::new(loss).name("Pkt Loss").color(color));
+            })
+    }
+
     pub fn show(
         &self,
         ui: &mut egui::Ui,
@@ -150,6 +179,12 @@ impl SessionVisualizer {
                     bytes_recv_delta: sample.packets_delta.bytes_recv.0,
                     bytes_sent_delta: sample.packets_delta.bytes_sent.0,
                 }),
+            );
+
+            self.show_loss(
+                ui,
+                sampling,
+                samples.clone().into_iter().map(|sample| sample.loss),
             );
         });
     }
