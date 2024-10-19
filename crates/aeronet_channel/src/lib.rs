@@ -155,7 +155,7 @@ fn on_io_added(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
     let session = trigger.entity();
     commands
         .entity(session)
-        .insert((Session, Connected, PacketMtu(usize::MAX)));
+        .insert((Session, Connected::now(), PacketMtu(usize::MAX)));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelIo>) {

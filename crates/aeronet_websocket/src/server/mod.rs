@@ -11,7 +11,7 @@ use {
     },
     aeronet_io::{
         connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
-        packet::{PacketBuffersCapacity, PacketMtu},
+        packet::PacketBuffersCapacity,
         server::{CloseReason, Closed, Opened, Server},
         IoSet,
     },
@@ -21,7 +21,6 @@ use {
     futures::channel::{mpsc, oneshot},
     std::{io, net::SocketAddr},
     thiserror::Error,
-    tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
     tracing::{debug_span, Instrument},
 };
 
@@ -91,11 +90,6 @@ impl WebSocketServer {
 fn open(server: Entity, world: &mut World, config: ServerConfig) {
     let runtime = world.resource::<WebSocketRuntime>().clone();
     let packet_buf_cap = PacketBuffersCapacity::compute_from(world, server);
-    let packet_mtu = config.socket.max_message_size.unwrap_or_else(|| {
-        WebSocketConfig::default()
-            .max_message_size
-            .expect("default impl has a value set")
-    });
 
     let (send_closed, recv_closed) = oneshot::channel::<CloseReason<ServerError>>();
     let (send_next, recv_next) = oneshot::channel::<ToOpen>();
@@ -107,13 +101,12 @@ fn open(server: Entity, world: &mut World, config: ServerConfig) {
         .instrument(debug_span!("server", %server)),
     );
 
-    world.entity_mut(server).insert((
-        WebSocketServer(Frontend::Opening {
+    world
+        .entity_mut(server)
+        .insert(WebSocketServer(Frontend::Opening {
             recv_closed,
             recv_next,
-        }),
-        PacketMtu(packet_mtu),
-    ));
+        }));
 }
 
 /// [`WebSocketServer`] error.
@@ -188,11 +181,8 @@ fn on_server_added(trigger: Trigger<OnAdd, WebSocketServer>, mut commands: Comma
     commands.entity(server).insert(Server);
 }
 
-fn poll_servers(
-    mut commands: Commands,
-    mut servers: Query<(Entity, &mut WebSocketServer, &PacketMtu)>,
-) {
-    for (server, mut frontend, packet_mtu) in &mut servers {
+fn poll_servers(mut commands: Commands, mut servers: Query<(Entity, &mut WebSocketServer)>) {
+    for (server, mut frontend) in &mut servers {
         replace_with::replace_with_or_abort(&mut frontend.0, |state| match state {
             Frontend::Opening {
                 recv_closed,
@@ -201,13 +191,7 @@ fn poll_servers(
             Frontend::Open {
                 recv_closed,
                 recv_connecting,
-            } => poll_open(
-                &mut commands,
-                server,
-                *packet_mtu,
-                recv_closed,
-                recv_connecting,
-            ),
+            } => poll_open(&mut commands, server, recv_closed, recv_connecting),
             Frontend::Closed => state,
         });
     }
@@ -232,7 +216,7 @@ fn poll_opening(
 
     commands
         .entity(server)
-        .insert((Opened, LocalAddr(next.local_addr)));
+        .insert((Opened::now(), LocalAddr(next.local_addr)));
     Frontend::Open {
         recv_closed,
         recv_connecting: next.recv_connecting,
@@ -242,7 +226,6 @@ fn poll_opening(
 fn poll_open(
     commands: &mut Commands,
     server: Entity,
-    packet_mtu: PacketMtu,
     mut recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
     mut recv_connecting: mpsc::Receiver<ToConnecting>,
 ) -> Frontend {
@@ -263,7 +246,6 @@ fn poll_open(
                     recv_next: connecting.recv_next,
                 },
                 RemoteAddr(connecting.remote_addr),
-                packet_mtu,
             ))
             .id();
         _ = connecting.send_session_entity.send(session);

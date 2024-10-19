@@ -21,7 +21,7 @@ pub struct SessionVisualizerPlugin;
 impl Plugin for SessionVisualizerPlugin {
     fn build(&self, app: &mut App) {
         if !app.is_plugin_added::<SessionStatsPlugin>() {
-            app.add_plugins(SessionStatsPlugin::default());
+            app.add_plugins(SessionStatsPlugin);
         }
 
         app.configure_sets(Update, DrawSessionVisualizer.after(SampleSessionStats))

@@ -8,7 +8,7 @@ use {
     crate::WebSocketRuntime,
     aeronet_io::{
         connection::{Connected, Disconnect, DROP_DISCONNECT_REASON},
-        packet::{PacketBuffers, PacketStats},
+        packet::{PacketBuffers, PacketMtu, PacketStats, IP_MTU},
         AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
@@ -123,6 +123,17 @@ impl Drop for WebSocketIo {
     }
 }
 
+/// [`PacketMtu`] of [`WebSocketIo`] sessions.
+///
+/// This is made up of the [`IP_MTU`] minus:
+/// - maximum TCP header size
+///   - <https://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_segment_structure>
+/// - IPv6 header size without extensions
+///   - <https://en.wikipedia.org/wiki/IPv6_packet#Fixed_header>
+/// - WebSocket frame header size without extensions
+///   - <https://en.wikipedia.org/wiki/WebSocket#Frame_structure>
+pub const MTU: usize = IP_MTU - 60 - 40 - 14;
+
 #[derive(Debug)]
 pub(crate) struct SessionFrontend {
     pub recv_packet_b2f: mpsc::Receiver<Bytes>,
@@ -133,7 +144,9 @@ pub(crate) struct SessionFrontend {
 // TODO: required components
 fn on_io_added(trigger: Trigger<OnAdd, WebSocketIo>, mut commands: Commands) {
     let session = trigger.entity();
-    commands.entity(session).insert(Connected);
+    commands
+        .entity(session)
+        .insert((Connected::now(), PacketMtu(MTU)));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebSocketIo>) {

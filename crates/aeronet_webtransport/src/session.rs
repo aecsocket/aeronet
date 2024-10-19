@@ -125,7 +125,7 @@ pub(crate) struct SessionMeta {
 // TODO: required components
 fn on_io_added(trigger: Trigger<OnAdd, WebTransportIo>, mut commands: Commands) {
     let session = trigger.entity();
-    commands.entity(session).insert(Connected);
+    commands.entity(session).insert(Connected::now());
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTransportIo>) {

@@ -23,7 +23,6 @@ impl Plugin for ServerPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Server>()
             .register_type::<Opened>()
-            .register_type::<OpenedAt>()
             .observe(on_opening)
             .observe(on_opened)
             .observe(on_close)
@@ -59,21 +58,26 @@ impl Plugin for ServerPlugin {
 #[reflect(Component)]
 pub struct Server;
 
-/// Marker component for a [`Server`] which is currently attempting to receive
-/// client connections and spawn [`Session`]s.
+/// Component for a [`Server`] which is currently attempting to receive client
+/// connections and spawn [`Session`]s.
 ///
 /// To listen for when a server is opened, add an observer listening for
 /// [`Trigger<OnAdd, Opened>`].
-#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
+#[derive(Debug, Clone, Copy, Component, Reflect)]
 #[reflect(Component)]
-pub struct Opened;
+pub struct Opened {
+    /// Instant at which the server was opened.
+    pub at: Instant,
+}
 
-/// Instant at which a [`Server`] opened.
-///
-/// This is automatically added to the server when [`Opened`] is added.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component, Reflect)]
-#[reflect(Component)]
-pub struct OpenedAt(pub Instant);
+impl Opened {
+    /// Creates an [`Opened`] which indicates that the server was opened
+    /// [`now`](Instant::now).
+    #[must_use]
+    pub fn now() -> Self {
+        Self { at: Instant::now() }
+    }
+}
 
 /// Triggered when a user requests a [`Server`] to gracefully shut down and
 /// disconnect all of its connected clients.
@@ -175,9 +179,8 @@ fn on_opening(trigger: Trigger<OnAdd, Server>) {
     debug!("{server} opening");
 }
 
-fn on_opened(trigger: Trigger<OnAdd, Opened>, mut commands: Commands) {
+fn on_opened(trigger: Trigger<OnAdd, Opened>) {
     let server = trigger.entity();
-    commands.entity(server).insert(OpenedAt(Instant::now()));
     debug!("{server} opened");
 }
 
