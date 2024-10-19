@@ -1,26 +1,14 @@
-//! Tools for estimating the round-trip time of data transfer along a [session].
-//!
-//! TODO rtt explanation
-//!
-//! [session]: crate::session
+use std::time::Duration;
 
-use {bevy_reflect::prelude::*, std::time::Duration};
-
-#[derive(Debug, Clone, Reflect)]
-#[doc(alias = "ping")]
-#[doc(alias = "latency")]
+#[derive(Debug, Clone, Copy)]
 pub struct RttEstimator {
     latest: Duration,
     smoothed: Duration,
-    jitter: Duration,
+    var: Duration,
     min: Duration,
 }
 
-impl Default for RttEstimator {
-    fn default() -> Self {
-        Self::new(Duration::from_millis(333))
-    }
-}
+const TIMER_GRANULARITY: Duration = Duration::from_millis(1);
 
 impl RttEstimator {
     #[must_use]
@@ -28,7 +16,7 @@ impl RttEstimator {
         Self {
             latest: initial_rtt,
             smoothed: initial_rtt,
-            jitter: initial_rtt / 2,
+            var: initial_rtt / 2,
             min: initial_rtt,
         }
     }
@@ -40,17 +28,12 @@ impl RttEstimator {
 
     #[must_use]
     pub fn conservative(&self) -> Duration {
-        self.smoothed.max(self.latest)
-    }
-
-    #[must_use]
-    pub const fn min(&self) -> Duration {
-        self.min
+        self.get().max(self.latest)
     }
 
     #[must_use]
     pub fn pto(&self) -> Duration {
-        self.get() + 4 * self.jitter
+        self.get() + (self.var * 4).max(TIMER_GRANULARITY)
     }
 
     pub fn update(&mut self, rtt: Duration) {
@@ -62,7 +45,13 @@ impl RttEstimator {
         } else {
             rtt - self.smoothed
         };
-        self.jitter = (3 * self.jitter + var_sample) / 4;
+        self.var = (3 * self.var + var_sample) / 4;
         self.smoothed = (7 * self.smoothed + rtt) / 8;
+    }
+}
+
+impl Default for RttEstimator {
+    fn default() -> Self {
+        Self::new(Duration::from_millis(333))
     }
 }

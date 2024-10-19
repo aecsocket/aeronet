@@ -7,7 +7,7 @@ use {
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
-    bevy_time::common_conditions::on_real_timer,
+    bevy_time::{Real, Time, Timer, TimerMode},
     ringbuf::{
         traits::{Consumer, RingBuffer},
         HeapRb,
@@ -16,19 +16,21 @@ use {
 };
 
 #[derive(Debug, Clone, Default)]
-pub struct SessionStatsPlugin {
-    pub sampling: SessionStatsSampling,
-}
+pub struct SessionStatsPlugin;
 
 impl Plugin for SessionStatsPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(self.sampling)
-            .configure_sets(Update, UpdateSessionStats)
+        app.init_resource::<SessionStatsSampling>()
+            .init_resource::<SamplingTimer>()
+            .configure_sets(Update, SampleSessionStats)
             .add_systems(
                 Update,
-                update_stats
-                    .run_if(on_real_timer(self.sampling.interval))
-                    .in_set(UpdateSessionStats),
+                (
+                    update_sampling.run_if(resource_changed::<SessionStatsSampling>),
+                    update_stats,
+                )
+                    .chain()
+                    .in_set(SampleSessionStats),
             )
             .observe(on_transport_added);
     }
@@ -69,7 +71,7 @@ impl Default for SessionStatsSampling {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub struct UpdateSessionStats;
+pub struct SampleSessionStats;
 
 #[derive(Component, Deref, DerefMut)]
 pub struct SessionStats(pub HeapRb<SessionStatsSample>);
@@ -89,6 +91,7 @@ pub struct SessionStatsSample {
     pub packets_delta: PacketStats,
     pub msgs_total: MessageStats,
     pub msgs_delta: MessageStats,
+    pub loss: f64,
 }
 
 // TODO: required components
@@ -104,7 +107,30 @@ fn on_transport_added(
         .insert(SessionStats::with_capacity(sampling.history_cap));
 }
 
+fn update_sampling(
+    sampling: Res<SessionStatsSampling>,
+    mut timer: ResMut<SamplingTimer>,
+    mut sessions: Query<&mut SessionStats>,
+) {
+    *timer = SamplingTimer(Timer::new(sampling.interval, TimerMode::Repeating));
+    for mut stats in &mut sessions {
+        *stats = SessionStats::with_capacity(sampling.history_cap);
+    }
+}
+
+#[derive(Debug, Deref, DerefMut, Resource)]
+struct SamplingTimer(Timer);
+
+impl FromWorld for SamplingTimer {
+    fn from_world(world: &mut World) -> Self {
+        let sampling = world.resource::<SessionStatsSampling>();
+        Self(Timer::new(sampling.interval, TimerMode::Repeating))
+    }
+}
+
 fn update_stats(
+    time: Res<Time<Real>>,
+    mut timer: ResMut<SamplingTimer>,
     mut sessions: Query<(
         &mut SessionStats,
         Option<&PacketRtt>,
@@ -112,17 +138,67 @@ fn update_stats(
         &PacketStats,
         &MessageStats,
     )>,
+    sampling: Res<SessionStatsSampling>,
 ) {
+    timer.tick(time.delta());
+    if !timer.just_finished() {
+        return;
+    }
+
     for (mut stats, packet_rtt, msg_rtt, packet_stats, msg_stats) in &mut sessions {
         let last_sample = stats.iter().next_back().copied().unwrap_or_default();
 
+        // we are computing sample 100
+        // we expect to have received all acks up to 90
+        // up to sample 90, we had 4950 acks and 5000 sent
+        // so at sample 100, we expect to have 5000 acks
+        //
+        // - 5000 - 4950 = 50 = extra acks expected
+        //
+        // - if we now have 5000 acks, we have 0% packet loss
+        // - if we now have >5000 acks, we have 0% packet loss and an RTT overestimate
+        // - if we now have 4950 acks, we have 100% packet loss
+        // - if we now have <4950 acks, that's impossible
+        // - if we now have 4975 acks, we have 50% packet loss
+        //   - 4975 - 4950 = 25 = extra acks received
+        // - if we now have 4990 acks, we have 20% packet loss
+        //   - 4990 - 4950 = 40
+        //   - 40 / 50 = 0.8 = 80% received
+        //   - 1.0 - 0.8 = 0.2 = 20% not received (lost)
+
+        let loss = {
+            let lost_thresh = msg_rtt.pto();
+            let lost_thresh_index = (lost_thresh.as_secs_f64() * sampling.rate()).ceil();
+            let lost_thresh_index = lost_thresh_index as usize;
+            let lost_thresh_sample = stats
+                .iter()
+                .rev()
+                .nth(lost_thresh_index)
+                .copied()
+                .unwrap_or_default();
+
+            let extra_acks_expected = (lost_thresh_sample.packets_total.packets_sent
+                - lost_thresh_sample.msgs_total.packet_acks_recv)
+                .0;
+
+            if extra_acks_expected == 0 {
+                0.0
+            } else {
+                let extra_acks_received =
+                    (msg_stats.packet_acks_recv - lost_thresh_sample.msgs_total.packet_acks_recv).0;
+                let acked_frac = extra_acks_received as f64 / extra_acks_expected as f64;
+                1.0 - acked_frac.clamp(0.0, 1.0)
+            }
+        };
+
         let sample = SessionStatsSample {
             packet_rtt: packet_rtt.map(|rtt| **rtt),
-            message_rtt: Duration::ZERO, // TODO
+            message_rtt: msg_rtt.get(),
             packets_total: *packet_stats,
             packets_delta: *packet_stats - last_sample.packets_total,
             msgs_total: *msg_stats,
             msgs_delta: *msg_stats - last_sample.msgs_total,
+            loss,
         };
         stats.push_overwrite(sample);
     }
