@@ -1,18 +1,19 @@
-use std::{borrow::Borrow, hash::Hash, ops::RangeInclusive, time::Duration};
-
-use bevy_app::prelude::*;
-use bevy_core::Name;
-use bevy_ecs::prelude::*;
-use bevy_egui::{
-    egui::{self, epaint::Hsva},
-    EguiContexts,
-};
-use itertools::Itertools;
-use ringbuf::traits::Consumer;
-use size_format::{BinaryPrefixes, PointSeparated, SizeFormatter};
-
-use crate::stats::{
-    SampleSessionStats, SessionStats, SessionStatsPlugin, SessionStatsSample, SessionStatsSampling,
+use {
+    crate::stats::{
+        SampleSessionStats, SessionStats, SessionStatsPlugin, SessionStatsSample,
+        SessionStatsSampling,
+    },
+    bevy_app::prelude::*,
+    bevy_core::Name,
+    bevy_ecs::prelude::*,
+    bevy_egui::{
+        EguiContexts,
+        egui::{self, epaint::Hsva},
+    },
+    itertools::Itertools,
+    ringbuf::traits::Consumer,
+    size_format::{BinaryPrefixes, PointSeparated, SizeFormatter},
+    std::{borrow::Borrow, hash::Hash, ops::RangeInclusive, time::Duration},
 };
 
 #[derive(Debug)]
@@ -76,10 +77,10 @@ impl SessionVisualizer {
             .map(|(index, sample)| {
                 let x = graph_x(index, sample_rate);
                 let sample = sample.borrow();
-                (
-                    [x, sample.packet_rtt.as_secs_f64() * MS_PER_SEC],
-                    [x, sample.msg_rtt.as_secs_f64() * MS_PER_SEC],
-                )
+
+                let packet_rtt = sample.packet_rtt.as_secs_f64() * MS_PER_SEC;
+                let msg_rtt = sample.msg_rtt.as_secs_f64() * MS_PER_SEC;
+                ([x, packet_rtt], [x, msg_rtt])
             })
             .multiunzip::<(Vec<_>, Vec<_>)>();
 
@@ -112,10 +113,10 @@ impl SessionVisualizer {
             .map(|(index, sample)| {
                 let x = graph_x(index, sample_rate);
                 let sample = sample.borrow();
-                (
-                    [x, sample.bytes_recv_delta as f64 * sample_rate],
-                    [x, sample.bytes_sent_delta as f64 * sample_rate],
-                )
+
+                let rx = sample.bytes_recv_delta as f64 * sample_rate;
+                let tx = sample.bytes_sent_delta as f64 * sample_rate;
+                ([x, rx], [x, tx])
             })
             .multiunzip::<(Vec<_>, Vec<_>)>();
 
@@ -142,7 +143,8 @@ impl SessionVisualizer {
             .enumerate()
             .map(|(index, loss)| {
                 let x = graph_x(index, sample_rate);
-                [x, loss * 100.0]
+                let loss = loss * 100.0;
+                [x, loss]
             })
             .collect::<Vec<_>>();
 

@@ -51,7 +51,6 @@ bytes = "1.6.1"
 cfg-if = "1.0.0"
 clap = { version = "4.5.11", features = ["derive"] }
 datasize = "0.2.15"
-derivative = "2.2.0"
 derive_more = "0.99.18"
 egui = "0.28.1"
 egui_plot = "0.28.1"

@@ -18,6 +18,7 @@ workspace = true
 all-features = true
 
 [features]
+serde = ["dep:serde"]
 stats = []
 visualizer = [
   "stats",
@@ -30,11 +31,15 @@ visualizer = [
 [dependencies]
 aeronet_io = { workspace = true }
 
+ahash = { workspace = true }
+arbitrary = { workspace = true }
+datasize = { workspace = true }
 derive_more = { workspace = true }
 octs = { workspace = true }
 ringbuf = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+web-time = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_core = { workspace = true }
@@ -43,6 +48,8 @@ bevy_ecs = { workspace = true }
 bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }
 bevy_time = { workspace = true }
+
+serde = { workspace = true, optional = true }
 
 bevy_egui = { workspace = true, optional = true }
 egui_plot = { workspace = true, optional = true }
