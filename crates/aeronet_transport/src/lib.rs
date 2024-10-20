@@ -4,8 +4,10 @@
 
 pub mod lane;
 pub mod message;
+pub mod msg;
 pub mod packet;
 pub mod rtt;
+pub mod seq_buf;
 
 #[cfg(feature = "stats")]
 pub mod stats;
@@ -15,11 +17,15 @@ pub mod visualizer;
 
 pub use {aeronet_io as io, octs};
 use {
+    ahash::AHashMap,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
-    lane::LaneKind,
-    message::{MessageBuffers, MessageRtt, MessageStats},
+    lane::{LaneKind, LaneReliability},
+    message::MessageStats,
+    packet::{Acknowledge, MessageSeq},
     rtt::RttEstimator,
+    seq_buf::SeqBuf,
+    web_time::Instant,
 };
 
 #[derive(Debug)]
@@ -42,10 +48,21 @@ pub enum TransportSet {
 
 #[derive(Debug, Component)]
 pub struct Transport {
-    recv_lanes: Box<()>,
-    send_lanes: Box<()>,
+    // config
     pub max_memory_usage: usize,
     pub send_bytes_per_sec: usize,
+
+    // shared
+    flushed_packets: SeqBuf<FlushedPacket, 1024>,
+    acks: Acknowledge,
+    stats: MessageStats,
+
+    // recv
+    recv_lanes: Box<RecvLane>,
+    rtt: RttEstimator,
+
+    // send
+    send_lanes: Box<SendLane>,
 }
 
 impl Transport {
@@ -59,16 +76,53 @@ impl Transport {
             send_lanes: Box::new(()),
             max_memory_usage: 4 * 1024 * 1024,
             send_bytes_per_sec: usize::MAX,
+            stats: MessageStats::default(),
+            rtt: RttEstimator::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_max_memory_usage(self, max_memory_usage: usize) -> Self {
+        Self {
+            max_memory_usage,
+            ..self
+        }
+    }
+
+    #[must_use]
+    pub fn with_send_bytes_per_sec(self, send_bytes_per_sec: usize) -> Self {
+        Self {
+            send_bytes_per_sec,
+            ..self
+        }
+    }
+
+    #[must_use]
+    pub const fn stats(&self) -> MessageStats {
+        self.stats
+    }
+
+    #[must_use]
+    pub const fn rtt(&self) -> &RttEstimator {
+        &self.rtt
     }
 }
 
-// TODO: required components
-fn on_transport_added(trigger: Trigger<OnAdd, Transport>, mut commands: Commands) {
-    let session = trigger.entity();
-    commands.entity(session).insert((
-        MessageBuffers::default(),
-        MessageRtt(RttEstimator::default()),
-        MessageStats::default(),
-    ));
+struct FlushedPacket {
+    flushed_at: Instant,
+    frags: Box<[FragmentPath]>,
 }
+
+struct RecvLane {}
+
+struct SendLane {
+    sent_msgs: AHashMap<MessageSeq, SentMessage>,
+    next_msg_seq: MessageSeq,
+    reliability: LaneReliability,
+}
+
+struct SentMessage {
+    frags: Box<[Option<SentFragment>]>,
+}
+
+struct SentFragment {}

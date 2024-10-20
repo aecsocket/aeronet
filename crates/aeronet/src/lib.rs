@@ -1,7 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
-use bevy_app::{prelude::*, PluginGroupBuilder};
+use bevy_app::{PluginGroupBuilder, prelude::*};
 pub use {
     aeronet_io::{self as io, anyhow, bytes, connection, packet, ringbuf, server, web_time},
     aeronet_transport::{self as transport, message, octs},

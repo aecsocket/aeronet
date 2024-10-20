@@ -1,16 +1,13 @@
 use {
-    crate::{
-        message::{MessageRtt, MessageStats},
-        Transport,
-    },
+    crate::{Transport, message::MessageStats},
     aeronet_io::packet::{PacketRtt, PacketStats},
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
     bevy_time::{Real, Time, Timer, TimerMode},
     ringbuf::{
-        traits::{Consumer, RingBuffer},
         HeapRb,
+        traits::{Consumer, RingBuffer},
     },
     std::time::Duration,
 };
@@ -134,9 +131,8 @@ fn update_stats(
     mut sessions: Query<(
         &mut SessionStats,
         Option<&PacketRtt>,
-        &MessageRtt,
         &PacketStats,
-        &MessageStats,
+        &Transport,
     )>,
     sampling: Res<SessionStatsSampling>,
 ) {
@@ -145,7 +141,10 @@ fn update_stats(
         return;
     }
 
-    for (mut stats, packet_rtt, msg_rtt, packet_stats, msg_stats) in &mut sessions {
+    for (mut stats, packet_rtt, packet_stats, transport) in &mut sessions {
+        let msg_rtt = transport.rtt();
+        let msg_stats = transport.stats();
+
         let last_sample = stats.iter().next_back().copied().unwrap_or_default();
 
         // we are computing sample 100
@@ -196,8 +195,8 @@ fn update_stats(
             message_rtt: msg_rtt.get(),
             packets_total: *packet_stats,
             packets_delta: *packet_stats - last_sample.packets_total,
-            msgs_total: *msg_stats,
-            msgs_delta: *msg_stats - last_sample.msgs_total,
+            msgs_total: msg_stats,
+            msgs_delta: msg_stats - last_sample.msgs_total,
             loss,
         };
         stats.push_overwrite(sample);

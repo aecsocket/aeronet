@@ -1,5 +1,5 @@
 use {
-    crate::{lane::LaneIndex, rtt::RttEstimator, TransportSet},
+    crate::{TransportSet, lane::LaneIndex, rtt::RttEstimator},
     aeronet_io::{packet::PacketBuffers, ringbuf::traits::Consumer},
     bevy_app::prelude::*,
     bevy_derive::Deref,
@@ -39,19 +39,7 @@ impl MessageBuffersSend {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Deref, Component, Reflect,
-)]
-#[reflect(Component)]
-pub struct MessageMtu(pub(crate) usize);
-
-#[derive(Debug, Clone, Copy, Deref, Component)]
-#[doc(alias = "ping")]
-#[doc(alias = "latency")]
-pub struct MessageRtt(pub(crate) RttEstimator);
-
-#[derive(Debug, Clone, Copy, Default, Component, Reflect, Add, AddAssign, Sub, SubAssign)]
-#[reflect(Component)]
+#[derive(Debug, Clone, Copy, Default, Reflect, Add, AddAssign, Sub, SubAssign)]
 pub struct MessageStats {
     pub msgs_recv: Saturating<usize>,
     pub msgs_sent: Saturating<usize>,
