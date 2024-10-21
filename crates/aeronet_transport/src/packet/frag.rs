@@ -1,10 +1,10 @@
 use {
-    super::{FragmentPosition, MessageFragment, MessageSeq, PayloadTooLarge},
-    core::fmt,
+    super::{FragmentIndex, FragmentPosition, MessageFragment, MessageSeq, PayloadTooLarge},
     octs::{
         BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLen, Read, VarInt, VarIntTooLarge,
         Write,
     },
+    std::fmt,
 };
 
 //
@@ -51,22 +51,12 @@ impl Decode for MessageFragment {
 
 impl FragmentPosition {
     #[must_use]
-    pub const fn non_last_u32(index: u32) -> Self {
-        Self(index as u64 * 2)
-    }
-
-    #[must_use]
-    pub const fn last_u32(index: u32) -> Self {
-        Self(index as u64 * 2 + 1)
-    }
-
-    #[must_use]
-    pub fn non_last_u64(index: u64) -> Option<Self> {
+    pub fn non_last(index: FragmentIndex) -> Option<Self> {
         index.checked_mul(2).map(Self)
     }
 
     #[must_use]
-    pub fn last_u64(index: u64) -> Option<Self> {
+    pub fn last(index: FragmentIndex) -> Option<Self> {
         index
             .checked_mul(2)
             .and_then(|n| n.checked_add(1))
@@ -74,13 +64,27 @@ impl FragmentPosition {
     }
 
     #[must_use]
-    pub fn index(self) -> u64 {
+    pub fn new(index: FragmentIndex, last: bool) -> Option<Self> {
+        if last {
+            Self::last(index)
+        } else {
+            Self::non_last(index)
+        }
+    }
+
+    #[must_use]
+    pub const fn index(self) -> FragmentIndex {
         self.0 / 2
     }
 
     #[must_use]
+    pub const fn index_usize(self) -> usize {
+        self.index() as usize // checked via `const_assert`
+    }
+
+    #[must_use]
     pub const fn is_last(self) -> bool {
-        self.0 % 2 == 0
+        self.0 % 2 == 1
     }
 }
 

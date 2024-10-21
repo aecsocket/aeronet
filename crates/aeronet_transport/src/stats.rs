@@ -1,13 +1,13 @@
 use {
-    crate::{Transport, message::MessageStats},
+    crate::{message::MessageStats, Transport},
     aeronet_io::packet::{PacketRtt, PacketStats},
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
     bevy_time::{Real, Time, Timer, TimerMode},
     ringbuf::{
-        HeapRb,
         traits::{Consumer, RingBuffer},
+        HeapRb,
     },
     std::time::Duration,
 };
@@ -177,14 +177,15 @@ fn update_stats(
                 .unwrap_or_default();
 
             let extra_acks_expected = (lost_thresh_sample.packets_total.packets_sent
-                - lost_thresh_sample.msgs_total.packet_acks_recv)
-                .0;
+                - lost_thresh_sample.msgs_total.packet_acks_recv.get())
+            .0;
 
             if extra_acks_expected == 0 {
                 0.0
             } else {
-                let extra_acks_received =
-                    (msg_stats.packet_acks_recv - lost_thresh_sample.msgs_total.packet_acks_recv).0;
+                let extra_acks_received = (msg_stats.packet_acks_recv.get()
+                    - lost_thresh_sample.msgs_total.packet_acks_recv.get())
+                .0;
                 let acked_frac = extra_acks_received as f64 / extra_acks_expected as f64;
                 1.0 - acked_frac.clamp(0.0, 1.0)
             }

@@ -3,15 +3,14 @@ use {
     octs::{
         BufError, BufTooShortOr, Decode, Encode, EncodeLen, Read, VarInt, VarIntTooLarge, Write,
     },
+    static_assertions::const_assert,
     std::mem::size_of,
     thiserror::Error,
 };
 
 type PayloadLen = u32;
 
-const _: () = {
-    assert!(size_of::<usize>() >= size_of::<PayloadLen>());
-};
+const_assert!(size_of::<usize>() >= size_of::<PayloadLen>());
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Error)]
 #[error("payload too large - {len} / {} bytes", PayloadLen::MAX)]
@@ -50,7 +49,7 @@ impl Decode for MessagePayload {
 
     fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
         let len = src.read::<VarInt<PayloadLen>>()?.0;
-        let len_u = usize::try_from(len).expect("bit sizes checked at compile time");
+        let len_u = len as usize; // checked via `const_assert`
         Ok(Self(src.read_next(len_u)?))
     }
 }
