@@ -3,10 +3,10 @@
 use {
     crate::convert,
     aeronet_io::{
-        connection::{Connected, DisconnectReason, Disconnected},
+        connection::{Connected, Disconnect, DisconnectReason, Disconnected},
         server::{Opened, Server},
     },
-    aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet, message::MessageBuffers},
+    aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_hierarchy::Parent,
@@ -183,16 +183,16 @@ fn on_disconnected(
 
 fn poll(
     mut replicon_server: ResMut<RepliconServer>,
-    mut clients: Query<(Entity, &mut MessageBuffers, &Parent)>,
+    mut clients: Query<(Entity, &mut Transport, &Parent)>,
     open_servers: Query<(), OpenedServer>,
 ) {
-    for (client, mut msg_bufs, server) in &mut clients {
+    for (client, mut transport, server) in &mut clients {
         if open_servers.get(server.get()).is_err() {
             continue;
         }
 
         let client_id = convert::to_client_id(client);
-        for (lane_index, msg) in msg_bufs.recv.drain(..) {
+        for (lane_index, msg) in transport.recv.drain() {
             let Some(channel_id) = convert::to_channel_id(lane_index) else {
                 continue;
             };
@@ -201,14 +201,21 @@ fn poll(
     }
 }
 
-fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut MessageBuffers>) {
+fn flush(
+    mut commands: Commands,
+    mut replicon_server: ResMut<RepliconServer>,
+    mut clients: Query<(Entity, &mut Transport)>,
+) {
     for (client_id, channel_id, msg) in replicon_server.drain_sent() {
-        let Some(mut msg_bufs) =
+        let Some((client, mut transport)) =
             convert::to_entity(client_id).and_then(|client| clients.get_mut(client).ok())
         else {
             continue;
         };
         let lane_index = convert::to_lane_index(channel_id);
-        msg_bufs.send.push(lane_index, msg);
+
+        if let Err(err) = transport.send.push(lane_index, msg) {
+            commands.trigger_targets(Disconnect::new(err.to_string()), client);
+        }
     }
 }

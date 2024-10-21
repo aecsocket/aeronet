@@ -55,8 +55,7 @@ impl Seq {
 
 impl fmt::Debug for Seq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Self(seq) = self;
-        write!(f, "Seq({seq})")
+        f.debug_tuple("Seq").field(&self.0).finish()
     }
 }
 
@@ -85,9 +84,7 @@ impl Ord for Seq {
         let s1 = self.0;
         let s2 = other.0;
 
-        // alternate impl
-        // s1.wrapping_add(HALF.wrapping_sub(s2)).cmp(&(u16::MAX / 2))
-        #[allow(clippy::cast_possible_wrap)] // that's exactly what we want
+        #[expect(clippy::cast_possible_wrap, reason = "we want wrap behavior")]
         (s1 as i16).wrapping_sub(s2 as i16).cmp(&0)
     }
 }
@@ -163,8 +160,7 @@ impl PacketSeq {
 
 impl fmt::Debug for PacketSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Self(Seq(seq)) = self;
-        write!(f, "PacketSeq({seq})")
+        f.debug_tuple("PacketSeq").field(&self.0 .0).finish()
     }
 }
 
@@ -203,8 +199,7 @@ impl MessageSeq {
 
 impl fmt::Debug for MessageSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Self(Seq(seq)) = self;
-        write!(f, "MessageSeq({seq})")
+        f.debug_tuple("MessageSeq").field(&self.0 .0).finish()
     }
 }
 

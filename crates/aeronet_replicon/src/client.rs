@@ -2,8 +2,8 @@
 
 use {
     crate::convert,
-    aeronet_io::connection::{Connected, Session},
-    aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet, message::MessageBuffers},
+    aeronet_io::connection::{Connected, Disconnect, Session},
+    aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
@@ -161,10 +161,10 @@ fn update_state(
 
 fn poll(
     mut replicon_client: ResMut<RepliconClient>,
-    mut clients: Query<&mut MessageBuffers, ConnectedClient>,
+    mut clients: Query<&mut Transport, ConnectedClient>,
 ) {
-    for mut msg_bufs in &mut clients {
-        for (lane_index, msg) in msg_bufs.recv.drain(..) {
+    for mut transport in &mut clients {
+        for (lane_index, msg) in transport.recv.drain() {
             let Some(channel_id) = convert::to_channel_id(lane_index) else {
                 continue;
             };
@@ -174,13 +174,16 @@ fn poll(
 }
 
 fn flush(
+    mut commands: Commands,
     mut replicon_client: ResMut<RepliconClient>,
-    mut clients: Query<&mut MessageBuffers, ConnectedClient>,
+    mut clients: Query<(Entity, &mut Transport), ConnectedClient>,
 ) {
     for (channel_id, msg) in replicon_client.drain_sent() {
         let lane_index = convert::to_lane_index(channel_id);
-        for mut msg_bufs in &mut clients {
-            msg_bufs.send.push(lane_index, msg.clone());
+        for (client, mut transport) in &mut clients {
+            if let Err(err) = transport.send.push(lane_index, msg.clone()) {
+                commands.trigger_targets(Disconnect::new(err.to_string()), client);
+            }
         }
     }
 }

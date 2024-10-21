@@ -4,7 +4,6 @@
 
 pub mod frag;
 pub mod lane;
-pub mod message;
 pub mod packet;
 pub mod recv;
 pub mod rtt;
@@ -12,8 +11,8 @@ pub mod send;
 pub mod seq_buf;
 pub mod sized;
 
-#[cfg(feature = "stats")]
-pub mod stats;
+#[cfg(feature = "sampling")]
+pub mod sampling;
 
 #[cfg(feature = "visualizer")]
 pub mod visualizer;
@@ -22,11 +21,12 @@ pub use {aeronet_io as io, octs};
 use {
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
+    bevy_reflect::prelude::*,
+    derive_more::{Add, AddAssign, Sub, SubAssign},
     lane::LaneKind,
-    message::MessageStats,
     packet::Acknowledge,
     rtt::RttEstimator,
-    typesize::derive::TypeSize,
+    typesize::{derive::TypeSize, TypeSize},
 };
 
 #[derive(Debug)]
@@ -52,14 +52,17 @@ pub struct Transport {
     pub send_bytes_per_sec: usize,
 
     // shared
-    max_frag_len: usize,
+    // flushed_packets: SeqBuf<FlushedPacket, 1024>,
     stats: MessageStats,
     acks: Acknowledge,
-    // flushed_packets: SeqBuf<FlushedPacket, 1024>,
-    send: send::Sender,
 
     // recv
+    recv_lanes: Box<[recv::Lane]>,
     rtt: RttEstimator,
+    pub recv: recv::TransportRecv,
+
+    // send
+    pub send: send::TransportSend,
 }
 
 impl Transport {
@@ -80,22 +83,6 @@ impl Transport {
     }
 
     #[must_use]
-    pub fn with_max_memory_usage(self, max_memory_usage: usize) -> Self {
-        Self {
-            max_memory_usage,
-            ..self
-        }
-    }
-
-    #[must_use]
-    pub fn with_send_bytes_per_sec(self, send_bytes_per_sec: usize) -> Self {
-        Self {
-            send_bytes_per_sec,
-            ..self
-        }
-    }
-
-    #[must_use]
     pub const fn stats(&self) -> MessageStats {
         self.stats
     }
@@ -104,4 +91,17 @@ impl Transport {
     pub const fn rtt(&self) -> &RttEstimator {
         &self.rtt
     }
+
+    #[must_use]
+    pub fn memory_usage(&self) -> usize {
+        self.get_size()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, TypeSize, Reflect)] // force `#[derive]` on multiple lines
+#[derive(Add, AddAssign, Sub, SubAssign)]
+pub struct MessageStats {
+    pub msgs_recv: sized::Saturating<usize>,
+    pub msgs_sent: sized::Saturating<usize>,
+    pub packet_acks_recv: sized::Saturating<usize>,
 }

@@ -18,10 +18,10 @@ workspace = true
 all-features = true
 
 [features]
+sampling = []
 serde = ["dep:serde"]
-stats = []
 visualizer = [
-  "stats",
+  "sampling",
   "dep:bevy_egui",
   "dep:egui_plot",
   "dep:itertools",

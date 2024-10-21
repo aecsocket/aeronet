@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use typesize::derive::TypeSize;
 
-#[derive(Debug, Clone, Copy, TypeSize)]
+#[derive(Debug, Clone, TypeSize)]
 pub struct RttEstimator {
     latest: Duration,
     smoothed: Duration,

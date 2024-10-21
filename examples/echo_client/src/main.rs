@@ -15,17 +15,16 @@
 
 use {
     aeronet::{
-        connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
-        message::MessageBuffers,
-        octs::Bytes,
+        io::connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
         transport::{
-            AeronetTransportPlugin, Transport,
             lane::{LaneIndex, LaneKind},
+            octs::Bytes,
+            AeronetTransportPlugin, Transport,
         },
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     std::mem,
 };
 
@@ -142,8 +141,8 @@ fn recv_messages(
     // Query..
     mut sessions: Query<
         (
-            &mut MessageBuffers, // ..the messages received
-            &mut UiState,        // ..and push the messages into `UiState::log`
+            &mut Transport, // ..the messages received by the transport layer
+            &mut UiState,   // ..and push the messages into `UiState::log`
         ),
         (
             With<Session>,   // ..for all sessions (this isn't strictly necessary)
@@ -152,12 +151,11 @@ fn recv_messages(
         ),
     >,
 ) {
-    for (mut msg_bufs, mut ui_state) in &mut sessions {
-        for (_lane_index, msg) in msg_bufs.recv.drain(..) {
-            // `msg` is a `bytes::Bytes` - a cheaply cloneable ref-counted byte buffer
+    for (mut transport, mut ui_state) in &mut sessions {
+        for (_lane_index, msg) in transport.recv.drain() {
+            // `msg` is a `Vec<u8>` - we have full ownership of the bytes received
             // We'll turn it into a UTF-8 string
             // We don't care about the lane index
-            let msg = Vec::from(msg);
             let msg = String::from_utf8(msg).unwrap_or_else(|_| "(not UTF-8)".into());
             ui_state.log.push(format!("> {msg}"));
         }
@@ -172,11 +170,11 @@ fn ui(
     // Technically, this query can run for multiple sessions, so we can have
     // multiple `egui` windows. But there will only ever be 1 session active.
     mut sessions: Query<
-        (Entity, &mut MessageBuffers, &mut UiState),
+        (Entity, &mut Transport, &mut UiState),
         (With<Session>, With<Connected>, Without<Parent>),
     >,
 ) {
-    for (session, mut msg_bufs, mut ui_state) in &mut sessions {
+    for (session, mut transport, mut ui_state) in &mut sessions {
         egui::Window::new("Log").show(egui.ctx_mut(), |ui| {
             ui.text_edit_singleline(&mut ui_state.msg);
 
@@ -186,7 +184,7 @@ fn ui(
                 ui_state.log.push(format!("< {msg}"));
 
                 let msg = Bytes::from(msg);
-                msg_bufs.send.push(SEND_LANE, msg);
+                transport.send.push(SEND_LANE, msg);
             }
 
             if ui.button("Disconnect").clicked() {

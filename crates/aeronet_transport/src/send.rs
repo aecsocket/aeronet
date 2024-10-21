@@ -11,8 +11,14 @@ use crate::{
     frag,
     lane::{LaneIndex, LaneReliability},
     packet::{FragmentPosition, MessageSeq},
-    sized, Transport,
+    sized,
 };
+
+#[derive(Debug, TypeSize)]
+pub struct TransportSend {
+    max_frag_len: usize,
+    lanes: Box<[Lane]>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize)]
 pub struct MessageKey {
@@ -27,13 +33,8 @@ pub enum SendError {
     TooManyMessages,
 }
 
-#[derive(Debug, TypeSize)]
-pub(crate) struct Sender {
-    lanes: Box<[SendLane]>,
-}
-
 #[derive(Debug, Clone, TypeSize)]
-struct SendLane {
+struct Lane {
     sent_msgs: HashMap<MessageSeq, SentMessage>,
     next_msg_seq: MessageSeq,
     reliability: LaneReliability,
@@ -52,14 +53,18 @@ struct SentFragment {
     next_flush_at: sized::Instant,
 }
 
-impl Transport {
-    pub fn send(
+impl TransportSend {
+    pub fn push(&mut self, lane_index: LaneIndex, msg: Bytes) -> Result<MessageKey, SendError> {
+        self.push_internal(Instant::now(), lane_index, msg)
+    }
+
+    fn push_internal(
         &mut self,
         now: Instant,
         lane_index: LaneIndex,
         msg: Bytes,
     ) -> Result<MessageKey, SendError> {
-        let lane = &mut self.send.lanes[lane_index.into_usize()];
+        let lane = &mut self.lanes[lane_index.into_usize()];
         let msg_seq = lane.next_msg_seq;
         let Entry::Vacant(entry) = lane.sent_msgs.entry(msg_seq) else {
             return Err(SendError::TooManyMessages);
