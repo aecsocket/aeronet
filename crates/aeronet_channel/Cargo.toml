@@ -1,5 +1,5 @@
 [package]
-description = "In-memory MPSC channel transport implementation for aeronet"
+description = "In-memory MPSC channel IO layer implementation for aeronet"
 name = "aeronet_channel"
 
 authors.workspace = true
@@ -16,28 +16,20 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-[features]
-## Enables [`bevy`](https://docs.rs/bevy) support.
-bevy = ["dep:bevy_ecs", "aeronet/bevy"]
-
 [dependencies]
-aeronet = { workspace = true, features = ["client", "server"] }
+aeronet_io = { workspace = true }
 
 bytes = { workspace = true }
-crossbeam-channel = { workspace = true }
-replace_with = { workspace = true }
-slotmap = { workspace = true }
+flume = { workspace = true }
+oneshot = { workspace = true }
+sync_wrapper = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 web-time = { workspace = true }
 
-bevy_ecs = { workspace = true, optional = true }
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
 
 [dev-dependencies]
-assert_matches = { workspace = true }
 bevy = { workspace = true }
 bevy_egui = { workspace = true }
-
-[[example]]
-name = "echo"
-path = "examples/echo.rs"
-required-features = ["bevy"]

@@ -1,220 +1,256 @@
-//! Server-side transport implementation.
+//! See [`WebTransportClient`].
 
 mod backend;
-mod frontend;
 
-use std::io;
-
-use aeronet::{
-    client::DisconnectReason,
-    stats::{ConnectedAt, MessageStats, Rtt},
+use {
+    crate::{
+        runtime::WebTransportRuntime,
+        session::{self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin},
+    },
+    aeronet_io::{
+        IoSet,
+        connection::{DisconnectReason, Disconnected, Session},
+        packet::{PacketBuffersCapacity, PacketMtu},
+    },
+    bevy_app::prelude::*,
+    bevy_ecs::{prelude::*, system::EntityCommand},
+    bytes::Bytes,
+    futures::channel::{mpsc, oneshot},
+    thiserror::Error,
+    tracing::{Instrument, debug_span},
 };
-use aeronet_proto::session::{FatalSendError, MtuTooSmall, OutOfMemory, SendError, Session};
-use bytes::Bytes;
-use futures::channel::{mpsc, oneshot};
-use web_time::{Duration, Instant};
-
-use crate::internal::{ConnectionInner, ConnectionMeta, InternalError};
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
-        use crate::shared::JsError;
-
-        /// Client network configuration.
+        /// Configuration for the [`WebTransportClient`] on WASM platforms.
         pub type ClientConfig = xwt_web_sys::WebTransportOptions;
-        type ConnectError = JsError;
-        type AwaitConnectError = JsError;
-        type ConnectionLostError = JsError;
+
+        type ConnectTarget = String;
+
+        type ConnectError = crate::JsError;
+        type AwaitConnectError = crate::JsError;
     } else {
-        use std::net::SocketAddr;
+        use wtransport::endpoint::endpoint_side;
+        use xwt_core::endpoint::{Connect, connect::Connecting};
 
-        use aeronet::stats::{LocalAddr, RemoteAddr};
-        use xwt_core::endpoint::Connect;
-
-        use crate::{internal, shared::RawRtt};
-
-        /// Client network configuration.
+        /// Configuration for the [`WebTransportClient`] on non-WASM platforms.
         pub type ClientConfig = wtransport::ClientConfig;
-        type ConnectError = <internal::ClientEndpoint as Connect>::Error;
-        type AwaitConnectError = <<internal::ClientEndpoint as Connect>::Connecting as xwt_core::endpoint::connect::Connecting>::Error;
-        type ConnectionLostError = <internal::Connection as xwt_core::session::datagram::Receive>::Error;
+
+        type ConnectTarget = wtransport::endpoint::ConnectOptions;
+        type ClientEndpoint = xwt_wtransport::Endpoint<endpoint_side::Client>;
+
+        type ConnectError = <ClientEndpoint as Connect>::Error;
+        type AwaitConnectError = <<ClientEndpoint as Connect>::Connecting as Connecting>::Error;
     }
 }
 
-/// WebTransport implementation of [`ClientTransport`].
-///
-/// See the [crate-level documentation](crate).
-///
-/// [`ClientTransport`]: aeronet::client::ClientTransport
+/// Allows using [`WebTransportClient`].
 #[derive(Debug)]
-#[cfg_attr(feature = "bevy", derive(bevy_ecs::prelude::Resource))]
-pub struct WebTransportClient {
-    state: State,
+pub struct WebTransportClientPlugin;
+
+impl Plugin for WebTransportClientPlugin {
+    fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<WebTransportSessionPlugin>() {
+            app.add_plugins(WebTransportSessionPlugin);
+        }
+
+        app.add_systems(
+            PreUpdate,
+            poll_clients.in_set(IoSet::Poll).before(session::poll),
+        )
+        .observe(on_client_added);
+    }
 }
 
-#[derive(Debug)]
-enum State {
-    Disconnected,
-    Connecting(Connecting),
-    Connected(Connected),
-    Disconnecting { reason: String },
+/// WebTransport session implementation which acts as a dedicated client,
+/// connecting to a target endpoint.
+///
+/// Use [`WebTransportClient::connect`] to start a connection.
+#[derive(Debug, Component)]
+pub struct WebTransportClient(ClientFrontend);
+
+impl WebTransportClient {
+    /// Creates an [`EntityCommand`] to set up a session and connect it to the
+    /// `target`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use {
+    ///     aeronet_webtransport::client::{ClientConfig, WebTransportClient},
+    ///     bevy_ecs::{prelude::*, system::EntityCommand},
+    /// };
+    ///
+    /// # fn run(mut commands: Commands, world: &mut World) {
+    /// let config = ClientConfig::default();
+    /// let target = "https://[::1]:1234";
+    ///
+    /// // using `Commands`
+    /// commands
+    ///     .spawn_empty()
+    ///     .add(WebTransportClient::connect(config, target));
+    ///
+    /// // using mutable `World` access
+    /// # let config = ClientConfig::default();
+    /// let session = world.spawn_empty().id();
+    /// WebTransportClient::connect(config, target).apply(session, world);
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn connect(
+        config: impl Into<ClientConfig>,
+        #[cfg(target_family = "wasm")] target: impl Into<String>,
+        #[cfg(not(target_family = "wasm"))] target: impl wtransport::endpoint::IntoConnectOptions,
+    ) -> impl EntityCommand {
+        let config = config.into();
+        let target = {
+            #[cfg(target_family = "wasm")]
+            {
+                target.into()
+            }
+
+            #[cfg(not(target_family = "wasm"))]
+            {
+                target.into_options()
+            }
+        };
+        move |session: Entity, world: &mut World| connect(session, world, config, target)
+    }
 }
 
-/// Error type for operations on a [`WebTransportClient`].
-#[derive(Debug, thiserror::Error)]
+fn connect(session: Entity, world: &mut World, config: ClientConfig, target: ConnectTarget) {
+    let runtime = world.resource::<WebTransportRuntime>().clone();
+    let packet_buf_cap = PacketBuffersCapacity::compute_from(world, session);
+
+    let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
+    let (send_next, recv_next) = oneshot::channel::<ToConnected>();
+    runtime.spawn_on_self(
+        async move {
+            let Err(reason) = backend::start(packet_buf_cap, config, target, send_next).await;
+            _ = send_dc.send(reason);
+        }
+        .instrument(debug_span!("client", %session)),
+    );
+
+    world
+        .entity_mut(session)
+        .insert(WebTransportClient(ClientFrontend::Connecting {
+            recv_dc,
+            recv_next,
+        }));
+}
+
+/// [`WebTransportClient`] error.
+#[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ClientError {
-    // frontend
-    /// Backend client task was cancelled, dropping the underlying connection.
-    #[error("backend closed")]
-    BackendClosed,
-    /// Client is already connecting or connected.
-    #[error("already connecting or connected")]
-    AlreadyConnected,
-    /// Client is already disconnected.
-    #[error("already disconnected")]
-    AlreadyDisconnected,
-    /// Client is not connected.
-    #[error("not connected")]
-    NotConnected,
-    /// See [`SendError`].
-    #[error(transparent)]
-    Send(SendError),
-    /// See [`FatalSendError`].
-    #[error(transparent)]
-    FatalSend(FatalSendError),
-    /// See [`OutOfMemory`].
-    #[error(transparent)]
-    OutOfMemory(OutOfMemory),
-
-    // backend
-    /// Client frontend was closed.
-    #[error("frontend closed")]
-    FrontendClosed,
-    /// Failed to create the endpoint to run the connection on.
-    #[error("failed to create endpoint")]
-    CreateEndpoint(#[source] io::Error),
-    /// Failed to connect to the target.
+    /// Failed to start connecting to the target.
     #[error("failed to connect")]
     Connect(#[source] ConnectError),
     /// Failed to await the connection to the target.
     #[error("failed to await connection")]
     AwaitConnect(#[source] AwaitConnectError),
-    /// Established a connection with the server, but it does not support
-    /// datagrams.
-    #[error("datagrams are not supported on this peer")]
-    DatagramsNotSupported,
-    /// Server supports datagrams, but the maximum datagram size it supports is
-    /// too small for us.
-    #[error("connection MTU too small")]
-    MtuTooSmall(#[source] MtuTooSmall),
-    /// Frontend forced a disconnect from the server.
-    #[error("failed to get endpoint local address")]
-    GetLocalAddr(#[source] io::Error),
-
-    // connection
-    /// Lost connection.
-    #[error("connection lost")]
-    ConnectionLost(#[source] ConnectionLostError),
+    /// Generic session error.
+    #[error(transparent)]
+    Session(#[from] SessionError),
 }
 
-impl From<InternalError<Self>> for ClientError {
-    fn from(value: InternalError<Self>) -> Self {
-        match value {
-            InternalError::Spec(e) => e,
-            InternalError::BackendClosed => Self::BackendClosed,
-            InternalError::MtuTooSmall(err) => Self::MtuTooSmall(err),
-            InternalError::OutOfMemory(err) => Self::OutOfMemory(err),
-            InternalError::Send(err) => Self::Send(err),
-            InternalError::FatalSend(err) => Self::FatalSend(err),
-            InternalError::FrontendClosed => Self::FrontendClosed,
-            InternalError::DatagramsNotSupported => Self::DatagramsNotSupported,
-            InternalError::ConnectionLost(err) => Self::ConnectionLost(err),
-        }
-    }
-}
-
-/// State of a [`WebTransportClient`] when it is [`ClientState::Connecting`].
-///
-/// [`ClientState::Connecting`]: aeronet::client::ClientState::Connecting
 #[derive(Debug)]
-pub struct Connecting {
-    recv_connected: oneshot::Receiver<ToConnected>,
-    recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
+enum ClientFrontend {
+    Connecting {
+        recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
+        recv_next: oneshot::Receiver<ToConnected>,
+    },
+    Connected {
+        recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
+    },
+    Disconnected,
 }
 
 #[derive(Debug)]
 struct ToConnected {
     #[cfg(not(target_family = "wasm"))]
-    local_addr: SocketAddr,
+    local_addr: std::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
-    initial_remote_addr: SocketAddr,
+    initial_remote_addr: std::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
-    initial_rtt: Duration,
-    recv_meta: mpsc::Receiver<ConnectionMeta>,
-    send_c2s: mpsc::UnboundedSender<Bytes>,
-    recv_s2c: mpsc::Receiver<Bytes>,
-    send_local_dc: oneshot::Sender<String>,
-    session: Session,
+    initial_rtt: std::time::Duration,
+    initial_mtu: usize,
+    recv_meta: mpsc::Receiver<SessionMeta>,
+    recv_packet_b2f: mpsc::Receiver<Bytes>,
+    send_packet_f2b: mpsc::UnboundedSender<Bytes>,
+    send_user_dc: oneshot::Sender<String>,
 }
 
-/// State of a [`WebTransportClient`] when it is [`ClientState::Connected`].
-///
-/// [`ClientState::Connected`]: aeronet::client::ClientState::Connected
-#[derive(Debug)]
-pub struct Connected {
-    #[cfg(not(target_family = "wasm"))]
-    local_addr: SocketAddr,
-    inner: ConnectionInner<ClientError>,
+// TODO: required components
+fn on_client_added(trigger: Trigger<OnAdd, WebTransportClient>, mut commands: Commands) {
+    let session = trigger.entity();
+    commands.entity(session).insert(Session);
 }
 
-#[cfg(not(target_family = "wasm"))]
-impl LocalAddr for Connected {
-    fn local_addr(&self) -> SocketAddr {
-        self.local_addr
+fn poll_clients(mut commands: Commands, mut frontends: Query<(Entity, &mut WebTransportClient)>) {
+    for (session, mut frontend) in &mut frontends {
+        replace_with::replace_with_or_abort(&mut frontend.0, |state| match state {
+            ClientFrontend::Connecting { recv_dc, recv_next } => {
+                poll_connecting(&mut commands, session, recv_dc, recv_next)
+            }
+            ClientFrontend::Connected { mut recv_dc } => {
+                if should_disconnect(&mut commands, session, &mut recv_dc) {
+                    ClientFrontend::Disconnected
+                } else {
+                    ClientFrontend::Connected { recv_dc }
+                }
+            }
+            ClientFrontend::Disconnected => state,
+        });
     }
 }
 
-impl Connected {
-    /// Provides access to the underlying [`Session`] for reading more detailed
-    /// network statistics.
-    #[must_use]
-    pub const fn session(&self) -> &Session {
-        &self.inner.session
+fn poll_connecting(
+    commands: &mut Commands,
+    session: Entity,
+    mut recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
+    mut recv_next: oneshot::Receiver<ToConnected>,
+) -> ClientFrontend {
+    if should_disconnect(commands, session, &mut recv_dc) {
+        return ClientFrontend::Disconnected;
     }
+
+    let Ok(Some(next)) = recv_next.try_recv() else {
+        return ClientFrontend::Connecting { recv_dc, recv_next };
+    };
+
+    commands.entity(session).insert((
+        WebTransportIo {
+            recv_meta: next.recv_meta,
+            recv_packet_b2f: next.recv_packet_b2f,
+            send_packet_f2b: next.send_packet_f2b,
+            send_user_dc: Some(next.send_user_dc),
+        },
+        PacketMtu(next.initial_mtu),
+        #[cfg(not(target_family = "wasm"))]
+        aeronet_io::connection::LocalAddr(next.local_addr),
+        #[cfg(not(target_family = "wasm"))]
+        aeronet_io::connection::RemoteAddr(next.initial_remote_addr),
+        #[cfg(not(target_family = "wasm"))]
+        aeronet_io::packet::PacketRtt(next.initial_rtt),
+    ));
+    ClientFrontend::Connected { recv_dc }
 }
 
-impl ConnectedAt for Connected {
-    fn connected_at(&self) -> Instant {
-        self.session().connected_at()
-    }
-}
-
-impl Rtt for Connected {
-    fn rtt(&self) -> Duration {
-        self.session().rtt().get()
-    }
-}
-
-impl MessageStats for Connected {
-    fn bytes_sent(&self) -> usize {
-        self.session().bytes_sent()
-    }
-
-    fn bytes_recv(&self) -> usize {
-        self.session().bytes_recv()
-    }
-}
-
-#[cfg(not(target_family = "wasm"))]
-impl RemoteAddr for Connected {
-    fn remote_addr(&self) -> SocketAddr {
-        self.inner.remote_addr
-    }
-}
-
-#[cfg(not(target_family = "wasm"))]
-impl RawRtt for Connected {
-    fn raw_rtt(&self) -> Duration {
-        self.inner.raw_rtt
-    }
+fn should_disconnect(
+    commands: &mut Commands,
+    session: Entity,
+    recv_dc: &mut oneshot::Receiver<DisconnectReason<ClientError>>,
+) -> bool {
+    let dc_reason = match recv_dc.try_recv() {
+        Ok(None) => None,
+        Ok(Some(dc_reason)) => Some(dc_reason),
+        Err(_) => Some(ClientError::Session(SessionError::BackendClosed).into()),
+    };
+    dc_reason.map_or(false, |reason| {
+        let reason = reason.map_err(anyhow::Error::new);
+        commands.trigger_targets(Disconnected { reason }, session);
+        true
+    })
 }

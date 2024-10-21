@@ -1,5 +1,5 @@
 [package]
-description = "bevy_replicon backend implementation using aeronet"
+description = "aeronet backend implementation for bevy_replicon"
 name = "aeronet_replicon"
 
 authors.workspace = true
@@ -18,27 +18,16 @@ workspace = true
 all-features = true
 
 [features]
-## Enables client-side items.
-client = ["aeronet/client", "bevy_replicon/client"]
-
-## Enables server-side items.
-server = ["aeronet/server", "bevy_replicon/server"]
+client = ["bevy_replicon/client"]
+server = ["bevy_replicon/server"]
 
 [dependencies]
-aeronet = { workspace = true, features = ["bevy"] }
-
-ahash = { workspace = true }
-bimap = { workspace = true }
-bytes = { workspace = true }
-derivative = { workspace = true }
-tracing = { workspace = true }
+aeronet_io = { workspace = true }
+aeronet_transport = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
-bevy_time = { workspace = true }
+bevy_hierarchy = { workspace = true }
+bevy_reflect = { workspace = true }
 
 bevy_replicon = { workspace = true }
-
-[dev-dependencies]
-bevy = { workspace = true }
-serde = { workspace = true }
