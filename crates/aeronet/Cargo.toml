@@ -18,7 +18,7 @@ workspace = true
 all-features = true
 
 [features]
-stats = ["aeronet_transport/stats"]
+sampling = ["aeronet_transport/sampling"]
 visualizer = ["aeronet_transport/visualizer"]
 
 [dependencies]

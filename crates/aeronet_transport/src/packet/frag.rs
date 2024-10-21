@@ -4,6 +4,7 @@ use {
         BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLen, Read, VarInt, VarIntTooLarge,
         Write,
     },
+    static_assertions::const_assert,
     std::fmt,
 };
 
@@ -48,6 +49,8 @@ impl Decode for MessageFragment {
 //
 // `FragmentPosition`
 //
+
+const_assert!(size_of::<usize>() >= size_of::<FragmentIndex>());
 
 impl FragmentPosition {
     #[must_use]

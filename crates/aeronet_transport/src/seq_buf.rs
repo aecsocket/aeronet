@@ -182,16 +182,18 @@ impl<T: Default, const N: usize> SeqBuf<T, N> {
 
 #[cfg(test)]
 mod tests {
+    #![expect(clippy::unwrap_used, reason = "testing")]
+
     use super::*;
 
     #[test]
-    #[should_panic]
+    #[should_panic = "assertion failed: N > 0"]
     fn zero_cap() {
         let _ = SeqBuf::<(), 0>::new();
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "assertion failed: N < u16::MAX as usize"]
     fn over_max_cap() {
         let _ = SeqBuf::<(), { u16::MAX as usize }>::new();
     }

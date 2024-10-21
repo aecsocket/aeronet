@@ -214,6 +214,8 @@ impl FragmentReceiver {
 
 #[cfg(test)]
 mod tests {
+    #![expect(clippy::unwrap_used, reason = "testing")]
+
     use super::*;
 
     // TODO

@@ -34,7 +34,6 @@ impl Acknowledge {
     /// acks.ack(PacketSeq::new(2));
     /// assert_eq!(acks, acks_clone);
     /// ```
-    #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
     pub fn ack(&mut self, seq: PacketSeq) {
         let dist = seq.dist_to(*self.last_recv);
         if let Ok(dist) = u32::try_from(dist) {
@@ -118,6 +117,7 @@ impl Acknowledge {
     /// assert_eq!(None, iter.next());
     /// ```
     #[inline]
+    #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
     pub fn seqs(self) -> impl Iterator<Item = PacketSeq> {
         // explicitly don't ack `last_recv` *unless* bit 0 is set
         // we may be in a situation where we literally haven't received any of
@@ -181,11 +181,7 @@ impl Decode for Acknowledge {
     reason = "no separators shows the shift logic more clearly"
 )]
 mod tests {
-    use {
-        super::*,
-        octs::test::*,
-        std::{u16, u32},
-    };
+    use {super::*, octs::test::*};
 
     #[test]
     fn shl_in_range() {

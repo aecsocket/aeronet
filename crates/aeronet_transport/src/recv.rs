@@ -1,16 +1,21 @@
 use ahash::{HashMap, HashSet};
 use typesize::derive::TypeSize;
 
-use crate::{frag::FragmentReceiver, packet::MessageSeq, rtt::RttEstimator};
+use crate::{frag::FragmentReceiver, lane::LaneIndex, packet::MessageSeq};
 
 #[derive(Debug, TypeSize)]
-pub(crate) struct Receiver {
-    lanes: Box<[RecvLane]>,
-    rtt: RttEstimator,
+pub struct TransportRecv {
+    msgs: Vec<(LaneIndex, Vec<u8>)>,
+}
+
+impl TransportRecv {
+    pub fn drain(&mut self) -> impl Iterator<Item = (LaneIndex, Vec<u8>)> + '_ {
+        self.msgs.drain(..)
+    }
 }
 
 #[derive(Debug, Clone, TypeSize)]
-struct RecvLane {
+pub(crate) struct Lane {
     frags: FragmentReceiver,
 }
 

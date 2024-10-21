@@ -1,14 +1,14 @@
 use {
-    crate::stats::{
-        SampleSessionStats, SessionStats, SessionStatsPlugin, SessionStatsSample,
+    crate::sampling::{
+        SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
         SessionStatsSampling,
     },
     bevy_app::prelude::*,
     bevy_core::Name,
     bevy_ecs::prelude::*,
     bevy_egui::{
-        EguiContexts,
         egui::{self, epaint::Hsva},
+        EguiContexts,
     },
     itertools::Itertools,
     ringbuf::traits::Consumer,
@@ -21,8 +21,8 @@ pub struct SessionVisualizerPlugin;
 
 impl Plugin for SessionVisualizerPlugin {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<SessionStatsPlugin>() {
-            app.add_plugins(SessionStatsPlugin);
+        if !app.is_plugin_added::<SessionSamplingPlugin>() {
+            app.add_plugins(SessionSamplingPlugin);
         }
 
         app.configure_sets(Update, DrawSessionVisualizer.after(SampleSessionStats))

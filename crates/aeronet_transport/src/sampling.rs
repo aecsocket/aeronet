@@ -1,5 +1,5 @@
 use {
-    crate::{message::MessageStats, Transport},
+    crate::{MessageStats, Transport},
     aeronet_io::packet::{PacketRtt, PacketStats},
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
@@ -13,9 +13,9 @@ use {
 };
 
 #[derive(Debug, Clone, Default)]
-pub struct SessionStatsPlugin;
+pub struct SessionSamplingPlugin;
 
-impl Plugin for SessionStatsPlugin {
+impl Plugin for SessionSamplingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SessionStatsSampling>()
             .init_resource::<SamplingTimer>()

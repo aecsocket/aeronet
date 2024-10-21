@@ -5,7 +5,6 @@ mod payload;
 mod seq;
 
 pub use payload::*;
-use static_assertions::const_assert;
 use typesize::derive::TypeSize;
 use {
     crate::lane::LaneIndex,
@@ -14,7 +13,6 @@ use {
     bevy_reflect::Reflect,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     octs::Bytes,
-    std::mem::size_of,
 };
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
@@ -45,6 +43,12 @@ pub struct PacketHeader {
     pub acks: Acknowledge,
 }
 
+pub type FragmentIndex = u64;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct FragmentPosition(FragmentIndex);
+
 #[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut)]
 pub struct MessagePayload(pub Bytes);
 
@@ -54,14 +58,6 @@ pub struct MessageFragment {
     pub pos: FragmentPosition,
     pub payload: MessagePayload,
 }
-
-pub type FragmentIndex = u64;
-
-const_assert!(size_of::<usize>() >= size_of::<FragmentIndex>());
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct FragmentPosition(FragmentIndex);
 
 /*
 packet examples:
