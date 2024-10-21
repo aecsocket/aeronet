@@ -1,13 +1,12 @@
 use {
-    crate::{TransportSet, lane::LaneIndex, rtt::RttEstimator},
+    crate::{lane::LaneIndex, sized, TransportSet},
     aeronet_io::{packet::PacketBuffers, ringbuf::traits::Consumer},
     bevy_app::prelude::*,
-    bevy_derive::Deref,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     octs::{BufMut, Bytes, BytesMut, Read},
-    std::num::Saturating,
+    typesize::derive::TypeSize,
 };
 
 #[derive(Debug)]
@@ -39,11 +38,12 @@ impl MessageBuffersSend {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, Reflect, Add, AddAssign, Sub, SubAssign)]
+#[derive(Debug, Clone, Copy, Default, TypeSize, Reflect)] // force `#[derive]` on multiple lines
+#[derive(Add, AddAssign, Sub, SubAssign)]
 pub struct MessageStats {
-    pub msgs_recv: Saturating<usize>,
-    pub msgs_sent: Saturating<usize>,
-    pub packet_acks_recv: Saturating<usize>,
+    pub msgs_recv: sized::Saturating<usize>,
+    pub msgs_sent: sized::Saturating<usize>,
+    pub packet_acks_recv: sized::Saturating<usize>,
 }
 
 fn naive_poll(mut sessions: Query<(&mut PacketBuffers, &mut MessageBuffers)>) {

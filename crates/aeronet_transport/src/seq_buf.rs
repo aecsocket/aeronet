@@ -1,9 +1,8 @@
 //! See [`SeqBuf`].
 
-use {
-    datasize::DataSize,
-    std::{array, mem},
-};
+use std::{array, mem};
+
+use typesize::TypeSize;
 
 /// Rolling sequence buffer data structure.
 ///
@@ -160,6 +159,12 @@ impl<T, const N: usize> SeqBuf<T, N> {
     }
 }
 
+impl<T: TypeSize, const N: usize> TypeSize for SeqBuf<T, N> {
+    fn extra_size(&self) -> usize {
+        self.indices.extra_size() + self.data.extra_size()
+    }
+}
+
 impl<T: Default, const N: usize> SeqBuf<T, N> {
     /// Creates a new sequence buffer, populating the data array with default
     /// values of `T`.
@@ -172,17 +177,6 @@ impl<T: Default, const N: usize> SeqBuf<T, N> {
     #[inline]
     pub fn remove(&mut self, key: u16) -> Option<T> {
         self.remove_with(key, T::default())
-    }
-}
-
-impl<T: DataSize, const N: usize> DataSize for SeqBuf<T, N> {
-    const IS_DYNAMIC: bool = T::IS_DYNAMIC;
-
-    const STATIC_HEAP_SIZE: usize =
-        Box::<[u16; N]>::STATIC_HEAP_SIZE + Box::<[T; N]>::STATIC_HEAP_SIZE;
-
-    fn estimate_heap_size(&self) -> usize {
-        DataSize::estimate_heap_size(&self.indices) + DataSize::estimate_heap_size(&self.data)
     }
 }
 

@@ -1,10 +1,12 @@
 use {
+    arbitrary::Arbitrary,
     bevy_reflect::prelude::*,
-    datasize::DataSize,
     octs::{BufTooShortOr, Decode, Encode, EncodeLen, Read, VarInt, Write},
+    static_assertions::const_assert,
+    typesize::derive::TypeSize,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, DataSize, Reflect)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LaneKind {
     UnreliableUnordered,
@@ -23,26 +25,36 @@ impl LaneKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, DataSize, Reflect)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LaneReliability {
     Unreliable,
     Reliable,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, DataSize, Reflect)]
+type RawLaneIndex = u32;
+
+const_assert!(size_of::<usize>() >= size_of::<RawLaneIndex>());
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct LaneIndex(u32);
+pub struct LaneIndex(RawLaneIndex);
 
 impl LaneIndex {
     #[must_use]
-    pub const fn from_raw(index: u32) -> Self {
+    pub const fn from_raw(index: RawLaneIndex) -> Self {
         Self(index)
     }
 
     #[must_use]
-    pub const fn into_raw(self) -> u32 {
+    pub const fn into_raw(self) -> RawLaneIndex {
         self.0
+    }
+
+    #[must_use]
+    pub const fn into_usize(self) -> usize {
+        // `RawLaneIndex` is checked to be at least `usize` bits at compile time
+        self.into_raw() as usize
     }
 }
 

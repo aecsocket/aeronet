@@ -5,38 +5,40 @@ mod payload;
 mod seq;
 
 pub use payload::*;
+use static_assertions::const_assert;
+use typesize::derive::TypeSize;
 use {
     crate::lane::LaneIndex,
     arbitrary::Arbitrary,
     bevy_derive::{Deref, DerefMut},
     bevy_reflect::Reflect,
-    datasize::DataSize,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     octs::Bytes,
+    std::mem::size_of,
 };
 
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, DataSize, Reflect)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Seq(pub u16);
 
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, DataSize, Reflect)] // force `#[derive]` on multiple lines
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)] // force `#[derive]` on multiple lines
 #[derive(Deref, DerefMut, Add, AddAssign, Sub, SubAssign)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PacketSeq(pub Seq);
 
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, DataSize, Reflect)] // force `#[derive]` on multiple lines
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)] // force `#[derive]` on multiple lines
 #[derive(Deref, DerefMut, Add, AddAssign, Sub, SubAssign)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MessageSeq(pub Seq);
 
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, DataSize, Reflect)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Acknowledge {
     pub last_recv: PacketSeq,
     pub bits: u32,
 }
 
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, DataSize, Reflect)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PacketHeader {
     pub seq: PacketSeq,
@@ -53,9 +55,13 @@ pub struct MessageFragment {
     pub payload: MessagePayload,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Arbitrary, DataSize, Reflect)]
+pub type FragmentIndex = u64;
+
+const_assert!(size_of::<usize>() >= size_of::<FragmentIndex>());
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct FragmentPosition(u64);
+pub struct FragmentPosition(FragmentIndex);
 
 /*
 packet examples:

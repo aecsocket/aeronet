@@ -2,12 +2,15 @@
 #![doc = include_str!("../README.md")]
 #![allow(missing_docs, dead_code)] // TODO
 
+pub mod frag;
 pub mod lane;
 pub mod message;
-pub mod msg;
 pub mod packet;
+pub mod recv;
 pub mod rtt;
+pub mod send;
 pub mod seq_buf;
+pub mod sized;
 
 #[cfg(feature = "stats")]
 pub mod stats;
@@ -17,15 +20,13 @@ pub mod visualizer;
 
 pub use {aeronet_io as io, octs};
 use {
-    ahash::AHashMap,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
-    lane::{LaneKind, LaneReliability},
+    lane::LaneKind,
     message::MessageStats,
-    packet::{Acknowledge, MessageSeq},
+    packet::Acknowledge,
     rtt::RttEstimator,
-    seq_buf::SeqBuf,
-    web_time::Instant,
+    typesize::derive::TypeSize,
 };
 
 #[derive(Debug)]
@@ -34,9 +35,7 @@ pub struct AeronetTransportPlugin;
 impl Plugin for AeronetTransportPlugin {
     fn build(&self, app: &mut App) {
         app.configure_sets(PreUpdate, TransportSet::Poll)
-            .configure_sets(PostUpdate, TransportSet::Flush)
-            .add_plugins(message::MessagePlugin)
-            .observe(on_transport_added);
+            .configure_sets(PostUpdate, TransportSet::Flush);
     }
 }
 
@@ -46,23 +45,21 @@ pub enum TransportSet {
     Flush,
 }
 
-#[derive(Debug, Component)]
+#[derive(Debug, Component, TypeSize)]
 pub struct Transport {
     // config
     pub max_memory_usage: usize,
     pub send_bytes_per_sec: usize,
 
     // shared
-    flushed_packets: SeqBuf<FlushedPacket, 1024>,
-    acks: Acknowledge,
+    max_frag_len: usize,
     stats: MessageStats,
+    acks: Acknowledge,
+    // flushed_packets: SeqBuf<FlushedPacket, 1024>,
+    send: send::Sender,
 
     // recv
-    recv_lanes: Box<RecvLane>,
     rtt: RttEstimator,
-
-    // send
-    send_lanes: Box<SendLane>,
 }
 
 impl Transport {
@@ -71,14 +68,15 @@ impl Transport {
         recv_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
         send_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
     ) -> Self {
-        Self {
-            recv_lanes: Box::new(()),
-            send_lanes: Box::new(()),
-            max_memory_usage: 4 * 1024 * 1024,
-            send_bytes_per_sec: usize::MAX,
-            stats: MessageStats::default(),
-            rtt: RttEstimator::default(),
-        }
+        todo!()
+        // Self {
+        //     recv_lanes: Box::new(()),
+        //     send_lanes: Box::new(()),
+        //     max_memory_usage: 4 * 1024 * 1024,
+        //     send_bytes_per_sec: usize::MAX,
+        //     stats: MessageStats::default(),
+        //     rtt: RttEstimator::default(),
+        // }
     }
 
     #[must_use]
@@ -107,22 +105,3 @@ impl Transport {
         &self.rtt
     }
 }
-
-struct FlushedPacket {
-    flushed_at: Instant,
-    frags: Box<[FragmentPath]>,
-}
-
-struct RecvLane {}
-
-struct SendLane {
-    sent_msgs: AHashMap<MessageSeq, SentMessage>,
-    next_msg_seq: MessageSeq,
-    reliability: LaneReliability,
-}
-
-struct SentMessage {
-    frags: Box<[Option<SentFragment>]>,
-}
-
-struct SentFragment {}

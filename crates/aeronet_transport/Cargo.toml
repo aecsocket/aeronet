@@ -33,12 +33,14 @@ aeronet_io = { workspace = true }
 
 ahash = { workspace = true }
 arbitrary = { workspace = true }
-datasize = { workspace = true }
+bitvec = { workspace = true }
 derive_more = { workspace = true }
 octs = { workspace = true }
 ringbuf = { workspace = true }
+static_assertions = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+typesize = { workspace = true }
 web-time = { workspace = true }
 
 bevy_app = { workspace = true }

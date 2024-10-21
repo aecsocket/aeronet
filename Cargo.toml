@@ -47,10 +47,10 @@ anyhow = "1.0.89"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 assert_matches = "1.5.0"
 base64 = "0.22.1"
+bitvec = "1.0.1"
 bytes = "1.6.1"
 cfg-if = "1.0.0"
 clap = { version = "4.5.11", features = ["derive"] }
-datasize = "0.2.15"
 derive_more = "0.99.18"
 egui = "0.28.1"
 egui_plot = "0.28.1"
@@ -64,9 +64,11 @@ replace_with = "0.1.7"
 ringbuf = "0.4.1"
 serde = { version = "1.0.204", features = ["derive"] }
 size_format = "1.0.2"
+static_assertions = "1.1.0"
 sync_wrapper = "1.0.1"
 thiserror = "1.0.63"
 tracing = "0.1.40"
+typesize = "0.1.9"
 web-time = "1.1.0"
 
 # native
