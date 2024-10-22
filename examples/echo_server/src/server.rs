@@ -1,9 +1,11 @@
 use {
     aeronet::{
-        connection::{Connected, DisconnectReason, Disconnected, LocalAddr, Session},
-        message::MessageBuffers,
-        server::Opened,
-        transport::{AeronetTransportPlugin, Transport, lane::LaneKind},
+        io::{
+            bytes::Bytes,
+            connection::{Connected, DisconnectReason, Disconnected, LocalAddr, Session},
+            server::Opened,
+        },
+        transport::{lane::LaneKind, AeronetTransportPlugin, Transport},
     },
     aeronet_websocket::server::{ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},
@@ -119,8 +121,8 @@ fn echo_messages(
     // Query..
     mut clients: Query<
         (
-            Entity,              // ..the entity ID
-            &mut MessageBuffers, // ..and the message buffers for sending/receiving
+            Entity,         // ..the entity ID
+            &mut Transport, // ..and the transport layer access
         ),
         (
             With<Session>,   // ..for all sessions (this isn't strictly necessary)
@@ -130,23 +132,22 @@ fn echo_messages(
         ),
     >,
 ) {
-    for (client, mut msg_bufs) in &mut clients {
-        // We can access the receiving and sending halves of the
-        // `MessageBuffers` like this, and use them independently.
-        let MessageBuffers { recv, send } = &mut *msg_bufs;
+    for (client, mut transport) in &mut clients {
+        // Explicitly deref the `Mut<Transport>` to get a `&mut Transport`
+        // from which we can grab disjoint refs to `recv` and `send`.
+        let transport = &mut *transport;
 
-        for (lane_index, msg) in recv.drain(..) {
-            // `msg` is a `bytes::Bytes` - a cheaply cloneable ref-counted byte buffer
+        for (lane_index, msg) in transport.recv.drain() {
+            // `msg` is a `Vec<u8>` - we have full ownership of the bytes received.
             // We'll turn it into a UTF-8 string, and resend it along the same
             // lane that we received it on.
-            let msg = Vec::from(msg);
             let msg = String::from_utf8(msg).unwrap_or_else(|_| "(not UTF-8)".into());
             info!("{client} > {msg}");
 
             let reply = format!("You sent: {msg}");
             info!("{client} < {reply}");
             // Convert our `String` into a `Bytes` to send it out.
-            send.push(lane_index, reply.into());
+            transport.send.push(lane_index, Bytes::from(reply));
         }
     }
 }
