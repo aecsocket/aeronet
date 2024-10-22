@@ -154,8 +154,8 @@ fn recv_messages(
     for (mut transport, mut ui_state) in &mut sessions {
         for (_lane_index, msg) in transport.recv.drain() {
             // `msg` is a `Vec<u8>` - we have full ownership of the bytes received
-            // We'll turn it into a UTF-8 string
-            // We don't care about the lane index
+            // We'll turn it into a UTF-8 string.
+            // We don't care about the lane index.
             let msg = String::from_utf8(msg).unwrap_or_else(|_| "(not UTF-8)".into());
             ui_state.log.push(format!("> {msg}"));
         }
