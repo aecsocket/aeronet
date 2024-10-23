@@ -19,12 +19,13 @@ pub mod visualizer;
 
 pub use {aeronet_io as io, octs};
 use {
+    aeronet_io::{packet::PacketBuffers, IoSet},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
     bevy_reflect::prelude::*,
     derive_more::{Add, AddAssign, Sub, SubAssign},
-    lane::LaneKind,
-    packet::Acknowledge,
+    lane::{LaneIndex, LaneKind},
+    packet::{Acknowledge, MessageSeq},
     rtt::RttEstimator,
     typesize::{derive::TypeSize, TypeSize},
 };
@@ -34,8 +35,9 @@ pub struct AeronetTransportPlugin;
 
 impl Plugin for AeronetTransportPlugin {
     fn build(&self, app: &mut App) {
-        app.configure_sets(PreUpdate, TransportSet::Poll)
-            .configure_sets(PostUpdate, TransportSet::Flush);
+        app.configure_sets(PreUpdate, (IoSet::Poll, TransportSet::Poll).chain())
+            .configure_sets(PostUpdate, (TransportSet::Flush, IoSet::Flush).chain())
+            .add_systems(PostUpdate, flush.in_set(TransportSet::Flush));
     }
 }
 
@@ -104,4 +106,11 @@ pub struct MessageStats {
     pub msgs_recv: sized::Saturating<usize>,
     pub msgs_sent: sized::Saturating<usize>,
     pub packet_acks_recv: sized::Saturating<usize>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct FragmentPath {
+    lane_index: LaneIndex,
+    msg_seq: MessageSeq,
+    frag_index: usize,
 }

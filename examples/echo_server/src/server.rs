@@ -147,7 +147,8 @@ fn echo_messages(
             let reply = format!("You sent: {msg}");
             info!("{client} < {reply}");
             // Convert our `String` into a `Bytes` to send it out.
-            transport.send.push(lane_index, Bytes::from(reply));
+            // We ignore the resulting `MessageKey`, since we don't need it.
+            _ = transport.send.push(lane_index, Bytes::from(reply));
         }
     }
 }
