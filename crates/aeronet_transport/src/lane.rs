@@ -3,6 +3,7 @@ use {
     bevy_reflect::prelude::*,
     octs::{BufTooShortOr, Decode, Encode, EncodeLen, Read, VarInt, Write},
     static_assertions::const_assert,
+    std::num::TryFromIntError,
     typesize::derive::TypeSize,
 };
 
@@ -54,7 +55,21 @@ impl LaneIndex {
     #[must_use]
     pub const fn into_usize(self) -> usize {
         // `RawLaneIndex` is checked to be at least `usize` bits at compile time
-        self.into_raw() as usize
+        self.0 as usize
+    }
+}
+
+impl From<LaneIndex> for usize {
+    fn from(value: LaneIndex) -> Self {
+        value.into_usize()
+    }
+}
+
+impl TryFrom<usize> for LaneIndex {
+    type Error = TryFromIntError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        RawLaneIndex::try_from(value).map(Self)
     }
 }
 

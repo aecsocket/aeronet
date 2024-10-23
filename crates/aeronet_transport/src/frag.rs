@@ -51,9 +51,9 @@ pub fn split(
     let num_frags = iter.len();
     iter.enumerate().rev().map(move |(index, payload)| {
         // do this inside the iterator, since we now know
-        // that we have at least at least 1 item in this iterator
-        // and otherwise, `num_frags` would be 0, so `num_frags - 1`
-        // would underflow
+        // that we have at least at least 1 item in this iterator.
+        // if we did this outside the iterator, and `num_frags` was 0,
+        // `num_frags - 1` would underflow.
         let last_index = num_frags - 1;
 
         let position = if index == last_index {
@@ -82,7 +82,7 @@ pub struct FragmentReceiver {
 pub enum ReassembleError {
     #[error("already received fragment {index}")]
     AlreadyReceivedFrag { index: usize },
-    #[error("not enough memory - {needed} / {left} bytes")]
+    #[error("not enough memory - {left} / {needed} bytes")]
     NotEnoughMemory { needed: usize, left: usize },
     #[error("received last fragment {index}, but we already received last fragment {last}")]
     AlreadyReceivedLastFrag { index: usize, last: usize },

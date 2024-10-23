@@ -3,7 +3,7 @@
 use {
     crate::convert,
     aeronet_io::{
-        connection::{Connected, Disconnect, DisconnectReason, Disconnected},
+        connection::{Connected, DisconnectReason, Disconnected},
         server::{Opened, Server},
     },
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
@@ -201,21 +201,15 @@ fn poll(
     }
 }
 
-fn flush(
-    mut commands: Commands,
-    mut replicon_server: ResMut<RepliconServer>,
-    mut clients: Query<(Entity, &mut Transport)>,
-) {
+fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Transport>) {
     for (client_id, channel_id, msg) in replicon_server.drain_sent() {
-        let Some((client, mut transport)) =
+        let Some(mut transport) =
             convert::to_entity(client_id).and_then(|client| clients.get_mut(client).ok())
         else {
             continue;
         };
         let lane_index = convert::to_lane_index(channel_id);
 
-        if let Err(err) = transport.send.push(lane_index, msg) {
-            commands.trigger_targets(Disconnect::new(err.to_string()), client);
-        }
+        transport.send.push(lane_index, msg);
     }
 }

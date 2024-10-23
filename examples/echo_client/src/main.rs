@@ -153,7 +153,7 @@ fn recv_messages(
 ) {
     for (mut transport, mut ui_state) in &mut sessions {
         for (_lane_index, msg) in transport.recv.drain() {
-            // `msg` is a `Vec<u8>` - we have full ownership of the bytes received
+            // `msg` is a `Vec<u8>` - we have full ownership of the bytes received.
             // We'll turn it into a UTF-8 string.
             // We don't care about the lane index.
             let msg = String::from_utf8(msg).unwrap_or_else(|_| "(not UTF-8)".into());
@@ -179,12 +179,13 @@ fn ui(
             ui.text_edit_singleline(&mut ui_state.msg);
 
             if ui.button("Send").clicked() {
-                // Send the message out
+                // Send the message out.
                 let msg = mem::take(&mut ui_state.msg);
                 ui_state.log.push(format!("< {msg}"));
 
                 let msg = Bytes::from(msg);
-                transport.send.push(SEND_LANE, msg);
+                // We ignore the resulting `MessageKey`, since we don't need it.
+                _ = transport.send.push(SEND_LANE, msg);
             }
 
             if ui.button("Disconnect").clicked() {

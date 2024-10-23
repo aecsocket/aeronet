@@ -2,7 +2,7 @@
 
 use {
     crate::convert,
-    aeronet_io::connection::{Connected, Disconnect, Session},
+    aeronet_io::connection::{Connected, Session},
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -174,16 +174,13 @@ fn poll(
 }
 
 fn flush(
-    mut commands: Commands,
     mut replicon_client: ResMut<RepliconClient>,
-    mut clients: Query<(Entity, &mut Transport), ConnectedClient>,
+    mut clients: Query<&mut Transport, ConnectedClient>,
 ) {
     for (channel_id, msg) in replicon_client.drain_sent() {
         let lane_index = convert::to_lane_index(channel_id);
-        for (client, mut transport) in &mut clients {
-            if let Err(err) = transport.send.push(lane_index, msg.clone()) {
-                commands.trigger_targets(Disconnect::new(err.to_string()), client);
-            }
+        for mut transport in &mut clients {
+            transport.send.push(lane_index, msg.clone());
         }
     }
 }

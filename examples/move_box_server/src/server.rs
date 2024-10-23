@@ -1,5 +1,5 @@
 use {
-    aeronet::{
+    aeronet::io::{
         connection::{Connected, DisconnectReason, Disconnected, LocalAddr},
         server::Opened,
     },

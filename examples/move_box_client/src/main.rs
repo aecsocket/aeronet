@@ -2,7 +2,7 @@
 
 use {
     aeronet::{
-        connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
+        io::connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
         transport::visualizer::{SessionVisualizer, SessionVisualizerPlugin},
     },
     aeronet_replicon::client::{AeronetRepliconClient, AeronetRepliconClientPlugin},
@@ -12,7 +12,7 @@ use {
         client::{WebTransportClient, WebTransportClientPlugin},
     },
     bevy::{ecs::query::QuerySingleError, prelude::*},
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     bevy_replicon::prelude::*,
     move_box::{GameState, MoveBoxPlugin, PlayerColor, PlayerInput, PlayerPosition},
 };
