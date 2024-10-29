@@ -52,53 +52,10 @@ pub struct FragmentPosition(FragmentIndex);
 #[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut)]
 pub struct MessagePayload(pub Bytes);
 
+#[derive(Debug, Clone)]
 pub struct MessageFragment {
     pub seq: MessageSeq,
     pub lane: LaneIndex,
-    pub pos: FragmentPosition,
+    pub position: FragmentPosition,
     pub payload: MessagePayload,
 }
-
-/*
-packet examples:
-
-```ignore
-PacketHeader {
-    seq: 1234,
-    acks: Acknowledge {
-        last_recv: 1200,
-        bits: 0b1111..1011,
-    },
-}
-
-MessageFragment {
-    seq: 50,
-    lane: 0,
-    pos: FragmentPosition {
-        index: 0,
-        is_last: true,
-    },
-    payload: b"hello world",
-}
-
-MessageFragment {
-    seq: 51,
-    lane: 0,
-    pos: FragmentPosition {
-        index: 0,
-        is_last: false,
-    },
-    payload: b"goodbye ",
-}
-
-MessageFragment {
-    seq: 51,
-    lane: 0,
-    pos: FragmentPosition {
-        index: 1,
-        is_last: true,
-    },
-    payload: b"world",
-}
-```
-*/

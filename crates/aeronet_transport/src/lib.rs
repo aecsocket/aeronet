@@ -4,6 +4,7 @@
 
 pub mod frag;
 pub mod lane;
+pub mod limit;
 pub mod packet;
 pub mod recv;
 pub mod rtt;
@@ -19,7 +20,7 @@ pub mod visualizer;
 
 pub use {aeronet_io as io, octs};
 use {
-    aeronet_io::{packet::PacketBuffers, IoSet},
+    aeronet_io::IoSet,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
     bevy_reflect::prelude::*,
@@ -27,6 +28,7 @@ use {
     lane::{LaneIndex, LaneKind},
     packet::{Acknowledge, MessageSeq},
     rtt::RttEstimator,
+    seq_buf::SeqBuf,
     typesize::{derive::TypeSize, TypeSize},
 };
 
@@ -37,7 +39,7 @@ impl Plugin for AeronetTransportPlugin {
     fn build(&self, app: &mut App) {
         app.configure_sets(PreUpdate, (IoSet::Poll, TransportSet::Poll).chain())
             .configure_sets(PostUpdate, (TransportSet::Flush, IoSet::Flush).chain())
-            .add_systems(PostUpdate, flush.in_set(TransportSet::Flush));
+            .add_systems(PostUpdate, send::flush.in_set(TransportSet::Flush));
     }
 }
 
@@ -54,7 +56,7 @@ pub struct Transport {
     pub send_bytes_per_sec: usize,
 
     // shared
-    // flushed_packets: SeqBuf<FlushedPacket, 1024>,
+    flushed_packets: SeqBuf<FlushedPacket, 1024>,
     stats: MessageStats,
     acks: Acknowledge,
 

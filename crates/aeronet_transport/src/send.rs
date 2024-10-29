@@ -1,17 +1,19 @@
-use std::collections::hash_map::Entry;
+use std::{collections::hash_map::Entry, iter};
 
 use aeronet_io::packet::PacketBuffers;
 use ahash::HashMap;
 use arbitrary::Arbitrary;
 use bevy_ecs::prelude::*;
-use octs::Bytes;
+use octs::{Bytes, EncodeLen, FixedEncodeLen, Write};
+use tracing::{trace, trace_span};
 use typesize::derive::TypeSize;
 use web_time::Instant;
 
 use crate::{
     frag,
     lane::{LaneIndex, LaneReliability},
-    packet::{FragmentPosition, MessageSeq},
+    limit::Limit,
+    packet::{FragmentPosition, MessageFragment, MessagePayload, MessageSeq, PacketHeader},
     rtt::RttEstimator,
     sized, FragmentPath, Transport,
 };
@@ -90,7 +92,7 @@ impl TransportSend {
 }
 
 impl Transport {
-    fn flush(&mut self, now: Instant) {
+    fn flush(&mut self, now: Instant) -> impl Iterator<Item = Vec<u8>> + '_ {
         // collect the paths of the frags to send, along with how old they are
         let mut frag_paths = self
             .send
@@ -107,6 +109,83 @@ impl Transport {
             .into_iter()
             .map(|(path, _)| Some(path))
             .collect::<Vec<_>>();
+
+        let mut sent_packet_yet = false;
+        iter::from_fn(move || {
+            // this iteration, we want to build up one full packet
+
+            // make a buffer for the packet
+            // note: we may want to preallocate some memory for this,
+            // and have it be user-configurable, but I don't want to overcomplicate it
+            // also, we don't preallocate `mtu` bytes, because that might be a big length
+            // e.g. Steamworks already fragments messages, so we don't fragment messages
+            // ourselves, leading to very large `mtu`s (~512KiB)
+            let mut packet = Vec::<u8>::new();
+
+            // we can't put more than either `mtu` or `bytes_left`
+            // bytes into this packet, so we track this as well
+            let mut bytes_left = (&mut self.bytes_left).min_of(self.mtu);
+            let packet_seq = self.next_packet_seq;
+            bytes_left.consume(PacketHeader::ENCODE_LEN).ok()?;
+            packet
+                .write(PacketHeader {
+                    seq: packet_seq,
+                    acks: self.acks,
+                })
+                .expect("should grow the buffer when writing over capacity");
+
+            let span = trace_span!("flush", packet = packet_seq.0 .0);
+            let _span = span.enter();
+
+            // collect the paths of the frags we want to put into this packet
+            // so that we can track which ones have been acked later
+            let mut packet_frags = Vec::new();
+            for path_opt in &mut frag_paths {
+                let Some(path) = path_opt else {
+                    continue;
+                };
+                let path = *path;
+
+                if write_frag_at_path(
+                    now,
+                    &self.rtt,
+                    &mut self.send.lanes,
+                    &mut bytes_left,
+                    &mut packet,
+                    path,
+                )
+                .is_ok()
+                {
+                    // if we successfully wrote this frag out,
+                    // remove it from the candidate frag paths
+                    // and track that this frag has been sent out in this packet
+                    *path_opt = None;
+                    packet_frags.push(path);
+                }
+            }
+
+            let send_empty = !sent_packet_yet && now >= self.next_ack_at;
+            let should_send = !packet_frags.is_empty() || send_empty;
+            if !should_send {
+                return None;
+            }
+
+            trace!(num_frags = packet_frags.len(), "Flushed packet");
+            self.flushed_packets.insert(
+                packet_seq.0 .0,
+                FlushedPacket {
+                    flushed_at: now,
+                    frags: packet_frags.into_boxed_slice(),
+                },
+            );
+
+            self.packets_sent += 1;
+            self.bytes_sent += packet.len();
+            self.next_packet_seq += PacketSeq::ONE;
+            self.next_ack_at = now + MAX_ACK_DELAY;
+            sent_packet_yet = true;
+            Some(packet)
+        })
     }
 }
 
@@ -144,7 +223,7 @@ fn frag_paths_in_lane(
     })
 }
 
-fn write_frag_path(
+fn write_frag_at_path(
     now: Instant,
     rtt: &RttEstimator,
     lanes: &mut [Lane],
@@ -152,8 +231,7 @@ fn write_frag_path(
     packet: &mut Vec<u8>,
     path: FragmentPath,
 ) -> Result<(), ()> {
-    let lane_index =
-        usize::try_from(path.lane_index.into_raw()).expect("lane index should fit into a usize");
+    let lane_index = path.lane_index.into_usize();
     let lane = lanes
         .get_mut(lane_index)
         .expect("frag path should point to a valid lane");
@@ -163,7 +241,7 @@ fn write_frag_path(
         .get_mut(&path.msg_seq)
         .expect("frag path should point to a valid msg in this lane");
 
-    let frag_index = usize::from(path.frag_index);
+    let frag_index = path.frag_index;
     let frag_slot = msg
         .frags
         .get_mut(frag_index)
@@ -172,31 +250,29 @@ fn write_frag_path(
         .as_mut()
         .expect("frag path should point to a frag slot which is still occupied");
 
-    let frag = Fragment {
-        header: FragmentHeader {
-            lane_index: path.lane_index,
-            msg_seq: path.msg_seq,
-            marker: sent_frag.marker,
-        },
-        payload: sent_frag.payload.clone(),
+    let frag = MessageFragment {
+        seq: path.msg_seq,
+        lane: path.lane_index,
+        position: sent_frag.position,
+        payload: MessagePayload(sent_frag.payload.clone().0),
     };
     bytes_left.consume(frag.encode_len()).map_err(drop)?;
     packet
         .write(frag)
-        .expect("BytesMut should grow the buffer when writing over capacity");
+        .expect("should grow the buffer when writing over capacity");
 
     // what does the lane do with this after sending?
-    match &lane.kind {
-        SendLaneKind::Unreliable => {
+    match &lane.reliability {
+        LaneReliability::Unreliable => {
             // drop the frag
             // if we've dropped all frags of this message, then
             // on the next `flush`, we'll drop the message
             *frag_slot = None;
         }
-        SendLaneKind::Reliable => {
+        LaneReliability::Reliable => {
             // don't drop the frag, just attempt to resend it later
             // it'll be dropped when the peer acks it
-            sent_frag.next_flush_at = now + rtt.pto();
+            sent_frag.next_flush_at = sized::Instant(now + rtt.pto());
         }
     }
 
@@ -204,5 +280,10 @@ fn write_frag_path(
 }
 
 pub(crate) fn flush(mut sessions: Query<(&mut Transport, &mut PacketBuffers)>) {
-    for (mut transport, mut packet_bufs) in &mut sessions {}
+    let now = Instant::now();
+    for (mut transport, mut packet_bufs) in &mut sessions {
+        for packet in transport.flush(now) {
+            packet_bufs.send.push(Bytes::from(packet));
+        }
+    }
 }
