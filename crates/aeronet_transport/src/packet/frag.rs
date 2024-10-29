@@ -16,7 +16,7 @@ impl EncodeLen for MessageFragment {
     fn encode_len(&self) -> usize {
         MessageSeq::ENCODE_LEN
             + self.lane.encode_len()
-            + self.pos.encode_len()
+            + self.position.encode_len()
             + self.payload.encode_len()
     }
 }
@@ -27,7 +27,7 @@ impl Encode for MessageFragment {
     fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
         dst.write(self.seq)?;
         dst.write(self.lane)?;
-        dst.write(self.pos)?;
+        dst.write(self.position)?;
         dst.write(&self.payload)?;
         Ok(())
     }
@@ -40,7 +40,7 @@ impl Decode for MessageFragment {
         Ok(Self {
             seq: src.read()?,
             lane: src.read()?,
-            pos: src.read()?,
+            position: src.read()?,
             payload: src.read()?,
         })
     }
