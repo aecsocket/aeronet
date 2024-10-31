@@ -83,16 +83,16 @@ pub struct Seq(pub u16);
 ///
 /// This is used in [`PacketHeader`] for tracking packet-level acknowledgements
 /// (see [`Acknowledge`]).
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)] // force `#[derive]` on multiple lines
-#[derive(Deref, DerefMut, Add, AddAssign, Sub, SubAssign)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Arbitrary, TypeSize)] // force `#[derive]` on multiple lines
+#[derive(Deref, DerefMut, Add, AddAssign, Sub, SubAssign, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PacketSeq(pub Seq);
 
 /// Sequence number of a message in transit.
 ///
 /// This is used for fragmentation, reassembly, reliability, and ordering.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)] // force `#[derive]` on multiple lines
-#[derive(Deref, DerefMut, Add, AddAssign, Sub, SubAssign)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Arbitrary, TypeSize)] // force `#[derive]` on multiple lines
+#[derive(Deref, DerefMut, Add, AddAssign, Sub, SubAssign, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MessageSeq(pub Seq);
 

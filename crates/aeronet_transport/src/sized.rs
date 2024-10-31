@@ -1,7 +1,6 @@
 //! Provides [`TypeSize`]-implementing wrappers for types.
 //!
 //! This will be removed when [`typesize`] issues are resolved.
-#![allow(missing_docs)]
 
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
@@ -13,7 +12,9 @@ use bitvec::{
 };
 use typesize::TypeSize;
 
-// TODO: <https://github.com/GnomedDev/typesize/pull/2>
+/// [`TypeSize`]d wrapper for [`bitvec::vec::BitVec`].
+///
+/// See <https://github.com/GnomedDev/typesize/pull/2>.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deref, DerefMut)]
 pub struct BitVec<T: BitStore = usize, O: BitOrder = Lsb0>(pub bitvec::vec::BitVec<T, O>);
 
@@ -23,13 +24,15 @@ impl<T: BitStore, O: BitOrder> TypeSize for BitVec<T, O> {
     }
 }
 
-// TODO: <https://github.com/GnomedDev/typesize/pull/3>
+/// [`TypeSize`]d wrapper for [`core::num::Saturating`].
+///
+/// See <https://github.com/GnomedDev/typesize/pull/3>.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deref, DerefMut, Reflect)]
 pub struct Saturating<T>(pub core::num::Saturating<T>);
 
 impl<T> Saturating<T> {
-    // TODO: use this instead of `.0` directly so we can catch compile errors
-    // when we change to using the real `nu
+    // use this instead of `.0` directly so we can catch compile errors
+    // when we change to using the real `Saturating`
     #[must_use]
     pub fn get(self) -> core::num::Saturating<T> {
         self.0
@@ -77,7 +80,9 @@ macro_rules! impl_op {
 impl_op!(Add, add, AddAssign, add_assign, +);
 impl_op!(Sub, sub, SubAssign, sub_assign, -);
 
-// TODO: <https://github.com/GnomedDev/typesize/issues/4>
+/// [`TypeSize`]d version of [`octs::Bytes`].
+///
+/// See <https://github.com/GnomedDev/typesize/issues/4>.
 #[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut)]
 pub struct Bytes(pub octs::Bytes);
 
@@ -87,7 +92,9 @@ impl TypeSize for Bytes {
     }
 }
 
-// TODO: https://github.com/GnomedDev/typesize/pull/5
+/// [`TypeSize`]d version of [`web_time::Instant`].
+///
+/// See <https://github.com/GnomedDev/typesize/pull/5>.
 #[derive(Debug, Clone, Copy, Deref, DerefMut)]
 pub struct Instant(pub web_time::Instant);
 

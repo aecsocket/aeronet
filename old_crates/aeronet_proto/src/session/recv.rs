@@ -97,7 +97,7 @@ impl Session {
             .map_err(RecvError::DecodeHeader)?;
         self.acks.ack(header.seq);
 
-        let span = trace_span!("recv", packet = header.seq.0.0);
+        let span = trace_span!("recv", packet = header.seq.0 .0);
         let _span = span.enter();
 
         trace!(len = packet.len(), "Got packet");
