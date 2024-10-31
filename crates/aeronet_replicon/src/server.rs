@@ -5,6 +5,7 @@ use {
     aeronet_io::{
         connection::{Connected, DisconnectReason, Disconnected},
         server::{Opened, Server},
+        web_time::Instant,
     },
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
@@ -202,6 +203,7 @@ fn poll(
 }
 
 fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Transport>) {
+    let now = Instant::now();
     for (client_id, channel_id, msg) in replicon_server.drain_sent() {
         let Some(mut transport) =
             convert::to_entity(client_id).and_then(|client| clients.get_mut(client).ok())
@@ -210,6 +212,6 @@ fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Tr
         };
         let lane_index = convert::to_lane_index(channel_id);
 
-        transport.send.push(lane_index, msg);
+        transport.send.push(now, lane_index, msg);
     }
 }

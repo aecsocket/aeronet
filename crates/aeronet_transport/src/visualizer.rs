@@ -1,3 +1,5 @@
+//! See [`SessionVisualizerPlugin`].
+
 use {
     crate::sampling::{
         SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
@@ -16,6 +18,15 @@ use {
     std::{borrow::Borrow, hash::Hash, ops::RangeInclusive, time::Duration},
 };
 
+/// Uses [`egui`] to draw [`egui_plot`]s of [`Session`] statistics.
+///
+/// In [`DrawSessionVisualizer`], any [`Session`] with a [`SessionVisualizer`]
+/// and [`SessionStats`] will display an [`egui::Window`] with its session
+/// statistics.
+///
+/// Without this plugin, you can still use [`SessionVisualizer`] manually.
+///
+/// This automatically adds [`SessionSamplingPlugin`].
 #[derive(Debug)]
 pub struct SessionVisualizerPlugin;
 
@@ -30,12 +41,18 @@ impl Plugin for SessionVisualizerPlugin {
     }
 }
 
+/// System set in which [`SessionVisualizer`]s are drawn via [`egui`].
+///
+/// This runs after [`SampleSessionStats`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub struct DrawSessionVisualizer;
 
+/// State for drawing [`egui_plot`]s of [`SessionStats`].
 #[derive(Debug, Clone, Component)]
 pub struct SessionVisualizer {
+    /// Color which represents incoming data.
     pub rx_color: egui::Color32,
+    /// Color which represents outgoing data.
     pub tx_color: egui::Color32,
 }
 
@@ -61,6 +78,7 @@ pub struct RxTxSample {
 }
 
 impl SessionVisualizer {
+    /// Draws the plot for RTT.
     pub fn show_rtt(
         &self,
         ui: &mut egui::Ui,
@@ -99,6 +117,7 @@ impl SessionVisualizer {
             })
     }
 
+    /// Draws the plot for amount of incoming and outgoing data per second.
     pub fn show_rx_tx(
         &self,
         ui: &mut egui::Ui,
@@ -114,8 +133,11 @@ impl SessionVisualizer {
                 let x = graph_x(index, sample_rate);
                 let sample = sample.borrow();
 
-                let rx = sample.bytes_recv_delta as f64 * sample_rate;
-                let tx = sample.bytes_sent_delta as f64 * sample_rate;
+                #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
+                let (rx, tx) = (
+                    sample.bytes_recv_delta as f64 * sample_rate,
+                    sample.bytes_sent_delta as f64 * sample_rate,
+                );
                 ([x, rx], [x, tx])
             })
             .multiunzip::<(Vec<_>, Vec<_>)>();
@@ -130,6 +152,7 @@ impl SessionVisualizer {
             })
     }
 
+    /// Draws the plot for percentage of messages lost in transit.
     pub fn show_loss(
         &self,
         ui: &mut egui::Ui,
@@ -158,6 +181,7 @@ impl SessionVisualizer {
             })
     }
 
+    /// Draws the entire UI.
     pub fn show(
         &self,
         ui: &mut egui::Ui,
@@ -193,7 +217,9 @@ impl SessionVisualizer {
 }
 
 fn graph_x(index: usize, sample_rate: f64) -> f64 {
-    -(index as f64 / sample_rate)
+    #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
+    let x = -(index as f64 / sample_rate);
+    x
 }
 
 fn plot(history_sec: f64, id_salt: impl Hash) -> egui_plot::Plot<'static> {
@@ -229,6 +255,11 @@ fn fmt_bytes(n: usize) -> String {
 }
 
 fn fmt_bytes_y_axis(mark: egui_plot::GridMark, _range: &RangeInclusive<f64>) -> String {
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "input values should never be negative"
+    )]
+    #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
     fmt_bytes(mark.value as usize)
 }
 

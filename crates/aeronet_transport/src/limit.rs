@@ -289,9 +289,12 @@ impl TokenBucket {
     /// # Panics
     ///
     /// Panics if `f` is less than `0.0`.
-    pub fn refill_portion(&mut self, f: f32) {
+    pub fn refill_portion(&mut self, f: f64) {
         assert!(f >= 0.0, "f = {f}");
-        let n = ((self.cap as f32) * f) as usize;
+        #[expect(clippy::cast_sign_loss, reason = "f >= 0.0")]
+        #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
+        #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
+        let n = ((self.cap as f64) * f) as usize;
         self.refill_exact(n);
     }
 }

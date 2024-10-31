@@ -1,3 +1,8 @@
+//! Provides [`TypeSize`]-implementing wrappers for types.
+//!
+//! This will be removed when [`typesize`] issues are resolved.
+#![allow(missing_docs)]
+
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use bevy_derive::{Deref, DerefMut};

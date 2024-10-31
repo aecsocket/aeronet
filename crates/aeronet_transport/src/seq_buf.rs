@@ -70,6 +70,7 @@ impl<T, const N: usize> SeqBuf<T, N> {
 
     #[inline]
     fn index(key: u16) -> u16 {
+        #[expect(clippy::cast_possible_truncation, reason = "N < u16::MAX")]
         let index = key % N as u16;
         debug_assert!(index != EMPTY);
         index

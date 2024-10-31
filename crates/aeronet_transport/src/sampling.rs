@@ -1,3 +1,5 @@
+//! See [`SessionSamplingPlugin`].
+
 use {
     crate::{MessageStats, Transport},
     aeronet_io::packet::{PacketRtt, PacketStats},
@@ -12,6 +14,14 @@ use {
     std::time::Duration,
 };
 
+/// Periodically samples the state of [`Session`]s to gather statistics on the
+/// connection and store them in [`SessionStats`].
+///
+/// Insert the [`SessionStatsSampling`] resource to override the sampling.
+///
+/// With this plugin, when [`Transport`] is added to a [`Session`],
+/// [`SessionStats`] is automatically added with the capacity defined by
+/// [`SessionStatsSampling`].
 #[derive(Debug, Clone, Default)]
 pub struct SessionSamplingPlugin;
 
@@ -29,20 +39,36 @@ impl Plugin for SessionSamplingPlugin {
                     .chain()
                     .in_set(SampleSessionStats),
             )
-            .observe(on_transport_added);
+            .observe(add_session_stats);
     }
 }
 
+/// Configuration for sampling session statistics.
 #[derive(Debug, Clone, Copy, Resource)]
 pub struct SessionStatsSampling {
+    /// Interval to gather samples at.
     pub interval: Duration,
+    /// Default maximum number of samples to store for [`Session`]s.
     pub history_cap: usize,
 }
 
 impl SessionStatsSampling {
+    /// Computes and creates a new sampling configuration.
+    ///
+    /// - `rate`: how many times to sample per second
+    /// - `history_sec`: how many seconds of sample history to keep
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rate` or `history_sec` are zero or negative.
     #[must_use]
     pub fn new(rate: f64, history_sec: f64) -> Self {
+        assert!(rate > 0.0);
+        assert!(history_sec > 0.0);
+
         let interval = Duration::from_secs_f64(1.0 / rate);
+        #[expect(clippy::cast_sign_loss, reason = "`rate`, `history_sec` > 0.0")]
+        #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
         let history_cap = (rate * history_sec) as usize;
         Self {
             interval,
@@ -50,14 +76,18 @@ impl SessionStatsSampling {
         }
     }
 
+    /// Gets the sample rate, in samples per second.
     #[must_use]
     pub fn rate(&self) -> f64 {
         1.0 / self.interval.as_secs_f64()
     }
 
+    /// Gets the number of seconds of history that are stored.
     #[must_use]
     pub fn history_sec(&self) -> f64 {
-        self.history_cap as f64 * self.interval.as_secs_f64()
+        #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
+        let history = self.history_cap as f64 * self.interval.as_secs_f64();
+        history
     }
 }
 
@@ -67,9 +97,14 @@ impl Default for SessionStatsSampling {
     }
 }
 
+/// System set in which [`Session`] statistics are sampled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub struct SampleSessionStats;
 
+/// Stores [`SessionStatsSample`]s for [`Session`] statistics.
+///
+/// This uses a [`HeapRb`] internally to overwrite old samples, and avoid
+/// unbounded growth.
 #[derive(Component, Deref, DerefMut)]
 pub struct SessionStats(pub HeapRb<SessionStatsSample>);
 
@@ -80,19 +115,65 @@ impl SessionStats {
     }
 }
 
+/// Single sample of collected [`Session`] statistics.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SessionStatsSample {
+    /// [`PacketRtt`], if it was present on the [`Session`].
     pub packet_rtt: Option<Duration>,
+    /// [`Transport::rtt`]'s [`RttEstimator::get`].
+    ///
+    /// [`RttEstimator::get`]: crate::rtt::RttEstimator::get
     pub message_rtt: Duration,
+    /// [`Transport::rtt`]'s [`RttEstimator::conservative`].
+    ///
+    /// [`RttEstimator::conservative`]: crate::rtt::RttEstimator::conservative
+    pub message_crtt: Duration,
+    /// [`PacketStats`] at the time of sampling.
     pub packets_total: PacketStats,
+    /// [`PacketStats`] at the time of sampling, minus the previous sample's
+    /// [`SessionStatsSample::packets_total`].
     pub packets_delta: PacketStats,
+    /// [`Transport::stats`] at the time of sampling.
     pub msgs_total: MessageStats,
+    /// [`Transport::stats`] at the time of sampling, minus the previous
+    /// sample's [`SessionStatsSample::msgs_total`].
     pub msgs_delta: MessageStats,
+    /// What proportion of packets sent recently are believed to have been lost
+    /// in transit.
+    ///
+    /// If the receiver has not acknowledged a packet within a variable time
+    /// threshold (which is a function of the RTT), then they have probably lost
+    /// that packet.
+    ///
+    /// # Algorithm
+    ///
+    /// We want to figure out how many packets have been lost during this
+    /// sample. To do this, we find out how many packets, that we sent out
+    /// earlier, should have been acknowledged by our peer by now; and how many
+    /// of those have actually been acknowledged. "By now" is defined as a
+    /// function of the current RTT estimate. Currently it is just [the PTO],
+    /// however the implementation may change this in the future.
+    ///
+    /// Let's assume that we are calculating sample 100, and our RTT is such
+    /// that e expect to have received acknowledgements for all packets sent up
+    /// to sample 90 by now.
+    /// Up to sample 90, we received 950 acks and sent 1000 messages total.
+    /// Therefore, at sample 100, we expect to have 1000 acks.
+    ///
+    /// - If by now we have received 1000 acknowledgements, then we have 0%
+    ///   packet loss, and our RTT estimate is very accurate.
+    /// - If we have more than 1000 acknowledgements, our packet loss is still
+    ///   0%, but our RTT estimate is too high, and the peer actually
+    ///   acknowledges packets faster than we think.
+    /// - If we have between 950 and 1000 acknowledgements, we have some
+    ///   percentage of packet loss i.e. 955 acks means 10% packet loss.
+    /// - If we still only have 950 acks, we have 100% packet loss.
+    ///
+    /// [the PTO]: crate::rtt::RttEstimator::pto
     pub loss: f64,
 }
 
-// TODO: required components
-fn on_transport_added(
+fn add_session_stats(
     trigger: Trigger<OnAdd, Transport>,
     mut commands: Commands,
     sampling: Res<SessionStatsSampling>,
@@ -147,28 +228,16 @@ fn update_stats(
 
         let last_sample = stats.iter().next_back().copied().unwrap_or_default();
 
-        // we are computing sample 100
-        // we expect to have received all acks up to 90
-        // up to sample 90, we had 4950 acks and 5000 sent
-        // so at sample 100, we expect to have 5000 acks
-        //
-        // - 5000 - 4950 = 50 = extra acks expected
-        //
-        // - if we now have 5000 acks, we have 0% packet loss
-        // - if we now have >5000 acks, we have 0% packet loss and an RTT overestimate
-        // - if we now have 4950 acks, we have 100% packet loss
-        // - if we now have <4950 acks, that's impossible
-        // - if we now have 4975 acks, we have 50% packet loss
-        //   - 4975 - 4950 = 25 = extra acks received
-        // - if we now have 4990 acks, we have 20% packet loss
-        //   - 4990 - 4950 = 40
-        //   - 40 / 50 = 0.8 = 80% received
-        //   - 1.0 - 0.8 = 0.2 = 20% not received (lost)
-
         let loss = {
+            // see `SessionStatsSample::loss`
+
             let lost_thresh = msg_rtt.pto();
-            let lost_thresh_index = (lost_thresh.as_secs_f64() * sampling.rate()).ceil();
-            let lost_thresh_index = lost_thresh_index as usize;
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "all floats involved should be positive"
+            )]
+            #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
+            let lost_thresh_index = (lost_thresh.as_secs_f64() * sampling.rate()).ceil() as usize;
             let lost_thresh_sample = stats
                 .iter()
                 .rev()
@@ -186,6 +255,7 @@ fn update_stats(
                 let extra_acks_received = (msg_stats.packet_acks_recv.get()
                     - lost_thresh_sample.msgs_total.packet_acks_recv.get())
                 .0;
+                #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
                 let acked_frac = extra_acks_received as f64 / extra_acks_expected as f64;
                 1.0 - acked_frac.clamp(0.0, 1.0)
             }
@@ -194,6 +264,7 @@ fn update_stats(
         let sample = SessionStatsSample {
             packet_rtt: packet_rtt.map(|rtt| **rtt),
             message_rtt: msg_rtt.get(),
+            message_crtt: msg_rtt.conservative(),
             packets_total: *packet_stats,
             packets_delta: *packet_stats - last_sample.packets_total,
             msgs_total: msg_stats,

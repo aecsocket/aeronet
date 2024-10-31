@@ -5,10 +5,14 @@ use crate::{frag::FragmentReceiver, lane::LaneIndex, packet::MessageSeq};
 
 #[derive(Debug, TypeSize)]
 pub struct TransportRecv {
-    msgs: Vec<(LaneIndex, Vec<u8>)>,
+    pub(crate) msgs: Vec<(LaneIndex, Vec<u8>)>,
 }
 
 impl TransportRecv {
+    pub(crate) const fn new() -> Self {
+        Self { msgs: Vec::new() }
+    }
+
     pub fn drain(&mut self) -> impl Iterator<Item = (LaneIndex, Vec<u8>)> + '_ {
         self.msgs.drain(..)
     }
