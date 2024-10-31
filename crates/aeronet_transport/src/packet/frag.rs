@@ -4,7 +4,6 @@ use {
         BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLen, Read, VarInt, VarIntTooLarge,
         Write,
     },
-    static_assertions::const_assert,
     std::fmt,
 };
 
@@ -50,14 +49,16 @@ impl Decode for MessageFragment {
 // `FragmentPosition`
 //
 
-const_assert!(size_of::<usize>() >= size_of::<FragmentIndex>());
-
 impl FragmentPosition {
+    /// Creates a position for a fragment which is *not* the last one in the
+    /// message.
     #[must_use]
     pub fn non_last(index: FragmentIndex) -> Option<Self> {
         index.checked_mul(2).map(Self)
     }
 
+    /// Creates a position for a fragment which *is* the last one in the
+    /// message.
     #[must_use]
     pub fn last(index: FragmentIndex) -> Option<Self> {
         index
@@ -66,6 +67,10 @@ impl FragmentPosition {
             .map(Self)
     }
 
+    /// Creates a position which may be last or not.
+    ///
+    /// Prefer [`FragmentPosition::non_last`] or [`FragmentPosition::last`] if
+    /// you know statically if the position is last or not.
     #[must_use]
     pub fn new(index: FragmentIndex, last: bool) -> Option<Self> {
         if last {
@@ -75,16 +80,13 @@ impl FragmentPosition {
         }
     }
 
+    /// Gets the fragment index of this position.
     #[must_use]
     pub const fn index(self) -> FragmentIndex {
         self.0 / 2
     }
 
-    #[must_use]
-    pub const fn index_usize(self) -> usize {
-        self.index() as usize // checked via `const_assert`
-    }
-
+    /// Gets if this position represents the last fragment in a message.
     #[must_use]
     pub const fn is_last(self) -> bool {
         self.0 % 2 == 1
@@ -107,7 +109,7 @@ impl EncodeLen for FragmentPosition {
 }
 
 impl Encode for FragmentPosition {
-    type Error = <VarInt<u64> as Encode>::Error;
+    type Error = <VarInt<FragmentIndex> as Encode>::Error;
 
     fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
         dst.write(VarInt(self.0))
@@ -115,9 +117,9 @@ impl Encode for FragmentPosition {
 }
 
 impl Decode for FragmentPosition {
-    type Error = <VarInt<u64> as Decode>::Error;
+    type Error = <VarInt<FragmentIndex> as Decode>::Error;
 
     fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
-        Ok(Self(src.read::<VarInt<u64>>()?.0))
+        Ok(Self(src.read::<VarInt<FragmentIndex>>()?.0))
     }
 }

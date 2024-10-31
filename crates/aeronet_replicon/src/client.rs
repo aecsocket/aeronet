@@ -2,7 +2,10 @@
 
 use {
     crate::convert,
-    aeronet_io::connection::{Connected, Session},
+    aeronet_io::{
+        connection::{Connected, Session},
+        web_time,
+    },
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -108,7 +111,6 @@ pub enum ClientTransportSet {
 #[reflect(Component)]
 pub struct AeronetRepliconClient;
 
-// TODO: required components
 fn on_client_added(
     trigger: Trigger<OnAdd, AeronetRepliconClient>,
     mut commands: Commands,
@@ -177,10 +179,11 @@ fn flush(
     mut replicon_client: ResMut<RepliconClient>,
     mut clients: Query<&mut Transport, ConnectedClient>,
 ) {
+    let now = Instant::now();
     for (channel_id, msg) in replicon_client.drain_sent() {
         let lane_index = convert::to_lane_index(channel_id);
         for mut transport in &mut clients {
-            transport.send.push(lane_index, msg.clone());
+            transport.send.push(now, lane_index, msg.clone());
         }
     }
 }

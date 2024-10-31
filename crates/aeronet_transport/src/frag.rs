@@ -61,7 +61,7 @@ pub fn split(
                 .ok()
                 .and_then(FragmentPosition::last)
         } else {
-            u64::try_from(index)
+            FragmentIndex::try_from(index)
                 .ok()
                 .and_then(FragmentPosition::non_last)
         }
@@ -73,25 +73,58 @@ pub fn split(
     })
 }
 
+/// Receives fragments created by [`split`] and reassembles them into full
+/// messages.
 #[derive(Default, Clone, TypeSize)]
 pub struct FragmentReceiver {
     msgs: HashMap<MessageSeq, MessageBuf>,
 }
 
+/// Received an invalid fragment when reassembling fragments into a message.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ReassembleError {
+    /// Already received a fragment with this index.
     #[error("already received fragment {index}")]
-    AlreadyReceivedFrag { index: usize },
-    #[error("not enough memory - {left} / {needed} bytes")]
-    NotEnoughMemory { needed: usize, left: usize },
+    AlreadyReceivedFrag {
+        /// Index of the fragment received.
+        index: usize,
+    },
+    /// Not enough memory to buffer this fragment up.
+    #[error("not enough memory - {left} / {required} bytes")]
+    NotEnoughMemory {
+        /// Bytes of memory required.
+        required: usize,
+        /// Bytes of memory left.
+        left: usize,
+    },
+    /// Received a fragment which claims to be the last fragment, but we already
+    /// received the last fragment.
     #[error("received last fragment {index}, but we already received last fragment {last}")]
-    AlreadyReceivedLastFrag { index: usize, last: usize },
+    AlreadyReceivedLastFrag {
+        /// Index of the fragment received.
+        index: usize,
+        /// Index of the fragment which is already the last fragment.
+        last: usize,
+    },
+    /// Received a fragment which claims to be the last fragment, but we already
+    /// received a (non-last) fragment with a larger index.
     #[error("received last fragment {index}, but we already received fragment {max} with a larger index")]
-    InvalidLastFrag { index: usize, max: usize },
+    InvalidLastFrag {
+        /// Index of the fragment received.
+        index: usize,
+        /// Index of the largest fragment we have received up to now.
+        max: usize,
+    },
+    /// Received a non-last fragment which has an invalid length.
+    ///
+    /// All non-last fragments must be the same size.
     #[error("non-last fragment {index} has invalid length {len}, expected {expected}")]
     InvalidPayloadLength {
+        /// Index of the fragment received.
         index: usize,
+        /// Length of the fragment received.
         len: usize,
+        /// Expected fragment length.
         expected: usize,
     },
 }
@@ -115,6 +148,28 @@ impl fmt::Debug for FragmentReceiver {
 }
 
 impl FragmentReceiver {
+    /// Receives a single message fragment created from [`split`] and attempts
+    /// to reassemble it into a full message.
+    ///
+    /// - `max_frag_len`: maximum length of a single non-last fragment; must be
+    ///   the same as the value passed into [`split`]
+    /// - `mem_left`: number of bytes of memory left for buffering messages
+    /// - `msg_seq`: sequence number of this message; all fragments for a single
+    ///   message sequence will be reassembled as one message
+    /// - `position`: index + last state of this fragment
+    /// - `payload`: fragment payload
+    ///
+    /// If all fragments of this message have been received, this will return
+    /// `Ok(Some(msg))` with ownership of the reassembled message bytes.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the fragment received is unexpected for the current state of
+    /// reassembly.
+    ///
+    /// Errors must not be treated as fatal, as they may happen due to network
+    /// conditions such as duplicated or lost packets. Errors will not cause any
+    /// invalid state.
     #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
     pub fn reassemble(
         &mut self,
@@ -123,11 +178,11 @@ impl FragmentReceiver {
         msg_seq: MessageSeq,
         position: FragmentPosition,
         payload: &[u8],
-    ) -> Result<Option<Bytes>, ReassembleError> {
+    ) -> Result<Option<Vec<u8>>, ReassembleError> {
         debug_assert!(max_frag_len > 0);
 
         let buf = self.msgs.entry(msg_seq).or_default();
-        let frag_index = position.index_usize();
+        let frag_index = usize::from(position.index());
 
         // check if this fragment has been received yet
         if buf.frag_indices_recv.get(frag_index).as_deref() == Some(&true) {
@@ -140,19 +195,19 @@ impl FragmentReceiver {
 
         // try to resize buffers to make room for this fragment,
         // checking if we have enough memory
-        let payload_mem_needed = end.saturating_sub(buf.payload.capacity());
-        let indices_mem_needed = frag_index
+        let payload_mem_required = end.saturating_sub(buf.payload.capacity());
+        let indices_mem_required = frag_index
             .saturating_sub(buf.frag_indices_recv.capacity())
             .div_ceil(8);
 
-        let mem_needed = payload_mem_needed + indices_mem_needed;
-        // we *may* end up reserving more memory than `mem_needed`,
+        let mem_required = payload_mem_required + indices_mem_required;
+        // we *may* end up reserving more memory than `mem_required`,
         // but this should be sufficient to prevent ridiculously sized allocs
         // and anyway, if we go over the memory limit later, we'll catch it
         // somewhere else
-        if mem_needed > mem_left {
+        if mem_required > mem_left {
             return Err(ReassembleError::NotEnoughMemory {
-                needed: mem_needed,
+                required: mem_required,
                 left: mem_left,
             });
         }
@@ -199,10 +254,10 @@ impl FragmentReceiver {
             .is_some_and(|last| buf.num_frags_recv >= last)
         {
             let buf = self.msgs.remove(&msg_seq).expect(
-                "we already have a mut ref to the buffer at this key, so we should be able to \
-                 remove and take ownership of it",
+                "we already have a mut ref to the buffer at this key, \
+                so we should be able to remove and take ownership of it",
             );
-            Ok(Some(Bytes::from(buf.payload)))
+            Ok(Some(buf.payload))
         } else {
             // this happens separately from the other buffer meta update
             // so that the `if` condition above works properly

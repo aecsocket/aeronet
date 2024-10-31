@@ -1,6 +1,6 @@
 use std::{collections::hash_map::Entry, iter};
 
-use aeronet_io::packet::PacketBuffers;
+use aeronet_io::packet::{PacketBuffers, PacketMtu};
 use ahash::HashMap;
 use arbitrary::Arbitrary;
 use bevy_ecs::prelude::*;
@@ -11,11 +11,13 @@ use web_time::Instant;
 
 use crate::{
     frag,
-    lane::{LaneIndex, LaneReliability},
+    lane::{LaneIndex, LaneKind, LaneReliability},
     limit::Limit,
-    packet::{FragmentPosition, MessageFragment, MessagePayload, MessageSeq, PacketHeader},
+    packet::{
+        FragmentPayload, FragmentPosition, MessageFragment, MessageSeq, PacketHeader, PacketSeq,
+    },
     rtt::RttEstimator,
-    sized, FragmentPath, Transport,
+    sized, FlushedPacket, FragmentPath, Transport,
 };
 
 #[derive(Debug, TypeSize)]
@@ -52,17 +54,28 @@ struct SentFragment {
 }
 
 impl TransportSend {
-    pub fn push(&mut self, lane_index: LaneIndex, msg: Bytes) -> Option<MessageKey> {
-        self.push_internal(Instant::now(), lane_index, msg)
+    pub(crate) fn new(
+        max_frag_len: usize,
+        lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
+    ) -> Self {
+        Self {
+            max_frag_len,
+            lanes: lanes
+                .into_iter()
+                .map(Into::into)
+                .map(|kind| Lane {
+                    sent_msgs: HashMap::default(),
+                    next_msg_seq: MessageSeq::default(),
+                    reliability: kind.reliability(),
+                })
+                .collect(),
+            too_many_msgs: false,
+        }
     }
 
-    fn push_internal(
-        &mut self,
-        now: Instant,
-        lane_index: LaneIndex,
-        msg: Bytes,
-    ) -> Option<MessageKey> {
-        let lane = &mut self.lanes[usize::from(lane_index)];
+    pub fn push(&mut self, now: Instant, lane_index: LaneIndex, msg: Bytes) -> Option<MessageKey> {
+        let lane_index_u = lane_index.into_usize();
+        let lane = &mut self.lanes[lane_index_u];
         let msg_seq = lane.next_msg_seq;
         let Entry::Vacant(entry) = lane.sent_msgs.entry(msg_seq) else {
             self.too_many_msgs = true;
@@ -92,7 +105,7 @@ impl TransportSend {
 }
 
 impl Transport {
-    fn flush(&mut self, now: Instant) -> impl Iterator<Item = Vec<u8>> + '_ {
+    fn flush(&mut self, now: Instant, mtu: usize) -> impl Iterator<Item = Vec<u8>> + '_ {
         // collect the paths of the frags to send, along with how old they are
         let mut frag_paths = self
             .send
@@ -102,7 +115,7 @@ impl Transport {
             .flat_map(|(lane_index, lane)| frag_paths_in_lane(now, lane_index, lane))
             .collect::<Vec<_>>();
 
-        // sort by oldest sent to newest
+        // sort by time sent, oldest to newest
         frag_paths.sort_unstable_by(|(_, sent_at_a), (_, sent_at_b)| sent_at_a.cmp(sent_at_b));
 
         let mut frag_paths = frag_paths
@@ -124,7 +137,7 @@ impl Transport {
 
             // we can't put more than either `mtu` or `bytes_left`
             // bytes into this packet, so we track this as well
-            let mut bytes_left = (&mut self.bytes_left).min_of(self.mtu);
+            let mut bytes_left = (&mut self.bytes_left).min_of(mtu);
             let packet_seq = self.next_packet_seq;
             bytes_left.consume(PacketHeader::ENCODE_LEN).ok()?;
             packet
@@ -164,7 +177,7 @@ impl Transport {
                 }
             }
 
-            let send_empty = !sent_packet_yet && now >= self.next_ack_at;
+            let send_empty = !sent_packet_yet; // TODO //&& now >= self.next_ack_at;
             let should_send = !packet_frags.is_empty() || send_empty;
             if !should_send {
                 return None;
@@ -174,15 +187,13 @@ impl Transport {
             self.flushed_packets.insert(
                 packet_seq.0 .0,
                 FlushedPacket {
-                    flushed_at: now,
+                    flushed_at: sized::Instant(now),
                     frags: packet_frags.into_boxed_slice(),
                 },
             );
 
-            self.packets_sent += 1;
-            self.bytes_sent += packet.len();
-            self.next_packet_seq += PacketSeq::ONE;
-            self.next_ack_at = now + MAX_ACK_DELAY;
+            self.next_packet_seq += PacketSeq::new(1);
+            // self.next_ack_at = now + MAX_ACK_DELAY; // TODO
             sent_packet_yet = true;
             Some(packet)
         })
@@ -194,7 +205,7 @@ fn frag_paths_in_lane(
     lane_index: usize,
     lane: &mut Lane,
 ) -> impl Iterator<Item = (FragmentPath, Instant)> + '_ {
-    let lane_index = LaneIndex::try_from(lane_index).expect("too many lanes");
+    let lane_index = LaneIndex::from_raw(lane_index.try_into().expect("lane index too large"));
 
     // drop any messages which have no frags to send
     lane.sent_msgs
@@ -231,7 +242,8 @@ fn write_frag_at_path(
     packet: &mut Vec<u8>,
     path: FragmentPath,
 ) -> Result<(), ()> {
-    let lane_index = path.lane_index.into_usize();
+    let lane_index =
+        usize::try_from(path.lane_index.into_raw()).expect("lane index should fit into a `usize`");
     let lane = lanes
         .get_mut(lane_index)
         .expect("frag path should point to a valid lane");
@@ -254,7 +266,7 @@ fn write_frag_at_path(
         seq: path.msg_seq,
         lane: path.lane_index,
         position: sent_frag.position,
-        payload: MessagePayload(sent_frag.payload.clone().0),
+        payload: FragmentPayload(sent_frag.payload.clone().0),
     };
     bytes_left.consume(frag.encode_len()).map_err(drop)?;
     packet
@@ -279,10 +291,10 @@ fn write_frag_at_path(
     Ok(())
 }
 
-pub(crate) fn flush(mut sessions: Query<(&mut Transport, &mut PacketBuffers)>) {
+pub(crate) fn flush(mut sessions: Query<(&mut Transport, &mut PacketBuffers, &PacketMtu)>) {
     let now = Instant::now();
-    for (mut transport, mut packet_bufs) in &mut sessions {
-        for packet in transport.flush(now) {
+    for (mut transport, mut packet_bufs, &PacketMtu(packet_mtu)) in &mut sessions {
+        for packet in transport.flush(now, packet_mtu) {
             packet_bufs.send.push(Bytes::from(packet));
         }
     }
