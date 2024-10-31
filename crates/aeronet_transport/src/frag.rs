@@ -1,3 +1,13 @@
+//! Handles splitting large messages into smaller fragments, and reassembling
+//! fragments back into messages.
+//!
+//! Packets are limited in size, usually to ~1000 bytes over a network. To be
+//! able to send larger messages, we need a strategy to break down a large
+//! message into smaller fragments, and send those fragments as packets over
+//! the network (see [`split`]). On the receiving end, we combine these
+//! fragments back up in order, and reassemble them into a full message (see
+//! [`FragmentReceiver`]).
+
 use {
     crate::{
         packet::{FragmentIndex, FragmentPosition, MessageSeq},

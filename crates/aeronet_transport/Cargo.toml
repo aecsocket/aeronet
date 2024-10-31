@@ -32,6 +32,7 @@ visualizer = [
 aeronet_io = { workspace = true }
 
 ahash = { workspace = true }
+anyhow = { workspace = true }
 arbitrary = { workspace = true }
 bitvec = { workspace = true }
 derive_more = { workspace = true }

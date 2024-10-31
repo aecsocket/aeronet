@@ -5,17 +5,17 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        AeronetIoPlugin, IoSet,
-        connection::{Connected, DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, RemoteAddr},
+        connection::{Connected, Disconnect, DisconnectReason, RemoteAddr, DROP_DISCONNECT_REASON},
         packet::{PacketBuffers, PacketMtu, PacketRtt, PacketStats},
+        AeronetIoPlugin, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
-        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
+        FutureExt, SinkExt, StreamExt,
     },
     std::{io, num::Saturating, sync::Arc, time::Duration},
     thiserror::Error,
@@ -340,7 +340,7 @@ async fn recv_loop(
     loop {
         #[cfg_attr(
             not(target_family = "wasm"),
-            allow(clippy::useless_conversion, reason = "conversion required for WASM")
+            expect(clippy::useless_conversion, reason = "conversion required for WASM")
         )]
         let packet = futures::select! {
             x = conn.receive_datagram().fuse() => x,

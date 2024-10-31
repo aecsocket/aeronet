@@ -22,9 +22,6 @@ pedantic = { level = "warn", priority = -1 }
 
 unwrap_used = "warn"
 
-# cast_possible_truncation = "allow"
-# cast_precision_loss = "allow"
-# cast_sign_loss = "allow"
 future_not_send = "allow"
 module_name_repetitions = "allow"
 needless_pass_by_value = "allow"
@@ -32,15 +29,22 @@ similar_names = "allow"
 type_complexity = "allow"
 
 [workspace.dependencies]
+# aeronet
+# core
 aeronet = { version = "0.9.0-dev", path = "crates/aeronet" }
 aeronet_io = { version = "0.9.0-dev", path = "crates/aeronet_io" }
-aeronet_replicon = { version = "0.9.0-dev", path = "crates/aeronet_replicon" }
 aeronet_transport = { version = "0.9.0-dev", path = "crates/aeronet_transport" }
 
+# io
 aeronet_channel = { version = "0.9.0-dev", path = "crates/aeronet_channel" }
 aeronet_steam = { version = "0.9.0-dev", path = "crates/aeronet_steam" }
 aeronet_websocket = { version = "0.9.0-dev", path = "crates/aeronet_websocket" }
 aeronet_webtransport = { version = "0.9.0-dev", path = "crates/aeronet_webtransport" }
+
+# integration
+aeronet_replicon = { version = "0.9.0-dev", path = "crates/aeronet_replicon" }
+
+# generic
 
 ahash = "0.8.11"
 anyhow = "1.0.89"
@@ -118,14 +122,16 @@ rcgen = "0.13.1"
 tokio-tungstenite = "0.24.0"
 
 # aeronet_webtransport
-
+# core
 xwt-core = "0.5.0"
 
+# native
 spki = "0.7.3"
 wtransport = "0.3.1"
 x509-cert = "0.2.5"
 xwt-wtransport = "0.10.0"
 
+# wasm
 xwt-web-sys = "0.12.0"
 
 # aeronet_replicon

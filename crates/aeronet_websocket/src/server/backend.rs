@@ -4,9 +4,9 @@ use {
     aeronet_io::connection::DisconnectReason,
     bevy_ecs::prelude::*,
     futures::{
-        SinkExt,
         channel::{mpsc, oneshot},
         never::Never,
+        SinkExt,
     },
     std::{
         net::SocketAddr,
@@ -19,7 +19,7 @@ use {
     },
     tokio_rustls::TlsAcceptor,
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
-    tracing::{Instrument, debug, debug_span},
+    tracing::{debug, debug_span, Instrument},
 };
 
 pub async fn start(
@@ -153,7 +153,7 @@ async fn handle_session(
 }
 
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant, reason = "most users will use `Rustls`")]
+#[expect(clippy::large_enum_variant, reason = "most users will use `Rustls`")]
 enum MaybeTlsStream<S> {
     Plain(S),
     Rustls(tokio_rustls::server::TlsStream<S>),

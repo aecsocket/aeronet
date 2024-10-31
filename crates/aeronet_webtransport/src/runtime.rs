@@ -52,7 +52,7 @@ mod maybe {
 
 #[cfg_attr(
     target_family = "wasm",
-    allow(
+    expect(
         clippy::derivable_impls,
         reason = "constructor has conditional cfg logic"
     )

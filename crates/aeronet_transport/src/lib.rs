@@ -1,6 +1,5 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
-#![allow(missing_docs, dead_code)] // TODO
 
 pub mod frag;
 pub mod lane;
@@ -21,6 +20,7 @@ pub mod visualizer;
 pub use {aeronet_io as io, octs};
 use {
     aeronet_io::IoSet,
+    arbitrary::Arbitrary,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
     derive_more::{Add, AddAssign, Sub, SubAssign},
@@ -40,6 +40,7 @@ impl Plugin for AeronetTransportPlugin {
     fn build(&self, app: &mut App) {
         app.configure_sets(PreUpdate, (IoSet::Poll, TransportSet::Poll).chain())
             .configure_sets(PostUpdate, (TransportSet::Flush, IoSet::Flush).chain())
+            .add_systems(PreUpdate, recv::poll.in_set(TransportSet::Poll))
             .add_systems(PostUpdate, send::flush.in_set(TransportSet::Flush));
     }
 }
@@ -58,12 +59,13 @@ pub struct Transport {
     // shared
     flushed_packets: SeqBuf<FlushedPacket, 1024>,
     stats: MessageStats,
-    acks: Acknowledge,
+    peer_acks: Acknowledge,
 
     // recv
     recv_lanes: Box<[recv::Lane]>,
     rtt: RttEstimator,
-    pub recv: recv::TransportRecv,
+    pub recv_msgs: recv::TransportRecv<(LaneIndex, Vec<u8>)>,
+    pub recv_acks: recv::TransportRecv<MessageKey>,
 
     // send
     bytes_left: TokenBucket,
@@ -85,7 +87,7 @@ impl Transport {
             //
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
             stats: MessageStats::default(),
-            acks: Acknowledge::default(),
+            peer_acks: Acknowledge::default(),
             //
             recv_lanes: recv_lanes
                 .into_iter()
@@ -93,7 +95,8 @@ impl Transport {
                 .map(|kind| recv::Lane { frags: todo!() })
                 .collect(),
             rtt: RttEstimator::default(),
-            recv: recv::TransportRecv::new(),
+            recv_msgs: recv::TransportRecv::new(),
+            recv_acks: recv::TransportRecv::new(),
             //
             bytes_left: TokenBucket::new(usize::MAX),
             next_packet_seq: PacketSeq::default(),
@@ -115,6 +118,17 @@ impl Transport {
     pub fn memory_usage(&self) -> usize {
         self.get_size()
     }
+
+    #[must_use]
+    pub fn memory_left(&self) -> usize {
+        self.max_memory_usage.saturating_sub(self.get_size())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize)]
+pub struct MessageKey {
+    pub lane: LaneIndex,
+    pub seq: MessageSeq,
 }
 
 #[derive(Debug, Clone, Copy, Default, TypeSize)] // force `#[derive]` on multiple lines

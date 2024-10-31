@@ -1,8 +1,9 @@
+//! Sending logic for [`Transport`]s.
+
 use std::{collections::hash_map::Entry, iter};
 
 use aeronet_io::packet::{PacketBuffers, PacketMtu};
 use ahash::HashMap;
-use arbitrary::Arbitrary;
 use bevy_ecs::prelude::*;
 use octs::{Bytes, EncodeLen, FixedEncodeLen, Write};
 use tracing::{trace, trace_span};
@@ -17,32 +18,26 @@ use crate::{
         FragmentPayload, FragmentPosition, MessageFragment, MessageSeq, PacketHeader, PacketSeq,
     },
     rtt::RttEstimator,
-    sized, FlushedPacket, FragmentPath, Transport,
+    sized, FlushedPacket, FragmentPath, MessageKey, Transport,
 };
 
 #[derive(Debug, TypeSize)]
 pub struct TransportSend {
-    max_frag_len: usize,
-    lanes: Box<[Lane]>,
+    pub(crate) max_frag_len: usize,
+    pub(crate) lanes: Box<[Lane]>,
     too_many_msgs: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize)]
-pub struct MessageKey {
-    lane: LaneIndex,
-    seq: MessageSeq,
-}
-
 #[derive(Debug, Clone, TypeSize)]
-struct Lane {
-    sent_msgs: HashMap<MessageSeq, SentMessage>,
+pub(crate) struct Lane {
+    pub(crate) sent_msgs: HashMap<MessageSeq, SentMessage>,
     next_msg_seq: MessageSeq,
     reliability: LaneReliability,
 }
 
 #[derive(Debug, Clone, TypeSize)]
-struct SentMessage {
-    frags: Box<[Option<SentFragment>]>,
+pub(crate) struct SentMessage {
+    pub(crate) frags: Box<[Option<SentFragment>]>,
 }
 
 #[derive(Debug, Clone, TypeSize)]
@@ -104,100 +99,111 @@ impl TransportSend {
     }
 }
 
-impl Transport {
-    fn flush(&mut self, now: Instant, mtu: usize) -> impl Iterator<Item = Vec<u8>> + '_ {
-        // collect the paths of the frags to send, along with how old they are
-        let mut frag_paths = self
-            .send
-            .lanes
-            .iter_mut()
-            .enumerate()
-            .flat_map(|(lane_index, lane)| frag_paths_in_lane(now, lane_index, lane))
-            .collect::<Vec<_>>();
-
-        // sort by time sent, oldest to newest
-        frag_paths.sort_unstable_by(|(_, sent_at_a), (_, sent_at_b)| sent_at_a.cmp(sent_at_b));
-
-        let mut frag_paths = frag_paths
-            .into_iter()
-            .map(|(path, _)| Some(path))
-            .collect::<Vec<_>>();
-
-        let mut sent_packet_yet = false;
-        iter::from_fn(move || {
-            // this iteration, we want to build up one full packet
-
-            // make a buffer for the packet
-            // note: we may want to preallocate some memory for this,
-            // and have it be user-configurable, but I don't want to overcomplicate it
-            // also, we don't preallocate `mtu` bytes, because that might be a big length
-            // e.g. Steamworks already fragments messages, so we don't fragment messages
-            // ourselves, leading to very large `mtu`s (~512KiB)
-            let mut packet = Vec::<u8>::new();
-
-            // we can't put more than either `mtu` or `bytes_left`
-            // bytes into this packet, so we track this as well
-            let mut bytes_left = (&mut self.bytes_left).min_of(mtu);
-            let packet_seq = self.next_packet_seq;
-            bytes_left.consume(PacketHeader::ENCODE_LEN).ok()?;
-            packet
-                .write(PacketHeader {
-                    seq: packet_seq,
-                    acks: self.acks,
-                })
-                .expect("should grow the buffer when writing over capacity");
-
-            let span = trace_span!("flush", packet = packet_seq.0 .0);
-            let _span = span.enter();
-
-            // collect the paths of the frags we want to put into this packet
-            // so that we can track which ones have been acked later
-            let mut packet_frags = Vec::new();
-            for path_opt in &mut frag_paths {
-                let Some(path) = path_opt else {
-                    continue;
-                };
-                let path = *path;
-
-                if write_frag_at_path(
-                    now,
-                    &self.rtt,
-                    &mut self.send.lanes,
-                    &mut bytes_left,
-                    &mut packet,
-                    path,
-                )
-                .is_ok()
-                {
-                    // if we successfully wrote this frag out,
-                    // remove it from the candidate frag paths
-                    // and track that this frag has been sent out in this packet
-                    *path_opt = None;
-                    packet_frags.push(path);
-                }
-            }
-
-            let send_empty = !sent_packet_yet; // TODO //&& now >= self.next_ack_at;
-            let should_send = !packet_frags.is_empty() || send_empty;
-            if !should_send {
-                return None;
-            }
-
-            trace!(num_frags = packet_frags.len(), "Flushed packet");
-            self.flushed_packets.insert(
-                packet_seq.0 .0,
-                FlushedPacket {
-                    flushed_at: sized::Instant(now),
-                    frags: packet_frags.into_boxed_slice(),
-                },
-            );
-
-            self.next_packet_seq += PacketSeq::new(1);
-            // self.next_ack_at = now + MAX_ACK_DELAY; // TODO
-            sent_packet_yet = true;
-            Some(packet)
-        })
+pub(crate) fn flush(mut sessions: Query<(&mut Transport, &mut PacketBuffers, &PacketMtu)>) {
+    let now = Instant::now();
+    for (mut transport, mut packet_bufs, &PacketMtu(packet_mtu)) in &mut sessions {
+        for packet in flush_on(&mut transport, now, packet_mtu) {
+            packet_bufs.send.push(Bytes::from(packet));
+        }
     }
+}
+
+fn flush_on(
+    transport: &mut Transport,
+    now: Instant,
+    mtu: usize,
+) -> impl Iterator<Item = Vec<u8>> + '_ {
+    // collect the paths of the frags to send, along with how old they are
+    let mut frag_paths = transport
+        .send
+        .lanes
+        .iter_mut()
+        .enumerate()
+        .flat_map(|(lane_index, lane)| frag_paths_in_lane(now, lane_index, lane))
+        .collect::<Vec<_>>();
+
+    // sort by time sent, oldest to newest
+    frag_paths.sort_unstable_by(|(_, sent_at_a), (_, sent_at_b)| sent_at_a.cmp(sent_at_b));
+
+    let mut frag_paths = frag_paths
+        .into_iter()
+        .map(|(path, _)| Some(path))
+        .collect::<Vec<_>>();
+
+    let mut sent_packet_yet = false;
+    iter::from_fn(move || {
+        // this iteration, we want to build up one full packet
+
+        // make a buffer for the packet
+        // note: we may want to preallocate some memory for this,
+        // and have it be user-configurable, but I don't want to overcomplicate it
+        // also, we don't preallocate `mtu` bytes, because that might be a big length
+        // e.g. Steamworks already fragments messages, so we don't fragment messages
+        // ourselves, leading to very large `mtu`s (~512KiB)
+        let mut packet = Vec::<u8>::new();
+
+        // we can't put more than either `mtu` or `bytes_left`
+        // bytes into this packet, so we track this as well
+        let mut bytes_left = (&mut transport.bytes_left).min_of(mtu);
+        let packet_seq = transport.next_packet_seq;
+        bytes_left.consume(PacketHeader::ENCODE_LEN).ok()?;
+        packet
+            .write(PacketHeader {
+                seq: packet_seq,
+                acks: transport.peer_acks,
+            })
+            .expect("should grow the buffer when writing over capacity");
+
+        let span = trace_span!("flush", packet = packet_seq.0 .0);
+        let _span = span.enter();
+
+        // collect the paths of the frags we want to put into this packet
+        // so that we can track which ones have been acked later
+        let mut packet_frags = Vec::new();
+        for path_opt in &mut frag_paths {
+            let Some(path) = path_opt else {
+                continue;
+            };
+            let path = *path;
+
+            if write_frag_at_path(
+                now,
+                &transport.rtt,
+                &mut transport.send.lanes,
+                &mut bytes_left,
+                &mut packet,
+                path,
+            )
+            .is_ok()
+            {
+                // if we successfully wrote this frag out,
+                // remove it from the candidate frag paths
+                // and track that this frag has been sent out in this packet
+                *path_opt = None;
+                packet_frags.push(path);
+            }
+        }
+
+        let send_empty = !sent_packet_yet; // TODO //&& now >= self.next_ack_at;
+        let should_send = !packet_frags.is_empty() || send_empty;
+        if !should_send {
+            return None;
+        }
+
+        trace!(num_frags = packet_frags.len(), "Flushed packet");
+        transport.flushed_packets.insert(
+            packet_seq.0 .0,
+            FlushedPacket {
+                flushed_at: sized::Instant(now),
+                frags: packet_frags.into_boxed_slice(),
+            },
+        );
+
+        transport.next_packet_seq += PacketSeq::new(1);
+        // self.next_ack_at = now + MAX_ACK_DELAY; // TODO
+        sent_packet_yet = true;
+        Some(packet)
+    })
 }
 
 fn frag_paths_in_lane(
@@ -289,13 +295,4 @@ fn write_frag_at_path(
     }
 
     Ok(())
-}
-
-pub(crate) fn flush(mut sessions: Query<(&mut Transport, &mut PacketBuffers, &PacketMtu)>) {
-    let now = Instant::now();
-    for (mut transport, mut packet_bufs, &PacketMtu(packet_mtu)) in &mut sessions {
-        for packet in transport.flush(now, packet_mtu) {
-            packet_bufs.send.push(Bytes::from(packet));
-        }
-    }
 }
