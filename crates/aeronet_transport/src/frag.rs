@@ -15,7 +15,7 @@ use {
     },
     ahash::HashMap,
     core::fmt,
-    octs::{chunks::ByteChunksExt, Bytes},
+    octs::{Bytes, chunks::ByteChunksExt},
     std::iter::FusedIterator,
     thiserror::Error,
     typesize::derive::TypeSize,
@@ -118,7 +118,10 @@ pub enum ReassembleError {
     },
     /// Received a fragment which claims to be the last fragment, but we already
     /// received a (non-last) fragment with a larger index.
-    #[error("received last fragment {index}, but we already received fragment {max} with a larger index")]
+    #[error(
+        "received last fragment {index}, but we already received fragment {max} with a larger \
+         index"
+    )]
     InvalidLastFrag {
         /// Index of the fragment received.
         index: usize,
@@ -264,8 +267,8 @@ impl FragmentReceiver {
             .is_some_and(|last| buf.num_frags_recv >= last)
         {
             let buf = self.msgs.remove(&msg_seq).expect(
-                "we already have a mut ref to the buffer at this key, \
-                so we should be able to remove and take ownership of it",
+                "we already have a mut ref to the buffer at this key, so we should be able to \
+                 remove and take ownership of it",
             );
             Ok(Some(buf.payload))
         } else {

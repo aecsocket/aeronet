@@ -5,7 +5,7 @@ use {
             connection::{Connected, DisconnectReason, Disconnected, LocalAddr, Session},
             server::Opened,
         },
-        transport::{lane::LaneKind, AeronetTransportPlugin, Transport},
+        transport::{AeronetTransportPlugin, Transport, lane::LaneKind},
     },
     aeronet_websocket::server::{ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},

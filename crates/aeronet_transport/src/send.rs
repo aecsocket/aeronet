@@ -1,25 +1,25 @@
 //! Sending logic for [`Transport`]s.
 
-use std::{collections::hash_map::Entry, iter};
-
-use aeronet_io::packet::{PacketBuffers, PacketMtu};
-use ahash::HashMap;
-use bevy_ecs::prelude::*;
-use octs::{Bytes, EncodeLen, FixedEncodeLen, Write};
-use tracing::{trace, trace_span};
-use typesize::derive::TypeSize;
-use web_time::Instant;
-
-use crate::{
-    frag,
-    lane::{LaneIndex, LaneKind, LaneReliability},
-    limit::Limit,
-    packet::{
-        Fragment, FragmentHeader, FragmentIndex, FragmentPayload, FragmentPosition, MessageSeq,
-        PacketHeader, PacketSeq,
+use {
+    crate::{
+        FlushedPacket, FragmentPath, MessageKey, Transport, frag,
+        lane::{LaneIndex, LaneKind, LaneReliability},
+        limit::Limit,
+        packet::{
+            Fragment, FragmentHeader, FragmentIndex, FragmentPayload, FragmentPosition, MessageSeq,
+            PacketHeader, PacketSeq,
+        },
+        rtt::RttEstimator,
+        sized,
     },
-    rtt::RttEstimator,
-    sized, FlushedPacket, FragmentPath, MessageKey, Transport,
+    aeronet_io::packet::{PacketBuffers, PacketMtu},
+    ahash::HashMap,
+    bevy_ecs::prelude::*,
+    octs::{Bytes, EncodeLen, FixedEncodeLen, Write},
+    std::{collections::hash_map::Entry, iter},
+    tracing::{trace, trace_span},
+    typesize::derive::TypeSize,
+    web_time::Instant,
 };
 
 #[derive(Debug, TypeSize)]
@@ -159,7 +159,7 @@ fn flush_on(
             })
             .expect("should grow the buffer when writing over capacity");
 
-        let span = trace_span!("flush", packet = packet_seq.0 .0);
+        let span = trace_span!("flush", packet = packet_seq.0.0);
         let _span = span.enter();
 
         // collect the paths of the frags we want to put into this packet
@@ -196,13 +196,12 @@ fn flush_on(
         }
 
         trace!(num_frags = packet_frags.len(), "Flushed packet");
-        transport.flushed_packets.insert(
-            packet_seq.0 .0,
-            FlushedPacket {
+        transport
+            .flushed_packets
+            .insert(packet_seq.0.0, FlushedPacket {
                 flushed_at: sized::Instant(now),
                 frags: packet_frags.into_boxed_slice(),
-            },
-        );
+            });
 
         transport.next_packet_seq += PacketSeq::new(1);
         // self.next_ack_at = now + MAX_ACK_DELAY; // TODO

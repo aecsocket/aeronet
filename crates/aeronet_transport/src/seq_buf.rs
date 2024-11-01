@@ -1,8 +1,9 @@
 //! See [`SeqBuf`].
 
-use std::{array, mem};
-
-use typesize::TypeSize;
+use {
+    std::{array, mem},
+    typesize::TypeSize,
+};
 
 /// Rolling sequence buffer data structure.
 ///

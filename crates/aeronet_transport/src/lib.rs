@@ -31,7 +31,7 @@ use {
     rtt::RttEstimator,
     seq_buf::SeqBuf,
     thiserror::Error,
-    typesize::{derive::TypeSize, TypeSize},
+    typesize::{TypeSize, derive::TypeSize},
     web_time::Instant,
 };
 

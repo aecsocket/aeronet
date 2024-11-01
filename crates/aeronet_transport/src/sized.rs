@@ -2,15 +2,16 @@
 //!
 //! This will be removed when [`typesize`] issues are resolved.
 
-use std::ops::{Add, AddAssign, Sub, SubAssign};
-
-use bevy_derive::{Deref, DerefMut};
-use bevy_reflect::Reflect;
-use bitvec::{
-    order::{BitOrder, Lsb0},
-    store::BitStore,
+use {
+    bevy_derive::{Deref, DerefMut},
+    bevy_reflect::Reflect,
+    bitvec::{
+        order::{BitOrder, Lsb0},
+        store::BitStore,
+    },
+    std::ops::{Add, AddAssign, Sub, SubAssign},
+    typesize::TypeSize,
 };
-use typesize::TypeSize;
 
 /// [`TypeSize`]d wrapper for [`bitvec::vec::BitVec`].
 ///
@@ -41,7 +42,7 @@ impl<T> Saturating<T> {
 
 impl<T: TypeSize> TypeSize for Saturating<T> {
     fn extra_size(&self) -> usize {
-        self.0 .0.extra_size()
+        self.0.0.extra_size()
     }
 }
 

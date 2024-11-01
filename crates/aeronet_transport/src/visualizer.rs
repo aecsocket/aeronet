@@ -2,11 +2,11 @@
 
 use {
     crate::{
+        Transport,
         sampling::{
             SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
             SessionStatsSampling,
         },
-        Transport,
     },
     aeronet_io::{
         connection::Connected,
@@ -16,8 +16,8 @@ use {
     bevy_core::Name,
     bevy_ecs::prelude::*,
     bevy_egui::{
-        egui::{self, epaint::Hsva},
         EguiContexts,
+        egui::{self, epaint::Hsva},
     },
     itertools::Itertools,
     ringbuf::traits::Consumer,

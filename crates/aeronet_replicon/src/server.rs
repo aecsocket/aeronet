@@ -148,8 +148,7 @@ fn on_connected(
     }
     let Ok(&PacketMtu(packet_mtu)) = packet_mtus.get(client) else {
         warn!(
-            "{client} connected to {server} but does not have `{}` - \
-            cannot create transport",
+            "{client} connected to {server} but does not have `{}` - cannot create transport",
             type_name::<PacketMtu>(),
         );
         return;

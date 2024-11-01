@@ -17,14 +17,14 @@ use {
     aeronet::{
         io::connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
         transport::{
+            AeronetTransportPlugin, Transport,
             lane::{LaneIndex, LaneKind},
             octs::Bytes,
-            AeronetTransportPlugin, Transport,
         },
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    bevy_egui::{EguiContexts, EguiPlugin, egui},
     std::mem,
 };
 
