@@ -2,7 +2,7 @@
 
 use {
     crate::{
-        FlushedPacket, FragmentPath, MessageKey, Transport, frag,
+        frag,
         lane::{LaneIndex, LaneKind, LaneReliability},
         limit::Limit,
         packet::{
@@ -10,7 +10,7 @@ use {
             PacketHeader, PacketSeq,
         },
         rtt::RttEstimator,
-        sized,
+        sized, FlushedPacket, FragmentPath, MessageKey, Transport,
     },
     aeronet_io::packet::{PacketBuffers, PacketMtu},
     ahash::HashMap,
@@ -70,8 +70,7 @@ impl TransportSend {
     }
 
     pub fn push(&mut self, now: Instant, lane_index: LaneIndex, msg: Bytes) -> Option<MessageKey> {
-        let lane_index_u = lane_index.into_usize();
-        let lane = &mut self.lanes[lane_index_u];
+        let lane = &mut self.lanes[usize::from(lane_index)];
         let msg_seq = lane.next_msg_seq;
         let Entry::Vacant(entry) = lane.sent_msgs.entry(msg_seq) else {
             self.too_many_msgs = true;
@@ -159,7 +158,7 @@ fn flush_on(
             })
             .expect("should grow the buffer when writing over capacity");
 
-        let span = trace_span!("flush", packet = packet_seq.0.0);
+        let span = trace_span!("flush", packet = packet_seq.0 .0);
         let _span = span.enter();
 
         // collect the paths of the frags we want to put into this packet
@@ -196,12 +195,13 @@ fn flush_on(
         }
 
         trace!(num_frags = packet_frags.len(), "Flushed packet");
-        transport
-            .flushed_packets
-            .insert(packet_seq.0.0, FlushedPacket {
+        transport.flushed_packets.insert(
+            packet_seq.0 .0,
+            FlushedPacket {
                 flushed_at: sized::Instant(now),
                 frags: packet_frags.into_boxed_slice(),
-            });
+            },
+        );
 
         transport.next_packet_seq += PacketSeq::new(1);
         // self.next_ack_at = now + MAX_ACK_DELAY; // TODO
@@ -215,7 +215,7 @@ fn frag_paths_in_lane(
     lane_index: usize,
     lane: &mut Lane,
 ) -> impl Iterator<Item = (FragmentPath, Instant)> + '_ {
-    let lane_index = LaneIndex::from_raw(lane_index.try_into().expect("lane index too large"));
+    let lane_index = LaneIndex::try_from(lane_index).expect("lane index too large");
 
     // drop any messages which have no frags to send
     lane.sent_msgs
@@ -254,9 +254,8 @@ fn write_frag_at_path(
     packet: &mut Vec<u8>,
     path: FragmentPath,
 ) -> Result<(), ()> {
-    let lane_index = path.lane_index.into_usize();
     let lane = lanes
-        .get_mut(lane_index)
+        .get_mut(usize::from(path.lane_index))
         .expect("frag path should point to a valid lane");
 
     let msg = lane

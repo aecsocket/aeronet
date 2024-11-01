@@ -1,7 +1,7 @@
 //! Allows converting between [`bevy_replicon`] and [`crate`] types.
 
 use {
-    aeronet_transport::lane::{LaneIndex, LaneKind},
+    aeronet_transport::lane::{LaneIndex, LaneKind, RawLaneIndex},
     bevy_ecs::prelude::*,
     bevy_replicon::prelude::*,
 };
@@ -62,7 +62,7 @@ pub const fn to_lane_kind(channel_kind: ChannelKind) -> LaneKind {
 /// See [`to_lane_index`].
 #[must_use]
 pub fn to_channel_id(lane_index: LaneIndex) -> Option<u8> {
-    u8::try_from(lane_index.into_raw()).ok()
+    u8::try_from(lane_index.0).ok()
 }
 
 /// Converts a channel ID into a [`LaneIndex`].
@@ -70,5 +70,5 @@ pub fn to_channel_id(lane_index: LaneIndex) -> Option<u8> {
 /// See [`to_channel_id`].
 #[must_use]
 pub fn to_lane_index(channel_id: u8) -> LaneIndex {
-    LaneIndex::from_raw(u32::from(channel_id))
+    LaneIndex(RawLaneIndex::from(channel_id))
 }

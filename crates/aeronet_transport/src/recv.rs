@@ -2,13 +2,13 @@
 
 use {
     crate::{
-        FlushedPacket, MessageKey, Transport,
         frag::{FragmentReceiver, ReassembleError},
         lane::{LaneIndex, LaneKind},
         packet::{Fragment, MessageSeq, PacketHeader, PacketSeq},
         rtt::RttEstimator,
         send,
         seq_buf::SeqBuf,
+        FlushedPacket, MessageKey, Transport,
     },
     aeronet_io::{connection::Disconnect, packet::PacketBuffers},
     ahash::{HashMap, HashSet},
@@ -18,7 +18,7 @@ use {
     std::{iter, num::Saturating},
     thiserror::Error,
     tracing::{trace, trace_span, warn},
-    typesize::{TypeSize, derive::TypeSize},
+    typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
 };
 
@@ -127,7 +127,7 @@ fn recv_on(
         .read::<PacketHeader>()
         .map_err(|_| RecvError::ReadHeader)?;
 
-    let span = trace_span!("recv", packet = header.seq.0.0);
+    let span = trace_span!("recv", packet = header.seq.0 .0);
     let _span = span.enter();
 
     trace!(len = packet.len(), "Received packet");
@@ -179,8 +179,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
         })
         .filter_map(|frag_path| {
             // for each of those fragments, we'll mark that fragment as acked
-            let lane_index = usize::try_from(frag_path.lane_index.into_raw())
-                .expect("lane index should fit into a usize");
+            let lane_index = usize::from(frag_path.lane_index);
             let lane = send_lanes
                 .get_mut(lane_index)
                 .expect("frag path should point into a valid lane index");
@@ -209,12 +208,11 @@ fn recv_frag(transport: &mut Transport, packet: &mut &[u8]) -> Result<(), RecvEr
         .read::<Fragment>()
         .map_err(|_| RecvError::ReadFragment)?;
     let lane_index = frag.header.lane;
-    let lane_index_u = lane_index.into_usize();
 
     let memory_left = transport.memory_left();
     let lane = transport
         .recv_lanes
-        .get_mut(lane_index_u)
+        .get_mut(usize::from(lane_index))
         .ok_or(RecvError::InvalidLane { lane: lane_index })?;
     let msg = lane
         .frags

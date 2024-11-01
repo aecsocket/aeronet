@@ -137,26 +137,29 @@ pub enum LaneReliability {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct LaneIndex(RawLaneIndex);
+pub struct LaneIndex(pub RawLaneIndex);
 
 pub type RawLaneIndex = u32;
 
 const_assert!(size_of::<usize>() >= size_of::<RawLaneIndex>());
 
-impl LaneIndex {
-    #[must_use]
-    pub const fn from_raw(index: RawLaneIndex) -> Self {
-        Self(index)
+impl From<RawLaneIndex> for LaneIndex {
+    fn from(value: RawLaneIndex) -> Self {
+        Self(value)
     }
+}
 
-    #[must_use]
-    pub const fn into_raw(self) -> RawLaneIndex {
-        self.0
+impl TryFrom<usize> for LaneIndex {
+    type Error = <RawLaneIndex as TryFrom<usize>>::Error;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        RawLaneIndex::try_from(value).map(Self)
     }
+}
 
-    #[must_use]
-    pub const fn into_usize(self) -> usize {
-        self.0 as usize // checked statically
+impl From<LaneIndex> for usize {
+    fn from(value: LaneIndex) -> Self {
+        value.0 as usize // `usize` is at least as big as `RawLaneIndex` - checked statically
     }
 }
 
