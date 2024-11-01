@@ -37,8 +37,6 @@ mod payload;
 mod seq;
 
 pub use payload::*;
-use static_assertions::const_assert;
-use typesize::derive::TypeSize;
 use {
     crate::lane::LaneIndex,
     arbitrary::Arbitrary,
@@ -46,6 +44,8 @@ use {
     bevy_reflect::Reflect,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     octs::Bytes,
+    static_assertions::const_assert,
+    typesize::derive::TypeSize,
 };
 
 /// Sequence number uniquely identifying an item sent across a network.

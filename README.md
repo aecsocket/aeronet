@@ -6,7 +6,7 @@
 A set of [Bevy]-native networking crates, focused on providing robust and rock-solid data transfer
 primitives.
 
-## Goals
+# Goals
 
 - Native to Bevy ECS
   - Network state is represented as entities, making them easily queryable
@@ -24,6 +24,8 @@ primitives.
 High-level networking features such as replication, rollback, and prediction are explicit
 **non-goals** for this crate. Instead, this crate aims to provide a solid foundation for
 implementing these features.
+
+# Crates
 
 ## IO layer implementations
 
@@ -79,9 +81,11 @@ cargo run --bin move_box_server
 cargo run --bin move_box_client
 ```
 
+# Overview
+
 ## Layers
 
-This crate is fundamentally split into multiple layers:
+`aeronet` is fundamentally split into multiple layers:
 - [session layer](crate::session)
   - Defines what a [`Session`] is
   - Handles core dis/connection logic, shared among all IO implementations
@@ -96,8 +100,8 @@ This crate is fundamentally split into multiple layers:
   - Splits messages into packets, and reassembles packets into messages, which can be used layers
     above
   - Allows receiving acknowledgement of sent message acknowledgements
-  - Technically user-swappable, but most code above this layer relies on this specific transport
-    layer implementation
+  - Technically user-swappable, but most code above this layer relies on [`aeronet_transport`]
+    specifically
 - Component replication, rollback, etc.
   - This is not provided as part of `aeronet`, but you can use a crate which integrates `aeronet`
     with one of these e.g. [`aeronet_replicon`]
@@ -116,6 +120,38 @@ date, so you should use that as the definitive reference for information on spec
 Once you have a rough idea of the architecture, choose an IO layer implementation from the list at
 the top, add it and `aeronet` to your app, and start building!
 
+# Testing
+
+## For `aeronet`
+
+TODO: we need fuzz tests for the transport!
+
+## For users
+
+### Visualizer
+
+As a debug tool, you may want to see the state of your session over time while you are in the app.
+If using `aeronet_transport`, you can use the `visualizer` feature to enable an [`egui_plot`]
+visualizer which displays statistics on sessions. This includes data such as round-trip time and
+packet loss percentage.
+
+### Conditioning
+
+Using a conditioner allows you to emulate poor network conditions locally, and see how your app
+copes with problems such as duplicate or lost packets, delay, and jitter.
+
+Some example tools you may use are:
+- Linux
+  - [`tc`](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/configuring_and_managing_networking/linux-traffic-control_configuring-and-managing-networking)
+    - `sudo tc qdisc add dev lo root netem delay 250ms`
+    - `sudo tc qdisc add dev lo root netem delay 200ms 50ms distribution normal`
+    - `sudo tc qdisc add dev lo root netem loss 50%`
+    - `sudo tc qdisc delete dev lo root`
+- MacOS
+  - [`dummynet`](https://superuser.com/questions/126642/throttle-network-bandwidth-per-application-in-mac-os-x)
+- Windows
+  - [`clumsy`](https://github.com/jagt/clumsy)
+
 [Bevy]: https://bevyengine.org
 [`aeronet_channel`]: https://docs.rs/aeronet_channel
 [`aeronet_websocket`]: https://docs.rs/aeronet_websocket
@@ -123,6 +159,8 @@ the top, add it and `aeronet` to your app, and start building!
 [`aeronet_steam`]: https://docs.rs/aeronet_steam
 [`aeronet_replicon`]: https://docs.rs/aeronet_replicon
 [`bevy_replicon`]: https://docs.rs/bevy_replicon
-[`Session`]: connection::Session
+[`aeronet_transport`]: https://docs.rs/aeronet_transport
+[`Session`]: io::connection::Session
 [`echo_client`]: ./examples/echo_client
 [`echo_server`]: ./examples/echo_server
+[`egui_plot`]: https://docs.rs/egui_plot

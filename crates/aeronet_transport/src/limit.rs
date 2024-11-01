@@ -1,7 +1,6 @@
 //! See [`Limit`].
 
-use thiserror::Error;
-use typesize::derive::TypeSize;
+use {thiserror::Error, typesize::derive::TypeSize};
 
 /// Tracks how many counts this value has remaining, and allows consuming or
 /// refilling this counter.
@@ -74,7 +73,10 @@ pub trait Limit {
 }
 
 impl<T: Limit> Limit for &mut T {
-    type Consume<'this> = T::Consume<'this> where Self: 'this;
+    type Consume<'this>
+        = T::Consume<'this>
+    where
+        Self: 'this;
 
     #[inline]
     fn try_consume(&mut self, n: usize) -> Result<Self::Consume<'_>, NotEnoughCounts> {
@@ -352,7 +354,10 @@ impl<A, B> MinOf<A, B> {
 }
 
 impl<A: Limit, B: Limit> Limit for MinOf<A, B> {
-    type Consume<'s> = ConsumeMinOf<A::Consume<'s>, B::Consume<'s>> where Self: 's;
+    type Consume<'s>
+        = ConsumeMinOf<A::Consume<'s>, B::Consume<'s>>
+    where
+        Self: 's;
 
     #[inline]
     fn try_consume(&mut self, n: usize) -> Result<Self::Consume<'_>, NotEnoughCounts> {

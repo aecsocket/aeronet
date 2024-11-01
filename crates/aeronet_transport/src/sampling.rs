@@ -8,8 +8,8 @@ use {
     bevy_ecs::prelude::*,
     bevy_time::{Real, Time, Timer, TimerMode},
     ringbuf::{
-        traits::{Consumer, RingBuffer},
         HeapRb,
+        traits::{Consumer, RingBuffer},
     },
     std::time::Duration,
 };

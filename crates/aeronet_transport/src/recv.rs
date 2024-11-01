@@ -1,25 +1,25 @@
 //! Receiving logic for [`Transport`]s.
 
-use std::{iter, num::Saturating};
-
-use aeronet_io::{connection::Disconnect, packet::PacketBuffers};
-use ahash::{HashMap, HashSet};
-use bevy_ecs::prelude::*;
-use itertools::Either;
-use octs::{Buf, Read};
-use thiserror::Error;
-use tracing::{trace, trace_span, warn};
-use typesize::{derive::TypeSize, TypeSize};
-use web_time::Instant;
-
-use crate::{
-    frag::{FragmentReceiver, ReassembleError},
-    lane::{LaneIndex, LaneKind},
-    packet::{Fragment, MessageSeq, PacketHeader, PacketSeq},
-    rtt::RttEstimator,
-    send,
-    seq_buf::SeqBuf,
-    FlushedPacket, MessageKey, Transport,
+use {
+    crate::{
+        FlushedPacket, MessageKey, Transport,
+        frag::{FragmentReceiver, ReassembleError},
+        lane::{LaneIndex, LaneKind},
+        packet::{Fragment, MessageSeq, PacketHeader, PacketSeq},
+        rtt::RttEstimator,
+        send,
+        seq_buf::SeqBuf,
+    },
+    aeronet_io::{connection::Disconnect, packet::PacketBuffers},
+    ahash::{HashMap, HashSet},
+    bevy_ecs::prelude::*,
+    itertools::Either,
+    octs::{Buf, Read},
+    std::{iter, num::Saturating},
+    thiserror::Error,
+    tracing::{trace, trace_span, warn},
+    typesize::{TypeSize, derive::TypeSize},
+    web_time::Instant,
 };
 
 #[derive(Debug, TypeSize)]
@@ -127,7 +127,7 @@ fn recv_on(
         .read::<PacketHeader>()
         .map_err(|_| RecvError::ReadHeader)?;
 
-    let span = trace_span!("recv", packet = header.seq.0 .0);
+    let span = trace_span!("recv", packet = header.seq.0.0);
     let _span = span.enter();
 
     trace!(len = packet.len(), "Received packet");
