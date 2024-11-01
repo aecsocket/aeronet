@@ -159,18 +159,28 @@ pub struct SessionStatsSample {
     /// however the implementation may change this in the future.
     ///
     /// Let's assume that we are calculating sample 100, and our RTT is such
-    /// that e expect to have received acknowledgements for all packets sent up
+    /// that we expect to have received acknowledgements for all packets sent up
     /// to sample 90 by now.
     /// Up to sample 90, we received 950 acks and sent 1000 messages total.
-    /// Therefore, at sample 100, we expect to have 1000 acks.
+    /// Therefore, at sample 100, we expect to have 1000 acks - we expect to
+    /// have 50 more acks than we had at sample 90.
     ///
-    /// - If by now we have received 1000 acknowledgements, then we have 0%
-    ///   packet loss, and our RTT estimate is very accurate.
-    /// - If we have more than 1000 acknowledgements, our packet loss is still
-    ///   0%, but our RTT estimate is too high, and the peer actually
-    ///   acknowledges packets faster than we think.
+    /// - If by now we have received 1000 acks, then:
+    ///   - we have received 50 (1000 - 950) extra acks
+    ///   - we have lost 0 (50 - 50) packets
+    ///   - we have 0% packet loss
+    ///   - we have a very accurate RTT estimate
+    /// - If we have more than 1000 acks, then:
+    ///   - we have received more than 50 extra acks
+    ///   - we have lost 0 packets
+    ///   - we have 0% packet loss
+    ///   - our RTT estimate is too high - the peer actually acknowledges
+    ///     packets faster than we think
     /// - If we have between 950 and 1000 acknowledgements, we have some
-    ///   percentage of packet loss i.e. 955 acks means 10% packet loss.
+    ///   percentage of packet loss. If we had 960 acks, then:
+    ///   - we have received 10 extra acks
+    ///   - we have lost 40 (50 - 10) packets
+    ///   - we have 90% packet loss
     /// - If we still only have 950 acks, we have 100% packet loss.
     ///
     /// [the PTO]: crate::rtt::RttEstimator::pto
@@ -249,9 +259,8 @@ fn update_stats(
                 .copied()
                 .unwrap_or_default();
 
-            let extra_acks_expected = (lost_thresh_sample.packets_total.packets_sent
-                - lost_thresh_sample.msgs_total.packet_acks_recv.get())
-            .0;
+            let extra_acks_expected =
+                (packet_stats.packets_sent - lost_thresh_sample.packets_total.packets_sent).0;
 
             if extra_acks_expected == 0 {
                 0.0
@@ -261,6 +270,7 @@ fn update_stats(
                 .0;
                 #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
                 let acked_frac = extra_acks_received as f64 / extra_acks_expected as f64;
+
                 1.0 - acked_frac.clamp(0.0, 1.0)
             }
         };

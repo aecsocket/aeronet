@@ -40,9 +40,7 @@ fn main() -> AppExit {
         .add_systems(
             Update,
             (
-                global_ui,
-                web_transport_ui,
-                web_socket_ui,
+                (web_transport_ui, web_socket_ui, global_ui).chain(),
                 (draw_boxes, handle_inputs).run_if(in_state(GameState::Playing)),
             ),
         )
