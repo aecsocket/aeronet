@@ -4,6 +4,7 @@ use {
     crate::convert,
     aeronet_io::{
         connection::{Connected, DisconnectReason, Disconnected},
+        packet::PacketMtu,
         server::{Opened, Server},
         web_time::Instant,
     },
@@ -16,6 +17,8 @@ use {
         prelude::{RepliconChannels, RepliconServer},
         server::{ServerEvent, ServerSet},
     },
+    std::any::type_name,
+    tracing::warn,
 };
 
 /// Provides a [`bevy_replicon`] server backend using [`Server`]s and
@@ -129,19 +132,28 @@ fn update_state(
 
 fn on_connected(
     trigger: Trigger<OnAdd, Connected>,
-    clients: Query<&Parent>,
+    parents: Query<&Parent>,
+    packet_mtus: Query<&PacketMtu>,
     open_servers: Query<(), OpenedServer>,
     mut events: EventWriter<ServerEvent>,
     channels: Res<RepliconChannels>,
     mut commands: Commands,
 ) {
     let client = trigger.entity();
-    let Ok(server) = clients.get(client).map(Parent::get) else {
+    let Ok(server) = parents.get(client).map(Parent::get) else {
         return;
     };
     if open_servers.get(server).is_err() {
         return;
     }
+    let Ok(&PacketMtu(packet_mtu)) = packet_mtus.get(client) else {
+        warn!(
+            "{client} connected to {server} but does not have `{}` - \
+            cannot create transport",
+            type_name::<PacketMtu>(),
+        );
+        return;
+    };
 
     let client_id = convert::to_client_id(client);
     events.send(ServerEvent::ClientConnected { client_id });
@@ -154,9 +166,16 @@ fn on_connected(
         .server_channels()
         .iter()
         .map(|channel| convert::to_lane_kind(channel.kind));
-    commands
-        .entity(client)
-        .insert(Transport::new(recv_lanes, send_lanes));
+    let transport = match Transport::new(Instant::now(), packet_mtu, recv_lanes, send_lanes) {
+        Ok(transport) => transport,
+        Err(err) => {
+            let err = anyhow::Error::new(err);
+            warn!("Failed to create transport for {client} connecting to {server}: {err:#}");
+            return;
+        }
+    };
+
+    commands.entity(client).insert(transport);
 }
 
 fn on_disconnected(
@@ -193,11 +212,15 @@ fn poll(
         }
 
         let client_id = convert::to_client_id(client);
-        for (lane_index, msg) in transport.recv.drain() {
+        for (lane_index, msg) in transport.recv_msgs.drain() {
             let Some(channel_id) = convert::to_channel_id(lane_index) else {
                 continue;
             };
             replicon_server.insert_received(client_id, channel_id, msg);
+        }
+
+        for _ in transport.recv_acks.drain() {
+            // we don't use the acks for anything
         }
     }
 }

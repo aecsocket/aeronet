@@ -30,7 +30,7 @@
 use {
     arbitrary::Arbitrary,
     bevy_reflect::prelude::*,
-    octs::{BufTooShortOr, Decode, Encode, EncodeLen, Read, VarInt, Write},
+    octs::{BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt, Write},
     static_assertions::const_assert,
     typesize::derive::TypeSize,
 };
@@ -158,6 +158,12 @@ impl LaneIndex {
     pub const fn into_usize(self) -> usize {
         self.0 as usize // checked statically
     }
+}
+
+impl FixedEncodeLenHint for LaneIndex {
+    const MIN_ENCODE_LEN: usize = <VarInt<RawLaneIndex> as FixedEncodeLenHint>::MIN_ENCODE_LEN;
+
+    const MAX_ENCODE_LEN: usize = <VarInt<RawLaneIndex> as FixedEncodeLenHint>::MAX_ENCODE_LEN;
 }
 
 impl EncodeLen for LaneIndex {

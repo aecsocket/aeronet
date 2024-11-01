@@ -3,14 +3,17 @@
 use {
     crate::convert,
     aeronet_io::{
-        connection::{Connected, Session},
-        web_time,
+        connection::{Connected, Disconnect, Session},
+        packet::PacketMtu,
+        web_time::Instant,
     },
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
+    std::any::type_name,
+    tracing::warn,
 };
 
 /// Provides a [`bevy_replicon`] client backend using [`Session`]s for
@@ -59,7 +62,7 @@ impl Plugin for AeronetRepliconClientPlugin {
                     .in_set(ClientTransportSet::Flush)
                     .run_if(resource_exists::<RepliconClient>),
             )
-            .observe(on_client_added);
+            .observe(on_client_connected);
     }
 }
 
@@ -111,24 +114,52 @@ pub enum ClientTransportSet {
 #[reflect(Component)]
 pub struct AeronetRepliconClient;
 
-fn on_client_added(
-    trigger: Trigger<OnAdd, AeronetRepliconClient>,
+fn on_client_connected(
+    trigger: Trigger<OnAdd, Connected>,
     mut commands: Commands,
+    is_client: Query<(), With<AeronetRepliconClient>>,
+    packet_mtus: Query<&PacketMtu>,
     channels: Res<RepliconChannels>,
 ) {
     let client = trigger.entity();
+    if is_client.get(client).is_err() {
+        return;
+    }
 
-    let recv_lanes = channels
-        .server_channels()
-        .iter()
-        .map(|channel| convert::to_lane_kind(channel.kind));
-    let send_lanes = channels
-        .client_channels()
-        .iter()
-        .map(|channel| convert::to_lane_kind(channel.kind));
-    commands
-        .entity(client)
-        .insert(Transport::new(recv_lanes, send_lanes));
+    let result = (|| {
+        let Ok(&PacketMtu(packet_mtu)) = packet_mtus.get(client) else {
+            warn!(
+                "{client} has `{}` but not `{}` - cannot create transport",
+                type_name::<AeronetRepliconClient>(),
+                type_name::<PacketMtu>()
+            );
+            return Err(());
+        };
+
+        let recv_lanes = channels
+            .server_channels()
+            .iter()
+            .map(|channel| convert::to_lane_kind(channel.kind));
+        let send_lanes = channels
+            .client_channels()
+            .iter()
+            .map(|channel| convert::to_lane_kind(channel.kind));
+        let transport = match Transport::new(Instant::now(), packet_mtu, recv_lanes, send_lanes) {
+            Ok(transport) => transport,
+            Err(err) => {
+                let err = anyhow::Error::new(err);
+                warn!("Failed to create transport for {client}: {err:#}");
+                return Err(());
+            }
+        };
+
+        commands.entity(client).insert(transport);
+        Ok(())
+    })();
+
+    if result.is_err() {
+        commands.trigger_targets(Disconnect::new("failed to create transport"), client);
+    }
 }
 
 type ConnectedClient = (With<Session>, With<Connected>, With<AeronetRepliconClient>);
@@ -166,11 +197,15 @@ fn poll(
     mut clients: Query<&mut Transport, ConnectedClient>,
 ) {
     for mut transport in &mut clients {
-        for (lane_index, msg) in transport.recv.drain() {
+        for (lane_index, msg) in transport.recv_msgs.drain() {
             let Some(channel_id) = convert::to_channel_id(lane_index) else {
                 continue;
             };
             replicon_client.insert_received(channel_id, msg);
+        }
+
+        for _ in transport.recv_acks.drain() {
+            // we don't use the acks for anything
         }
     }
 }

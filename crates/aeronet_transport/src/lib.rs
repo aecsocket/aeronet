@@ -26,9 +26,11 @@ use {
     derive_more::{Add, AddAssign, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
     limit::TokenBucket,
-    packet::{Acknowledge, MessageSeq, PacketSeq},
+    octs::FixedEncodeLenHint,
+    packet::{Acknowledge, FragmentHeader, FragmentIndex, MessageSeq, PacketHeader, PacketSeq},
     rtt::RttEstimator,
     seq_buf::SeqBuf,
+    thiserror::Error,
     typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
 };
@@ -73,16 +75,27 @@ pub struct Transport {
     pub send: send::TransportSend,
 }
 
+const FRAG_OVERHEAD: usize = PacketHeader::MAX_ENCODE_LEN + FragmentHeader::MAX_ENCODE_LEN;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum TransportCreationError {
+    #[error("packet MTU of {packet_mtu} is too small for this protocol")]
+    PacketMtuTooSmall { packet_mtu: usize },
+}
+
 impl Transport {
     #[must_use]
     pub fn new(
         now: Instant,
-        mtu: usize,
+        packet_mtu: usize,
         recv_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
         send_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
-    ) -> Self {
-        let max_frag_len = 0;
-        Self {
+    ) -> Result<Self, TransportCreationError> {
+        let max_frag_len = packet_mtu
+            .checked_sub(FRAG_OVERHEAD)
+            .ok_or(TransportCreationError::PacketMtuTooSmall { packet_mtu })?;
+        Ok(Self {
             max_memory_usage: 4 * 1024 * 1024,
             //
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
@@ -92,7 +105,7 @@ impl Transport {
             recv_lanes: recv_lanes
                 .into_iter()
                 .map(Into::into)
-                .map(|kind| recv::Lane { frags: todo!() })
+                .map(recv::Lane::new)
                 .collect(),
             rtt: RttEstimator::default(),
             recv_msgs: recv::TransportRecv::new(),
@@ -101,7 +114,7 @@ impl Transport {
             bytes_left: TokenBucket::new(usize::MAX),
             next_packet_seq: PacketSeq::default(),
             send: send::TransportSend::new(max_frag_len, send_lanes),
-        }
+        })
     }
 
     #[must_use]
@@ -115,7 +128,7 @@ impl Transport {
     }
 
     #[must_use]
-    pub fn memory_usage(&self) -> usize {
+    pub fn memory_used(&self) -> usize {
         self.get_size()
     }
 
@@ -143,7 +156,7 @@ pub struct MessageStats {
 struct FragmentPath {
     lane_index: LaneIndex,
     msg_seq: MessageSeq,
-    frag_index: usize,
+    frag_index: FragmentIndex,
 }
 
 #[derive(Debug, Clone, TypeSize)]

@@ -123,11 +123,11 @@ pub struct SessionStatsSample {
     /// [`Transport::rtt`]'s [`RttEstimator::get`].
     ///
     /// [`RttEstimator::get`]: crate::rtt::RttEstimator::get
-    pub message_rtt: Duration,
+    pub msg_rtt: Duration,
     /// [`Transport::rtt`]'s [`RttEstimator::conservative`].
     ///
     /// [`RttEstimator::conservative`]: crate::rtt::RttEstimator::conservative
-    pub message_crtt: Duration,
+    pub msg_crtt: Duration,
     /// [`PacketStats`] at the time of sampling.
     pub packets_total: PacketStats,
     /// [`PacketStats`] at the time of sampling, minus the previous sample's
@@ -138,6 +138,10 @@ pub struct SessionStatsSample {
     /// [`Transport::stats`] at the time of sampling, minus the previous
     /// sample's [`SessionStatsSample::msgs_total`].
     pub msgs_delta: MessageStats,
+    /// [`Transport::memory_used`] at the time of sampling.
+    pub mem_used: usize,
+    /// [`Transport::max_memory_usage`] at the time of sampling.
+    pub mem_max: usize,
     /// What proportion of packets sent recently are believed to have been lost
     /// in transit.
     ///
@@ -263,12 +267,14 @@ fn update_stats(
 
         let sample = SessionStatsSample {
             packet_rtt: packet_rtt.map(|rtt| **rtt),
-            message_rtt: msg_rtt.get(),
-            message_crtt: msg_rtt.conservative(),
+            msg_rtt: msg_rtt.get(),
+            msg_crtt: msg_rtt.conservative(),
             packets_total: *packet_stats,
             packets_delta: *packet_stats - last_sample.packets_total,
             msgs_total: msg_stats,
             msgs_delta: msg_stats - last_sample.msgs_total,
+            mem_used: transport.memory_used(),
+            mem_max: transport.max_memory_usage,
             loss,
         };
         stats.push_overwrite(sample);
