@@ -137,7 +137,7 @@ fn echo_messages(
         // from which we can grab disjoint refs to `recv` and `send`.
         let transport = &mut *transport;
 
-        for (lane_index, msg) in transport.recv.drain() {
+        for (lane_index, msg) in transport.recv_msgs.drain() {
             // `msg` is a `Vec<u8>` - we have full ownership of the bytes received.
             // We'll turn it into a UTF-8 string, and resend it along the same
             // lane that we received it on.
@@ -148,7 +148,7 @@ fn echo_messages(
             info!("{client} < {reply}");
             // Convert our `String` into a `Bytes` to send it out.
             // We ignore the resulting `MessageKey`, since we don't need it.
-            _ = transport.send.push(lane_index, Bytes::from(reply));
+            _ = transport.send.push_now(lane_index, Bytes::from(reply));
         }
     }
 }
