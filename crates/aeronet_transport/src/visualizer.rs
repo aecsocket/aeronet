@@ -1,9 +1,16 @@
 //! See [`SessionVisualizerPlugin`].
 
 use {
-    crate::sampling::{
-        SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
-        SessionStatsSampling,
+    crate::{
+        sampling::{
+            SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
+            SessionStatsSampling,
+        },
+        Transport,
+    },
+    aeronet_io::{
+        connection::Connected,
+        packet::{PacketMtu, PacketRtt},
     },
     bevy_app::prelude::*,
     bevy_core::Name,
@@ -15,7 +22,8 @@ use {
     itertools::Itertools,
     ringbuf::traits::Consumer,
     size_format::{BinaryPrefixes, PointSeparated, SizeFormatter},
-    std::{borrow::Borrow, hash::Hash, ops::RangeInclusive, time::Duration},
+    std::{hash::Hash, ops::RangeInclusive, time::Duration},
+    web_time::Instant,
 };
 
 /// Uses [`egui`] to draw [`egui_plot`]s of [`Session`] statistics.
@@ -77,6 +85,12 @@ pub struct RxTxSample {
     pub bytes_sent_delta: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct MiscSample {
+    pub loss: f64,
+    pub mem_used: f64,
+}
+
 impl SessionVisualizer {
     /// Draws the plot for RTT.
     pub fn show_rtt(
@@ -94,8 +108,6 @@ impl SessionVisualizer {
             .enumerate()
             .map(|(index, sample)| {
                 let x = graph_x(index, sample_rate);
-                let sample = sample.borrow();
-
                 let packet_rtt = sample.packet_rtt.as_secs_f64() * MS_PER_SEC;
                 let msg_rtt = sample.msg_rtt.as_secs_f64() * MS_PER_SEC;
                 ([x, packet_rtt], [x, msg_rtt])
@@ -104,10 +116,13 @@ impl SessionVisualizer {
 
         let color = ui.visuals().text_color();
         let weak_color = ui.visuals().weak_text_color();
-        plot(sampling.history_sec(), "rtt")
+        let history_sec = sampling.history_sec();
+        plot(history_sec, "rtt")
             .y_grid_spacer(egui_plot::uniform_grid_spacer(|_| [500.0, 200.0, 50.0]))
             .custom_y_axes(vec![axis_hints("ms")])
             .show(ui, |ui| {
+                constrain_plot(ui, history_sec);
+
                 ui.line(egui_plot::Line::new(msg_rtt).name("Msg RTT").color(color));
                 ui.line(
                     egui_plot::Line::new(packet_rtt)
@@ -131,8 +146,6 @@ impl SessionVisualizer {
             .enumerate()
             .map(|(index, sample)| {
                 let x = graph_x(index, sample_rate);
-                let sample = sample.borrow();
-
                 #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
                 let (rx, tx) = (
                     sample.bytes_recv_delta as f64 * sample_rate,
@@ -142,47 +155,60 @@ impl SessionVisualizer {
             })
             .multiunzip::<(Vec<_>, Vec<_>)>();
 
-        plot(sampling.history_sec(), "rx_tx")
+        let history_sec = sampling.history_sec();
+        plot(history_sec, "rx_tx")
             .y_grid_spacer(egui_plot::log_grid_spacer(2))
             .custom_y_axes(vec![axis_hints("bytes/sec")])
             .y_axis_formatter(fmt_bytes_y_axis)
             .show(ui, |ui| {
+                constrain_plot(ui, history_sec);
+
                 ui.line(egui_plot::Line::new(rx).name("Rx").color(self.rx_color));
                 ui.line(egui_plot::Line::new(tx).name("Tx").color(self.tx_color));
             })
     }
 
-    /// Draws the plot for percentage of messages lost in transit.
-    pub fn show_loss(
+    /// Draws the plot for miscellaneous fractional statistics.
+    pub fn show_misc(
         &self,
         ui: &mut egui::Ui,
         sampling: SessionStatsSampling,
-        samples: impl IntoIterator<Item = f64>,
+        samples: impl IntoIterator<Item = MiscSample>,
     ) -> egui_plot::PlotResponse<()> {
         let sample_rate = sampling.rate();
 
-        let loss = samples
+        let (loss, mem_used) = samples
             .into_iter()
             .enumerate()
-            .map(|(index, loss)| {
+            .map(|(index, sample)| {
                 let x = graph_x(index, sample_rate);
-                let loss = loss * 100.0;
-                [x, loss]
+                let loss = sample.loss * 100.0;
+                let mem_used = sample.mem_used * 100.0;
+                ([x, loss], [x, mem_used])
             })
-            .collect::<Vec<_>>();
+            .multiunzip::<(Vec<_>, Vec<_>)>();
 
         let color = ui.visuals().text_color();
+        let weak_color = ui.visuals().weak_text_color();
+        let history_sec = sampling.history_sec();
         plot(sampling.history_sec(), "loss")
             .include_y(100.0)
             .y_grid_spacer(egui_plot::uniform_grid_spacer(|_| [100.0, 25.0, 10.0]))
             .custom_y_axes(vec![axis_hints("%")])
             .show(ui, |ui| {
+                constrain_plot(ui, history_sec);
+
                 ui.line(egui_plot::Line::new(loss).name("Pkt Loss").color(color));
+                ui.line(
+                    egui_plot::Line::new(mem_used)
+                        .name("Mem Used")
+                        .color(weak_color),
+                );
             })
     }
 
     /// Draws the entire UI.
-    pub fn show(
+    pub fn show_plots(
         &self,
         ui: &mut egui::Ui,
         sampling: SessionStatsSampling,
@@ -194,7 +220,7 @@ impl SessionVisualizer {
                 sampling,
                 samples.clone().into_iter().map(|sample| RttSample {
                     packet_rtt: sample.packet_rtt.unwrap_or_default(),
-                    msg_rtt: Duration::ZERO,
+                    msg_rtt: sample.msg_rtt,
                 }),
             );
 
@@ -207,11 +233,53 @@ impl SessionVisualizer {
                 }),
             );
 
-            self.show_loss(
+            self.show_misc(
                 ui,
                 sampling,
-                samples.clone().into_iter().map(|sample| sample.loss),
+                samples.clone().into_iter().map(|sample| MiscSample {
+                    loss: sample.loss,
+                    mem_used: sample.mem_used as f64 / sample.mem_max as f64,
+                }),
             );
+        });
+    }
+
+    pub fn show_status_bar(
+        &self,
+        ui: &mut egui::Ui,
+        now: Instant,
+        transport: &Transport,
+        connected_at: Option<Instant>,
+        packet_mtu: Option<usize>,
+        packet_rtt: Option<Duration>,
+    ) {
+        let unknown = || "?".to_string();
+
+        ui.horizontal(|ui| {
+            ui.label(connected_at.map_or_else(
+                || "not connected".into(),
+                |at| format!("{:.1?}", now.saturating_duration_since(at)),
+            ));
+            ui.separator();
+
+            ui.label("MTU");
+            ui.label(packet_mtu.map_or_else(unknown, |mtu| format!("{mtu}")));
+            ui.separator();
+
+            ui.label("RTT");
+            ui.label(format!(
+                "{} pkt / {:.1?} msg",
+                packet_rtt.map_or_else(unknown, |rtt| format!("{rtt:.1?}")),
+                transport.rtt().get(),
+            ));
+            ui.separator();
+
+            ui.label("MEM");
+            ui.label(format!(
+                "{} / {}",
+                fmt_bytes(transport.memory_used()),
+                fmt_bytes(transport.max_memory_usage)
+            ));
         });
     }
 }
@@ -240,6 +308,18 @@ fn plot(history_sec: f64, id_salt: impl Hash) -> egui_plot::Plot<'static> {
         .legend(egui_plot::Legend::default().position(egui_plot::Corner::LeftTop))
 }
 
+fn constrain_plot(ui: &mut egui_plot::PlotUi, history_sec: f64) {
+    let bounds = ui.plot_bounds();
+    let [min_x, min_y] = bounds.min();
+    let [max_x, max_y] = bounds.max();
+
+    ui.set_auto_bounds(egui::Vec2b::new(false, true));
+    ui.set_plot_bounds(egui_plot::PlotBounds::from_min_max(
+        [min_x.clamp(-history_sec, 0.0), min_y],
+        [max_x.clamp(-history_sec, 0.0), max_y],
+    ));
+}
+
 fn axis_hints(label: impl Into<egui::WidgetText>) -> egui_plot::AxisHints<'static> {
     egui_plot::AxisHints::new_y()
         .label(label)
@@ -265,15 +345,33 @@ fn fmt_bytes_y_axis(mark: egui_plot::GridMark, _range: &RangeInclusive<f64>) -> 
 
 fn draw(
     mut egui: EguiContexts,
-    sessions: Query<(Entity, Option<&Name>, &SessionVisualizer, &SessionStats)>,
+    sessions: Query<(
+        Entity,
+        Option<&Name>,
+        &SessionVisualizer,
+        &SessionStats,
+        &Transport,
+        Option<&Connected>,
+        Option<&PacketMtu>,
+        Option<&PacketRtt>,
+    )>,
     sampling: Res<SessionStatsSampling>,
 ) {
-    for (entity, name, visualizer, stats) in &sessions {
+    for (entity, name, visualizer, stats, transport, connected, packet_mtu, packet_rtt) in &sessions
+    {
         let display_name =
             name.map_or_else(|| entity.to_string(), |name| format!("{name} ({entity})"));
 
         egui::Window::new(format!("Session: {display_name}")).show(egui.ctx_mut(), |ui| {
-            visualizer.show(ui, *sampling, stats.iter().rev().copied());
+            visualizer.show_plots(ui, *sampling, stats.iter().rev().copied());
+            visualizer.show_status_bar(
+                ui,
+                Instant::now(),
+                transport,
+                connected.map(|x| x.at),
+                packet_mtu.map(|x| x.0),
+                packet_rtt.map(|x| x.0),
+            );
         });
     }
 }

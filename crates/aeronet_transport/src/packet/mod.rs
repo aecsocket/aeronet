@@ -129,7 +129,7 @@ pub struct Acknowledge {
 }
 
 /// Metadata for a single packet.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PacketHeader {
     /// Monotonically increasing sequence number of this packet.
@@ -173,14 +173,14 @@ pub struct FragmentPayload(pub Bytes);
 
 /// Defines the type used for representing the length of a [`FragmentPayload`].
 ///
-/// This must be at least as big as [`usize`].
+/// This must be the same size or smaller than [`usize`].
 pub type FragmentPayloadLen = u32;
 
 const_assert!(size_of::<usize>() >= size_of::<FragmentPayloadLen>());
 
-/// Single fragment of a message.
-#[derive(Debug, Clone)]
-pub struct MessageFragment {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct FragmentHeader {
     /// Index along which this message should be received by the receiver.
     pub lane: LaneIndex,
     /// Monotonically increasing sequence number of this message.
@@ -190,6 +190,13 @@ pub struct MessageFragment {
     pub seq: MessageSeq,
     /// Position of the fragment that we are about to deliver.
     pub position: FragmentPosition,
+}
+
+/// Single fragment of a message.
+#[derive(Debug, Clone)]
+pub struct Fragment {
+    /// Fragment metadata.
+    pub header: FragmentHeader,
     /// User-defined data to be delivered.
     pub payload: FragmentPayload,
 }

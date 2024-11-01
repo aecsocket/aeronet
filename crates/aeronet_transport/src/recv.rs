@@ -14,8 +14,8 @@ use web_time::Instant;
 
 use crate::{
     frag::{FragmentReceiver, ReassembleError},
-    lane::LaneIndex,
-    packet::{MessageFragment, MessageSeq, PacketHeader, PacketSeq},
+    lane::{LaneIndex, LaneKind},
+    packet::{Fragment, MessageSeq, PacketHeader, PacketSeq},
     rtt::RttEstimator,
     send,
     seq_buf::SeqBuf,
@@ -39,6 +39,28 @@ impl<T: TypeSize> TransportRecv<T> {
 pub(crate) struct Lane {
     frags: FragmentReceiver,
     state: LaneState,
+}
+
+impl Lane {
+    pub(crate) fn new(kind: LaneKind) -> Self {
+        Self {
+            frags: FragmentReceiver::default(),
+            state: match kind {
+                LaneKind::UnreliableUnordered => LaneState::UnreliableUnordered,
+                LaneKind::UnreliableSequenced => LaneState::UnreliableSequenced {
+                    pending: MessageSeq::default(),
+                },
+                LaneKind::ReliableUnordered => LaneState::ReliableUnordered {
+                    pending: MessageSeq::default(),
+                    recv_buf: HashSet::default(),
+                },
+                LaneKind::ReliableOrdered => LaneState::ReliableOrdered {
+                    pending: MessageSeq::default(),
+                    recv_buf: HashMap::default(),
+                },
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, TypeSize)]
@@ -87,7 +109,7 @@ pub(crate) fn poll(
             };
         }
 
-        let mem_used = transport.memory_usage();
+        let mem_used = transport.memory_used();
         let mem_max = transport.max_memory_usage;
         if mem_used > mem_max {
             warn!("{session} exceeded memory limit, disconnecting - {mem_used} / {mem_max} bytes");
@@ -120,7 +142,7 @@ fn recv_on(
     ));
 
     while packet.has_remaining() {
-        recv_frag(transport, packet)?;
+        recv_frag(transport, &mut packet)?;
     }
 
     transport.peer_acks.ack(header.seq);
@@ -182,11 +204,11 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
         })
 }
 
-fn recv_frag(transport: &mut Transport, mut packet: &[u8]) -> Result<(), RecvError> {
+fn recv_frag(transport: &mut Transport, packet: &mut &[u8]) -> Result<(), RecvError> {
     let frag = packet
-        .read::<MessageFragment>()
+        .read::<Fragment>()
         .map_err(|_| RecvError::ReadFragment)?;
-    let lane_index = frag.lane;
+    let lane_index = frag.header.lane;
     let lane_index_u = lane_index.into_usize();
 
     let memory_left = transport.memory_left();
@@ -199,15 +221,15 @@ fn recv_frag(transport: &mut Transport, mut packet: &[u8]) -> Result<(), RecvErr
         .reassemble(
             transport.send.max_frag_len,
             memory_left,
-            frag.seq,
-            frag.position,
+            frag.header.seq,
+            frag.header.position,
             &frag.payload,
         )
         .map_err(RecvError::Reassemble)?;
 
     if let Some(msg) = msg {
         let msgs_with_lane =
-            recv_on_lane(&mut lane.state, msg, frag.seq).map(|msg| (lane_index, msg));
+            recv_on_lane(&mut lane.state, msg, frag.header.seq).map(|msg| (lane_index, msg));
         transport.recv_msgs.0.extend(msgs_with_lane);
     }
 

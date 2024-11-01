@@ -15,7 +15,8 @@ use crate::{
     lane::{LaneIndex, LaneKind, LaneReliability},
     limit::Limit,
     packet::{
-        FragmentPayload, FragmentPosition, MessageFragment, MessageSeq, PacketHeader, PacketSeq,
+        Fragment, FragmentHeader, FragmentIndex, FragmentPayload, FragmentPosition, MessageSeq,
+        PacketHeader, PacketSeq,
     },
     rtt::RttEstimator,
     sized, FlushedPacket, FragmentPath, MessageKey, Transport,
@@ -41,7 +42,7 @@ pub(crate) struct SentMessage {
 }
 
 #[derive(Debug, Clone, TypeSize)]
-struct SentFragment {
+pub(crate) struct SentFragment {
     position: FragmentPosition,
     payload: sized::Bytes,
     sent_at: sized::Instant,
@@ -228,6 +229,8 @@ fn frag_paths_in_lane(
             .filter_map(|(i, frag)| frag.as_ref().map(|frag| (i, frag)))
             .filter(move |(_, frag)| now >= frag.next_flush_at.0)
             .map(move |(frag_index, frag)| {
+                let frag_index = FragmentIndex::try_from(frag_index)
+                    .expect("number of frags should fit into `FragmentIndex`");
                 (
                     FragmentPath {
                         lane_index,
@@ -248,8 +251,7 @@ fn write_frag_at_path(
     packet: &mut Vec<u8>,
     path: FragmentPath,
 ) -> Result<(), ()> {
-    let lane_index =
-        usize::try_from(path.lane_index.into_raw()).expect("lane index should fit into a `usize`");
+    let lane_index = path.lane_index.into_usize();
     let lane = lanes
         .get_mut(lane_index)
         .expect("frag path should point to a valid lane");
@@ -259,7 +261,7 @@ fn write_frag_at_path(
         .get_mut(&path.msg_seq)
         .expect("frag path should point to a valid msg in this lane");
 
-    let frag_index = path.frag_index;
+    let frag_index = usize::from(path.frag_index);
     let frag_slot = msg
         .frags
         .get_mut(frag_index)
@@ -268,10 +270,12 @@ fn write_frag_at_path(
         .as_mut()
         .expect("frag path should point to a frag slot which is still occupied");
 
-    let frag = MessageFragment {
-        seq: path.msg_seq,
-        lane: path.lane_index,
-        position: sent_frag.position,
+    let frag = Fragment {
+        header: FragmentHeader {
+            seq: path.msg_seq,
+            lane: path.lane_index,
+            position: sent_frag.position,
+        },
         payload: FragmentPayload(sent_frag.payload.clone().0),
     };
     bytes_left.consume(frag.encode_len()).map_err(drop)?;

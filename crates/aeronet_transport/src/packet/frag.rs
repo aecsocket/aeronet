@@ -1,53 +1,16 @@
 use {
-    super::{FragmentIndex, FragmentPosition, MessageFragment, MessageSeq, PayloadTooLarge},
+    super::{
+        Fragment, FragmentHeader, FragmentIndex, FragmentPosition, MessageSeq, PayloadTooLarge,
+    },
+    crate::lane::LaneIndex,
     octs::{
-        BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLen, Read, VarInt, VarIntTooLarge,
+        BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt, VarIntTooLarge,
         Write,
     },
-    std::fmt,
+    std::{convert::Infallible, fmt},
 };
 
-//
-// `MessageFragment`
-//
-
-impl EncodeLen for MessageFragment {
-    fn encode_len(&self) -> usize {
-        MessageSeq::ENCODE_LEN
-            + self.lane.encode_len()
-            + self.position.encode_len()
-            + self.payload.encode_len()
-    }
-}
-
-impl Encode for MessageFragment {
-    type Error = PayloadTooLarge;
-
-    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
-        dst.write(self.seq)?;
-        dst.write(self.lane)?;
-        dst.write(self.position)?;
-        dst.write(&self.payload)?;
-        Ok(())
-    }
-}
-
-impl Decode for MessageFragment {
-    type Error = VarIntTooLarge;
-
-    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
-        Ok(Self {
-            seq: src.read()?,
-            lane: src.read()?,
-            position: src.read()?,
-            payload: src.read()?,
-        })
-    }
-}
-
-//
 // `FragmentPosition`
-//
 
 impl FragmentPosition {
     /// Creates a position for a fragment which is *not* the last one in the
@@ -102,6 +65,12 @@ impl fmt::Debug for FragmentPosition {
     }
 }
 
+impl FixedEncodeLenHint for FragmentPosition {
+    const MIN_ENCODE_LEN: usize = <VarInt<FragmentIndex> as FixedEncodeLenHint>::MIN_ENCODE_LEN;
+
+    const MAX_ENCODE_LEN: usize = <VarInt<FragmentIndex> as FixedEncodeLenHint>::MAX_ENCODE_LEN;
+}
+
 impl EncodeLen for FragmentPosition {
     fn encode_len(&self) -> usize {
         VarInt(self.0).encode_len()
@@ -121,5 +90,73 @@ impl Decode for FragmentPosition {
 
     fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
         Ok(Self(src.read::<VarInt<FragmentIndex>>()?.0))
+    }
+}
+
+// `FragmentHeader`
+
+impl FixedEncodeLenHint for FragmentHeader {
+    const MIN_ENCODE_LEN: usize =
+        LaneIndex::MIN_ENCODE_LEN + MessageSeq::MIN_ENCODE_LEN + FragmentPosition::MIN_ENCODE_LEN;
+
+    const MAX_ENCODE_LEN: usize =
+        LaneIndex::MAX_ENCODE_LEN + MessageSeq::MAX_ENCODE_LEN + FragmentPosition::MAX_ENCODE_LEN;
+}
+
+impl EncodeLen for FragmentHeader {
+    fn encode_len(&self) -> usize {
+        self.lane.encode_len() + self.seq.encode_len() + self.position.encode_len()
+    }
+}
+
+impl Encode for FragmentHeader {
+    type Error = Infallible;
+
+    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+        dst.write(self.seq)?;
+        dst.write(self.lane)?;
+        dst.write(self.position)?;
+        Ok(())
+    }
+}
+
+impl Decode for FragmentHeader {
+    type Error = VarIntTooLarge;
+
+    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
+        Ok(Self {
+            seq: src.read()?,
+            lane: src.read()?,
+            position: src.read()?,
+        })
+    }
+}
+
+// `Fragment`
+
+impl EncodeLen for Fragment {
+    fn encode_len(&self) -> usize {
+        self.header.encode_len() + self.payload.encode_len()
+    }
+}
+
+impl Encode for Fragment {
+    type Error = PayloadTooLarge;
+
+    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+        dst.write(&self.header)?;
+        dst.write(&self.payload)?;
+        Ok(())
+    }
+}
+
+impl Decode for Fragment {
+    type Error = VarIntTooLarge;
+
+    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
+        Ok(Self {
+            header: src.read()?,
+            payload: src.read()?,
+        })
     }
 }
