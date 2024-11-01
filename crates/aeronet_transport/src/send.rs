@@ -98,6 +98,10 @@ impl TransportSend {
             seq: msg_seq,
         })
     }
+
+    pub fn push_now(&mut self, lane_index: LaneIndex, msg: Bytes) -> Option<MessageKey> {
+        self.push(Instant::now(), lane_index, msg)
+    }
 }
 
 pub(crate) fn flush(mut sessions: Query<(&mut Transport, &mut PacketBuffers, &PacketMtu)>) {

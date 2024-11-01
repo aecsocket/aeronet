@@ -177,7 +177,7 @@ pub struct SessionStatsSample {
     ///   - our RTT estimate is too high - the peer actually acknowledges
     ///     packets faster than we think
     /// - If we have between 950 and 1000 acknowledgements, we have some
-    ///   percentage of packet loss. If we had 960 acks, then:
+    ///   percentage of packet loss. If we have 960 acks, then:
     ///   - we have received 10 extra acks
     ///   - we have lost 40 (50 - 10) packets
     ///   - we have 90% packet loss

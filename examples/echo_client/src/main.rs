@@ -152,12 +152,18 @@ fn recv_messages(
     >,
 ) {
     for (mut transport, mut ui_state) in &mut sessions {
-        for (_lane_index, msg) in transport.recv.drain() {
+        for (_lane_index, msg) in transport.recv_msgs.drain() {
             // `msg` is a `Vec<u8>` - we have full ownership of the bytes received.
             // We'll turn it into a UTF-8 string.
             // We don't care about the lane index.
             let msg = String::from_utf8(msg).unwrap_or_else(|_| "(not UTF-8)".into());
             ui_state.log.push(format!("> {msg}"));
+        }
+
+        for _ in transport.recv_acks.drain() {
+            // We have to use up acknowlegements,
+            // but since we don't actually care about reading them,
+            // we'll just ignore them.
         }
     }
 }
@@ -185,7 +191,7 @@ fn ui(
 
                 let msg = Bytes::from(msg);
                 // We ignore the resulting `MessageKey`, since we don't need it.
-                _ = transport.send.push(SEND_LANE, msg);
+                _ = transport.send.push_now(SEND_LANE, msg);
             }
 
             if ui.button("Disconnect").clicked() {
