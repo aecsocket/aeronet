@@ -19,7 +19,7 @@ pub mod visualizer;
 
 pub use {aeronet_io as io, octs};
 use {
-    aeronet_io::IoSet,
+    aeronet_io::{connection::Disconnect, IoSet},
     arbitrary::Arbitrary,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
@@ -30,8 +30,10 @@ use {
     packet::{Acknowledge, FragmentHeader, FragmentIndex, MessageSeq, PacketHeader, PacketSeq},
     rtt::RttEstimator,
     seq_buf::SeqBuf,
+    std::usize,
     thiserror::Error,
-    typesize::{TypeSize, derive::TypeSize},
+    tracing::warn,
+    typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
 };
 
@@ -42,8 +44,14 @@ impl Plugin for AeronetTransportPlugin {
     fn build(&self, app: &mut App) {
         app.configure_sets(PreUpdate, (IoSet::Poll, TransportSet::Poll).chain())
             .configure_sets(PostUpdate, (TransportSet::Flush, IoSet::Flush).chain())
-            .add_systems(PreUpdate, recv::poll.in_set(TransportSet::Poll))
-            .add_systems(PostUpdate, send::flush.in_set(TransportSet::Flush));
+            .add_systems(
+                PreUpdate,
+                (recv::poll, update_config, check_memory_limit)
+                    .chain()
+                    .in_set(TransportSet::Poll),
+            )
+            .add_systems(PostUpdate, send::flush.in_set(TransportSet::Flush))
+            .observe(init_config);
     }
 }
 
@@ -53,11 +61,24 @@ pub enum TransportSet {
     Flush,
 }
 
-#[derive(Debug, Component, TypeSize)]
-pub struct Transport {
-    // config
+#[derive(Debug, Clone, Copy, Component, TypeSize)]
+pub struct TransportConfig {
     pub max_memory_usage: usize,
+    pub send_bytes_per_sec: usize,
+}
 
+impl Default for TransportConfig {
+    fn default() -> Self {
+        Self {
+            max_memory_usage: 4 * 1024 * 1024,
+            send_bytes_per_sec: usize::MAX,
+        }
+    }
+}
+
+#[derive(Debug, Component, TypeSize)]
+// TODO: required component TransportConfig
+pub struct Transport {
     // shared
     flushed_packets: SeqBuf<FlushedPacket, 1024>,
     stats: MessageStats,
@@ -75,29 +96,37 @@ pub struct Transport {
     pub send: send::TransportSend,
 }
 
+// TODO: required component TransportConfig
+fn init_config(
+    trigger: Trigger<OnInsert, Transport>,
+    with_config: Query<(), With<TransportConfig>>,
+    mut commands: Commands,
+) {
+    let entity = trigger.entity();
+    if with_config.get(entity).is_err() {
+        commands.entity(entity).insert(TransportConfig::default());
+    }
+}
+
 const FRAG_OVERHEAD: usize = PacketHeader::MAX_ENCODE_LEN + FragmentHeader::MAX_ENCODE_LEN;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
-#[non_exhaustive]
-pub enum TransportCreationError {
-    #[error("packet MTU of {packet_mtu} is too small for this protocol")]
-    PacketMtuTooSmall { packet_mtu: usize },
+#[error("packet MTU of {packet_mtu} is too small for this protocol")]
+pub struct MtuTooSmall {
+    pub packet_mtu: usize,
 }
 
 impl Transport {
-    #[must_use]
     pub fn new(
         now: Instant,
         packet_mtu: usize,
         recv_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
         send_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
-    ) -> Result<Self, TransportCreationError> {
+    ) -> Result<Self, MtuTooSmall> {
         let max_frag_len = packet_mtu
             .checked_sub(FRAG_OVERHEAD)
-            .ok_or(TransportCreationError::PacketMtuTooSmall { packet_mtu })?;
+            .ok_or(MtuTooSmall { packet_mtu })?;
         Ok(Self {
-            max_memory_usage: 4 * 1024 * 1024,
-            //
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
             stats: MessageStats::default(),
             peer_acks: Acknowledge::default(),
@@ -130,11 +159,6 @@ impl Transport {
     #[must_use]
     pub fn memory_used(&self) -> usize {
         self.get_size()
-    }
-
-    #[must_use]
-    pub fn memory_left(&self) -> usize {
-        self.max_memory_usage.saturating_sub(self.get_size())
     }
 }
 
@@ -171,5 +195,27 @@ impl FlushedPacket {
             flushed_at: sized::Instant(flushed_at),
             frags: Box::new([]),
         }
+    }
+}
+
+fn check_memory_limit(
+    mut commands: Commands,
+    sessions: Query<(Entity, &Transport, &TransportConfig)>,
+) {
+    for (session, transport, config) in &sessions {
+        let mem_used = transport.memory_used();
+        let mem_max = config.max_memory_usage;
+        if mem_used > mem_max {
+            warn!("{session} exceeded memory limit, disconnecting - {mem_used} / {mem_max} bytes");
+            commands.trigger_targets(Disconnect::new("memory limit exceeded"), session);
+        }
+    }
+}
+
+fn update_config(
+    mut sessions: Query<(&mut Transport, &TransportConfig), Changed<TransportConfig>>,
+) {
+    for (mut transport, config) in &sessions {
+        // TODO
     }
 }

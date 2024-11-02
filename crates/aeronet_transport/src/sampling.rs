@@ -1,15 +1,15 @@
 //! See [`SessionSamplingPlugin`].
 
 use {
-    crate::{MessageStats, Transport},
+    crate::{MessageStats, Transport, TransportConfig},
     aeronet_io::packet::{PacketRtt, PacketStats},
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
     bevy_time::{Real, Time, Timer, TimerMode},
     ringbuf::{
-        HeapRb,
         traits::{Consumer, RingBuffer},
+        HeapRb,
     },
     std::time::Duration,
 };
@@ -228,6 +228,7 @@ fn update_stats(
         Option<&PacketRtt>,
         &PacketStats,
         &Transport,
+        &TransportConfig,
     )>,
     sampling: Res<SessionStatsSampling>,
 ) {
@@ -236,7 +237,7 @@ fn update_stats(
         return;
     }
 
-    for (mut stats, packet_rtt, packet_stats, transport) in &mut sessions {
+    for (mut stats, packet_rtt, packet_stats, transport, config) in &mut sessions {
         let msg_rtt = transport.rtt();
         let msg_stats = transport.stats();
 
@@ -284,7 +285,7 @@ fn update_stats(
             msgs_total: msg_stats,
             msgs_delta: msg_stats - last_sample.msgs_total,
             mem_used: transport.memory_used(),
-            mem_max: transport.max_memory_usage,
+            mem_max: config.max_memory_usage,
             loss,
         };
         stats.push_overwrite(sample);

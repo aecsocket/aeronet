@@ -34,7 +34,7 @@ impl Plugin for MoveBoxPlugin {
             .replicate::<Player>()
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
-            .add_client_event::<PlayerInput>(ChannelKind::Ordered)
+            .add_client_event::<PlayerInput>(ChannelKind::Unreliable)
             .add_systems(
                 FixedUpdate,
                 (recv_input, apply_movement)

@@ -3,7 +3,10 @@
 use {
     aeronet::{
         io::connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
-        transport::visualizer::{SessionVisualizer, SessionVisualizerPlugin},
+        transport::{
+            visualizer::{SessionVisualizer, SessionVisualizerPlugin},
+            TransportConfig,
+        },
     },
     aeronet_replicon::client::{AeronetRepliconClient, AeronetRepliconClientPlugin},
     aeronet_websocket::client::{WebSocketClient, WebSocketClientPlugin},
@@ -12,7 +15,7 @@ use {
         client::{WebTransportClient, WebTransportClientPlugin},
     },
     bevy::{ecs::query::QuerySingleError, prelude::*},
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     bevy_replicon::prelude::*,
     move_box::{GameState, MoveBoxPlugin, PlayerColor, PlayerInput, PlayerPosition},
 };
@@ -209,7 +212,15 @@ fn web_transport_ui(
             global_ui.session_id += 1;
             let name = format!("{}. {target}", global_ui.session_id);
             commands
-                .spawn((Name::new(name), AeronetRepliconClient))
+                .spawn((
+                    Name::new(name),
+                    AeronetRepliconClient,
+                    // TODO
+                    TransportConfig {
+                        max_memory_usage: 40 * 1024,
+                        ..default()
+                    },
+                ))
                 .add(WebTransportClient::connect(config, target));
         }
     });

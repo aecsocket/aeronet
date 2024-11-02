@@ -6,6 +6,13 @@
 A set of [Bevy]-native networking crates, focused on providing robust and rock-solid data transfer
 primitives.
 
+# TODO
+
+- don't require users to manually set minimum MTU for transport
+  - new MinPacketMtu component
+- make session config a component - max mem usage + send bytes per sec
+  - transport should be for "state" kinda stuff like lanes
+
 # Goals
 
 - Native to Bevy ECS
