@@ -8,16 +8,17 @@ use {
         session::{self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin},
     },
     aeronet_io::{
-        IoSet,
-        connection::{DisconnectReason, Disconnected, Session},
-        packet::{PacketBuffersCapacity, PacketMtu},
+        connection::{DisconnectReason, Disconnected},
+        packet::{RecvPacket, IP_MTU},
+        IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bytes::Bytes,
     futures::channel::{mpsc, oneshot},
     thiserror::Error,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
+    web_time::Instant,
 };
 
 cfg_if::cfg_if! {
@@ -57,8 +58,7 @@ impl Plugin for WebTransportClientPlugin {
         app.add_systems(
             PreUpdate,
             poll_clients.in_set(IoSet::Poll).before(session::poll),
-        )
-        .observe(on_client_added);
+        );
     }
 }
 
@@ -120,13 +120,11 @@ impl WebTransportClient {
 
 fn connect(session: Entity, world: &mut World, config: ClientConfig, target: ConnectTarget) {
     let runtime = world.resource::<WebTransportRuntime>().clone();
-    let packet_buf_cap = PacketBuffersCapacity::compute_from(world, session);
-
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     runtime.spawn_on_self(
         async move {
-            let Err(reason) = backend::start(packet_buf_cap, config, target, send_next).await;
+            let Err(reason) = backend::start(config, target, send_next).await;
             _ = send_dc.send(reason);
         }
         .instrument(debug_span!("client", %session)),
@@ -155,6 +153,8 @@ pub enum ClientError {
     Session(#[from] SessionError),
 }
 
+pub const MIN_MTU: usize = IP_MTU;
+
 #[derive(Debug)]
 enum ClientFrontend {
     Connecting {
@@ -177,15 +177,9 @@ struct ToConnected {
     initial_rtt: std::time::Duration,
     initial_mtu: usize,
     recv_meta: mpsc::Receiver<SessionMeta>,
-    recv_packet_b2f: mpsc::Receiver<Bytes>,
+    recv_packet_b2f: mpsc::Receiver<RecvPacket>,
     send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     send_user_dc: oneshot::Sender<String>,
-}
-
-// TODO: required components
-fn on_client_added(trigger: Trigger<OnAdd, WebTransportClient>, mut commands: Commands) {
-    let session = trigger.entity();
-    commands.entity(session).insert(Session);
 }
 
 fn poll_clients(mut commands: Commands, mut frontends: Query<(Entity, &mut WebTransportClient)>) {
@@ -208,11 +202,11 @@ fn poll_clients(mut commands: Commands, mut frontends: Query<(Entity, &mut WebTr
 
 fn poll_connecting(
     commands: &mut Commands,
-    session: Entity,
+    entity: Entity,
     mut recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
     mut recv_next: oneshot::Receiver<ToConnected>,
 ) -> ClientFrontend {
-    if should_disconnect(commands, session, &mut recv_dc) {
+    if should_disconnect(commands, entity, &mut recv_dc) {
         return ClientFrontend::Disconnected;
     }
 
@@ -220,14 +214,25 @@ fn poll_connecting(
         return ClientFrontend::Connecting { recv_dc, recv_next };
     };
 
-    commands.entity(session).insert((
+    let mut session = Session::new(Instant::now(), MIN_MTU);
+    if let Err(err) = session.set_mtu(next.initial_mtu) {
+        commands.trigger_targets(
+            Disconnected {
+                reason: DisconnectReason::Error(SessionError::MtuTooSmall(err).into()),
+            },
+            entity,
+        );
+        return ClientFrontend::Disconnected;
+    }
+
+    commands.entity(entity).insert((
         WebTransportIo {
             recv_meta: next.recv_meta,
             recv_packet_b2f: next.recv_packet_b2f,
             send_packet_f2b: next.send_packet_f2b,
             send_user_dc: Some(next.send_user_dc),
         },
-        PacketMtu(next.initial_mtu),
+        session,
         #[cfg(not(target_family = "wasm"))]
         aeronet_io::connection::LocalAddr(next.local_addr),
         #[cfg(not(target_family = "wasm"))]

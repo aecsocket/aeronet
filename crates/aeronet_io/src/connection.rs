@@ -1,14 +1,13 @@
 //! Logic for connection and disconnection of a [`Session`].
 
 use {
+    crate::Session,
     bevy_app::prelude::*,
-    bevy_derive::{Deref, DerefMut},
+    bevy_derive::Deref,
     bevy_ecs::prelude::*,
     bevy_hierarchy::DespawnRecursiveExt,
-    bevy_reflect::prelude::*,
     std::{fmt::Debug, net::SocketAddr},
     tracing::debug,
-    web_time::Instant,
 };
 
 #[derive(Debug)]
@@ -16,73 +15,9 @@ pub(crate) struct ConnectionPlugin;
 
 impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Session>()
-            .register_type::<Connected>()
-            .observe(on_connecting)
-            .observe(on_connected)
+        app.observe(on_connected)
             .observe(on_disconnect)
             .observe(on_disconnected);
-    }
-}
-
-/// Marker component for an [`Entity`] used to transfer sequences of bytes over
-/// a connection, potentially over a network.
-///
-/// A session can send data over to the other side of its connection - to its
-/// peer. The peer may be located on a different machine, on the same machine as
-/// this session, or even within the same app. This data is sent in the form of
-/// packets - [`PacketBuffers`] stores the incoming and outgoing packets.
-///
-/// The session API is agnostic to the networking model used: it can be used to
-/// represent a client-server, peer-to-peer, or any other kind of network
-/// topology. The only constraint is that one session talks to one and only one
-/// peer for its lifetime, however you can have multiple sessions within the
-/// same world. These different sessions may even be communicating over
-/// different protocols, such as raw UDP datagrams alongside Steam networking
-/// sockets, so that you can e.g. support crossplay between different platforms.
-///
-/// You should not add this component to entities yourself - your chosen IO
-/// layer implementation is responsible for this. Once added, the session is
-/// considered connecting, but it may not be connected yet, and therefore you
-/// cannot send data across this session. Once [`Connected`] is added, you can
-/// start sending and receiving data.
-///
-/// If the session fails to connect, or loses connection after successfully
-/// connecting (this may be a graceful disconnect or a connection error),
-/// [`Disconnected`] is [triggered][trigger] on the session entity, and the
-/// session is despawned immediately afterwards. You may also [trigger] your own
-/// disconnection with a string reason by triggering [`Disconnect`].
-///
-/// [`PacketBuffers`]: crate::packet::PacketBuffers
-/// [trigger]: Trigger
-#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
-#[reflect(Component)]
-pub struct Session;
-
-/// Component for a [`Session`] which is connected to its peer, and data
-/// transmission should be possible.
-///
-/// Note that this is not a guarantee that the session is connected, since
-/// networking operations such as working with OS sockets may fail at any time.
-///
-/// The IO layer will add this component to a [`Session`] once it has completed
-/// connection.
-///
-/// To listen for when a session is connected, add an observer listening for
-/// [`Trigger<OnAdd, Connected>`].
-#[derive(Debug, Clone, Copy, Component, Reflect)]
-#[reflect(Component)]
-pub struct Connected {
-    /// Instant at which the session was connected.
-    pub at: Instant,
-}
-
-impl Connected {
-    /// Creates a [`Connected`] which indicates that the session was connected
-    /// [`now`](Instant::now).
-    #[must_use]
-    pub fn now() -> Self {
-        Self { at: Instant::now() }
     }
 }
 
@@ -137,7 +72,7 @@ impl Disconnect {
 ///
 /// If you want to get the concrete error type of the
 /// [`DisconnectReason::Error`], use [`anyhow::Error::downcast_ref`].
-#[derive(Debug, Deref, DerefMut, Event)]
+#[derive(Debug, Event)]
 pub struct Disconnected {
     /// Why the session was disconnected.
     pub reason: DisconnectReason<anyhow::Error>,
@@ -206,7 +141,7 @@ pub const DROP_DISCONNECT_REASON: &str = "dropped";
 /// to OS sockets (i.e. WASM).
 ///
 /// To access the remote socket address of a session, see [`RemoteAddr`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, Component)]
 pub struct LocalAddr(pub SocketAddr);
 
 /// Remote socket address that this [`Session`] is connected to.
@@ -219,38 +154,33 @@ pub struct LocalAddr(pub SocketAddr);
 /// to OS sockets (i.e. WASM).
 ///
 /// To access the local socket address of a session, see [`LocalAddr`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, DerefMut, Component)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, Component)]
 pub struct RemoteAddr(pub SocketAddr);
 
-fn on_connecting(trigger: Trigger<OnAdd, Session>) {
-    let session = trigger.entity();
-    debug!("{session} connecting");
-}
-
-fn on_connected(trigger: Trigger<OnAdd, Connected>) {
-    let session = trigger.entity();
-    debug!("{session} connected");
+fn on_connected(trigger: Trigger<OnAdd, Session>) {
+    let entity = trigger.entity();
+    debug!("{entity} connected");
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
-    let session = trigger.entity();
+    let entity = trigger.entity();
     let reason = DisconnectReason::User(trigger.event().reason.clone());
-    commands.trigger_targets(Disconnected { reason }, session);
+    commands.trigger_targets(Disconnected { reason }, entity);
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
-    let session = trigger.entity();
-    match &**trigger.event() {
+    let entity = trigger.entity();
+    match &trigger.event().reason {
         DisconnectReason::User(reason) => {
-            debug!("{session} disconnected by user: {reason}");
+            debug!("{entity} disconnected by user: {reason}");
         }
         DisconnectReason::Peer(reason) => {
-            debug!("{session} disconnected by user: {reason}");
+            debug!("{entity} disconnected by user: {reason}");
         }
         DisconnectReason::Error(err) => {
-            debug!("{session} disconnected due to error: {err:#}");
+            debug!("{entity} disconnected due to error: {err:#}");
         }
     }
 
-    commands.entity(session).despawn_recursive();
+    commands.entity(entity).despawn_recursive();
 }

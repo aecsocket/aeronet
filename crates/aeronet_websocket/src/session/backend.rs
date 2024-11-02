@@ -2,18 +2,18 @@
 pub mod wasm {
     use {
         crate::{
-            JsError,
             session::{SessionError, SessionFrontend},
+            JsError,
         },
         aeronet_io::connection::DisconnectReason,
         bytes::Bytes,
         futures::{
-            SinkExt, StreamExt,
             channel::{mpsc, oneshot},
             never::Never,
+            SinkExt, StreamExt,
         },
         js_sys::Uint8Array,
-        wasm_bindgen::{JsCast, prelude::Closure},
+        wasm_bindgen::{prelude::Closure, JsCast},
         web_sys::{BinaryType, CloseEvent, ErrorEvent, MessageEvent, WebSocket},
     };
 
@@ -157,28 +157,29 @@ pub mod wasm {
 pub mod native {
     use {
         crate::session::{SessionError, SessionFrontend},
-        aeronet_io::connection::DisconnectReason,
+        aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
         bytes::Bytes,
         futures::{
-            SinkExt, StreamExt,
             channel::{mpsc, oneshot},
             never::Never,
+            SinkExt, StreamExt,
         },
         std::borrow::Cow,
         tokio::io::{AsyncRead, AsyncWrite},
         tokio_tungstenite::{
-            WebSocketStream,
             tungstenite::{
+                protocol::{frame::coding::CloseCode, CloseFrame},
                 Message,
-                protocol::{CloseFrame, frame::coding::CloseCode},
             },
+            WebSocketStream,
         },
+        web_time::Instant,
     };
 
     #[derive(Debug)]
     pub struct SessionBackend<S> {
         stream: WebSocketStream<S>,
-        send_packet_b2f: mpsc::Sender<Bytes>,
+        send_packet_b2f: mpsc::Sender<RecvPacket>,
         recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
         recv_user_dc: oneshot::Receiver<String>,
     }
@@ -187,7 +188,7 @@ pub mod native {
         stream: WebSocketStream<S>,
         packet_buf_cap: usize,
     ) -> (SessionFrontend, SessionBackend<S>) {
-        let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<Bytes>(packet_buf_cap);
+        let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<RecvPacket>(packet_buf_cap);
         let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
         let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
 
@@ -237,7 +238,7 @@ pub mod native {
         }
 
         async fn recv(
-            send_packet_b2f: &mut mpsc::Sender<Bytes>,
+            send_packet_b2f: &mut mpsc::Sender<RecvPacket>,
             msg: Message,
         ) -> Result<(), DisconnectReason<SessionError>> {
             let packet = match msg {
@@ -249,9 +250,13 @@ pub mod native {
                 }
                 msg => Bytes::from(msg.into_data()),
             };
+            let now = Instant::now();
 
             send_packet_b2f
-                .send(packet)
+                .send(RecvPacket {
+                    recv_at: now,
+                    payload: packet,
+                })
                 .await
                 .map_err(|_| SessionError::BackendClosed)?;
             Ok(())

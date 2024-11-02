@@ -7,9 +7,9 @@ pub(crate) mod backend;
 use {
     crate::WebSocketRuntime,
     aeronet_io::{
-        AeronetIoPlugin, IoSet,
-        connection::{Connected, DROP_DISCONNECT_REASON, Disconnect},
-        packet::{IP_MTU, PacketBuffers, PacketMtu, PacketStats},
+        connection::{Disconnect, DROP_DISCONNECT_REASON},
+        packet::{RecvPacket, IP_MTU},
+        AeronetIoPlugin, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -72,9 +72,22 @@ impl Plugin for WebSocketSessionPlugin {
 ///
 /// You should not add or remove this component directly - it is managed
 /// entirely by the client and server implementations.
+///
+/// # Buffers
+///
+/// Internally, this uses [`mpsc::channel`] bounded channels to store packets
+/// sent between the frontend (this component) and the backend (async task).
+///
+/// These channels will be fully drained on every [`Update`]. You must specify
+/// the capacity of these channels explicitly, however you should usually err on
+/// the side of caution and use a capacity which is larger than what you need
+/// (wasting some memory), as opposed to a capacity which is too small (dropping
+/// some packets).
+///
+/// By default, [`DEFAULT_PACKET_BUF_CAP`] is used as the capacity.
 #[derive(Debug, Component)]
 pub struct WebSocketIo {
-    pub(crate) recv_packet_b2f: mpsc::Receiver<Bytes>,
+    pub(crate) recv_packet_b2f: mpsc::Receiver<RecvPacket>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
 }
@@ -123,7 +136,7 @@ impl Drop for WebSocketIo {
     }
 }
 
-/// [`PacketMtu`] of [`WebSocketIo`] sessions.
+/// Packet MTU of [`WebSocketIo`] sessions.
 ///
 /// This is made up of the [`IP_MTU`] minus:
 /// - maximum TCP header size
@@ -134,19 +147,22 @@ impl Drop for WebSocketIo {
 ///   - <https://en.wikipedia.org/wiki/WebSocket#Frame_structure>
 pub const MTU: usize = IP_MTU - 60 - 40 - 14;
 
+/// Default capacity of packet buffers on a [`WebSocketIo`].
+pub const DEFAULT_PACKET_BUF_CAP: usize = 64;
+
 #[derive(Debug)]
 pub(crate) struct SessionFrontend {
-    pub recv_packet_b2f: mpsc::Receiver<Bytes>,
+    pub recv_packet_b2f: mpsc::Receiver<RecvPacket>,
     pub send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub send_user_dc: oneshot::Sender<String>,
 }
 
 // TODO: required components
 fn on_io_added(trigger: Trigger<OnAdd, WebSocketIo>, mut commands: Commands) {
-    let session = trigger.entity();
+    let entity = trigger.entity();
     commands
-        .entity(session)
-        .insert((Connected::now(), PacketMtu(MTU)));
+        .entity(entity)
+        .insert(Session::new(Instant::now(), IP_MTU));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebSocketIo>) {
@@ -161,28 +177,21 @@ fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebSocke
     }
 }
 
-pub(crate) fn poll(
-    mut sessions: Query<(
-        Entity,
-        &mut WebSocketIo,
-        &mut PacketBuffers,
-        &mut PacketStats,
-    )>,
-) {
-    for (session, mut io, mut bufs, mut stats) in &mut sessions {
-        let span = trace_span!("poll", %session);
+pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut WebSocketIo)>) {
+    for (entity, mut session, mut io) in &mut sessions {
+        let span = trace_span!("poll", %entity);
         let _span = span.enter();
 
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
         while let Ok(Some(packet)) = io.recv_packet_b2f.try_next() {
             num_packets += 1;
-            stats.packets_recv += 1;
+            session.stats.packets_recv += 1;
 
-            num_bytes += packet.len();
-            stats.bytes_recv += packet.len();
+            num_bytes += packet.payload.len();
+            session.stats.bytes_recv += packet.payload.len();
 
-            bufs.recv.push((Instant::now(), packet));
+            session.recv.push(packet);
         }
 
         trace!(
@@ -193,19 +202,21 @@ pub(crate) fn poll(
     }
 }
 
-fn flush(mut sessions: Query<(Entity, &WebSocketIo, &mut PacketBuffers, &mut PacketStats)>) {
-    for (session, io, mut bufs, mut stats) in &mut sessions {
-        let span = trace_span!("flush", %session);
+fn flush(mut sessions: Query<(Entity, &mut Session, &WebSocketIo)>) {
+    for (entity, mut session, io) in &mut sessions {
+        let span = trace_span!("flush", %entity);
         let _span = span.enter();
 
+        // explicit deref so we can access disjoint fields
+        let session = &mut *session;
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        for packet in bufs.send.drain() {
+        for packet in session.send.drain(..) {
             num_packets += 1;
-            stats.packets_sent += 1;
+            session.stats.packets_sent += 1;
 
             num_bytes += packet.len();
-            stats.bytes_sent += packet.len();
+            session.stats.bytes_sent += packet.len();
 
             // handle connection errors in `poll`
             _ = io.send_packet_f2b.unbounded_send(packet);

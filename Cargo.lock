@@ -134,7 +134,6 @@ dependencies = [
  "bevy_reflect",
  "bytes",
  "derive_more",
- "ringbuf",
  "tracing",
  "web-time",
 ]

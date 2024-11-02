@@ -3,9 +3,9 @@
 
 use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
-    aeronet_io::{connection::Disconnect, packet::PacketBuffers},
+    aeronet_io::{connection::Disconnect, Session},
     bevy::{log::LogPlugin, prelude::*},
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     std::mem,
 };
 
@@ -35,6 +35,8 @@ struct SessionUi {
 }
 
 fn setup(mut commands: Commands) {
+    const BUFFER_CAP: usize = 64;
+
     // Typically, you'll use commands to create a session.
     // With other implementations, you spawn an entity and push an
     // `EntityCommand` onto it to set up the session.
@@ -44,15 +46,16 @@ fn setup(mut commands: Commands) {
     // since it affects two entities at the same time.
     let a = commands.spawn((Name::new("A"), SessionUi::default())).id();
     let b = commands.spawn((Name::new("B"), SessionUi::default())).id();
-    commands.add(ChannelIo::open(a, b));
+    commands.add(ChannelIo::open(BUFFER_CAP, a, b));
 }
 
-fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
-    for (mut ui_state, mut bufs) in &mut sessions {
-        // Use `PacketBuffers` to read and write packets directly.
+fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut Session)>) {
+    for (mut ui_state, mut session) in &mut sessions {
+        // Here, we read and write packets directly to/from the session.
         // Typically, you'll be using a higher-level feature such as messages.
-        for (_, packet) in bufs.recv.drain() {
-            let msg = String::from_utf8(packet.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+        for packet in session.recv.drain(..) {
+            let msg =
+                String::from_utf8(packet.payload.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             ui_state.log.push(format!("> {msg}"));
         }
     }
@@ -61,9 +64,9 @@ fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
 fn session_ui(
     mut egui: EguiContexts,
     mut commands: Commands,
-    mut sessions: Query<(Entity, &Name, &mut SessionUi, &mut PacketBuffers)>,
+    mut sessions: Query<(Entity, &Name, &mut SessionUi, &mut Session)>,
 ) {
-    for (session, name, mut ui_state, mut bufs) in &mut sessions {
+    for (entity, name, mut ui_state, mut session) in &mut sessions {
         egui::Window::new(format!("Session {name}")).show(egui.ctx_mut(), |ui| {
             let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
@@ -82,12 +85,12 @@ fn session_ui(
             if send_msg {
                 let msg = mem::take(&mut ui_state.msg);
                 ui_state.log.push(format!("< {msg}"));
-                bufs.send.push(msg.into());
+                session.send.push(msg.into());
                 ui.memory_mut(|m| m.request_focus(msg_resp.id));
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.trigger_targets(Disconnect::new("disconnected by user"), session);
+                commands.trigger_targets(Disconnect::new("disconnected by user"), entity);
             }
 
             egui::ScrollArea::vertical().show(ui, |ui| {

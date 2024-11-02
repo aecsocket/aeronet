@@ -4,9 +4,9 @@ use {
     aeronet_io::connection::DisconnectReason,
     bevy_ecs::prelude::*,
     futures::{
-        SinkExt,
         channel::{mpsc, oneshot},
         never::Never,
+        SinkExt,
     },
     std::{
         net::SocketAddr,
@@ -19,12 +19,11 @@ use {
     },
     tokio_rustls::TlsAcceptor,
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
-    tracing::{Instrument, debug, debug_span},
+    tracing::{debug, debug_span, Instrument},
 };
 
 pub async fn start(
     config: ServerConfig,
-    packet_buf_cap: usize,
     send_next: oneshot::Sender<ToOpen>,
 ) -> Result<Never, ServerError> {
     let tls_acceptor = config.tls.map(TlsAcceptor::from);
