@@ -23,6 +23,7 @@ use {
     arbitrary::Arbitrary,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
+    bevy_time::{Real, Time},
     derive_more::{Add, AddAssign, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
     limit::TokenBucket,
@@ -30,7 +31,6 @@ use {
     packet::{Acknowledge, FragmentHeader, FragmentIndex, MessageSeq, PacketHeader, PacketSeq},
     rtt::RttEstimator,
     seq_buf::SeqBuf,
-    std::usize,
     thiserror::Error,
     tracing::warn,
     typesize::{derive::TypeSize, TypeSize},
@@ -46,7 +46,12 @@ impl Plugin for AeronetTransportPlugin {
             .configure_sets(PostUpdate, (TransportSet::Flush, IoSet::Flush).chain())
             .add_systems(
                 PreUpdate,
-                (recv::poll, update_config, check_memory_limit)
+                (
+                    recv::poll,
+                    update_config,
+                    refill_send_bytes,
+                    check_memory_limit,
+                )
                     .chain()
                     .in_set(TransportSet::Poll),
             )
@@ -91,7 +96,7 @@ pub struct Transport {
     pub recv_acks: recv::TransportRecv<MessageKey>,
 
     // send
-    bytes_left: TokenBucket,
+    send_bytes_bucket: TokenBucket,
     next_packet_seq: PacketSeq,
     pub send: send::TransportSend,
 }
@@ -140,7 +145,7 @@ impl Transport {
             recv_msgs: recv::TransportRecv::new(),
             recv_acks: recv::TransportRecv::new(),
             //
-            bytes_left: TokenBucket::new(usize::MAX),
+            send_bytes_bucket: TokenBucket::new(0),
             next_packet_seq: PacketSeq::default(),
             send: send::TransportSend::new(max_frag_len, send_lanes),
         })
@@ -154,6 +159,11 @@ impl Transport {
     #[must_use]
     pub const fn rtt(&self) -> &RttEstimator {
         &self.rtt
+    }
+
+    #[must_use]
+    pub const fn send_bytes_bucket(&self) -> &TokenBucket {
+        &self.send_bytes_bucket
     }
 
     #[must_use]
@@ -213,9 +223,22 @@ fn check_memory_limit(
 }
 
 fn update_config(
-    mut sessions: Query<(&mut Transport, &TransportConfig), Changed<TransportConfig>>,
+    mut sessions: Query<
+        (&mut Transport, &TransportConfig),
+        Or<(Added<Transport>, Changed<TransportConfig>)>,
+    >,
 ) {
-    for (mut transport, config) in &sessions {
-        // TODO
+    for (mut transport, config) in &mut sessions {
+        transport
+            .send_bytes_bucket
+            .set_cap(config.send_bytes_per_sec);
+    }
+}
+
+fn refill_send_bytes(time: Res<Time<Real>>, mut sessions: Query<&mut Transport>) {
+    for mut transport in &mut sessions {
+        transport
+            .send_bytes_bucket
+            .refill_portion(time.delta_seconds_f64());
     }
 }

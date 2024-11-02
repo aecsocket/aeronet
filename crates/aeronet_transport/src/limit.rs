@@ -32,7 +32,7 @@ pub trait Limit {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_proto::limit::{Limit, TokenBucket};
+    /// use aeronet_transport::limit::{Limit, TokenBucket};
     /// let mut counts = TokenBucket::new(1000);
     /// assert_eq!(1000, counts.cap());
     /// assert_eq!(1000, counts.get());
@@ -56,7 +56,7 @@ pub trait Limit {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_proto::limit::{Limit, TokenBucket};
+    /// use aeronet_transport::limit::{Limit, TokenBucket};
     /// let counts1 = TokenBucket::new(1000);
     /// let counts2 = TokenBucket::new(500);
     /// let mut min_of = counts1.min_of(counts2);
@@ -190,7 +190,7 @@ impl TokenBucket {
 
     /// Gets the amount of counts remaining.
     #[must_use]
-    pub const fn get(&self) -> usize {
+    pub const fn rem(&self) -> usize {
         self.rem
     }
 
@@ -201,7 +201,7 @@ impl TokenBucket {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_proto::limit::{Limit, TokenBucket};
+    /// use aeronet_transport::limit::{Limit, TokenBucket};
     /// let mut counts = TokenBucket::new(1000);
     ///
     /// counts.consume(100).unwrap();
@@ -222,7 +222,7 @@ impl TokenBucket {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_proto::limit::{Limit, TokenBucket};
+    /// use aeronet_transport::limit::{Limit, TokenBucket};
     /// let mut counts = TokenBucket::new(1000);
     ///
     /// counts.consume(250).unwrap();
@@ -245,7 +245,7 @@ impl TokenBucket {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_proto::limit::{Limit, TokenBucket};
+    /// use aeronet_transport::limit::{Limit, TokenBucket};
     /// let mut counts = TokenBucket::new(1000);
     ///
     /// counts.consume(500).unwrap();
@@ -270,7 +270,7 @@ impl TokenBucket {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_proto::limit::{Limit, TokenBucket};
+    /// use aeronet_transport::limit::{Limit, TokenBucket};
     /// let mut counts = TokenBucket::new(1000);
     ///
     /// counts.consume(500).unwrap();
@@ -298,6 +298,29 @@ impl TokenBucket {
         #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
         let n = ((self.cap as f64) * f) as usize;
         self.refill_exact(n);
+    }
+
+    /// Updates the maximum number of counts in this bucket, potentially
+    /// reducing the number of counts currently available.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aeronet_transport::limit::{Limit, TokenBucket};
+    /// let mut counts = TokenBucket::new(1000);
+    /// assert_eq!(1000, counts.cap());
+    ///
+    /// counts.set_cap(800);
+    /// assert_eq!(800, counts.cap());
+    /// assert_eq!(800, counts.rem());
+    ///
+    /// counts.set_cap(1200);
+    /// assert_eq!(1200, counts.cap());
+    /// assert_eq!(800, counts.rem());
+    /// ```
+    pub fn set_cap(&mut self, cap: usize) {
+        self.cap = cap;
+        self.rem = self.rem.min(cap);
     }
 }
 
@@ -338,7 +361,7 @@ impl<A, B> MinOf<A, B> {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_proto::limit::{Limit, TokenBucket};
+    /// use aeronet_transport::limit::{Limit, TokenBucket};
     /// let counts1 = TokenBucket::new(100);
     /// let counts2 = TokenBucket::new(200);
     /// let min_of = counts1.min_of(counts2);
@@ -393,8 +416,8 @@ mod tests {
     fn refill_usize_max() {
         let mut counts = TokenBucket::new(usize::MAX);
         counts.refill_exact(1);
-        assert_eq!(usize::MAX, counts.get());
+        assert_eq!(usize::MAX, counts.rem());
         counts.refill_exact(usize::MAX);
-        assert_eq!(usize::MAX, counts.get());
+        assert_eq!(usize::MAX, counts.rem());
     }
 }

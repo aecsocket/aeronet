@@ -19,7 +19,7 @@ use {
         transport::{
             lane::{LaneIndex, LaneKind},
             octs::Bytes,
-            AeronetTransportPlugin, Transport,
+            AeronetTransportPlugin, Transport, TransportConfig,
         },
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
@@ -102,6 +102,10 @@ fn setup(mut commands: Commands) {
         // Add `Transport` and configure it with our lanes so that we can send
         // and receive messages (not just packets).
         Transport::new(LANES, LANES),
+        // Optionally, you can also add a `TransportConfig` to configure
+        // some settings like max memory usage.
+        // If you don't insert this yourself, it will be automatically added.
+        TransportConfig::default(),
         // Add `UiState` so that we can log what messages we've received.
         UiState::default(),
     ));

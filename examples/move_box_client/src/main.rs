@@ -215,10 +215,9 @@ fn web_transport_ui(
                 .spawn((
                     Name::new(name),
                     AeronetRepliconClient,
-                    // TODO
                     TransportConfig {
-                        max_memory_usage: 40 * 1024,
-                        ..default()
+                        max_memory_usage: 64 * 1024,
+                        send_bytes_per_sec: 4 * 1024,
                     },
                 ))
                 .add(WebTransportClient::connect(config, target));

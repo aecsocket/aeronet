@@ -148,7 +148,7 @@ fn flush_on(
 
         // we can't put more than either `mtu` or `bytes_left`
         // bytes into this packet, so we track this as well
-        let mut bytes_left = (&mut transport.bytes_left).min_of(mtu);
+        let mut bytes_left = (&mut transport.send_bytes_bucket).min_of(mtu);
         let packet_seq = transport.next_packet_seq;
         bytes_left.consume(PacketHeader::ENCODE_LEN).ok()?;
         packet

@@ -10,8 +10,8 @@ primitives.
 
 - don't require users to manually set minimum MTU for transport
   - new MinPacketMtu component
-- make session config a component - max mem usage + send bytes per sec
-  - transport should be for "state" kinda stuff like lanes
+- how do users handle draining msgs?
+  - if the user doesn't drain recv_msgs, is that a warn? unbounded growth?
 
 # Goals
 

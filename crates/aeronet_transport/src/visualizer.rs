@@ -288,6 +288,14 @@ impl SessionVisualizer {
                     fmt_bytes(transport.memory_used()),
                     fmt_bytes(config.max_memory_usage)
                 ));
+                ui.separator();
+
+                ui.label("TX CAP");
+                ui.label(format!(
+                    "{} / {}",
+                    fmt_bytes(transport.send_bytes_bucket().rem()),
+                    fmt_bytes(transport.send_bytes_bucket().cap()),
+                ));
             });
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
