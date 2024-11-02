@@ -69,7 +69,7 @@ impl TransportSend {
         }
     }
 
-    pub fn push(&mut self, now: Instant, lane_index: LaneIndex, msg: Bytes) -> Option<MessageKey> {
+    pub fn push(&mut self, lane_index: LaneIndex, msg: Bytes, now: Instant) -> Option<MessageKey> {
         let lane = &mut self.lanes[usize::from(lane_index)];
         let msg_seq = lane.next_msg_seq;
         let Entry::Vacant(entry) = lane.sent_msgs.entry(msg_seq) else {

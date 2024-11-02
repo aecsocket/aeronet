@@ -176,11 +176,11 @@ fn poll(
     mut clients: Query<&mut Transport, With<AeronetRepliconClient>>,
 ) {
     for mut transport in &mut clients {
-        for (lane_index, msg) in transport.recv_msgs.drain() {
-            let Some(channel_id) = convert::to_channel_id(lane_index) else {
+        for msg in transport.recv_msgs.drain() {
+            let Some(channel_id) = convert::to_channel_id(msg.lane) else {
                 continue;
             };
-            replicon_client.insert_received(channel_id, msg);
+            replicon_client.insert_received(channel_id, msg.payload);
         }
 
         for _ in transport.recv_acks.drain() {
@@ -197,7 +197,7 @@ fn flush(
     for (channel_id, msg) in replicon_client.drain_sent() {
         let lane_index = convert::to_lane_index(channel_id);
         for mut transport in &mut clients {
-            transport.send.push(now, lane_index, msg.clone());
+            transport.send.push(lane_index, msg.clone(), now);
         }
     }
 }

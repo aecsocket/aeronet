@@ -52,15 +52,9 @@ impl Plugin for AeronetTransportPlugin {
                     check_memory_limit,
                 )
                     .chain()
-                    .in_set(TransportSet::Poll)
-                    .before(aeronet_io::packet::clear_recv_buffers),
+                    .in_set(TransportSet::Poll),
             )
-            .add_systems(
-                PostUpdate,
-                send::flush
-                    .in_set(TransportSet::Flush)
-                    .before(aeronet_io::packet::clear_send_buffers),
-            )
+            .add_systems(PostUpdate, send::flush.in_set(TransportSet::Flush))
             .observe(init_config);
     }
 }
@@ -97,13 +91,20 @@ pub struct Transport {
     // recv
     recv_lanes: Box<[recv::Lane]>,
     rtt: RttEstimator,
-    pub recv_msgs: recv::TransportRecv<(LaneIndex, Vec<u8>)>,
+    pub recv_msgs: recv::TransportRecv<RecvMessage>,
     pub recv_acks: recv::TransportRecv<MessageKey>,
 
     // send
     send_bytes_bucket: TokenBucket,
     next_packet_seq: PacketSeq,
     pub send: send::TransportSend,
+}
+
+#[derive(Debug, TypeSize)]
+pub struct RecvMessage {
+    pub lane: LaneIndex,
+    pub recv_at: sized::Instant,
+    pub payload: Vec<u8>,
 }
 
 // TODO: required component TransportConfig

@@ -4,6 +4,7 @@ use {
             bytes::Bytes,
             connection::{DisconnectReason, Disconnected, LocalAddr},
             server::Opened,
+            web_time, Session,
         },
         transport::{lane::LaneKind, AeronetTransportPlugin, Transport},
     },
@@ -81,11 +82,15 @@ fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
 }
 
 fn on_connected(
-    trigger: Trigger<OnAdd, Connected>,
+    trigger: Trigger<OnAdd, Session>,
+    sessions: Query<&Session>,
     clients: Query<&Parent>,
     mut commands: Commands,
 ) {
     let client = trigger.entity();
+    let session = sessions
+        .get(client)
+        .expect("we are adding this component to this entity");
     // A `Connected` `Session` which has a `Parent` is a client of a server.
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
@@ -94,7 +99,19 @@ fn on_connected(
 
     // Add `Transport` and configure it with our lanes so that we can send
     // and receive messages on this client.
-    commands.entity(client).insert(Transport::new(LANES, LANES));
+    let transport = Transport::new(
+        session,
+        LANES,
+        LANES,
+        // Don't use `std::time::Instant::now`!
+        // On WASM that function will panic.
+        // Instead, use the re-exported `web_time`.
+        // (We're writing a server, so we'll never run it on WASM.
+        // But still, use `web_time` for consistency with the client code.)
+        web_time::Instant::now(),
+    )
+    .expect("packet MTU should be large enough to support transport");
+    commands.entity(client).insert(transport);
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
@@ -125,10 +142,8 @@ fn echo_messages(
             &mut Transport, // ..and the transport layer access
         ),
         (
-            With<Session>,   // ..for all sessions (this isn't strictly necessary)
-            With<Connected>, // which are connected (this isn't strictly necessary)
-            With<Parent>,    /* ..which are connected to one of our servers (excludes local
-                              * dedicated clients) */
+            With<Parent>, /* ..for all sessions which are connected to one of our servers
+                          (excludes local dedicated clients) */
         ),
     >,
 ) {
@@ -137,18 +152,22 @@ fn echo_messages(
         // from which we can grab disjoint refs to `recv` and `send`.
         let transport = &mut *transport;
 
-        for (lane_index, msg) in transport.recv_msgs.drain() {
-            // `msg` is a `Vec<u8>` - we have full ownership of the bytes received.
+        for msg in transport.recv_msgs.drain() {
+            let payload = msg.payload;
+
+            // `payload` is a `Vec<u8>` - we have full ownership of the bytes received.
             // We'll turn it into a UTF-8 string, and resend it along the same
             // lane that we received it on.
-            let msg = String::from_utf8(msg).unwrap_or_else(|_| "(not UTF-8)".into());
-            info!("{client} > {msg}");
+            let text = String::from_utf8(payload).unwrap_or_else(|_| "(not UTF-8)".into());
+            info!("{client} > {text}");
 
-            let reply = format!("You sent: {msg}");
+            let reply = format!("You sent: {text}");
             info!("{client} < {reply}");
             // Convert our `String` into a `Bytes` to send it out.
             // We ignore the resulting `MessageKey`, since we don't need it.
-            _ = transport.send.push_now(lane_index, Bytes::from(reply));
+            _ = transport
+                .send
+                .push(msg.lane, Bytes::from(reply), web_time::Instant::now());
         }
     }
 }
