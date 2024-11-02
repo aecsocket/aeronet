@@ -1,5 +1,4 @@
 use {
-    crate::session::DEFAULT_PACKET_BUF_CAP,
     rustls::{
         client::danger::{ServerCertVerified, ServerCertVerifier},
         crypto::WebPkiSupportedAlgorithms,
@@ -21,7 +20,6 @@ pub struct ClientConfig {
     pub(crate) connector: Connector,
     pub(crate) socket: WebSocketConfig,
     pub(crate) nagle: bool,
-    pub(crate) packet_buf_cap: usize,
 }
 
 impl ClientConfig {
@@ -99,7 +97,6 @@ impl ClientConfigBuilder<WantsConnector> {
             connector,
             socket: WebSocketConfig::default(),
             nagle: true,
-            packet_buf_cap: DEFAULT_PACKET_BUF_CAP,
         }
     }
 }
@@ -122,18 +119,6 @@ impl ClientConfig {
     /// [Nagle]: https://en.wikipedia.org/wiki/Nagle%27s_algorithm
     pub fn disable_nagle(self) -> Self {
         self.with_nagle(false)
-    }
-
-    /// Configures the capacity of packet buffers on this client session.
-    ///
-    /// See [`WebSocketIo`] for how to choose a capacity value.
-    ///
-    /// [`WebSocketIo`]: crate::session::WebSocketIo
-    pub fn with_packet_buf_cap(self, packet_buf_cap: usize) -> Self {
-        Self {
-            packet_buf_cap,
-            ..self
-        }
     }
 }
 

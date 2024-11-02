@@ -3,6 +3,7 @@
 mod backend;
 mod config;
 
+use aeronet_io::Endpoint;
 pub use config::*;
 use {
     crate::{
@@ -10,7 +11,7 @@ use {
         tungstenite, WebSocketRuntime,
     },
     aeronet_io::{
-        connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr},
+        connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         server::{CloseReason, Closed, Opened, Server},
         IoSet,
     },
@@ -161,7 +162,7 @@ struct ToOpen {
 
 #[derive(Debug)]
 struct ToConnecting {
-    remote_addr: SocketAddr,
+    peer_addr: SocketAddr,
     send_session_entity: oneshot::Sender<Entity>,
     recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
     recv_next: oneshot::Receiver<ToConnected>,
@@ -169,7 +170,7 @@ struct ToConnecting {
 
 #[derive(Debug)]
 struct ToConnected {
-    remote_addr: SocketAddr,
+    peer_addr: SocketAddr,
     frontend: SessionFrontend,
 }
 
@@ -238,11 +239,12 @@ fn poll_open(
             .spawn_empty()
             .set_parent(server)
             .insert((
+                Endpoint, // TODO: required component of ClientFrontend
                 ClientFrontend::Connecting {
                     recv_dc: connecting.recv_dc,
                     recv_next: connecting.recv_next,
                 },
-                RemoteAddr(connecting.remote_addr),
+                PeerAddr(connecting.peer_addr),
             ))
             .id();
         _ = connecting.send_session_entity.send(session);
@@ -309,7 +311,7 @@ fn poll_connecting(
             send_packet_f2b: next.frontend.send_packet_f2b,
             send_user_dc: Some(next.frontend.send_user_dc),
         },
-        RemoteAddr(next.remote_addr),
+        PeerAddr(next.peer_addr),
     ));
     ClientFrontend::Connected { recv_dc }
 }

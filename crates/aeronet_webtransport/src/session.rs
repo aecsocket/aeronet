@@ -5,7 +5,7 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        connection::{Disconnect, DisconnectReason, RemoteAddr, DROP_DISCONNECT_REASON},
+        connection::{Disconnect, DisconnectReason, PeerAddr, DROP_DISCONNECT_REASON},
         packet::{MtuTooSmall, PacketRtt, RecvPacket, IP_MTU},
         AeronetIoPlugin, IoSet, Session,
     },
@@ -74,7 +74,7 @@ impl Plugin for WebTransportSessionPlugin {
 #[derive(Debug, Component)]
 pub struct WebTransportIo {
     pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,
-    pub(crate) recv_packet_b2f: mpsc::Receiver<RecvPacket>,
+    pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
 }
@@ -107,6 +107,8 @@ pub enum SessionError {
     Connection(#[source] ConnectionError),
 }
 
+pub const MIN_MTU: usize = IP_MTU;
+
 impl Drop for WebTransportIo {
     fn drop(&mut self) {
         if let Some(send_dc) = self.send_user_dc.take() {
@@ -118,7 +120,7 @@ impl Drop for WebTransportIo {
 #[derive(Debug)]
 pub(crate) struct SessionMeta {
     #[cfg(not(target_family = "wasm"))]
-    remote_addr: std::net::SocketAddr,
+    peer_addr: std::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
     packet_rtt: Duration,
     mtu: usize,
@@ -149,15 +151,15 @@ pub(crate) fn poll(
         Entity,
         &mut Session,
         &mut WebTransportIo,
-        Option<&mut RemoteAddr>,
+        Option<&mut PeerAddr>,
         Option<&mut PacketRtt>,
     )>,
 ) {
-    for (entity, mut session, mut io, mut remote_addr, mut packet_rtt) in &mut sessions {
+    for (entity, mut session, mut io, mut peer_addr, mut packet_rtt) in &mut sessions {
         #[cfg(target_family = "wasm")]
         {
             // suppress `unused_variables`, `unused_mut`
-            _ = (&mut remote_addr, &mut packet_rtt);
+            _ = (&mut peer_addr, &mut packet_rtt);
         }
 
         let span = trace_span!("poll", %entity);
@@ -168,8 +170,8 @@ pub(crate) fn poll(
 
             #[cfg(not(target_family = "wasm"))]
             {
-                if let Some(remote_addr) = &mut remote_addr {
-                    remote_addr.0 = meta.remote_addr;
+                if let Some(peer_addr) = &mut peer_addr {
+                    peer_addr.0 = meta.peer_addr;
                 }
 
                 if let Some(packet_rtt) = &mut packet_rtt {
@@ -230,7 +232,7 @@ fn flush(mut sessions: Query<(Entity, &mut Session, &WebTransportIo)>) {
 pub(crate) struct SessionBackend {
     pub conn: Connection,
     pub send_meta: mpsc::Sender<SessionMeta>,
-    pub send_packet_b2f: mpsc::Sender<RecvPacket>,
+    pub send_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
     pub recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
     pub recv_user_dc: oneshot::Receiver<String>,
 }
@@ -310,7 +312,7 @@ async fn meta_loop(
 
         let meta = SessionMeta {
             #[cfg(not(target_family = "wasm"))]
-            remote_addr: conn.0.remote_address(),
+            peer_addr: conn.0.remote_address(),
             #[cfg(not(target_family = "wasm"))]
             packet_rtt: conn.0.rtt(),
             mtu: conn
@@ -330,7 +332,7 @@ async fn meta_loop(
 async fn recv_loop(
     conn: Arc<Connection>,
     mut recv_closed: oneshot::Receiver<()>,
-    mut send_packet_b2f: mpsc::Sender<RecvPacket>,
+    mut send_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
 ) -> Result<Never, SessionError> {
     loop {
         #[cfg_attr(

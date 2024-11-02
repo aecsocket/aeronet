@@ -5,13 +5,15 @@ mod backend;
 use {
     crate::{
         runtime::WebTransportRuntime,
-        session::{self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin},
+        session::{
+            self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin, MIN_MTU,
+        },
     },
     aeronet_io::{
-        IoSet,
-        connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
-        packet::{PacketBuffersCapacity, PacketMtu, PacketRtt},
+        connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
+        packet::{PacketRtt, RecvPacket},
         server::{CloseReason, Closed, Opened, Server},
+        Endpoint, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -21,7 +23,8 @@ use {
     futures::channel::{mpsc, oneshot},
     std::{collections::HashMap, net::SocketAddr, time::Duration},
     thiserror::Error,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
+    web_time::Instant,
     wtransport::error::ConnectionError,
 };
 
@@ -97,13 +100,11 @@ impl WebTransportServer {
 
 fn open(server: Entity, world: &mut World, config: ServerConfig) {
     let runtime = world.resource::<WebTransportRuntime>().clone();
-    let packet_buf_cap = PacketBuffersCapacity::compute_from(world, server);
-
     let (send_closed, recv_closed) = oneshot::channel::<CloseReason<ServerError>>();
     let (send_next, recv_next) = oneshot::channel::<ToOpen>();
     runtime.spawn_on_self(
         async move {
-            let Err(err) = backend::start(config, packet_buf_cap, send_next).await;
+            let Err(err) = backend::start(config, send_next).await;
             _ = send_closed.send(CloseReason::Error(err));
         }
         .instrument(debug_span!("server", %server)),
@@ -261,11 +262,11 @@ struct ToConnecting {
 
 #[derive(Debug)]
 struct ToConnected {
-    initial_remote_addr: SocketAddr,
+    initial_peer_addr: SocketAddr,
     initial_rtt: Duration,
     initial_mtu: usize,
     recv_meta: mpsc::Receiver<SessionMeta>,
-    recv_packet_b2f: mpsc::Receiver<Bytes>,
+    recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     send_user_dc: oneshot::Sender<String>,
 }
@@ -335,7 +336,7 @@ fn poll_open(
             .spawn_empty()
             .set_parent(server)
             .insert((
-                Session,
+                Endpoint, // TODO: required component of ClientFrontend
                 ClientFrontend::Connecting {
                     send_session_response: Some(connecting.send_session_response),
                     recv_dc: connecting.recv_dc,
@@ -432,12 +433,12 @@ fn poll_clients(mut commands: Commands, mut clients: Query<(Entity, &mut ClientF
 
 fn poll_connecting(
     commands: &mut Commands,
-    client: Entity,
+    entity: Entity,
     send_session_response: Option<oneshot::Sender<SessionResponse>>,
     mut recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
     mut recv_next: oneshot::Receiver<ToConnected>,
 ) -> ClientFrontend {
-    if should_disconnect(commands, client, &mut recv_dc) {
+    if should_disconnect(commands, entity, &mut recv_dc) {
         return ClientFrontend::Disconnected;
     }
 
@@ -449,15 +450,26 @@ fn poll_connecting(
         };
     };
 
-    commands.entity(client).insert((
+    let mut session = Session::new(Instant::now(), MIN_MTU);
+    if let Err(err) = session.set_mtu(next.initial_mtu) {
+        commands.trigger_targets(
+            Disconnected {
+                reason: DisconnectReason::Error(SessionError::MtuTooSmall(err).into()),
+            },
+            entity,
+        );
+        return ClientFrontend::Disconnected;
+    }
+
+    commands.entity(entity).insert((
         WebTransportIo {
             recv_meta: next.recv_meta,
             recv_packet_b2f: next.recv_packet_b2f,
             send_packet_f2b: next.send_packet_f2b,
             send_user_dc: Some(next.send_user_dc),
         },
-        PacketMtu(next.initial_mtu),
-        RemoteAddr(next.initial_remote_addr),
+        session,
+        PeerAddr(next.initial_peer_addr),
         PacketRtt(next.initial_rtt),
     ));
     ClientFrontend::Connected { recv_dc }

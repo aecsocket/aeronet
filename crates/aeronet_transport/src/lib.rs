@@ -19,7 +19,7 @@ pub mod visualizer;
 
 pub use {aeronet_io as io, octs};
 use {
-    aeronet_io::{connection::Disconnect, IoSet},
+    aeronet_io::{connection::Disconnect, packet::MtuTooSmall, IoSet, Session},
     arbitrary::Arbitrary,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
@@ -31,7 +31,6 @@ use {
     packet::{Acknowledge, FragmentHeader, FragmentIndex, MessageSeq, PacketHeader, PacketSeq},
     rtt::RttEstimator,
     seq_buf::SeqBuf,
-    thiserror::Error,
     tracing::warn,
     typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
@@ -53,9 +52,15 @@ impl Plugin for AeronetTransportPlugin {
                     check_memory_limit,
                 )
                     .chain()
-                    .in_set(TransportSet::Poll),
+                    .in_set(TransportSet::Poll)
+                    .before(aeronet_io::packet::clear_recv_buffers),
             )
-            .add_systems(PostUpdate, send::flush.in_set(TransportSet::Flush))
+            .add_systems(
+                PostUpdate,
+                send::flush
+                    .in_set(TransportSet::Flush)
+                    .before(aeronet_io::packet::clear_send_buffers),
+            )
             .observe(init_config);
     }
 }
@@ -115,22 +120,18 @@ fn init_config(
 
 const FRAG_OVERHEAD: usize = PacketHeader::MAX_ENCODE_LEN + FragmentHeader::MAX_ENCODE_LEN;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
-#[error("packet MTU of {packet_mtu} is too small for this protocol")]
-pub struct MtuTooSmall {
-    pub packet_mtu: usize,
-}
-
 impl Transport {
     pub fn new(
-        now: Instant,
-        packet_mtu: usize,
+        session: &Session,
         recv_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
         send_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
+        now: Instant,
     ) -> Result<Self, MtuTooSmall> {
-        let max_frag_len = packet_mtu
-            .checked_sub(FRAG_OVERHEAD)
-            .ok_or(MtuTooSmall { packet_mtu })?;
+        let min_mtu = session.min_mtu();
+        let max_frag_len = min_mtu.checked_sub(FRAG_OVERHEAD).ok_or(MtuTooSmall {
+            mtu: min_mtu,
+            min: FRAG_OVERHEAD,
+        })?;
         Ok(Self {
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
             stats: MessageStats::default(),

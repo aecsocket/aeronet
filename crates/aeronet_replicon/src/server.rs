@@ -3,10 +3,10 @@
 use {
     crate::convert,
     aeronet_io::{
-        connection::{Connected, DisconnectReason, Disconnected},
-        packet::PacketMtu,
+        connection::{DisconnectReason, Disconnected},
         server::{Opened, Server},
         web_time::Instant,
+        Session,
     },
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
@@ -17,7 +17,6 @@ use {
         prelude::{RepliconChannels, RepliconServer},
         server::{ServerEvent, ServerSet},
     },
-    std::any::type_name,
     tracing::warn,
 };
 
@@ -131,28 +130,25 @@ fn update_state(
 }
 
 fn on_connected(
-    trigger: Trigger<OnAdd, Connected>,
+    trigger: Trigger<OnAdd, Session>,
+    sessions: Query<&Session>,
     parents: Query<&Parent>,
-    packet_mtus: Query<&PacketMtu>,
     open_servers: Query<(), OpenedServer>,
     mut events: EventWriter<ServerEvent>,
     channels: Res<RepliconChannels>,
     mut commands: Commands,
 ) {
     let client = trigger.entity();
+    let session = sessions
+        .get(client)
+        .expect("we are adding this component to this entity");
+
     let Ok(server) = parents.get(client).map(Parent::get) else {
         return;
     };
     if open_servers.get(server).is_err() {
         return;
     }
-    let Ok(&PacketMtu(packet_mtu)) = packet_mtus.get(client) else {
-        warn!(
-            "{client} connected to {server} but does not have `{}` - cannot create transport",
-            type_name::<PacketMtu>(),
-        );
-        return;
-    };
 
     let client_id = convert::to_client_id(client);
     events.send(ServerEvent::ClientConnected { client_id });
@@ -165,7 +161,7 @@ fn on_connected(
         .server_channels()
         .iter()
         .map(|channel| convert::to_lane_kind(channel.kind));
-    let transport = match Transport::new(Instant::now(), packet_mtu, recv_lanes, send_lanes) {
+    let transport = match Transport::new(session, recv_lanes, send_lanes, Instant::now()) {
         Ok(transport) => transport,
         Err(err) => {
             let err = anyhow::Error::new(err);
@@ -179,12 +175,15 @@ fn on_connected(
 
 fn on_disconnected(
     trigger: Trigger<Disconnected>,
-    clients: Query<&Parent, With<Connected>>,
+    // check for `Session` - clients which are already connected
+    // on the replicon side, if we disconnect a non-connected client,
+    // replicon panics
+    connected_clients: Query<&Parent, With<Session>>,
     open_servers: Query<(), OpenedServer>,
     mut events: EventWriter<ServerEvent>,
 ) {
     let client = trigger.entity();
-    let Ok(server) = clients.get(client).map(Parent::get) else {
+    let Ok(server) = connected_clients.get(client).map(Parent::get) else {
         return;
     };
     if open_servers.get(server).is_err() {
@@ -192,11 +191,10 @@ fn on_disconnected(
     }
 
     let client_id = convert::to_client_id(client);
-    let reason = match &**trigger.event() {
+    let reason = match &trigger.event().reason {
         DisconnectReason::User(reason) | DisconnectReason::Peer(reason) => reason.clone(),
         DisconnectReason::Error(err) => format!("{err:#}"),
     };
-    // only disconnect already-connected clients, otherwise replicon panics
     events.send(ServerEvent::ClientDisconnected { client_id, reason });
 }
 

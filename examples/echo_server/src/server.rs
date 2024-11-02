@@ -2,10 +2,10 @@ use {
     aeronet::{
         io::{
             bytes::Bytes,
-            connection::{Connected, DisconnectReason, Disconnected, LocalAddr, Session},
+            connection::{DisconnectReason, Disconnected, LocalAddr},
             server::Opened,
         },
-        transport::{AeronetTransportPlugin, Transport, lane::LaneKind},
+        transport::{lane::LaneKind, AeronetTransportPlugin, Transport},
     },
     aeronet_websocket::server::{ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},

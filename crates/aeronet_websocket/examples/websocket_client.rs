@@ -3,14 +3,12 @@
 
 use {
     aeronet_io::{
-        connection::{
-            Connected, Disconnect, DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session,
-        },
-        packet::{PacketBuffers, PacketMtu, PacketStats},
+        connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
+        Endpoint, Session,
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     std::mem,
 };
 
@@ -39,25 +37,25 @@ struct SessionUi {
 }
 
 fn on_connecting(
+    trigger: Trigger<OnAdd, Endpoint>,
+    names: Query<&Name>,
+    mut ui_state: ResMut<GlobalUi>,
+) {
+    let entity = trigger.entity();
+    let name = names
+        .get(entity)
+        .expect("our session entity should have a name");
+    ui_state.log.push(format!("{name} connected"));
+}
+
+fn on_connected(
     trigger: Trigger<OnAdd, Session>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {
-    let session = trigger.entity();
+    let entity = trigger.entity();
     let name = names
-        .get(session)
-        .expect("our session entity should have a name");
-    ui_state.log.push(format!("{name} connecting"));
-}
-
-fn on_connected(
-    trigger: Trigger<OnAdd, Connected>,
-    names: Query<&Name>,
-    mut ui_state: ResMut<GlobalUi>,
-) {
-    let session = trigger.entity();
-    let name = names
-        .get(session)
+        .get(entity)
         .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connected"));
 }
@@ -132,10 +130,11 @@ fn client_config() -> ClientConfig {
     ClientConfig::builder().with_no_cert_validation()
 }
 
-fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
-    for (mut ui_state, mut bufs) in &mut sessions {
-        for (_, packet) in bufs.recv.drain() {
-            let msg = String::from_utf8(packet.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut Session)>) {
+    for (mut ui_state, mut session) in &mut sessions {
+        for packet in session.recv.drain(..) {
+            let msg =
+                String::from_utf8(packet.payload.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             ui_state.log.push(format!("> {msg}"));
         }
     }
@@ -148,33 +147,19 @@ fn session_ui(
         Entity,
         &Name,
         &mut SessionUi,
-        &mut PacketBuffers,
-        Option<&Connected>,
-        Option<&PacketMtu>,
-        Option<&PacketStats>,
+        Option<&mut Session>,
         Option<&LocalAddr>,
-        Option<&RemoteAddr>,
+        Option<&PeerAddr>,
     )>,
 ) {
-    for (
-        session,
-        name,
-        mut ui_state,
-        mut bufs,
-        connected,
-        packet_mtu,
-        packet_stats,
-        local_addr,
-        remote_addr,
-    ) in &mut sessions
-    {
+    for (entity, name, mut ui_state, mut session, local_addr, peer_addr) in &mut sessions {
         egui::Window::new(name.to_string()).show(egui.ctx_mut(), |ui| {
             let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
             let mut send_msg = false;
             let msg_resp = ui
                 .horizontal(|ui| {
-                    if connected.is_none() {
+                    if session.is_none() {
                         ui.disable();
                     }
 
@@ -188,39 +173,31 @@ fn session_ui(
                 .inner;
 
             if send_msg {
-                let msg = mem::take(&mut ui_state.msg);
-                ui_state.log.push(format!("< {msg}"));
-                bufs.send.push(msg.into());
-                ui.memory_mut(|m| m.request_focus(msg_resp.id));
+                if let Some(session) = &mut session {
+                    let msg = mem::take(&mut ui_state.msg);
+                    ui_state.log.push(format!("< {msg}"));
+                    session.send.push(msg.into());
+                    ui.memory_mut(|m| m.request_focus(msg_resp.id));
+                }
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.trigger_targets(Disconnect::new("disconnected by user"), session);
+                commands.trigger_targets(Disconnect::new("disconnected by user"), entity);
             }
+
+            let stats = session.as_ref().map(|s| s.stats).unwrap_or_default();
 
             egui::Grid::new("stats").show(ui, |ui| {
                 ui.label("Packet MTU");
-                ui.label(
-                    packet_mtu
-                        .map(|PacketMtu(mtu)| format!("{mtu}"))
-                        .unwrap_or_default(),
-                );
+                ui.label(format!("{}", session.map(|s| s.mtu()).unwrap_or_default()));
                 ui.end_row();
 
                 ui.label("Packets recv/sent");
-                ui.label(
-                    packet_stats
-                        .map(|stats| format!("{} / {}", stats.packets_recv, stats.packets_sent))
-                        .unwrap_or_default(),
-                );
+                ui.label(format!("{} / {}", stats.packets_recv, stats.packets_sent));
                 ui.end_row();
 
                 ui.label("Bytes recv/sent");
-                ui.label(
-                    packet_stats
-                        .map(|stats| format!("{} / {}", stats.bytes_recv, stats.bytes_sent))
-                        .unwrap_or_default(),
-                );
+                ui.label(format!("{} / {}", stats.bytes_recv, stats.bytes_sent));
                 ui.end_row();
 
                 ui.label("Local address");
@@ -231,10 +208,10 @@ fn session_ui(
                 );
                 ui.end_row();
 
-                ui.label("Remote address");
+                ui.label("Peer address");
                 ui.label(
-                    remote_addr
-                        .map(|RemoteAddr(addr)| format!("{addr:?}"))
+                    peer_addr
+                        .map(|PeerAddr(addr)| format!("{addr:?}"))
                         .unwrap_or_default(),
                 );
                 ui.end_row();

@@ -1,6 +1,8 @@
 //! Example server using WebSocket which listens for clients sending strings
 //! and sends back a string reply.
 
+use aeronet_io::{Endpoint, Session};
+
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         fn main() {
@@ -10,8 +12,7 @@ cfg_if::cfg_if! {
 
 use {
     aeronet_io::{
-        connection::{Connected, DisconnectReason, Disconnected, LocalAddr, Session},
-        packet::PacketBuffers,
+        connection::{DisconnectReason, Disconnected, LocalAddr},
         server::Opened,
     },
     aeronet_websocket::{
@@ -50,7 +51,7 @@ fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
     info!("{server} opened on {}", **local_addr);
 }
 
-fn on_connecting(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>) {
+fn on_connecting(trigger: Trigger<OnAdd, Endpoint>, clients: Query<&Parent>) {
     let client = trigger.entity();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
@@ -59,7 +60,7 @@ fn on_connecting(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>) {
     info!("{client} connecting to {server}");
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Connected>, clients: Query<&Parent>) {
+fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>) {
     let client = trigger.entity();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
@@ -87,21 +88,17 @@ fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
     }
 }
 
-fn reply(mut clients: Query<(Entity, &mut PacketBuffers), With<Parent>>) {
-    for (client, mut bufs) in &mut clients {
-        let mut to_send = Vec::new();
-
-        for (_, packet) in bufs.recv.drain() {
-            let msg = String::from_utf8(packet.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+fn reply(mut clients: Query<(Entity, &mut Session), With<Parent>>) {
+    for (client, mut session) in &mut clients {
+        // explicit deref so we can access disjoint fields
+        let session = &mut *session;
+        for packet in session.recv.drain(..) {
+            let msg = String::from_utf8(packet.payload.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             info!("{client} > {msg}");
 
             let reply = format!("You sent: {msg}");
             info!("{client} < {reply}");
-            to_send.push(reply.into());
-        }
-
-        for msg in to_send {
-            bufs.send.push(msg);
+            session.send.push(reply.into());
         }
     }
 }

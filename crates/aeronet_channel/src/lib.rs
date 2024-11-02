@@ -5,7 +5,7 @@ use {
     aeronet_io::{
         connection::{Disconnect, DisconnectReason, Disconnected, DROP_DISCONNECT_REASON},
         packet::RecvPacket,
-        AeronetIoPlugin, IoSet, Session,
+        AeronetIoPlugin, Endpoint, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
@@ -37,17 +37,6 @@ impl Plugin for ChannelIoPlugin {
 /// [`aeronet_io`] layer using in-memory MPSC channels.
 ///
 /// Use [`ChannelIo::open`] to open a connection between two entities.
-///
-/// # Buffers
-///
-/// Internally, this uses [`flume::bounded`] channels to store packets sent
-/// between two sessions.
-///
-/// These channels will be fully drained on every [`Update`]. You must specify
-/// the capacity of these channels explicitly, however you should usually err on
-/// the side of caution and use a capacity which is larger than what you need
-/// (wasting some memory), as opposed to a capacity which is too small (dropping
-/// some packets).
 #[derive(Debug, Component)]
 pub struct ChannelIo {
     send_packet: flume::Sender<Bytes>,
@@ -57,9 +46,7 @@ pub struct ChannelIo {
 }
 
 impl ChannelIo {
-    /// Creates a [`ChannelIo`] pair with a given packet buffer capacity.
-    ///
-    /// See [`ChannelIo`] for how to choose a capacity value.
+    /// Creates a [`ChannelIo`] pair.
     ///
     /// If the target entities already exist in the same world, prefer using
     /// [`ChannelIo::open`] and applying the resulting command. However, if your
@@ -73,15 +60,15 @@ impl ChannelIo {
     /// use {aeronet_channel::ChannelIo, bevy_ecs::prelude::*};
     ///
     /// # fn run(client_world: &mut World, server_world: &mut World) {
-    /// let (client_io, server_io) = ChannelIo::new(64);
+    /// let (client_io, server_io) = ChannelIo::new();
     /// client_world.spawn(client_io);
     /// server_world.spawn(server_io);
     /// # }
     /// ```
     #[must_use]
-    pub fn new(capacity: usize) -> (Self, Self) {
-        let (send_packet_a, recv_packet_a) = flume::bounded(capacity);
-        let (send_packet_b, recv_packet_b) = flume::bounded(capacity);
+    pub fn new() -> (Self, Self) {
+        let (send_packet_a, recv_packet_a) = flume::unbounded();
+        let (send_packet_b, recv_packet_b) = flume::unbounded();
         let (send_dc_a, recv_dc_a) = oneshot::channel();
         let (send_dc_b, recv_dc_b) = oneshot::channel();
 
@@ -124,16 +111,16 @@ impl ChannelIo {
     /// let b = commands.spawn_empty().id();
     ///
     /// // using `Commands`
-    /// commands.add(ChannelIo::open(64, a, b));
+    /// commands.add(ChannelIo::open(a, b));
     ///
     /// // using mutable `World` access
     /// ChannelIo::open(a, b).apply(world);
     /// # }
     /// ```
     #[must_use]
-    pub fn open(capacity: usize, a: Entity, b: Entity) -> impl Command {
+    pub fn open(a: Entity, b: Entity) -> impl Command {
         move |world: &mut World| {
-            let (io_a, io_b) = Self::new(capacity);
+            let (io_a, io_b) = Self::new();
             world.entity_mut(a).insert(io_a);
             world.entity_mut(b).insert(io_b);
         }
@@ -158,7 +145,7 @@ const MTU: usize = usize::MAX;
 fn on_io_added(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
     let entity = trigger.entity();
     let session = Session::new(Instant::now(), MTU);
-    commands.entity(entity).insert(session);
+    commands.entity(entity).insert((Endpoint, session));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelIo>) {

@@ -2,17 +2,12 @@
 
 use {
     crate::convert,
-    aeronet_io::{
-        connection::{Connected, Disconnect, Session},
-        packet::PacketMtu,
-        web_time::Instant,
-    },
+    aeronet_io::{connection::Disconnect, web_time::Instant, Endpoint, Session},
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
-    std::any::type_name,
     tracing::warn,
 };
 
@@ -115,68 +110,52 @@ pub enum ClientTransportSet {
 pub struct AeronetRepliconClient;
 
 fn on_client_connected(
-    trigger: Trigger<OnAdd, Connected>,
+    trigger: Trigger<OnAdd, Session>,
     mut commands: Commands,
-    is_client: Query<(), With<AeronetRepliconClient>>,
-    packet_mtus: Query<&PacketMtu>,
+    clients: Query<&Session, With<AeronetRepliconClient>>,
     channels: Res<RepliconChannels>,
 ) {
     let client = trigger.entity();
-    if is_client.get(client).is_err() {
+    let Ok(session) = clients.get(client) else {
         return;
-    }
+    };
 
-    let result = (|| {
-        let Ok(&PacketMtu(packet_mtu)) = packet_mtus.get(client) else {
-            warn!(
-                "{client} has `{}` but not `{}` - cannot create transport",
-                type_name::<AeronetRepliconClient>(),
-                type_name::<PacketMtu>()
-            );
-            return Err(());
-        };
+    let recv_lanes = channels
+        .server_channels()
+        .iter()
+        .map(|channel| convert::to_lane_kind(channel.kind));
+    let send_lanes = channels
+        .client_channels()
+        .iter()
+        .map(|channel| convert::to_lane_kind(channel.kind));
+    let now = Instant::now();
 
-        let recv_lanes = channels
-            .server_channels()
-            .iter()
-            .map(|channel| convert::to_lane_kind(channel.kind));
-        let send_lanes = channels
-            .client_channels()
-            .iter()
-            .map(|channel| convert::to_lane_kind(channel.kind));
-        let transport = match Transport::new(Instant::now(), packet_mtu, recv_lanes, send_lanes) {
-            Ok(transport) => transport,
-            Err(err) => {
-                let err = anyhow::Error::new(err);
-                warn!("Failed to create transport for {client}: {err:#}");
-                return Err(());
-            }
-        };
+    let transport = match Transport::new(&session, recv_lanes, send_lanes, now) {
+        Ok(transport) => transport,
+        Err(err) => {
+            let err = anyhow::Error::new(err);
+            warn!("Failed to create transport for {client}: {err:#}");
+            commands.trigger_targets(Disconnect::new("failed to create transport"), client);
+            return;
+        }
+    };
 
-        commands.entity(client).insert(transport);
-        Ok(())
-    })();
-
-    if result.is_err() {
-        commands.trigger_targets(Disconnect::new("failed to create transport"), client);
-    }
+    commands.entity(client).insert(transport);
 }
-
-type ConnectedClient = (With<Session>, With<Connected>, With<AeronetRepliconClient>);
 
 fn update_state(
     mut replicon_client: ResMut<RepliconClient>,
-    clients: Query<Option<&Connected>, (With<Session>, With<AeronetRepliconClient>)>,
+    clients: Query<Option<&Session>, (With<Endpoint>, With<AeronetRepliconClient>)>,
 ) {
     let status =
         clients.iter().fold(
             RepliconClientStatus::Disconnected,
-            |status, connected| match status {
+            |status, session| match status {
                 // if we've already found a connected client, then we are considered connected
                 RepliconClientStatus::Connected { .. } => status,
                 _ => {
                     // otherwise, we check if this client is connected..
-                    if connected.is_some() {
+                    if session.is_some() {
                         // ..and if so, then we're connected
                         RepliconClientStatus::Connected { client_id: None }
                     } else {
@@ -194,7 +173,7 @@ fn update_state(
 
 fn poll(
     mut replicon_client: ResMut<RepliconClient>,
-    mut clients: Query<&mut Transport, ConnectedClient>,
+    mut clients: Query<&mut Transport, With<AeronetRepliconClient>>,
 ) {
     for mut transport in &mut clients {
         for (lane_index, msg) in transport.recv_msgs.drain() {
@@ -212,7 +191,7 @@ fn poll(
 
 fn flush(
     mut replicon_client: ResMut<RepliconClient>,
-    mut clients: Query<&mut Transport, ConnectedClient>,
+    mut clients: Query<&mut Transport, With<AeronetRepliconClient>>,
 ) {
     let now = Instant::now();
     for (channel_id, msg) in replicon_client.drain_sent() {

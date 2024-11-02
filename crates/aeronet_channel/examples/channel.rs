@@ -35,8 +35,6 @@ struct SessionUi {
 }
 
 fn setup(mut commands: Commands) {
-    const BUFFER_CAP: usize = 64;
-
     // Typically, you'll use commands to create a session.
     // With other implementations, you spawn an entity and push an
     // `EntityCommand` onto it to set up the session.
@@ -46,7 +44,7 @@ fn setup(mut commands: Commands) {
     // since it affects two entities at the same time.
     let a = commands.spawn((Name::new("A"), SessionUi::default())).id();
     let b = commands.spawn((Name::new("B"), SessionUi::default())).id();
-    commands.add(ChannelIo::open(BUFFER_CAP, a, b));
+    commands.add(ChannelIo::open(a, b));
 }
 
 fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut Session)>) {

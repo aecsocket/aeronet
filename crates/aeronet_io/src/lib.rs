@@ -32,6 +32,15 @@ impl Plugin for AeronetIoPlugin {
     }
 }
 
+/// Represents an [`Entity`] which is establishing a connection to a peer, so
+/// that it may open a [`Session`] in the future.
+///
+/// This is effectively a marker component for a [`Session`] which isn't
+/// connected yet.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Component, Reflect)]
+#[reflect(Component)]
+pub struct Endpoint;
+
 /// Represents an [`Entity`] which can be used to transfer [packets] over a
 /// connection to a peer session, potentially over a network.
 ///
@@ -57,7 +66,8 @@ impl Plugin for AeronetIoPlugin {
 ///
 /// After creating a session entity using your chosen IO layer, the entity may
 /// not start with the [`Session`] component - the session is *connecting* but
-/// is not *connected* yet. Once the IO layer adds [`Session`], the entity is
+/// is not *connected* yet. This connecting state is marked with the\
+/// [`Endpoint`] component. Once the IO layer adds [`Session`], the entity is
 /// considered *connected*, and you can send and receive data.
 ///
 /// Note that [`Session`] is not a *guarantee* that you can send and receive
@@ -76,8 +86,8 @@ impl Plugin for AeronetIoPlugin {
 /// [`Session::recv`] and [`Session::send`] respectively. These buffers are
 /// [`Vec`]s with unbounded capacity, but are cleared automatically on every
 /// update:
-/// - [`packet::clear_recv_buffers`] after [`IoSet::Poll`]
-/// - [`packet::clear_send_buffers`] after [`IoSet::Flush`]
+/// - [`packet::clear_recv_buffers`] before [`IoSet::Poll`]
+/// - [`packet::clear_send_buffers`] before [`IoSet::Flush`]
 ///
 /// If there are any unconsumed packets in a buffer when it is cleared, a
 /// warning is emitted - all packets should be consumed on every update.
@@ -90,6 +100,7 @@ impl Plugin for AeronetIoPlugin {
 /// [packets]: packet
 #[derive(Debug, Component, Reflect)]
 #[reflect(from_reflect = false, Component)]
+// TODO: required component Endpoint
 pub struct Session {
     connected_at: Instant,
     min_mtu: usize,
@@ -126,6 +137,22 @@ impl Session {
             recv: Vec::new(),
             send: Vec::new(),
         }
+    }
+
+    /// Returns when this session established its connection.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use {aeronet_io::Session, web_time::Instant};
+    ///
+    /// let now = Instant::now();
+    /// let session = Session::new(now, 1000, 1200);
+    /// assert_eq!(now, session.connected_at());
+    /// ```
+    #[must_use]
+    pub const fn connected_at(&self) -> Instant {
+        self.connected_at
     }
 
     /// Returns the minimum value that [`Session::mtu`] will ever report on this
