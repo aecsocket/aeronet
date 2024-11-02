@@ -159,6 +159,10 @@ Some example tools you may use are:
 - Windows
   - [`clumsy`](https://github.com/jagt/clumsy)
 
+`aeronet` does not provide support for conditioning within the networking crate itself, since
+conditioning testing is more effective (and representative of real-world results) when the
+conditioning is applied at the lowest level possible.
+
 [Bevy]: https://bevyengine.org
 [`aeronet_channel`]: https://docs.rs/aeronet_channel
 [`aeronet_websocket`]: https://docs.rs/aeronet_websocket
