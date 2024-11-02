@@ -169,5 +169,11 @@ fn echo_messages(
                 .send
                 .push(msg.lane, Bytes::from(reply), web_time::Instant::now());
         }
+
+        for _ in transport.recv_acks.drain() {
+            // We have to use up acknowlegements,
+            // but since we don't actually care about reading them,
+            // we'll just ignore them.
+        }
     }
 }
