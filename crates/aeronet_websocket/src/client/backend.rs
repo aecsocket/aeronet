@@ -7,7 +7,6 @@ use {
 };
 
 pub async fn start(
-    packet_buf_cap: usize,
     config: ClientConfig,
     target: ConnectTarget,
     send_connected: oneshot::Sender<ToConnected>,
@@ -67,7 +66,7 @@ pub async fn start(
             debug!("Created stream");
 
             let (frontend, backend) =
-                crate::session::backend::native::split(stream, packet_buf_cap);
+                crate::session::backend::native::split(stream, config.packet_buf_cap);
             (
                 ToConnected {
                     local_addr,

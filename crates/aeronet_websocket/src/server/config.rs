@@ -2,6 +2,7 @@
 // https://github.com/BiagioFesta/wtransport/blob/bf3a5401c2b3671e6611bd093d7666f4660b2119/wtransport/src/tls.rs
 
 use {
+    crate::session::DEFAULT_PACKET_BUF_CAP,
     rustls::pki_types::{CertificateDer, PrivateKeyDer},
     std::{
         net::{Ipv6Addr, SocketAddr},
@@ -22,6 +23,7 @@ pub struct ServerConfig {
     pub(crate) bind_address: SocketAddr,
     pub(crate) tls: Option<Arc<rustls::ServerConfig>>,
     pub(crate) socket: WebSocketConfig,
+    pub(crate) packet_buf_cap: usize,
 }
 
 impl ServerConfig {
@@ -106,6 +108,7 @@ impl ServerConfigBuilder<WantsTlsConfig> {
             bind_address: self.0.bind_address,
             tls,
             socket: WebSocketConfig::default(),
+            packet_buf_cap: DEFAULT_PACKET_BUF_CAP,
         }
     }
 }
@@ -114,6 +117,19 @@ impl ServerConfig {
     /// Configures this to use the given socket configuration.
     pub fn with_socket_config(self, socket: WebSocketConfig) -> Self {
         Self { socket, ..self }
+    }
+
+    /// Configures the capacity of packet buffers on client sessions spawned
+    /// under this server.
+    ///
+    /// See [`WebSocketIo`] for how to choose a capacity value.
+    ///
+    /// [`WebSocketIo`]: crate::session::WebSocketIo
+    pub fn with_packet_buf_cap(self, packet_buf_cap: usize) -> Self {
+        Self {
+            packet_buf_cap,
+            ..self
+        }
     }
 }
 

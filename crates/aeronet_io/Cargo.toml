@@ -22,7 +22,6 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 anyhow = { workspace = true }
 bytes = { workspace = true }
 derive_more = { workspace = true }
-ringbuf = { workspace = true }
 tracing = { workspace = true }
 web-time = { workspace = true }
 

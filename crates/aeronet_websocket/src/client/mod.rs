@@ -4,19 +4,19 @@ mod backend;
 
 use {
     crate::{
+        session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin, MTU},
         WebSocketRuntime,
-        session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
     },
     aeronet_io::{
-        IoSet,
-        connection::{DisconnectReason, Disconnected, Session},
-        packet::PacketBuffersCapacity,
+        connection::{DisconnectReason, Disconnected},
+        IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     futures::{channel::oneshot, never::Never},
     thiserror::Error,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
+    web_time::Instant,
 };
 
 cfg_if::cfg_if! {
@@ -58,8 +58,7 @@ impl Plugin for WebSocketClientPlugin {
         app.add_systems(
             PreUpdate,
             poll_clients.in_set(IoSet::Poll).before(session::poll),
-        )
-        .observe(on_client_added);
+        );
     }
 }
 
@@ -121,13 +120,12 @@ impl WebSocketClient {
 
 fn connect(session: Entity, world: &mut World, config: ClientConfig, target: ConnectTarget) {
     let runtime = world.resource::<WebSocketRuntime>().clone();
-    let packet_buf_cap = PacketBuffersCapacity::compute_from(world, session);
 
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     runtime.spawn_on_self(
         async move {
-            let Err(reason) = backend::start(packet_buf_cap, config, target, send_next).await;
+            let Err(reason) = backend::start(config, target, send_next).await;
             _ = send_dc.send(reason);
         }
         .instrument(debug_span!("client", %session)),
@@ -181,12 +179,6 @@ struct ToConnected {
     frontend: SessionFrontend,
 }
 
-// TODO: required components
-fn on_client_added(trigger: Trigger<OnAdd, WebSocketClient>, mut commands: Commands) {
-    let session = trigger.entity();
-    commands.entity(session).insert(Session);
-}
-
 fn poll_clients(mut commands: Commands, mut frontends: Query<(Entity, &mut WebSocketClient)>) {
     for (session, mut frontend) in &mut frontends {
         replace_with::replace_with_or_abort(&mut frontend.0, |state| match state {
@@ -225,6 +217,7 @@ fn poll_connecting(
             send_packet_f2b: next.frontend.send_packet_f2b,
             send_user_dc: Some(next.frontend.send_user_dc),
         },
+        Session::new(Instant::now(), MTU),
         #[cfg(not(target_family = "wasm"))]
         aeronet_io::connection::LocalAddr(next.local_addr),
         #[cfg(not(target_family = "wasm"))]

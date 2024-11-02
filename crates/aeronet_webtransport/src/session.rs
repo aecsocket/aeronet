@@ -5,17 +5,17 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        AeronetIoPlugin, IoSet,
-        connection::{Connected, DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, RemoteAddr},
-        packet::{PacketBuffers, PacketMtu, PacketRtt, PacketStats},
+        connection::{Disconnect, DisconnectReason, RemoteAddr, DROP_DISCONNECT_REASON},
+        packet::{MtuTooSmall, PacketRtt, RecvPacket, IP_MTU},
+        AeronetIoPlugin, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
-        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
+        FutureExt, SinkExt, StreamExt,
     },
     std::{io, num::Saturating, sync::Arc, time::Duration},
     thiserror::Error,
@@ -74,7 +74,7 @@ impl Plugin for WebTransportSessionPlugin {
 #[derive(Debug, Component)]
 pub struct WebTransportIo {
     pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,
-    pub(crate) recv_packet_b2f: mpsc::Receiver<Bytes>,
+    pub(crate) recv_packet_b2f: mpsc::Receiver<RecvPacket>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
 }
@@ -100,6 +100,8 @@ pub enum SessionError {
     /// datagrams.
     #[error("datagrams not supported")]
     DatagramsNotSupported,
+    #[error(transparent)]
+    MtuTooSmall(MtuTooSmall),
     /// Unexpectedly lost connection from the peer.
     #[error("connection lost")]
     Connection(#[source] ConnectionError),
@@ -118,14 +120,16 @@ pub(crate) struct SessionMeta {
     #[cfg(not(target_family = "wasm"))]
     remote_addr: std::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
-    raw_rtt: Duration,
+    packet_rtt: Duration,
     mtu: usize,
 }
 
 // TODO: required components
 fn on_io_added(trigger: Trigger<OnAdd, WebTransportIo>, mut commands: Commands) {
-    let session = trigger.entity();
-    commands.entity(session).insert(Connected::now());
+    let entity = trigger.entity();
+    commands
+        .entity(entity)
+        .insert(Session::new(Instant::now(), IP_MTU));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTransportIo>) {
@@ -143,37 +147,33 @@ fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTrans
 pub(crate) fn poll(
     mut sessions: Query<(
         Entity,
+        &mut Session,
         &mut WebTransportIo,
-        &mut PacketBuffers,
-        &mut PacketMtu,
-        &mut PacketStats,
         Option<&mut RemoteAddr>,
         Option<&mut PacketRtt>,
     )>,
 ) {
-    for (session, mut io, mut bufs, mut mtu, mut stats, mut remote_addr, mut packet_rtt) in
-        &mut sessions
-    {
+    for (entity, mut session, mut io, mut remote_addr, mut packet_rtt) in &mut sessions {
         #[cfg(target_family = "wasm")]
         {
             // suppress `unused_variables`, `unused_mut`
-            _ = &mut remote_addr;
-            _ = &mut packet_rtt;
+            _ = (&mut remote_addr, &mut packet_rtt);
         }
 
-        let span = trace_span!("poll", %session);
+        let span = trace_span!("poll", %entity);
         let _span = span.enter();
 
         while let Ok(Some(meta)) = io.recv_meta.try_next() {
-            **mtu = meta.mtu;
+            if session.set_mtu(meta.mtu).is_err() {}
+
             #[cfg(not(target_family = "wasm"))]
             {
-                if let Some(ref mut remote_addr) = remote_addr {
-                    ***remote_addr = meta.remote_addr;
+                if let Some(remote_addr) = &mut remote_addr {
+                    remote_addr.0 = meta.remote_addr;
                 }
 
-                if let Some(ref mut raw_rtt) = packet_rtt {
-                    ***raw_rtt = meta.raw_rtt;
+                if let Some(packet_rtt) = &mut packet_rtt {
+                    packet_rtt.0 = meta.packet_rtt;
                 }
             }
         }
@@ -182,12 +182,12 @@ pub(crate) fn poll(
         let mut num_bytes = Saturating(0);
         while let Ok(Some(packet)) = io.recv_packet_b2f.try_next() {
             num_packets += 1;
-            stats.packets_recv += 1;
+            session.stats.packets_recv += 1;
 
-            num_bytes += packet.len();
-            stats.bytes_recv += packet.len();
+            num_bytes += packet.payload.len();
+            session.stats.bytes_recv += packet.payload.len();
 
-            bufs.recv.push((Instant::now(), packet));
+            session.recv.push(packet);
         }
 
         trace!(
@@ -198,26 +198,21 @@ pub(crate) fn poll(
     }
 }
 
-fn flush(
-    mut sessions: Query<(
-        Entity,
-        &WebTransportIo,
-        &mut PacketBuffers,
-        &mut PacketStats,
-    )>,
-) {
-    for (session, io, mut bufs, mut stats) in &mut sessions {
-        let span = trace_span!("flush", %session);
+fn flush(mut sessions: Query<(Entity, &mut Session, &WebTransportIo)>) {
+    for (entity, mut session, io) in &mut sessions {
+        let span = trace_span!("flush", %entity);
         let _span = span.enter();
 
+        // explicit deref so we can access disjoint fields
+        let session = &mut *session;
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        for packet in bufs.send.drain() {
+        for packet in session.send.drain(..) {
             num_packets += 1;
-            stats.packets_sent += 1;
+            session.stats.packets_sent += 1;
 
             num_bytes += packet.len();
-            stats.bytes_sent += packet.len();
+            session.stats.bytes_sent += packet.len();
 
             // handle connection errors in `poll`
             _ = io.send_packet_f2b.unbounded_send(packet);
@@ -235,7 +230,7 @@ fn flush(
 pub(crate) struct SessionBackend {
     pub conn: Connection,
     pub send_meta: mpsc::Sender<SessionMeta>,
-    pub send_packet_b2f: mpsc::Sender<Bytes>,
+    pub send_packet_b2f: mpsc::Sender<RecvPacket>,
     pub recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
     pub recv_user_dc: oneshot::Receiver<String>,
 }
@@ -317,7 +312,7 @@ async fn meta_loop(
             #[cfg(not(target_family = "wasm"))]
             remote_addr: conn.0.remote_address(),
             #[cfg(not(target_family = "wasm"))]
-            raw_rtt: conn.0.rtt(),
+            packet_rtt: conn.0.rtt(),
             mtu: conn
                 .max_datagram_size()
                 .ok_or(SessionError::DatagramsNotSupported)?,
@@ -335,7 +330,7 @@ async fn meta_loop(
 async fn recv_loop(
     conn: Arc<Connection>,
     mut recv_closed: oneshot::Receiver<()>,
-    mut send_packet_b2f: mpsc::Sender<Bytes>,
+    mut send_packet_b2f: mpsc::Sender<RecvPacket>,
 ) -> Result<Never, SessionError> {
     loop {
         #[cfg_attr(
@@ -359,9 +354,13 @@ async fn recv_loop(
                 packet.0.payload()
             }
         };
+        let now = Instant::now();
 
         send_packet_b2f
-            .send(packet)
+            .send(RecvPacket {
+                recv_at: now,
+                payload: packet,
+            })
             .await
             .map_err(|_| SessionError::BackendClosed)?;
     }

@@ -6,7 +6,7 @@
 //! server/client topology.
 
 use {
-    crate::connection::{Disconnect, Session},
+    crate::{connection::Disconnect, Session},
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,

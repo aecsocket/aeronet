@@ -6,15 +6,13 @@ mod config;
 pub use config::*;
 use {
     crate::{
-        WebSocketRuntime,
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
-        tungstenite,
+        tungstenite, WebSocketRuntime,
     },
     aeronet_io::{
-        IoSet,
-        connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr, Session},
-        packet::PacketBuffersCapacity,
+        connection::{DisconnectReason, Disconnected, LocalAddr, RemoteAddr},
         server::{CloseReason, Closed, Opened, Server},
+        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -22,7 +20,7 @@ use {
     futures::channel::{mpsc, oneshot},
     std::{io, net::SocketAddr},
     thiserror::Error,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
 };
 
 /// Allows using [`WebSocketServer`].
@@ -90,13 +88,12 @@ impl WebSocketServer {
 
 fn open(server: Entity, world: &mut World, config: ServerConfig) {
     let runtime = world.resource::<WebSocketRuntime>().clone();
-    let packet_buf_cap = PacketBuffersCapacity::compute_from(world, server);
 
     let (send_closed, recv_closed) = oneshot::channel::<CloseReason<ServerError>>();
     let (send_next, recv_next) = oneshot::channel::<ToOpen>();
     runtime.spawn_on_self(
         async move {
-            let Err(err) = backend::start(config, packet_buf_cap, send_next).await;
+            let Err(err) = backend::start(config, send_next).await;
             _ = send_closed.send(CloseReason::Error(err));
         }
         .instrument(debug_span!("server", %server)),
@@ -241,7 +238,6 @@ fn poll_open(
             .spawn_empty()
             .set_parent(server)
             .insert((
-                Session,
                 ClientFrontend::Connecting {
                     recv_dc: connecting.recv_dc,
                     recv_next: connecting.recv_next,
