@@ -149,6 +149,12 @@ impl From<RawLaneIndex> for LaneIndex {
     }
 }
 
+impl From<LaneIndex> for RawLaneIndex {
+    fn from(value: LaneIndex) -> Self {
+        value.0
+    }
+}
+
 impl TryFrom<usize> for LaneIndex {
     type Error = <RawLaneIndex as TryFrom<usize>>::Error;
 
@@ -159,7 +165,7 @@ impl TryFrom<usize> for LaneIndex {
 
 impl From<LaneIndex> for usize {
     fn from(value: LaneIndex) -> Self {
-        value.0 as usize // `usize` is at least as big as `RawLaneIndex` - checked statically
+        value.0 as Self // `usize` is at least as big as `RawLaneIndex` - checked statically
     }
 }
 

@@ -2,11 +2,11 @@
 
 use {
     crate::{
-        Transport,
         sampling::{
             SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
             SessionStatsSampling,
         },
+        Transport, TransportConfig,
     },
     aeronet_io::{
         connection::Connected,
@@ -16,8 +16,8 @@ use {
     bevy_core::Name,
     bevy_ecs::prelude::*,
     bevy_egui::{
-        EguiContexts,
         egui::{self, epaint::Hsva},
+        EguiContexts,
     },
     itertools::Itertools,
     ringbuf::traits::Consumer,
@@ -255,6 +255,7 @@ impl SessionVisualizer {
         ui: &mut egui::Ui,
         now: Instant,
         transport: &Transport,
+        config: &TransportConfig,
         connected_at: Option<Instant>,
         packet_mtu: Option<usize>,
         packet_rtt: Option<Duration>,
@@ -285,7 +286,7 @@ impl SessionVisualizer {
                 ui.label(format!(
                     "{} / {}",
                     fmt_bytes(transport.memory_used()),
-                    fmt_bytes(transport.max_memory_usage)
+                    fmt_bytes(config.max_memory_usage)
                 ));
             });
 
@@ -353,14 +354,24 @@ fn draw(
         &mut SessionVisualizer,
         &SessionStats,
         &Transport,
+        &TransportConfig,
         Option<&Connected>,
         Option<&PacketMtu>,
         Option<&PacketRtt>,
     )>,
     sampling: Res<SessionStatsSampling>,
 ) {
-    for (entity, name, mut visualizer, stats, transport, connected, packet_mtu, packet_rtt) in
-        &mut sessions
+    for (
+        entity,
+        name,
+        mut visualizer,
+        stats,
+        transport,
+        config,
+        connected,
+        packet_mtu,
+        packet_rtt,
+    ) in &mut sessions
     {
         let display_name =
             name.map_or_else(|| entity.to_string(), |name| format!("{name} ({entity})"));
@@ -371,6 +382,7 @@ fn draw(
                 ui,
                 Instant::now(),
                 transport,
+                config,
                 connected.map(|x| x.at),
                 packet_mtu.map(|x| x.0),
                 packet_rtt.map(|x| x.0),

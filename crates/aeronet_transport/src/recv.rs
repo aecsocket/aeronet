@@ -8,16 +8,16 @@ use {
         rtt::RttEstimator,
         send,
         seq_buf::SeqBuf,
-        FlushedPacket, MessageKey, Transport,
+        FlushedPacket, MessageKey, Transport, TransportConfig,
     },
-    aeronet_io::{connection::Disconnect, packet::PacketBuffers},
+    aeronet_io::packet::PacketBuffers,
     ahash::{HashMap, HashSet},
     bevy_ecs::prelude::*,
     itertools::Either,
     octs::{Buf, Read},
     std::{iter, num::Saturating},
     thiserror::Error,
-    tracing::{trace, trace_span, warn},
+    tracing::{trace, trace_span},
     typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
 };
@@ -92,34 +92,27 @@ pub enum RecvError {
 }
 
 pub(crate) fn poll(
-    mut commands: Commands,
-    mut sessions: Query<(Entity, &mut Transport, &mut PacketBuffers)>,
+    mut sessions: Query<(Entity, &mut Transport, &TransportConfig, &mut PacketBuffers)>,
 ) {
-    for (session, mut transport, mut packet_bufs) in &mut sessions {
+    for (session, mut transport, config, mut packet_bufs) in &mut sessions {
         let span = trace_span!("poll", %session);
         let _span = span.enter();
 
         for (recv_at, packet) in packet_bufs.recv.drain() {
             // TODO: expose the first packet `recv_at` to expose
             // when this message arrived
-            if let Err(err) = recv_on(&mut transport, recv_at, &packet) {
+            if let Err(err) = recv_on(&mut transport, config, recv_at, &packet) {
                 let err = anyhow::Error::new(err);
                 trace!("{session} received invalid packet: {err:#}");
                 continue;
             };
-        }
-
-        let mem_used = transport.memory_used();
-        let mem_max = transport.max_memory_usage;
-        if mem_used > mem_max {
-            warn!("{session} exceeded memory limit, disconnecting - {mem_used} / {mem_max} bytes");
-            commands.trigger_targets(Disconnect::new("memory limit exceeded"), session);
         }
     }
 }
 
 fn recv_on(
     transport: &mut Transport,
+    config: &TransportConfig,
     recv_at: Instant,
     mut packet: &[u8],
 ) -> Result<(), RecvError> {
@@ -142,7 +135,7 @@ fn recv_on(
     ));
 
     while packet.has_remaining() {
-        recv_frag(transport, &mut packet)?;
+        recv_frag(transport, config, &mut packet)?;
     }
 
     transport.peer_acks.ack(header.seq);
@@ -203,13 +196,17 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
         })
 }
 
-fn recv_frag(transport: &mut Transport, packet: &mut &[u8]) -> Result<(), RecvError> {
+fn recv_frag(
+    transport: &mut Transport,
+    config: &TransportConfig,
+    packet: &mut &[u8],
+) -> Result<(), RecvError> {
     let frag = packet
         .read::<Fragment>()
         .map_err(|_| RecvError::ReadFragment)?;
     let lane_index = frag.header.lane;
 
-    let memory_left = transport.memory_left();
+    let memory_left = config.max_memory_usage - transport.memory_used();
     let lane = transport
         .recv_lanes
         .get_mut(usize::from(lane_index))
