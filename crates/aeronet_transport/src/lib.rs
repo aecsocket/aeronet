@@ -46,13 +46,16 @@ impl Plugin for AeronetTransportPlugin {
             .add_systems(
                 PreUpdate,
                 (
-                    recv::poll,
-                    update_config,
-                    refill_send_bytes,
-                    check_memory_limit,
-                )
-                    .chain()
-                    .in_set(TransportSet::Poll),
+                    clear_recv_buffers.before(TransportSet::Poll),
+                    (
+                        recv::poll,
+                        update_config,
+                        refill_send_bytes,
+                        check_memory_limit,
+                    )
+                        .chain()
+                        .in_set(TransportSet::Poll),
+                ),
             )
             .add_systems(PostUpdate, send::flush.in_set(TransportSet::Flush))
             .observe(init_config);
@@ -206,6 +209,33 @@ impl FlushedPacket {
         Self {
             flushed_at: sized::Instant(flushed_at),
             frags: Box::new([]),
+        }
+    }
+}
+
+/// Clears all [`Transport::recv_msgs`] and [`Transport::recv_acks`] buffers,
+/// emitting warnings if there were any items left in the buffers.
+///
+/// The equivalent for [`Transport::send_msgs`] does not exist, because this
+/// crate itself is responsible for draining that buffer.
+pub fn clear_recv_buffers(mut sessions: Query<(Entity, &mut Transport)>) {
+    for (entity, mut transport) in &mut sessions {
+        let len = transport.recv_msgs.0.len();
+        if len > 0 {
+            warn!(
+                "{entity} has {len} received messages which have not been consumed - \
+                this indicates a bug in code above the transport layer"
+            );
+            transport.recv_msgs.0.clear();
+        }
+
+        let len = transport.recv_acks.0.len();
+        if len > 0 {
+            warn!(
+                "{entity} has {len} received acks which have not been consumed - \
+                this indicates a bug in code above the transport layer"
+            );
+            transport.recv_acks.0.clear();
         }
     }
 }

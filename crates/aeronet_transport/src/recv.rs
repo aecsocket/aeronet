@@ -23,7 +23,7 @@ use {
 };
 
 #[derive(Debug, TypeSize)]
-pub struct TransportRecv<T: TypeSize>(Vec<T>);
+pub struct TransportRecv<T: TypeSize>(pub(crate) Vec<T>);
 
 impl<T: TypeSize> TransportRecv<T> {
     pub(crate) const fn new() -> Self {

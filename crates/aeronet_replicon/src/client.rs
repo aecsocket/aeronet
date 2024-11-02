@@ -130,7 +130,7 @@ fn on_client_connected(
         .map(|channel| convert::to_lane_kind(channel.kind));
     let now = Instant::now();
 
-    let transport = match Transport::new(&session, recv_lanes, send_lanes, now) {
+    let transport = match Transport::new(session, recv_lanes, send_lanes, now) {
         Ok(transport) => transport,
         Err(err) => {
             let err = anyhow::Error::new(err);

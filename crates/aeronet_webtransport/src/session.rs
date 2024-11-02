@@ -100,6 +100,10 @@ pub enum SessionError {
     /// datagrams.
     #[error("datagrams not supported")]
     DatagramsNotSupported,
+    /// Packet MTU is smaller than [`MIN_MTU`].
+    ///
+    /// This may occur either immediately after connecting to the peer, or after
+    /// a connection has been established and the path MTU updates.
     #[error(transparent)]
     MtuTooSmall(MtuTooSmall),
     /// Unexpectedly lost connection from the peer.
@@ -107,6 +111,7 @@ pub enum SessionError {
     Connection(#[source] ConnectionError),
 }
 
+/// Minimum packet MTU that a [`WebTransportIo`] must support.
 pub const MIN_MTU: usize = IP_MTU;
 
 impl Drop for WebTransportIo {
@@ -154,8 +159,9 @@ pub(crate) fn poll(
         Option<&mut PeerAddr>,
         Option<&mut PacketRtt>,
     )>,
+    mut commands: Commands,
 ) {
-    for (entity, mut session, mut io, mut peer_addr, mut packet_rtt) in &mut sessions {
+    'sessions: for (entity, mut session, mut io, mut peer_addr, mut packet_rtt) in &mut sessions {
         #[cfg(target_family = "wasm")]
         {
             // suppress `unused_variables`, `unused_mut`
@@ -166,7 +172,10 @@ pub(crate) fn poll(
         let _span = span.enter();
 
         while let Ok(Some(meta)) = io.recv_meta.try_next() {
-            if session.set_mtu(meta.mtu).is_err() {}
+            if let Err(err) = session.set_mtu(meta.mtu) {
+                commands.trigger_targets(Disconnect::new(err.to_string()), entity);
+                continue 'sessions;
+            }
 
             #[cfg(not(target_family = "wasm"))]
             {

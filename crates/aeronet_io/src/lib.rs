@@ -127,6 +127,19 @@ pub struct Session {
 }
 
 impl Session {
+    /// Creates a new [`Session`].
+    ///
+    /// The [`Session::mtu`] will be set to `min_mtu` by default. If you already
+    /// have an initial MTU estimate, use [`Session::set_mtu`] after creation
+    /// to provide the estimate.
+    ///
+    /// - `connected_at`: the instant at which the IO layer acknowledged that
+    ///   the session is now connected and ready for transporting data.
+    /// - `min_mtu`: the lowest MTU value that this session may possibly ever
+    ///   have. This is usually a constant based on the protocol used, e.g.
+    ///   "[`IP_MTU`] minus overhead".
+    ///
+    /// [`IP_MTU`]: packet::IP_MTU
     #[must_use]
     pub fn new(connected_at: Instant, min_mtu: usize) -> Self {
         Self {
