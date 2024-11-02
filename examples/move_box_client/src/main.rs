@@ -103,7 +103,13 @@ fn on_connected(
     ui_state.log.push(format!("{name} connected"));
 
     game_state.set(GameState::Playing);
-    commands.entity(entity).insert(SessionVisualizer::default());
+    commands.entity(entity).insert((
+        SessionVisualizer::default(),
+        TransportConfig {
+            max_memory_usage: 64 * 1024,
+            send_bytes_per_sec: 4 * 1024,
+        },
+    ));
 }
 
 fn on_disconnected(
@@ -213,14 +219,7 @@ fn web_transport_ui(
             global_ui.session_id += 1;
             let name = format!("{}. {target}", global_ui.session_id);
             commands
-                .spawn((
-                    Name::new(name),
-                    AeronetRepliconClient,
-                    TransportConfig {
-                        max_memory_usage: 64 * 1024,
-                        send_bytes_per_sec: 4 * 1024,
-                    },
-                ))
+                .spawn((Name::new(name), AeronetRepliconClient))
                 .add(WebTransportClient::connect(config, target));
         }
     });

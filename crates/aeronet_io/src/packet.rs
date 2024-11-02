@@ -100,36 +100,32 @@ pub struct PacketStats {
 #[doc(alias = "ping", alias = "latency")]
 pub struct PacketRtt(pub Duration);
 
-/// Clears all [`Session::recv`] buffers, emitting an error if there were any
+/// Clears all [`Session::recv`] buffers, emitting warnings if there were any
 /// packets left in the buffer.
 pub fn clear_recv_buffers(mut sessions: Query<(Entity, &mut Session)>) {
     for (entity, mut session) in &mut sessions {
         let len = session.recv.len();
-        if len == 0 {
-            continue;
+        if len > 0 {
+            warn!(
+                "{entity} has {len} received packets which have not been consumed - \
+                this indicates a bug in code above the IO layer"
+            );
+            session.recv.clear();
         }
-
-        warn!(
-            "{entity} has {len} received packets which have not been consumed - \
-            this indicates a bug in code above the IO layer"
-        );
-        session.recv.clear();
     }
 }
 
-/// Clears all [`Session::send`] buffers, emitting an error if there were any
+/// Clears all [`Session::send`] buffers, emitting warnings if there were any
 /// packets left in the buffer.
 pub fn clear_send_buffers(mut sessions: Query<(Entity, &mut Session)>) {
     for (entity, mut session) in &mut sessions {
         let len = session.send.len();
-        if len == 0 {
-            continue;
+        if len > 0 {
+            warn!(
+                "{entity} has {len} sent packets which have not been consumed - \
+                this indicates a bug in the IO layer"
+            );
+            session.send.clear();
         }
-
-        warn!(
-            "{entity} has {len} sent packets which have not been consumed - \
-            this indicates a bug in the IO layer"
-        );
-        session.send.clear();
     }
 }
