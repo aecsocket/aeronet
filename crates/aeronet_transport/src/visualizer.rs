@@ -240,6 +240,10 @@ impl SessionVisualizer {
                     sampling,
                     samples.clone().into_iter().map(|sample| MiscSample {
                         loss: sample.loss,
+                        #[expect(
+                            clippy::cast_precision_loss,
+                            reason = "precision loss is acceptable"
+                        )]
                         mem_used: sample.mem_used as f64 / sample.mem_max as f64,
                     }),
                 );
