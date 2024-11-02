@@ -11,7 +11,7 @@
 use {
     crate::{IoSet, Session},
     bevy_app::prelude::*,
-    bevy_derive::{Deref, DerefMut},
+    bevy_derive::Deref,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bytes::Bytes,
@@ -28,7 +28,7 @@ impl Plugin for PacketPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<PacketRtt>()
             .register_type::<PacketStats>()
-            .add_systems(PreUpdate, clear_recv_buffers.after(IoSet::Poll))
+            .add_systems(PreUpdate, clear_recv_buffers.before(IoSet::Poll))
             .add_systems(PostUpdate, clear_send_buffers.after(IoSet::Flush));
     }
 }
@@ -109,7 +109,10 @@ pub fn clear_recv_buffers(mut sessions: Query<(Entity, &mut Session)>) {
             continue;
         }
 
-        warn!("{entity} has {len} received packets which have not been consumed");
+        warn!(
+            "{entity} has {len} received packets which have not been consumed - \
+            this indicates a bug in code above the IO layer"
+        );
         session.recv.clear();
     }
 }
@@ -123,7 +126,10 @@ pub fn clear_send_buffers(mut sessions: Query<(Entity, &mut Session)>) {
             continue;
         }
 
-        warn!("{entity} has {len} sent packets which have not been consumed");
+        warn!(
+            "{entity} has {len} sent packets which have not been consumed - \
+            this indicates a bug in the IO layer"
+        );
         session.send.clear();
     }
 }

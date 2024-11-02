@@ -8,10 +8,7 @@ use {
         },
         Transport, TransportConfig,
     },
-    aeronet_io::{
-        connection::Connected,
-        packet::{PacketMtu, PacketRtt},
-    },
+    aeronet_io::{packet::PacketRtt, Session},
     bevy_app::prelude::*,
     bevy_core::Name,
     bevy_ecs::prelude::*,
@@ -256,22 +253,22 @@ impl SessionVisualizer {
         now: Instant,
         transport: &Transport,
         config: &TransportConfig,
-        connected_at: Option<Instant>,
-        packet_mtu: Option<usize>,
+        connected_at: Instant,
+        packet_mtu: usize,
         packet_rtt: Option<Duration>,
     ) {
         let unknown = || "?".to_string();
 
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.label(connected_at.map_or_else(
-                    || "not connected".into(),
-                    |at| format!("{:.1?}", now.saturating_duration_since(at)),
+                ui.label(format!(
+                    "{:.1?}",
+                    now.saturating_duration_since(connected_at)
                 ));
                 ui.separator();
 
                 ui.label("MTU");
-                ui.label(packet_mtu.map_or_else(unknown, |mtu| format!("{mtu}")));
+                ui.label(format!("{packet_mtu}"));
                 ui.separator();
 
                 ui.label("RTT");
@@ -359,27 +356,17 @@ fn draw(
     mut sessions: Query<(
         Entity,
         Option<&Name>,
-        &mut SessionVisualizer,
         &SessionStats,
+        &mut SessionVisualizer,
+        &Session,
+        Option<&PacketRtt>,
         &Transport,
         &TransportConfig,
-        Option<&Connected>,
-        Option<&PacketMtu>,
-        Option<&PacketRtt>,
     )>,
     sampling: Res<SessionStatsSampling>,
 ) {
-    for (
-        entity,
-        name,
-        mut visualizer,
-        stats,
-        transport,
-        config,
-        connected,
-        packet_mtu,
-        packet_rtt,
-    ) in &mut sessions
+    for (entity, name, stats, mut visualizer, session, packet_rtt, transport, transport_config) in
+        &mut sessions
     {
         let display_name =
             name.map_or_else(|| entity.to_string(), |name| format!("{name} ({entity})"));
@@ -390,9 +377,9 @@ fn draw(
                 ui,
                 Instant::now(),
                 transport,
-                config,
-                connected.map(|x| x.at),
-                packet_mtu.map(|x| x.0),
+                transport_config,
+                session.connected_at(),
+                session.mtu(),
                 packet_rtt.map(|x| x.0),
             );
         });

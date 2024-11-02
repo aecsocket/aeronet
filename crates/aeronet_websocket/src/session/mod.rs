@@ -87,7 +87,7 @@ impl Plugin for WebSocketSessionPlugin {
 /// By default, [`DEFAULT_PACKET_BUF_CAP`] is used as the capacity.
 #[derive(Debug, Component)]
 pub struct WebSocketIo {
-    pub(crate) recv_packet_b2f: mpsc::Receiver<RecvPacket>,
+    pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
 }
@@ -107,8 +107,8 @@ pub enum SessionError {
     #[error("failed to get local socket address")]
     GetLocalAddr(#[source] io::Error),
     /// Failed to read the peer socket address of the endpoint.
-    #[error("failed to get remote socket address")]
-    GetRemoteAddr(#[source] io::Error),
+    #[error("failed to get peer socket address")]
+    GetPeerAddr(#[source] io::Error),
     /// Receiver stream was unexpectedly closed.
     #[error("receiver stream closed")]
     RecvStreamClosed,
@@ -147,12 +147,9 @@ impl Drop for WebSocketIo {
 ///   - <https://en.wikipedia.org/wiki/WebSocket#Frame_structure>
 pub const MTU: usize = IP_MTU - 60 - 40 - 14;
 
-/// Default capacity of packet buffers on a [`WebSocketIo`].
-pub const DEFAULT_PACKET_BUF_CAP: usize = 64;
-
 #[derive(Debug)]
 pub(crate) struct SessionFrontend {
-    pub recv_packet_b2f: mpsc::Receiver<RecvPacket>,
+    pub recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     pub send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub send_user_dc: oneshot::Sender<String>,
 }

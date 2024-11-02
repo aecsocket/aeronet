@@ -5,12 +5,14 @@ mod backend;
 use {
     crate::{
         runtime::WebTransportRuntime,
-        session::{self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin},
+        session::{
+            self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin, MIN_MTU,
+        },
     },
     aeronet_io::{
         connection::{DisconnectReason, Disconnected},
-        packet::{RecvPacket, IP_MTU},
-        IoSet, Session,
+        packet::RecvPacket,
+        Endpoint, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -130,12 +132,10 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
         .instrument(debug_span!("client", %session)),
     );
 
-    world
-        .entity_mut(session)
-        .insert(WebTransportClient(ClientFrontend::Connecting {
-            recv_dc,
-            recv_next,
-        }));
+    world.entity_mut(session).insert((
+        Endpoint, // TODO: required component of WebTransportClient
+        WebTransportClient(ClientFrontend::Connecting { recv_dc, recv_next }),
+    ));
 }
 
 /// [`WebTransportClient`] error.
@@ -152,8 +152,6 @@ pub enum ClientError {
     #[error(transparent)]
     Session(#[from] SessionError),
 }
-
-pub const MIN_MTU: usize = IP_MTU;
 
 #[derive(Debug)]
 enum ClientFrontend {
@@ -172,12 +170,12 @@ struct ToConnected {
     #[cfg(not(target_family = "wasm"))]
     local_addr: std::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
-    initial_remote_addr: std::net::SocketAddr,
+    initial_peer_addr: std::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
     initial_rtt: std::time::Duration,
     initial_mtu: usize,
     recv_meta: mpsc::Receiver<SessionMeta>,
-    recv_packet_b2f: mpsc::Receiver<RecvPacket>,
+    recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     send_user_dc: oneshot::Sender<String>,
 }
@@ -236,7 +234,7 @@ fn poll_connecting(
         #[cfg(not(target_family = "wasm"))]
         aeronet_io::connection::LocalAddr(next.local_addr),
         #[cfg(not(target_family = "wasm"))]
-        aeronet_io::connection::RemoteAddr(next.initial_remote_addr),
+        aeronet_io::connection::PeerAddr(next.initial_peer_addr),
         #[cfg(not(target_family = "wasm"))]
         aeronet_io::packet::PacketRtt(next.initial_rtt),
     ));

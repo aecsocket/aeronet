@@ -12,7 +12,7 @@ use {
         rtt::RttEstimator,
         sized, FlushedPacket, FragmentPath, MessageKey, Transport,
     },
-    aeronet_io::packet::{PacketBuffers, PacketMtu},
+    aeronet_io::Session,
     ahash::HashMap,
     bevy_ecs::prelude::*,
     octs::{Bytes, EncodeLen, FixedEncodeLen, Write},
@@ -97,18 +97,15 @@ impl TransportSend {
             seq: msg_seq,
         })
     }
-
-    pub fn push_now(&mut self, lane_index: LaneIndex, msg: Bytes) -> Option<MessageKey> {
-        self.push(Instant::now(), lane_index, msg)
-    }
 }
 
-pub(crate) fn flush(mut sessions: Query<(&mut Transport, &mut PacketBuffers, &PacketMtu)>) {
+pub(crate) fn flush(mut sessions: Query<(&mut Session, &mut Transport)>) {
     let now = Instant::now();
-    for (mut transport, mut packet_bufs, &PacketMtu(packet_mtu)) in &mut sessions {
-        for packet in flush_on(&mut transport, now, packet_mtu) {
-            packet_bufs.send.push(Bytes::from(packet));
-        }
+    for (mut session, mut transport) in &mut sessions {
+        let packet_mtu = session.mtu();
+        session
+            .send
+            .extend(flush_on(&mut transport, now, packet_mtu));
     }
 }
 
@@ -116,7 +113,7 @@ fn flush_on(
     transport: &mut Transport,
     now: Instant,
     mtu: usize,
-) -> impl Iterator<Item = Vec<u8>> + '_ {
+) -> impl Iterator<Item = Bytes> + '_ {
     // collect the paths of the frags to send, along with how old they are
     let mut frag_paths = transport
         .send
@@ -206,7 +203,7 @@ fn flush_on(
         transport.next_packet_seq += PacketSeq::new(1);
         // self.next_ack_at = now + MAX_ACK_DELAY; // TODO
         sent_packet_yet = true;
-        Some(packet)
+        Some(Bytes::from(packet))
     })
 }
 

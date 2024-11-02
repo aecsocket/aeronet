@@ -10,7 +10,7 @@ use {
         seq_buf::SeqBuf,
         FlushedPacket, MessageKey, Transport, TransportConfig,
     },
-    aeronet_io::packet::PacketBuffers,
+    aeronet_io::Session,
     ahash::{HashMap, HashSet},
     bevy_ecs::prelude::*,
     itertools::Either,
@@ -91,19 +91,17 @@ pub enum RecvError {
     Reassemble(#[source] ReassembleError),
 }
 
-pub(crate) fn poll(
-    mut sessions: Query<(Entity, &mut Transport, &TransportConfig, &mut PacketBuffers)>,
-) {
-    for (session, mut transport, config, mut packet_bufs) in &mut sessions {
-        let span = trace_span!("poll", %session);
+pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut Transport, &TransportConfig)>) {
+    for (entity, mut session, mut transport, config) in &mut sessions {
+        let span = trace_span!("poll", %entity);
         let _span = span.enter();
 
-        for (recv_at, packet) in packet_bufs.recv.drain() {
+        for packet in session.recv.drain(..) {
             // TODO: expose the first packet `recv_at` to expose
             // when this message arrived
-            if let Err(err) = recv_on(&mut transport, config, recv_at, &packet) {
+            if let Err(err) = recv_on(&mut transport, config, packet.recv_at, &packet.payload) {
                 let err = anyhow::Error::new(err);
-                trace!("{session} received invalid packet: {err:#}");
+                trace!("{entity} received invalid packet: {err:#}");
                 continue;
             };
         }

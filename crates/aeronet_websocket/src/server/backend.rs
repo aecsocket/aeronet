@@ -45,7 +45,7 @@ pub async fn start(
 
     debug!("Starting server loop");
     loop {
-        let (stream, remote_addr) = listener
+        let (stream, peer_addr) = listener
             .accept()
             .await
             .map_err(ServerError::AcceptConnection)?;
@@ -55,9 +55,8 @@ pub async fn start(
             async move {
                 if let Err(err) = accept_session(
                     stream,
-                    remote_addr,
+                    peer_addr,
                     config.socket,
-                    packet_buf_cap,
                     tls_acceptor,
                     send_connecting,
                 )
@@ -72,9 +71,8 @@ pub async fn start(
 
 async fn accept_session(
     stream: TcpStream,
-    remote_addr: SocketAddr,
+    peer_addr: SocketAddr,
     socket_config: WebSocketConfig,
-    packet_buf_cap: usize,
     tls_acceptor: Option<TlsAcceptor>,
     mut send_connecting: mpsc::Sender<ToConnecting>,
 ) -> Result<(), DisconnectReason<ServerError>> {
@@ -83,7 +81,7 @@ async fn accept_session(
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     send_connecting
         .send(ToConnecting {
-            remote_addr,
+            peer_addr,
             send_session_entity,
             recv_dc,
             recv_next,
@@ -96,25 +94,17 @@ async fn accept_session(
         .map_err(|_| SessionError::FrontendClosed)
         .map_err(ServerError::Session)?;
 
-    let Err(dc_reason) = handle_session(
-        stream,
-        remote_addr,
-        socket_config,
-        packet_buf_cap,
-        tls_acceptor,
-        send_next,
-    )
-    .instrument(debug_span!("session", %session))
-    .await;
+    let Err(dc_reason) = handle_session(stream, peer_addr, socket_config, tls_acceptor, send_next)
+        .instrument(debug_span!("session", %session))
+        .await;
     _ = send_dc.send(dc_reason);
     Ok(())
 }
 
 async fn handle_session(
     stream: TcpStream,
-    remote_addr: SocketAddr,
+    peer_addr: SocketAddr,
     socket_config: WebSocketConfig,
-    packet_buf_cap: usize,
     tls_acceptor: Option<TlsAcceptor>,
     send_next: oneshot::Sender<ToConnected>,
 ) -> Result<Never, DisconnectReason<ServerError>> {
@@ -132,9 +122,9 @@ async fn handle_session(
         .await
         .map_err(ServerError::AcceptClient)?;
 
-    let (frontend, backend) = crate::session::backend::native::split(stream, packet_buf_cap);
+    let (frontend, backend) = crate::session::backend::native::split(stream);
     let connected = ToConnected {
-        remote_addr,
+        peer_addr,
         frontend,
     };
     debug!("Connected");

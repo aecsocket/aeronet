@@ -59,18 +59,17 @@ pub async fn start(
                 .local_addr()
                 .map_err(SessionError::GetLocalAddr)
                 .map_err(ClientError::Session)?;
-            let remote_addr = socket
+            let peer_addr = socket
                 .peer_addr()
-                .map_err(SessionError::GetRemoteAddr)
+                .map_err(SessionError::GetPeerAddr)
                 .map_err(ClientError::Session)?;
             debug!("Created stream");
 
-            let (frontend, backend) =
-                crate::session::backend::native::split(stream, config.packet_buf_cap);
+            let (frontend, backend) = crate::session::backend::native::split(stream);
             (
                 ToConnected {
                     local_addr,
-                    remote_addr,
+                    peer_addr,
                     frontend,
                 },
                 backend,

@@ -140,11 +140,11 @@ pub const DROP_DISCONNECT_REASON: &str = "dropped";
 /// This component may not be present in environments where there is no access
 /// to OS sockets (i.e. WASM).
 ///
-/// To access the remote socket address of a session, see [`RemoteAddr`].
+/// To access the socket address of a session's peer, see [`PeerAddr`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, Component)]
 pub struct LocalAddr(pub SocketAddr);
 
-/// Remote socket address that this [`Session`] is connected to.
+/// Socket address of the peer that this [`Session`] is connected to.
 ///
 /// Sessions which use a network will use an OS socket for communication. This
 /// component stores the [`SocketAddr`] of the peer, which this session is
@@ -155,7 +155,7 @@ pub struct LocalAddr(pub SocketAddr);
 ///
 /// To access the local socket address of a session, see [`LocalAddr`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, Component)]
-pub struct RemoteAddr(pub SocketAddr);
+pub struct PeerAddr(pub SocketAddr);
 
 fn on_connected(trigger: Trigger<OnAdd, Session>) {
     let entity = trigger.entity();

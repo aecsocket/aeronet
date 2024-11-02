@@ -1,28 +1,27 @@
 use {
     super::{ServerError, SessionResponse, ToConnected, ToConnecting, ToOpen},
     crate::{
-        WebTransportRuntime,
         session::{SessionBackend, SessionError, SessionMeta},
+        WebTransportRuntime,
     },
-    aeronet_io::connection::DisconnectReason,
+    aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
-        SinkExt,
         channel::{mpsc, oneshot},
         never::Never,
+        SinkExt,
     },
-    tracing::{Instrument, debug, debug_span},
+    tracing::{debug, debug_span, Instrument},
     wtransport::{
-        Endpoint, ServerConfig,
         endpoint::{IncomingSession, SessionRequest},
+        Endpoint, ServerConfig,
     },
     xwt_core::prelude::*,
 };
 
 pub async fn start(
     config: ServerConfig,
-    packet_buf_cap: usize,
     send_next: oneshot::Sender<ToOpen>,
 ) -> Result<Never, ServerError> {
     debug!("Spawning backend task to open server");
@@ -48,7 +47,7 @@ pub async fn start(
         WebTransportRuntime::spawn({
             let send_connecting = send_connecting.clone();
             async move {
-                if let Err(err) = accept_session(packet_buf_cap, session, send_connecting).await {
+                if let Err(err) = accept_session(session, send_connecting).await {
                     debug!("Failed to accept session: {err:?}");
                 };
             }
@@ -57,7 +56,6 @@ pub async fn start(
 }
 
 async fn accept_session(
-    packet_buf_cap: usize,
     session: IncomingSession,
     mut send_connecting: mpsc::Sender<ToConnecting>,
 ) -> Result<(), ServerError> {
@@ -85,7 +83,7 @@ async fn accept_session(
         .await
         .map_err(|_| SessionError::FrontendClosed)?;
 
-    let Err(dc_reason) = handle_session(packet_buf_cap, request, recv_session_response, send_next)
+    let Err(dc_reason) = handle_session(request, recv_session_response, send_next)
         .instrument(debug_span!("session", %session))
         .await;
     _ = send_dc.send(dc_reason);
@@ -93,7 +91,6 @@ async fn accept_session(
 }
 
 async fn handle_session(
-    packet_buf_cap: usize,
     request: SessionRequest,
     recv_session_response: oneshot::Receiver<SessionResponse>,
     send_connected: oneshot::Sender<ToConnected>,
@@ -127,11 +124,11 @@ async fn handle_session(
     debug!("Connected");
 
     let (send_meta, recv_meta) = mpsc::channel::<SessionMeta>(1);
-    let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<Bytes>(packet_buf_cap);
+    let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
     let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
     let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
     let next = ToConnected {
-        initial_remote_addr: conn.0.remote_address(),
+        initial_peer_addr: conn.0.remote_address(),
         initial_rtt: conn.0.rtt(),
         initial_mtu: conn
             .max_datagram_size()

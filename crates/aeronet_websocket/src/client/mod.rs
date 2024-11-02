@@ -9,7 +9,7 @@ use {
     },
     aeronet_io::{
         connection::{DisconnectReason, Disconnected},
-        IoSet, Session,
+        Endpoint, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -131,12 +131,10 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
         .instrument(debug_span!("client", %session)),
     );
 
-    world
-        .entity_mut(session)
-        .insert(WebSocketClient(ClientFrontend::Connecting {
-            recv_dc,
-            recv_next,
-        }));
+    world.entity_mut(session).insert((
+        Endpoint, // TODO: required component of WebSocketClient
+        WebSocketClient(ClientFrontend::Connecting { recv_dc, recv_next }),
+    ));
 }
 
 /// [`WebSocketClient`] error.
@@ -175,7 +173,7 @@ struct ToConnected {
     #[cfg(not(target_family = "wasm"))]
     local_addr: std::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
-    remote_addr: std::net::SocketAddr,
+    peer_addr: std::net::SocketAddr,
     frontend: SessionFrontend,
 }
 
@@ -221,7 +219,7 @@ fn poll_connecting(
         #[cfg(not(target_family = "wasm"))]
         aeronet_io::connection::LocalAddr(next.local_addr),
         #[cfg(not(target_family = "wasm"))]
-        aeronet_io::connection::RemoteAddr(next.remote_addr),
+        aeronet_io::connection::PeerAddr(next.peer_addr),
     ));
     ClientFrontend::Connected { recv_dc }
 }

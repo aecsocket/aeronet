@@ -27,10 +27,10 @@ pub mod wasm {
     // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
     const NORMAL_CLOSE_CODE: u16 = 1000;
 
-    pub fn split(socket: WebSocket, packet_buf_cap: usize) -> (SessionFrontend, SessionBackend) {
+    pub fn split(socket: WebSocket) -> (SessionFrontend, SessionBackend) {
         socket.set_binary_type(BinaryType::Arraybuffer);
 
-        let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<Bytes>(packet_buf_cap);
+        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<Bytes>();
         let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
         let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
 
@@ -179,16 +179,15 @@ pub mod native {
     #[derive(Debug)]
     pub struct SessionBackend<S> {
         stream: WebSocketStream<S>,
-        send_packet_b2f: mpsc::Sender<RecvPacket>,
+        send_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
         recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
         recv_user_dc: oneshot::Receiver<String>,
     }
 
     pub fn split<S: AsyncRead + AsyncWrite + Unpin>(
         stream: WebSocketStream<S>,
-        packet_buf_cap: usize,
     ) -> (SessionFrontend, SessionBackend<S>) {
-        let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<RecvPacket>(packet_buf_cap);
+        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
         let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
         let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
 
@@ -211,7 +210,7 @@ pub mod native {
         pub async fn start(self) -> Result<Never, DisconnectReason<SessionError>> {
             let Self {
                 mut stream,
-                mut send_packet_b2f,
+                send_packet_b2f,
                 mut recv_packet_f2b,
                 mut recv_user_dc,
             } = self;
@@ -222,7 +221,7 @@ pub mod native {
                         let msg = msg
                             .ok_or(SessionError::RecvStreamClosed)?
                             .map_err(SessionError::Connection)?;
-                        Self::recv(&mut send_packet_b2f, msg).await?;
+                        Self::recv(&send_packet_b2f, msg)?;
                     }
                     packet = recv_packet_f2b.next() => {
                         let packet = packet.ok_or(SessionError::FrontendClosed)?;
@@ -237,8 +236,8 @@ pub mod native {
             }
         }
 
-        async fn recv(
-            send_packet_b2f: &mut mpsc::Sender<RecvPacket>,
+        fn recv(
+            send_packet_b2f: &mpsc::UnboundedSender<RecvPacket>,
             msg: Message,
         ) -> Result<(), DisconnectReason<SessionError>> {
             let packet = match msg {
@@ -253,11 +252,10 @@ pub mod native {
             let now = Instant::now();
 
             send_packet_b2f
-                .send(RecvPacket {
+                .unbounded_send(RecvPacket {
                     recv_at: now,
                     payload: packet,
                 })
-                .await
                 .map_err(|_| SessionError::BackendClosed)?;
             Ok(())
         }

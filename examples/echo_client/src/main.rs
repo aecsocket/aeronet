@@ -15,7 +15,10 @@
 
 use {
     aeronet::{
-        io::connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
+        io::{
+            connection::{Disconnect, DisconnectReason, Disconnected},
+            web_time, Session,
+        },
         transport::{
             lane::{LaneIndex, LaneKind},
             octs::Bytes,
@@ -53,7 +56,6 @@ fn main() -> AppExit {
             ui, // ..draw the UI for the session
         ))
         // Set up some observers to run when the session state changes
-        .observe(on_connecting)
         .observe(on_connected)
         .observe(on_disconnected)
         .run()
@@ -99,13 +101,18 @@ fn setup(mut commands: Commands) {
 
     // Spawn an entity to represent this session.
     let mut entity = commands.spawn((
-        // Add `Transport` and configure it with our lanes so that we can send
-        // and receive messages (not just packets).
-        Transport::new(LANES, LANES),
-        // Optionally, you can also add a `TransportConfig` to configure
-        // some settings like max memory usage.
-        // If you don't insert this yourself, it will be automatically added.
-        TransportConfig::default(),
+        // Add the `TransportConfig` to configure some settings for the
+        // `aeronet_transport::Transport` we'll add later.
+        // We can't add that component just yet, since we don't have a
+        // `Session`, but we will later.
+        // This component is optional - if `Transport` is added without it,
+        // a default `TransportConfig` will also be added.
+        TransportConfig {
+            // Define how many bytes of memory this session can use
+            // for transport state.
+            max_memory_usage: 4 * 1024 * 1024,
+            ..default()
+        },
         // Add `UiState` so that we can log what messages we've received.
         UiState::default(),
     ));
@@ -114,29 +121,39 @@ fn setup(mut commands: Commands) {
     entity.add(WebSocketClient::connect(config, target));
 }
 
-// Observe state change events using `Trigger`s
-fn on_connecting(trigger: Trigger<OnAdd, Session>, mut sessions: Query<&mut UiState>) {
-    let session = trigger.entity();
-    let mut ui_state = sessions
-        .get_mut(session)
-        .expect("our session should have a `UiState`");
-    ui_state.log.push("Connecting".into());
-}
+// Observe state change events using `Trigger`s.
+fn on_connected(
+    trigger: Trigger<OnAdd, Session>,
+    mut sessions: Query<(&Session, &mut UiState)>,
+    mut commands: Commands,
+) {
+    let entity = trigger.entity();
+    let (session, mut ui_state) = sessions
+        .get_mut(entity)
+        .expect("our sessions should have these components");
+    ui_state.log.push("{entity} connected".into());
 
-fn on_connected(trigger: Trigger<OnAdd, Connected>, mut sessions: Query<&mut UiState>) {
-    let session = trigger.entity();
-    let mut ui_state = sessions
-        .get_mut(session)
-        .expect("our session should have a `UiState`");
-    ui_state.log.push("Connected".into());
+    // Once the `Session` is added, we can make a `Transport`
+    // and use messages.
+    let transport = Transport::new(
+        session,
+        LANES,
+        LANES,
+        // Don't use `std::time::Instant::now`!
+        // On WASM that function will panic.
+        // Instead, use the re-exported `web_time`.
+        web_time::Instant::now(),
+    )
+    .expect("packet MTU should be large enough to support transport");
+    commands.entity(entity).insert(transport);
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>) {
-    let session = trigger.entity();
+    let entity = trigger.entity();
     match &trigger.event().reason {
-        DisconnectReason::User(reason) => info!("{session} disconnected by user: {reason}"),
-        DisconnectReason::Peer(reason) => info!("{session} disconnected by peer: {reason}"),
-        DisconnectReason::Error(err) => warn!("{session} disconnected due to error: {err:#}"),
+        DisconnectReason::User(reason) => info!("{entity} disconnected by user: {reason}"),
+        DisconnectReason::Peer(reason) => info!("{entity} disconnected by peer: {reason}"),
+        DisconnectReason::Error(err) => warn!("{entity} disconnected due to error: {err:#}"),
     }
 }
 
@@ -148,11 +165,7 @@ fn recv_messages(
             &mut Transport, // ..the messages received by the transport layer
             &mut UiState,   // ..and push the messages into `UiState::log`
         ),
-        (
-            With<Session>,   // ..for all sessions (this isn't strictly necessary)
-            With<Connected>, // ..which are connected (this isn't strictly necessary)
-            Without<Parent>, // ..which aren't parented to a server (so only our own local clients)
-        ),
+        Without<Parent>, // ..for all sessions which aren't parented to a server (so only our own local clients)
     >,
 ) {
     for (mut transport, mut ui_state) in &mut sessions {
@@ -179,12 +192,9 @@ fn ui(
     mut commands: Commands,
     // Technically, this query can run for multiple sessions, so we can have
     // multiple `egui` windows. But there will only ever be 1 session active.
-    mut sessions: Query<
-        (Entity, &mut Transport, &mut UiState),
-        (With<Session>, With<Connected>, Without<Parent>),
-    >,
+    mut sessions: Query<(Entity, &mut Transport, &mut UiState), Without<Parent>>,
 ) {
-    for (session, mut transport, mut ui_state) in &mut sessions {
+    for (entity, mut transport, mut ui_state) in &mut sessions {
         egui::Window::new("Log").show(egui.ctx_mut(), |ui| {
             ui.text_edit_singleline(&mut ui_state.msg);
 
@@ -195,13 +205,15 @@ fn ui(
 
                 let msg = Bytes::from(msg);
                 // We ignore the resulting `MessageKey`, since we don't need it.
-                _ = transport.send.push_now(SEND_LANE, msg);
+                _ = transport
+                    .send
+                    .push(web_time::Instant::now(), SEND_LANE, msg);
             }
 
             if ui.button("Disconnect").clicked() {
                 // Here's how you disconnect the session with a given reason.
                 // Don't just remove components - use `Disconnect` instead!
-                commands.trigger_targets(Disconnect::new("disconnected by user"), session);
+                commands.trigger_targets(Disconnect::new("disconnected by user"), entity);
             }
 
             for line in &ui_state.log {

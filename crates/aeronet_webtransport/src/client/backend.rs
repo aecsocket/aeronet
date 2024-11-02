@@ -12,7 +12,6 @@ use {
 };
 
 pub async fn start(
-    packet_buf_cap: usize,
     config: ClientConfig,
     target: ConnectTarget,
     send_next: oneshot::Sender<ToConnected>,
@@ -65,7 +64,7 @@ pub async fn start(
     debug!("Connected");
 
     let (send_meta, recv_meta) = mpsc::channel::<SessionMeta>(1);
-    let (send_packet_b2f, recv_packet_b2f) = mpsc::channel::<RecvPacket>(packet_buf_cap);
+    let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
     let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
     let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
     let next = ToConnected {
@@ -75,7 +74,7 @@ pub async fn start(
             .map_err(SessionError::GetLocalAddr)
             .map_err(ClientError::Session)?,
         #[cfg(not(target_family = "wasm"))]
-        initial_remote_addr: conn.0.remote_address(),
+        initial_peer_addr: conn.0.remote_address(),
         #[cfg(not(target_family = "wasm"))]
         initial_rtt: conn.0.rtt(),
         initial_mtu: conn

@@ -1,6 +1,8 @@
 //! Example server using WebTransport which listens for clients sending strings
 //! and sends back a string reply.
 
+use aeronet_io::Session;
+
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         fn main() {
@@ -10,8 +12,7 @@ cfg_if::cfg_if! {
 
 use {
     aeronet_io::{
-        connection::{Connected, DisconnectReason, Disconnected, LocalAddr},
-        packet::PacketBuffers,
+        connection::{DisconnectReason, Disconnected, LocalAddr},
         server::Opened,
     },
     aeronet_webtransport::{
@@ -93,7 +94,7 @@ fn on_session_request(
     commands.trigger_targets(SessionResponse::Accepted, client);
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Connected>, clients: Query<&Parent>) {
+fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>) {
     let client = trigger.entity();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
@@ -121,16 +122,17 @@ fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
     }
 }
 
-fn reply(mut clients: Query<(Entity, &mut PacketBuffers), With<Parent>>) {
-    for (client, mut bufs) in &mut clients {
-        let PacketBuffers { recv, send } = &mut *bufs;
-        for (_, packet) in recv.drain() {
-            let msg = String::from_utf8(packet.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+fn reply(mut clients: Query<(Entity, &mut Session), With<Parent>>) {
+    for (client, mut session) in &mut clients {
+        // explicit deref so we can access disjoint fields
+        let session = &mut *session;
+        for packet in session.recv.drain(..) {
+            let msg = String::from_utf8(packet.payload.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             info!("{client} > {msg}");
 
             let reply = format!("You sent: {msg}");
             info!("{client} < {reply}");
-            send.push(reply.into());
+            session.send.push(reply.into());
         }
     }
 }

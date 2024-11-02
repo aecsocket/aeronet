@@ -2,7 +2,10 @@
 
 use {
     crate::{MessageStats, Transport, TransportConfig},
-    aeronet_io::packet::{PacketRtt, PacketStats},
+    aeronet_io::{
+        packet::{PacketRtt, PacketStats},
+        Session,
+    },
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
@@ -192,10 +195,10 @@ fn add_session_stats(
     mut commands: Commands,
     sampling: Res<SessionStatsSampling>,
 ) {
-    let session = trigger.entity();
+    let entity = trigger.entity();
 
     commands
-        .entity(session)
+        .entity(entity)
         .insert(SessionStats::with_capacity(sampling.history_cap));
 }
 
@@ -225,8 +228,8 @@ fn update_stats(
     mut timer: ResMut<SamplingTimer>,
     mut sessions: Query<(
         &mut SessionStats,
+        &Session,
         Option<&PacketRtt>,
-        &PacketStats,
         &Transport,
         &TransportConfig,
     )>,
@@ -237,7 +240,7 @@ fn update_stats(
         return;
     }
 
-    for (mut stats, packet_rtt, packet_stats, transport, config) in &mut sessions {
+    for (mut stats, session, packet_rtt, transport, transport_config) in &mut sessions {
         let msg_rtt = transport.rtt();
         let msg_stats = transport.stats();
 
@@ -261,7 +264,7 @@ fn update_stats(
                 .unwrap_or_default();
 
             let extra_acks_expected =
-                (packet_stats.packets_sent - lost_thresh_sample.packets_total.packets_sent).0;
+                (session.stats.packets_sent - lost_thresh_sample.packets_total.packets_sent).0;
 
             if extra_acks_expected == 0 {
                 0.0
@@ -280,12 +283,12 @@ fn update_stats(
             packet_rtt: packet_rtt.map(|rtt| **rtt),
             msg_rtt: msg_rtt.get(),
             msg_crtt: msg_rtt.conservative(),
-            packets_total: *packet_stats,
-            packets_delta: *packet_stats - last_sample.packets_total,
+            packets_total: session.stats,
+            packets_delta: session.stats - last_sample.packets_total,
             msgs_total: msg_stats,
             msgs_delta: msg_stats - last_sample.msgs_total,
             mem_used: transport.memory_used(),
-            mem_max: config.max_memory_usage,
+            mem_max: transport_config.max_memory_usage,
             loss,
         };
         stats.push_overwrite(sample);
