@@ -209,11 +209,11 @@ fn poll(
         }
 
         let client_id = convert::to_client_id(client);
-        for (lane_index, msg) in transport.recv_msgs.drain() {
-            let Some(channel_id) = convert::to_channel_id(lane_index) else {
+        for msg in transport.recv_msgs.drain() {
+            let Some(channel_id) = convert::to_channel_id(msg.lane) else {
                 continue;
             };
-            replicon_server.insert_received(client_id, channel_id, msg);
+            replicon_server.insert_received(client_id, channel_id, msg.payload);
         }
 
         for _ in transport.recv_acks.drain() {
@@ -232,6 +232,6 @@ fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Tr
         };
         let lane_index = convert::to_lane_index(channel_id);
 
-        transport.send.push(now, lane_index, msg);
+        transport.send.push(lane_index, msg, now);
     }
 }

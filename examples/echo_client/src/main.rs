@@ -17,7 +17,7 @@ use {
     aeronet::{
         io::{
             connection::{Disconnect, DisconnectReason, Disconnected},
-            web_time, Session,
+            web_time, Endpoint, Session,
         },
         transport::{
             lane::{LaneIndex, LaneKind},
@@ -56,6 +56,7 @@ fn main() -> AppExit {
             ui, // ..draw the UI for the session
         ))
         // Set up some observers to run when the session state changes
+        .observe(on_connecting)
         .observe(on_connected)
         .observe(on_disconnected)
         .run()
@@ -122,6 +123,14 @@ fn setup(mut commands: Commands) {
 }
 
 // Observe state change events using `Trigger`s.
+fn on_connecting(trigger: Trigger<OnAdd, Endpoint>, mut sessions: Query<&mut UiState>) {
+    let entity = trigger.entity();
+    let mut ui_state = sessions
+        .get_mut(entity)
+        .expect("our sessions should have these components");
+    ui_state.log.push(format!("{entity} connecting"));
+}
+
 fn on_connected(
     trigger: Trigger<OnAdd, Session>,
     mut sessions: Query<(&Session, &mut UiState)>,
@@ -131,7 +140,7 @@ fn on_connected(
     let (session, mut ui_state) = sessions
         .get_mut(entity)
         .expect("our sessions should have these components");
-    ui_state.log.push("{entity} connected".into());
+    ui_state.log.push(format!("{entity} connected"));
 
     // Once the `Session` is added, we can make a `Transport`
     // and use messages.
@@ -169,12 +178,14 @@ fn recv_messages(
     >,
 ) {
     for (mut transport, mut ui_state) in &mut sessions {
-        for (_lane_index, msg) in transport.recv_msgs.drain() {
-            // `msg` is a `Vec<u8>` - we have full ownership of the bytes received.
+        for msg in transport.recv_msgs.drain() {
+            let payload = msg.payload;
+
+            // `payload` is a `Vec<u8>` - we have full ownership of the bytes received.
             // We'll turn it into a UTF-8 string.
             // We don't care about the lane index.
-            let msg = String::from_utf8(msg).unwrap_or_else(|_| "(not UTF-8)".into());
-            ui_state.log.push(format!("> {msg}"));
+            let text = String::from_utf8(payload).unwrap_or_else(|_| "(not UTF-8)".into());
+            ui_state.log.push(format!("> {text}"));
         }
 
         for _ in transport.recv_acks.drain() {
@@ -207,7 +218,7 @@ fn ui(
                 // We ignore the resulting `MessageKey`, since we don't need it.
                 _ = transport
                     .send
-                    .push(web_time::Instant::now(), SEND_LANE, msg);
+                    .push(SEND_LANE, msg, web_time::Instant::now());
             }
 
             if ui.button("Disconnect").clicked() {

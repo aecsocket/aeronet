@@ -8,7 +8,7 @@ use {
         rtt::RttEstimator,
         send,
         seq_buf::SeqBuf,
-        FlushedPacket, MessageKey, Transport, TransportConfig,
+        sized, FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
     },
     aeronet_io::Session,
     ahash::{HashMap, HashSet},
@@ -133,7 +133,7 @@ fn recv_on(
     ));
 
     while packet.has_remaining() {
-        recv_frag(transport, config, &mut packet)?;
+        recv_frag(transport, config, recv_at, &mut packet)?;
     }
 
     transport.peer_acks.ack(header.seq);
@@ -197,6 +197,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
 fn recv_frag(
     transport: &mut Transport,
     config: &TransportConfig,
+    recv_at: Instant,
     packet: &mut &[u8],
 ) -> Result<(), RecvError> {
     let frag = packet
@@ -222,7 +223,11 @@ fn recv_frag(
 
     if let Some(msg) = msg {
         let msgs_with_lane =
-            recv_on_lane(&mut lane.state, msg, frag.header.seq).map(|msg| (lane_index, msg));
+            recv_on_lane(&mut lane.state, msg, frag.header.seq).map(|msg| RecvMessage {
+                lane: lane_index,
+                recv_at: sized::Instant(recv_at),
+                payload: msg,
+            });
         transport.recv_msgs.0.extend(msgs_with_lane);
     }
 
