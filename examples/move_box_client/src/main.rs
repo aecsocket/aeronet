@@ -2,7 +2,10 @@
 
 use {
     aeronet::{
-        io::connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
+        io::{
+            connection::{Disconnect, DisconnectReason, Disconnected},
+            Endpoint, Session,
+        },
         transport::{
             visualizer::{SessionVisualizer, SessionVisualizerPlugin},
             TransportConfig,
@@ -75,34 +78,32 @@ fn setup_level(mut commands: Commands) {
 }
 
 fn on_connecting(
-    trigger: Trigger<OnAdd, Session>,
+    trigger: Trigger<OnAdd, Endpoint>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
-    mut commands: Commands,
 ) {
-    let session = trigger.entity();
+    let entity = trigger.entity();
     let name = names
-        .get(session)
+        .get(entity)
         .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connecting"));
-
-    commands
-        .entity(session)
-        .insert(SessionVisualizer::default());
 }
 
 fn on_connected(
-    trigger: Trigger<OnAdd, Connected>,
+    trigger: Trigger<OnAdd, Session>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
     mut game_state: ResMut<NextState<GameState>>,
+    mut commands: Commands,
 ) {
-    let session = trigger.entity();
+    let entity = trigger.entity();
     let name = names
-        .get(session)
+        .get(entity)
         .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connected"));
+
     game_state.set(GameState::Playing);
+    commands.entity(entity).insert(SessionVisualizer::default());
 }
 
 fn on_disconnected(
@@ -134,7 +135,7 @@ fn global_ui(
     mut commands: Commands,
     mut egui: EguiContexts,
     global_ui: Res<GlobalUi>,
-    sessions: Query<(Entity, &Name, Option<&Connected>), With<Session>>,
+    sessions: Query<(Entity, &Name, Option<&Session>), With<Endpoint>>,
 ) {
     egui::Window::new("Session Log").show(egui.ctx_mut(), |ui| {
         match sessions.get_single() {

@@ -1,7 +1,8 @@
 use {
     aeronet::io::{
-        connection::{Connected, DisconnectReason, Disconnected, LocalAddr},
+        connection::{DisconnectReason, Disconnected, LocalAddr},
         server::Opened,
+        Session,
     },
     aeronet_replicon::server::{AeronetRepliconServer, AeronetRepliconServerPlugin},
     aeronet_websocket::server::{WebSocketServer, WebSocketServerPlugin},
@@ -157,11 +158,7 @@ fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
     info!("{server} opened on {}", **local_addr);
 }
 
-fn on_connected(
-    trigger: Trigger<OnAdd, Connected>,
-    clients: Query<&Parent>,
-    mut commands: Commands,
-) {
+fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>, mut commands: Commands) {
     let client = trigger.entity();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
