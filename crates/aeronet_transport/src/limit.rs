@@ -35,11 +35,11 @@ pub trait Limit {
     /// use aeronet_transport::limit::{Limit, TokenBucket};
     /// let mut counts = TokenBucket::new(1000);
     /// assert_eq!(1000, counts.cap());
-    /// assert_eq!(1000, counts.get());
+    /// assert_eq!(1000, counts.rem());
     ///
     /// counts.consume(200).unwrap();
     /// assert_eq!(1000, counts.cap());
-    /// assert_eq!(800, counts.get());
+    /// assert_eq!(800, counts.rem());
     ///
     /// counts.consume(900).unwrap_err();
     /// ```
@@ -205,11 +205,11 @@ impl TokenBucket {
     /// let mut counts = TokenBucket::new(1000);
     ///
     /// counts.consume(100).unwrap();
-    /// assert_eq!(900, counts.get());
+    /// assert_eq!(900, counts.rem());
     /// assert_eq!(100, counts.used());
     ///
     /// counts.consume(250).unwrap();
-    /// assert_eq!(650, counts.get());
+    /// assert_eq!(650, counts.rem());
     /// assert_eq!(350, counts.used());
     /// ```
     #[must_use]
@@ -226,11 +226,11 @@ impl TokenBucket {
     /// let mut counts = TokenBucket::new(1000);
     ///
     /// counts.consume(250).unwrap();
-    /// assert_eq!(750, counts.get());
+    /// assert_eq!(750, counts.rem());
     /// assert_eq!(250, counts.used());
     ///
     /// counts.refill();
-    /// assert_eq!(1000, counts.get());
+    /// assert_eq!(1000, counts.rem());
     /// assert_eq!(0, counts.used());
     /// ```
     #[inline]
@@ -249,14 +249,14 @@ impl TokenBucket {
     /// let mut counts = TokenBucket::new(1000);
     ///
     /// counts.consume(500).unwrap();
-    /// assert_eq!(500, counts.get());
+    /// assert_eq!(500, counts.rem());
     ///
     /// counts.refill_exact(100);
-    /// assert_eq!(600, counts.get());
+    /// assert_eq!(600, counts.rem());
     ///
     /// // refilling over the capacity will cap it at the capacity
     /// counts.refill_exact(1000);
-    /// assert_eq!(1000, counts.get());
+    /// assert_eq!(1000, counts.rem());
     /// ```
     pub fn refill_exact(&mut self, n: usize) {
         self.rem = self.cap.min(self.rem.saturating_add(n));
@@ -274,18 +274,18 @@ impl TokenBucket {
     /// let mut counts = TokenBucket::new(1000);
     ///
     /// counts.consume(500).unwrap();
-    /// assert_eq!(500, counts.get());
+    /// assert_eq!(500, counts.rem());
     ///
     /// // amount refilled is proportional to capacity
     /// counts.refill_portion(0.25);
-    /// assert_eq!(750, counts.get());
+    /// assert_eq!(750, counts.rem());
     ///
     /// counts.refill_portion(0.1);
-    /// assert_eq!(850, counts.get());
+    /// assert_eq!(850, counts.rem());
     ///
     /// // refilling over the capacity will cap it at the capacity
     /// counts.refill_portion(0.5);
-    /// assert_eq!(1000, counts.get());
+    /// assert_eq!(1000, counts.rem());
     /// ```
     ///
     /// # Panics

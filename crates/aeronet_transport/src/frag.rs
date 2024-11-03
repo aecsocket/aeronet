@@ -309,7 +309,7 @@ mod tests {
         let mut iter = split(max_frag_len, msg);
 
         let mut recv = FragmentReceiver::default();
-        let mem_left = 6;
+        let mem_left = 30;
         let msg_seq = MessageSeq::new(0);
 
         let (position, payload) = iter.next().unwrap();
