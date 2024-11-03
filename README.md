@@ -6,11 +6,6 @@
 A set of [Bevy]-native networking crates, focused on providing robust and rock-solid data transfer
 primitives.
 
-# TODO
-
-- how do users handle draining msgs?
-  - if the user doesn't drain recv_msgs, is that a warn? unbounded growth?
-
 # Goals
 
 - Native to Bevy ECS

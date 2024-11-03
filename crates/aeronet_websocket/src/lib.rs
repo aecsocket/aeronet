@@ -1,5 +1,12 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![cfg_attr(
+    target_family = "wasm",
+    expect(
+        clippy::future_not_send,
+        reason = "`Send`, `Sync` are not used on wasm"
+    )
+)]
 
 #[cfg(feature = "client")]
 pub mod client;
