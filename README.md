@@ -131,7 +131,7 @@ TODO: we need fuzz tests for the transport!
 ### Visualizer
 
 As a debug tool, you may want to see the state of your session over time while you are in the app.
-If using `aeronet_transport`, you can use the `visualizer` feature to enable an [`egui_plot`]
+If using [`aeronet_transport`], you can use the `visualizer` feature to enable an [`egui_plot`]
 visualizer which displays statistics on sessions. This includes data such as round-trip time and
 packet loss percentage.
 

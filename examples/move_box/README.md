@@ -13,7 +13,7 @@ TODO: needs to be updated
 ## Server
 
 ```sh
-cargo run -p move_box_server
+cargo run --bin move_box_server
 ```
 
 ## Client
@@ -21,14 +21,14 @@ cargo run -p move_box_server
 Native:
 
 ```sh
-cargo run -p move_box_client
+cargo run --bin move_box_client
 ```
 
 WASM:
 
 ```sh
 cargo install wasm-server-runner
-cargo run -p move_box_client --target wasm32-unknown-unknown
+cargo run --bin move_box_client --target wasm32-unknown-unknown
 ```
 
 You must use a Chromium browser to try the demo:
