@@ -16,6 +16,8 @@ use {
 };
 
 /// Sets up the IO layer functionality.
+///
+/// See [`Session`].
 #[derive(Debug)]
 pub struct AeronetIoPlugin;
 
@@ -160,7 +162,7 @@ impl Session {
     /// use {aeronet_io::Session, web_time::Instant};
     ///
     /// let now = Instant::now();
-    /// let session = Session::new(now, 1000, 1200);
+    /// let session = Session::new(now, 1000);
     /// assert_eq!(now, session.connected_at());
     /// ```
     #[must_use]
@@ -178,7 +180,7 @@ impl Session {
     /// ```
     /// use {aeronet_io::Session, web_time::Instant};
     ///
-    /// let session = Session::new(Instant::now(), 1000, 1200);
+    /// let session = Session::new(Instant::now(), 1000);
     /// assert_eq!(1000, session.min_mtu());
     /// ```
     #[must_use]
@@ -195,8 +197,8 @@ impl Session {
     /// ```
     /// use {aeronet_io::Session, web_time::Instant};
     ///
-    /// let mut session = Session::new(Instant::now(), 1000, 1200);
-    /// assert_eq!(1200, session.mtu());
+    /// let mut session = Session::new(Instant::now(), 1000);
+    /// assert_eq!(1000, session.mtu());
     ///
     /// session.set_mtu(1400);
     /// assert_eq!(1400, session.mtu());
@@ -219,7 +221,7 @@ impl Session {
     /// ```
     /// use {aeronet_io::Session, web_time::Instant};
     ///
-    /// let mut session = Session::new(Instant::now(), 1000, 1000);
+    /// let mut session = Session::new(Instant::now(), 1000);
     /// session.set_mtu(1200).unwrap();
     /// assert_eq!(1200, session.mtu());
     ///

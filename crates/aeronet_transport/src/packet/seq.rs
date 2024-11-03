@@ -37,14 +37,14 @@ impl Seq {
     /// assert_eq!(Seq(1).dist_to(Seq(0)), -1);
     /// assert_eq!(Seq(2).dist_to(Seq(0)), -2);
     ///
-    /// assert_eq!(Seq(0).dist_to(Seq::MAX), -1);
-    /// assert_eq!(Seq::MAX.dist_to(Seq::MAX), 0);
+    /// assert_eq!(Seq(0).dist_to(Seq(u16::MAX)), -1);
+    /// assert_eq!(Seq(u16::MAX).dist_to(Seq(u16::MAX)), 0);
     ///
-    /// assert_eq!(Seq::MAX.dist_to(Seq(0)), 1);
-    /// assert_eq!((Seq::MAX - Seq(3)).dist_to(Seq(0)), 4);
+    /// assert_eq!(Seq(u16::MAX).dist_to(Seq(0)), 1);
+    /// assert_eq!((Seq(u16::MAX) - Seq(3)).dist_to(Seq(0)), 4);
     ///
-    /// assert_eq!(Seq::MAX.dist_to(Seq(3)), 4);
-    /// assert_eq!((Seq::MAX - Seq(3)).dist_to(Seq(3)), 7);
+    /// assert_eq!(Seq(u16::MAX).dist_to(Seq(3)), 4);
+    /// assert_eq!((Seq(u16::MAX) - Seq(3)).dist_to(Seq(3)), 7);
     /// ```
     #[must_use]
     pub const fn dist_to(self, rhs: Self) -> i16 {
@@ -160,7 +160,7 @@ impl PacketSeq {
 
 impl fmt::Debug for PacketSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("PacketSeq").field(&self.0.0).finish()
+        f.debug_tuple("PacketSeq").field(&self.0 .0).finish()
     }
 }
 
@@ -199,7 +199,7 @@ impl MessageSeq {
 
 impl fmt::Debug for MessageSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("MessageSeq").field(&self.0.0).finish()
+        f.debug_tuple("MessageSeq").field(&self.0 .0).finish()
     }
 }
 

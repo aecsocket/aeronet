@@ -147,7 +147,7 @@ pub enum LaneReliability {
 pub struct LaneIndex(pub RawLaneIndex);
 
 /// Raw integer type backing [`LaneIndex`].
-pub type RawLaneIndex = u32;
+pub type RawLaneIndex = u16;
 
 const_assert!(size_of::<usize>() >= size_of::<RawLaneIndex>());
 

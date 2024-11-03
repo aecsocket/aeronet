@@ -68,7 +68,7 @@ impl Acknowledge {
     ///
     /// ```
     /// # use aeronet_transport::packet::{Acknowledge, PacketSeq};
-    /// let mut acks = Acknowledge::new();
+    /// let mut acks = Acknowledge::default();
     ///
     /// acks.ack(PacketSeq::new(1));
     /// assert!(acks.is_acked(PacketSeq::new(1)));
