@@ -1,7 +1,7 @@
 //! Logic for connection and disconnection of a [`Session`].
 
 use {
-    crate::Session,
+    crate::{Endpoint, Session},
     bevy_app::prelude::*,
     bevy_derive::Deref,
     bevy_ecs::prelude::*,
@@ -15,7 +15,8 @@ pub(crate) struct ConnectionPlugin;
 
 impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
-        app.observe(on_connected)
+        app.observe(on_connecting)
+            .observe(on_connected)
             .observe(on_disconnect)
             .observe(on_disconnected);
     }
@@ -157,6 +158,11 @@ pub struct LocalAddr(pub SocketAddr);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, Component)]
 pub struct PeerAddr(pub SocketAddr);
 
+fn on_connecting(trigger: Trigger<OnAdd, Endpoint>) {
+    let entity = trigger.entity();
+    debug!("{entity} connecting");
+}
+
 fn on_connected(trigger: Trigger<OnAdd, Session>) {
     let entity = trigger.entity();
     debug!("{entity} connected");
@@ -182,5 +188,45 @@ fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
         }
     }
 
-    commands.entity(entity).despawn_recursive();
+    if let Some(entity) = commands.get_entity(entity) {
+        entity.despawn_recursive();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::AeronetIoPlugin;
+
+    use super::*;
+
+    #[test]
+    fn remove_entity_on_disconnect() {
+        const REASON: &str = "disconnect reason";
+
+        #[derive(Resource)]
+        struct HasDisconnected(bool);
+
+        let mut app = App::new();
+        app.add_plugins(AeronetIoPlugin)
+            .insert_resource(HasDisconnected(false));
+
+        let entity = app.world_mut().spawn_empty().id();
+        app.world_mut().entity_mut(entity).observe(
+            |trigger: Trigger<Disconnected>, mut has_disconnected: ResMut<HasDisconnected>| {
+                assert!(matches!(
+                    &trigger.event().reason,
+                    DisconnectReason::User(reason) if reason == REASON
+                ));
+
+                has_disconnected.0 = true;
+            },
+        );
+
+        app.world_mut()
+            .trigger_targets(Disconnect::new(REASON), entity);
+        app.update();
+
+        assert!(app.world().get_entity(entity).is_none());
+        assert!(app.world().resource::<HasDisconnected>().0);
+    }
 }

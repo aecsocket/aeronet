@@ -48,7 +48,6 @@ bevy_app = { workspace = true }
 bevy_core = { workspace = true }
 bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true }
-bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }
 bevy_time = { workspace = true }
 

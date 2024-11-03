@@ -6,9 +6,8 @@
 //! server/client topology.
 
 use {
-    crate::{connection::Disconnect, Session},
+    crate::connection::Disconnect,
     bevy_app::prelude::*,
-    bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
     bevy_hierarchy::{Children, DespawnRecursiveExt},
     bevy_reflect::prelude::*,
@@ -133,7 +132,7 @@ impl Close {
 ///
 /// If you want to get the concrete error type of the
 /// [`CloseReason::Error`], use [`anyhow::Error::downcast_ref`].
-#[derive(Debug, Deref, DerefMut, Event)]
+#[derive(Debug, Event)]
 pub struct Closed {
     /// Why the server was closed.
     pub reason: CloseReason<anyhow::Error>,
@@ -190,24 +189,13 @@ fn on_close(trigger: Trigger<Close>, mut commands: Commands) {
     commands.trigger_targets(Closed { reason }, server);
 }
 
-fn on_closed(
-    trigger: Trigger<Closed>,
-    children: Query<&Children>,
-    with_session: Query<(), With<Session>>,
-    mut commands: Commands,
-) {
+fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands: Commands) {
     let server = trigger.entity();
     let children = children
         .get(server)
-        .map(|children| {
-            children
-                .iter()
-                .copied()
-                .filter(|child| with_session.get(*child).is_ok())
-                .collect::<Vec<_>>()
-        })
+        .map(|children| children.iter().copied().collect::<Vec<_>>())
         .unwrap_or_default();
-    match &**trigger.event() {
+    match &trigger.event().reason {
         CloseReason::User(reason) => {
             debug!("{server} closed by user: {reason}");
             commands.trigger_targets(Disconnect::new(reason), children);
@@ -217,5 +205,71 @@ fn on_closed(
         }
     }
 
-    commands.entity(server).despawn_recursive();
+    if let Some(server) = commands.get_entity(server) {
+        server.despawn_recursive();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy_hierarchy::BuildWorldChildren;
+
+    use crate::{
+        connection::{DisconnectReason, Disconnected},
+        AeronetIoPlugin,
+    };
+
+    use super::*;
+
+    #[test]
+    fn disconnect_clients_on_close() {
+        const REASON: &str = "disconnect reason";
+
+        #[derive(Resource)]
+        struct HasClosed(bool);
+
+        #[derive(Resource)]
+        struct HasDisconnected(bool);
+
+        let mut app = App::new();
+        app.add_plugins(AeronetIoPlugin)
+            .insert_resource(HasClosed(false))
+            .insert_resource(HasDisconnected(false));
+
+        let client = app.world_mut().spawn_empty().id();
+        app.world_mut().entity_mut(client).observe(
+            |trigger: Trigger<Disconnected>, mut has_disconnected: ResMut<HasDisconnected>| {
+                assert!(matches!(
+                    &trigger.event().reason,
+                    DisconnectReason::User(reason) if reason == REASON
+                ));
+
+                has_disconnected.0 = true;
+            },
+        );
+
+        let server = app.world_mut().spawn_empty().id();
+        app.world_mut()
+            .entity_mut(server)
+            .add_child(client)
+            .observe(
+                |trigger: Trigger<Closed>, mut has_closed: ResMut<HasClosed>| {
+                    assert!(matches!(
+                        &trigger.event().reason,
+                        CloseReason::User(reason) if reason == REASON
+                    ));
+
+                    has_closed.0 = true;
+                },
+            );
+
+        app.world_mut().trigger_targets(Close::new(REASON), server);
+        app.update();
+
+        assert!(app.world().get_entity(client).is_none());
+        assert!(app.world().resource::<HasDisconnected>().0);
+
+        assert!(app.world().get_entity(server).is_none());
+        assert!(app.world().resource::<HasClosed>().0);
+    }
 }

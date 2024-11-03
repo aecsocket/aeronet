@@ -95,9 +95,9 @@ pub enum ClientTransportSet {
 /// - sending messages
 ///   - all outgoing `replicon` messages are cloned and sent to all sessions
 /// - determining connected status
-///   - if at least 1 session is [`Connected`], [`RepliconClient`] is
+///   - if at least 1 session has [`Session`], [`RepliconClient`] is
 ///     [`RepliconClientStatus::Connected`]
-///   - if at least 1 session exists, [`RepliconClient`] is
+///   - if at least 1 session has [`Endpoint`], [`RepliconClient`] is
 ///     [`RepliconClientStatus::Connecting`]
 ///   - else, [`RepliconClientStatus::Disconnected`]
 ///

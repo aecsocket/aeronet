@@ -7,5 +7,3 @@ Defines IO layer primitives and abstractions, which may be used by IO layer impl
 which is abstract over the specific IO layer.
 
 The heart of this layer is the [`Session`] component.
-
-[`Session`]: connection::Session
