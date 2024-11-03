@@ -138,12 +138,9 @@ fn open_web_socket_server(mut commands: Commands, args: Res<Args>) {
 }
 
 fn web_socket_config(args: &Args) -> WebSocketServerConfig {
-    let identity =
-        aeronet_websocket::server::Identity::self_signed(["localhost", "127.0.0.1", "::1"])
-            .expect("all given SANs should be valid DNS names");
     WebSocketServerConfig::builder()
         .with_bind_default(args.ws_port)
-        .with_identity(identity)
+        .with_no_encryption()
 }
 
 //

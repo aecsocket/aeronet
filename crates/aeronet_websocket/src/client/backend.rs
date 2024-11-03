@@ -24,7 +24,7 @@ pub async fn start(
                 .map_err(ClientError::CreateSocket)?;
             debug!("Created socket");
 
-            let (frontend, backend) = crate::session::backend::wasm::split(socket, packet_buf_cap);
+            let (frontend, backend) = crate::session::backend::wasm::split(socket);
             (ToConnected { frontend }, backend)
         }
 
