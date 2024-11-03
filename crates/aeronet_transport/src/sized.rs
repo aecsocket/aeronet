@@ -32,17 +32,19 @@ impl<T: BitStore, O: BitOrder> TypeSize for BitVec<T, O> {
 pub struct Saturating<T>(pub core::num::Saturating<T>);
 
 impl<T> Saturating<T> {
-    // use this instead of `.0` directly so we can catch compile errors
-    // when we change to using the real `Saturating`
+    /// Gets the [`core::num::Saturating`] value.
+    ///
+    /// Use this instead of `.0` so we can catch compile errors when we change
+    /// to using the real `Saturating`.
     #[must_use]
-    pub fn get(self) -> core::num::Saturating<T> {
-        self.0
+    pub const fn get(&self) -> &core::num::Saturating<T> {
+        &self.0
     }
 }
 
 impl<T: TypeSize> TypeSize for Saturating<T> {
     fn extra_size(&self) -> usize {
-        self.0.0.extra_size()
+        self.0 .0.extra_size()
     }
 }
 

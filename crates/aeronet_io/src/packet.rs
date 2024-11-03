@@ -71,7 +71,7 @@ pub struct MtuTooSmall {
 }
 
 /// Statistics for the IO layer of a [`Session`].
-#[derive(Debug, Clone, Copy, Default, Reflect)] // force multiline `derive`
+#[derive(Debug, Clone, Copy, Default, Reflect)] // force `#[derive]` on multiple lines
 #[derive(Add, AddAssign, Sub, SubAssign)]
 pub struct PacketStats {
     /// Number of packets received into [`Session::recv`].

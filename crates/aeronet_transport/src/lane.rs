@@ -25,7 +25,9 @@
 //!
 //! Note that lanes provide a *minimum* guarantee of reliability and ordering.
 //! If you are using an IO layer which is already reliable-ordered, then even
-//! unreliable-unordered messages will be reliable-ordered.
+//! unreliable-unordered messages will be reliable-ordered. However, in this
+//! situation we still need lanes as they are a part of the protocol - we can't
+//! just ignore them for certain IO layers.
 
 use {
     arbitrary::Arbitrary,
@@ -35,11 +37,9 @@ use {
     typesize::derive::TypeSize,
 };
 
-/// What guarantees a kind of lane provides about message delivery.
+/// What guarantees a kind of [lane] provides about message delivery.
 ///
-/// See [`lane`].
-///
-/// [`lane`]: crate::lane
+/// [lane]: crate::lane
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LaneKind {
@@ -123,8 +123,10 @@ impl LaneKind {
     }
 }
 
-/// Guarantees that a [`lane`] provides with relation to if a message is
+/// Guarantees that a [lane] provides with relation to if a message is
 /// received by the peer.
+///
+/// [lane]: crate::lane
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LaneReliability {
@@ -135,10 +137,16 @@ pub enum LaneReliability {
     Reliable,
 }
 
+/// Index of a [lane] on either the sender or receiver side.
+///
+/// This type is guaranteed to be convertible to a [`usize`].
+///
+/// [lane]: crate::lane
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LaneIndex(pub RawLaneIndex);
 
+/// Raw integer type backing [`LaneIndex`].
 pub type RawLaneIndex = u32;
 
 const_assert!(size_of::<usize>() >= size_of::<RawLaneIndex>());

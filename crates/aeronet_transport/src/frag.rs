@@ -15,7 +15,7 @@ use {
     },
     ahash::HashMap,
     core::fmt,
-    octs::{Bytes, chunks::ByteChunksExt},
+    octs::{chunks::ByteChunksExt, Bytes},
     std::iter::FusedIterator,
     thiserror::Error,
     typesize::derive::TypeSize,
@@ -175,6 +175,17 @@ impl FragmentReceiver {
     /// If all fragments of this message have been received, this will return
     /// `Ok(Some(msg))` with ownership of the reassembled message bytes.
     ///
+    /// # Memory exhaustion
+    ///
+    /// One potential attack vector is a malicious sender sending many fragments
+    /// of partially-completed messages, but never sending the final fragments,
+    /// so the receiver is forced to keep the fragments in memory. To avoid
+    /// this, receivers define a memory limit via `mem_left`, and if buffering a
+    /// packet will result in using too much memory, this returns a
+    /// [`ReassembleError::OutOfMemory`]. Note that this will just return an
+    /// error on out-of-memory, unlike [`TransportConfig::max_memory_usage`],
+    /// which will forcibly disconnect the session.
+    ///
     /// # Errors
     ///
     /// Errors if the fragment received is unexpected for the current state of
@@ -183,6 +194,8 @@ impl FragmentReceiver {
     /// Errors must not be treated as fatal, as they may happen due to network
     /// conditions such as duplicated or lost packets. Errors will not cause any
     /// invalid state.
+    ///
+    /// [`TransportConfig::max_memory_usage`]: crate::TransportConfig::max_memory_usage
     #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
     pub fn reassemble(
         &mut self,

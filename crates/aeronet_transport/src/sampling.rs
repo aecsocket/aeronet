@@ -112,6 +112,7 @@ pub struct SampleSessionStats;
 pub struct SessionStats(pub HeapRb<SessionStatsSample>);
 
 impl SessionStats {
+    /// Creates a new statistics buffer with the given capacity.
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self(HeapRb::new(capacity))

@@ -124,7 +124,10 @@ pub struct MessageSeq(pub Seq);
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Acknowledge {
+    /// Last packet sequence number that the receiver received.
     pub last_recv: PacketSeq,
+    /// Bitfield of which packets before and including `last_recv` have been
+    /// acknowledged.
     pub bits: u32,
 }
 
@@ -178,10 +181,12 @@ pub type FragmentPayloadLen = u32;
 
 const_assert!(size_of::<usize>() >= size_of::<FragmentPayloadLen>());
 
+/// Front-loaded [`Fragment`] metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FragmentHeader {
-    /// Index along which this message should be received by the receiver.
+    /// Lane index of this fragment's message, relative to the receiver's
+    /// receive lanes.
     pub lane: LaneIndex,
     /// Monotonically increasing sequence number of this message.
     ///
