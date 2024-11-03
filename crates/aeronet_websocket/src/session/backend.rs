@@ -35,7 +35,8 @@ pub mod wasm {
         let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
         let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
 
-        let (send_dc_reason, recv_dc_reason) = mpsc::channel::<DisconnectReason<SessionError>>(1);
+        let (mut send_dc_reason, recv_dc_reason) =
+            mpsc::channel::<DisconnectReason<SessionError>>(1);
 
         let (_send_dropped, recv_dropped) = oneshot::channel::<()>();
         let on_open = Closure::<dyn FnOnce()>::once({
@@ -53,8 +54,7 @@ pub mod wasm {
             let data = event.data();
             let packet = data
                 .as_string()
-                .map(String::into_bytes)
-                .unwrap_or_else(|| Uint8Array::new(&data).to_vec());
+                .map_or_else(|| Uint8Array::new(&data).to_vec(), String::into_bytes);
             let packet = Bytes::from(packet);
             let now = Instant::now();
 
@@ -83,13 +83,10 @@ pub mod wasm {
             })
         };
 
-        let on_error = {
-            let mut send_dc_reason = send_dc_reason.clone();
-            Closure::<dyn FnMut(_)>::new(move |event: ErrorEvent| {
-                let err = SessionError::Connection(JsError(event.message()));
-                _ = send_dc_reason.try_send(DisconnectReason::Error(err));
-            })
-        };
+        let on_error = Closure::<dyn FnMut(_)>::new(move |event: ErrorEvent| {
+            let err = SessionError::Connection(JsError(event.message()));
+            _ = send_dc_reason.try_send(DisconnectReason::Error(err));
+        });
 
         socket.set_onopen(Some(on_open.as_ref().unchecked_ref()));
         on_open.forget();
@@ -212,7 +209,7 @@ pub mod native {
         )
     }
 
-    impl<S: AsyncRead + AsyncWrite + Unpin> SessionBackend<S> {
+    impl<S: Send + AsyncRead + AsyncWrite + Unpin> SessionBackend<S> {
         pub async fn start(self) -> Result<Never, DisconnectReason<SessionError>> {
             let Self {
                 mut stream,

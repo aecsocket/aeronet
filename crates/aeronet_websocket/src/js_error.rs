@@ -34,7 +34,7 @@ impl From<JsValue> for JsError {
 
 impl From<js_sys::Error> for JsError {
     fn from(value: js_sys::Error) -> Self {
-        Self(value.message().as_string().unwrap())
+        Self(value.message().as_string().unwrap_or_default())
     }
 }
 

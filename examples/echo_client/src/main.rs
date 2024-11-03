@@ -91,12 +91,22 @@ fn setup(mut commands: Commands) {
     // Let's start a connection to a WebSocket server.
 
     // First, make the configuration.
-    // Since our demo server uses self-signed certificates, we need to
-    // explicitly configure the client to accept those certificates.
-    // We can do this by disabling certificate validation entirely, but in
-    // production you should use the default certificate validation, and
-    // generate real certificates using a root CA.
-    let config = ClientConfig::builder().with_no_cert_validation();
+    // This changes depending on if you're on WASM or native.
+    let config = {
+        #[cfg(target_family = "wasm")]
+        {
+            ClientConfig
+        }
+        #[cfg(not(target_family = "wasm"))]
+        {
+            // Since our demo server uses self-signed certificates, we need to
+            // explicitly configure the client to accept those certificates.
+            // We can do this by disabling certificate validation entirely, but in
+            // production you should use the default certificate validation, and
+            // generate real certificates using a root CA.
+            ClientConfig::builder().with_no_cert_validation()
+        }
+    };
     // And define what URL we want to connect to.
     let target = DEFAULT_TARGET;
 

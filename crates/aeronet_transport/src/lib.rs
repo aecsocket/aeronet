@@ -103,7 +103,7 @@ pub struct Transport {
 ///
 /// This component may be modified over the lifetime of a [`Session`] and the
 /// [`Transport`] will be updated accordingly.
-#[derive(Debug, Clone, Copy, Component, TypeSize, Reflect)]
+#[derive(Debug, Clone, Component, TypeSize, Reflect)]
 #[reflect(Component)]
 pub struct TransportConfig {
     /// Maximum amount of memory, in bytes, that this [`Transport`] may use for
