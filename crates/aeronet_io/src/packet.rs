@@ -56,7 +56,7 @@ pub struct RecvPacket {
 /// used (therefore a connection cannot be established).
 ///
 /// [MTU]: crate::packet
-pub const IP_MTU: usize = 1280;
+pub const IP_MTU: usize = 1024;
 
 /// Provided a packet [MTU] which is too small.
 ///

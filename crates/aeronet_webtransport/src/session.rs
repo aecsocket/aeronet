@@ -19,7 +19,7 @@ use {
     },
     std::{io, num::Saturating, sync::Arc, time::Duration},
     thiserror::Error,
-    tracing::{debug, trace, trace_span},
+    tracing::{trace, trace_span},
     web_time::Instant,
     xwt_core::prelude::*,
 };
@@ -49,9 +49,9 @@ impl Plugin for WebTransportSessionPlugin {
                 .install_default()
                 .is_ok()
             {
-                debug!("Installed default `ring` CryptoProvider");
+                tracing::debug!("Installed default `ring` CryptoProvider");
             } else {
-                debug!("CryptoProvider is already installed");
+                tracing::debug!("CryptoProvider is already installed");
             }
         }
 

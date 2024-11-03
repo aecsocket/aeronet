@@ -1,10 +1,12 @@
 # `move_box`
 
-Demo app where clients can connect to a server using [`aeronet_webtransport`] and control a box with
-the arrow keys. Box positions are synced between clients and servers using [`bevy_replicon`] with
-the [`aeronet_replicon`] backend.
+Demo app where clients can connect to a server using [`aeronet_webtransport`] or
+[`aeronet_websocket`] and control a box with the arrow keys. Box positions are synced between
+clients and servers using [`bevy_replicon`] with the [`aeronet_replicon`] backend.
 
 Based on <https://github.com/projectharmonia/bevy_replicon_renet/blob/master/examples/simple_box.rs>.
+
+TODO: needs to be updated
 
 # Usage
 
@@ -68,6 +70,7 @@ validate certificates. **This is dangerous** and should not be done in your actu
 it's locked behind the `dangerous-configuration` flag, but is done for convenience in this example.
 
 [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport
+[`aeronet_websocket`]: https://docs.rs/aeronet_websocket
 [`bevy_replicon`]: https://docs.rs/bevy_replicon
 [`aeronet_replicon`]: https://docs.rs/aeronet_replicon
 [`aeronet_webtransport/README.md`]: ../../crates/aeronet_webtransport/README.md

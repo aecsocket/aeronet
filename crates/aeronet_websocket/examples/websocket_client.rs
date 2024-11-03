@@ -84,7 +84,7 @@ fn on_disconnected(
 }
 
 fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMut<GlobalUi>) {
-    const DEFAULT_TARGET: &str = "wss://[::1]:25565";
+    const DEFAULT_TARGET: &str = "wss://[::1]:25566";
 
     egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));

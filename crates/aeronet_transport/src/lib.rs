@@ -30,7 +30,9 @@ use {
     limit::TokenBucket,
     octs::FixedEncodeLenHint,
     packet::{Acknowledge, FragmentHeader, FragmentIndex, MessageSeq, PacketHeader, PacketSeq},
+    recv::TransportRecv,
     rtt::RttEstimator,
+    send::TransportSend,
     seq_buf::SeqBuf,
     tracing::warn,
     typesize::{derive::TypeSize, TypeSize},
@@ -77,13 +79,21 @@ pub struct Transport {
     // recv
     recv_lanes: Box<[recv::Lane]>,
     rtt: RttEstimator,
-    pub recv_msgs: recv::TransportRecv<RecvMessage>,
-    pub recv_acks: recv::TransportRecv<MessageKey>,
+    /// Buffer of received messages.
+    ///
+    /// This must be drained by the user on every update.
+    pub recv_msgs: TransportRecv<RecvMessage>,
+    /// Buffer of received message acknowledgements for messages previously
+    /// sent via [`TransportSend::push`].
+    ///
+    /// This must be drained by the user on every update.
+    pub recv_acks: TransportRecv<MessageKey>,
 
     // send
     send_bytes_bucket: TokenBucket,
     next_packet_seq: PacketSeq,
-    pub send: send::TransportSend,
+    /// Allows enqueueing messages to be sent along this transport.
+    pub send: TransportSend,
 }
 
 /// User-configurable properties of a [`Transport`].
@@ -194,12 +204,12 @@ impl Transport {
                 .map(recv::Lane::new)
                 .collect(),
             rtt: RttEstimator::default(),
-            recv_msgs: recv::TransportRecv::new(),
-            recv_acks: recv::TransportRecv::new(),
+            recv_msgs: TransportRecv::new(),
+            recv_acks: TransportRecv::new(),
             //
             send_bytes_bucket: TokenBucket::new(0),
             next_packet_seq: PacketSeq::default(),
-            send: send::TransportSend::new(max_frag_len, send_lanes),
+            send: TransportSend::new(max_frag_len, send_lanes),
         })
     }
 
@@ -269,8 +279,6 @@ pub enum TransportSet {
 /// message keys around for a long time. As soon as you receive an ack for a
 /// message (or don't receive an ack in a certain period of time), drop the
 /// key - it's very likely to have the same key as another message later.
-///
-/// [`TransportSend::push`]: send::TransportSend::push
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize)]
 pub struct MessageKey {
     /// Lane index on which the message was sent.

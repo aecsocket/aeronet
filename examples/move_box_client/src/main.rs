@@ -229,7 +229,7 @@ type WebTransportClientConfig = aeronet_webtransport::client::ClientConfig;
 
 #[cfg(target_family = "wasm")]
 fn web_transport_config(cert_hash: String) -> WebTransportClientConfig {
-    use aeronet_webtransport::xwt_web_sys::{CertificateHash, HashAlgorithm, WebTransportOptions};
+    use aeronet_webtransport::xwt_web_sys::{CertificateHash, HashAlgorithm};
 
     let server_certificate_hashes = match cert::hash_from_b64(&cert_hash) {
         Ok(hash) => vec![CertificateHash {
@@ -285,7 +285,7 @@ fn web_socket_ui(
     mut ui_state: ResMut<WebSocketUi>,
     sessions: Query<(), With<Session>>,
 ) {
-    const DEFAULT_TARGET: &str = "wss://[::1]:25566";
+    const DEFAULT_TARGET: &str = "ws://[::1]:25566";
 
     egui::Window::new("WebSocket").show(egui.ctx_mut(), |ui| {
         if sessions.iter().next().is_some() {

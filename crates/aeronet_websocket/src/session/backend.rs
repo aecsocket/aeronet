@@ -5,7 +5,7 @@ pub mod wasm {
             session::{SessionError, SessionFrontend},
             JsError,
         },
-        aeronet_io::connection::DisconnectReason,
+        aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
         bytes::Bytes,
         futures::{
             channel::{mpsc, oneshot},
@@ -15,6 +15,7 @@ pub mod wasm {
         js_sys::Uint8Array,
         wasm_bindgen::{prelude::Closure, JsCast},
         web_sys::{BinaryType, CloseEvent, ErrorEvent, MessageEvent, WebSocket},
+        web_time::Instant,
     };
 
     #[derive(Debug)]
@@ -30,7 +31,7 @@ pub mod wasm {
     pub fn split(socket: WebSocket) -> (SessionFrontend, SessionBackend) {
         socket.set_binary_type(BinaryType::Arraybuffer);
 
-        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<Bytes>();
+        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
         let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
         let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
 
@@ -42,9 +43,7 @@ pub mod wasm {
             let mut send_dc_reason = send_dc_reason.clone();
             || {
                 wasm_bindgen_futures::spawn_local(async move {
-                    let Err(err) = send_loop(socket, recv_packet_f2b, recv_dropped).await else {
-                        unreachable!();
-                    };
+                    let Err(err) = send_loop(socket, recv_packet_f2b, recv_dropped).await;
                     _ = send_dc_reason.send(err.into());
                 });
             }
@@ -57,9 +56,16 @@ pub mod wasm {
                 .map(String::into_bytes)
                 .unwrap_or_else(|| Uint8Array::new(&data).to_vec());
             let packet = Bytes::from(packet);
+            let now = Instant::now();
+
             let mut send_packet_b2f = send_packet_b2f.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                _ = send_packet_b2f.send(packet).await;
+                _ = send_packet_b2f
+                    .send(RecvPacket {
+                        recv_at: now,
+                        payload: packet,
+                    })
+                    .await;
             });
         });
 
