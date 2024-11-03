@@ -166,7 +166,6 @@ dependencies = [
  "bevy_derive",
  "bevy_ecs",
  "bevy_egui",
- "bevy_hierarchy",
  "bevy_reflect",
  "bevy_time",
  "bitvec",
@@ -2301,7 +2300,6 @@ dependencies = [
  "aeronet",
  "aeronet_websocket",
  "bevy",
- "bevy_egui",
 ]
 
 [[package]]

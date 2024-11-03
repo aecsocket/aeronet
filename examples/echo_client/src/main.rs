@@ -199,7 +199,7 @@ fn recv_messages(
         }
 
         for _ in transport.recv_acks.drain() {
-            // We have to use up acknowlegements,
+            // We have to use up acknowledgements,
             // but since we don't actually care about reading them,
             // we'll just ignore them.
         }

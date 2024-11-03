@@ -96,10 +96,14 @@ pub struct Endpoint;
 ///
 /// # MTU
 ///
-/// TODO
+/// [`Session`]s are also responsible for tracking the current MTU value (see
+/// [`packet`]). If the IO layer has a new value for known path MTU, it should
+/// use [`Session::set_mtu`] to update it.
 ///
 /// [trigger]: Trigger
 /// [packets]: packet
+/// [`Disconnected`]: connection::Disconnected
+/// [`Disconnect`]: connection::Disconnect
 #[derive(Debug, Component, Reflect)]
 #[reflect(from_reflect = false, Component)]
 // TODO: required component Endpoint

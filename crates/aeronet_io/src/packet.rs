@@ -2,11 +2,39 @@
 //!
 //! # Packets
 //!
-//! TODO: explain packets
+//! A packet is a sequence of bytes sent from one [`Session`] to another (its
+//! peer).
 //!
-//! # MTU
+//! Guarantees:
+//! - the contents of the packet will be the same on the receiving side as the
+//!   sender side.
+//!   - this means the packet may *not* be truncated, extended, or otherwise
+//!     corrupted.
+//!   - it is the IO layer's responsibility to detect this, attempt to correct
+//!     it, or drop the packet.
 //!
-//! TODO
+//! Non-guarantees:
+//! - the packet may not be sent.
+//! - the packet may not be received by the peer.
+//! - the packet may not arrive in any fixed amount of time.
+//! - the packet may arrive out of order relative to other packets.
+//!
+//! # Maximum transmissible unit (MTU)
+//!
+//! The maximum length of a sent packet is called the maximum transmissible
+//! unit. The MTU varies for different IO layers, but all IO layers guarantee
+//! that they provide two MTU values:
+//! - a current MTU value, which may vary over the lifetime of the session.
+//! - a minimum MTU value, which the current MTU value may never drop below,
+//!   and which itself may never change *over the lifetime of a session*.
+//!   - this does not mean that the minimum MTU is constant for a given kind of
+//!     IO layer, just that it may not change after a session is started.
+//!
+//! This value may even be [`usize::MAX`] (if using e.g. MPSC channels). Code
+//! which uses the packet MTU must be resilient to being given any MTU value.
+//!
+//! A networked transport may choose to use [`IP_MTU`] as a base MTU value,
+//! minus protocol overhead.
 
 use {
     crate::{IoSet, Session},
