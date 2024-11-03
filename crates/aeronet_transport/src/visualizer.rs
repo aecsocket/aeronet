@@ -59,8 +59,13 @@ pub struct SessionVisualizer {
     pub rx_color: egui::Color32,
     /// Color which represents outgoing data.
     pub tx_color: egui::Color32,
+    /// Whether to draw the RTT graph in [`SessionVisualizer::show_plots`].
     pub show_rtt: bool,
+    /// Whether to draw the bytes in/out graph in
+    /// [`SessionVisualizer::show_plots`].
     pub show_rx_tx: bool,
+    /// Whether to draw the miscellaneous fractional data graph in
+    /// [`SessionVisualizer::show_plots`].
     pub show_misc: bool,
 }
 
@@ -76,21 +81,32 @@ impl Default for SessionVisualizer {
     }
 }
 
+/// Sample of data for [`SessionVisualizer::show_rtt`].
 #[derive(Debug, Clone, Copy)]
 pub struct RttSample {
+    /// [`PacketRtt`].
     pub packet_rtt: Duration,
+    /// [`Transport::rtt`]'s [`RttEstimator::get`].
+    ///
+    /// [`RttEstimator::get`]: crate::rtt::RttEstimator::get
     pub msg_rtt: Duration,
 }
 
+/// Sample of data for [`SessionVisualizer::show_rx_tx`].
 #[derive(Debug, Clone, Copy)]
 pub struct RxTxSample {
+    /// [`PacketStats::bytes_recv`] difference between this sample and the last.
     pub bytes_recv_delta: usize,
+    /// [`PacketStats::bytes_sent`] difference between this sample and the last.
     pub bytes_sent_delta: usize,
 }
 
+/// Sample of data for [`SessionVisualizer::show_misc`].
 #[derive(Debug, Clone, Copy)]
 pub struct MiscSample {
+    /// Packet loss as computed in [`SessionStatsSample::loss`].
     pub loss: f64,
+    /// [`Transport::memory_used`] over [`TransportConfig::max_memory_usage`].
     pub mem_used: f64,
 }
 
@@ -251,15 +267,16 @@ impl SessionVisualizer {
         });
     }
 
+    /// Draws a status bar showing current [`Session`] and [`Transport`]
+    /// statistics.
     pub fn show_status_bar(
         &mut self,
         ui: &mut egui::Ui,
         now: Instant,
-        transport: &Transport,
-        config: &TransportConfig,
-        connected_at: Instant,
-        packet_mtu: usize,
+        session: &Session,
         packet_rtt: Option<Duration>,
+        transport: &Transport,
+        transport_config: &TransportConfig,
     ) {
         let unknown = || "?".to_string();
 
@@ -267,12 +284,12 @@ impl SessionVisualizer {
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.label(format!(
                     "{:.1?}",
-                    now.saturating_duration_since(connected_at)
+                    now.saturating_duration_since(session.connected_at())
                 ));
                 ui.separator();
 
                 ui.label("MTU");
-                ui.label(format!("{packet_mtu}"));
+                ui.label(format!("{} ({} min)", session.mtu(), session.min_mtu()));
                 ui.separator();
 
                 ui.label("RTT");
@@ -287,7 +304,7 @@ impl SessionVisualizer {
                 ui.label(format!(
                     "{} / {}",
                     fmt_bytes(transport.memory_used()),
-                    fmt_bytes(config.max_memory_usage)
+                    fmt_bytes(transport_config.max_memory_usage)
                 ));
                 ui.separator();
 
@@ -380,11 +397,10 @@ fn draw(
             visualizer.show_status_bar(
                 ui,
                 Instant::now(),
+                session,
+                packet_rtt.map(|x| x.0),
                 transport,
                 transport_config,
-                session.connected_at(),
-                session.mtu(),
-                packet_rtt.map(|x| x.0),
             );
         });
     }

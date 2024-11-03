@@ -22,6 +22,10 @@ use {
     web_time::Instant,
 };
 
+/// Buffer storing data received by a [`Transport`].
+///
+/// This is effectively a wrapper around [`Vec`] which only publicly allows
+/// draining elements from it.
 #[derive(Debug, TypeSize)]
 pub struct TransportRecv<T: TypeSize>(pub(crate) Vec<T>);
 
@@ -30,6 +34,7 @@ impl<T: TypeSize> TransportRecv<T> {
         Self(Vec::new())
     }
 
+    /// Drains all items from this buffer.
     pub fn drain(&mut self) -> impl Iterator<Item = T> + '_ {
         self.0.drain(..)
     }
@@ -79,8 +84,23 @@ enum LaneState {
     },
 }
 
+pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut Transport, &TransportConfig)>) {
+    for (entity, mut session, mut transport, config) in &mut sessions {
+        let span = trace_span!("poll", %entity);
+        let _span = span.enter();
+
+        for packet in session.recv.drain(..) {
+            if let Err(err) = recv_on(&mut transport, config, packet.recv_at, &packet.payload) {
+                let err = anyhow::Error::new(err);
+                trace!("{entity} received invalid packet: {err:#}");
+                continue;
+            };
+        }
+    }
+}
+
 #[derive(Debug, Error)]
-pub enum RecvError {
+enum RecvError {
     #[error("not enough bytes to read header")]
     ReadHeader,
     #[error("not enough bytes to read fragment")]
@@ -89,23 +109,6 @@ pub enum RecvError {
     InvalidLane { lane: LaneIndex },
     #[error("failed to reassemble fragment")]
     Reassemble(#[source] ReassembleError),
-}
-
-pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut Transport, &TransportConfig)>) {
-    for (entity, mut session, mut transport, config) in &mut sessions {
-        let span = trace_span!("poll", %entity);
-        let _span = span.enter();
-
-        for packet in session.recv.drain(..) {
-            // TODO: expose the first packet `recv_at` to expose
-            // when this message arrived
-            if let Err(err) = recv_on(&mut transport, config, packet.recv_at, &packet.payload) {
-                let err = anyhow::Error::new(err);
-                trace!("{entity} received invalid packet: {err:#}");
-                continue;
-            };
-        }
-    }
 }
 
 fn recv_on(
@@ -128,6 +131,7 @@ fn recv_on(
         &mut transport.send.lanes,
         &mut transport.rtt,
         &mut transport.stats.packet_acks_recv,
+        &mut transport.stats.msg_acks_recv,
         recv_at,
         header.acks.seqs(),
     ));
@@ -145,6 +149,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
     send_lanes: &'s mut [send::Lane],
     rtt: &'s mut RttEstimator,
     packet_acks_recv: &'s mut Saturating<usize>,
+    msgs_acks_recv: &'s mut Saturating<usize>,
     recv_at: Instant,
     acked_seqs: impl Iterator<Item = PacketSeq> + 's,
 ) -> impl Iterator<Item = MessageKey> + 's {
@@ -160,7 +165,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
             let span = trace_span!("ack", packet = acked_seq.0 .0);
             let _span = span.enter();
 
-            *packet_acks_recv += 1;
+            *packet_acks_recv += Saturating(1);
             let packet_rtt = recv_at.saturating_duration_since(packet.flushed_at.0);
             rtt.update(packet_rtt);
             let rtt_now = rtt.get();
@@ -184,6 +189,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
             // if all the fragments are now acked, then we report that
             // the entire message is now acked
             if msg.frags.iter().all(Option::is_none) {
+                *msgs_acks_recv += Saturating(1);
                 Some(MessageKey {
                     lane: frag_path.lane_index,
                     seq: frag_path.msg_seq

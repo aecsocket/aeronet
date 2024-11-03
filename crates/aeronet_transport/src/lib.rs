@@ -23,6 +23,7 @@ use {
     arbitrary::Arbitrary,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
+    bevy_reflect::Reflect,
     bevy_time::{Real, Time},
     derive_more::{Add, AddAssign, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
@@ -36,6 +37,9 @@ use {
     web_time::Instant,
 };
 
+/// Sets up the transport layer functionality.
+///
+/// See [`Transport`].
 #[derive(Debug)]
 pub struct AeronetTransportPlugin;
 
@@ -62,27 +66,6 @@ impl Plugin for AeronetTransportPlugin {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum TransportSet {
-    Poll,
-    Flush,
-}
-
-#[derive(Debug, Clone, Copy, Component, TypeSize)]
-pub struct TransportConfig {
-    pub max_memory_usage: usize,
-    pub send_bytes_per_sec: usize,
-}
-
-impl Default for TransportConfig {
-    fn default() -> Self {
-        Self {
-            max_memory_usage: 4 * 1024 * 1024,
-            send_bytes_per_sec: usize::MAX,
-        }
-    }
-}
-
 #[derive(Debug, Component, TypeSize)]
 // TODO: required component TransportConfig
 pub struct Transport {
@@ -103,28 +86,92 @@ pub struct Transport {
     pub send: send::TransportSend,
 }
 
-#[derive(Debug, TypeSize)]
-pub struct RecvMessage {
-    pub lane: LaneIndex,
-    pub recv_at: sized::Instant,
-    pub payload: Vec<u8>,
+/// User-configurable properties of a [`Transport`].
+///
+/// If you do not provide this component explicitly, a default config will
+/// be created and inserted into the [`Session`].
+///
+/// This component may be modified over the lifetime of a [`Session`] and the
+/// [`Transport`] will be updated accordingly.
+#[derive(Debug, Clone, Copy, Component, TypeSize, Reflect)]
+#[reflect(Component)]
+pub struct TransportConfig {
+    /// Maximum amount of memory, in bytes, that this [`Transport`] may use for
+    /// buffering messages until the [`Session`] is forcibly disconnected.
+    ///
+    /// By default, this is 4 MiB. Consider tuning this number if you see
+    /// connections fail with an out-of-memory error, or you see memory usage
+    /// is too high in your app.
+    pub max_memory_usage: usize,
+    /// How many packet bytes we can flush out to the IO layer per second.
+    ///
+    /// This can be used to limit the outgoing bandwidth of this transport.
+    ///
+    /// By default, this is [`usize::MAX`].
+    pub send_bytes_per_sec: usize,
 }
 
-// TODO: required component TransportConfig
-fn init_config(
-    trigger: Trigger<OnInsert, Transport>,
-    with_config: Query<(), With<TransportConfig>>,
-    mut commands: Commands,
-) {
-    let entity = trigger.entity();
-    if with_config.get(entity).is_err() {
-        commands.entity(entity).insert(TransportConfig::default());
+impl Default for TransportConfig {
+    fn default() -> Self {
+        Self {
+            max_memory_usage: 4 * 1024 * 1024,
+            send_bytes_per_sec: usize::MAX,
+        }
     }
+}
+
+/// Incoming message that a [`Transport`] created from packets received by the
+/// IO layer.
+#[derive(Debug, TypeSize)]
+pub struct RecvMessage {
+    /// Lane index on which this message was received.
+    pub lane: LaneIndex,
+    /// Instant at which the final fragment of this message was received.
+    pub recv_at: sized::Instant,
+    /// Raw byte data of this message.
+    pub payload: Vec<u8>,
 }
 
 const FRAG_OVERHEAD: usize = PacketHeader::MAX_ENCODE_LEN + FragmentHeader::MAX_ENCODE_LEN;
 
 impl Transport {
+    /// Creates a new transport from an existing [`Session`].
+    ///
+    /// This should be added to a [`Session`] after it has connected (after the
+    /// component is added).
+    ///
+    /// Also see [`TransportConfig`] for configuration options.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the [`Session::min_mtu`] is too small to support messages.
+    ///
+    /// Since messages take some overhead on the wire (fragmentation, acks,
+    /// etc.), packets must be larger than some minimum size to support this.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use {
+    ///     bevy_ecs::prelude::*,
+    ///     aeronet_io::Session,
+    ///     aeronet_transport::{Transport, lane::LaneKind},
+    ///     web_time::Instant,
+    ///     tracing::warn,
+    /// };
+    ///
+    /// const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
+    ///
+    /// fn on_connected(trigger: Trigger<OnAdd, Session>, sessions: Query<&Session>, mut commands: Commands) {
+    ///     let entity = trigger.entity();
+    ///     let session = sessions.get(entity).expect("we are adding this component to this entity");
+    ///     let Ok(transport) = Transport::new(session, LANES, LANES, Instant::now()) else {
+    ///         warn!("Failed to create transport for {entity}");
+    ///         return;
+    ///     };
+    ///     commands.entity(entity).insert(transport);
+    /// }
+    /// ```
     pub fn new(
         session: &Session,
         recv_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
@@ -156,39 +203,95 @@ impl Transport {
         })
     }
 
+    /// Gets the total stats gathered up to now.
     #[must_use]
     pub const fn stats(&self) -> MessageStats {
         self.stats
     }
 
+    /// Gets the current RTT estimation.
     #[must_use]
     pub const fn rtt(&self) -> &RttEstimator {
         &self.rtt
     }
 
+    /// Gets the [`TokenBucket`] for how many packet bytes we have left for
+    /// sending.
     #[must_use]
     pub const fn send_bytes_bucket(&self) -> &TokenBucket {
         &self.send_bytes_bucket
     }
 
+    /// Gets how many total bytes of memory this transport is using.
+    ///
+    /// This call is potentially expensive. You should cache this where
+    /// possible.
     #[must_use]
     pub fn memory_used(&self) -> usize {
         self.get_size()
     }
 }
 
+/// Set for scheduling transport layer systems.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
+pub enum TransportSet {
+    /// Draining packets from the IO layer and reading out messages; updating
+    /// the internal transport state.
+    ///
+    /// # Ordering
+    ///
+    /// - [`IoSet::Poll`]
+    /// - **[`TransportSet::Poll`]**
+    Poll,
+    /// Draining messages and turning them into packets for the IO layer.
+    ///
+    /// # Ordering
+    ///
+    /// - **[`TransportSet::Flush`]**
+    /// - [`IoSet::Flush`]
+    Flush,
+}
+
+/// Key which pseudo-uniquely identifies a message that has been sent out via
+/// [`TransportSend::push`] on this [`Transport`].
+///
+/// After pushing a message to the transport, you can use the output of
+/// [`Transport::recv_acks`] to read what messages have received acknowledgement
+/// from the peer. If you see the same message key that you got from
+/// [`TransportSend::push`], that message was acknowledged.
+///
+/// # Uniqueness
+///
+/// This key is only unique for a certain period of time, which depends on how
+/// quickly you send out messages. Internally, this uses [`Seq`] to track the
+/// sequence number of messages, but this can and will overflow eventually as
+/// long as you keep sending out messages. Therefore, you should not keep
+/// message keys around for a long time. As soon as you receive an ack for a
+/// message (or don't receive an ack in a certain period of time), drop the
+/// key - it's very likely to have the same key as another message later.
+///
+/// [`TransportSend::push`]: send::TransportSend::push
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize)]
 pub struct MessageKey {
+    /// Lane index on which the message was sent.
     pub lane: LaneIndex,
+    /// Message sequence number.
     pub seq: MessageSeq,
 }
 
+/// Statistics for a [`Transport`].
 #[derive(Debug, Clone, Copy, Default, TypeSize)] // force `#[derive]` on multiple lines
 #[derive(Add, AddAssign, Sub, SubAssign)]
 pub struct MessageStats {
+    /// Number of messages received into [`Transport::recv_msgs`].
     pub msgs_recv: sized::Saturating<usize>,
+    /// Number of messages sent out from [`Transport::send`].
     pub msgs_sent: sized::Saturating<usize>,
+    /// Number of packet acknowledgements received.
     pub packet_acks_recv: sized::Saturating<usize>,
+    /// Number of message acknowledgements received into
+    /// [`Transport::recv_acks`].
+    pub msg_acks_recv: sized::Saturating<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize)]
@@ -210,6 +313,18 @@ impl FlushedPacket {
             flushed_at: sized::Instant(flushed_at),
             frags: Box::new([]),
         }
+    }
+}
+
+// TODO: required component TransportConfig
+fn init_config(
+    trigger: Trigger<OnInsert, Transport>,
+    with_config: Query<(), With<TransportConfig>>,
+    mut commands: Commands,
+) {
+    let entity = trigger.entity();
+    if with_config.get(entity).is_err() {
+        commands.entity(entity).insert(TransportConfig::default());
     }
 }
 

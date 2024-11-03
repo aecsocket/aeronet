@@ -22,6 +22,7 @@ use {
     web_time::Instant,
 };
 
+/// Allows buffering up messages to be sent on a [`Transport`].
 #[derive(Debug, TypeSize)]
 pub struct TransportSend {
     pub(crate) max_frag_len: usize,
@@ -69,6 +70,27 @@ impl TransportSend {
         }
     }
 
+    /// Attempts to enqueue a message on this transport for sending.
+    ///
+    /// This will not send out a message immediately - that happens during
+    /// [`TransportSet::Flush`].
+    ///
+    /// If the message was enqueued successfully, returns a [`MessageKey`]
+    /// uniquely[^1] identifying this message. When draining
+    /// [`Transport::recv_acks`], you can compare message keys to tell if the
+    /// message you are pushing right now was the one that was acknowledged.
+    ///
+    /// [^1]: See [`MessageKey`] for uniqueness guarantees.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `lane_index` is outside the range of send lanes configured
+    /// on this [`Transport`] when it was created.
+    ///
+    /// Since you are responsible for creating the [`Transport`], you are also
+    /// responsible for knowing how many lanes you have.
+    ///
+    /// [`TransportSet::Flush`]: crate::TransportSet::Flush
     pub fn push(&mut self, lane_index: LaneIndex, msg: Bytes, now: Instant) -> Option<MessageKey> {
         let lane = &mut self.lanes[usize::from(lane_index)];
         let msg_seq = lane.next_msg_seq;
