@@ -13,7 +13,7 @@ use {
     aeronet_io::Session,
     ahash::{HashMap, HashSet},
     bevy_ecs::prelude::*,
-    itertools::Either,
+    either::Either,
     octs::{Buf, Read},
     std::{iter, num::Saturating},
     thiserror::Error,
@@ -109,6 +109,21 @@ enum RecvError {
     InvalidLane { lane: LaneIndex },
     #[error("failed to reassemble fragment")]
     Reassemble(#[source] ReassembleError),
+}
+
+/// Exposes `recv_on` for fuzz tests.
+#[cfg(fuzzing)]
+pub fn fuzz_recv_on(
+    transport: &mut Transport,
+    packet: &[u8],
+) -> Result<(), Box<dyn core::error::Error>> {
+    recv_on(
+        transport,
+        &TransportConfig::default(),
+        Instant::now(),
+        packet,
+    )
+    .map_err(|err| Box::new(err) as Box<_>)
 }
 
 fn recv_on(

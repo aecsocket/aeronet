@@ -16,12 +16,12 @@
 use {
     aeronet::{
         io::{
+            bytes::Bytes,
             connection::{Disconnect, DisconnectReason, Disconnected},
             web_time, Endpoint, Session,
         },
         transport::{
             lane::{LaneIndex, LaneKind},
-            octs::Bytes,
             AeronetTransportPlugin, Transport, TransportConfig,
         },
     },

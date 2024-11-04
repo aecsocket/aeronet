@@ -1,8 +1,6 @@
 //! Example server using WebSocket which listens for clients sending strings
 //! and sends back a string reply.
 
-use aeronet_io::{Endpoint, Session};
-
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         fn main() {
@@ -14,10 +12,9 @@ use {
     aeronet_io::{
         connection::{DisconnectReason, Disconnected, LocalAddr},
         server::Opened,
+        Endpoint, Session,
     },
-    aeronet_websocket::{
-        server::{Identity, ServerConfig, WebSocketServer, WebSocketServerPlugin},
-    },
+    aeronet_websocket::server::{Identity, ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},
 };
 

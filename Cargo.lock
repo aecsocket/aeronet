@@ -171,6 +171,7 @@ dependencies = [
  "bitvec",
  "derive_more",
  "egui_plot",
+ "either",
  "itertools 0.13.0",
  "octs",
  "ringbuf",
