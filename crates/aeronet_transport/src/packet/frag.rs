@@ -15,6 +15,16 @@ use {
 impl FragmentPosition {
     /// Creates a position for a fragment which is *not* the last one in the
     /// message.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aeronet_transport::packet::FragmentIndex;
+    ///
+    /// let pos = FragmentPosition::non_last(3).unwrap();
+    /// assert_eq!(3, pos.index());
+    /// assert!(!pos.is_last());
+    /// ```
     #[must_use]
     pub fn non_last(index: FragmentIndex) -> Option<Self> {
         index.checked_mul(2).map(Self)
@@ -22,6 +32,16 @@ impl FragmentPosition {
 
     /// Creates a position for a fragment which *is* the last one in the
     /// message.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aeronet_transport::packet::FragmentIndex;
+    ///
+    /// let pos = FragmentPosition::last(3).unwrap();
+    /// assert_eq!(3, pos.index());
+    /// assert!(pos.is_last());
+    /// ```
     #[must_use]
     pub fn last(index: FragmentIndex) -> Option<Self> {
         index

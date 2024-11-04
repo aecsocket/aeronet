@@ -6,14 +6,13 @@ mod config;
 pub use config::*;
 use {
     crate::{
-        WebSocketRuntime,
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
-        tungstenite,
+        tungstenite, WebSocketRuntime,
     },
     aeronet_io::{
-        Endpoint, IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         server::{CloseReason, Closed, Opened, Server},
+        Endpoint, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -21,7 +20,7 @@ use {
     futures::channel::{mpsc, oneshot},
     std::{io, net::SocketAddr},
     thiserror::Error,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
 };
 
 /// Allows using [`WebSocketServer`].

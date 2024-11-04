@@ -184,15 +184,15 @@ mod tests {
     fn increasing_wraparound() {
         assert!(Seq(0) < Seq(1));
         assert!(Seq(1) < Seq(2));
-        assert!(Seq(u16::MAX - 3) < Seq(u16::MAX));
-        assert!(Seq(u16::MAX - 2) < Seq(u16::MAX));
-        assert!(Seq(u16::MAX - 1) < Seq(u16::MAX));
+        assert!(Seq::MAX - 3 < Seq::MAX);
+        assert!(Seq::MAX - 2 < Seq::MAX);
+        assert!(Seq::MAX - 1 < Seq::MAX);
 
-        assert!(Seq(u16::MAX) < Seq(0));
-        assert!(Seq(u16::MAX) < Seq(1));
-        assert!(Seq(u16::MAX) < Seq(2));
+        assert!(Seq::MAX < Seq(0));
+        assert!(Seq::MAX < Seq(1));
+        assert!(Seq::MAX < Seq(2));
 
-        assert!(Seq(u16::MAX - 3) < Seq(2));
+        assert!(Seq::MAX - Seq(3) < Seq(2));
 
         // NOTE: we explicitly don't test what happens when the difference
         // is around u16::MAX, because we guarantee no behaviour there
