@@ -3,17 +3,17 @@
 mod backend;
 mod config;
 
-use aeronet_io::Endpoint;
 pub use config::*;
 use {
     crate::{
+        WebSocketRuntime,
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
-        tungstenite, WebSocketRuntime,
+        tungstenite,
     },
     aeronet_io::{
+        Endpoint, IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         server::{CloseReason, Closed, Opened, Server},
-        IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -21,7 +21,7 @@ use {
     futures::channel::{mpsc, oneshot},
     std::{io, net::SocketAddr},
     thiserror::Error,
-    tracing::{debug_span, Instrument},
+    tracing::{Instrument, debug_span},
 };
 
 /// Allows using [`WebSocketServer`].

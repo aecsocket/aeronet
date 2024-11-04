@@ -2,7 +2,7 @@
 
 use {
     crate::convert,
-    aeronet_io::{connection::Disconnect, web_time::Instant, Endpoint, Session},
+    aeronet_io::{Endpoint, Session, connection::Disconnect, web_time::Instant},
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,

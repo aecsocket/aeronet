@@ -5,17 +5,17 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        connection::{Disconnect, DisconnectReason, PeerAddr, DROP_DISCONNECT_REASON},
-        packet::{MtuTooSmall, PacketRtt, RecvPacket, IP_MTU},
         AeronetIoPlugin, IoSet, Session,
+        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, PeerAddr},
+        packet::{IP_MTU, MtuTooSmall, PacketRtt, RecvPacket},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
+        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
-        FutureExt, SinkExt, StreamExt,
     },
     std::{io, num::Saturating, sync::Arc, time::Duration},
     thiserror::Error,

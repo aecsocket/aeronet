@@ -3,16 +3,16 @@
 use {
     crate::{MessageStats, Transport, TransportConfig},
     aeronet_io::{
-        packet::{PacketRtt, PacketStats},
         Session,
+        packet::{PacketRtt, PacketStats},
     },
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
     bevy_time::{Real, Time, Timer, TimerMode},
     ringbuf::{
-        traits::{Consumer, RingBuffer},
         HeapRb,
+        traits::{Consumer, RingBuffer},
     },
     std::time::Duration,
 };

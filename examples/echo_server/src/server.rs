@@ -1,12 +1,13 @@
 use {
     aeronet::{
         io::{
+            Session,
             bytes::Bytes,
             connection::{DisconnectReason, Disconnected, LocalAddr},
             server::Opened,
-            web_time, Session,
+            web_time,
         },
-        transport::{lane::LaneKind, AeronetTransportPlugin, Transport},
+        transport::{AeronetTransportPlugin, Transport, lane::LaneKind},
     },
     aeronet_websocket::server::{ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},
@@ -171,7 +172,7 @@ fn echo_messages(
         }
 
         for _ in transport.recv_acks.drain() {
-            // We have to use up acknowlegements,
+            // We have to use up acknowledgements,
             // but since we don't actually care about reading them,
             // we'll just ignore them.
         }

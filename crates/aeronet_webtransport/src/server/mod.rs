@@ -6,14 +6,14 @@ use {
     crate::{
         runtime::WebTransportRuntime,
         session::{
-            self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin, MIN_MTU,
+            self, MIN_MTU, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
         },
     },
     aeronet_io::{
+        Endpoint, IoSet, Session,
         connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         packet::{PacketRtt, RecvPacket},
         server::{CloseReason, Closed, Opened, Server},
-        Endpoint, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -23,7 +23,7 @@ use {
     futures::channel::{mpsc, oneshot},
     std::{collections::HashMap, net::SocketAddr, time::Duration},
     thiserror::Error,
-    tracing::{debug_span, Instrument},
+    tracing::{Instrument, debug_span},
     web_time::Instant,
     wtransport::error::ConnectionError,
 };
