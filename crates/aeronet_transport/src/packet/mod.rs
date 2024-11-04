@@ -139,6 +139,13 @@ pub struct PacketHeader {
     pub seq: PacketSeq,
     /// Informs the receiver which packets the sender has already received.
     pub acks: Acknowledge,
+    /// How long the sender waited to send this packet, even if the packet was
+    /// ready to be sent earlier.
+    ///
+    /// See [`TransportConfig::ack_delay`].
+    ///
+    /// [`TransportConfig::ack_delay`]: crate::TransportConfig::ack_delay
+    pub ack_delay: u16,
 }
 
 /// Marks the index and last state of a single fragment.
