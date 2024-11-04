@@ -131,6 +131,12 @@ pub(crate) fn flush(mut sessions: Query<(&mut Session, &mut Transport)>) {
     }
 }
 
+/// Exposes `flush_on` for fuzz tests.
+#[cfg(fuzzing)]
+pub fn fuzz_flush_on(transport: &mut Transport, mtu: usize) -> impl Iterator<Item = Bytes> + '_ {
+    flush_on(transport, Instant::now(), mtu)
+}
+
 fn flush_on(
     transport: &mut Transport,
     now: Instant,

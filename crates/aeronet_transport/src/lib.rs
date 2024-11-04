@@ -17,7 +17,7 @@ pub mod sampling;
 #[cfg(feature = "visualizer")]
 pub mod visualizer;
 
-pub use {aeronet_io as io, octs};
+pub use aeronet_io as io;
 use {
     aeronet_io::{connection::Disconnect, packet::MtuTooSmall, IoSet, Session},
     arbitrary::Arbitrary,
@@ -184,8 +184,8 @@ impl Transport {
     /// ```
     pub fn new(
         session: &Session,
-        recv_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
-        send_lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
+        recv_lanes: impl IntoIterator<Item = LaneKind>,
+        send_lanes: impl IntoIterator<Item = LaneKind>,
         now: Instant,
     ) -> Result<Self, MtuTooSmall> {
         let min_mtu = session.min_mtu();

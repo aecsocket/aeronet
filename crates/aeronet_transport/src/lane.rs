@@ -40,7 +40,7 @@ use {
 /// What guarantees a kind of [lane] provides about message delivery.
 ///
 /// [lane]: crate::lane
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LaneKind {
     /// No guarantees given on *reliability* or *ordering*.

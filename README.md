@@ -86,16 +86,16 @@ cargo run --bin move_box_client
 ## Layers
 
 `aeronet` is fundamentally split into multiple layers:
-- [session layer](crate::session)
-  - Defines what a [`Session`] is
-  - Handles core dis/connection logic, shared among all IO implementations
+- IO layer (abstraction) - [`aeronet_io`]
+  - Defines what a [`Session`] is, and how it behaves
+  - Handles core dis/connection logic, shared among all IO layer implementations
   - Performs setup for the layers above
-- [IO layer](crate::io)
+- IO layer (implementation) - [`aeronet_channel`], [`aeronet_webtransport`], etc.
   - Establishes and maintains a connection to a peer
   - Detects connection and disconnection, and reports it to the session layer
   - Allows sending and receiving packets unreliably
-  - User-swappable - example implementations: [`aeronet_channel`], [`aeronet_webtransport`]
-- [Transport layer](crate::transport)
+  - User-swappable - can have multiple in a single app
+- Transport layer - [`aeronet_transport`]
   - Handles fragmentation, reliability, and ordering of messages
   - Splits messages into packets, and reassembles packets into messages, which can be used layers
     above
@@ -124,7 +124,20 @@ the top, add it and `aeronet` to your app, and start building!
 
 ## For `aeronet`
 
-TODO: we need fuzz tests for the transport!
+`aeronet` and its subcrates use a combination of:
+- unit tests, using `cargo`, for individual, self-contained features
+- integration tests, using `cargo`, for testing code in the context of a full Bevy app
+  - currently, only [`aeronet_channel`] has integration tests
+- fuzz tests, using [`cargo-fuzz`], for protocol-level features
+  - used by [`aeronet_transport`]
+
+### Fuzz tests
+
+To run the fuzz tests:
+```sh
+cd crates/aeronet_transport
+cargo +nightly fuzz run <fuzz target>
+```
 
 ## For users
 
@@ -168,3 +181,4 @@ conditioning is applied at the lowest level possible.
 [`echo_client`]: ./examples/echo_client
 [`echo_server`]: ./examples/echo_server
 [`egui_plot`]: https://docs.rs/egui_plot
+[`cargo-fuzz`]: https://github.com/rust-fuzz/cargo-fuzz

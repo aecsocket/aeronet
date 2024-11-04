@@ -1,0 +1,41 @@
+[workspace]
+members = ["."]
+
+[package]
+name = "aeronet_transport_fuzz"
+
+edition = "2021"
+publish = false
+version = "0.0.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+aeronet_transport = { path = ".." }
+
+[[bin]]
+name = "frag_recv"
+path = "fuzz_targets/frag_recv.rs"
+
+bench = false
+doc = false
+test = false
+
+[[bin]]
+name = "transport_recv"
+path = "fuzz_targets/transport_recv.rs"
+
+bench = false
+doc = false
+test = false
+
+[[bin]]
+name = "round_trip"
+path = "fuzz_targets/round_trip.rs"
+
+bench = false
+doc = false
+test = false
