@@ -52,3 +52,16 @@ impl Decode for FragmentPayload {
         Ok(Self(src.read_next(len_u)?))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use octs::{test::*, Bytes};
+
+    #[test]
+    fn encode_decode() {
+        round_trip(&FragmentPayload(Bytes::from_static(&[])));
+        round_trip(&FragmentPayload(Bytes::from_static(&[1, 2, 3, 4])));
+    }
+}

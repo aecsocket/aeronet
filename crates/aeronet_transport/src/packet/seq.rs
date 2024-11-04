@@ -10,6 +10,16 @@ use {
 };
 
 impl Seq {
+    /// Maximum [`Seq`] value.
+    ///
+    /// This is guaranteed to be one less than `Seq(0)` due to wraparound.
+    ///
+    /// ```
+    /// # use aeronet_transport::packet::Seq;
+    /// assert_eq!(Seq::MAX + Seq(1), Seq(0));
+    /// ```
+    pub const MAX: Self = Self(u16::MAX);
+
     /// Gets a signed number for the value of packet sequences "elapsed" between
     /// `rhs` and `self`.
     ///
@@ -37,14 +47,14 @@ impl Seq {
     /// assert_eq!(Seq(1).dist_to(Seq(0)), -1);
     /// assert_eq!(Seq(2).dist_to(Seq(0)), -2);
     ///
-    /// assert_eq!(Seq(0).dist_to(Seq(u16::MAX)), -1);
-    /// assert_eq!(Seq(u16::MAX).dist_to(Seq(u16::MAX)), 0);
+    /// assert_eq!(Seq(0).dist_to(Seq::MAX), -1);
+    /// assert_eq!(Seq::MAX.dist_to(Seq::MAX), 0);
     ///
-    /// assert_eq!(Seq(u16::MAX).dist_to(Seq(0)), 1);
-    /// assert_eq!((Seq(u16::MAX) - Seq(3)).dist_to(Seq(0)), 4);
+    /// assert_eq!(Seq::MAX.dist_to(Seq(0)), 1);
+    /// assert_eq!((Seq::MAX - Seq(3)).dist_to(Seq(0)), 4);
     ///
-    /// assert_eq!(Seq(u16::MAX).dist_to(Seq(3)), 4);
-    /// assert_eq!((Seq(u16::MAX) - Seq(3)).dist_to(Seq(3)), 7);
+    /// assert_eq!(Seq::MAX.dist_to(Seq(3)), 4);
+    /// assert_eq!((Seq::MAX - Seq(3)).dist_to(Seq(3)), 7);
     /// ```
     #[must_use]
     pub const fn dist_to(self, rhs: Self) -> i16 {
@@ -160,7 +170,7 @@ impl PacketSeq {
 
 impl fmt::Debug for PacketSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("PacketSeq").field(&self.0.0).finish()
+        f.debug_tuple("PacketSeq").field(&self.0 .0).finish()
     }
 }
 
@@ -199,7 +209,7 @@ impl MessageSeq {
 
 impl fmt::Debug for MessageSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("MessageSeq").field(&self.0.0).finish()
+        f.debug_tuple("MessageSeq").field(&self.0 .0).finish()
     }
 }
 
@@ -238,15 +248,15 @@ mod tests {
     fn increasing_wraparound() {
         assert!(Seq(0) < Seq(1));
         assert!(Seq(1) < Seq(2));
-        assert!(Seq(u16::MAX - 3) < Seq(u16::MAX));
-        assert!(Seq(u16::MAX - 2) < Seq(u16::MAX));
-        assert!(Seq(u16::MAX - 1) < Seq(u16::MAX));
+        assert!(Seq::MAX - Seq(3) < Seq::MAX);
+        assert!(Seq::MAX - Seq(2) < Seq::MAX);
+        assert!(Seq::MAX - Seq(1) < Seq::MAX);
 
-        assert!(Seq(u16::MAX) < Seq(0));
-        assert!(Seq(u16::MAX) < Seq(1));
-        assert!(Seq(u16::MAX) < Seq(2));
+        assert!(Seq::MAX < Seq(0));
+        assert!(Seq::MAX < Seq(1));
+        assert!(Seq::MAX < Seq(2));
 
-        assert!(Seq(u16::MAX - 3) < Seq(2));
+        assert!(Seq::MAX - Seq(3) < Seq(2));
 
         // NOTE: we explicitly don't test what happens when the difference
         // is around u16::MAX, because we guarantee no behaviour there

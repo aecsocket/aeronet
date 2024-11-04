@@ -7,9 +7,9 @@ pub(crate) mod backend;
 use {
     crate::WebSocketRuntime,
     aeronet_io::{
+        connection::{Disconnect, DROP_DISCONNECT_REASON},
+        packet::{RecvPacket, IP_MTU},
         AeronetIoPlugin, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect},
-        packet::{IP_MTU, RecvPacket},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,

@@ -28,3 +28,21 @@ impl Decode for PacketHeader {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use octs::test::*;
+
+    #[test]
+    fn encode_decode() {
+        hint_round_trip(&PacketHeader {
+            seq: PacketSeq::new(3),
+            acks: Acknowledge {
+                last_recv: PacketSeq::new(2),
+                bits: 0b11,
+            },
+        });
+    }
+}

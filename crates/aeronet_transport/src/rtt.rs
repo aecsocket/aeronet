@@ -43,6 +43,20 @@ impl RttEstimator {
     }
 
     /// Gets the minimum RTT registered so far for this estimator.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use {aeronet_transport::rtt::RttEstimator, core::time::Duration};
+    /// let mut rtt = RttEstimator::new(Duration::from_millis(500));
+    /// assert_eq!(Duration::from_millis(500), rtt.min());
+    ///
+    /// rtt.update(Duration::from_millis(750));
+    /// assert_eq!(Duration::from_millis(500), rtt.min());
+    ///
+    /// rtt.update(Duration::from_millis(250));
+    /// assert_eq!(Duration::from_millis(250), rtt.min());
+    /// ```
     #[must_use]
     pub const fn min(&self) -> Duration {
         self.min
