@@ -2,24 +2,23 @@
 
 use {
     crate::{
-        FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
         frag::{FragmentReceiver, ReassembleError},
         lane::{LaneIndex, LaneKind},
         packet::{Fragment, MessageSeq, PacketHeader, PacketSeq},
         rtt::RttEstimator,
         send,
         seq_buf::SeqBuf,
-        sized,
+        sized, FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
     },
     aeronet_io::Session,
     ahash::{HashMap, HashSet},
     bevy_ecs::prelude::*,
     either::Either,
     octs::{Buf, Read},
-    std::{iter, num::Saturating},
+    std::{iter, num::Saturating, time::Duration},
     thiserror::Error,
     tracing::{trace, trace_span},
-    typesize::{TypeSize, derive::TypeSize},
+    typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
 };
 
@@ -137,11 +136,12 @@ fn recv_on(
         .read::<PacketHeader>()
         .map_err(|_| RecvError::ReadHeader)?;
 
-    let span = trace_span!("recv", packet = header.seq.0.0);
+    let span = trace_span!("recv", packet = header.seq.0 .0);
     let _span = span.enter();
 
     trace!(len = packet.len(), "Received packet");
 
+    let ack_delay = Duration::from_millis(u64::from(header.ack_delay));
     transport.recv_acks.0.extend(packet_acks_to_msg_keys(
         &mut transport.flushed_packets,
         &mut transport.send.lanes,
@@ -149,6 +149,7 @@ fn recv_on(
         &mut transport.stats.packet_acks_recv,
         &mut transport.stats.msg_acks_recv,
         recv_at,
+        ack_delay,
         header.acks.seqs(),
     ));
 
@@ -167,6 +168,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
     packet_acks_recv: &'s mut Saturating<usize>,
     msgs_acks_recv: &'s mut Saturating<usize>,
     recv_at: Instant,
+    ack_delay: Duration,
     acked_seqs: impl Iterator<Item = PacketSeq> + 's,
 ) -> impl Iterator<Item = MessageKey> + 's {
     acked_seqs
@@ -181,12 +183,13 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
             let span = trace_span!("ack", packet = acked_seq.0 .0);
             let _span = span.enter();
 
-            *packet_acks_recv += Saturating(1);
-            let packet_rtt = recv_at.saturating_duration_since(packet.flushed_at.0);
+            let packet_rtt = recv_at.saturating_duration_since(packet.flushed_at.0).saturating_sub(ack_delay);
             rtt.update(packet_rtt);
+
             let rtt_now = rtt.get();
             trace!(?acked_seq, ?packet_rtt, ?rtt_now, "Got peer ack");
 
+            *packet_acks_recv += Saturating(1);
             Box::into_iter(packet.frags)
         })
         .filter_map(|frag_path| {

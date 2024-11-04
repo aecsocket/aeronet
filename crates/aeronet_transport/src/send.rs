@@ -2,7 +2,7 @@
 
 use {
     crate::{
-        FlushedPacket, FragmentPath, MessageKey, Transport, frag,
+        frag,
         lane::{LaneIndex, LaneKind, LaneReliability},
         limit::Limit,
         packet::{
@@ -10,12 +10,12 @@ use {
             PacketHeader, PacketSeq,
         },
         rtt::RttEstimator,
-        sized,
+        sized, FlushedPacket, FragmentPath, MessageKey, Transport,
     },
     aeronet_io::Session,
     ahash::HashMap,
     bevy_ecs::prelude::*,
-    octs::{Bytes, EncodeLen, FixedEncodeLen, Write},
+    octs::{Bytes, EncodeLen, Write},
     std::{collections::hash_map::Entry, iter},
     tracing::{trace, trace_span},
     typesize::derive::TypeSize,
@@ -175,15 +175,17 @@ fn flush_on(
         // bytes into this packet, so we track this as well
         let mut bytes_left = (&mut transport.send_bytes_bucket).min_of(mtu);
         let packet_seq = transport.next_packet_seq;
-        bytes_left.consume(PacketHeader::ENCODE_LEN).ok()?;
+        let header = PacketHeader {
+            seq: packet_seq,
+            acks: transport.peer_acks,
+            ack_delay: 0, // TODO
+        };
+        bytes_left.consume(header.encode_len()).ok()?;
         packet
-            .write(PacketHeader {
-                seq: packet_seq,
-                acks: transport.peer_acks,
-            })
+            .write(&header)
             .expect("should grow the buffer when writing over capacity");
 
-        let span = trace_span!("flush", packet = packet_seq.0.0);
+        let span = trace_span!("flush", packet = packet_seq.0 .0);
         let _span = span.enter();
 
         // collect the paths of the frags we want to put into this packet
@@ -220,12 +222,13 @@ fn flush_on(
         }
 
         trace!(num_frags = packet_frags.len(), "Flushed packet");
-        transport
-            .flushed_packets
-            .insert(packet_seq.0.0, FlushedPacket {
+        transport.flushed_packets.insert(
+            packet_seq.0 .0,
+            FlushedPacket {
                 flushed_at: sized::Instant(now),
                 frags: packet_frags.into_boxed_slice(),
-            });
+            },
+        );
 
         transport.next_packet_seq += PacketSeq::new(1);
         // self.next_ack_at = now + MAX_ACK_DELAY; // TODO

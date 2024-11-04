@@ -17,6 +17,8 @@ pub mod sampling;
 #[cfg(feature = "visualizer")]
 pub mod visualizer;
 
+use std::time::Duration;
+
 pub use aeronet_io as io;
 use {
     aeronet_io::{connection::Disconnect, packet::MtuTooSmall, IoSet, Session},
@@ -119,6 +121,7 @@ pub struct TransportConfig {
     ///
     /// By default, this is [`usize::MAX`].
     pub send_bytes_per_sec: usize,
+    pub ack_delay: Duration,
 }
 
 impl Default for TransportConfig {
@@ -126,6 +129,7 @@ impl Default for TransportConfig {
         Self {
             max_memory_usage: 4 * 1024 * 1024,
             send_bytes_per_sec: usize::MAX,
+            ack_delay: Duration::from_millis(250),
         }
     }
 }
