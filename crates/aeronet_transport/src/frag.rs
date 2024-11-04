@@ -15,7 +15,7 @@ use {
     },
     ahash::HashMap,
     core::fmt,
-    octs::{chunks::ByteChunksExt, Bytes},
+    octs::{Bytes, chunks::ByteChunksExt},
     std::iter::FusedIterator,
     thiserror::Error,
     typesize::derive::TypeSize,

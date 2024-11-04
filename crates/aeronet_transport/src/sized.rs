@@ -44,7 +44,7 @@ impl<T> Saturating<T> {
 
 impl<T: TypeSize> TypeSize for Saturating<T> {
     fn extra_size(&self) -> usize {
-        self.0 .0.extra_size()
+        self.0.0.extra_size()
     }
 }
 

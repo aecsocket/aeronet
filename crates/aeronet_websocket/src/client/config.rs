@@ -1,11 +1,11 @@
 use {
     rustls::{
+        RootCertStore,
         client::danger::{ServerCertVerified, ServerCertVerifier},
         crypto::WebPkiSupportedAlgorithms,
-        RootCertStore,
     },
     std::sync::Arc,
-    tokio_tungstenite::{tungstenite::protocol::WebSocketConfig, Connector},
+    tokio_tungstenite::{Connector, tungstenite::protocol::WebSocketConfig},
 };
 
 /// Configuration for a [`WebSocketClient`] using [`tokio_tungstenite`].

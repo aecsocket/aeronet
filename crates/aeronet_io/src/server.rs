@@ -212,14 +212,14 @@ fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands:
 
 #[cfg(test)]
 mod tests {
-    use bevy_hierarchy::BuildWorldChildren;
-
-    use crate::{
-        connection::{DisconnectReason, Disconnected},
-        AeronetIoPlugin,
+    use {
+        super::*,
+        crate::{
+            AeronetIoPlugin,
+            connection::{DisconnectReason, Disconnected},
+        },
+        bevy_hierarchy::BuildWorldChildren,
     };
-
-    use super::*;
 
     #[test]
     fn disconnect_clients_on_close() {

@@ -195,9 +195,7 @@ fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
 
 #[cfg(test)]
 mod tests {
-    use crate::AeronetIoPlugin;
-
-    use super::*;
+    use {super::*, crate::AeronetIoPlugin};
 
     #[test]
     fn remove_entity_on_disconnect() {

@@ -3,8 +3,8 @@
 use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
     aeronet_io::{
-        connection::{Disconnect, DisconnectReason, Disconnected},
         Session,
+        connection::{Disconnect, DisconnectReason, Disconnected},
     },
     bevy::{log::LogPlugin, prelude::*},
 };

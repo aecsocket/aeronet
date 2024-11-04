@@ -19,7 +19,7 @@ pub mod visualizer;
 
 pub use aeronet_io as io;
 use {
-    aeronet_io::{connection::Disconnect, packet::MtuTooSmall, IoSet, Session},
+    aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
     arbitrary::Arbitrary,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
@@ -35,7 +35,7 @@ use {
     send::TransportSend,
     seq_buf::SeqBuf,
     tracing::warn,
-    typesize::{derive::TypeSize, TypeSize},
+    typesize::{TypeSize, derive::TypeSize},
     web_time::Instant,
 };
 
@@ -163,18 +163,24 @@ impl Transport {
     ///
     /// ```
     /// use {
-    ///     bevy_ecs::prelude::*,
     ///     aeronet_io::Session,
     ///     aeronet_transport::{Transport, lane::LaneKind},
-    ///     web_time::Instant,
+    ///     bevy_ecs::prelude::*,
     ///     tracing::warn,
+    ///     web_time::Instant,
     /// };
     ///
     /// const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
     ///
-    /// fn on_connected(trigger: Trigger<OnAdd, Session>, sessions: Query<&Session>, mut commands: Commands) {
+    /// fn on_connected(
+    ///     trigger: Trigger<OnAdd, Session>,
+    ///     sessions: Query<&Session>,
+    ///     mut commands: Commands,
+    /// ) {
     ///     let entity = trigger.entity();
-    ///     let session = sessions.get(entity).expect("we are adding this component to this entity");
+    ///     let session = sessions
+    ///         .get(entity)
+    ///         .expect("we are adding this component to this entity");
     ///     let Ok(transport) = Transport::new(session, LANES, LANES, Instant::now()) else {
     ///         warn!("Failed to create transport for {entity}");
     ///         return;
@@ -346,8 +352,8 @@ pub fn clear_recv_buffers(mut sessions: Query<(Entity, &mut Transport)>) {
         let len = transport.recv_msgs.0.len();
         if len > 0 {
             warn!(
-                "{entity} has {len} received messages which have not been consumed - \
-                this indicates a bug in code above the transport layer"
+                "{entity} has {len} received messages which have not been consumed - this \
+                 indicates a bug in code above the transport layer"
             );
             transport.recv_msgs.0.clear();
         }
@@ -355,8 +361,8 @@ pub fn clear_recv_buffers(mut sessions: Query<(Entity, &mut Transport)>) {
         let len = transport.recv_acks.0.len();
         if len > 0 {
             warn!(
-                "{entity} has {len} received acks which have not been consumed - \
-                this indicates a bug in code above the transport layer"
+                "{entity} has {len} received acks which have not been consumed - this indicates a \
+                 bug in code above the transport layer"
             );
             transport.recv_acks.0.clear();
         }

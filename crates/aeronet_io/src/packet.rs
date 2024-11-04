@@ -25,8 +25,8 @@
 //! unit. The MTU varies for different IO layers, but all IO layers guarantee
 //! that they provide two MTU values:
 //! - a current MTU value, which may vary over the lifetime of the session.
-//! - a minimum MTU value, which the current MTU value may never drop below,
-//!   and which itself may never change *over the lifetime of a session*.
+//! - a minimum MTU value, which the current MTU value may never drop below, and
+//!   which itself may never change *over the lifetime of a session*.
 //!   - this does not mean that the minimum MTU is constant for a given kind of
 //!     IO layer, just that it may not change after a session is started.
 //!
@@ -135,8 +135,8 @@ pub fn clear_recv_buffers(mut sessions: Query<(Entity, &mut Session)>) {
         let len = session.recv.len();
         if len > 0 {
             warn!(
-                "{entity} has {len} received packets which have not been consumed - \
-                this indicates a bug in code above the IO layer"
+                "{entity} has {len} received packets which have not been consumed - this \
+                 indicates a bug in code above the IO layer"
             );
             session.recv.clear();
         }
@@ -150,8 +150,8 @@ pub fn clear_send_buffers(mut sessions: Query<(Entity, &mut Session)>) {
         let len = session.send.len();
         if len > 0 {
             warn!(
-                "{entity} has {len} sent packets which have not been consumed - \
-                this indicates a bug in the IO layer"
+                "{entity} has {len} sent packets which have not been consumed - this indicates a \
+                 bug in the IO layer"
             );
             session.send.clear();
         }
