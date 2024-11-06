@@ -18,10 +18,8 @@ workspace = true
 all-features = true
 
 [features]
-sampling = []
 serde = ["dep:serde"]
 visualizer = [
-  "sampling",
   "dep:bevy_egui",
   "dep:egui_plot",
   "dep:itertools",
@@ -41,7 +39,11 @@ octs = { workspace = true }
 ringbuf = { workspace = true }
 static_assertions = { workspace = true }
 tracing = { workspace = true }
-typesize = { workspace = true }
+typesize = { workspace = true, features = [
+  "bitvec",
+  "web-time",
+  "saturating_impls",
+] }
 web-time = { workspace = true }
 
 bevy_app = { workspace = true }

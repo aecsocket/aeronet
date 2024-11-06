@@ -9,11 +9,9 @@
 //! [`FragmentReceiver`]).
 
 use {
-    crate::{
-        packet::{FragmentIndex, FragmentPosition, MessageSeq},
-        sized,
-    },
+    crate::packet::{FragmentIndex, FragmentPosition, MessageSeq},
     ahash::HashMap,
+    bitvec::vec::BitVec,
     core::fmt,
     derive_more::{Display, Error},
     octs::{chunks::ByteChunksExt, Bytes},
@@ -147,7 +145,7 @@ struct MessageBuf {
     last_frag_index: Option<usize>,
     max_frag_index: usize,
     num_frags_recv: usize,
-    frag_indices_recv: sized::BitVec,
+    frag_indices_recv: BitVec,
     payload: Vec<u8>,
 }
 
