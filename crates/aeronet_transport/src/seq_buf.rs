@@ -1,7 +1,7 @@
 //! See [`SeqBuf`].
 
 use {
-    std::{array, mem},
+    core::{array, mem},
     typesize::TypeSize,
 };
 

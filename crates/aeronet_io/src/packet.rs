@@ -43,8 +43,8 @@ use {
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bytes::Bytes,
+    core::{num::Saturating, time::Duration},
     derive_more::{Add, AddAssign, Display, Error, Sub, SubAssign},
-    std::{num::Saturating, time::Duration},
     tracing::warn,
     web_time::Instant,
 };

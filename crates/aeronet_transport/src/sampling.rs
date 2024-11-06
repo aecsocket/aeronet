@@ -10,11 +10,11 @@ use {
     bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
     bevy_time::{Real, Time, Timer, TimerMode},
+    core::time::Duration,
     ringbuf::{
         traits::{Consumer, RingBuffer},
         HeapRb,
     },
-    std::time::Duration,
 };
 
 /// Periodically samples the state of [`Session`]s to gather statistics on the

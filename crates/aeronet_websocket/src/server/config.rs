@@ -2,12 +2,10 @@
 // https://github.com/BiagioFesta/wtransport/blob/bf3a5401c2b3671e6611bd093d7666f4660b2119/wtransport/src/tls.rs
 
 use {
+    alloc::sync::Arc,
+    core::net::{Ipv6Addr, SocketAddr},
     derive_more::{Display, Error},
     rustls::pki_types::{CertificateDer, PrivateKeyDer},
-    std::{
-        net::{Ipv6Addr, SocketAddr},
-        sync::Arc,
-    },
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
 };
 

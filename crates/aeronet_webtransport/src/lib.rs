@@ -9,6 +9,8 @@
     )
 )]
 
+extern crate alloc;
+
 pub mod cert;
 #[cfg(feature = "client")]
 pub mod client;

@@ -21,6 +21,9 @@ all = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 
+alloc_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+std_instead_of_core = "warn"
 unwrap_used = "warn"
 
 module_name_repetitions = "allow"
@@ -48,15 +51,15 @@ aeronet_replicon = { version = "0.9.0-dev", path = "crates/aeronet_replicon" }
 # generic
 
 ahash = "0.8.11"
-anyhow = "1.0.89"
+anyhow = { version = "1.0.89", default-features = false }
 arbitrary = { version = "1.3.2", features = ["derive"] }
 assert_matches = "1.5.0"
 base64 = "0.22.1"
 bitvec = "1.0.1"
-bytes = "1.6.1"
+bytes = { version = "1.6.1", default-features = false }
 cfg-if = "1.0.0"
 clap = { version = "4.5.11", features = ["derive"] }
-derive_more = "1.0.0"
+derive_more = { version = "1.0.0", default-features = false }
 egui = "0.28.1"
 egui_plot = "0.28.1"
 either = "1.13.0"
@@ -72,7 +75,7 @@ serde = { version = "1.0.204", features = ["derive"] }
 size_format = "1.0.2"
 static_assertions = "1.1.0"
 sync_wrapper = "1.0.1"
-tracing = "0.1.40"
+tracing = { version = "0.1.40", default-features = false }
 typesize = "0.1.10"
 web-time = "1.1.0"
 

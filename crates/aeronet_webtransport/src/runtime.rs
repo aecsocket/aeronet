@@ -1,6 +1,6 @@
 use {
     bevy_ecs::prelude::*,
-    std::{future::Future, time::Duration},
+    core::{future::Future, time::Duration},
 };
 
 /// Provides a platform-agnostic way to spawn futures for driving the

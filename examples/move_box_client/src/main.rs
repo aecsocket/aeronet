@@ -251,7 +251,7 @@ fn web_transport_config(cert_hash: String) -> WebTransportClientConfig {
 
 #[cfg(not(target_family = "wasm"))]
 fn web_transport_config(cert_hash: String) -> WebTransportClientConfig {
-    use {aeronet_webtransport::wtransport::tls::Sha256Digest, std::time::Duration};
+    use {aeronet_webtransport::wtransport::tls::Sha256Digest, core::time::Duration};
 
     let config = WebTransportClientConfig::builder().with_bind_default();
 

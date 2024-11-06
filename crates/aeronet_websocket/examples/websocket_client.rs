@@ -3,13 +3,13 @@
 
 use {
     aeronet_io::{
-        Endpoint, Session,
         connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
+        Endpoint, Session,
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
-    std::mem,
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    core::mem,
 };
 
 fn main() -> AppExit {

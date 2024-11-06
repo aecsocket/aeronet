@@ -20,9 +20,9 @@ use {
     bevy_hierarchy::BuildChildren,
     bevy_reflect::prelude::*,
     bytes::Bytes,
+    core::{net::SocketAddr, time::Duration},
     derive_more::{Display, Error, From},
     futures::channel::{mpsc, oneshot},
-    std::{collections::HashMap, net::SocketAddr, time::Duration},
     tracing::{debug_span, Instrument},
     web_time::Instant,
     wtransport::error::ConnectionError,
@@ -194,7 +194,7 @@ pub struct SessionRequest {
     /// `user-agent` header.
     pub user_agent: Option<String>,
     /// Full map of request headers.
-    pub headers: HashMap<String, String>,
+    pub headers: std::collections::HashMap<String, String>,
 }
 
 /// [`WebTransportServer`] error.
@@ -253,7 +253,7 @@ struct ToConnecting {
     path: String,
     origin: Option<String>,
     user_agent: Option<String>,
-    headers: HashMap<String, String>,
+    headers: std::collections::HashMap<String, String>,
     send_session_entity: oneshot::Sender<Entity>,
     send_session_response: oneshot::Sender<SessionResponse>,
     recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,

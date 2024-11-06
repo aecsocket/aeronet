@@ -171,9 +171,9 @@ enum ClientFrontend {
 #[derive(Debug)]
 struct ToConnected {
     #[cfg(not(target_family = "wasm"))]
-    local_addr: std::net::SocketAddr,
+    local_addr: core::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
-    peer_addr: std::net::SocketAddr,
+    peer_addr: core::net::SocketAddr,
     frontend: SessionFrontend,
 }
 

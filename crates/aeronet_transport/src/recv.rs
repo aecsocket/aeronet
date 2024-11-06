@@ -13,10 +13,10 @@ use {
     aeronet_io::Session,
     ahash::{HashMap, HashSet},
     bevy_ecs::prelude::*,
+    core::{iter, num::Saturating, time::Duration},
     derive_more::{Display, Error},
     either::Either,
     octs::{Buf, Read},
-    std::{iter, num::Saturating, time::Duration},
     tracing::{trace, trace_span},
     typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
@@ -46,6 +46,22 @@ pub(crate) struct Lane {
     state: LaneState,
 }
 
+#[derive(Debug, Clone, TypeSize)]
+enum LaneState {
+    UnreliableUnordered,
+    UnreliableSequenced {
+        pending: MessageSeq,
+    },
+    ReliableUnordered {
+        pending: MessageSeq,
+        recv_buf: HashSet<MessageSeq>,
+    },
+    ReliableOrdered {
+        pending: MessageSeq,
+        recv_buf: HashMap<MessageSeq, Vec<u8>>,
+    },
+}
+
 impl Lane {
     pub(crate) fn new(kind: LaneKind) -> Self {
         Self {
@@ -66,22 +82,6 @@ impl Lane {
             },
         }
     }
-}
-
-#[derive(Debug, Clone, TypeSize)]
-enum LaneState {
-    UnreliableUnordered,
-    UnreliableSequenced {
-        pending: MessageSeq,
-    },
-    ReliableUnordered {
-        pending: MessageSeq,
-        recv_buf: HashSet<MessageSeq>,
-    },
-    ReliableOrdered {
-        pending: MessageSeq,
-        recv_buf: HashMap<MessageSeq, Vec<u8>>,
-    },
 }
 
 pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut Transport, &TransportConfig)>) {

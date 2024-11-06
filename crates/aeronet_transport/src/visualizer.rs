@@ -2,24 +2,24 @@
 
 use {
     crate::{
-        Transport, TransportConfig,
         sampling::{
             SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
             SessionStatsSampling,
         },
+        Transport, TransportConfig,
     },
-    aeronet_io::{Session, packet::PacketRtt},
+    aeronet_io::{packet::PacketRtt, Session},
     bevy_app::prelude::*,
     bevy_core::Name,
     bevy_ecs::prelude::*,
     bevy_egui::{
-        EguiContexts,
         egui::{self, epaint::Hsva},
+        EguiContexts,
     },
+    core::{hash::Hash, ops::RangeInclusive, time::Duration},
     itertools::Itertools,
     ringbuf::traits::Consumer,
     size_format::{BinaryPrefixes, PointSeparated, SizeFormatter},
-    std::{hash::Hash, ops::RangeInclusive, time::Duration},
     web_time::Instant,
 };
 

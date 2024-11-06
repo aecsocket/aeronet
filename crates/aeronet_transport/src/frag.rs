@@ -13,9 +13,9 @@ use {
     ahash::HashMap,
     bitvec::vec::BitVec,
     core::fmt,
+    core::iter::FusedIterator,
     derive_more::{Display, Error},
     octs::{chunks::ByteChunksExt, Bytes},
-    std::iter::FusedIterator,
     typesize::derive::TypeSize,
 };
 

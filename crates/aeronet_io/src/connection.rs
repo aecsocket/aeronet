@@ -6,7 +6,7 @@ use {
     bevy_derive::Deref,
     bevy_ecs::prelude::*,
     bevy_hierarchy::DespawnRecursiveExt,
-    std::{fmt::Debug, net::SocketAddr},
+    core::{fmt::Debug, net::SocketAddr},
     tracing::debug,
 };
 
