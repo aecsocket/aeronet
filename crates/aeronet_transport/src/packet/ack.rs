@@ -1,7 +1,7 @@
 use {
     crate::packet::{Acknowledge, PacketSeq},
+    core::{convert::Infallible, fmt},
     octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write},
-    std::{convert::Infallible, fmt},
 };
 
 impl Acknowledge {

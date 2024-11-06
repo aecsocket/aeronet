@@ -8,6 +8,8 @@
     )
 )]
 
+extern crate alloc;
+
 #[cfg(feature = "client")]
 pub mod client;
 pub mod session;

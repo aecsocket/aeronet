@@ -3,11 +3,11 @@ use {
         Fragment, FragmentHeader, FragmentIndex, FragmentPosition, MessageSeq, PayloadTooLarge,
     },
     crate::lane::LaneIndex,
+    core::{convert::Infallible, fmt},
     octs::{
         BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt, VarIntTooLarge,
         Write,
     },
-    std::{convert::Infallible, fmt},
 };
 
 // `FragmentPosition`

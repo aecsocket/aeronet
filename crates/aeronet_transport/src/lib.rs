@@ -1,6 +1,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
+extern crate alloc;
+
 pub mod frag;
 pub mod lane;
 pub mod limit;
@@ -14,8 +16,6 @@ pub mod seq_buf;
 #[cfg(feature = "visualizer")]
 pub mod visualizer;
 
-use std::{num::Saturating, time::Duration};
-
 pub use aeronet_io as io;
 use {
     aeronet_io::{connection::Disconnect, packet::MtuTooSmall, IoSet, Session},
@@ -24,6 +24,7 @@ use {
     bevy_ecs::{prelude::*, schedule::SystemSet},
     bevy_reflect::Reflect,
     bevy_time::{Real, Time},
+    core::{num::Saturating, time::Duration},
     derive_more::{Add, AddAssign, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
     limit::TokenBucket,

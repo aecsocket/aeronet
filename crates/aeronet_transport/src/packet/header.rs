@@ -1,10 +1,10 @@
 use {
     super::{Acknowledge, PacketHeader, PacketSeq},
+    core::convert::Infallible,
     octs::{
         BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt, VarIntTooLarge,
         Write,
     },
-    std::convert::Infallible,
 };
 
 impl FixedEncodeLenHint for PacketHeader {

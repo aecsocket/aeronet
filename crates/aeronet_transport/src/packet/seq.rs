@@ -1,12 +1,12 @@
 use {
     crate::packet::{MessageSeq, PacketSeq, Seq},
-    octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write},
-    std::{
+    core::{
         cmp::Ordering,
         convert::Infallible,
         fmt,
         ops::{Add, AddAssign, Sub, SubAssign},
     },
+    octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write},
 };
 
 impl Seq {

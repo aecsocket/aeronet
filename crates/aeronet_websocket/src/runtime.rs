@@ -1,4 +1,4 @@
-use {bevy_ecs::prelude::*, std::future::Future};
+use {bevy_ecs::prelude::*, core::future::Future};
 
 /// Provides a platform-agnostic way to spawn futures for driving the
 /// WebSocket IO layer.

@@ -168,11 +168,11 @@ enum ClientFrontend {
 #[derive(Debug)]
 struct ToConnected {
     #[cfg(not(target_family = "wasm"))]
-    local_addr: std::net::SocketAddr,
+    local_addr: core::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
-    initial_peer_addr: std::net::SocketAddr,
+    initial_peer_addr: core::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
-    initial_rtt: std::time::Duration,
+    initial_rtt: core::time::Duration,
     initial_mtu: usize,
     recv_meta: mpsc::Receiver<SessionMeta>,
     recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,

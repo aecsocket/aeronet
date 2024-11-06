@@ -18,9 +18,10 @@ use {
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
+    core::net::SocketAddr,
     derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
-    std::{io, net::SocketAddr},
+    std::io,
     tracing::{debug_span, Instrument},
 };
 

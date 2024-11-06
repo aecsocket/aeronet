@@ -2,18 +2,18 @@
 pub mod wasm {
     use {
         crate::{
-            JsError,
             session::{SessionError, SessionFrontend},
+            JsError,
         },
         aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
         bytes::Bytes,
         futures::{
-            SinkExt, StreamExt,
             channel::{mpsc, oneshot},
             never::Never,
+            SinkExt, StreamExt,
         },
         js_sys::Uint8Array,
-        wasm_bindgen::{JsCast, prelude::Closure},
+        wasm_bindgen::{prelude::Closure, JsCast},
         web_sys::{BinaryType, CloseEvent, ErrorEvent, MessageEvent, WebSocket},
         web_time::Instant,
     };
@@ -161,20 +161,20 @@ pub mod native {
     use {
         crate::session::{SessionError, SessionFrontend},
         aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
+        alloc::borrow::Cow,
         bytes::Bytes,
         futures::{
-            SinkExt, StreamExt,
             channel::{mpsc, oneshot},
             never::Never,
+            SinkExt, StreamExt,
         },
-        std::borrow::Cow,
         tokio::io::{AsyncRead, AsyncWrite},
         tokio_tungstenite::{
-            WebSocketStream,
             tungstenite::{
+                protocol::{frame::coding::CloseCode, CloseFrame},
                 Message,
-                protocol::{CloseFrame, frame::coding::CloseCode},
             },
+            WebSocketStream,
         },
         web_time::Instant,
     };

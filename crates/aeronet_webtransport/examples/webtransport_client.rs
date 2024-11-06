@@ -3,17 +3,17 @@
 
 use {
     aeronet_io::{
-        Endpoint, Session,
         connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         packet::PacketRtt,
+        Endpoint, Session,
     },
     aeronet_webtransport::{
         cert,
         client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
     },
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
-    std::mem,
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    core::mem,
 };
 
 fn main() -> AppExit {
@@ -165,7 +165,7 @@ fn client_config(cert_hash: String) -> Result<ClientConfig, anyhow::Error> {
 
 #[cfg(not(target_family = "wasm"))]
 fn client_config(cert_hash: String) -> Result<ClientConfig, anyhow::Error> {
-    use {aeronet_webtransport::wtransport::tls::Sha256Digest, std::time::Duration};
+    use {aeronet_webtransport::wtransport::tls::Sha256Digest, core::time::Duration};
 
     let config = ClientConfig::builder().with_bind_default();
 

@@ -23,7 +23,7 @@ use {
         },
     },
     bevy::{log::LogPlugin, prelude::*},
-    std::time::Duration,
+    core::time::Duration,
 };
 
 fn main() -> AppExit {

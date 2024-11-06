@@ -1,6 +1,6 @@
 //! See [`RttEstimator`].
 
-use {std::time::Duration, typesize::derive::TypeSize};
+use {core::time::Duration, typesize::derive::TypeSize};
 
 /// Computes an RTT estimation for a network path.
 ///

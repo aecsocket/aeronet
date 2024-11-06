@@ -9,16 +9,18 @@ use {
         packet::{MtuTooSmall, PacketRtt, RecvPacket, IP_MTU},
         AeronetIoPlugin, IoSet, Session,
     },
+    alloc::sync::Arc,
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bytes::Bytes,
+    core::{num::Saturating, time::Duration},
     derive_more::{Display, Error},
     futures::{
         channel::{mpsc, oneshot},
         never::Never,
         FutureExt, SinkExt, StreamExt,
     },
-    std::{io, num::Saturating, sync::Arc, time::Duration},
+    std::io,
     tracing::{trace, trace_span},
     web_time::Instant,
     xwt_core::prelude::*,
@@ -124,7 +126,7 @@ impl Drop for WebTransportIo {
 #[derive(Debug)]
 pub(crate) struct SessionMeta {
     #[cfg(not(target_family = "wasm"))]
-    peer_addr: std::net::SocketAddr,
+    peer_addr: core::net::SocketAddr,
     #[cfg(not(target_family = "wasm"))]
     packet_rtt: Duration,
     mtu: usize,
