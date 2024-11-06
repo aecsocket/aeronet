@@ -14,9 +14,9 @@ use {
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bytes::Bytes,
+    derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
     std::{io, num::Saturating},
-    thiserror::Error,
     tracing::{trace, trace_span},
     web_time::Instant,
 };
@@ -94,38 +94,38 @@ pub struct WebSocketIo {
 
 /// Error that occurs when polling a session using the [`WebSocketIo`] IO
 /// layer.
-#[derive(Debug, Error)]
+#[derive(Debug, Display, Error)]
 #[non_exhaustive]
 pub enum SessionError {
     /// Frontend ([`WebSocketIo`]) was dropped.
-    #[error("frontend closed")]
+    #[display("frontend closed")]
     FrontendClosed,
     /// Backend async task was unexpectedly cancelled and dropped.
-    #[error("backend closed")]
+    #[display("backend closed")]
     BackendClosed,
     /// Failed to read the local socket address of the endpoint.
-    #[error("failed to get local socket address")]
-    GetLocalAddr(#[source] io::Error),
+    #[display("failed to get local socket address")]
+    GetLocalAddr(io::Error),
     /// Failed to read the peer socket address of the endpoint.
-    #[error("failed to get peer socket address")]
-    GetPeerAddr(#[source] io::Error),
+    #[display("failed to get peer socket address")]
+    GetPeerAddr(io::Error),
     /// Receiver stream was unexpectedly closed.
-    #[error("receiver stream closed")]
+    #[display("receiver stream closed")]
     RecvStreamClosed,
     /// Unexpectedly lost connection from the peer.
-    #[error("connection lost")]
-    Connection(#[source] ConnectionError),
+    #[display("connection lost")]
+    Connection(ConnectionError),
     /// Connection closed with an error code which wasn't `1000`.
-    #[error("connection closed with code {0}")]
-    Closed(u16),
+    #[display("connection closed with code {_0}")]
+    Closed(#[error(not(source))] u16),
     /// The peer sent us a close frame, but it did not include a reason.
     ///
     /// [`WebSocketIo`] will always send a reason when closing a connection.
-    #[error("peer disconnected without reason")]
+    #[display("peer disconnected without reason")]
     DisconnectedWithoutReason,
     /// Failed to send data across the socket.
-    #[error("failed to send data")]
-    Send(#[source] SendError),
+    #[display("failed to send data")]
+    Send(SendError),
 }
 
 impl Drop for WebSocketIo {

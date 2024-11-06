@@ -17,8 +17,8 @@ use {
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bytes::Bytes,
+    derive_more::{Display, Error, From},
     futures::channel::{mpsc, oneshot},
-    thiserror::Error,
     tracing::{debug_span, Instrument},
     web_time::Instant,
 };
@@ -139,18 +139,18 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
 }
 
 /// [`WebTransportClient`] error.
-#[derive(Debug, Error)]
+#[derive(Debug, Display, Error, From)]
 #[non_exhaustive]
 pub enum ClientError {
     /// Failed to start connecting to the target.
-    #[error("failed to connect")]
-    Connect(#[source] ConnectError),
+    #[display("failed to connect")]
+    Connect(ConnectError),
     /// Failed to await the connection to the target.
-    #[error("failed to await connection")]
-    AwaitConnect(#[source] AwaitConnectError),
+    #[display("failed to await connection")]
+    AwaitConnect(AwaitConnectError),
     /// Generic session error.
-    #[error(transparent)]
-    Session(#[from] SessionError),
+    #[from]
+    Session(SessionError),
 }
 
 #[derive(Debug)]

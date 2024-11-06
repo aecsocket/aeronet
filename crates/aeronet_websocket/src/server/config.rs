@@ -2,6 +2,7 @@
 // https://github.com/BiagioFesta/wtransport/blob/bf3a5401c2b3671e6611bd093d7666f4660b2119/wtransport/src/tls.rs
 
 use {
+    derive_more::{Display, Error},
     rustls::pki_types::{CertificateDer, PrivateKeyDer},
     std::{
         net::{Ipv6Addr, SocketAddr},
@@ -200,6 +201,6 @@ impl Identity {
 
 /// Provided a subject alternative name which is not a valid DNS string.
 #[cfg(feature = "self-signed")]
-#[derive(Debug, thiserror::Error)]
-#[error("invalid SANs for self-signed certificate")]
+#[derive(Debug, Display, Error)]
+#[display("invalid SANs for self-signed certificate")]
 pub struct InvalidSan;

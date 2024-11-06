@@ -1,6 +1,9 @@
 //! See [`Limit`].
 
-use {thiserror::Error, typesize::derive::TypeSize};
+use {
+    derive_more::{Display, Error},
+    typesize::derive::TypeSize,
+};
 
 /// Tracks how many counts this value has remaining, and allows consuming or
 /// refilling this counter.
@@ -85,8 +88,8 @@ impl<T: Limit> Limit for &mut T {
 }
 
 /// There were not enough counts available to consume from a [`Limit`].
-#[derive(Debug, Clone, Copy, Error)]
-#[error("not enough counts")]
+#[derive(Debug, Clone, Copy, Display, Error)]
+#[display("not enough counts")]
 pub struct NotEnoughCounts;
 
 /// Allows consuming counts from a [`Limit`].

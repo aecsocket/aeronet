@@ -6,22 +6,22 @@ mod native;
 #[cfg(not(target_family = "wasm"))]
 pub use native::*;
 use {
-    base64::{Engine, engine::general_purpose::STANDARD as BASE64},
-    thiserror::Error,
+    base64::{engine::general_purpose::STANDARD as BASE64, Engine},
+    derive_more::{Display, Error},
 };
 
 /// Bytes representing the SHA-256 digest of the DER encoding of a certificate.
 pub type CertificateHash = [u8; 32];
 
 /// Failed to decode a [`CertificateHash`] from a base 64 string.
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Display, Error)]
 pub enum DecodeHashError {
     /// Failed to decode the string from base 64.
-    #[error("failed to decode into base 64")]
-    Base64(#[source] base64::DecodeError),
+    #[display("failed to decode into base 64")]
+    Base64(base64::DecodeError),
     /// Decoded base 64 bytes were not of the same length as [`CertificateHash`]
     /// requires.
-    #[error("wrong number of bytes")]
+    #[display("wrong number of bytes")]
     InvalidLength,
 }
 

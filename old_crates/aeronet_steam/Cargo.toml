@@ -35,7 +35,6 @@ bevy_ecs = { workspace = true }
 aeronet_io = { workspace = true }
 
 steamworks = { workspace = true }
-thiserror = { workspace = true }
 
 bevy-steamworks = { workspace = true }
 bevy_app = { workspace = true }

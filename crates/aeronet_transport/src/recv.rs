@@ -13,10 +13,10 @@ use {
     aeronet_io::Session,
     ahash::{HashMap, HashSet},
     bevy_ecs::prelude::*,
+    derive_more::{Display, Error},
     either::Either,
     octs::{Buf, Read},
     std::{iter, num::Saturating, time::Duration},
-    thiserror::Error,
     tracing::{trace, trace_span},
     typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
@@ -99,16 +99,16 @@ pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut Transport, &T
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Display, Error)]
 enum RecvError {
-    #[error("not enough bytes to read header")]
+    #[display("not enough bytes to read header")]
     ReadHeader,
-    #[error("not enough bytes to read fragment")]
+    #[display("not enough bytes to read fragment")]
     ReadFragment,
-    #[error("invalid lane {lane:?}")]
+    #[display("invalid lane {lane:?}")]
     InvalidLane { lane: LaneIndex },
-    #[error("failed to reassemble fragment")]
-    Reassemble(#[source] ReassembleError),
+    #[display("failed to reassemble fragment")]
+    Reassemble(ReassembleError),
 }
 
 /// Exposes `recv_on` for fuzz tests.

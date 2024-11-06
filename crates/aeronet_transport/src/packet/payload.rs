@@ -1,15 +1,15 @@
 use {
     super::{FragmentPayload, FragmentPayloadLen},
+    derive_more::{Display, Error},
     octs::{
         BufError, BufTooShortOr, Decode, Encode, EncodeLen, Read, VarInt, VarIntTooLarge, Write,
     },
-    thiserror::Error,
 };
 
 /// Attempted to [`Encode`] a [`FragmentPayload`] which was more than
 /// [`FragmentPayloadLen::MAX`] bytes long.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Error)]
-#[error("payload too large - {len} / {} bytes", FragmentPayloadLen::MAX)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Display, Error)]
+#[display("payload too large - {len} / {} bytes", FragmentPayloadLen::MAX)]
 pub struct PayloadTooLarge {
     /// Length of the [`FragmentPayload`].
     pub len: usize,

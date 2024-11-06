@@ -5,20 +5,20 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
+        connection::{Disconnect, DisconnectReason, PeerAddr, DROP_DISCONNECT_REASON},
+        packet::{MtuTooSmall, PacketRtt, RecvPacket, IP_MTU},
         AeronetIoPlugin, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, PeerAddr},
-        packet::{IP_MTU, MtuTooSmall, PacketRtt, RecvPacket},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bytes::Bytes,
+    derive_more::{Display, Error},
     futures::{
-        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
+        FutureExt, SinkExt, StreamExt,
     },
     std::{io, num::Saturating, sync::Arc, time::Duration},
-    thiserror::Error,
     tracing::{trace, trace_span},
     web_time::Instant,
     xwt_core::prelude::*,
@@ -81,34 +81,33 @@ pub struct WebTransportIo {
 
 /// Error that occurs when polling a session using the [`WebTransportIo`]
 /// IO layer.
-#[derive(Debug, Error)]
+#[derive(Debug, Display, Error)]
 #[non_exhaustive]
 pub enum SessionError {
     /// Frontend ([`WebTransportIo`]) was dropped.
-    #[error("frontend closed")]
+    #[display("frontend closed")]
     FrontendClosed,
     /// Backend async task was unexpectedly cancelled and dropped.
-    #[error("backend closed")]
+    #[display("backend closed")]
     BackendClosed,
     /// Failed to create endpoint.
-    #[error("failed to create endpoint")]
-    CreateEndpoint(#[source] io::Error),
+    #[display("failed to create endpoint")]
+    CreateEndpoint(io::Error),
     /// Failed to read the local socket address of the endpoint.
-    #[error("failed to get local socket address")]
-    GetLocalAddr(#[source] io::Error),
+    #[display("failed to get local socket address")]
+    GetLocalAddr(io::Error),
     /// Successfully connected to the peer, but this connection does not support
     /// datagrams.
-    #[error("datagrams not supported")]
+    #[display("datagrams not supported")]
     DatagramsNotSupported,
     /// Packet MTU is smaller than [`MIN_MTU`].
     ///
     /// This may occur either immediately after connecting to the peer, or after
     /// a connection has been established and the path MTU updates.
-    #[error(transparent)]
     MtuTooSmall(MtuTooSmall),
     /// Unexpectedly lost connection from the peer.
-    #[error("connection lost")]
-    Connection(#[source] ConnectionError),
+    #[display("connection lost")]
+    Connection(ConnectionError),
 }
 
 /// Minimum packet MTU that a [`WebTransportIo`] must support.

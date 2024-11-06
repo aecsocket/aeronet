@@ -15,9 +15,9 @@ use {
     },
     ahash::HashMap,
     core::fmt,
-    octs::{Bytes, chunks::ByteChunksExt},
+    derive_more::{Display, Error},
+    octs::{chunks::ByteChunksExt, Bytes},
     std::iter::FusedIterator,
-    thiserror::Error,
     typesize::derive::TypeSize,
 };
 
@@ -91,16 +91,16 @@ pub struct FragmentReceiver {
 }
 
 /// Received an invalid fragment when reassembling fragments into a message.
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, Error)]
 pub enum ReassembleError {
     /// Already received a fragment with this index.
-    #[error("already received fragment {index}")]
+    #[display("already received fragment {index}")]
     AlreadyReceivedFrag {
         /// Index of the fragment received.
         index: usize,
     },
     /// Not enough memory to buffer this fragment up.
-    #[error("not enough memory - {left} / {required} bytes")]
+    #[display("not enough memory - {left} / {required} bytes")]
     NotEnoughMemory {
         /// Bytes of memory required.
         required: usize,
@@ -109,7 +109,7 @@ pub enum ReassembleError {
     },
     /// Received a fragment which claims to be the last fragment, but we already
     /// received the last fragment.
-    #[error("received last fragment {index}, but we already received last fragment {last}")]
+    #[display("received last fragment {index}, but we already received last fragment {last}")]
     AlreadyReceivedLastFrag {
         /// Index of the fragment received.
         index: usize,
@@ -118,7 +118,7 @@ pub enum ReassembleError {
     },
     /// Received a fragment which claims to be the last fragment, but we already
     /// received a (non-last) fragment with a larger index.
-    #[error(
+    #[display(
         "received last fragment {index}, but we already received fragment {max} with a larger \
          index"
     )]
@@ -131,7 +131,7 @@ pub enum ReassembleError {
     /// Received a non-last fragment which has an invalid length.
     ///
     /// All non-last fragments must be the same size.
-    #[error("non-last fragment {index} has invalid length {len}, expected {expected}")]
+    #[display("non-last fragment {index} has invalid length {len}, expected {expected}")]
     InvalidPayloadLength {
         /// Index of the fragment received.
         index: usize,

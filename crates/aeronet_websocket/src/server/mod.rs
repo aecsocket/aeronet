@@ -4,6 +4,7 @@ mod backend;
 mod config;
 
 pub use config::*;
+use derive_more::derive::From;
 use {
     crate::{
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
@@ -17,9 +18,9 @@ use {
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
+    derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
     std::{io, net::SocketAddr},
-    thiserror::Error,
     tracing::{debug_span, Instrument},
 };
 
@@ -108,24 +109,24 @@ fn open(server: Entity, world: &mut World, config: ServerConfig) {
 }
 
 /// [`WebSocketServer`] error.
-#[derive(Debug, Error)]
+#[derive(Debug, Display, Error, From)]
 #[non_exhaustive]
 pub enum ServerError {
     /// Failed to bind a socket to the address given in [`ServerConfig`].
-    #[error("failed to bind socket")]
-    BindSocket(#[source] io::Error),
+    #[display("failed to bind socket")]
+    BindSocket(io::Error),
     /// Failed to accept a connection.
-    #[error("failed to accept connection")]
-    AcceptConnection(#[source] io::Error),
+    #[display("failed to accept connection")]
+    AcceptConnection(io::Error),
     /// Failed to perform a TLS handshake over this connection.
-    #[error("failed to perform TLS handshake")]
-    TlsHandshake(#[source] io::Error),
+    #[display("failed to perform TLS handshake")]
+    TlsHandshake(io::Error),
     /// Failed to accept the client due to a WebSocket protocol error.
-    #[error("failed to accept client")]
-    AcceptClient(#[source] tungstenite::Error),
+    #[display("failed to accept client")]
+    AcceptClient(tungstenite::Error),
     /// Generic session error.
-    #[error(transparent)]
-    Session(#[from] SessionError),
+    #[from]
+    Session(SessionError),
 }
 
 #[derive(Debug, Component)]

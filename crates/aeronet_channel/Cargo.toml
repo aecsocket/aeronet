@@ -20,10 +20,10 @@ all-features = true
 aeronet_io = { workspace = true }
 
 bytes = { workspace = true }
+derive_more = { workspace = true, features = ["display", "error"] }
 flume = { workspace = true }
 oneshot = { workspace = true }
 sync_wrapper = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 web-time = { workspace = true }
 
