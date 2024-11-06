@@ -6,24 +6,24 @@ use {
     crate::{
         runtime::WebTransportRuntime,
         session::{
-            self, MIN_MTU, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
+            self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin, MIN_MTU,
         },
     },
     aeronet_io::{
-        Endpoint, IoSet, Session,
         connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         packet::{PacketRtt, RecvPacket},
         server::{CloseReason, Closed, Opened, Server},
+        Endpoint, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
     bevy_reflect::prelude::*,
     bytes::Bytes,
+    derive_more::{Display, Error, From},
     futures::channel::{mpsc, oneshot},
     std::{collections::HashMap, net::SocketAddr, time::Duration},
-    thiserror::Error,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
     web_time::Instant,
     wtransport::error::ConnectionError,
 };
@@ -198,21 +198,21 @@ pub struct SessionRequest {
 }
 
 /// [`WebTransportServer`] error.
-#[derive(Debug, Error)]
+#[derive(Debug, Display, Error, From)]
 #[non_exhaustive]
 pub enum ServerError {
     /// Failed to await an incoming session request.
-    #[error("failed to await session request")]
-    AwaitSessionRequest(#[source] ConnectionError),
+    #[display("failed to await session request")]
+    AwaitSessionRequest(ConnectionError),
     /// User rejected this incoming session request.
-    #[error("user rejected session request")]
+    #[display("user rejected session request")]
     Rejected,
     /// Failed to accept the incoming session request.
-    #[error("failed to accept session")]
-    AcceptSessionRequest(#[source] ConnectionError),
+    #[display("failed to accept session")]
+    AcceptSessionRequest(ConnectionError),
     /// Generic session error.
-    #[error(transparent)]
-    Session(#[from] SessionError),
+    #[from]
+    Session(SessionError),
 }
 
 #[derive(Debug, Component)]

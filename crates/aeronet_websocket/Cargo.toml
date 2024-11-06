@@ -32,9 +32,9 @@ aeronet_io = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }
 cfg-if = { workspace = true }
+derive_more = { workspace = true, features = ["display", "error", "from"] }
 futures = { workspace = true }
 replace_with = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 web-time = { workspace = true }
 

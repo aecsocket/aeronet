@@ -90,7 +90,7 @@ pub const IP_MTU: usize = 1024;
 ///
 /// [MTU]: crate::packet
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, Error)]
-#[display(fmt = "packet MTU too small - {mtu} / {min}")]
+#[display("packet MTU too small - {mtu} / {min}")]
 pub struct MtuTooSmall {
     /// Provided MTU value.
     pub mtu: usize,

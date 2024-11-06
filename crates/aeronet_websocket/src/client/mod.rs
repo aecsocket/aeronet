@@ -13,8 +13,8 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
+    derive_more::{Display, Error, From},
     futures::{channel::oneshot, never::Never},
-    thiserror::Error,
     tracing::{debug_span, Instrument},
     web_time::Instant,
 };
@@ -138,22 +138,22 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
 }
 
 /// [`WebSocketClient`] error.
-#[derive(Debug, Error)]
+#[derive(Debug, Display, Error, From)]
 #[non_exhaustive]
 pub enum ClientError {
     /// Failed to convert the `target` passed into [`WebSocketClient::connect`]
     /// into an actual connection target.
-    #[error("failed to create request target")]
-    CreateTarget(#[source] CreateTargetError),
+    #[display("failed to create request target")]
+    CreateTarget(CreateTargetError),
     /// Failed to create the socket used for connecting.
-    #[error("failed to create socket")]
-    CreateSocket(#[source] CreateSocketError),
+    #[display("failed to create socket")]
+    CreateSocket(CreateSocketError),
     /// Failed to connect to the target.
-    #[error("failed to connect")]
-    Connect(#[source] ConnectError),
+    #[display("failed to connect")]
+    Connect(ConnectError),
     /// Generic session error.
-    #[error(transparent)]
-    Session(#[from] SessionError),
+    #[from]
+    Session(SessionError),
 }
 
 #[derive(Debug)]

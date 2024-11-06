@@ -3,16 +3,16 @@
 
 use {
     aeronet_io::{
-        AeronetIoPlugin, Endpoint, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected},
+        connection::{Disconnect, DisconnectReason, Disconnected, DROP_DISCONNECT_REASON},
         packet::RecvPacket,
+        AeronetIoPlugin, Endpoint, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
     bytes::Bytes,
+    derive_more::{Display, Error},
     std::num::Saturating,
     sync_wrapper::SyncWrapper,
-    thiserror::Error,
     tracing::{trace, trace_span},
     web_time::Instant,
 };
@@ -136,8 +136,8 @@ impl Drop for ChannelIo {
 }
 
 /// [`ChannelIo`] error when the peer drops its channel.
-#[derive(Debug, Clone, Error)]
-#[error("channel disconnected")]
+#[derive(Debug, Clone, Display, Error)]
+#[display("channel disconnected")]
 pub struct ChannelDisconnected;
 
 const MTU: usize = usize::MAX;
