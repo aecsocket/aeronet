@@ -10,7 +10,7 @@ use {
             PacketHeader, PacketSeq,
         },
         rtt::RttEstimator,
-        sized, FlushedPacket, FragmentPath, MessageKey, Transport,
+        FlushedPacket, FragmentPath, MessageKey, Transport,
     },
     aeronet_io::Session,
     ahash::HashMap,
@@ -45,9 +45,10 @@ pub(crate) struct SentMessage {
 #[derive(Debug, Clone, TypeSize)]
 pub(crate) struct SentFragment {
     position: FragmentPosition,
-    payload: sized::Bytes,
-    sent_at: sized::Instant,
-    next_flush_at: sized::Instant,
+    #[typesize(with = Bytes::len)]
+    payload: Bytes,
+    sent_at: Instant,
+    next_flush_at: Instant,
 }
 
 impl TransportSend {
@@ -105,9 +106,10 @@ impl TransportSend {
                 .map(|(position, payload)| {
                     Some(SentFragment {
                         position,
-                        payload: sized::Bytes(payload),
-                        sent_at: sized::Instant(now),
-                        next_flush_at: sized::Instant(now),
+                        payload,
+                        // TODO is this right?
+                        sent_at: now,
+                        next_flush_at: now,
                     })
                 })
                 .collect(),
@@ -225,7 +227,7 @@ fn flush_on(
         transport.flushed_packets.insert(
             packet_seq.0 .0,
             FlushedPacket {
-                flushed_at: sized::Instant(now),
+                flushed_at: now,
                 frags: packet_frags.into_boxed_slice(),
             },
         );
@@ -257,7 +259,7 @@ fn frag_paths_in_lane(
             // back to this exact `Option<..>`
             .enumerate()
             .filter_map(|(i, frag)| frag.as_ref().map(|frag| (i, frag)))
-            .filter(move |(_, frag)| now >= frag.next_flush_at.0)
+            .filter(move |(_, frag)| now >= frag.next_flush_at)
             .map(move |(frag_index, frag)| {
                 let frag_index = FragmentIndex::try_from(frag_index)
                     .expect("number of frags should fit into `FragmentIndex`");
@@ -267,7 +269,7 @@ fn frag_paths_in_lane(
                         msg_seq: *msg_seq,
                         frag_index,
                     },
-                    frag.sent_at.0,
+                    frag.sent_at,
                 )
             })
     })
@@ -305,7 +307,7 @@ fn write_frag_at_path(
             lane: path.lane_index,
             position: sent_frag.position,
         },
-        payload: FragmentPayload(sent_frag.payload.clone().0),
+        payload: FragmentPayload(sent_frag.payload.clone()),
     };
     bytes_left.consume(frag.encode_len()).map_err(drop)?;
     packet
@@ -323,7 +325,7 @@ fn write_frag_at_path(
         LaneReliability::Reliable => {
             // don't drop the frag, just attempt to resend it later
             // it'll be dropped when the peer acks it
-            sent_frag.next_flush_at = sized::Instant(now + rtt.pto());
+            sent_frag.next_flush_at = now + rtt.pto();
         }
     }
 

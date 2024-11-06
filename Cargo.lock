@@ -5484,7 +5484,9 @@ version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "549e54551d85ba6718a95333d9bc4367f69793d7aba638de30f8d25a1f554a1d"
 dependencies = [
+ "bitvec",
  "typesize-derive",
+ "web-time",
 ]
 
 [[package]]

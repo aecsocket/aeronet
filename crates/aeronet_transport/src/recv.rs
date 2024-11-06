@@ -8,7 +8,7 @@ use {
         rtt::RttEstimator,
         send,
         seq_buf::SeqBuf,
-        sized, FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
+        FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
     },
     aeronet_io::Session,
     ahash::{HashMap, HashSet},
@@ -183,7 +183,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
             let span = trace_span!("ack", packet = acked_seq.0 .0);
             let _span = span.enter();
 
-            let packet_rtt = recv_at.saturating_duration_since(packet.flushed_at.0).saturating_sub(ack_delay);
+            let packet_rtt = recv_at.saturating_duration_since(packet.flushed_at).saturating_sub(ack_delay);
             rtt.update(packet_rtt);
 
             let rtt_now = rtt.get();
@@ -250,7 +250,7 @@ fn recv_frag(
         let msgs_with_lane =
             recv_on_lane(&mut lane.state, msg, frag.header.seq).map(|msg| RecvMessage {
                 lane: lane_index,
-                recv_at: sized::Instant(recv_at),
+                recv_at,
                 payload: msg,
             });
         transport.recv_msgs.0.extend(msgs_with_lane);

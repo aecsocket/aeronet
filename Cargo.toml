@@ -73,7 +73,7 @@ size_format = "1.0.2"
 static_assertions = "1.1.0"
 sync_wrapper = "1.0.1"
 tracing = "0.1.40"
-typesize = "0.1.9"
+typesize = "0.1.10"
 web-time = "1.1.0"
 
 # native

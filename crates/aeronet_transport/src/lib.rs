@@ -7,17 +7,14 @@ pub mod limit;
 pub mod packet;
 pub mod recv;
 pub mod rtt;
+pub mod sampling;
 pub mod send;
 pub mod seq_buf;
-pub mod sized;
-
-#[cfg(feature = "sampling")]
-pub mod sampling;
 
 #[cfg(feature = "visualizer")]
 pub mod visualizer;
 
-use std::time::Duration;
+use std::{num::Saturating, time::Duration};
 
 pub use aeronet_io as io;
 use {
@@ -112,8 +109,11 @@ pub struct TransportConfig {
     /// buffering messages until the [`Session`] is forcibly disconnected.
     ///
     /// By default, this is 4 MiB. Consider tuning this number if you see
-    /// connections fail with an out-of-memory error, or you see memory usage
-    /// is too high in your app.
+    /// connections fail with an out-of-memory error, or you see
+    /// [`Transport::memory_used`] is too high (you can use the
+    #[cfg_attr(feature = "visualizer", doc = "[`visualizer`]")]
+    #[cfg_attr(not(feature = "visualizer"), doc = "`visualizer`")]
+    /// to see real-time statistics).
     pub max_memory_usage: usize,
     /// How many packet bytes we can flush out to the IO layer per second.
     ///
@@ -141,7 +141,7 @@ pub struct RecvMessage {
     /// Lane index on which this message was received.
     pub lane: LaneIndex,
     /// Instant at which the final fragment of this message was received.
-    pub recv_at: sized::Instant,
+    pub recv_at: Instant,
     /// Raw byte data of this message.
     pub payload: Vec<u8>,
 }
@@ -302,14 +302,14 @@ pub struct MessageKey {
 #[derive(Add, AddAssign, Sub, SubAssign)]
 pub struct MessageStats {
     /// Number of messages received into [`Transport::recv_msgs`].
-    pub msgs_recv: sized::Saturating<usize>,
+    pub msgs_recv: Saturating<usize>,
     /// Number of messages sent out from [`Transport::send`].
-    pub msgs_sent: sized::Saturating<usize>,
+    pub msgs_sent: Saturating<usize>,
     /// Number of packet acknowledgements received.
-    pub packet_acks_recv: sized::Saturating<usize>,
+    pub packet_acks_recv: Saturating<usize>,
     /// Number of message acknowledgements received into
     /// [`Transport::recv_acks`].
-    pub msg_acks_recv: sized::Saturating<usize>,
+    pub msg_acks_recv: Saturating<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize)]
@@ -321,14 +321,14 @@ struct FragmentPath {
 
 #[derive(Debug, Clone, TypeSize)]
 struct FlushedPacket {
-    flushed_at: sized::Instant,
+    flushed_at: Instant,
     frags: Box<[FragmentPath]>,
 }
 
 impl FlushedPacket {
     fn new(flushed_at: Instant) -> Self {
         Self {
-            flushed_at: sized::Instant(flushed_at),
+            flushed_at,
             frags: Box::new([]),
         }
     }
