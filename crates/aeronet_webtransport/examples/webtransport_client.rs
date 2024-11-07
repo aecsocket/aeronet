@@ -3,16 +3,16 @@
 
 use {
     aeronet_io::{
+        Endpoint, Session,
         connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         packet::PacketRtt,
-        Endpoint, Session,
     },
     aeronet_webtransport::{
         cert,
         client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
     },
     bevy::prelude::*,
-    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    bevy_egui::{EguiContexts, EguiPlugin, egui},
     core::mem,
 };
 

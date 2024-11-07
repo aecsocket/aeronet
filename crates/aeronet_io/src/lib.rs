@@ -68,7 +68,7 @@ pub struct Endpoint;
 ///
 /// After creating a session entity using your chosen IO layer, the entity may
 /// not start with the [`Session`] component - the session is *connecting* but
-/// is not *connected* yet. This connecting state is marked with the\
+/// is not *connected* yet. This connecting state is marked with the
 /// [`Endpoint`] component. Once the IO layer adds [`Session`], the entity is
 /// considered *connected*, and you can send and receive data.
 ///

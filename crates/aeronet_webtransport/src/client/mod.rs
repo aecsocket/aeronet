@@ -6,20 +6,20 @@ use {
     crate::{
         runtime::WebTransportRuntime,
         session::{
-            self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin, MIN_MTU,
+            self, MIN_MTU, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
         },
     },
     aeronet_io::{
+        Endpoint, IoSet, Session,
         connection::{DisconnectReason, Disconnected},
         packet::RecvPacket,
-        Endpoint, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bytes::Bytes,
     derive_more::{Display, Error, From},
     futures::channel::{mpsc, oneshot},
-    tracing::{debug_span, Instrument},
+    tracing::{Instrument, debug_span},
     web_time::Instant,
 };
 

@@ -170,7 +170,7 @@ impl PacketSeq {
 
 impl fmt::Debug for PacketSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("PacketSeq").field(&self.0 .0).finish()
+        f.debug_tuple("PacketSeq").field(&self.0.0).finish()
     }
 }
 
@@ -209,7 +209,7 @@ impl MessageSeq {
 
 impl fmt::Debug for MessageSeq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("MessageSeq").field(&self.0 .0).finish()
+        f.debug_tuple("MessageSeq").field(&self.0.0).finish()
     }
 }
 

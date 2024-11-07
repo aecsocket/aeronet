@@ -108,7 +108,6 @@ fn on_connected(
         TransportConfig {
             max_memory_usage: 64 * 1024,
             send_bytes_per_sec: 4 * 1024,
-            ..default()
         },
     ));
 }
