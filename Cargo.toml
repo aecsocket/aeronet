@@ -141,4 +141,4 @@ xwt-web-sys = "0.12.0"
 
 # aeronet_replicon
 
-bevy_replicon = { version = "0.28.3", default-features = false }
+bevy_replicon = { version = "0.28.4", default-features = false }
