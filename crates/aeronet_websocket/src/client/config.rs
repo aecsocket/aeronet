@@ -1,11 +1,11 @@
 use {
     alloc::sync::Arc,
     rustls::{
-        RootCertStore,
         client::danger::{ServerCertVerified, ServerCertVerifier},
         crypto::WebPkiSupportedAlgorithms,
+        RootCertStore,
     },
-    tokio_tungstenite::{Connector, tungstenite::protocol::WebSocketConfig},
+    tokio_tungstenite::{tungstenite::protocol::WebSocketConfig, Connector},
 };
 
 /// Configuration for a [`WebSocketClient`] using [`tokio_tungstenite`].
@@ -73,6 +73,8 @@ impl ClientConfigBuilder<WantsConnector> {
     /// This will allow connecting to both encrypted and unencrypted peers (both
     /// `ws` and `wss`), whereas [`with_no_encryption`] will only allow you to
     /// connect to unencrypted peers.
+    ///
+    /// [`with_no_encryption`]: ClientConfigBuilder::with_no_encryption
     pub fn with_no_cert_validation(self) -> ClientConfig {
         let config = rustls::ClientConfig::builder()
             .dangerous()

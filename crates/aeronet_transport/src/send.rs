@@ -213,7 +213,6 @@ fn flush_on(
         let header = PacketHeader {
             seq: packet_seq,
             acks: transport.peer_acks,
-            ack_delay: 0, // TODO
         };
         bytes_left.consume(header.encode_len()).ok()?;
         packet

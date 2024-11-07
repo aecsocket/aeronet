@@ -14,7 +14,7 @@ use {
     bitvec::vec::BitVec,
     core::{fmt, iter::FusedIterator},
     derive_more::{Display, Error},
-    octs::{Bytes, chunks::ByteChunksExt},
+    octs::{chunks::ByteChunksExt, Bytes},
     typesize::derive::TypeSize,
 };
 
@@ -96,9 +96,9 @@ pub enum ReassembleError {
         /// Index of the fragment received.
         index: usize,
     },
-    /// Not enough memory to buffer this fragment up.
-    #[display("not enough memory - {left} / {required} bytes")]
-    NotEnoughMemory {
+    /// Not enough free memory to buffer this fragment up.
+    #[display("out of memory - {left} / {required} bytes")]
+    OutOfMemory {
         /// Bytes of memory required.
         required: usize,
         /// Bytes of memory left.
@@ -229,7 +229,7 @@ impl FragmentReceiver {
         // and anyway, if we go over the memory limit later, we'll catch it
         // somewhere else
         if mem_required > mem_left {
-            return Err(ReassembleError::NotEnoughMemory {
+            return Err(ReassembleError::OutOfMemory {
                 required: mem_required,
                 left: mem_left,
             });
