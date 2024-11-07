@@ -14,7 +14,7 @@ use {
     bitvec::vec::BitVec,
     core::{fmt, iter::FusedIterator},
     derive_more::{Display, Error},
-    octs::{chunks::ByteChunksExt, Bytes},
+    octs::{Bytes, chunks::ByteChunksExt},
     typesize::derive::TypeSize,
 };
 

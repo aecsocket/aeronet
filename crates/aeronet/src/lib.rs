@@ -1,7 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
-use bevy_app::{prelude::*, PluginGroupBuilder};
+use bevy_app::{PluginGroupBuilder, prelude::*};
 pub use {aeronet_io as io, aeronet_transport as transport};
 
 /// Adds the default networking plugins.
