@@ -170,6 +170,7 @@ conditioning testing is more effective (and representative of real-world results
 conditioning is applied at the lowest level possible.
 
 [Bevy]: https://bevyengine.org
+[`aeronet_io`]: https://docs.rs/aeronet_io
 [`aeronet_channel`]: https://docs.rs/aeronet_channel
 [`aeronet_websocket`]: https://docs.rs/aeronet_websocket
 [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport

@@ -11,3 +11,4 @@ code in a non-networked environment. This is not intended to be used as the prim
 your app, as it cannot communicate over a network.
 
 [`aeronet_io`]: https://docs.rs/aeronet_io
+[`flume`]: https://docs.rs/flume
