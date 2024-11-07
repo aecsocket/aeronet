@@ -18,20 +18,13 @@ workspace = true
 [dependencies]
 move_box = { path = "../move_box" }
 
-# core
-
 bevy = { workspace = true }
 clap = { workspace = true }
 rand = { workspace = true }
-web-time = { workspace = true }
-
-# transport
 
 aeronet = { workspace = true }
 aeronet_websocket = { workspace = true, features = ["server"] }
 aeronet_webtransport = { workspace = true, features = ["server"] }
-
-# replication
 
 aeronet_replicon = { workspace = true, features = ["server"] }
 bevy_replicon = { workspace = true }

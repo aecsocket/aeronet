@@ -21,10 +21,19 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 [features]
 default = ["self-signed"]
 
+## Enables the `client` module.
 client = []
+
+## Enables the `server` module.
 server = ["dep:tokio-rustls"]
 
+## Allows generating self-signed server certificates using [`rcgen`].
+##
+## [`rcgen`]: https://docs.rs/rcgen
 self-signed = ["dep:rcgen"]
+
+## Enable this when generating docs.
+document-features = ["dep:document-features"]
 
 [dependencies]
 aeronet_io = { workspace = true }
@@ -41,6 +50,8 @@ web-time = { workspace = true }
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_hierarchy = { workspace = true }
+
+document-features = { workspace = true, optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 js-sys = { workspace = true }

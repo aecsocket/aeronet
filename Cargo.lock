@@ -96,6 +96,7 @@ dependencies = [
  "aeronet_io",
  "aeronet_transport",
  "bevy_app",
+ "document-features",
 ]
 
 [[package]]
@@ -144,6 +145,7 @@ dependencies = [
  "bevy_hierarchy",
  "bevy_reflect",
  "bevy_replicon",
+ "document-features",
  "tracing",
 ]
 
@@ -164,6 +166,7 @@ dependencies = [
  "bevy_time",
  "bitvec",
  "derive_more",
+ "document-features",
  "egui_plot",
  "either",
  "itertools 0.13.0",
@@ -191,6 +194,7 @@ dependencies = [
  "bytes",
  "cfg-if",
  "derive_more",
+ "document-features",
  "futures",
  "js-sys",
  "rcgen",
@@ -223,6 +227,7 @@ dependencies = [
  "bytes",
  "cfg-if",
  "derive_more",
+ "document-features",
  "futures",
  "gloo-timers",
  "js-sys",
@@ -3569,7 +3574,6 @@ dependencies = [
  "clap",
  "move_box",
  "rand",
- "web-time",
 ]
 
 [[package]]
