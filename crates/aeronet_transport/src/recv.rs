@@ -2,15 +2,15 @@
 
 use {
     crate::{
-        FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
         frag::{FragmentReceiver, ReassembleError},
         lane::{LaneIndex, LaneKind},
         packet::{Fragment, MessageSeq, PacketHeader, PacketSeq},
         rtt::RttEstimator,
         send,
         seq_buf::SeqBuf,
+        FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
     },
-    aeronet_io::{Session, time::SinceAppStart},
+    aeronet_io::Session,
     ahash::{HashMap, HashSet},
     bevy_ecs::prelude::*,
     core::{iter, num::Saturating, time::Duration},
@@ -18,7 +18,8 @@ use {
     either::Either,
     octs::{Buf, Read},
     tracing::{trace, trace_span},
-    typesize::{TypeSize, derive::TypeSize},
+    typesize::{derive::TypeSize, TypeSize},
+    web_time::Instant,
 };
 
 /// Buffer storing data received by a [`Transport`].
@@ -128,14 +129,14 @@ pub fn fuzz_recv_on(
 fn recv_on(
     transport: &mut Transport,
     config: &TransportConfig,
-    recv_at: SinceAppStart,
+    recv_at: Instant,
     mut packet: &[u8],
 ) -> Result<(), RecvError> {
     let header = packet
         .read::<PacketHeader>()
         .map_err(|_| RecvError::ReadHeader)?;
 
-    let span = trace_span!("recv", packet = header.seq.0.0);
+    let span = trace_span!("recv", packet = header.seq.0 .0);
     let _span = span.enter();
 
     trace!(len = packet.len(), "Received packet");
@@ -166,7 +167,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
     rtt: &'s mut RttEstimator,
     packet_acks_recv: &'s mut Saturating<usize>,
     msgs_acks_recv: &'s mut Saturating<usize>,
-    recv_at: SinceAppStart,
+    recv_at: Instant,
     ack_delay: Duration,
     acked_seqs: impl Iterator<Item = PacketSeq> + 's,
 ) -> impl Iterator<Item = MessageKey> + 's {
@@ -182,7 +183,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
             let span = trace_span!("ack", packet = acked_seq.0 .0);
             let _span = span.enter();
 
-            let packet_rtt = recv_at.duration_since(packet.flushed_at).saturating_sub(ack_delay);
+            let packet_rtt = recv_at.saturating_duration_since(packet.flushed_at).saturating_sub(ack_delay);
             rtt.update(packet_rtt);
 
             let rtt_now = rtt.get();
@@ -221,7 +222,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
 fn recv_frag(
     transport: &mut Transport,
     config: &TransportConfig,
-    recv_at: SinceAppStart,
+    recv_at: Instant,
     packet: &mut &[u8],
 ) -> Result<(), RecvError> {
     let frag = packet

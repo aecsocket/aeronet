@@ -5,9 +5,9 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
+        connection::{Disconnect, DisconnectReason, PeerAddr, DROP_DISCONNECT_REASON},
+        packet::{MtuTooSmall, PacketRtt, RecvPacket, IP_MTU},
         AeronetIoPlugin, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, PeerAddr},
-        packet::{IP_MTU, MtuTooSmall, PacketRtt, RecvPacket},
     },
     alloc::sync::Arc,
     bevy_app::prelude::*,
@@ -16,9 +16,9 @@ use {
     core::{num::Saturating, time::Duration},
     derive_more::{Display, Error},
     futures::{
-        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
+        FutureExt, SinkExt, StreamExt,
     },
     std::io,
     tracing::{trace, trace_span},

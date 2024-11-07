@@ -1,7 +1,7 @@
 //! Logic for connection and disconnection of a [`Session`].
 
 use {
-    crate::{Session, SessionEndpoint},
+    crate::{Endpoint, Session},
     bevy_app::prelude::*,
     bevy_derive::Deref,
     bevy_ecs::prelude::*,
@@ -158,7 +158,7 @@ pub struct LocalAddr(pub SocketAddr);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, Component)]
 pub struct PeerAddr(pub SocketAddr);
 
-fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>) {
+fn on_connecting(trigger: Trigger<OnAdd, Endpoint>) {
     let entity = trigger.entity();
     debug!("{entity} connecting");
 }

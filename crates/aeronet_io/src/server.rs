@@ -6,12 +6,13 @@
 //! server/client topology.
 
 use {
-    crate::{connection::Disconnect, time::SinceAppStart},
+    crate::connection::Disconnect,
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_hierarchy::{Children, DespawnRecursiveExt},
     bevy_reflect::prelude::*,
     tracing::debug,
+    web_time::Instant,
 };
 
 #[derive(Debug)]
@@ -19,8 +20,8 @@ pub(crate) struct ServerPlugin;
 
 impl Plugin for ServerPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<ServerEndpoint>()
-            .register_type::<Server>()
+        app.register_type::<Server>()
+            .register_type::<Opened>()
             .observe(on_opening)
             .observe(on_opened)
             .observe(on_close)
@@ -28,18 +29,8 @@ impl Plugin for ServerPlugin {
     }
 }
 
-/// Represents an [`Entity`] which is either already listening for, or is
-/// starting to listen for, client connections.
-///
-/// - If an entity only has [`ServerEndpoint`], it is opening but not opened
-///   yet.
-/// - If an entity has [`ServerEndpoint`] and [`Server`], it has opened.
-#[derive(Debug, Component, Reflect)]
-#[reflect(Component)]
-pub struct ServerEndpoint;
-
-/// Represents an [`Entity`] which listens for client connections, and spawns
-/// [`Session`] entities to communicate with those clients.
+/// Marker component for an [`Entity`] which listens for client connections, and
+/// spawns [`Session`]s to communicate with those clients.
 ///
 /// This represents the "server" part of the client/server networking model (a
 /// client is represented as just a [`Session`]). Its responsibility is to
@@ -47,17 +38,13 @@ pub struct ServerEndpoint;
 /// that this does not have to represent a *dedicated* server - you may run
 /// a server, and connect a client to that server, in the same app.
 ///
-/// The server starts in an opening state (when [`ServerEndpoint`] has been
-/// added but [`Server`] is not yet present), and transitions to either an
-/// opened state when [`Server`] is added, or fails to open and is [`Closed`].
-/// After the server is opened, the server should not close unless there is a
-/// fatal server-internal error which affects all connected clients - if a
-/// single client causes issues e.g. sending illegal data or breaking some
-/// invariant, that single client will be disconnected instead of the entire
-/// server being torn down.
-///
-/// To listen for when a server is opened, add an observer listening for
-/// [`Trigger<OnAdd, Server>`].
+/// The server starts in an opening state (when [`Server`] has been added but
+/// [`Opened`] is not yet present), and transitions to either an [`Opened`]
+/// state, or fails to open and is [`Closed`]. After the server is opened, the
+/// server should not close unless there is a fatal server-internal error which
+/// affects all connected clients - if a single client causes issues e.g.
+/// sending illegal data or breaking some invariant, that single client will be
+/// disconnected instead of the entire server being torn down.
 ///
 /// When a client connects, it is spawned as a [child] of the server entity.
 /// Therefore, to query for sessions spawned under a server, use
@@ -66,39 +53,28 @@ pub struct ServerEndpoint;
 /// all connected clients will be disconnected with the same reason.
 ///
 /// [child]: Children
-#[derive(Debug, Component, Reflect)]
-#[reflect(from_reflect = false, Component)]
-pub struct Server {
-    opened_at: SinceAppStart,
+#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
+#[reflect(Component)]
+pub struct Server;
+
+/// Component for a [`Server`] which is currently attempting to receive client
+/// connections and spawn [`Session`]s.
+///
+/// To listen for when a server is opened, add an observer listening for
+/// [`Trigger<OnAdd, Opened>`].
+#[derive(Debug, Clone, Copy, Component, Reflect)]
+#[reflect(Component)]
+pub struct Opened {
+    /// Instant at which the server was opened.
+    pub at: Instant,
 }
 
-impl Server {
-    /// Creates a new [`Server`].
-    ///
-    /// - `opened_at`: the instant at which the IO layer acknowledged that the
-    ///   server is now listening and ready to receive client connections.
+impl Opened {
+    /// Creates an [`Opened`] which indicates that the server was opened
+    /// [`now`](Instant::now).
     #[must_use]
-    pub const fn new(opened_at: SinceAppStart) -> Self {
-        Self { opened_at }
-    }
-
-    /// Returns when this server started accepting client connections.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use aeronet_io::{server::Server, time::SinceAppStart};
-    ///
-    /// let now: SinceAppStart = now();
-    /// let server = Server::new(now);
-    /// assert_eq!(now, server.opened_at());
-    /// # fn now() -> SinceAppStart {
-    /// #   SinceAppStart::from_raw(core::time::Duration::ZERO)
-    /// # }
-    /// ```
-    #[must_use]
-    pub const fn opened_at(&self) -> SinceAppStart {
-        self.opened_at
+    pub fn now() -> Self {
+        Self { at: Instant::now() }
     }
 }
 
@@ -197,12 +173,12 @@ impl<E> From<E> for CloseReason<E> {
     }
 }
 
-fn on_opening(trigger: Trigger<OnAdd, ServerEndpoint>) {
+fn on_opening(trigger: Trigger<OnAdd, Server>) {
     let server = trigger.entity();
     debug!("{server} opening");
 }
 
-fn on_opened(trigger: Trigger<OnAdd, Server>) {
+fn on_opened(trigger: Trigger<OnAdd, Opened>) {
     let server = trigger.entity();
     debug!("{server} opened");
 }

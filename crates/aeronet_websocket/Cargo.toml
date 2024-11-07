@@ -36,11 +36,11 @@ derive_more = { workspace = true, features = ["display", "error", "from"] }
 futures = { workspace = true }
 replace_with = { workspace = true }
 tracing = { workspace = true }
+web-time = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_hierarchy = { workspace = true }
-bevy_time = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 js-sys = { workspace = true }

@@ -2,7 +2,7 @@
 
 use {
     crate::{
-        FlushedPacket, FragmentPath, MessageKey, Transport, frag,
+        frag,
         lane::{LaneIndex, LaneKind, LaneReliability},
         limit::Limit,
         packet::{
@@ -10,16 +10,17 @@ use {
             PacketHeader, PacketSeq,
         },
         rtt::RttEstimator,
+        FlushedPacket, FragmentPath, MessageKey, Transport,
     },
-    aeronet_io::{Session, time::SinceAppStart},
+    aeronet_io::Session,
     ahash::HashMap,
     bevy_ecs::prelude::*,
-    bevy_time::{Real, Time},
     core::iter,
     octs::{Bytes, EncodeLen, Write},
     std::collections::hash_map::Entry,
     tracing::{trace, trace_span},
     typesize::derive::TypeSize,
+    web_time::Instant,
 };
 
 /// Allows buffering up messages to be sent on a [`Transport`].
@@ -47,8 +48,8 @@ pub(crate) struct SentFragment {
     position: FragmentPosition,
     #[typesize(with = Bytes::len)]
     payload: Bytes,
-    sent_at: SinceAppStart,
-    next_flush_at: SinceAppStart,
+    sent_at: Instant,
+    next_flush_at: Instant,
 }
 
 impl TransportSend {
@@ -99,12 +100,7 @@ impl TransportSend {
     /// responsible for knowing how many lanes you have.
     ///
     /// [`TransportSet::Flush`]: crate::TransportSet::Flush
-    pub fn push(
-        &mut self,
-        lane_index: LaneIndex,
-        msg: Bytes,
-        now: SinceAppStart,
-    ) -> Option<MessageKey> {
+    pub fn push(&mut self, lane_index: LaneIndex, msg: Bytes, now: Instant) -> Option<MessageKey> {
         let lane = &mut self.lanes[usize::from(lane_index)];
         let msg_seq = lane.next_msg_seq;
         let Entry::Vacant(entry) = lane.sent_msgs.entry(msg_seq) else {
@@ -135,8 +131,8 @@ impl TransportSend {
     }
 }
 
-pub(crate) fn flush(mut sessions: Query<(&mut Session, &mut Transport)>, time: Res<Time<Real>>) {
-    let now = SinceAppStart::now(&time);
+pub(crate) fn flush(mut sessions: Query<(&mut Session, &mut Transport)>) {
+    let now = Instant::now();
     for (mut session, mut transport) in &mut sessions {
         let packet_mtu = session.mtu();
         session
@@ -153,7 +149,7 @@ pub fn fuzz_flush_on(transport: &mut Transport, mtu: usize) -> impl Iterator<Ite
 
 fn flush_on(
     transport: &mut Transport,
-    now: SinceAppStart,
+    now: Instant,
     mtu: usize,
 ) -> impl Iterator<Item = Bytes> + '_ {
     // collect the paths of the frags to send, along with how old they are
@@ -199,7 +195,7 @@ fn flush_on(
             .write(&header)
             .expect("should grow the buffer when writing over capacity");
 
-        let span = trace_span!("flush", packet = packet_seq.0.0);
+        let span = trace_span!("flush", packet = packet_seq.0 .0);
         let _span = span.enter();
 
         // collect the paths of the frags we want to put into this packet
@@ -236,12 +232,13 @@ fn flush_on(
         }
 
         trace!(num_frags = packet_frags.len(), "Flushed packet");
-        transport
-            .flushed_packets
-            .insert(packet_seq.0.0, FlushedPacket {
+        transport.flushed_packets.insert(
+            packet_seq.0 .0,
+            FlushedPacket {
                 flushed_at: now,
                 frags: packet_frags.into_boxed_slice(),
-            });
+            },
+        );
 
         transport.next_packet_seq += PacketSeq::new(1);
         // self.next_ack_at = now + MAX_ACK_DELAY; // TODO
@@ -251,10 +248,10 @@ fn flush_on(
 }
 
 fn frag_paths_in_lane(
-    now: SinceAppStart,
+    now: Instant,
     lane_index: usize,
     lane: &mut Lane,
-) -> impl Iterator<Item = (FragmentPath, SinceAppStart)> + '_ {
+) -> impl Iterator<Item = (FragmentPath, Instant)> + '_ {
     let lane_index = LaneIndex::try_from(lane_index).expect("lane index too large");
 
     // drop any messages which have no frags to send
@@ -287,7 +284,7 @@ fn frag_paths_in_lane(
 }
 
 fn write_frag_at_path(
-    now: SinceAppStart,
+    now: Instant,
     rtt: &RttEstimator,
     lanes: &mut [Lane],
     bytes_left: &mut impl Limit,

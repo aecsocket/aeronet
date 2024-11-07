@@ -66,7 +66,7 @@ either = "1.13.0"
 futures = "0.3.30"
 itertools = "0.13.0"
 octs = "0.4.2"
-oneshot = { version = "0.1.8", default-features = false }
+oneshot = "0.1.8"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 replace_with = "0.1.7"
@@ -74,9 +74,9 @@ ringbuf = "0.4.1"
 serde = { version = "1.0.204", features = ["derive"] }
 size_format = "1.0.2"
 static_assertions = "1.1.0"
-sync_wrapper = { version = "1.0.1", default-features = false }
+sync_wrapper = "1.0.1"
 tracing = { version = "0.1.40", default-features = false }
-typesize = { version = "0.1.10", default-features = false }
+typesize = "0.1.10"
 web-time = "1.1.0"
 
 # native
@@ -101,7 +101,6 @@ bevy_ecs = { version = "0.14.2", default-features = false }
 bevy_hierarchy = { version = "0.14.2", default-features = false }
 bevy_reflect = { version = "0.14.2", default-features = false }
 bevy_time = { version = "0.14.2", default-features = false }
-bevy_utils = { version = "0.14.2", default-features = false }
 
 bevy-tokio-tasks = "0.14.0"
 bevy_egui = "0.29.0"
@@ -114,7 +113,7 @@ tokio-rustls = "0.26.0"
 
 # aeronet_channel
 
-crossbeam-channel = { version = "0.5.13", default-features = false }
+flume = "0.11.0"
 
 # aeronet_steam
 

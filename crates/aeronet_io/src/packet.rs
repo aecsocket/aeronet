@@ -37,7 +37,7 @@
 //! minus protocol overhead.
 
 use {
-    crate::{IoSet, Session, time::SinceAppStart},
+    crate::{IoSet, Session},
     bevy_app::prelude::*,
     bevy_derive::Deref,
     bevy_ecs::prelude::*,
@@ -46,6 +46,7 @@ use {
     core::{num::Saturating, time::Duration},
     derive_more::{Add, AddAssign, Display, Error, Sub, SubAssign},
     tracing::warn,
+    web_time::Instant,
 };
 
 #[derive(Debug)]
@@ -68,7 +69,7 @@ pub struct RecvPacket {
     /// This may be earlier than when the packet was pushed into
     /// [`Session::recv`], if for example the packet was received in an async
     /// task and later forwarded to a [`Session`] in the Bevy world.
-    pub recv_at: SinceAppStart,
+    pub recv_at: Instant,
     /// Raw byte data of this packet.
     pub payload: Bytes,
 }

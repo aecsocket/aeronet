@@ -4,16 +4,15 @@
 pub mod connection;
 pub mod packet;
 pub mod server;
-pub mod time;
 
-pub use {anyhow, bytes};
+pub use {anyhow, bytes, web_time};
 use {
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bytes::Bytes,
     packet::{MtuTooSmall, PacketStats, RecvPacket},
-    time::SinceAppStart,
+    web_time::Instant,
 };
 
 /// Sets up the IO layer functionality.
@@ -24,8 +23,7 @@ pub struct AeronetIoPlugin;
 
 impl Plugin for AeronetIoPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<SessionEndpoint>()
-            .register_type::<Session>()
+        app.register_type::<Session>()
             .configure_sets(PreUpdate, IoSet::Poll)
             .configure_sets(PostUpdate, IoSet::Flush)
             .add_plugins((
@@ -36,16 +34,14 @@ impl Plugin for AeronetIoPlugin {
     }
 }
 
-/// Represents an [`Entity`] which has either already established, or is
-/// establishing, a connection to a peer.
+/// Represents an [`Entity`] which is establishing a connection to a peer, so
+/// that it may open a [`Session`] in the future.
 ///
-/// - If an entity only has [`SessionEndpoint`], it is connecting but not
-///   connected yet.
-/// - If an entity has [`SessionEndpoint`] and [`Endpoint`], it has connected to
-///   a peer.
-#[derive(Debug, Component, Reflect)]
+/// This is effectively a marker component for a [`Session`] which isn't
+/// connected yet.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Component, Reflect)]
 #[reflect(Component)]
-pub struct SessionEndpoint;
+pub struct Endpoint;
 
 /// Represents an [`Entity`] which can be used to transfer [packets] over a
 /// connection to a peer session, potentially over a network.
@@ -72,9 +68,9 @@ pub struct SessionEndpoint;
 ///
 /// After creating a session entity using your chosen IO layer, the entity may
 /// not start with the [`Session`] component - the session is *connecting* but
-/// is not *connected* yet. This connecting state is marked with the
-/// [`SessionEndpoint`] component. Once the IO layer adds [`Session`], the
-/// entity is considered *connected*, and you can send and receive data.
+/// is not *connected* yet. This connecting state is marked with the\
+/// [`Endpoint`] component. Once the IO layer adds [`Session`], the entity is
+/// considered *connected*, and you can send and receive data.
 ///
 /// Note that [`Session`] is not a *guarantee* that you can send and receive
 /// data - it is always possible that operations on OS sockets fail, the network
@@ -110,9 +106,9 @@ pub struct SessionEndpoint;
 /// [`Disconnect`]: connection::Disconnect
 #[derive(Debug, Component, Reflect)]
 #[reflect(from_reflect = false, Component)]
-// TODO: required component SessionEndpoint
+// TODO: required component Endpoint
 pub struct Session {
-    connected_at: SinceAppStart,
+    connected_at: Instant,
     min_mtu: usize,
     mtu: usize,
     /// Total packet statistics of this session up to now.
@@ -151,7 +147,7 @@ impl Session {
     ///
     /// [`IP_MTU`]: packet::IP_MTU
     #[must_use]
-    pub fn new(connected_at: SinceAppStart, min_mtu: usize) -> Self {
+    pub fn new(connected_at: Instant, min_mtu: usize) -> Self {
         Self {
             connected_at,
             min_mtu,
@@ -167,17 +163,14 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_io::{Session, time::SinceAppStart};
+    /// use {aeronet_io::Session, web_time::Instant};
     ///
-    /// let now: SinceAppStart = now();
+    /// let now = Instant::now();
     /// let session = Session::new(now, 1000);
     /// assert_eq!(now, session.connected_at());
-    /// # fn now() -> SinceAppStart {
-    /// #   SinceAppStart::from_raw(core::time::Duration::ZERO)
-    /// # }
     /// ```
     #[must_use]
-    pub const fn connected_at(&self) -> SinceAppStart {
+    pub const fn connected_at(&self) -> Instant {
         self.connected_at
     }
 
@@ -189,13 +182,10 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_io::Session;
+    /// use {aeronet_io::Session, web_time::Instant};
     ///
-    /// let session = Session::new(now(), 1000);
+    /// let session = Session::new(Instant::now(), 1000);
     /// assert_eq!(1000, session.min_mtu());
-    /// # fn now() -> aeronet_io::time::SinceAppStart {
-    /// #   aeronet_io::time::SinceAppStart::from_raw(core::time::Duration::ZERO)
-    /// # }
     /// ```
     #[must_use]
     pub const fn min_mtu(&self) -> usize {
@@ -209,16 +199,13 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_io::Session;
+    /// use {aeronet_io::Session, web_time::Instant};
     ///
-    /// let mut session = Session::new(now(), 1000);
+    /// let mut session = Session::new(Instant::now(), 1000);
     /// assert_eq!(1000, session.mtu());
     ///
     /// session.set_mtu(1400);
     /// assert_eq!(1400, session.mtu());
-    /// # fn now() -> aeronet_io::time::SinceAppStart {
-    /// #   aeronet_io::time::SinceAppStart::from_raw(core::time::Duration::ZERO)
-    /// # }
     /// ```
     #[must_use]
     pub const fn mtu(&self) -> usize {
@@ -236,16 +223,13 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_io::Session;
+    /// use {aeronet_io::Session, web_time::Instant};
     ///
-    /// let mut session = Session::new(now(), 1000);
+    /// let mut session = Session::new(Instant::now(), 1000);
     /// session.set_mtu(1200).unwrap();
     /// assert_eq!(1200, session.mtu());
     ///
     /// session.set_mtu(800).unwrap_err();
-    /// # fn now() -> aeronet_io::time::SinceAppStart {
-    /// #   aeronet_io::time::SinceAppStart::from_raw(core::time::Duration::ZERO)
-    /// # }
     /// ```
     pub fn set_mtu(&mut self, mtu: usize) -> Result<(), MtuTooSmall> {
         if mtu >= self.min_mtu {
