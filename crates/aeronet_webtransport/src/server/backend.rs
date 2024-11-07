@@ -1,21 +1,22 @@
 use {
     super::{ServerError, SessionResponse, ToConnected, ToConnecting, ToOpen},
     crate::{
-        WebTransportRuntime,
         session::{SessionBackend, SessionError, SessionMeta},
+        WebTransportRuntime,
     },
-    aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
+    aeronet_io::connection::DisconnectReason,
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
-        SinkExt,
         channel::{mpsc, oneshot},
         never::Never,
+        SinkExt,
     },
-    tracing::{Instrument, debug, debug_span},
+    tracing::{debug, debug_span, Instrument},
+    web_time::Instant,
     wtransport::{
-        Endpoint, ServerConfig,
         endpoint::{IncomingSession, SessionRequest},
+        Endpoint, ServerConfig,
     },
     xwt_core::prelude::*,
 };
@@ -124,7 +125,7 @@ async fn handle_session(
     debug!("Connected");
 
     let (send_meta, recv_meta) = mpsc::channel::<SessionMeta>(1);
-    let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
+    let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<(Instant, Bytes)>();
     let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
     let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
     let next = ToConnected {

@@ -4,19 +4,20 @@ mod backend;
 
 use {
     crate::{
+        session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin, MTU},
         WebSocketRuntime,
-        session::{self, MTU, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
     },
     aeronet_io::{
-        IoSet, Session, SessionEndpoint,
         connection::{DisconnectReason, Disconnected},
+        time::SinceAppStart,
+        IoSet, Session, SessionEndpoint,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
+    bevy_time::{Real, Time},
     derive_more::{Display, Error, From},
     futures::{channel::oneshot, never::Never},
-    tracing::{Instrument, debug_span},
-    web_time::Instant,
+    tracing::{debug_span, Instrument},
 };
 
 cfg_if::cfg_if! {
@@ -177,11 +178,15 @@ struct ToConnected {
     frontend: SessionFrontend,
 }
 
-fn poll_clients(mut commands: Commands, mut frontends: Query<(Entity, &mut WebSocketClient)>) {
+fn poll_clients(
+    mut commands: Commands,
+    time: Res<Time<Real>>,
+    mut frontends: Query<(Entity, &mut WebSocketClient)>,
+) {
     for (session, mut frontend) in &mut frontends {
         replace_with::replace_with_or_abort(&mut frontend.0, |state| match state {
             ClientFrontend::Connecting { recv_dc, recv_next } => {
-                poll_connecting(&mut commands, session, recv_dc, recv_next)
+                poll_connecting(&mut commands, &time, session, recv_dc, recv_next)
             }
             ClientFrontend::Connected { mut recv_dc } => {
                 if should_disconnect(&mut commands, session, &mut recv_dc) {
@@ -197,6 +202,7 @@ fn poll_clients(mut commands: Commands, mut frontends: Query<(Entity, &mut WebSo
 
 fn poll_connecting(
     commands: &mut Commands,
+    time: &Time<Real>,
     session: Entity,
     mut recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
     mut recv_next: oneshot::Receiver<ToConnected>,
@@ -209,13 +215,14 @@ fn poll_connecting(
         return ClientFrontend::Connecting { recv_dc, recv_next };
     };
 
+    let now = SinceAppStart::now(time);
     commands.entity(session).insert((
         WebSocketIo {
             recv_packet_b2f: next.frontend.recv_packet_b2f,
             send_packet_f2b: next.frontend.send_packet_f2b,
             send_user_dc: Some(next.frontend.send_user_dc),
         },
-        Session::new(Instant::now(), MTU),
+        Session::new(now, MTU),
         #[cfg(not(target_family = "wasm"))]
         aeronet_io::connection::LocalAddr(next.local_addr),
         #[cfg(not(target_family = "wasm"))]

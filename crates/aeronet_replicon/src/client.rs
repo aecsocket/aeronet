@@ -2,7 +2,7 @@
 
 use {
     crate::convert,
-    aeronet_io::{Session, SessionEndpoint, connection::Disconnect, time::SinceAppStart},
+    aeronet_io::{connection::Disconnect, time::SinceAppStart, Session, SessionEndpoint},
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -194,8 +194,9 @@ fn poll(
 fn flush(
     mut replicon_client: ResMut<RepliconClient>,
     mut clients: Query<&mut Transport, With<AeronetRepliconClient>>,
+    time: Res<Time<Real>>,
 ) {
-    let now = Instant::now();
+    let now = SinceAppStart::now(&time);
     for (channel_id, msg) in replicon_client.drain_sent() {
         let lane_index = convert::to_lane_index(channel_id);
         for mut transport in &mut clients {
