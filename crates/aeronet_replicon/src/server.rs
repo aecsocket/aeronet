@@ -3,10 +3,10 @@
 use {
     crate::convert,
     aeronet_io::{
+        Session,
         connection::{DisconnectReason, Disconnected},
         server::{Server, ServerEndpoint},
         web_time::Instant,
-        Session,
     },
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,

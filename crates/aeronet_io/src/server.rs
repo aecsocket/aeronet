@@ -78,8 +78,8 @@ pub struct Server {
 impl Server {
     /// Creates a new [`Server`].
     ///
-    /// - `opened_at`: the instant at which the IO layer acknowledged that
-    ///   the server is now ready to accept client connections.
+    /// - `opened_at`: the instant at which the IO layer acknowledged that the
+    ///   server is now ready to accept client connections.
     #[must_use]
     pub const fn new(opened_at: Instant) -> Self {
         Self { opened_at }
@@ -223,8 +223,8 @@ mod tests {
     use {
         super::*,
         crate::{
-            connection::{DisconnectReason, Disconnected},
             AeronetIoPlugin,
+            connection::{DisconnectReason, Disconnected},
         },
         bevy_hierarchy::BuildWorldChildren,
     };

@@ -3,12 +3,12 @@
 
 use {
     aeronet_io::{
-        connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         Session, SessionEndpoint,
+        connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    bevy_egui::{EguiContexts, EguiPlugin, egui},
     core::mem,
 };
 
