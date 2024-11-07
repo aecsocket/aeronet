@@ -100,6 +100,32 @@ impl TransportSend {
     /// responsible for knowing how many lanes you have.
     ///
     /// [`TransportSet::Flush`]: crate::TransportSet::Flush
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use {
+    ///     aeronet_transport::{Transport, lane::LaneIndex},
+    ///     web_time::Instant,
+    /// };
+    ///
+    /// const SEND_LANE: LaneIndex = LaneIndex(0);
+    ///
+    /// fn send_msgs(transport: &mut Transport) {
+    ///     let msg_key = transport
+    ///         .send
+    ///         .push(SEND_LANE, b"hello world"[..], Instant::now())
+    ///         .unwrap();
+    ///
+    ///     // later...
+    ///
+    ///     for acked_msg in transport.recv_acks.drain() {
+    ///         if acked_msg == msg_key {
+    ///             println!("Peer has received my sent message!");
+    ///         }
+    ///     }
+    /// }
+    /// ```
     pub fn push(&mut self, lane_index: LaneIndex, msg: Bytes, now: Instant) -> Option<MessageKey> {
         let lane = &mut self.lanes[usize::from(lane_index)];
         let msg_seq = lane.next_msg_seq;
@@ -115,7 +141,6 @@ impl TransportSend {
                     Some(SentFragment {
                         position,
                         payload,
-                        // TODO is this right?
                         sent_at: now,
                         next_flush_at: now,
                     })
@@ -225,8 +250,7 @@ fn flush_on(
             }
         }
 
-        let send_empty = !sent_packet_yet; // TODO //&& now >= self.next_ack_at;
-        let should_send = !packet_frags.is_empty() || send_empty;
+        let should_send = !packet_frags.is_empty() || !sent_packet_yet;
         if !should_send {
             return None;
         }
@@ -241,7 +265,6 @@ fn flush_on(
         );
 
         transport.next_packet_seq += PacketSeq::new(1);
-        // self.next_ack_at = now + MAX_ACK_DELAY; // TODO
         sent_packet_yet = true;
         Some(Bytes::from(packet))
     })

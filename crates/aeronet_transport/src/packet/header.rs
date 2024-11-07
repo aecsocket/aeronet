@@ -46,9 +46,7 @@ impl Decode for PacketHeader {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use octs::test::*;
+    use {super::*, octs::test::*};
 
     #[test]
     fn encode_decode() {

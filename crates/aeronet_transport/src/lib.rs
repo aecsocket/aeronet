@@ -24,7 +24,7 @@ use {
     bevy_ecs::{prelude::*, schedule::SystemSet},
     bevy_reflect::Reflect,
     bevy_time::{Real, Time},
-    core::{num::Saturating, time::Duration},
+    core::num::Saturating,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
     limit::TokenBucket,
@@ -68,6 +68,36 @@ impl Plugin for AeronetTransportPlugin {
     }
 }
 
+/// Manages sending and receiving messages on top of an IO layer.
+///
+/// The IO layer allows you to send and receive packets (see
+/// [`aeronet_io::packet`]), but packets do not provide enough guarantees to be
+/// usable for many use cases. [`Transport`] builds on top of packets, allowing
+/// you to send and receive messages with more reliabiliy and ordering
+/// guarantees via lanes (see [`lane`]).
+///
+/// # Lifecycle
+///
+/// After [`Session`] is added to your entity, you should create and add a
+/// [`Transport`] component - use a [`Trigger<OnAdd, Session>`] for this. If
+/// you are using a crate like `aeronet_replicon`, this step will already be
+/// handled for you. You can also add or mutate [`TransportConfig`] at any
+/// time during the session lifetime to change its configuration.
+///
+/// The [`Transport`] itself may disconnect the session prematurely if there
+/// is an error such as running out of memory or buffering too many messages.
+///
+/// # Usage
+///
+/// - Use [`Transport::send`] to enqueue messages for sending, and to get a key
+///   identifying the sent messages
+/// - Use [`Transport::recv_msgs`] to drain messages received from the IO layer
+/// - Use [`Transport::recv_acks`] to drain message acknowledgements for
+///   messages which you have sent out, and that the peer has now acknowledged
+///   that they have received.
+///
+/// The `recv` buffers must be drained on every update, otherwise some may be
+/// lost, leading to incorrect behavior, and a warning will be logged.
 #[derive(Debug, Component, TypeSize)]
 // TODO: required component TransportConfig
 pub struct Transport {
@@ -122,7 +152,6 @@ pub struct TransportConfig {
     ///
     /// By default, this is [`usize::MAX`].
     pub send_bytes_per_sec: usize,
-    pub ack_delay: Duration,
 }
 
 impl Default for TransportConfig {
@@ -130,7 +159,6 @@ impl Default for TransportConfig {
         Self {
             max_memory_usage: 4 * 1024 * 1024,
             send_bytes_per_sec: usize::MAX,
-            ack_delay: Duration::from_millis(250),
         }
     }
 }
