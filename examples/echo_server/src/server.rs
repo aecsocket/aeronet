@@ -1,13 +1,13 @@
 use {
     aeronet::{
         io::{
+            Session,
             bytes::Bytes,
             connection::{DisconnectReason, Disconnected, LocalAddr},
-            server::Server,
-            time::SinceAppStart,
-            Session,
+            server::Opened,
+            web_time,
         },
-        transport::{lane::LaneKind, AeronetTransportPlugin, Transport},
+        transport::{AeronetTransportPlugin, Transport, lane::LaneKind},
     },
     aeronet_websocket::server::{ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},
@@ -74,7 +74,7 @@ fn setup(mut commands: Commands) {
 }
 
 // Observe state change events using `Trigger`s
-fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
+fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
     let server = trigger.entity();
     let local_addr = servers
         .get(server)
@@ -87,7 +87,6 @@ fn on_connected(
     sessions: Query<&Session>,
     clients: Query<&Parent>,
     mut commands: Commands,
-    time: Res<Time<Real>>,
 ) {
     let client = trigger.entity();
     let session = sessions
@@ -101,13 +100,18 @@ fn on_connected(
 
     // Add `Transport` and configure it with our lanes so that we can send
     // and receive messages on this client.
-
-    // `SinceAppStart` is a Bevy-app-specific version of `Instant`,
-    // whose epoch is `Time<Real>::startup`.
-    // We use this for timekeeping in sessions and transports.
-    let now = SinceAppStart::now(&time);
-    let transport = Transport::new(session, LANES, LANES, now)
-        .expect("packet MTU should be large enough to support transport");
+    let transport = Transport::new(
+        session,
+        LANES,
+        LANES,
+        // Don't use `std::time::Instant::now`!
+        // On WASM that function will panic.
+        // Instead, use the re-exported `web_time`.
+        // (We're writing a server, so we'll never run it on WASM.
+        // But still, use `web_time` for consistency with the client code.)
+        web_time::Instant::now(),
+    )
+    .expect("packet MTU should be large enough to support transport");
     commands.entity(client).insert(transport);
 }
 
@@ -143,7 +147,6 @@ fn echo_messages(
                           (excludes local dedicated clients) */
         ),
     >,
-    time: Res<Time<Real>>,
 ) {
     for (client, mut transport) in &mut clients {
         // Explicitly deref the `Mut<Transport>` to get a `&mut Transport`
@@ -165,7 +168,7 @@ fn echo_messages(
             // We ignore the resulting `MessageKey`, since we don't need it.
             _ = transport
                 .send
-                .push(msg.lane, Bytes::from(reply), SinceAppStart::now(&time));
+                .push(msg.lane, Bytes::from(reply), web_time::Instant::now());
         }
 
         for _ in transport.recv_acks.drain() {

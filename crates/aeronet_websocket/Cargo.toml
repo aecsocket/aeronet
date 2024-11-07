@@ -27,7 +27,7 @@ server = ["dep:tokio-rustls"]
 self-signed = ["dep:rcgen"]
 
 [dependencies]
-aeronet_io = { workspace = true, features = ["std"] }
+aeronet_io = { workspace = true }
 
 anyhow = { workspace = true }
 bytes = { workspace = true }
@@ -36,7 +36,6 @@ derive_more = { workspace = true, features = ["display", "error", "from"] }
 futures = { workspace = true }
 replace_with = { workspace = true }
 tracing = { workspace = true }
-web-time = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }

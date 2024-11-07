@@ -7,14 +7,12 @@ pub(crate) mod backend;
 use {
     crate::WebSocketRuntime,
     aeronet_io::{
-        connection::{Disconnect, DROP_DISCONNECT_REASON},
-        packet::{RecvPacket, IP_MTU},
-        time::SinceAppStart,
         AeronetIoPlugin, IoSet, Session,
+        connection::{DROP_DISCONNECT_REASON, Disconnect},
+        packet::{IP_MTU, RecvPacket},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
-    bevy_time::{Real, Time},
     bytes::Bytes,
     core::num::Saturating,
     derive_more::{Display, Error},
@@ -90,8 +88,7 @@ impl Plugin for WebSocketSessionPlugin {
 /// By default, [`DEFAULT_PACKET_BUF_CAP`] is used as the capacity.
 #[derive(Debug, Component)]
 pub struct WebSocketIo {
-    pub(crate) epoch: Instant,
-    pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<(Instant, Bytes)>,
+    pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
 }
@@ -153,20 +150,17 @@ pub const MTU: usize = IP_MTU - 60 - 40 - 14;
 
 #[derive(Debug)]
 pub(crate) struct SessionFrontend {
-    pub recv_packet_b2f: mpsc::UnboundedReceiver<(Instant, Bytes)>,
+    pub recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     pub send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub send_user_dc: oneshot::Sender<String>,
 }
 
 // TODO: required components
-fn on_io_added(
-    trigger: Trigger<OnAdd, WebSocketIo>,
-    mut commands: Commands,
-    time: Res<Time<Real>>,
-) {
+fn on_io_added(trigger: Trigger<OnAdd, WebSocketIo>, mut commands: Commands) {
     let entity = trigger.entity();
-    let now = SinceAppStart::now(&time);
-    commands.entity(entity).insert(Session::new(now, IP_MTU));
+    commands
+        .entity(entity)
+        .insert(Session::new(Instant::now(), IP_MTU));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebSocketIo>) {
@@ -188,15 +182,14 @@ pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut WebSocketIo)>
 
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        while let Ok(Some((recv_at, payload))) = io.recv_packet_b2f.try_next() {
+        while let Ok(Some(packet)) = io.recv_packet_b2f.try_next() {
             num_packets += 1;
             session.stats.packets_recv += 1;
 
-            num_bytes += payload.len();
-            session.stats.bytes_recv += payload.len();
+            num_bytes += packet.payload.len();
+            session.stats.bytes_recv += packet.payload.len();
 
-            let recv_at = SinceAppStart::from_raw(recv_at.duration_since(io.epoch));
-            session.recv.push(RecvPacket { recv_at, payload });
+            session.recv.push(packet);
         }
 
         trace!(

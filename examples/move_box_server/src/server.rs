@@ -1,8 +1,8 @@
 use {
     aeronet::io::{
-        connection::{DisconnectReason, Disconnected, LocalAddr},
-        server::Server,
         Session,
+        connection::{DisconnectReason, Disconnected, LocalAddr},
+        server::Opened,
     },
     aeronet_replicon::server::{AeronetRepliconServer, AeronetRepliconServerPlugin},
     aeronet_websocket::server::{WebSocketServer, WebSocketServerPlugin},
@@ -147,7 +147,7 @@ fn web_socket_config(args: &Args) -> WebSocketServerConfig {
 // server logic
 //
 
-fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
+fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
     let server = trigger.entity();
     let local_addr = servers
         .get(server)
