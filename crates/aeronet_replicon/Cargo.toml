@@ -18,8 +18,14 @@ workspace = true
 all-features = true
 
 [features]
+## Enables support for `bevy_replicon/client`.
 client = ["bevy_replicon/client"]
+
+## Enables support for `bevy_replicon/server`.
 server = ["bevy_replicon/server"]
+
+## Enable this when generating docs.
+document-features = ["dep:document-features"]
 
 [dependencies]
 aeronet_io = { workspace = true }
@@ -34,3 +40,5 @@ bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }
 
 bevy_replicon = { workspace = true }
+
+document-features = { workspace = true, optional = true }

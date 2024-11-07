@@ -20,10 +20,17 @@ rustflags = ["--cfg=web_sys_unstable_apis"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [features]
+## Enables the `client` module.
 client = []
+
+## Enables the `server` module.
 server = []
 
+## Enables `wtransport/dangerous-configuration`.
 dangerous-configuration = ["wtransport/dangerous-configuration"]
+
+## Enable this when generating docs.
+document-features = ["dep:document-features"]
 
 [dependencies]
 aeronet_io = { workspace = true }
@@ -43,6 +50,8 @@ bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }
+
+document-features = { workspace = true, optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gloo-timers = { workspace = true, features = ["futures"] }

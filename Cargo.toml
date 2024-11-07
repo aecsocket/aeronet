@@ -60,6 +60,7 @@ bytes = { version = "1.6.1", default-features = false }
 cfg-if = "1.0.0"
 clap = { version = "4.5.11", features = ["derive"] }
 derive_more = { version = "1.0.0", default-features = false }
+document-features = "0.2.10"
 egui = "0.28.1"
 egui_plot = "0.28.1"
 either = "1.13.0"

@@ -18,13 +18,25 @@ workspace = true
 all-features = true
 
 [features]
+## Allows serializing and deserializing some types with [`serde`]
+##
+## [`serde`]: https://docs.rs/serde
 serde = ["dep:serde"]
+
+## Allows using the `visualizer` module, which draws session statistics using [`bevy_egui`] and
+## [`egui_plot`]
+##
+## [`bevy_egui`]: https://docs.rs/bevy_egui
+## [`egui_plot`]: https://docs.rs/egui_plot
 visualizer = [
   "dep:bevy_egui",
   "dep:egui_plot",
   "dep:itertools",
   "dep:size_format",
 ]
+
+## Enable this when generating docs.
+document-features = ["dep:document-features"]
 
 [dependencies]
 aeronet_io = { workspace = true }
@@ -59,3 +71,5 @@ bevy_egui = { workspace = true, optional = true }
 egui_plot = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 size_format = { workspace = true, optional = true }
+
+document-features = { workspace = true, optional = true }

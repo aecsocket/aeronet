@@ -1,12 +1,14 @@
 # `move_box`
 
-Demo app where clients can connect to a server using [`aeronet_webtransport`] or
-[`aeronet_websocket`] and control a box with the arrow keys. Box positions are synced between
-clients and servers using [`bevy_replicon`] with the [`aeronet_replicon`] backend.
+Demo app where clients can connect to a server and control a box with the arrow keys. Box positions
+are synced between clients and servers using [`bevy_replicon`] with the [`aeronet_replicon`]
+backend.
+
+This example currently runs the following IO layers at once:
+- [`aeronet_webtransport`] on port `25565`
+- [`aeronet_websocket`] on port `25566`
 
 Based on <https://github.com/projectharmonia/bevy_replicon_renet/blob/master/examples/simple_box.rs>.
-
-TODO: needs to be updated
 
 # Usage
 
@@ -45,6 +47,8 @@ Eventually, when Firefox is supported but you still have problems running the cl
 
 ## Connecting
 
+### WebTransport
+
 *See [`aeronet_webtransport/README.md`] for more details.*
 
 The server binds to `0.0.0.0:25565` by default. To connect to the server from the client, you must
@@ -68,6 +72,11 @@ In the browser, egui may not let you paste in the hash. You can get around this 
 In the native client, if you leave the certificate hash field blank, the client will simply not
 validate certificates. **This is dangerous** and should not be done in your actual app, which is why
 it's locked behind the `dangerous-configuration` flag, but is done for convenience in this example.
+
+### WebSocket
+
+The server binds to `0.0.0.0:25566` without encryption. You will need to connect using a URL which
+uses the `ws` protocol (not `wss`).
 
 [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport
 [`aeronet_websocket`]: https://docs.rs/aeronet_websocket

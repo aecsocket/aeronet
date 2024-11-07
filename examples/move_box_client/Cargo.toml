@@ -16,13 +16,10 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-
-# core
+move_box = { path = "../move_box" }
 
 bevy = { workspace = true }
 bevy_egui = { workspace = true }
-
-# transport
 
 aeronet = { workspace = true, features = ["visualizer"] }
 aeronet_websocket = { workspace = true, features = ["client"] }
@@ -31,11 +28,5 @@ aeronet_webtransport = { workspace = true, features = [
   "dangerous-configuration",
 ] }
 
-# replication
-
 aeronet_replicon = { workspace = true, features = ["client"] }
 bevy_replicon = { workspace = true }
-
-# protocol
-
-move_box = { path = "../move_box" }

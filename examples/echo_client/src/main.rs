@@ -16,19 +16,18 @@
 use {
     aeronet::{
         io::{
-            Endpoint, Session,
             bytes::Bytes,
             connection::{Disconnect, DisconnectReason, Disconnected},
-            web_time,
+            web_time, Endpoint, Session,
         },
         transport::{
-            AeronetTransportPlugin, Transport, TransportConfig,
             lane::{LaneIndex, LaneKind},
+            AeronetTransportPlugin, Transport, TransportConfig,
         },
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     core::mem,
 };
 

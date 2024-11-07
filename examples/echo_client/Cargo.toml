@@ -16,12 +16,8 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-# core
-
 bevy = { workspace = true }
 bevy_egui = { workspace = true }
-
-# networking
 
 aeronet = { workspace = true }
 aeronet_websocket = { workspace = true, features = ["client"] }
