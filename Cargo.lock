@@ -91,7 +91,7 @@ checksum = "512761e0bb2578dd7380c6baaa0f4ce03e84f95e960231d1dec8bf4d7d6e2627"
 
 [[package]]
 name = "aeronet"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
@@ -101,7 +101,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_channel"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "aeronet_io",
  "bevy",
@@ -119,7 +119,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_io"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "bevy_app",
@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_replicon"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
@@ -151,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_transport"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "aeronet_io",
  "ahash",
@@ -182,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_websocket"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "aeronet_io",
  "anyhow",
@@ -213,7 +213,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_webtransport"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "aeronet_io",
  "anyhow",
@@ -2286,7 +2286,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
 name = "echo_client"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "aeronet",
  "aeronet_websocket",
@@ -2296,7 +2296,7 @@ dependencies = [
 
 [[package]]
 name = "echo_server"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "aeronet",
  "aeronet_websocket",
@@ -3539,7 +3539,7 @@ checksum = "c9be0862c1b3f26a88803c4a49de6889c10e608b3ee9344e6ef5b45fb37ad3d1"
 
 [[package]]
 name = "move_box"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "aeronet_replicon",
  "bevy",
@@ -3549,7 +3549,7 @@ dependencies = [
 
 [[package]]
 name = "move_box_client"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "aeronet",
  "aeronet_replicon",
@@ -3563,7 +3563,7 @@ dependencies = [
 
 [[package]]
 name = "move_box_server"
-version = "0.9.0-dev"
+version = "0.9.0"
 dependencies = [
  "aeronet",
  "aeronet_replicon",
