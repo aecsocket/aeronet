@@ -2,7 +2,7 @@
 
 use {
     crate::convert,
-    aeronet_io::{Endpoint, Session, connection::Disconnect, web_time::Instant},
+    aeronet_io::{connection::Disconnect, web_time::Instant, Session, SessionEndpoint},
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -95,9 +95,9 @@ pub enum ClientTransportSet {
 /// - sending messages
 ///   - all outgoing `replicon` messages are cloned and sent to all sessions
 /// - determining connected status
-///   - if at least 1 session has [`Session`], [`RepliconClient`] is
-///     [`RepliconClientStatus::Connected`]
-///   - if at least 1 session has [`Endpoint`], [`RepliconClient`] is
+///   - if at least 1 session has both [`SessionEndpoint`] and [`Session`],
+///     [`RepliconClient`] is [`RepliconClientStatus::Connected`]
+///   - if at least 1 session has [`SessionEndpoint`], [`RepliconClient`] is
 ///     [`RepliconClientStatus::Connecting`]
 ///   - else, [`RepliconClientStatus::Disconnected`]
 ///
@@ -145,7 +145,7 @@ fn on_client_connected(
 
 fn update_state(
     mut replicon_client: ResMut<RepliconClient>,
-    clients: Query<Option<&Session>, (With<Endpoint>, With<AeronetRepliconClient>)>,
+    clients: Query<Option<&Session>, (With<SessionEndpoint>, With<AeronetRepliconClient>)>,
 ) {
     let status =
         clients.iter().fold(

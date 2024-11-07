@@ -3,26 +3,27 @@
 mod backend;
 mod config;
 
+use aeronet_io::server::ServerEndpoint;
 pub use config::*;
 use {
     crate::{
-        WebSocketRuntime,
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
-        tungstenite,
+        tungstenite, WebSocketRuntime,
     },
     aeronet_io::{
-        Endpoint, IoSet,
         connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
-        server::{CloseReason, Closed, Opened, Server},
+        server::{CloseReason, Closed, Server},
+        IoSet, SessionEndpoint,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
     core::net::SocketAddr,
-    derive_more::{Display, Error, derive::From},
+    derive_more::{derive::From, Display, Error},
     futures::channel::{mpsc, oneshot},
     std::io,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
+    web_time::Instant,
 };
 
 /// Allows using [`WebSocketServer`].
@@ -178,7 +179,7 @@ struct ToConnected {
 // TODO: required components
 fn on_server_added(trigger: Trigger<OnAdd, WebSocketServer>, mut commands: Commands) {
     let server = trigger.entity();
-    commands.entity(server).insert(Server);
+    commands.entity(server).insert(ServerEndpoint);
 }
 
 fn poll_servers(mut commands: Commands, mut servers: Query<(Entity, &mut WebSocketServer)>) {
@@ -214,9 +215,10 @@ fn poll_opening(
         };
     };
 
+    let now = Instant::now();
     commands
         .entity(server)
-        .insert((Opened::now(), LocalAddr(next.local_addr)));
+        .insert((Server::new(now), LocalAddr(next.local_addr)));
     Frontend::Open {
         recv_closed,
         recv_connecting: next.recv_connecting,
@@ -240,7 +242,7 @@ fn poll_open(
             .spawn_empty()
             .set_parent(server)
             .insert((
-                Endpoint, // TODO: required component of ClientFrontend
+                SessionEndpoint, // TODO: required component of ClientFrontend
                 ClientFrontend::Connecting {
                     recv_dc: connecting.recv_dc,
                     recv_next: connecting.recv_next,

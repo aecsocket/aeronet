@@ -23,7 +23,8 @@ pub struct AeronetIoPlugin;
 
 impl Plugin for AeronetIoPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Session>()
+        app.register_type::<SessionEndpoint>()
+            .register_type::<Session>()
             .configure_sets(PreUpdate, IoSet::Poll)
             .configure_sets(PostUpdate, IoSet::Flush)
             .add_plugins((
@@ -34,14 +35,15 @@ impl Plugin for AeronetIoPlugin {
     }
 }
 
-/// Represents an [`Entity`] which is establishing a connection to a peer, so
-/// that it may open a [`Session`] in the future.
+/// Represents an [`Entity`] which may be establishing, or has already
+/// established, a connection to a peer.
 ///
-/// This is effectively a marker component for a [`Session`] which isn't
-/// connected yet.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Component, Reflect)]
+/// - If a session entity only has [`SessionEndpoint`], it is still connecting.
+/// - If a session entity has [`SessionEndpoint`] and [`Session`], it has
+///   successfully connected.
+#[derive(Debug, Component, Reflect)]
 #[reflect(Component)]
-pub struct Endpoint;
+pub struct SessionEndpoint;
 
 /// Represents an [`Entity`] which can be used to transfer [packets] over a
 /// connection to a peer session, potentially over a network.
@@ -68,9 +70,9 @@ pub struct Endpoint;
 ///
 /// After creating a session entity using your chosen IO layer, the entity may
 /// not start with the [`Session`] component - the session is *connecting* but
-/// is not *connected* yet. This connecting state is marked with the
-/// [`Endpoint`] component. Once the IO layer adds [`Session`], the entity is
-/// considered *connected*, and you can send and receive data.
+/// is not *connected* yet (marked by having [`SessionEndpoint`] but not
+/// [`Session`]). Once the IO layer adds [`Session`], the entity is considered
+/// *connected*, and you can send and receive data.
 ///
 /// Note that [`Session`] is not a *guarantee* that you can send and receive
 /// data - it is always possible that operations on OS sockets fail, the network
@@ -106,7 +108,7 @@ pub struct Endpoint;
 /// [`Disconnect`]: connection::Disconnect
 #[derive(Debug, Component, Reflect)]
 #[reflect(from_reflect = false, Component)]
-// TODO: required component Endpoint
+// TODO: required component `SessionEndpoint`
 pub struct Session {
     connected_at: Instant,
     min_mtu: usize,

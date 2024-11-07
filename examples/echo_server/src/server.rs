@@ -1,13 +1,12 @@
 use {
     aeronet::{
         io::{
-            Session,
             bytes::Bytes,
             connection::{DisconnectReason, Disconnected, LocalAddr},
-            server::Opened,
-            web_time,
+            server::Server,
+            web_time, Session,
         },
-        transport::{AeronetTransportPlugin, Transport, lane::LaneKind},
+        transport::{lane::LaneKind, AeronetTransportPlugin, Transport},
     },
     aeronet_websocket::server::{ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},
@@ -74,7 +73,7 @@ fn setup(mut commands: Commands) {
 }
 
 // Observe state change events using `Trigger`s
-fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
+fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
     let server = trigger.entity();
     let local_addr = servers
         .get(server)

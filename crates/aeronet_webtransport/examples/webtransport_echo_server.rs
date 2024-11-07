@@ -1,7 +1,7 @@
 //! Example server using WebTransport which listens for clients sending strings
 //! and sends back a string reply.
 
-use aeronet_io::Session;
+use aeronet_io::{server::Server, Session};
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
@@ -13,7 +13,6 @@ cfg_if::cfg_if! {
 use {
     aeronet_io::{
         connection::{DisconnectReason, Disconnected, LocalAddr},
-        server::Opened,
     },
     aeronet_webtransport::{
         cert,
@@ -68,7 +67,7 @@ fn server_config(identity: &wtransport::Identity) -> ServerConfig {
         .build()
 }
 
-fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
+fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
     let server = trigger.entity();
     let local_addr = servers.get(server)
         .expect("spawned session entity should have a name");

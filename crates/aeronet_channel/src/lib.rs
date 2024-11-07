@@ -3,9 +3,9 @@
 
 use {
     aeronet_io::{
-        AeronetIoPlugin, Endpoint, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected},
+        connection::{Disconnect, DisconnectReason, Disconnected, DROP_DISCONNECT_REASON},
         packet::RecvPacket,
+        AeronetIoPlugin, IoSet, Session, SessionEndpoint,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
@@ -145,7 +145,7 @@ const MTU: usize = usize::MAX;
 fn on_io_added(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
     let entity = trigger.entity();
     let session = Session::new(Instant::now(), MTU);
-    commands.entity(entity).insert((Endpoint, session));
+    commands.entity(entity).insert((SessionEndpoint, session));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelIo>) {

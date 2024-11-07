@@ -6,20 +6,20 @@ use {
     crate::{
         runtime::WebTransportRuntime,
         session::{
-            self, MIN_MTU, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
+            self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin, MIN_MTU,
         },
     },
     aeronet_io::{
-        Endpoint, IoSet, Session,
         connection::{DisconnectReason, Disconnected},
         packet::RecvPacket,
+        IoSet, Session, SessionEndpoint,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bytes::Bytes,
     derive_more::{Display, Error, From},
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
     web_time::Instant,
 };
 
@@ -133,7 +133,7 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
     );
 
     world.entity_mut(session).insert((
-        Endpoint, // TODO: required component of WebTransportClient
+        SessionEndpoint, // TODO: required component of WebTransportClient
         WebTransportClient(ClientFrontend::Connecting { recv_dc, recv_next }),
     ));
 }

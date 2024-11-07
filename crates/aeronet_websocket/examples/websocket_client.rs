@@ -3,12 +3,12 @@
 
 use {
     aeronet_io::{
-        Endpoint, Session,
         connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
+        Session, SessionEndpoint,
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     core::mem,
 };
 
@@ -37,7 +37,7 @@ struct SessionUi {
 }
 
 fn on_connecting(
-    trigger: Trigger<OnAdd, Endpoint>,
+    trigger: Trigger<OnAdd, SessionEndpoint>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {

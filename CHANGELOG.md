@@ -1,3 +1,12 @@
+# 0.10.0
+
+- Renamed `Endpoint` to `SessionEndpoint`
+- Added `ServerEndpoint` to mark opening servers
+- Made `Server` only be added to opened servers, and have this component store the
+  `opened_at: Instant`
+- Removed `Opened`
+- All relevant `aeronet_io` types are now registered in the type registry
+
 # 0.9.0
 
 - Redesigned to be Bevy native
