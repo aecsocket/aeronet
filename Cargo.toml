@@ -10,7 +10,7 @@ keywords = ["gamedev", "network", "bevy"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aecsocket/aeronet"
 rust-version = "1.82.0"
-version = "0.9.0-dev"
+version = "0.9.0"
 
 [workspace.lints.rust]
 missing_docs = "warn"
@@ -35,18 +35,18 @@ type_complexity = "allow"
 [workspace.dependencies]
 # aeronet
 # core
-aeronet = { version = "0.9.0-dev", path = "crates/aeronet" }
-aeronet_io = { version = "0.9.0-dev", path = "crates/aeronet_io" }
-aeronet_transport = { version = "0.9.0-dev", path = "crates/aeronet_transport" }
+aeronet = { version = "0.9.0", path = "crates/aeronet" }
+aeronet_io = { version = "0.9.0", path = "crates/aeronet_io" }
+aeronet_transport = { version = "0.9.0", path = "crates/aeronet_transport" }
 
 # io
-aeronet_channel = { version = "0.9.0-dev", path = "crates/aeronet_channel" }
-aeronet_steam = { version = "0.9.0-dev", path = "crates/aeronet_steam" }
-aeronet_websocket = { version = "0.9.0-dev", path = "crates/aeronet_websocket" }
-aeronet_webtransport = { version = "0.9.0-dev", path = "crates/aeronet_webtransport" }
+aeronet_channel = { version = "0.9.0", path = "crates/aeronet_channel" }
+aeronet_steam = { version = "0.9.0", path = "crates/aeronet_steam" }
+aeronet_websocket = { version = "0.9.0", path = "crates/aeronet_websocket" }
+aeronet_webtransport = { version = "0.9.0", path = "crates/aeronet_webtransport" }
 
 # integration
-aeronet_replicon = { version = "0.9.0-dev", path = "crates/aeronet_replicon" }
+aeronet_replicon = { version = "0.9.0", path = "crates/aeronet_replicon" }
 
 # generic
 
