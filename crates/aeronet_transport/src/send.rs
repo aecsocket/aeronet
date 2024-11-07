@@ -2,7 +2,7 @@
 
 use {
     crate::{
-        FlushedPacket, FragmentPath, MessageKey, Transport, frag,
+        frag,
         lane::{LaneIndex, LaneKind, LaneReliability},
         limit::Limit,
         packet::{
@@ -10,6 +10,7 @@ use {
             PacketHeader, PacketSeq,
         },
         rtt::RttEstimator,
+        FlushedPacket, FragmentPath, MessageKey, Transport,
     },
     aeronet_io::Session,
     ahash::HashMap,
@@ -113,7 +114,7 @@ impl TransportSend {
     /// fn send_msgs(transport: &mut Transport) {
     ///     let msg_key = transport
     ///         .send
-    ///         .push(SEND_LANE, b"hello world"[..], Instant::now())
+    ///         .push(SEND_LANE, b"hello world".to_vec().into(), Instant::now())
     ///         .unwrap();
     ///
     ///     // later...
@@ -219,7 +220,7 @@ fn flush_on(
             .write(&header)
             .expect("should grow the buffer when writing over capacity");
 
-        let span = trace_span!("flush", packet = packet_seq.0.0);
+        let span = trace_span!("flush", packet = packet_seq.0 .0);
         let _span = span.enter();
 
         // collect the paths of the frags we want to put into this packet
@@ -255,12 +256,13 @@ fn flush_on(
         }
 
         trace!(num_frags = packet_frags.len(), "Flushed packet");
-        transport
-            .flushed_packets
-            .insert(packet_seq.0.0, FlushedPacket {
+        transport.flushed_packets.insert(
+            packet_seq.0 .0,
+            FlushedPacket {
                 flushed_at: now,
                 frags: packet_frags.into_boxed_slice(),
-            });
+            },
+        );
 
         transport.next_packet_seq += PacketSeq::new(1);
         sent_packet_yet = true;
