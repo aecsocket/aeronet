@@ -12,10 +12,9 @@ use {
     crate::packet::{FragmentIndex, FragmentPosition, MessageSeq},
     ahash::HashMap,
     bitvec::vec::BitVec,
-    core::fmt,
-    core::iter::FusedIterator,
+    core::{fmt, iter::FusedIterator},
     derive_more::{Display, Error},
-    octs::{chunks::ByteChunksExt, Bytes},
+    octs::{Bytes, chunks::ByteChunksExt},
     typesize::derive::TypeSize,
 };
 

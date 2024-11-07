@@ -2,12 +2,13 @@
 
 use {
     crate::convert,
-    aeronet_io::{Endpoint, Session, connection::Disconnect, web_time::Instant},
+    aeronet_io::{Session, SessionEndpoint, connection::Disconnect, time::SinceAppStart},
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
+    bevy_time::{Real, Time},
     tracing::warn,
 };
 
@@ -97,7 +98,7 @@ pub enum ClientTransportSet {
 /// - determining connected status
 ///   - if at least 1 session has [`Session`], [`RepliconClient`] is
 ///     [`RepliconClientStatus::Connected`]
-///   - if at least 1 session has [`Endpoint`], [`RepliconClient`] is
+///   - if at least 1 session has [`SessionEndpoint`], [`RepliconClient`] is
 ///     [`RepliconClientStatus::Connecting`]
 ///   - else, [`RepliconClientStatus::Disconnected`]
 ///
@@ -112,6 +113,7 @@ pub struct AeronetRepliconClient;
 fn on_client_connected(
     trigger: Trigger<OnAdd, Session>,
     mut commands: Commands,
+    time: Res<Time<Real>>,
     clients: Query<&Session, With<AeronetRepliconClient>>,
     channels: Res<RepliconChannels>,
 ) {
@@ -128,8 +130,8 @@ fn on_client_connected(
         .client_channels()
         .iter()
         .map(|channel| convert::to_lane_kind(channel.kind));
-    let now = Instant::now();
 
+    let now = SinceAppStart::now(&time);
     let transport = match Transport::new(session, recv_lanes, send_lanes, now) {
         Ok(transport) => transport,
         Err(err) => {
@@ -145,7 +147,7 @@ fn on_client_connected(
 
 fn update_state(
     mut replicon_client: ResMut<RepliconClient>,
-    clients: Query<Option<&Session>, (With<Endpoint>, With<AeronetRepliconClient>)>,
+    clients: Query<Option<&Session>, (With<SessionEndpoint>, With<AeronetRepliconClient>)>,
 ) {
     let status =
         clients.iter().fold(

@@ -12,7 +12,7 @@ use {
     aeronet_io::{
         connection::{DisconnectReason, Disconnected, LocalAddr},
         server::Opened,
-        Endpoint, Session,
+        SessionEndpoint, Session,
     },
     aeronet_websocket::server::{Identity, ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},
@@ -48,7 +48,7 @@ fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
     info!("{server} opened on {}", **local_addr);
 }
 
-fn on_connecting(trigger: Trigger<OnAdd, Endpoint>, clients: Query<&Parent>) {
+fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>, clients: Query<&Parent>) {
     let client = trigger.entity();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;

@@ -3,18 +3,19 @@
 
 use {
     aeronet_io::{
-        connection::{Disconnect, DisconnectReason, Disconnected, DROP_DISCONNECT_REASON},
+        AeronetIoPlugin, IoSet, Session, SessionEndpoint,
+        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected},
         packet::RecvPacket,
-        AeronetIoPlugin, Endpoint, IoSet, Session,
+        time::SinceAppStart,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
+    bevy_time::{Real, Time},
     bytes::Bytes,
     core::num::Saturating,
     derive_more::{Display, Error},
     sync_wrapper::SyncWrapper,
     tracing::{trace, trace_span},
-    web_time::Instant,
 };
 
 /// Allows using [`ChannelIo`].
@@ -39,8 +40,8 @@ impl Plugin for ChannelIoPlugin {
 /// Use [`ChannelIo::open`] to open a connection between two entities.
 #[derive(Debug, Component)]
 pub struct ChannelIo {
-    send_packet: flume::Sender<Bytes>,
-    recv_packet: flume::Receiver<Bytes>,
+    send_packet: crossbeam_channel::Sender<Bytes>,
+    recv_packet: crossbeam_channel::Receiver<Bytes>,
     send_dc: Option<SyncWrapper<oneshot::Sender<String>>>,
     recv_dc: SyncWrapper<oneshot::Receiver<String>>,
 }
@@ -67,8 +68,8 @@ impl ChannelIo {
     /// ```
     #[must_use]
     pub fn new() -> (Self, Self) {
-        let (send_packet_a, recv_packet_a) = flume::unbounded();
-        let (send_packet_b, recv_packet_b) = flume::unbounded();
+        let (send_packet_a, recv_packet_a) = crossbeam_channel::unbounded();
+        let (send_packet_b, recv_packet_b) = crossbeam_channel::unbounded();
         let (send_dc_a, recv_dc_a) = oneshot::channel();
         let (send_dc_b, recv_dc_b) = oneshot::channel();
 
@@ -142,10 +143,11 @@ pub struct ChannelDisconnected;
 
 const MTU: usize = usize::MAX;
 
-fn on_io_added(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
+fn on_io_added(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands, time: Res<Time<Real>>) {
     let entity = trigger.entity();
-    let session = Session::new(Instant::now(), MTU);
-    commands.entity(entity).insert((Endpoint, session));
+    let now = SinceAppStart::now(&time);
+    let session = Session::new(now, MTU);
+    commands.entity(entity).insert((SessionEndpoint, session));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelIo>) {
@@ -160,7 +162,11 @@ fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelI
     }
 }
 
-fn poll(mut commands: Commands, mut sessions: Query<(Entity, &mut Session, &mut ChannelIo)>) {
+fn poll(
+    mut commands: Commands,
+    time: Res<Time<Real>>,
+    mut sessions: Query<(Entity, &mut Session, &mut ChannelIo)>,
+) {
     for (entity, mut session, mut io) in &mut sessions {
         let span = trace_span!("poll", %entity);
         let _span = span.enter();
@@ -187,7 +193,7 @@ fn poll(mut commands: Commands, mut sessions: Query<(Entity, &mut Session, &mut 
             session.stats.bytes_recv += packet.len();
 
             session.recv.push(RecvPacket {
-                recv_at: Instant::now(),
+                recv_at: SinceAppStart::now(&time),
                 payload: packet,
             });
         }
