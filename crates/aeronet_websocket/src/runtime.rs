@@ -85,8 +85,9 @@ impl From<tokio::runtime::Handle> for WebSocketRuntime {
 impl WebSocketRuntime {
     /// Spawns a future on the task runtime `self`.
     ///
-    /// If you are already in a task context, use [`WebSocketRuntime::spawn`]
-    /// to avoid having to pass around [`WebSocketRuntime`].
+    /// If you are already in a task context, use the `spawn` function on your
+    /// platform (i.e. `tokio::spawn`) to avoid having to pass around
+    /// [`WebSocketRuntime`].
     pub fn spawn_on_self<F>(&self, future: F)
     where
         F: Future<Output = ()> + maybe::Send + 'static,

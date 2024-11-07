@@ -7,9 +7,9 @@ pub(crate) mod backend;
 use {
     crate::WebSocketRuntime,
     aeronet_io::{
+        connection::{Disconnect, DROP_DISCONNECT_REASON},
+        packet::{RecvPacket, IP_MTU},
         AeronetIoPlugin, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect},
-        packet::{IP_MTU, RecvPacket},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -84,8 +84,6 @@ impl Plugin for WebSocketSessionPlugin {
 /// the side of caution and use a capacity which is larger than what you need
 /// (wasting some memory), as opposed to a capacity which is too small (dropping
 /// some packets).
-///
-/// By default, [`DEFAULT_PACKET_BUF_CAP`] is used as the capacity.
 #[derive(Debug, Component)]
 pub struct WebSocketIo {
     pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,

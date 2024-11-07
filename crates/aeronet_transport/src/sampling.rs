@@ -3,8 +3,8 @@
 use {
     crate::{MessageStats, Transport, TransportConfig},
     aeronet_io::{
-        Session,
         packet::{PacketRtt, PacketStats},
+        Session,
     },
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
@@ -12,8 +12,8 @@ use {
     bevy_time::{Real, Time, Timer, TimerMode},
     core::time::Duration,
     ringbuf::{
-        HeapRb,
         traits::{Consumer, RingBuffer},
+        HeapRb,
     },
 };
 
@@ -144,7 +144,7 @@ pub struct SessionStatsSample {
     pub msgs_delta: MessageStats,
     /// [`Transport::memory_used`] at the time of sampling.
     pub mem_used: usize,
-    /// [`Transport::max_memory_usage`] at the time of sampling.
+    /// [`TransportConfig::max_memory_usage`] at the time of sampling.
     pub mem_max: usize,
     /// What proportion of packets sent recently are believed to have been lost
     /// in transit.

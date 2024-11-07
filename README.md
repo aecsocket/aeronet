@@ -177,7 +177,7 @@ conditioning is applied at the lowest level possible.
 [`aeronet_replicon`]: https://docs.rs/aeronet_replicon
 [`bevy_replicon`]: https://docs.rs/bevy_replicon
 [`aeronet_transport`]: https://docs.rs/aeronet_transport
-[`Session`]: io::connection::Session
+[`Session`]: io::Session
 [`echo_client`]: ./examples/echo_client
 [`echo_server`]: ./examples/echo_server
 [`egui_plot`]: https://docs.rs/egui_plot

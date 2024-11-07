@@ -2,19 +2,19 @@
 
 use {
     crate::{
-        Transport, TransportConfig,
         sampling::{
             SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
             SessionStatsSampling,
         },
+        Transport, TransportConfig,
     },
-    aeronet_io::{Session, packet::PacketRtt},
+    aeronet_io::{packet::PacketRtt, Session},
     bevy_app::prelude::*,
     bevy_core::Name,
     bevy_ecs::prelude::*,
     bevy_egui::{
-        EguiContexts,
         egui::{self, epaint::Hsva},
+        EguiContexts,
     },
     core::{hash::Hash, ops::RangeInclusive, time::Duration},
     itertools::Itertools,
@@ -96,8 +96,12 @@ pub struct RttSample {
 #[derive(Debug, Clone, Copy)]
 pub struct RxTxSample {
     /// [`PacketStats::bytes_recv`] difference between this sample and the last.
+    ///
+    /// [`PacketStats::bytes_recv`]: aeronet_io::packet::PacketStats::bytes_recv
     pub bytes_recv_delta: usize,
     /// [`PacketStats::bytes_sent`] difference between this sample and the last.
+    ///
+    /// [`PacketStats::bytes_sent`]: aeronet_io::packet::PacketStats::bytes_sent
     pub bytes_sent_delta: usize,
 }
 

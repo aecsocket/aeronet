@@ -18,7 +18,7 @@ pub mod visualizer;
 
 pub use aeronet_io as io;
 use {
-    aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
+    aeronet_io::{connection::Disconnect, packet::MtuTooSmall, IoSet, Session},
     arbitrary::Arbitrary,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
@@ -35,7 +35,7 @@ use {
     send::TransportSend,
     seq_buf::SeqBuf,
     tracing::warn,
-    typesize::{TypeSize, derive::TypeSize},
+    typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
 };
 
@@ -318,6 +318,8 @@ pub enum TransportSet {
 /// message keys around for a long time. As soon as you receive an ack for a
 /// message (or don't receive an ack in a certain period of time), drop the
 /// key - it's very likely to have the same key as another message later.
+///
+/// [`Seq`]: packet::Seq
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize)]
 pub struct MessageKey {
     /// Lane index on which the message was sent.
@@ -378,8 +380,8 @@ fn init_config(
 /// Clears all [`Transport::recv_msgs`] and [`Transport::recv_acks`] buffers,
 /// emitting warnings if there were any items left in the buffers.
 ///
-/// The equivalent for [`Transport::send_msgs`] does not exist, because this
-/// crate itself is responsible for draining that buffer.
+/// The equivalent for [`Transport::send`] does not exist, because this crate
+/// itself is responsible for draining that buffer.
 pub fn clear_recv_buffers(mut sessions: Query<(Entity, &mut Transport)>) {
     for (entity, mut transport) in &mut sessions {
         let len = transport.recv_msgs.0.len();

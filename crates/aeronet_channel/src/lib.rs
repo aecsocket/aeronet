@@ -3,9 +3,9 @@
 
 use {
     aeronet_io::{
-        AeronetIoPlugin, Endpoint, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected},
+        connection::{Disconnect, DisconnectReason, Disconnected, DROP_DISCONNECT_REASON},
         packet::RecvPacket,
+        AeronetIoPlugin, Endpoint, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
@@ -94,8 +94,8 @@ impl ChannelIo {
     ///
     /// When the command is applied, entities `a` and `b` must exist in the
     /// world, otherwise the command will panic. If your entities are in
-    /// separate worlds, use [`ChannelIo::with_capacity`] to manually create
-    /// a [`ChannelIo`] pair, and add the components to the target entities
+    /// separate worlds, use [`ChannelIo::new`] to manually create a
+    /// [`ChannelIo`] pair, and add the components to the target entities
     /// manually.
     ///
     /// # Examples

@@ -139,13 +139,6 @@ pub struct PacketHeader {
     pub seq: PacketSeq,
     /// Informs the receiver which packets the sender has already received.
     pub acks: Acknowledge,
-    /// How long the sender waited to send this packet, even if the packet was
-    /// ready to be sent earlier.
-    ///
-    /// See [`TransportConfig::ack_delay`].
-    ///
-    /// [`TransportConfig::ack_delay`]: crate::TransportConfig::ack_delay
-    pub ack_delay: u16,
 }
 
 /// Marks the index and last state of a single fragment.
@@ -171,7 +164,7 @@ pub struct FragmentPosition(FragmentIndex);
 /// Underlying type used by [`FragmentPosition`].
 pub type FragmentIndex = u16;
 
-/// Wrapper for the actual contents of a [`MessageFragment`].
+/// Wrapper for the actual contents of a [`Fragment`].
 ///
 /// On the wire, this is encoded as a varint of how long the payload is, plus
 /// the actual payload.

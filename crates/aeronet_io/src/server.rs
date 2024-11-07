@@ -4,6 +4,8 @@
 //! Although the core logic of this crate is topology-agnostic, this module
 //! provides an abstraction over the "server" part of the very common
 //! server/client topology.
+//!
+//! [`Session`]: crate::Session
 
 use {
     crate::connection::Disconnect,
@@ -53,6 +55,7 @@ impl Plugin for ServerPlugin {
 /// all connected clients will be disconnected with the same reason.
 ///
 /// [child]: Children
+/// [`Session`]: crate::Session
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct Server;
@@ -62,6 +65,8 @@ pub struct Server;
 ///
 /// To listen for when a server is opened, add an observer listening for
 /// [`Trigger<OnAdd, Opened>`].
+///
+/// [`Session`]: crate::Session
 #[derive(Debug, Clone, Copy, Component, Reflect)]
 #[reflect(Component)]
 pub struct Opened {
@@ -215,8 +220,8 @@ mod tests {
     use {
         super::*,
         crate::{
-            AeronetIoPlugin,
             connection::{DisconnectReason, Disconnected},
+            AeronetIoPlugin,
         },
         bevy_hierarchy::BuildWorldChildren,
     };
