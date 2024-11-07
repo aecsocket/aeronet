@@ -9,9 +9,9 @@ use {
         task::{Context, Poll},
     },
     futures::{
-        SinkExt,
         channel::{mpsc, oneshot},
         never::Never,
+        SinkExt,
     },
     tokio::{
         io::{AsyncRead, AsyncWrite, ReadBuf},
@@ -19,7 +19,7 @@ use {
     },
     tokio_rustls::TlsAcceptor,
     tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
-    tracing::{Instrument, debug, debug_span},
+    tracing::{debug, debug_span, Instrument},
 };
 
 pub async fn start(

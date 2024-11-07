@@ -55,10 +55,9 @@ impl Decode for FragmentPayload {
 
 #[cfg(test)]
 mod tests {
-    use {
-        super::*,
-        octs::{Bytes, test::*},
-    };
+    use super::*;
+
+    use octs::{test::*, Bytes};
 
     #[test]
     fn encode_decode() {

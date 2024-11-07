@@ -4,27 +4,25 @@ mod backend;
 mod config;
 
 pub use config::*;
+use derive_more::derive::From;
 use {
     crate::{
-        WebSocketRuntime,
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
-        tungstenite,
+        tungstenite, WebSocketRuntime,
     },
     aeronet_io::{
-        IoSet, SessionEndpoint,
         connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
-        server::{CloseReason, Closed, Server, ServerEndpoint},
-        time::SinceAppStart,
+        server::{CloseReason, Closed, Opened, Server},
+        Endpoint, IoSet,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
-    bevy_time::{Real, Time},
     core::net::SocketAddr,
-    derive_more::{Display, Error, derive::From},
+    derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
     std::io,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
 };
 
 /// Allows using [`WebSocketServer`].
@@ -180,20 +178,16 @@ struct ToConnected {
 // TODO: required components
 fn on_server_added(trigger: Trigger<OnAdd, WebSocketServer>, mut commands: Commands) {
     let server = trigger.entity();
-    commands.entity(server).insert(ServerEndpoint);
+    commands.entity(server).insert(Server);
 }
 
-fn poll_servers(
-    mut commands: Commands,
-    time: Res<Time<Real>>,
-    mut servers: Query<(Entity, &mut WebSocketServer)>,
-) {
+fn poll_servers(mut commands: Commands, mut servers: Query<(Entity, &mut WebSocketServer)>) {
     for (server, mut frontend) in &mut servers {
         replace_with::replace_with_or_abort(&mut frontend.0, |state| match state {
             Frontend::Opening {
                 recv_closed,
                 recv_next,
-            } => poll_opening(&mut commands, &time, server, recv_closed, recv_next),
+            } => poll_opening(&mut commands, server, recv_closed, recv_next),
             Frontend::Open {
                 recv_closed,
                 recv_connecting,
@@ -205,7 +199,6 @@ fn poll_servers(
 
 fn poll_opening(
     commands: &mut Commands,
-    time: &Time<Real>,
     server: Entity,
     mut recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
     mut recv_next: oneshot::Receiver<ToOpen>,
@@ -221,10 +214,9 @@ fn poll_opening(
         };
     };
 
-    let now = SinceAppStart::now(time);
     commands
         .entity(server)
-        .insert((Server::new(now), LocalAddr(next.local_addr)));
+        .insert((Opened::now(), LocalAddr(next.local_addr)));
     Frontend::Open {
         recv_closed,
         recv_connecting: next.recv_connecting,
@@ -248,7 +240,7 @@ fn poll_open(
             .spawn_empty()
             .set_parent(server)
             .insert((
-                SessionEndpoint, // TODO: required component of ClientFrontend
+                Endpoint, // TODO: required component of ClientFrontend
                 ClientFrontend::Connecting {
                     recv_dc: connecting.recv_dc,
                     recv_next: connecting.recv_next,

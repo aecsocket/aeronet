@@ -6,7 +6,7 @@ mod native;
 #[cfg(not(target_family = "wasm"))]
 pub use native::*;
 use {
-    base64::{Engine, engine::general_purpose::STANDARD as BASE64},
+    base64::{engine::general_purpose::STANDARD as BASE64, Engine},
     derive_more::{Display, Error},
 };
 

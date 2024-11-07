@@ -3,12 +3,12 @@
 use {
     aeronet::{
         io::{
-            Session, SessionEndpoint,
             connection::{Disconnect, DisconnectReason, Disconnected},
+            Endpoint, Session,
         },
         transport::{
-            TransportConfig,
             visualizer::{SessionVisualizer, SessionVisualizerPlugin},
+            TransportConfig,
         },
     },
     aeronet_replicon::client::{AeronetRepliconClient, AeronetRepliconClientPlugin},
@@ -18,7 +18,7 @@ use {
         client::{WebTransportClient, WebTransportClientPlugin},
     },
     bevy::{ecs::query::QuerySingleError, prelude::*},
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     bevy_replicon::prelude::*,
     move_box::{GameState, MoveBoxPlugin, PlayerColor, PlayerInput, PlayerPosition},
 };
@@ -78,7 +78,7 @@ fn setup_level(mut commands: Commands) {
 }
 
 fn on_connecting(
-    trigger: Trigger<OnAdd, SessionEndpoint>,
+    trigger: Trigger<OnAdd, Endpoint>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {
@@ -103,13 +103,14 @@ fn on_connected(
     ui_state.log.push(format!("{name} connected"));
 
     game_state.set(GameState::Playing);
-    commands
-        .entity(entity)
-        .insert((SessionVisualizer::default(), TransportConfig {
+    commands.entity(entity).insert((
+        SessionVisualizer::default(),
+        TransportConfig {
             max_memory_usage: 64 * 1024,
             send_bytes_per_sec: 4 * 1024,
             ..default()
-        }));
+        },
+    ));
 }
 
 fn on_disconnected(
@@ -141,7 +142,7 @@ fn global_ui(
     mut commands: Commands,
     mut egui: EguiContexts,
     global_ui: Res<GlobalUi>,
-    sessions: Query<(Entity, &Name, Option<&Session>), With<SessionEndpoint>>,
+    sessions: Query<(Entity, &Name, Option<&Session>), With<Endpoint>>,
 ) {
     egui::Window::new("Session Log").show(egui.ctx_mut(), |ui| {
         match sessions.get_single() {

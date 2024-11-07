@@ -6,14 +6,14 @@ use {
     crate::{
         runtime::WebTransportRuntime,
         session::{
-            self, MIN_MTU, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
+            self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin, MIN_MTU,
         },
     },
     aeronet_io::{
-        IoSet, Session, SessionEndpoint,
         connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         packet::{PacketRtt, RecvPacket},
         server::{CloseReason, Closed, Opened, Server},
+        Endpoint, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -23,7 +23,7 @@ use {
     core::{net::SocketAddr, time::Duration},
     derive_more::{Display, Error, From},
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
     web_time::Instant,
     wtransport::error::ConnectionError,
 };
@@ -336,7 +336,7 @@ fn poll_open(
             .spawn_empty()
             .set_parent(server)
             .insert((
-                SessionEndpoint, // TODO: required component of ClientFrontend
+                Endpoint, // TODO: required component of ClientFrontend
                 ClientFrontend::Connecting {
                     send_session_response: Some(connecting.send_session_response),
                     recv_dc: connecting.recv_dc,
