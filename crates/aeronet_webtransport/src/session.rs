@@ -5,20 +5,22 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
+        connection::{Disconnect, DisconnectReason, PeerAddr, DROP_DISCONNECT_REASON},
+        packet::{MtuTooSmall, PacketRtt, RecvPacket, IP_MTU},
+        time::SinceAppStart,
         AeronetIoPlugin, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, PeerAddr},
-        packet::{IP_MTU, MtuTooSmall, PacketRtt, RecvPacket},
     },
     alloc::sync::Arc,
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_time::{Real, Time},
     bytes::Bytes,
     core::{num::Saturating, time::Duration},
     derive_more::{Display, Error},
     futures::{
-        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
+        FutureExt, SinkExt, StreamExt,
     },
     std::io,
     tracing::{trace, trace_span},
@@ -76,7 +78,7 @@ impl Plugin for WebTransportSessionPlugin {
 #[derive(Debug, Component)]
 pub struct WebTransportIo {
     pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,
-    pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
+    pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<(Instant, Bytes)>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
 }
@@ -133,11 +135,14 @@ pub(crate) struct SessionMeta {
 }
 
 // TODO: required components
-fn on_io_added(trigger: Trigger<OnAdd, WebTransportIo>, mut commands: Commands) {
+fn on_io_added(
+    trigger: Trigger<OnAdd, WebTransportIo>,
+    mut commands: Commands,
+    time: Res<Time<Real>>,
+) {
     let entity = trigger.entity();
-    commands
-        .entity(entity)
-        .insert(Session::new(Instant::now(), IP_MTU));
+    let now = SinceAppStart::now(&time);
+    commands.entity(entity).insert(Session::new(now, IP_MTU));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTransportIo>) {
@@ -161,6 +166,7 @@ pub(crate) fn poll(
         Option<&mut PacketRtt>,
     )>,
     mut commands: Commands,
+    time: Res<Time<Real>>,
 ) {
     'sessions: for (entity, mut session, mut io, mut peer_addr, mut packet_rtt) in &mut sessions {
         #[cfg(target_family = "wasm")]
@@ -192,14 +198,15 @@ pub(crate) fn poll(
 
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        while let Ok(Some(packet)) = io.recv_packet_b2f.try_next() {
+        while let Ok(Some((recv_at, payload))) = io.recv_packet_b2f.try_next() {
             num_packets += 1;
             session.stats.packets_recv += 1;
 
-            num_bytes += packet.payload.len();
-            session.stats.bytes_recv += packet.payload.len();
+            num_bytes += payload.len();
+            session.stats.bytes_recv += payload.len();
 
-            session.recv.push(packet);
+            let recv_at = SinceAppStart::from_raw(recv_at.duration_since(time.startup()));
+            session.recv.push(RecvPacket { recv_at, payload });
         }
 
         trace!(
@@ -242,7 +249,7 @@ fn flush(mut sessions: Query<(Entity, &mut Session, &WebTransportIo)>) {
 pub(crate) struct SessionBackend {
     pub conn: Connection,
     pub send_meta: mpsc::Sender<SessionMeta>,
-    pub send_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
+    pub send_packet_b2f: mpsc::UnboundedSender<(Instant, Bytes)>,
     pub recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
     pub recv_user_dc: oneshot::Receiver<String>,
 }
@@ -342,7 +349,7 @@ async fn meta_loop(
 async fn recv_loop(
     conn: Arc<Connection>,
     mut recv_closed: oneshot::Receiver<()>,
-    mut send_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
+    mut send_packet_b2f: mpsc::UnboundedSender<(Instant, Bytes)>,
 ) -> Result<Never, SessionError> {
     loop {
         #[cfg_attr(
@@ -366,13 +373,9 @@ async fn recv_loop(
                 packet.0.payload()
             }
         };
-        let now = Instant::now();
 
         send_packet_b2f
-            .send(RecvPacket {
-                recv_at: now,
-                payload: packet,
-            })
+            .send((Instant::now(), packet))
             .await
             .map_err(|_| SessionError::BackendClosed)?;
     }

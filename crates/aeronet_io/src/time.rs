@@ -63,7 +63,7 @@ impl SinceAppStart {
     ///
     /// println!("{:?}", after.duration_since(before));
     /// println!("{:?}", before.duration_since(after)); // 0ns
-    ///     
+    ///
     /// # fn now() -> SinceAppStart { unimplemented!() }
     /// ```
     #[must_use]
@@ -85,7 +85,7 @@ impl SinceAppStart {
     ///
     /// println!("{:?}", after.checked_duration_since(before));
     /// println!("{:?}", before.checked_duration_since(after)); // 0ns
-    ///     
+    ///
     /// # fn now() -> SinceAppStart { unimplemented!() }
     /// ```
     #[must_use]
@@ -93,11 +93,17 @@ impl SinceAppStart {
         self.0.checked_sub(earlier.0)
     }
 
+    /// Returns `Some(t)` where `t` is the time `self + duration` if `t` can be represented as
+    /// `Self` (which means it's inside the bounds of the underlying data structure), `None`
+    /// otherwise.
     #[must_use]
     pub fn checked_add(&self, duration: Duration) -> Option<Self> {
         self.0.checked_add(duration).map(Self)
     }
 
+    /// Returns `Some(t)` where `t` is the time `self - duration` if `t` can be represented as
+    /// `Self` (which means it's inside the bounds of the underlying data structure), `None`
+    /// otherwise.
     #[must_use]
     pub fn checked_sub(&self, duration: Duration) -> Option<Self> {
         self.0.checked_sub(duration).map(Self)

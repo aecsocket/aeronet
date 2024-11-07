@@ -2,18 +2,18 @@
 pub mod wasm {
     use {
         crate::{
-            JsError,
             session::{SessionError, SessionFrontend},
+            JsError,
         },
         aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
         bytes::Bytes,
         futures::{
-            SinkExt, StreamExt,
             channel::{mpsc, oneshot},
             never::Never,
+            SinkExt, StreamExt,
         },
         js_sys::Uint8Array,
-        wasm_bindgen::{JsCast, prelude::Closure},
+        wasm_bindgen::{prelude::Closure, JsCast},
         web_sys::{BinaryType, CloseEvent, ErrorEvent, MessageEvent, WebSocket},
         web_time::Instant,
     };
@@ -31,7 +31,7 @@ pub mod wasm {
     pub fn split(socket: WebSocket) -> (SessionFrontend, SessionBackend) {
         socket.set_binary_type(BinaryType::Arraybuffer);
 
-        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
+        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<(Instant, Bytes)>();
         let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
         let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
 
@@ -160,21 +160,21 @@ pub mod wasm {
 pub mod native {
     use {
         crate::session::{SessionError, SessionFrontend},
-        aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
+        aeronet_io::connection::DisconnectReason,
         alloc::borrow::Cow,
         bytes::Bytes,
         futures::{
-            SinkExt, StreamExt,
             channel::{mpsc, oneshot},
             never::Never,
+            SinkExt, StreamExt,
         },
         tokio::io::{AsyncRead, AsyncWrite},
         tokio_tungstenite::{
-            WebSocketStream,
             tungstenite::{
+                protocol::{frame::coding::CloseCode, CloseFrame},
                 Message,
-                protocol::{CloseFrame, frame::coding::CloseCode},
             },
+            WebSocketStream,
         },
         web_time::Instant,
     };
@@ -182,7 +182,7 @@ pub mod native {
     #[derive(Debug)]
     pub struct SessionBackend<S> {
         stream: WebSocketStream<S>,
-        send_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
+        send_packet_b2f: mpsc::UnboundedSender<(Instant, Bytes)>,
         recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
         recv_user_dc: oneshot::Receiver<String>,
     }
@@ -190,7 +190,7 @@ pub mod native {
     pub fn split<S: AsyncRead + AsyncWrite + Unpin>(
         stream: WebSocketStream<S>,
     ) -> (SessionFrontend, SessionBackend<S>) {
-        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
+        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<(Instant, Bytes)>();
         let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
         let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
 
@@ -240,7 +240,7 @@ pub mod native {
         }
 
         fn recv(
-            send_packet_b2f: &mpsc::UnboundedSender<RecvPacket>,
+            send_packet_b2f: &mpsc::UnboundedSender<(Instant, Bytes)>,
             msg: Message,
         ) -> Result<(), DisconnectReason<SessionError>> {
             let packet = match msg {
@@ -255,10 +255,7 @@ pub mod native {
             let now = Instant::now();
 
             send_packet_b2f
-                .unbounded_send(RecvPacket {
-                    recv_at: now,
-                    payload: packet,
-                })
+                .unbounded_send((now, packet))
                 .map_err(|_| SessionError::BackendClosed)?;
             Ok(())
         }

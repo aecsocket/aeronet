@@ -1,13 +1,14 @@
 use {
     super::{ClientConfig, ClientError, ConnectTarget, ToConnected},
     crate::session::{SessionBackend, SessionError, SessionMeta},
-    aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
+    aeronet_io::connection::DisconnectReason,
     bytes::Bytes,
     futures::{
         channel::{mpsc, oneshot},
         never::Never,
     },
     tracing::debug,
+    web_time::Instant,
     xwt_core::prelude::*,
 };
 
@@ -64,7 +65,7 @@ pub async fn start(
     debug!("Connected");
 
     let (send_meta, recv_meta) = mpsc::channel::<SessionMeta>(1);
-    let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
+    let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<(Instant, Bytes)>();
     let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
     let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
     let next = ToConnected {

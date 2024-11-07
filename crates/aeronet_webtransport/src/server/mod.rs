@@ -6,24 +6,26 @@ use {
     crate::{
         runtime::WebTransportRuntime,
         session::{
-            self, MIN_MTU, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
+            self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin, MIN_MTU,
         },
     },
     aeronet_io::{
-        IoSet, Session, SessionEndpoint,
         connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
-        packet::{PacketRtt, RecvPacket},
-        server::{CloseReason, Closed, Opened, Server},
+        packet::PacketRtt,
+        server::{CloseReason, Closed, Server, ServerEndpoint},
+        time::SinceAppStart,
+        IoSet, Session, SessionEndpoint,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
     bevy_reflect::prelude::*,
+    bevy_time::{Real, Time},
     bytes::Bytes,
     core::{net::SocketAddr, time::Duration},
     derive_more::{Display, Error, From},
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
     web_time::Instant,
     wtransport::error::ConnectionError,
 };
@@ -266,7 +268,7 @@ struct ToConnected {
     initial_rtt: Duration,
     initial_mtu: usize,
     recv_meta: mpsc::Receiver<SessionMeta>,
-    recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
+    recv_packet_b2f: mpsc::UnboundedReceiver<(Instant, Bytes)>,
     send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     send_user_dc: oneshot::Sender<String>,
 }
@@ -274,16 +276,20 @@ struct ToConnected {
 // TODO: required components
 fn on_server_added(trigger: Trigger<OnAdd, WebTransportServer>, mut commands: Commands) {
     let server = trigger.entity();
-    commands.entity(server).insert(Server);
+    commands.entity(server).insert(ServerEndpoint);
 }
 
-fn poll_servers(mut commands: Commands, mut servers: Query<(Entity, &mut WebTransportServer)>) {
+fn poll_servers(
+    mut commands: Commands,
+    time: Res<Time<Real>>,
+    mut servers: Query<(Entity, &mut WebTransportServer)>,
+) {
     for (server, mut frontend) in &mut servers {
         replace_with::replace_with_or_abort(&mut frontend.0, |state| match state {
             Frontend::Opening {
                 recv_closed,
                 recv_next,
-            } => poll_opening(&mut commands, server, recv_closed, recv_next),
+            } => poll_opening(&mut commands, &time, server, recv_closed, recv_next),
             Frontend::Open {
                 recv_closed,
                 recv_connecting,
@@ -295,6 +301,7 @@ fn poll_servers(mut commands: Commands, mut servers: Query<(Entity, &mut WebTran
 
 fn poll_opening(
     commands: &mut Commands,
+    time: &Time<Real>,
     server: Entity,
     mut recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
     mut recv_next: oneshot::Receiver<ToOpen>,
@@ -310,9 +317,10 @@ fn poll_opening(
         };
     };
 
+    let now = SinceAppStart::now(time);
     commands
         .entity(server)
-        .insert((Opened::now(), LocalAddr(next.local_addr)));
+        .insert((Server::new(now), LocalAddr(next.local_addr)));
     Frontend::Open {
         recv_closed,
         recv_connecting: next.recv_connecting,
@@ -405,7 +413,11 @@ fn on_connection_response(
     _ = sender.send(*trigger.event());
 }
 
-fn poll_clients(mut commands: Commands, mut clients: Query<(Entity, &mut ClientFrontend)>) {
+fn poll_clients(
+    mut commands: Commands,
+    time: Res<Time<Real>>,
+    mut clients: Query<(Entity, &mut ClientFrontend)>,
+) {
     for (client, mut frontend) in &mut clients {
         replace_with::replace_with_or_abort(&mut *frontend, |state| match state {
             ClientFrontend::Connecting {
@@ -414,6 +426,7 @@ fn poll_clients(mut commands: Commands, mut clients: Query<(Entity, &mut ClientF
                 recv_next,
             } => poll_connecting(
                 &mut commands,
+                &time,
                 client,
                 send_session_response,
                 recv_dc,
@@ -433,6 +446,7 @@ fn poll_clients(mut commands: Commands, mut clients: Query<(Entity, &mut ClientF
 
 fn poll_connecting(
     commands: &mut Commands,
+    time: &Time<Real>,
     entity: Entity,
     send_session_response: Option<oneshot::Sender<SessionResponse>>,
     mut recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
@@ -450,7 +464,8 @@ fn poll_connecting(
         };
     };
 
-    let mut session = Session::new(Instant::now(), MIN_MTU);
+    let now = SinceAppStart::now(time);
+    let mut session = Session::new(now, MIN_MTU);
     if let Err(err) = session.set_mtu(next.initial_mtu) {
         commands.trigger_targets(
             Disconnected {
