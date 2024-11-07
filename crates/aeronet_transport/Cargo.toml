@@ -40,11 +40,11 @@ ringbuf = { workspace = true }
 static_assertions = { workspace = true }
 tracing = { workspace = true }
 typesize = { workspace = true, features = [
+  "std",
   "bitvec",
   "web-time",
   "saturating_impls",
 ] }
-web-time = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_core = { workspace = true }

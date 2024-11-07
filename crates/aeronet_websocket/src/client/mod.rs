@@ -4,18 +4,18 @@ mod backend;
 
 use {
     crate::{
-        session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin, MTU},
         WebSocketRuntime,
+        session::{self, MTU, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
     },
     aeronet_io::{
+        IoSet, Session, SessionEndpoint,
         connection::{DisconnectReason, Disconnected},
-        Endpoint, IoSet, Session,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     derive_more::{Display, Error, From},
     futures::{channel::oneshot, never::Never},
-    tracing::{debug_span, Instrument},
+    tracing::{Instrument, debug_span},
     web_time::Instant,
 };
 
@@ -132,7 +132,7 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
     );
 
     world.entity_mut(session).insert((
-        Endpoint, // TODO: required component of WebSocketClient
+        SessionEndpoint, // TODO: required component of WebSocketClient
         WebSocketClient(ClientFrontend::Connecting { recv_dc, recv_next }),
     ));
 }

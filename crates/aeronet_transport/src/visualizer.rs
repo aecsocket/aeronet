@@ -2,25 +2,25 @@
 
 use {
     crate::{
+        Transport, TransportConfig,
         sampling::{
             SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
             SessionStatsSampling,
         },
-        Transport, TransportConfig,
     },
-    aeronet_io::{packet::PacketRtt, Session},
+    aeronet_io::{Session, packet::PacketRtt, time::SinceAppStart},
     bevy_app::prelude::*,
     bevy_core::Name,
     bevy_ecs::prelude::*,
     bevy_egui::{
-        egui::{self, epaint::Hsva},
         EguiContexts,
+        egui::{self, epaint::Hsva},
     },
+    bevy_time::{Real, Time},
     core::{hash::Hash, ops::RangeInclusive, time::Duration},
     itertools::Itertools,
     ringbuf::traits::Consumer,
     size_format::{BinaryPrefixes, PointSeparated, SizeFormatter},
-    web_time::Instant,
 };
 
 /// Uses [`egui`] to draw [`egui_plot`]s of [`Session`] statistics.
@@ -272,7 +272,7 @@ impl SessionVisualizer {
     pub fn show_status_bar(
         &mut self,
         ui: &mut egui::Ui,
-        now: Instant,
+        now: SinceAppStart,
         session: &Session,
         packet_rtt: Option<Duration>,
         transport: &Transport,
@@ -284,7 +284,7 @@ impl SessionVisualizer {
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.label(format!(
                     "{:.1?}",
-                    now.saturating_duration_since(session.connected_at())
+                    now.duration_since(session.connected_at())
                 ));
                 ui.separator();
 
@@ -374,6 +374,7 @@ fn fmt_bytes_y_axis(mark: egui_plot::GridMark, _range: &RangeInclusive<f64>) -> 
 
 fn draw(
     mut egui: EguiContexts,
+    time: Res<Time<Real>>,
     mut sessions: Query<(
         Entity,
         Option<&Name>,
@@ -396,7 +397,7 @@ fn draw(
             visualizer.show_plots(ui, *sampling, stats.iter().rev().copied());
             visualizer.show_status_bar(
                 ui,
-                Instant::now(),
+                SinceAppStart::now(&time),
                 session,
                 packet_rtt.map(|x| x.0),
                 transport,

@@ -18,7 +18,9 @@ pub mod visualizer;
 
 pub use aeronet_io as io;
 use {
-    aeronet_io::{connection::Disconnect, packet::MtuTooSmall, IoSet, Session},
+    aeronet_io::{
+        IoSet, Session, connection::Disconnect, packet::MtuTooSmall, time::SinceAppStart,
+    },
     arbitrary::Arbitrary,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
@@ -35,8 +37,7 @@ use {
     send::TransportSend,
     seq_buf::SeqBuf,
     tracing::warn,
-    typesize::{derive::TypeSize, TypeSize},
-    web_time::Instant,
+    typesize::{TypeSize, derive::TypeSize},
 };
 
 /// Sets up the transport layer functionality.
@@ -142,7 +143,7 @@ pub struct RecvMessage {
     /// Lane index on which this message was received.
     pub lane: LaneIndex,
     /// Instant at which the final fragment of this message was received.
-    pub recv_at: Instant,
+    pub recv_at: SinceAppStart,
     /// Raw byte data of this message.
     pub payload: Vec<u8>,
 }
@@ -168,9 +169,10 @@ impl Transport {
     ///
     /// ```
     /// use {
-    ///     aeronet_io::Session,
+    ///     aeronet_io::{Session, time::SinceAppStart},
     ///     aeronet_transport::{Transport, lane::LaneKind},
     ///     bevy_ecs::prelude::*,
+    ///     bevy_time::{Real, Time},
     ///     tracing::warn,
     ///     web_time::Instant,
     /// };
@@ -181,12 +183,14 @@ impl Transport {
     ///     trigger: Trigger<OnAdd, Session>,
     ///     sessions: Query<&Session>,
     ///     mut commands: Commands,
+    ///     time: Res<Time<Real>>,
     /// ) {
     ///     let entity = trigger.entity();
     ///     let session = sessions
     ///         .get(entity)
     ///         .expect("we are adding this component to this entity");
-    ///     let Ok(transport) = Transport::new(session, LANES, LANES, Instant::now()) else {
+    ///     let now = SinceAppStart::new(&time);
+    ///     let Ok(transport) = Transport::new(session, LANES, LANES, now) else {
     ///         warn!("Failed to create transport for {entity}");
     ///         return;
     ///     };
@@ -197,7 +201,7 @@ impl Transport {
         session: &Session,
         recv_lanes: impl IntoIterator<Item = LaneKind>,
         send_lanes: impl IntoIterator<Item = LaneKind>,
-        now: Instant,
+        now: SinceAppStart,
     ) -> Result<Self, MtuTooSmall> {
         let min_mtu = session.min_mtu();
         let max_frag_len = min_mtu.checked_sub(FRAG_OVERHEAD).ok_or(MtuTooSmall {
@@ -322,12 +326,12 @@ struct FragmentPath {
 
 #[derive(Debug, Clone, TypeSize)]
 struct FlushedPacket {
-    flushed_at: Instant,
+    flushed_at: SinceAppStart,
     frags: Box<[FragmentPath]>,
 }
 
 impl FlushedPacket {
-    fn new(flushed_at: Instant) -> Self {
+    fn new(flushed_at: SinceAppStart) -> Self {
         Self {
             flushed_at,
             frags: Box::new([]),

@@ -16,19 +16,24 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
+[features]
+default = ["std"]
+
+std = ["aeronet_io/std"]
+
 [dependencies]
 aeronet_io = { workspace = true }
 
 bytes = { workspace = true }
+crossbeam-channel = { workspace = true }
 derive_more = { workspace = true, features = ["display", "error"] }
-flume = { workspace = true }
 oneshot = { workspace = true }
 sync_wrapper = { workspace = true }
 tracing = { workspace = true }
-web-time = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
+bevy_time = { workspace = true }
 
 [dev-dependencies]
 bevy = { workspace = true }
