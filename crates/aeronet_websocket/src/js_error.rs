@@ -5,9 +5,7 @@ use {
 
 /// Error obtained from a JavaScript execution context.
 ///
-/// You can get one [from][`From`] a:
-/// - [`JsValue`]
-/// - [`xwt_web_sys::Error`]
+/// You can get one [from][`From`] a [`JsValue`].
 #[derive(Debug, Clone)]
 pub struct JsError(pub String);
 
