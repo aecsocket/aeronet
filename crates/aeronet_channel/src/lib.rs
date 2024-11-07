@@ -3,9 +3,9 @@
 
 use {
     aeronet_io::{
-        connection::{Disconnect, DisconnectReason, Disconnected, DROP_DISCONNECT_REASON},
-        packet::RecvPacket,
         AeronetIoPlugin, Endpoint, IoSet, Session,
+        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected},
+        packet::RecvPacket,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},

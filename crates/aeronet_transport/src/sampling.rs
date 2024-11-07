@@ -3,8 +3,8 @@
 use {
     crate::{MessageStats, Transport, TransportConfig},
     aeronet_io::{
-        packet::{PacketRtt, PacketStats},
         Session,
+        packet::{PacketRtt, PacketStats},
     },
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
@@ -12,8 +12,8 @@ use {
     bevy_time::{Real, Time, Timer, TimerMode},
     core::time::Duration,
     ringbuf::{
-        traits::{Consumer, RingBuffer},
         HeapRb,
+        traits::{Consumer, RingBuffer},
     },
 };
 

@@ -220,8 +220,8 @@ mod tests {
     use {
         super::*,
         crate::{
-            connection::{DisconnectReason, Disconnected},
             AeronetIoPlugin,
+            connection::{DisconnectReason, Disconnected},
         },
         bevy_hierarchy::BuildWorldChildren,
     };
