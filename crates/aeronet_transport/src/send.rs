@@ -82,6 +82,13 @@ impl TransportSend {
     /// [`Transport::recv_acks`], you can compare message keys to tell if the
     /// message you are pushing right now was the one that was acknowledged.
     ///
+    /// If the message could not be enqueued (if e.g. there are already too many
+    /// messages buffered for sending), this returns [`None`], and the transport
+    /// will be forcibly disconnected on the next update. This is considered a
+    /// fatal connection condition, because you may have sent a message along a
+    /// reliable lane, and those [`LaneKind`]s provide strong guarantees that
+    /// messages will be received by the peer.
+    ///
     /// [^1]: See [`MessageKey`] for uniqueness guarantees.
     ///
     /// # Panics
