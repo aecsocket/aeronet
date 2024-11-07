@@ -1,8 +1,6 @@
 //! Example server using WebSocket which listens for clients sending strings
 //! and sends back a string reply.
 
-use aeronet_io::server::Server;
-
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         fn main() {
@@ -13,6 +11,7 @@ cfg_if::cfg_if! {
 use {
     aeronet_io::{
         connection::{DisconnectReason, Disconnected, LocalAddr},
+        server::Opened,
         SessionEndpoint, Session,
     },
     aeronet_websocket::server::{Identity, ServerConfig, WebSocketServer, WebSocketServerPlugin},
@@ -43,7 +42,7 @@ fn open_server(mut commands: Commands) {
     commands.spawn_empty().add(WebSocketServer::open(config));
 }
 
-fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
+fn on_opened(trigger: Trigger<OnAdd, Opened>, servers: Query<&LocalAddr>) {
     let server = trigger.entity();
     let local_addr = servers.get(server).expect("opened server should have a binding socket `LocalAddr`");
     info!("{server} opened on {}", **local_addr);

@@ -207,7 +207,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "web-time",
 ]
 
 [[package]]
@@ -223,7 +222,6 @@ dependencies = [
  "bevy_egui",
  "bevy_hierarchy",
  "bevy_reflect",
- "bevy_time",
  "bytes",
  "cfg-if",
  "derive_more",

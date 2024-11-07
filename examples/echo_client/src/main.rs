@@ -16,19 +16,19 @@
 use {
     aeronet::{
         io::{
+            Session, SessionEndpoint,
             bytes::Bytes,
             connection::{Disconnect, DisconnectReason, Disconnected},
-            time::SinceAppStart,
-            Session, SessionEndpoint,
+            web_time,
         },
         transport::{
-            lane::{LaneIndex, LaneKind},
             AeronetTransportPlugin, Transport, TransportConfig,
+            lane::{LaneIndex, LaneKind},
         },
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    bevy_egui::{EguiContexts, EguiPlugin, egui},
     core::mem,
 };
 
@@ -146,7 +146,6 @@ fn on_connected(
     trigger: Trigger<OnAdd, Session>,
     mut sessions: Query<(&Session, &mut UiState)>,
     mut commands: Commands,
-    time: Res<Time<Real>>,
 ) {
     let entity = trigger.entity();
     let (session, mut ui_state) = sessions
@@ -156,13 +155,16 @@ fn on_connected(
 
     // Once the `Session` is added, we can make a `Transport`
     // and use messages.
-
-    // `SinceAppStart` is a Bevy-app-specific version of `Instant`,
-    // whose epoch is `Time<Real>::startup`.
-    // We use this for timekeeping in sessions and transports.
-    let now = SinceAppStart::now(&time);
-    let transport = Transport::new(session, LANES, LANES, now)
-        .expect("packet MTU should be large enough to support transport");
+    let transport = Transport::new(
+        session,
+        LANES,
+        LANES,
+        // Don't use `std::time::Instant::now`!
+        // On WASM that function will panic.
+        // Instead, use the re-exported `web_time`.
+        web_time::Instant::now(),
+    )
+    .expect("packet MTU should be large enough to support transport");
     commands.entity(entity).insert(transport);
 }
 
@@ -214,7 +216,6 @@ fn ui(
     // Technically, this query can run for multiple sessions, so we can have
     // multiple `egui` windows. But there will only ever be 1 session active.
     mut sessions: Query<(Entity, &mut Transport, &mut UiState), Without<Parent>>,
-    time: Res<Time<Real>>,
 ) {
     for (entity, mut transport, mut ui_state) in &mut sessions {
         egui::Window::new("Log").show(egui.ctx_mut(), |ui| {
@@ -229,7 +230,7 @@ fn ui(
                 // We ignore the resulting `MessageKey`, since we don't need it.
                 _ = transport
                     .send
-                    .push(SEND_LANE, msg, SinceAppStart::now(&time));
+                    .push(SEND_LANE, msg, web_time::Instant::now());
             }
 
             if ui.button("Disconnect").clicked() {

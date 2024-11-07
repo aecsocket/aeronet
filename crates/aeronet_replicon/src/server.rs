@@ -3,10 +3,10 @@
 use {
     crate::convert,
     aeronet_io::{
-        connection::{DisconnectReason, Disconnected},
-        server::{Server, ServerEndpoint},
-        time::SinceAppStart,
         Session,
+        connection::{DisconnectReason, Disconnected},
+        server::{Opened, Server},
+        web_time::Instant,
     },
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
@@ -17,7 +17,6 @@ use {
         prelude::{RepliconChannels, RepliconServer},
         server::{ServerEvent, ServerSet},
     },
-    bevy_time::{Real, Time},
     tracing::warn,
 };
 
@@ -101,8 +100,7 @@ pub enum ServerTransportSet {
 ///   - the child [`Entity`] (which has [`Session`]) is used as the identifier
 ///     for the client which sent/receives the message (see [`convert`])
 /// - determining server [running] status
-///   - if at least 1 server has [`Server`] (not just [`ServerEndpoint`]),
-///     [`RepliconServer`] is [running]
+///   - if at least 1 server is [`Opened`], [`RepliconServer`] is [running]
 ///
 /// Although you can only have one [`RepliconServer`] at a time, it actually
 /// makes sense to have multiple [`AeronetRepliconServer`] entities (unlike
@@ -118,11 +116,7 @@ pub enum ServerTransportSet {
 #[reflect(Component)]
 pub struct AeronetRepliconServer;
 
-type OpenedServer = (
-    With<ServerEndpoint>,
-    With<Server>,
-    With<AeronetRepliconServer>,
-);
+type OpenedServer = (With<Server>, With<Opened>, With<AeronetRepliconServer>);
 
 fn update_state(
     mut replicon_server: ResMut<RepliconServer>,
@@ -143,7 +137,6 @@ fn on_connected(
     mut events: EventWriter<ServerEvent>,
     channels: Res<RepliconChannels>,
     mut commands: Commands,
-    time: Res<Time<Real>>,
 ) {
     let client = trigger.entity();
     let session = sessions
@@ -168,9 +161,7 @@ fn on_connected(
         .server_channels()
         .iter()
         .map(|channel| convert::to_lane_kind(channel.kind));
-
-    let now = SinceAppStart::now(&time);
-    let transport = match Transport::new(session, recv_lanes, send_lanes, now) {
+    let transport = match Transport::new(session, recv_lanes, send_lanes, Instant::now()) {
         Ok(transport) => transport,
         Err(err) => {
             let err = anyhow::Error::new(err);
@@ -231,12 +222,8 @@ fn poll(
     }
 }
 
-fn flush(
-    mut replicon_server: ResMut<RepliconServer>,
-    mut clients: Query<&mut Transport>,
-    time: Res<Time<Real>>,
-) {
-    let now = SinceAppStart::now(&time);
+fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Transport>) {
+    let now = Instant::now();
     for (client_id, channel_id, msg) in replicon_server.drain_sent() {
         let Some(mut transport) =
             convert::to_entity(client_id).and_then(|client| clients.get_mut(client).ok())

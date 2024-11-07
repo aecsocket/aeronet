@@ -2,15 +2,15 @@
 
 use {
     crate::{
+        FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
         frag::{FragmentReceiver, ReassembleError},
         lane::{LaneIndex, LaneKind},
         packet::{Fragment, MessageSeq, PacketHeader, PacketSeq},
         rtt::RttEstimator,
         send,
         seq_buf::SeqBuf,
-        FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
     },
-    aeronet_io::{time::SinceAppStart, Session},
+    aeronet_io::{Session, time::SinceAppStart},
     ahash::{HashMap, HashSet},
     bevy_ecs::prelude::*,
     core::{iter, num::Saturating, time::Duration},
@@ -18,7 +18,7 @@ use {
     either::Either,
     octs::{Buf, Read},
     tracing::{trace, trace_span},
-    typesize::{derive::TypeSize, TypeSize},
+    typesize::{TypeSize, derive::TypeSize},
 };
 
 /// Buffer storing data received by a [`Transport`].
@@ -135,7 +135,7 @@ fn recv_on(
         .read::<PacketHeader>()
         .map_err(|_| RecvError::ReadHeader)?;
 
-    let span = trace_span!("recv", packet = header.seq.0 .0);
+    let span = trace_span!("recv", packet = header.seq.0.0);
     let _span = span.enter();
 
     trace!(len = packet.len(), "Received packet");
