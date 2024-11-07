@@ -2,10 +2,9 @@
 #![doc = include_str!("../README.md")]
 //!
 //! ## Feature flags
-//!
 #![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
 
-use bevy_app::{prelude::*, PluginGroupBuilder};
+use bevy_app::{PluginGroupBuilder, prelude::*};
 pub use {aeronet_io as io, aeronet_transport as transport};
 
 /// Adds the default networking plugins.
