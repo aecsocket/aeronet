@@ -1,5 +1,5 @@
 use {
-    std::{convert::Infallible, error::Error, fmt},
+    core::{convert::Infallible, error::Error, fmt},
     wasm_bindgen::JsValue,
 };
 
