@@ -3,7 +3,7 @@
 use {
     aeronet::{
         io::{
-            Endpoint, Session,
+            Session, SessionEndpoint,
             connection::{Disconnect, DisconnectReason, Disconnected},
         },
         transport::{
@@ -78,7 +78,7 @@ fn setup_level(mut commands: Commands) {
 }
 
 fn on_connecting(
-    trigger: Trigger<OnAdd, Endpoint>,
+    trigger: Trigger<OnAdd, SessionEndpoint>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {
@@ -140,7 +140,7 @@ fn global_ui(
     mut commands: Commands,
     mut egui: EguiContexts,
     global_ui: Res<GlobalUi>,
-    sessions: Query<(Entity, &Name, Option<&Session>), With<Endpoint>>,
+    sessions: Query<(Entity, &Name, Option<&Session>), With<SessionEndpoint>>,
 ) {
     egui::Window::new("Session Log").show(egui.ctx_mut(), |ui| {
         match sessions.get_single() {

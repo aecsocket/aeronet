@@ -10,7 +10,7 @@ use {
         },
     },
     aeronet_io::{
-        Endpoint, IoSet, Session,
+        IoSet, Session, SessionEndpoint,
         connection::{DisconnectReason, Disconnected},
         packet::RecvPacket,
     },
@@ -133,7 +133,7 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
     );
 
     world.entity_mut(session).insert((
-        Endpoint, // TODO: required component of WebTransportClient
+        SessionEndpoint, // TODO: required component of WebTransportClient
         WebTransportClient(ClientFrontend::Connecting { recv_dc, recv_next }),
     ));
 }

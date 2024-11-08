@@ -8,7 +8,7 @@ use {
         session::{self, MTU, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
     },
     aeronet_io::{
-        Endpoint, IoSet, Session,
+        IoSet, Session, SessionEndpoint,
         connection::{DisconnectReason, Disconnected},
     },
     bevy_app::prelude::*,
@@ -132,7 +132,7 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
     );
 
     world.entity_mut(session).insert((
-        Endpoint, // TODO: required component of WebSocketClient
+        SessionEndpoint, // TODO: required component of WebSocketClient
         WebSocketClient(ClientFrontend::Connecting { recv_dc, recv_next }),
     ));
 }

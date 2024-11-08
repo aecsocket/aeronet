@@ -5,7 +5,7 @@ use {
     aeronet_io::{
         Session,
         connection::{DisconnectReason, Disconnected},
-        server::{Opened, Server},
+        server::{Server, ServerEndpoint},
         web_time::Instant,
     },
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
@@ -100,7 +100,8 @@ pub enum ServerTransportSet {
 ///   - the child [`Entity`] (which has [`Session`]) is used as the identifier
 ///     for the client which sent/receives the message (see [`convert`])
 /// - determining server [running] status
-///   - if at least 1 server is [`Opened`], [`RepliconServer`] is [running]
+///   - if at least 1 entity has both [`ServerEndpoint`] and [`Server`],
+///     [`RepliconServer`] is [running]
 ///
 /// Although you can only have one [`RepliconServer`] at a time, it actually
 /// makes sense to have multiple [`AeronetRepliconServer`] entities (unlike
@@ -116,7 +117,11 @@ pub enum ServerTransportSet {
 #[reflect(Component)]
 pub struct AeronetRepliconServer;
 
-type OpenedServer = (With<Server>, With<Opened>, With<AeronetRepliconServer>);
+type OpenedServer = (
+    With<ServerEndpoint>,
+    With<Server>,
+    With<AeronetRepliconServer>,
+);
 
 fn update_state(
     mut replicon_server: ResMut<RepliconServer>,

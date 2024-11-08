@@ -22,8 +22,8 @@ pub(crate) struct ServerPlugin;
 
 impl Plugin for ServerPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Server>()
-            .register_type::<Opened>()
+        app.register_type::<ServerEndpoint>()
+            .register_type::<Server>()
             .observe(on_opening)
             .observe(on_opened)
             .observe(on_close)
@@ -31,8 +31,17 @@ impl Plugin for ServerPlugin {
     }
 }
 
-/// Marker component for an [`Entity`] which listens for client connections, and
-/// spawns [`Session`]s to communicate with those clients.
+/// Represents an [`Entity`] which may be preparing to, or has already started,
+/// listening for client connections.
+///
+/// - If a server entity only has [`ServerEndpoint`], it is still opening.
+/// - If a server entity has [`ServerEndpoint`] and [`Server`], it has
+///   successfully opened.
+#[derive(Debug, Component, Reflect)]
+pub struct ServerEndpoint;
+
+/// Represents an [`Entity`] which listens for client connections, and spawns
+/// [`Session`]s to communicate with those clients.
 ///
 /// This represents the "server" part of the client/server networking model (a
 /// client is represented as just a [`Session`]). Its responsibility is to
@@ -40,13 +49,16 @@ impl Plugin for ServerPlugin {
 /// that this does not have to represent a *dedicated* server - you may run
 /// a server, and connect a client to that server, in the same app.
 ///
-/// The server starts in an opening state (when [`Server`] has been added but
-/// [`Opened`] is not yet present), and transitions to either an [`Opened`]
-/// state, or fails to open and is [`Closed`]. After the server is opened, the
-/// server should not close unless there is a fatal server-internal error which
-/// affects all connected clients - if a single client causes issues e.g.
-/// sending illegal data or breaking some invariant, that single client will be
-/// disconnected instead of the entire server being torn down.
+/// The server starts in an opening state (when [`ServerEndpoint`] has been
+/// added but [`Server`] is not yet present), and transitions to either an
+/// opened state, or fails to open and is [`Closed`]. After the server is
+/// opened, the server should not close unless there is a fatal server-internal
+/// error which affects all connected clients - if a single client causes issues
+/// e.g. sending illegal data or breaking some invariant, that single client
+/// will be disconnected instead of the entire server being torn down.
+///
+/// To listen for when a server is opened, add an observer listening for
+/// [`Trigger<OnAdd, Server>`].
 ///
 /// When a client connects, it is spawned as a [child] of the server entity.
 /// Therefore, to query for sessions spawned under a server, use
@@ -56,30 +68,21 @@ impl Plugin for ServerPlugin {
 ///
 /// [child]: Children
 /// [`Session`]: crate::Session
-#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
-#[reflect(Component)]
-pub struct Server;
-
-/// Component for a [`Server`] which is currently attempting to receive client
-/// connections and spawn [`Session`]s.
-///
-/// To listen for when a server is opened, add an observer listening for
-/// [`Trigger<OnAdd, Opened>`].
-///
-/// [`Session`]: crate::Session
-#[derive(Debug, Clone, Copy, Component, Reflect)]
-#[reflect(Component)]
-pub struct Opened {
-    /// Instant at which the server was opened.
-    pub at: Instant,
+#[derive(Debug, Component, Reflect)]
+#[reflect(from_reflect = false, Component)]
+// TODO: required component `ServerEndpoint`
+pub struct Server {
+    opened_at: Instant,
 }
 
-impl Opened {
-    /// Creates an [`Opened`] which indicates that the server was opened
-    /// [`now`](Instant::now).
+impl Server {
+    /// Creates a new [`Server`].
+    ///
+    /// - `opened_at`: the instant at which the IO layer acknowledged that the
+    ///   server is now ready to accept client connections.
     #[must_use]
-    pub fn now() -> Self {
-        Self { at: Instant::now() }
+    pub const fn new(opened_at: Instant) -> Self {
+        Self { opened_at }
     }
 }
 
@@ -178,12 +181,12 @@ impl<E> From<E> for CloseReason<E> {
     }
 }
 
-fn on_opening(trigger: Trigger<OnAdd, Server>) {
+fn on_opening(trigger: Trigger<OnAdd, ServerEndpoint>) {
     let server = trigger.entity();
     debug!("{server} opening");
 }
 
-fn on_opened(trigger: Trigger<OnAdd, Opened>) {
+fn on_opened(trigger: Trigger<OnAdd, Server>) {
     let server = trigger.entity();
     debug!("{server} opened");
 }

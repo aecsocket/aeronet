@@ -3,7 +3,7 @@
 
 use {
     aeronet_io::{
-        Endpoint, Session,
+        Session, SessionEndpoint,
         connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         packet::PacketRtt,
     },
@@ -42,7 +42,7 @@ struct SessionUi {
 }
 
 fn on_connecting(
-    trigger: Trigger<OnAdd, Endpoint>,
+    trigger: Trigger<OnAdd, SessionEndpoint>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {
