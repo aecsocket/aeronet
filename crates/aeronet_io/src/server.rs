@@ -49,13 +49,13 @@ pub struct ServerEndpoint;
 /// that this does not have to represent a *dedicated* server - you may run
 /// a server, and connect a client to that server, in the same app.
 ///
-/// The server starts in an opening state (when [`Server`] has been added but
-/// [`Opened`] is not yet present), and transitions to either an [`Opened`]
-/// state, or fails to open and is [`Closed`]. After the server is opened, the
-/// server should not close unless there is a fatal server-internal error which
-/// affects all connected clients - if a single client causes issues e.g.
-/// sending illegal data or breaking some invariant, that single client will be
-/// disconnected instead of the entire server being torn down.
+/// The server starts in an opening state (when [`ServerEndpoint`] has been
+/// added but [`Server`] is not yet present), and transitions to either an
+/// opened state, or fails to open and is [`Closed`]. After the server is
+/// opened, the server should not close unless there is a fatal server-internal
+/// error which affects all connected clients - if a single client causes issues
+/// e.g. sending illegal data or breaking some invariant, that single client
+/// will be disconnected instead of the entire server being torn down.
 ///
 /// To listen for when a server is opened, add an observer listening for
 /// [`Trigger<OnAdd, Server>`].
@@ -223,8 +223,8 @@ mod tests {
     use {
         super::*,
         crate::{
-            AeronetIoPlugin,
             connection::{DisconnectReason, Disconnected},
+            AeronetIoPlugin,
         },
         bevy_hierarchy::BuildWorldChildren,
     };
