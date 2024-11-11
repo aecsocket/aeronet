@@ -1,5 +1,5 @@
 [package]
-description = "Transport layer implementation for aeronet"
+description = "Transport layer implementation for `aeronet`"
 name = "aeronet_transport"
 
 authors.workspace = true
