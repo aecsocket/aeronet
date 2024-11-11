@@ -1,5 +1,5 @@
 [package]
-description = "Steam networking sockets IO layer implementation for aeronet"
+description = "Steam networking sockets IO layer implementation for `aeronet`"
 name = "aeronet_steam"
 
 authors.workspace = true
@@ -18,8 +18,16 @@ workspace = true
 all-features = true
 
 [features]
+## Enables the `client` module.
 client = []
+
+## Enables the `server` module.
 server = []
+
+## Enable this when generating docs.
+document-features = ["dep:document-features"]
+
+[dependencies]
 
 # so that this crate can still compile but be useless under WASM,
 # we put the native-only dependencies under a `target` block
@@ -28,16 +36,19 @@ server = []
 # it should use `::bevy_ecs` instead of `::bevy`
 # (the macro reads the crate dependencies to figure out which to use)
 
-[dependencies]
 bevy_ecs = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 aeronet_io = { workspace = true }
 
+bevy-steamworks = { workspace = true }
+derive_more = { workspace = true }
 steamworks = { workspace = true }
 
-bevy-steamworks = { workspace = true }
 bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+
+document-features = { workspace = true, optional = true }
 
 [dev-dependencies]
 bevy = { workspace = true }
