@@ -345,10 +345,6 @@ fn poll_open(
             .id();
         _ = connecting.send_session_entity.send(session);
 
-        // TODO: there may be a way to trigger SessionRequest on &mut World,
-        // immediately get a SessionResponse, and respond immediately
-        // without having to store send_session_response in Connecting
-        // https://github.com/bevyengine/bevy/pull/14894
         commands.queue(move |world: &mut World| {
             let mut request = SessionRequest {
                 authority: connecting.authority,
