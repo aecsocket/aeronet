@@ -6,25 +6,24 @@ use {
     crate::{
         runtime::WebTransportRuntime,
         session::{
-            self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin, MIN_MTU,
+            self, MIN_MTU, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
         },
     },
     aeronet_io::{
+        IoSet, Session, SessionEndpoint,
         connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         packet::{PacketRtt, RecvPacket},
         server::{CloseReason, Closed, Server, ServerEndpoint},
-        IoSet, Session, SessionEndpoint,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
     bevy_reflect::prelude::*,
     bytes::Bytes,
-    core::any::type_name,
-    core::{net::SocketAddr, time::Duration},
+    core::{any::type_name, net::SocketAddr, time::Duration},
     derive_more::{Display, Error, From},
     futures::channel::{mpsc, oneshot},
-    tracing::{debug_span, warn, Instrument},
+    tracing::{Instrument, debug_span, warn},
     web_time::Instant,
     wtransport::error::ConnectionError,
 };
@@ -358,8 +357,8 @@ fn poll_open(
 
             let response = request.response.unwrap_or_else(|| {
                 warn!(
-                    "Session {session} created on server {server} but no response was given, \
-                    will not allow this client to connect; you must `respond` to `{}`",
+                    "Session {session} created on server {server} but no response was given, will \
+                     not allow this client to connect; you must `respond` to `{}`",
                     type_name::<SessionRequest>()
                 );
                 SessionResponse::NotFound

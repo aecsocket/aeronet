@@ -3,12 +3,12 @@
 use {
     aeronet::{
         io::{
-            connection::{Disconnect, DisconnectReason, Disconnected},
             Session, SessionEndpoint,
+            connection::{Disconnect, DisconnectReason, Disconnected},
         },
         transport::{
-            visualizer::{SessionVisualizer, SessionVisualizerPlugin},
             TransportConfig,
+            visualizer::{SessionVisualizer, SessionVisualizerPlugin},
         },
     },
     aeronet_replicon::client::{AeronetRepliconClient, AeronetRepliconClientPlugin},
@@ -18,7 +18,7 @@ use {
         client::{WebTransportClient, WebTransportClientPlugin},
     },
     bevy::{ecs::query::QuerySingleError, prelude::*},
-    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    bevy_egui::{EguiContexts, EguiPlugin, egui},
     bevy_replicon::prelude::*,
     move_box::{GameState, MoveBoxPlugin, PlayerColor, PlayerInput, PlayerPosition},
 };
@@ -103,13 +103,12 @@ fn on_connected(
     ui_state.log.push(format!("{name} connected"));
 
     game_state.set(GameState::Playing);
-    commands.entity(entity).insert((
-        SessionVisualizer::default(),
-        TransportConfig {
+    commands
+        .entity(entity)
+        .insert((SessionVisualizer::default(), TransportConfig {
             max_memory_usage: 64 * 1024,
             send_bytes_per_sec: 4 * 1024,
-        },
-    ));
+        }));
 }
 
 fn on_disconnected(

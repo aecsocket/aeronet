@@ -3,9 +3,9 @@
 
 use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
-    aeronet_io::{connection::Disconnect, Session},
+    aeronet_io::{Session, connection::Disconnect},
     bevy::{log::LogPlugin, prelude::*},
-    bevy_egui::{egui, EguiContexts, EguiPlugin},
+    bevy_egui::{EguiContexts, EguiPlugin, egui},
     core::mem,
 };
 
