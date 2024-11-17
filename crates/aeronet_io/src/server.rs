@@ -37,7 +37,7 @@ impl Plugin for ServerPlugin {
 /// - If a server entity only has [`ServerEndpoint`], it is still opening.
 /// - If a server entity has [`ServerEndpoint`] and [`Server`], it has
 ///   successfully opened.
-#[derive(Debug, Component, Reflect)]
+#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 pub struct ServerEndpoint;
 
 /// Represents an [`Entity`] which listens for client connections, and spawns
@@ -70,7 +70,7 @@ pub struct ServerEndpoint;
 /// [`Session`]: crate::Session
 #[derive(Debug, Component, Reflect)]
 #[reflect(from_reflect = false, Component)]
-// TODO: required component `ServerEndpoint`
+#[require(ServerEndpoint)]
 pub struct Server {
     opened_at: Instant,
 }

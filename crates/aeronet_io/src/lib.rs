@@ -41,7 +41,7 @@ impl Plugin for AeronetIoPlugin {
 /// - If a session entity only has [`SessionEndpoint`], it is still connecting.
 /// - If a session entity has [`SessionEndpoint`] and [`Session`], it has
 ///   successfully connected.
-#[derive(Debug, Component, Reflect)]
+#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct SessionEndpoint;
 
@@ -111,7 +111,7 @@ pub struct SessionEndpoint;
 /// [`Disconnect`]: connection::Disconnect
 #[derive(Debug, Component, Reflect)]
 #[reflect(from_reflect = false, Component)]
-// TODO: required component `SessionEndpoint`
+#[require(SessionEndpoint)]
 pub struct Session {
     connected_at: Instant,
     min_mtu: usize,

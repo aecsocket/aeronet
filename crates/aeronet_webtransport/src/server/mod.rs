@@ -46,7 +46,6 @@ impl Plugin for WebTransportServerPlugin {
                     .in_set(IoSet::Poll)
                     .before(session::poll),
             )
-            .add_observer(on_server_added)
             .add_observer(on_connection_response);
     }
 }
@@ -56,6 +55,7 @@ impl Plugin for WebTransportServerPlugin {
 ///
 /// Use [`WebTransportServer::open`] to start opening a server.
 #[derive(Debug, Component)]
+#[require(ServerEndpoint)]
 pub struct WebTransportServer(Frontend);
 
 /// Configuration for the [`WebTransportServer`].
@@ -229,6 +229,7 @@ enum Frontend {
 }
 
 #[derive(Debug, Component)]
+#[require(SessionEndpoint)]
 enum ClientFrontend {
     Connecting {
         send_session_response: Option<oneshot::Sender<SessionResponse>>,
@@ -269,12 +270,6 @@ struct ToConnected {
     recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     send_user_dc: oneshot::Sender<String>,
-}
-
-// TODO: required components
-fn on_server_added(trigger: Trigger<OnAdd, WebTransportServer>, mut commands: Commands) {
-    let server = trigger.entity();
-    commands.entity(server).insert(ServerEndpoint);
 }
 
 fn poll_servers(mut commands: Commands, mut servers: Query<(Entity, &mut WebTransportServer)>) {
@@ -336,14 +331,13 @@ fn poll_open(
             // as soon as other components are added
             .spawn_empty()
             .set_parent(server)
-            .insert((
-                SessionEndpoint, // TODO: required component of ClientFrontend
+            .insert(
                 ClientFrontend::Connecting {
                     send_session_response: Some(connecting.send_session_response),
                     recv_dc: connecting.recv_dc,
                     recv_next: connecting.recv_next,
                 },
-            ))
+            )
             .id();
         _ = connecting.send_session_entity.send(session);
 

@@ -64,8 +64,7 @@ impl Plugin for AeronetTransportPlugin {
                         .in_set(TransportSet::Poll),
                 ),
             )
-            .add_systems(PostUpdate, send::flush.in_set(TransportSet::Flush))
-            .add_observer(init_config);
+            .add_systems(PostUpdate, send::flush.in_set(TransportSet::Flush));
     }
 }
 
@@ -101,7 +100,7 @@ impl Plugin for AeronetTransportPlugin {
 /// The `recv` buffers must be drained on every update, otherwise some may be
 /// lost, leading to incorrect behavior, and a warning will be logged.
 #[derive(Debug, Component, TypeSize)]
-// TODO: required component TransportConfig
+#[require(TransportConfig)]
 pub struct Transport {
     // shared
     flushed_packets: SeqBuf<FlushedPacket, 1024>,
@@ -343,18 +342,6 @@ impl FlushedPacket {
             flushed_at,
             frags: Box::new([]),
         }
-    }
-}
-
-// TODO: required component TransportConfig
-fn init_config(
-    trigger: Trigger<OnInsert, Transport>,
-    with_config: Query<(), With<TransportConfig>>,
-    mut commands: Commands,
-) {
-    let entity = trigger.entity();
-    if with_config.get(entity).is_err() {
-        commands.entity(entity).insert(TransportConfig::default());
     }
 }
 

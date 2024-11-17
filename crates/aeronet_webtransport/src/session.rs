@@ -60,7 +60,6 @@ impl Plugin for WebTransportSessionPlugin {
         app.init_resource::<WebTransportRuntime>()
             .add_systems(PreUpdate, poll.in_set(IoSet::Poll))
             .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
-            .add_observer(on_io_added)
             .add_observer(on_disconnect);
     }
 }
@@ -74,11 +73,16 @@ impl Plugin for WebTransportSessionPlugin {
 /// You should not add or remove this component directly - it is managed
 /// entirely by the client and server implementations.
 #[derive(Debug, Component)]
+#[require(Session(new_session))]
 pub struct WebTransportIo {
     pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,
     pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
+}
+
+fn new_session() -> Session {
+    Session::new(Instant::now(), IP_MTU)
 }
 
 /// Error that occurs when polling a session using the [`WebTransportIo`]
@@ -130,14 +134,6 @@ pub(crate) struct SessionMeta {
     #[cfg(not(target_family = "wasm"))]
     packet_rtt: Duration,
     mtu: usize,
-}
-
-// TODO: required components
-fn on_io_added(trigger: Trigger<OnAdd, WebTransportIo>, mut commands: Commands) {
-    let entity = trigger.entity();
-    commands
-        .entity(entity)
-        .insert(Session::new(Instant::now(), IP_MTU));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTransportIo>) {
