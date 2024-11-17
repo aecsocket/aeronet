@@ -3,8 +3,8 @@
 use {
     crate::{MessageStats, Transport, TransportConfig},
     aeronet_io::{
-        Session,
         packet::{PacketRtt, PacketStats},
+        Session,
     },
     bevy_app::prelude::*,
     bevy_derive::{Deref, DerefMut},
@@ -12,8 +12,8 @@ use {
     bevy_time::{Real, Time, Timer, TimerMode},
     core::time::Duration,
     ringbuf::{
-        HeapRb,
         traits::{Consumer, RingBuffer},
+        HeapRb,
     },
 };
 
@@ -42,7 +42,7 @@ impl Plugin for SessionSamplingPlugin {
                     .chain()
                     .in_set(SampleSessionStats),
             )
-            .observe(add_session_stats);
+            .add_observer(add_session_stats);
     }
 }
 

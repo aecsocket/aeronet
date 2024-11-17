@@ -16,19 +16,18 @@
 use {
     aeronet::{
         io::{
-            Session, SessionEndpoint,
             bytes::Bytes,
             connection::{Disconnect, DisconnectReason, Disconnected},
-            web_time,
+            web_time, Session, SessionEndpoint,
         },
         transport::{
-            AeronetTransportPlugin, Transport, TransportConfig,
             lane::{LaneIndex, LaneKind},
+            AeronetTransportPlugin, Transport, TransportConfig,
         },
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     core::mem,
 };
 
@@ -57,9 +56,9 @@ fn main() -> AppExit {
             ui, // ..draw the UI for the session
         ))
         // Set up some observers to run when the session state changes
-        .observe(on_connecting)
-        .observe(on_connected)
-        .observe(on_disconnected)
+        .add_observer(on_connecting)
+        .add_observer(on_connected)
+        .add_observer(on_disconnected)
         .run()
 }
 
@@ -130,7 +129,7 @@ fn setup(mut commands: Commands) {
     ));
     // Make an `EntityCommand` via `connect`, which will set up this
     // session, and push that command onto the entity.
-    entity.add(WebSocketClient::connect(config, target));
+    entity.queue(WebSocketClient::connect(config, target));
 }
 
 // Observe state change events using `Trigger`s.

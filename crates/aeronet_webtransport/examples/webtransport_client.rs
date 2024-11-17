@@ -3,16 +3,16 @@
 
 use {
     aeronet_io::{
-        Session, SessionEndpoint,
         connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         packet::PacketRtt,
+        Session, SessionEndpoint,
     },
     aeronet_webtransport::{
         cert,
         client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
     },
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     core::mem,
 };
 
@@ -21,9 +21,9 @@ fn main() -> AppExit {
         .add_plugins((DefaultPlugins, EguiPlugin, WebTransportClientPlugin))
         .init_resource::<GlobalUi>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
-        .observe(on_connecting)
-        .observe(on_connected)
-        .observe(on_disconnected)
+        .add_observer(on_connecting)
+        .add_observer(on_connected)
+        .add_observer(on_disconnected)
         .run()
 }
 
@@ -132,7 +132,7 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
                 let name = format!("{}. {target}", ui_state.session_id);
                 commands
                     .spawn((Name::new(name), SessionUi::default()))
-                    .add(WebTransportClient::connect(config, target));
+                    .queue(WebTransportClient::connect(config, target));
             }
         })();
 

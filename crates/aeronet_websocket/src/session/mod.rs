@@ -7,9 +7,9 @@ pub(crate) mod backend;
 use {
     crate::WebSocketRuntime,
     aeronet_io::{
+        connection::{Disconnect, DROP_DISCONNECT_REASON},
+        packet::{RecvPacket, IP_MTU},
         AeronetIoPlugin, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect},
-        packet::{IP_MTU, RecvPacket},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -60,8 +60,8 @@ impl Plugin for WebSocketSessionPlugin {
         app.init_resource::<WebSocketRuntime>()
             .add_systems(PreUpdate, poll.in_set(IoSet::Poll))
             .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
-            .observe(on_io_added)
-            .observe(on_disconnect);
+            .add_observer(on_io_added)
+            .add_observer(on_disconnect);
     }
 }
 

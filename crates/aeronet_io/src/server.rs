@@ -24,10 +24,10 @@ impl Plugin for ServerPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<ServerEndpoint>()
             .register_type::<Server>()
-            .observe(on_opening)
-            .observe(on_opened)
-            .observe(on_close)
-            .observe(on_closed);
+            .add_observer(on_opening)
+            .add_observer(on_opened)
+            .add_observer(on_close)
+            .add_observer(on_closed);
     }
 }
 
@@ -223,10 +223,10 @@ mod tests {
     use {
         super::*,
         crate::{
-            AeronetIoPlugin,
             connection::{DisconnectReason, Disconnected},
+            AeronetIoPlugin,
         },
-        bevy_hierarchy::BuildWorldChildren,
+        bevy_hierarchy::BuildChildren,
     };
 
     #[test]
@@ -274,10 +274,10 @@ mod tests {
         app.world_mut().trigger_targets(Close::new(REASON), server);
         app.update();
 
-        assert!(app.world().get_entity(client).is_none());
+        assert!(app.world().get_entity(client).is_err());
         assert!(app.world().resource::<HasDisconnected>().0);
 
-        assert!(app.world().get_entity(server).is_none());
+        assert!(app.world().get_entity(server).is_err());
         assert!(app.world().resource::<HasClosed>().0);
     }
 }

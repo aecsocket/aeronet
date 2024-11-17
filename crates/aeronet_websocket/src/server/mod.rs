@@ -6,23 +6,22 @@ mod config;
 pub use config::*;
 use {
     crate::{
-        WebSocketRuntime,
         session::{self, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
-        tungstenite,
+        tungstenite, WebSocketRuntime,
     },
     aeronet_io::{
-        IoSet, SessionEndpoint,
         connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         server::{CloseReason, Closed, Server, ServerEndpoint},
+        IoSet, SessionEndpoint,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_hierarchy::BuildChildren,
     core::net::SocketAddr,
-    derive_more::{Display, Error, derive::From},
+    derive_more::{derive::From, Display, Error},
     futures::channel::{mpsc, oneshot},
     std::io,
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
     web_time::Instant,
 };
 
@@ -42,7 +41,7 @@ impl Plugin for WebSocketServerPlugin {
                 .in_set(IoSet::Poll)
                 .before(session::poll),
         )
-        .observe(on_server_added);
+        .add_observer(on_server_added);
     }
 }
 

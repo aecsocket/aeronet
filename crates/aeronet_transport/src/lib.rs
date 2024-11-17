@@ -21,7 +21,7 @@ pub mod visualizer;
 
 pub use aeronet_io as io;
 use {
-    aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
+    aeronet_io::{connection::Disconnect, packet::MtuTooSmall, IoSet, Session},
     arbitrary::Arbitrary,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
@@ -36,7 +36,7 @@ use {
     send::TransportSend,
     seq_buf::SeqBuf,
     tracing::warn,
-    typesize::{TypeSize, derive::TypeSize},
+    typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
 };
 
@@ -65,7 +65,7 @@ impl Plugin for AeronetTransportPlugin {
                 ),
             )
             .add_systems(PostUpdate, send::flush.in_set(TransportSet::Flush))
-            .observe(init_config);
+            .add_observer(init_config);
     }
 }
 

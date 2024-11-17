@@ -3,9 +3,9 @@
 
 use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
-    aeronet_io::{Session, connection::Disconnect},
+    aeronet_io::{connection::Disconnect, Session},
     bevy::{log::LogPlugin, prelude::*},
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     core::mem,
 };
 
@@ -44,7 +44,7 @@ fn setup(mut commands: Commands) {
     // since it affects two entities at the same time.
     let a = commands.spawn((Name::new("A"), SessionUi::default())).id();
     let b = commands.spawn((Name::new("B"), SessionUi::default())).id();
-    commands.add(ChannelIo::open(a, b));
+    commands.queue(ChannelIo::open(a, b));
 }
 
 fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut Session)>) {

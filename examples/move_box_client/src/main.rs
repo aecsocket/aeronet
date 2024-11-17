@@ -3,12 +3,12 @@
 use {
     aeronet::{
         io::{
-            Session, SessionEndpoint,
             connection::{Disconnect, DisconnectReason, Disconnected},
+            Session, SessionEndpoint,
         },
         transport::{
-            TransportConfig,
             visualizer::{SessionVisualizer, SessionVisualizerPlugin},
+            TransportConfig,
         },
     },
     aeronet_replicon::client::{AeronetRepliconClient, AeronetRepliconClientPlugin},
@@ -18,7 +18,7 @@ use {
         client::{WebTransportClient, WebTransportClientPlugin},
     },
     bevy::{ecs::query::QuerySingleError, prelude::*},
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     bevy_replicon::prelude::*,
     move_box::{GameState, MoveBoxPlugin, PlayerColor, PlayerInput, PlayerPosition},
 };
@@ -50,9 +50,9 @@ fn main() -> AppExit {
                 (draw_boxes, handle_inputs).run_if(in_state(GameState::Playing)),
             ),
         )
-        .observe(on_connecting)
-        .observe(on_connected)
-        .observe(on_disconnected)
+        .add_observer(on_connecting)
+        .add_observer(on_connected)
+        .add_observer(on_disconnected)
         .run()
 }
 
@@ -74,7 +74,7 @@ struct WebSocketUi {
 }
 
 fn setup_level(mut commands: Commands) {
-    commands.spawn(Camera2dBundle::default());
+    commands.spawn(Camera2d);
 }
 
 fn on_connecting(
@@ -103,12 +103,13 @@ fn on_connected(
     ui_state.log.push(format!("{name} connected"));
 
     game_state.set(GameState::Playing);
-    commands
-        .entity(entity)
-        .insert((SessionVisualizer::default(), TransportConfig {
+    commands.entity(entity).insert((
+        SessionVisualizer::default(),
+        TransportConfig {
             max_memory_usage: 64 * 1024,
             send_bytes_per_sec: 4 * 1024,
-        }));
+        },
+    ));
 }
 
 fn on_disconnected(
@@ -219,7 +220,7 @@ fn web_transport_ui(
             let name = format!("{}. {target}", global_ui.session_id);
             commands
                 .spawn((Name::new(name), AeronetRepliconClient))
-                .add(WebTransportClient::connect(config, target));
+                .queue(WebTransportClient::connect(config, target));
         }
     });
 }
@@ -315,7 +316,7 @@ fn web_socket_ui(
             let name = format!("{}. {target}", global_ui.session_id);
             commands
                 .spawn((Name::new(name), AeronetRepliconClient))
-                .add(WebSocketClient::connect(config, target));
+                .queue(WebSocketClient::connect(config, target));
         }
     });
 }
@@ -357,6 +358,6 @@ fn handle_inputs(mut inputs: EventWriter<PlayerInput>, input: Res<ButtonInput<Ke
 
 fn draw_boxes(mut gizmos: Gizmos, players: Query<(&PlayerPosition, &PlayerColor)>) {
     for (PlayerPosition(pos), PlayerColor(color)) in &players {
-        gizmos.rect(pos.extend(0.0), Quat::IDENTITY, Vec2::ONE * 50.0, *color);
+        gizmos.rect_2d(*pos, Vec2::ONE * 50.0, *color);
     }
 }

@@ -1,7 +1,7 @@
 //! Example server using WebTransport which listens for clients sending strings
 //! and sends back a string reply.
 
-use aeronet_io::{Session, server::Server};
+use aeronet_io::{server::Server, Session};
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
@@ -34,10 +34,10 @@ fn main() -> AppExit {
         ))
         .add_systems(Startup, open_server)
         .add_systems(Update, reply)
-        .observe(on_opened)
-        .observe(on_session_request)
-        .observe(on_connected)
-        .observe(on_disconnected)
+        .add_observer(on_opened)
+        .add_observer(on_session_request)
+        .add_observer(on_connected)
+        .add_observer(on_disconnected)
         .run()
 }
 
@@ -54,7 +54,7 @@ fn open_server(mut commands: Commands) {
     info!("************************");
 
     let config = server_config(&identity);
-    commands.spawn_empty().add(WebTransportServer::open(config));
+    commands.spawn_empty().queue(WebTransportServer::open(config));
 }
 
 fn server_config(identity: &wtransport::Identity) -> ServerConfig {

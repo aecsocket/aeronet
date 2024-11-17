@@ -3,10 +3,10 @@
 use {
     crate::convert,
     aeronet_io::{
-        Session,
         connection::{DisconnectReason, Disconnected},
         server::{Server, ServerEndpoint},
         web_time::Instant,
+        Session,
     },
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
@@ -65,8 +65,8 @@ impl Plugin for AeronetRepliconServerPlugin {
                 .in_set(ServerTransportSet::Flush)
                 .run_if(resource_exists::<RepliconServer>),
         )
-        .observe(on_connected)
-        .observe(on_disconnected);
+        .add_observer(on_connected)
+        .add_observer(on_disconnected);
     }
 }
 

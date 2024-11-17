@@ -40,7 +40,7 @@ impl Plugin for MoveBoxPlugin {
                     .chain()
                     .run_if(server_or_singleplayer),
             )
-            .observe(on_player_added);
+            .add_observer(on_player_added);
     }
 }
 
@@ -100,7 +100,7 @@ fn apply_movement(time: Res<Time>, mut players: Query<(&PlayerInput, &mut Player
         if let Some(movement) = input.movement.try_normalize() {
             // only change `position` if we actually have a movement vector to apply
             // this saves bandwidth; we don't replicate position if we don't change it
-            **position += movement * time.delta_seconds() * MOVE_SPEED;
+            **position += movement * time.delta_secs() * MOVE_SPEED;
         }
     }
 }

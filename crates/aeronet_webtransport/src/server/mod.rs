@@ -6,14 +6,14 @@ use {
     crate::{
         runtime::WebTransportRuntime,
         session::{
-            self, MIN_MTU, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
+            self, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin, MIN_MTU,
         },
     },
     aeronet_io::{
-        IoSet, Session, SessionEndpoint,
         connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         packet::{PacketRtt, RecvPacket},
         server::{CloseReason, Closed, Server, ServerEndpoint},
+        IoSet, Session, SessionEndpoint,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -23,7 +23,7 @@ use {
     core::{net::SocketAddr, time::Duration},
     derive_more::{Display, Error, From},
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug_span},
+    tracing::{debug_span, Instrument},
     web_time::Instant,
     wtransport::error::ConnectionError,
 };
@@ -46,8 +46,8 @@ impl Plugin for WebTransportServerPlugin {
                     .in_set(IoSet::Poll)
                     .before(session::poll),
             )
-            .observe(on_server_added)
-            .observe(on_connection_response);
+            .add_observer(on_server_added)
+            .add_observer(on_connection_response);
     }
 }
 

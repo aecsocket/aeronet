@@ -24,10 +24,10 @@ fn main() -> AppExit {
         .add_plugins((MinimalPlugins, LogPlugin::default(), WebSocketServerPlugin))
         .add_systems(Startup, open_server)
         .add_systems(Update, reply)
-        .observe(on_opened)
-        .observe(on_connecting)
-        .observe(on_connected)
-        .observe(on_disconnected)
+        .add_observer(on_opened)
+        .add_observer(on_connecting)
+        .add_observer(on_connected)
+        .add_observer(on_disconnected)
         .run()
 }
 
@@ -40,7 +40,7 @@ fn server_config() -> ServerConfig {
 
 fn open_server(mut commands: Commands) {
     let config = server_config();
-    commands.spawn_empty().add(WebSocketServer::open(config));
+    commands.spawn_empty().queue(WebSocketServer::open(config));
 }
 
 fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {

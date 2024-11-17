@@ -169,6 +169,13 @@ Some example tools you may use are:
 conditioning testing is more effective (and representative of real-world results) when the
 conditioning is applied at the lowest level possible.
 
+# Versions
+
+| `bevy` | `aeronet`        |
+|--------|------------------|
+| `0.15` | `bevy-rc` branch |
+| `0.14` | `0.9.0`          |
+
 [Bevy]: https://bevyengine.org
 [`aeronet_io`]: https://docs.rs/aeronet_io
 [`aeronet_channel`]: https://docs.rs/aeronet_channel

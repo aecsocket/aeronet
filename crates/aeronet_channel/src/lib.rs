@@ -3,9 +3,9 @@
 
 use {
     aeronet_io::{
-        AeronetIoPlugin, IoSet, Session, SessionEndpoint,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected},
+        connection::{Disconnect, DisconnectReason, Disconnected, DROP_DISCONNECT_REASON},
         packet::RecvPacket,
+        AeronetIoPlugin, IoSet, Session, SessionEndpoint,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
@@ -29,8 +29,8 @@ impl Plugin for ChannelIoPlugin {
 
         app.add_systems(PreUpdate, poll.in_set(IoSet::Poll))
             .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
-            .observe(on_io_added)
-            .observe(on_disconnect);
+            .add_observer(on_io_added)
+            .add_observer(on_disconnect);
     }
 }
 
