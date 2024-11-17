@@ -171,10 +171,10 @@ conditioning is applied at the lowest level possible.
 
 # Versions
 
-| `bevy` | `aeronet`        |
-|--------|------------------|
-| `0.15` | `bevy-rc` branch |
-| `0.14` | `0.9.0`          |
+| `bevy` | `aeronet` |
+|--------|-----------|
+| `0.15` | `0.10.0`  |
+| `0.14` | `0.9.0`   |
 
 [Bevy]: https://bevyengine.org
 [`aeronet_io`]: https://docs.rs/aeronet_io
