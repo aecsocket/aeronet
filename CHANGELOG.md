@@ -1,6 +1,8 @@
 # Unreleased
 
 - Update to Bevy 0.15
+- Made `SessionResponse` in `aeronet_webtransport` no longer an event which you trigger
+  - Moved to a field on `SessionRequest` which you have to update in your request observer
 
 # 0.10.1
 
@@ -26,6 +28,8 @@
   (enabled by default)
 - [#15](https://github.com/aecsocket/aeronet/issues/15): fixed a bug in `aeronet_transport` where
   receiving a previously-received fragment (in a resent packet) would lead to an error death spiral
+
+>>>>>>> ab87e99 (changelog)
 
 # 0.9.0
 
