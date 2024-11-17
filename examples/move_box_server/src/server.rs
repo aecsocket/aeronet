@@ -106,13 +106,9 @@ fn web_transport_config(identity: &wtransport::Identity, args: &Args) -> WebTran
         .build()
 }
 
-fn on_session_request(
-    trigger: Trigger<SessionRequest>,
-    clients: Query<&Parent>,
-    mut commands: Commands,
-) {
+fn on_session_request(mut trigger: Trigger<SessionRequest>, clients: Query<&Parent>) {
     let client = trigger.entity();
-    let request = trigger.event();
+    let request = trigger.event_mut();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
     };
@@ -122,7 +118,7 @@ fn on_session_request(
         info!("  {header_key}: {header_value}");
     }
 
-    commands.trigger_targets(SessionResponse::Accepted, client);
+    request.respond(SessionResponse::Accepted);
 }
 
 //

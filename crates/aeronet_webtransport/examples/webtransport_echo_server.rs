@@ -75,12 +75,11 @@ fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
 }
 
 fn on_session_request(
-    trigger: Trigger<SessionRequest>,
+    mut trigger: Trigger<SessionRequest>,
     clients: Query<&Parent>,
-    mut commands: Commands,
 ) {
     let client = trigger.entity();
-    let request = trigger.event();
+    let request = trigger.event_mut();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
     };
@@ -90,7 +89,7 @@ fn on_session_request(
         info!("  {header_key}: {header_value}");
     }
 
-    commands.trigger_targets(SessionResponse::Accepted, client);
+    request.respond(SessionResponse::Accepted);
 }
 
 fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>) {
