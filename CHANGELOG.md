@@ -1,3 +1,7 @@
+# Unreleased
+
+- Update to Bevy 0.15
+
 # 0.10.1
 
 - Fixed crash in `SeqBuf::remove`
