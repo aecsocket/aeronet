@@ -1,5 +1,5 @@
 [package]
-description = "WebSocket IO layer implementation for aeronet"
+description = "WebSocket IO layer implementation for `aeronet`"
 name = "aeronet_websocket"
 
 authors.workspace = true

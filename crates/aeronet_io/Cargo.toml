@@ -1,5 +1,5 @@
 [package]
-description = "IO abstraction primitives for aeronet"
+description = "IO abstraction primitives for `aeronet`"
 name = "aeronet_io"
 
 authors.workspace = true

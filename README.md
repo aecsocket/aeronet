@@ -97,7 +97,7 @@ cargo run --bin move_box_client
   - User-swappable - can have multiple in a single app
 - Transport layer - [`aeronet_transport`]
   - Handles fragmentation, reliability, and ordering of messages
-  - Splits messages into packets, and reassembles packets into messages, which can be used layers
+  - Splits messages into packets, and reassembles packets into messages, which can be used by layers
     above
   - Allows receiving acknowledgement of sent message acknowledgements
   - Technically user-swappable, but most code above this layer relies on [`aeronet_transport`]

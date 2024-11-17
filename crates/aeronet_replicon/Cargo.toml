@@ -1,5 +1,5 @@
 [package]
-description = "aeronet backend implementation for bevy_replicon"
+description = "`aeronet` backend implementation for `bevy_replicon`"
 name = "aeronet_replicon"
 
 authors.workspace = true

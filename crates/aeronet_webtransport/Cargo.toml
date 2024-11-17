@@ -1,5 +1,5 @@
 [package]
-description = "WebTransport IO layer implementation for aeronet"
+description = "WebTransport IO layer implementation for `aeronet`"
 name = "aeronet_webtransport"
 
 authors.workspace = true
