@@ -63,16 +63,19 @@ pub struct SessionEndpoint;
 /// different protocols, such as raw UDP datagrams alongside Steam networking
 /// sockets, so that you can e.g. support crossplay between different platforms.
 ///
-/// The [`Session`] component is managed by your chosen IO layer implementation,
-/// and you should not modify it yourself.
+/// The [`Session`] component is created by your chosen IO layer implementation,
+/// so you should not create it yourself. See your IO layer's documentation for
+/// how to spawn an entity with [`Session`]. There are also constraints on which
+/// fields of this component you can modify, and how. See each field's
+/// documentation for how you can use it.
 ///
 /// # Lifecycle
 ///
-/// After creating a session entity using your chosen IO layer, the entity may
-/// not start with the [`Session`] component - the session is *connecting* but
-/// is not *connected* yet (marked by having [`SessionEndpoint`] but not
-/// [`Session`]). Once the IO layer adds [`Session`], the entity is considered
-/// *connected*, and you can send and receive data.
+/// After creating a session entity using your chosen IO layer, the entity will
+/// have the [`SessionEndpoint`] component (indicating that the session is
+/// either *connecting* or *connected*), but may not necessarily have the
+/// [`Session`] component (indicating that the session is *connected*). Once
+/// this component is added, you can send and receive data.
 ///
 /// Note that [`Session`] is not a *guarantee* that you can send and receive
 /// data - it is always possible that operations on OS sockets fail, the network
@@ -115,7 +118,7 @@ pub struct Session {
     mtu: usize,
     /// Total packet statistics of this session up to now.
     ///
-    /// The IO layer is responsible for updating this field.
+    /// Only the IO layer should mutate this field.
     pub stats: PacketStats,
     /// Buffer for incoming packets received by the IO layer.
     ///
@@ -176,8 +179,8 @@ impl Session {
         self.connected_at
     }
 
-    /// Returns the minimum value that [`Session::mtu`] will ever report on this
-    /// session.
+    /// Returns the smallest value that [`Session::mtu`] will ever report on
+    /// this session.
     ///
     /// See [`packet`].
     ///
@@ -195,6 +198,8 @@ impl Session {
     }
 
     /// Returns the current packet MTU of this session.
+    ///
+    /// This will never be smaller than [`Session::min_mtu`].
     ///
     /// See [`packet`].
     ///
