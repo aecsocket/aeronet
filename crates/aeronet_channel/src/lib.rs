@@ -3,9 +3,9 @@
 
 use {
     aeronet_io::{
-        AeronetIoPlugin, IoSet, Session, SessionEndpoint,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected},
+        connection::{Disconnect, DisconnectReason, Disconnected, DROP_DISCONNECT_REASON},
         packet::RecvPacket,
+        AeronetIoPlugin, IoSet, Session, SessionEndpoint,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, world::Command},
@@ -89,8 +89,6 @@ impl ChannelIo {
     }
 
     /// Creates a [`Command`] to open a [`ChannelIo`] pair between two entities.
-    ///
-    /// See [`ChannelIo`] for how to choose a capacity value.
     ///
     /// When the command is applied, entities `a` and `b` must exist in the
     /// world, otherwise the command will panic. If your entities are in
