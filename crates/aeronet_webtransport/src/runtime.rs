@@ -18,8 +18,8 @@ use {
 /// On a native target, this holds a handle to a `tokio` runtime, because
 /// `wtransport` currently only supports this async runtime.
 ///
-/// Use the [`Default`] impl to create and leak a new `tokio` runtime, and that
-/// as the [`WebTransportRuntime`] handle.
+/// Use the [`Default`] impl to create and leak a new `tokio` runtime, and use
+/// that as the [`WebTransportRuntime`] handle.
 ///
 /// If you already have a runtime handle, you can use
 /// `WebTransportRuntime::from(handle)` to create a runtime from that handle.

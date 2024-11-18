@@ -7,9 +7,9 @@ pub(crate) mod backend;
 use {
     crate::WebSocketRuntime,
     aeronet_io::{
+        connection::{Disconnect, DROP_DISCONNECT_REASON},
+        packet::{RecvPacket, IP_MTU},
         AeronetIoPlugin, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect},
-        packet::{IP_MTU, RecvPacket},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -73,17 +73,6 @@ impl Plugin for WebSocketSessionPlugin {
 ///
 /// You should not add or remove this component directly - it is managed
 /// entirely by the client and server implementations.
-///
-/// # Buffers
-///
-/// Internally, this uses [`mpsc::channel`] bounded channels to store packets
-/// sent between the frontend (this component) and the backend (async task).
-///
-/// These channels will be fully drained on every [`Update`]. You must specify
-/// the capacity of these channels explicitly, however you should usually err on
-/// the side of caution and use a capacity which is larger than what you need
-/// (wasting some memory), as opposed to a capacity which is too small (dropping
-/// some packets).
 #[derive(Debug, Component)]
 pub struct WebSocketIo {
     pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
