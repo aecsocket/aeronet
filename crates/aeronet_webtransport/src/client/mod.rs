@@ -91,7 +91,7 @@ impl WebTransportClient {
     /// // using `Commands`
     /// commands
     ///     .spawn_empty()
-    ///     .add(WebTransportClient::connect(config, target));
+    ///     .queue(WebTransportClient::connect(config, target));
     ///
     /// // using mutable `World` access
     /// # let config = ClientConfig::default();

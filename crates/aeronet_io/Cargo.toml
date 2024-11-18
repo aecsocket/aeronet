@@ -33,5 +33,7 @@ web-time = { workspace = true }
 bevy_app = { workspace = true, features = ["bevy_reflect"] }
 bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true, features = ["bevy_reflect"] }
-bevy_hierarchy = { workspace = true }
+bevy_hierarchy = { workspace = true, features = [
+  "reflect", # TODO: https://github.com/bevyengine/bevy/pull/16428
+] }
 bevy_reflect = { workspace = true }

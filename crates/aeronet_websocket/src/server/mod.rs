@@ -74,7 +74,7 @@ impl WebSocketServer {
     ///     .with_identity(identity);
     ///
     /// // using `Commands`
-    /// commands.spawn_empty().add(WebSocketServer::open(config));
+    /// commands.spawn_empty().queue(WebSocketServer::open(config));
     ///
     /// // using mutable `World` access
     /// # let config: ServerConfig = unimplemented!();

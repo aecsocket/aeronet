@@ -89,7 +89,7 @@ impl WebSocketClient {
     /// // using `Commands`
     /// commands
     ///     .spawn_empty()
-    ///     .add(WebSocketClient::connect(config, target));
+    ///     .queue(WebSocketClient::connect(config, target));
     ///
     /// // using mutable `World` access
     /// # let config = ClientConfig::default();

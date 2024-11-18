@@ -109,7 +109,7 @@ impl ChannelIo {
     /// let b = commands.spawn_empty().id();
     ///
     /// // using `Commands`
-    /// commands.add(ChannelIo::open(a, b));
+    /// commands.queue(ChannelIo::open(a, b));
     ///
     /// // using mutable `World` access
     /// ChannelIo::open(a, b).apply(world);

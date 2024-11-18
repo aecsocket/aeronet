@@ -82,7 +82,9 @@ impl WebTransportServer {
     ///     .build();
     ///
     /// // using `Commands`
-    /// commands.spawn_empty().add(WebTransportServer::open(config));
+    /// commands
+    ///     .spawn_empty()
+    ///     .queue(WebTransportServer::open(config));
     ///
     /// // using mutable `World` access
     /// # let config: ServerConfig = unimplemented!();
