@@ -92,10 +92,11 @@ impl Plugin for AeronetTransportPlugin {
 ///
 /// - Use [`Transport::send`] to enqueue messages for sending, and to get a key
 ///   identifying the sent messages
-/// - Use [`Transport::recv_msgs`] to drain messages received from the IO layer
-/// - Use [`Transport::recv_acks`] to drain message acknowledgements for
-///   messages which you have sent out, and that the peer has now acknowledged
-///   that they have received.
+/// - Use [`Transport::recv`]'s [`TransportRecv::msgs`] to drain messages
+///   received from the IO layer
+/// - Use [`Transport::recv`]'s [`TransportRecv::acks`] to drain message
+///   acknowledgements for messages which you have sent out, and that the peer
+///   has now acknowledged that they have received.
 ///
 /// The `recv` buffers must be drained on every update, otherwise some may be
 /// lost, leading to incorrect behavior, and a warning will be logged.
@@ -278,7 +279,7 @@ pub enum TransportSet {
 /// [`TransportSend::push`] on this [`Transport`].
 ///
 /// After pushing a message to the transport, you can use the output of
-/// [`Transport::recv_acks`] to read what messages have received acknowledgement
+/// [`TransportRecv::acks`] to read what messages have received acknowledgement
 /// from the peer. If you see the same message key that you got from
 /// [`TransportSend::push`], that message was acknowledged.
 ///
@@ -305,14 +306,14 @@ pub struct MessageKey {
 #[derive(Debug, Clone, Copy, Default, TypeSize)] // force `#[derive]` on multiple lines
 #[derive(Add, AddAssign, Sub, SubAssign)]
 pub struct MessageStats {
-    /// Number of messages received into [`Transport::recv_msgs`].
+    /// Number of messages received into [`TransportRecv::msgs`].
     pub msgs_recv: Saturating<usize>,
     /// Number of messages sent out from [`Transport::send`].
     pub msgs_sent: Saturating<usize>,
     /// Number of packet acknowledgements received.
     pub packet_acks_recv: Saturating<usize>,
     /// Number of message acknowledgements received into
-    /// [`Transport::recv_acks`].
+    /// [`TransportRecv::acks`].
     pub msg_acks_recv: Saturating<usize>,
 }
 

@@ -34,6 +34,8 @@ pub struct TransportRecv {
     /// sent via [`TransportSend::push`].
     ///
     /// This must be drained by the user on every update.
+    ///
+    /// [`TransportSend::push`]: crate::send::TransportSend::push
     pub acks: RecvBuffer<MessageKey>,
 }
 

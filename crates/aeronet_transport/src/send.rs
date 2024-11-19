@@ -97,7 +97,7 @@ impl TransportSend {
     ///
     /// If the message was enqueued successfully, returns a [`MessageKey`]
     /// uniquely[^1] identifying this message. When draining
-    /// [`Transport::recv_acks`], you can compare message keys to tell if the
+    /// [`TransportRecv::acks`], you can compare message keys to tell if the
     /// message you are pushing right now was the one that was acknowledged.
     ///
     /// If the message could not be enqueued (if e.g. there are already too many
@@ -137,13 +137,15 @@ impl TransportSend {
     ///
     ///     // later...
     ///
-    ///     for acked_msg in transport.recv_acks.drain() {
+    ///     for acked_msg in transport.recv.acks.drain() {
     ///         if acked_msg == msg_key {
     ///             println!("Peer has received my sent message!");
     ///         }
     ///     }
     /// }
     /// ```
+    ///
+    /// [`TransportRecv::acks`]: crate::recv::TransportRecv::acks
     pub fn push(&mut self, lane_index: LaneIndex, msg: Bytes, now: Instant) -> Option<MessageKey> {
         let lane = &mut self.lanes[usize::from(lane_index)];
         let msg_seq = lane.next_msg_seq;
