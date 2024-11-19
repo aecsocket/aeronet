@@ -92,9 +92,8 @@ pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut Transport, &T
         for packet in session.recv.drain(..) {
             if let Err(err) = recv_on(&mut transport, config, packet.recv_at, &packet.payload) {
                 let err = anyhow::Error::new(err);
-                trace!("{entity} received invalid packet: {err:#}");
-                continue;
-            };
+                trace!("Received invalid packet: {err:#}");
+            }
         }
     }
 }
@@ -132,6 +131,8 @@ fn recv_on(
     recv_at: Instant,
     mut packet: &[u8],
 ) -> Result<(), RecvError> {
+    let packet_len = packet.len();
+
     let header = packet
         .read::<PacketHeader>()
         .map_err(|_| RecvError::ReadHeader)?;
@@ -139,7 +140,7 @@ fn recv_on(
     let span = trace_span!("recv", packet = header.seq.0.0);
     let _span = span.enter();
 
-    trace!(len = packet.len(), "Received packet");
+    trace!(len = packet_len, "Received packet");
 
     transport.recv_acks.0.extend(packet_acks_to_msg_keys(
         &mut transport.flushed_packets,
@@ -186,7 +187,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
             let rtt_now = rtt.get();
             trace!(?acked_seq, ?packet_rtt, ?rtt_now, "Got peer ack");
 
-            *packet_acks_recv += Saturating(1);
+            *packet_acks_recv += 1;
             Box::into_iter(packet.frags)
         })
         .filter_map(|frag_path| {
@@ -205,7 +206,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
             // if all the fragments are now acked, then we report that
             // the entire message is now acked
             if msg.frags.iter().all(Option::is_none) {
-                *msgs_acks_recv += Saturating(1);
+                *msgs_acks_recv += 1;
                 Some(MessageKey {
                     lane: frag_path.lane_index,
                     seq: frag_path.msg_seq
@@ -283,13 +284,13 @@ fn recv_on_lane(
             } else {
                 // here's an example to visualize what this does:
                 // msg_seq: 40
-                // pending_seq: 40, recv_seq_buf: [41, 45]
+                // pending_seq: 40, recv_buf: [41, 45]
                 recv_buf.insert(msg_seq);
-                // pending_seq: 40, recv_seq_buf: [40, 41, 45]
+                // pending_seq: 40, recv_buf: [40, 41, 45]
                 while recv_buf.remove(pending) {
                     *pending += MessageSeq::new(1);
-                    // iter 1: pending_seq: 41, recv_seq_buf: [41, 45]
-                    // iter 2: pending_seq: 42, recv_seq_buf: [45]
+                    // iter 1: pending_seq: 41, recv_buf: [41, 45]
+                    // iter 2: pending_seq: 42, recv_buf: [45]
                 }
                 Either::Left(Some(msg))
             }

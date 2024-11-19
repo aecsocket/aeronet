@@ -17,6 +17,11 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
+[package.metadata.cargo-machete]
+ignored = [
+  "bevy_winit", # see `document-features`
+]
+
 [features]
 ## Allows serializing and deserializing some types with [`serde`]
 ##
@@ -36,7 +41,24 @@ visualizer = [
 ]
 
 ## Enable this when generating docs.
-document-features = ["dep:document-features"]
+document-features = [
+  "dep:document-features",
+  # "Wait - why the hell does `document-features` enable `bevy_winit`!?!?"
+  #
+  # Without this, generating docs with `cargo doc --all-features` will fail because of a specific
+  # combination of factors:
+  # - `--all-features` enables `visualizer`, which enables `bevy_egui`
+  # - `bevy_egui` depends on `bevy_winit`, which depends on `winit`
+  # - `winit` will fail to compile if there are no backends that it can use
+  # - On Linux, you must explicitly enable `x11` or `wayland` to tell `winit` which backend to use
+  # - When compiling the entire workspace, `bevy` enables `x11` by default. But when only compiling
+  #   this crate, we don't depend on `bevy`, so we never enable any of the backends.
+  # - Compile error!
+  #
+  # To get around this, when generating docs, we manually enable the `x11` feature.
+  "dep:bevy_winit",
+  "bevy_winit/x11",
+]
 
 [dependencies]
 aeronet_io = { workspace = true }
@@ -72,4 +94,5 @@ egui_plot = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 size_format = { workspace = true, optional = true }
 
+bevy_winit = { workspace = true, optional = true }
 document-features = { workspace = true, optional = true }

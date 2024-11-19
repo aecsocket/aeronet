@@ -90,8 +90,6 @@ impl ChannelIo {
 
     /// Creates a [`Command`] to open a [`ChannelIo`] pair between two entities.
     ///
-    /// See [`ChannelIo`] for how to choose a capacity value.
-    ///
     /// When the command is applied, entities `a` and `b` must exist in the
     /// world, otherwise the command will panic. If your entities are in
     /// separate worlds, use [`ChannelIo::new`] to manually create a

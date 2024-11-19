@@ -15,8 +15,8 @@ use {bevy_ecs::prelude::*, core::future::Future};
 /// On a native target, this holds a handle to a `tokio` runtime, because
 /// `tokio-tungstenite` only supports this async runtime.
 ///
-/// Use the [`Default`] impl to create and leak a new `tokio` runtime, and that
-/// as the [`WebSocketRuntime`] handle.
+/// Use the [`Default`] impl to create and leak a new `tokio` runtime, and use
+/// that as the [`WebSocketRuntime`] handle.
 ///
 /// If you already have a runtime handle, you can use
 /// `WebSocketRuntime::from(handle)` to create a runtime from that handle.

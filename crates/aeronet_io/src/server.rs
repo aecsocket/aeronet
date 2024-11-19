@@ -55,7 +55,7 @@ pub struct ServerEndpoint;
 /// opened, the server should not close unless there is a fatal server-internal
 /// error which affects all connected clients - if a single client causes issues
 /// e.g. sending illegal data or breaking some invariant, that single client
-/// will be disconnected instead of the entire server being torn down.
+/// should be disconnected instead of the entire server being torn down.
 ///
 /// To listen for when a server is opened, add an observer listening for
 /// [`Trigger<OnAdd, Server>`].

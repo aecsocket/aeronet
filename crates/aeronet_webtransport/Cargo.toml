@@ -20,13 +20,26 @@ rustflags = ["--cfg=web_sys_unstable_apis"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [features]
+default = ["self-signed"]
+
 ## Enables the `client` module.
 client = []
 
 ## Enables the `server` module.
 server = []
 
-## Enables `wtransport/dangerous-configuration`.
+## Enables `wtransport/self-signed`, allowing you to generate self-signed certificates easily for
+## use in a server.
+##
+## Note that, without explicitly allowing your server's self-signed certificate (or using
+## `dangerous-configuration` and disabling certificate validation), clients will not be able to
+## connect to a server with self-signed certificates.
+self-signed = ["wtransport/self-signed"]
+
+## Enables `wtransport/dangerous-configuration`, allowing you to use potentially dangerous
+## certificate validation configurations.
+##
+## You should not use dangerous configurations in production builds of your app.
 dangerous-configuration = ["wtransport/dangerous-configuration"]
 
 ## Enable this when generating docs.
@@ -79,4 +92,4 @@ required-features = ["client"]
 [[example]]
 name = "webtransport_echo_server"
 path = "examples/webtransport_echo_server.rs"
-required-features = ["server"]
+required-features = ["server", "self-signed"]

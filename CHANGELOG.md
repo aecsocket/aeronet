@@ -6,6 +6,8 @@
   `opened_at: Instant`
 - Removed `Opened`
 - All relevant `aeronet_io` types are now registered in the type registry
+- Added `aeronet_webtransport/self-signed` feature, mapping to `wtransport/self-signed`
+  (enabled by default)
 
 # 0.9.0
 

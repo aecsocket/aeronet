@@ -94,7 +94,7 @@ web-sys = "0.3.70"
 
 # bevy
 
-bevy = { version = "0.14.2", features = ["wayland"] }
+bevy = { version = "0.14.2" }
 bevy_app = { version = "0.14.2", default-features = false }
 bevy_core = { version = "0.14.2", default-features = false }
 bevy_derive = { version = "0.14.2", default-features = false }
@@ -102,6 +102,7 @@ bevy_ecs = { version = "0.14.2", default-features = false }
 bevy_hierarchy = { version = "0.14.2", default-features = false }
 bevy_reflect = { version = "0.14.2", default-features = false }
 bevy_time = { version = "0.14.2", default-features = false }
+bevy_winit = { version = "0.14.2", default-features = false }
 
 bevy-tokio-tasks = "0.14.0"
 bevy_egui = "0.29.0"
