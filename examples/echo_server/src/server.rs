@@ -1,13 +1,12 @@
 use {
     aeronet::{
         io::{
-            Session,
             bytes::Bytes,
             connection::{DisconnectReason, Disconnected, LocalAddr},
             server::Server,
-            web_time,
+            web_time, Session,
         },
-        transport::{AeronetTransportPlugin, Transport, lane::LaneKind},
+        transport::{lane::LaneKind, AeronetTransportPlugin, Transport},
     },
     aeronet_websocket::server::{ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},
@@ -153,7 +152,7 @@ fn echo_messages(
         // from which we can grab disjoint refs to `recv` and `send`.
         let transport = &mut *transport;
 
-        for msg in transport.recv_msgs.drain() {
+        for msg in transport.recv.msgs.drain() {
             let payload = msg.payload;
 
             // `payload` is a `Vec<u8>` - we have full ownership of the bytes received.
@@ -171,7 +170,7 @@ fn echo_messages(
                 .push(msg.lane, Bytes::from(reply), web_time::Instant::now());
         }
 
-        for _ in transport.recv_acks.drain() {
+        for _ in transport.recv.acks.drain() {
             // We have to use up acknowledgements,
             // but since we don't actually care about reading them,
             // we'll just ignore them.

@@ -5,6 +5,14 @@
 - Made `Server` only be added to opened servers, and have this component store the
   `opened_at: Instant`
 - Removed `Opened`
+- Changed how the `Transport` API works
+  - `TransportRecv` renamed to `RecvBuffer`
+  - `transport.recv_msgs` moved to `transport.recv.msgs`
+  - `transport.recv_acks` moved to `transport.recv.acks`
+  - `transport.send_bytes_bucket()` moved to `transport.send.bytes_bucket()`
+  - Exposed the `RecvLane` and `SendLane` types along with some read-only access
+- Improved the `SessionVisualizer` with more detailed statistics
+  - Hover over the bottom labels to see more info e.g. per-lane stats
 - All relevant `aeronet_io` types are now registered in the type registry
 - Added `aeronet_webtransport/self-signed` feature, mapping to `wtransport/self-signed`
   (enabled by default)

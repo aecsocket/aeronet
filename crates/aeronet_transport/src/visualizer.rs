@@ -2,24 +2,25 @@
 
 use {
     crate::{
-        Transport, TransportConfig,
         sampling::{
             SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
             SessionStatsSampling,
         },
+        Transport, TransportConfig,
     },
-    aeronet_io::{Session, packet::PacketRtt},
+    aeronet_io::{packet::PacketRtt, Session},
     bevy_app::prelude::*,
     bevy_core::Name,
     bevy_ecs::prelude::*,
     bevy_egui::{
-        EguiContexts,
         egui::{self, epaint::Hsva},
+        EguiContexts,
     },
     core::{hash::Hash, ops::RangeInclusive, time::Duration},
     itertools::Itertools,
     ringbuf::traits::Consumer,
     size_format::{BinaryPrefixes, PointSeparated, SizeFormatter},
+    thousands::Separable,
     web_time::Instant,
 };
 
@@ -282,42 +283,15 @@ impl SessionVisualizer {
         transport: &Transport,
         transport_config: &TransportConfig,
     ) {
-        let unknown = || "?".to_string();
-
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.label(format!(
-                    "{:.1?}",
-                    now.saturating_duration_since(session.connected_at())
-                ));
-                ui.separator();
+                show_connected_status(ui, session, now);
+                show_mtu_status(ui, session);
+                show_rtt_status(ui, packet_rtt, transport);
+                show_mem_status(ui, transport, transport_config);
+                show_tx_cap_status(ui, transport);
 
-                ui.label("MTU");
-                ui.label(format!("{} ({} min)", session.mtu(), session.min_mtu()));
-                ui.separator();
-
-                ui.label("RTT");
-                ui.label(format!(
-                    "{} pkt / {:.1?} msg",
-                    packet_rtt.map_or_else(unknown, |rtt| format!("{rtt:.1?}")),
-                    transport.rtt().get(),
-                ));
-                ui.separator();
-
-                ui.label("MEM");
-                ui.label(format!(
-                    "{} / {}",
-                    fmt_bytes(transport.memory_used()),
-                    fmt_bytes(transport_config.max_memory_usage)
-                ));
-                ui.separator();
-
-                ui.label("TX CAP");
-                ui.label(format!(
-                    "{} / {}",
-                    fmt_bytes(transport.send_bytes_bucket().rem()),
-                    fmt_bytes(transport.send_bytes_bucket().cap()),
-                ));
+                ui.label("hover for details");
             });
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -327,6 +301,123 @@ impl SessionVisualizer {
             });
         });
     }
+}
+
+fn show_connected_status(ui: &mut egui::Ui, session: &Session, now: Instant) {
+    ui.group(|ui| {
+        ui.label(format!(
+            "{:.1?}",
+            now.saturating_duration_since(session.connected_at())
+        ));
+    });
+}
+
+fn show_mtu_status(ui: &mut egui::Ui, session: &Session) {
+    ui.group(|ui| {
+        ui.label("MTU");
+        ui.label(format!("{} ({} min)", session.mtu(), session.min_mtu()));
+    });
+}
+
+fn show_rtt_status(ui: &mut egui::Ui, packet_rtt: Option<Duration>, transport: &Transport) {
+    let msg_rtt = transport.rtt();
+
+    ui.group(|ui| {
+        ui.label("RTT");
+        ui.label(format!(
+            "{} pkt / {:.1?} msg",
+            packet_rtt.map_or_else(|| "?".into(), |rtt| format!("{rtt:.1?}")),
+            msg_rtt.get(),
+        ));
+    })
+    .response
+    .on_hover_ui(|ui| {
+        egui::Grid::new("rtt_detail").num_columns(2).show(ui, |ui| {
+            ui.label("Min");
+            ui.label(format!("{:.1?}", msg_rtt.min()));
+            ui.end_row();
+
+            ui.label("Conservative");
+            ui.label(format!("{:.1?}", msg_rtt.conservative()));
+            ui.end_row();
+
+            ui.label("PTO");
+            ui.label(format!("{:.1?}", msg_rtt.pto()));
+            ui.end_row();
+        });
+    });
+}
+
+fn show_mem_status(ui: &mut egui::Ui, transport: &Transport, transport_config: &TransportConfig) {
+    let mem_used = transport.memory_used();
+
+    ui.group(|ui| {
+        ui.label("MEM");
+        ui.label(format!(
+            "{} / {}",
+            fmt_bytes(mem_used),
+            fmt_bytes(transport_config.max_memory_usage)
+        ));
+    })
+    .response
+    .on_hover_ui(|ui| {
+        ui.label(format!(
+            "{} / {} bytes",
+            fmt_thousands(mem_used),
+            fmt_thousands(transport_config.max_memory_usage),
+        ));
+
+        ui.heading("Recv lanes");
+
+        egui::Grid::new("recv_lane_stats").show(ui, |ui| {
+            ui.scope(|_| {});
+            ui.label("Kind");
+            ui.label("# un-reassembled msgs");
+            ui.label("# unordered msgs");
+            ui.end_row();
+
+            for (index, lane) in transport.recv.lanes().iter().enumerate() {
+                ui.label(format!("{index}"));
+                ui.label(format!("{:?}", lane.kind()));
+                ui.label(format!("{}", lane.num_unreassembled_msgs()));
+                ui.label(format!("{}", lane.num_unordered_msgs()));
+                ui.end_row();
+            }
+        });
+
+        ui.heading("Send lanes");
+
+        egui::Grid::new("send_lane_stats").show(ui, |ui| {
+            ui.scope(|_| {});
+            ui.label("Kind");
+            ui.label("# msgs");
+            ui.end_row();
+
+            for (index, lane) in transport.send.lanes().iter().enumerate() {
+                ui.label(format!("{index}"));
+                ui.label(format!("{:?}", lane.reliability()));
+                ui.label(format!("{}", lane.num_msgs_queued()));
+                ui.end_row();
+            }
+        });
+    });
+}
+
+fn show_tx_cap_status(ui: &mut egui::Ui, transport: &Transport) {
+    ui.group(|ui| {
+        ui.label("TX CAP");
+        ui.label(format!(
+            "{} / {}",
+            fmt_bytes(transport.send.bytes_bucket().rem()),
+            fmt_bytes(transport.send.bytes_bucket().cap()),
+        ));
+    })
+    .response
+    .on_hover_text(format!(
+        "{} / {} bytes",
+        fmt_thousands(transport.send.bytes_bucket().rem()),
+        fmt_thousands(transport.send.bytes_bucket().cap()),
+    ));
 }
 
 fn graph_x(index: usize, sample_rate: f64) -> f64 {
@@ -365,6 +456,10 @@ fn fmt_bytes(n: usize) -> String {
         "{:.0}",
         SizeFormatter::<_, BinaryPrefixes, PointSeparated>::new(n)
     )
+}
+
+fn fmt_thousands(n: usize) -> String {
+    n.separate_with_spaces()
 }
 
 fn fmt_bytes_y_axis(mark: egui_plot::GridMark, _range: &RangeInclusive<f64>) -> String {

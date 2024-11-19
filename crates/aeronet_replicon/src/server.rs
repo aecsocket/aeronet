@@ -3,10 +3,10 @@
 use {
     crate::convert,
     aeronet_io::{
-        Session,
         connection::{DisconnectReason, Disconnected},
         server::{Server, ServerEndpoint},
         web_time::Instant,
+        Session,
     },
     aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
     bevy_app::prelude::*,
@@ -214,14 +214,14 @@ fn poll(
         }
 
         let client_id = convert::to_client_id(client);
-        for msg in transport.recv_msgs.drain() {
+        for msg in transport.recv.msgs.drain() {
             let Some(channel_id) = convert::to_channel_id(msg.lane) else {
                 continue;
             };
             replicon_server.insert_received(client_id, channel_id, msg.payload);
         }
 
-        for _ in transport.recv_acks.drain() {
+        for _ in transport.recv.acks.drain() {
             // we don't use the acks for anything
         }
     }

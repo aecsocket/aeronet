@@ -14,7 +14,7 @@ use {
     bitvec::vec::BitVec,
     core::{fmt, iter::FusedIterator},
     derive_more::{Display, Error},
-    octs::{Bytes, chunks::ByteChunksExt},
+    octs::{chunks::ByteChunksExt, Bytes},
     typesize::derive::TypeSize,
 };
 
@@ -158,6 +158,11 @@ impl fmt::Debug for FragmentReceiver {
 }
 
 impl FragmentReceiver {
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.msgs.len()
+    }
+
     /// Receives a single message fragment created from [`split`] and attempts
     /// to reassemble it into a full message.
     ///

@@ -2,13 +2,13 @@
 
 use {
     crate::{
-        FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
         frag::{FragmentReceiver, ReassembleError},
         lane::{LaneIndex, LaneKind},
         packet::{Fragment, MessageSeq, PacketHeader, PacketSeq},
         rtt::RttEstimator,
-        send,
+        send::SendLane,
         seq_buf::SeqBuf,
+        FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
     },
     aeronet_io::Session,
     ahash::{HashMap, HashSet},
@@ -17,23 +17,52 @@ use {
     derive_more::{Display, Error},
     either::Either,
     octs::{Buf, Read},
-    tracing::{trace, trace_span},
-    typesize::{TypeSize, derive::TypeSize},
+    tracing::{trace, trace_span, warn},
+    typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
 };
+
+#[derive(Debug, TypeSize)]
+pub struct TransportRecv {
+    lanes: Box<[RecvLane]>,
+    /// Buffer of received messages.
+    ///
+    /// This must be drained by the user on every update.
+    pub msgs: RecvBuffer<RecvMessage>,
+    /// Buffer of received message acknowledgements for messages previously
+    /// sent via [`TransportSend::push`].
+    ///
+    /// This must be drained by the user on every update.
+    pub acks: RecvBuffer<MessageKey>,
+}
 
 /// Buffer storing data received by a [`Transport`].
 ///
 /// This is effectively a wrapper around [`Vec`] which only publicly allows
 /// draining elements from it.
 #[derive(Debug, TypeSize)]
-pub struct TransportRecv<T: TypeSize>(pub(crate) Vec<T>);
+pub struct RecvBuffer<T: TypeSize>(Vec<T>);
 
-impl<T: TypeSize> TransportRecv<T> {
-    pub(crate) const fn new() -> Self {
-        Self(Vec::new())
+impl TransportRecv {
+    pub(crate) fn new(lanes: impl IntoIterator<Item = impl Into<LaneKind>>) -> Self {
+        Self {
+            lanes: lanes
+                .into_iter()
+                .map(Into::into)
+                .map(RecvLane::new)
+                .collect(),
+            msgs: RecvBuffer(Vec::new()),
+            acks: RecvBuffer(Vec::new()),
+        }
     }
 
+    #[must_use]
+    pub const fn lanes(&self) -> &[RecvLane] {
+        &self.lanes
+    }
+}
+
+impl<T: TypeSize> RecvBuffer<T> {
     /// Drains all items from this buffer.
     pub fn drain(&mut self) -> impl Iterator<Item = T> + '_ {
         self.0.drain(..)
@@ -41,7 +70,7 @@ impl<T: TypeSize> TransportRecv<T> {
 }
 
 #[derive(Debug, Clone, TypeSize)]
-pub(crate) struct Lane {
+pub(crate) struct RecvLane {
     frags: FragmentReceiver,
     state: LaneState,
 }
@@ -62,8 +91,8 @@ enum LaneState {
     },
 }
 
-impl Lane {
-    pub(crate) fn new(kind: LaneKind) -> Self {
+impl RecvLane {
+    fn new(kind: LaneKind) -> Self {
         Self {
             frags: FragmentReceiver::default(),
             state: match kind {
@@ -80,6 +109,57 @@ impl Lane {
                     recv_buf: HashMap::default(),
                 },
             },
+        }
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> LaneKind {
+        match self.state {
+            LaneState::UnreliableUnordered => LaneKind::UnreliableUnordered,
+            LaneState::UnreliableSequenced { .. } => LaneKind::UnreliableSequenced,
+            LaneState::ReliableUnordered { .. } => LaneKind::ReliableUnordered,
+            LaneState::ReliableOrdered { .. } => LaneKind::ReliableOrdered,
+        }
+    }
+
+    #[must_use]
+    pub fn num_unordered_msgs(&self) -> usize {
+        match &self.state {
+            LaneState::UnreliableUnordered | LaneState::UnreliableSequenced { .. } => 0,
+            LaneState::ReliableUnordered { recv_buf, .. } => recv_buf.len(),
+            LaneState::ReliableOrdered { recv_buf, .. } => recv_buf.len(),
+        }
+    }
+
+    #[must_use]
+    pub fn num_unreassembled_msgs(&self) -> usize {
+        self.frags.len()
+    }
+}
+
+/// Clears all [`TransportRecv::msgs`] and [`TransportRecv::acks`] buffers,
+/// emitting warnings if there were any items left in the buffers.
+///
+/// The equivalent for [`Transport::send`] does not exist, because the transport
+/// layer itself is responsible for draining that buffer.
+pub fn clear_buffers(mut sessions: Query<(Entity, &mut Transport)>) {
+    for (entity, mut transport) in &mut sessions {
+        let len = transport.recv.msgs.0.len();
+        if len > 0 {
+            warn!(
+                "{entity} has {len} received messages which have not been consumed - this \
+                 indicates a bug in code above the transport layer"
+            );
+            transport.recv.msgs.0.clear();
+        }
+
+        let len = transport.recv.acks.0.len();
+        if len > 0 {
+            warn!(
+                "{entity} has {len} received acks which have not been consumed - this indicates a \
+                 bug in code above the transport layer"
+            );
+            transport.recv.acks.0.clear();
         }
     }
 }
@@ -137,12 +217,12 @@ fn recv_on(
         .read::<PacketHeader>()
         .map_err(|_| RecvError::ReadHeader)?;
 
-    let span = trace_span!("recv", packet = header.seq.0.0);
+    let span = trace_span!("recv", packet = header.seq.0 .0);
     let _span = span.enter();
 
     trace!(len = packet_len, "Received packet");
 
-    transport.recv_acks.0.extend(packet_acks_to_msg_keys(
+    transport.recv.acks.0.extend(packet_acks_to_msg_keys(
         &mut transport.flushed_packets,
         &mut transport.send.lanes,
         &mut transport.rtt,
@@ -162,7 +242,7 @@ fn recv_on(
 
 fn packet_acks_to_msg_keys<'s, const N: usize>(
     flushed_packets: &'s mut SeqBuf<FlushedPacket, N>,
-    send_lanes: &'s mut [send::Lane],
+    send_lanes: &'s mut [SendLane],
     rtt: &'s mut RttEstimator,
     packet_acks_recv: &'s mut Saturating<usize>,
     msgs_acks_recv: &'s mut Saturating<usize>,
@@ -230,7 +310,8 @@ fn recv_frag(
 
     let memory_left = config.max_memory_usage - transport.memory_used();
     let lane = transport
-        .recv_lanes
+        .recv
+        .lanes
         .get_mut(usize::from(lane_index))
         .ok_or(RecvError::InvalidLane { lane: lane_index })?;
     let msg = lane
@@ -251,7 +332,7 @@ fn recv_frag(
                 recv_at,
                 payload: msg,
             });
-        transport.recv_msgs.0.extend(msgs_with_lane);
+        transport.recv.msgs.0.extend(msgs_with_lane);
     }
 
     Ok(())

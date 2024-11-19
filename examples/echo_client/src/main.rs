@@ -16,19 +16,18 @@
 use {
     aeronet::{
         io::{
-            Session, SessionEndpoint,
             bytes::Bytes,
             connection::{Disconnect, DisconnectReason, Disconnected},
-            web_time,
+            web_time, Session, SessionEndpoint,
         },
         transport::{
-            AeronetTransportPlugin, Transport, TransportConfig,
             lane::{LaneIndex, LaneKind},
+            AeronetTransportPlugin, Transport, TransportConfig,
         },
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{egui, EguiContexts, EguiPlugin},
     core::mem,
 };
 
@@ -190,7 +189,7 @@ fn recv_messages(
     >,
 ) {
     for (mut transport, mut ui_state) in &mut sessions {
-        for msg in transport.recv_msgs.drain() {
+        for msg in transport.recv.msgs.drain() {
             let payload = msg.payload;
 
             // `payload` is a `Vec<u8>` - we have full ownership of the bytes received.
@@ -200,7 +199,7 @@ fn recv_messages(
             ui_state.log.push(format!("> {text}"));
         }
 
-        for _ in transport.recv_acks.drain() {
+        for _ in transport.recv.acks.drain() {
             // We have to use up acknowledgements,
             // but since we don't actually care about reading them,
             // we'll just ignore them.

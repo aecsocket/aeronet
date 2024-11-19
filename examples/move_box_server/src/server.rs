@@ -1,8 +1,8 @@
 use {
     aeronet::io::{
-        Session,
         connection::{DisconnectReason, Disconnected, LocalAddr},
         server::Server,
+        Session,
     },
     aeronet_replicon::server::{AeronetRepliconServer, AeronetRepliconServerPlugin},
     aeronet_websocket::server::{WebSocketServer, WebSocketServerPlugin},
@@ -11,7 +11,7 @@ use {
         server::{SessionRequest, SessionResponse, WebTransportServer, WebTransportServerPlugin},
         wtransport,
     },
-    bevy::{log::LogPlugin, prelude::*, state::app::StatesPlugin},
+    bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*, state::app::StatesPlugin},
     bevy_replicon::prelude::*,
     core::time::Duration,
     move_box::{MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition, TICK_RATE},
@@ -44,14 +44,17 @@ pub fn main() -> AppExit {
         .add_plugins((
             // core
             LogPlugin::default(),
-            MinimalPlugins,
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
+                1.0 / f64::from(TICK_RATE),
+            ))),
             StatesPlugin,
             // transport
             WebTransportServerPlugin,
             WebSocketServerPlugin,
             // replication
             RepliconPlugins.set(ServerPlugin {
-                tick_policy: TickPolicy::MaxTickRate(TICK_RATE),
+                // 1 frame lasts `1.0 / TICK_RATE` anyway
+                tick_policy: TickPolicy::EveryFrame,
                 ..Default::default()
             }),
             AeronetRepliconServerPlugin,
