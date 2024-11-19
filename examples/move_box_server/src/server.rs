@@ -1,8 +1,8 @@
 use {
     aeronet::io::{
+        Session,
         connection::{DisconnectReason, Disconnected, LocalAddr},
         server::Server,
-        Session,
     },
     aeronet_replicon::server::{AeronetRepliconServer, AeronetRepliconServerPlugin},
     aeronet_websocket::server::{WebSocketServer, WebSocketServerPlugin},

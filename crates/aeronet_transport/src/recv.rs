@@ -2,13 +2,13 @@
 
 use {
     crate::{
+        FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
         frag::{FragmentReceiver, ReassembleError},
         lane::{LaneIndex, LaneKind},
         packet::{Fragment, MessageSeq, PacketHeader, PacketSeq},
         rtt::RttEstimator,
         send::SendLane,
         seq_buf::SeqBuf,
-        FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
     },
     aeronet_io::Session,
     ahash::{HashMap, HashSet},
@@ -18,7 +18,7 @@ use {
     either::Either,
     octs::{Buf, Read},
     tracing::{trace, trace_span, warn},
-    typesize::{derive::TypeSize, TypeSize},
+    typesize::{TypeSize, derive::TypeSize},
     web_time::Instant,
 };
 
@@ -217,7 +217,7 @@ fn recv_on(
         .read::<PacketHeader>()
         .map_err(|_| RecvError::ReadHeader)?;
 
-    let span = trace_span!("recv", packet = header.seq.0 .0);
+    let span = trace_span!("recv", packet = header.seq.0.0);
     let _span = span.enter();
 
     trace!(len = packet_len, "Received packet");
