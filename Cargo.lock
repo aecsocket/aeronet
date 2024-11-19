@@ -164,6 +164,7 @@ dependencies = [
  "bevy_egui",
  "bevy_reflect",
  "bevy_time",
+ "bevy_winit",
  "bitvec",
  "derive_more",
  "document-features",
