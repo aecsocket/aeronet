@@ -22,6 +22,7 @@ use {
     web_time::Instant,
 };
 
+/// Access to the receiving half of a [`Transport`].
 #[derive(Debug, TypeSize)]
 pub struct TransportRecv {
     lanes: Box<[RecvLane]>,
@@ -56,6 +57,7 @@ impl TransportRecv {
         }
     }
 
+    /// Gets access to the state of the receiving-side lanes.
     #[must_use]
     pub const fn lanes(&self) -> &[RecvLane] {
         &self.lanes
@@ -69,8 +71,9 @@ impl<T: TypeSize> RecvBuffer<T> {
     }
 }
 
+/// State of a lane used for receiving incoming messages on a [`Transport`].
 #[derive(Debug, Clone, TypeSize)]
-pub(crate) struct RecvLane {
+pub struct RecvLane {
     frags: FragmentReceiver,
     state: LaneState,
 }
@@ -112,6 +115,7 @@ impl RecvLane {
         }
     }
 
+    /// Gets what kind of lane this state represents.
     #[must_use]
     pub const fn kind(&self) -> LaneKind {
         match self.state {
@@ -122,6 +126,16 @@ impl RecvLane {
         }
     }
 
+    /// Gets the number of messages which are currently being reassembled on
+    /// this lane, but have not been fully reassembled yet.
+    #[must_use]
+    pub fn num_reassembling_msgs(&self) -> usize {
+        self.frags.len()
+    }
+
+    /// Gets the number of messages which have been received and fully
+    /// reassembled, but have not been forwarded to the user yet because some
+    /// previous message has not been received yet.
     #[must_use]
     pub fn num_unordered_msgs(&self) -> usize {
         match &self.state {
@@ -129,11 +143,6 @@ impl RecvLane {
             LaneState::ReliableUnordered { recv_buf, .. } => recv_buf.len(),
             LaneState::ReliableOrdered { recv_buf, .. } => recv_buf.len(),
         }
-    }
-
-    #[must_use]
-    pub fn num_reassembling_msgs(&self) -> usize {
-        self.frags.len()
     }
 }
 

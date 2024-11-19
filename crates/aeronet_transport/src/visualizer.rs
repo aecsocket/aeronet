@@ -449,7 +449,7 @@ fn show_queued_status(ui: &mut egui::Ui, transport: &Transport) {
 
             for (index, lane) in transport.send.lanes().iter().enumerate() {
                 ui.label(format!("{index}"));
-                ui.label(format!("{:?}", lane.reliability()));
+                ui.label(format!("{:?}", lane.kind()));
                 ui.label(format!("{}", lane.num_queued_msgs()));
                 ui.end_row();
             }

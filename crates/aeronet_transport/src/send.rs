@@ -33,11 +33,12 @@ pub struct TransportSend {
     too_many_msgs: bool,
 }
 
+/// State of a lane used for sending outgoing messages on a [`Transport`].
 #[derive(Debug, Clone, TypeSize)]
 pub struct SendLane {
+    kind: LaneKind,
     pub(crate) sent_msgs: HashMap<MessageSeq, SentMessage>,
     next_msg_seq: MessageSeq,
-    reliability: LaneReliability,
 }
 
 #[derive(Debug, Clone, TypeSize)]
@@ -65,9 +66,9 @@ impl TransportSend {
                 .into_iter()
                 .map(Into::into)
                 .map(|kind| SendLane {
+                    kind,
                     sent_msgs: HashMap::default(),
                     next_msg_seq: MessageSeq::default(),
-                    reliability: kind.reliability(),
                 })
                 .collect(),
             bytes_bucket: TokenBucket::new(0),
@@ -76,11 +77,14 @@ impl TransportSend {
         }
     }
 
+    /// Gets access to the state of the sender-side lanes.
     #[must_use]
     pub const fn lanes(&self) -> &[SendLane] {
         &self.lanes
     }
 
+    /// Gets access to the [`TokenBucket`] used for tracking how many bytes are
+    /// left for outgoing packets.
     #[must_use]
     pub const fn bytes_bucket(&self) -> &TokenBucket {
         &self.bytes_bucket
@@ -171,11 +175,14 @@ impl TransportSend {
 }
 
 impl SendLane {
+    /// Gets what kind of lane this state represents.
     #[must_use]
-    pub const fn reliability(&self) -> LaneReliability {
-        self.reliability
+    pub const fn kind(&self) -> LaneKind {
+        self.kind
     }
 
+    /// Gets the number of messages queued for sending, but which have not been
+    /// flushed yet.
     #[must_use]
     pub fn num_queued_msgs(&self) -> usize {
         self.sent_msgs.len()
@@ -393,7 +400,7 @@ fn write_frag_at_path(
         .expect("should grow the buffer when writing over capacity");
 
     // what does the lane do with this after sending?
-    match &lane.reliability {
+    match &lane.kind.reliability() {
         LaneReliability::Unreliable => {
             // drop the frag
             // if we've dropped all frags of this message, then
