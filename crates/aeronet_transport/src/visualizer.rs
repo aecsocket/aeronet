@@ -2,10 +2,12 @@
 
 use {
     crate::{
+        recv::RecvLane,
         sampling::{
             SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
             SessionStatsSampling,
         },
+        send::SendLane,
         Transport, TransportConfig,
     },
     aeronet_io::{packet::PacketRtt, Session},
@@ -290,6 +292,7 @@ impl SessionVisualizer {
                 show_rtt_status(ui, packet_rtt, transport);
                 show_mem_status(ui, transport, transport_config);
                 show_tx_cap_status(ui, transport);
+                show_queued_status(ui, transport);
 
                 ui.label("hover for details");
             });
@@ -315,7 +318,21 @@ fn show_connected_status(ui: &mut egui::Ui, session: &Session, now: Instant) {
 fn show_mtu_status(ui: &mut egui::Ui, session: &Session) {
     ui.group(|ui| {
         ui.label("MTU");
-        ui.label(format!("{} ({} min)", session.mtu(), session.min_mtu()));
+        ui.label(format!("{}", session.mtu()));
+    })
+    .response
+    .on_hover_ui(|ui| {
+        egui::Grid::new("mtu_details")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("Current");
+                ui.label(format!("{}", session.mtu()));
+                ui.end_row();
+
+                ui.label("Min");
+                ui.label(format!("{}", session.min_mtu()));
+                ui.end_row();
+            });
     });
 }
 
@@ -360,47 +377,11 @@ fn show_mem_status(ui: &mut egui::Ui, transport: &Transport, transport_config: &
         ));
     })
     .response
-    .on_hover_ui(|ui| {
-        ui.label(format!(
-            "{} / {} bytes",
-            fmt_thousands(mem_used),
-            fmt_thousands(transport_config.max_memory_usage),
-        ));
-
-        ui.heading("Recv lanes");
-
-        egui::Grid::new("recv_lane_stats").show(ui, |ui| {
-            ui.scope(|_| {});
-            ui.label("Kind");
-            ui.label("# un-reassembled msgs");
-            ui.label("# unordered msgs");
-            ui.end_row();
-
-            for (index, lane) in transport.recv.lanes().iter().enumerate() {
-                ui.label(format!("{index}"));
-                ui.label(format!("{:?}", lane.kind()));
-                ui.label(format!("{}", lane.num_unreassembled_msgs()));
-                ui.label(format!("{}", lane.num_unordered_msgs()));
-                ui.end_row();
-            }
-        });
-
-        ui.heading("Send lanes");
-
-        egui::Grid::new("send_lane_stats").show(ui, |ui| {
-            ui.scope(|_| {});
-            ui.label("Kind");
-            ui.label("# msgs");
-            ui.end_row();
-
-            for (index, lane) in transport.send.lanes().iter().enumerate() {
-                ui.label(format!("{index}"));
-                ui.label(format!("{:?}", lane.reliability()));
-                ui.label(format!("{}", lane.num_msgs_queued()));
-                ui.end_row();
-            }
-        });
-    });
+    .on_hover_text(format!(
+        "{} / {} bytes",
+        fmt_thousands(mem_used),
+        fmt_thousands(transport_config.max_memory_usage),
+    ));
 }
 
 fn show_tx_cap_status(ui: &mut egui::Ui, transport: &Transport) {
@@ -418,6 +399,62 @@ fn show_tx_cap_status(ui: &mut egui::Ui, transport: &Transport) {
         fmt_thousands(transport.send.bytes_bucket().rem()),
         fmt_thousands(transport.send.bytes_bucket().cap()),
     ));
+}
+
+fn show_queued_status(ui: &mut egui::Ui, transport: &Transport) {
+    let total_recv = transport
+        .recv
+        .lanes()
+        .iter()
+        .map(RecvLane::num_reassembling_msgs)
+        .sum::<usize>();
+    let total_send = transport
+        .send
+        .lanes()
+        .iter()
+        .map(SendLane::num_queued_msgs)
+        .sum::<usize>();
+
+    ui.group(|ui| {
+        ui.label("QUEUED");
+        ui.label(format!("{total_recv} recv / {total_send} send"))
+    })
+    .response
+    .on_hover_ui(|ui| {
+        ui.heading("Recv lanes");
+
+        egui::Grid::new("recv_lane_stats").show(ui, |ui| {
+            ui.scope(|_| {});
+            ui.label("Kind");
+            ui.label("# reassmbling msgs");
+            ui.label("# unordered msgs");
+            ui.end_row();
+
+            for (index, lane) in transport.recv.lanes().iter().enumerate() {
+                ui.label(format!("{index}"));
+                ui.label(format!("{:?}", lane.kind()));
+                ui.label(format!("{}", lane.num_reassembling_msgs()));
+                ui.label(format!("{}", lane.num_unordered_msgs()));
+                ui.end_row();
+            }
+        });
+
+        ui.heading("Send lanes");
+
+        egui::Grid::new("send_lane_stats").show(ui, |ui| {
+            ui.scope(|_| {});
+            ui.label("Kind");
+            ui.label("# queued msgs");
+            ui.end_row();
+
+            for (index, lane) in transport.send.lanes().iter().enumerate() {
+                ui.label(format!("{index}"));
+                ui.label(format!("{:?}", lane.reliability()));
+                ui.label(format!("{}", lane.num_queued_msgs()));
+                ui.end_row();
+            }
+        });
+    });
 }
 
 fn graph_x(index: usize, sample_rate: f64) -> f64 {

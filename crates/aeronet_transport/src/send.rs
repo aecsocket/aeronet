@@ -178,7 +178,7 @@ impl SendLane {
     }
 
     #[must_use]
-    pub fn num_msgs_queued(&self) -> usize {
+    pub fn num_queued_msgs(&self) -> usize {
         self.sent_msgs.len()
     }
 }

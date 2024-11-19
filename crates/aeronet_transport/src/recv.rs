@@ -132,7 +132,7 @@ impl RecvLane {
     }
 
     #[must_use]
-    pub fn num_unreassembled_msgs(&self) -> usize {
+    pub fn num_reassembling_msgs(&self) -> usize {
         self.frags.len()
     }
 }
