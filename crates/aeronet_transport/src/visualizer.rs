@@ -2,21 +2,21 @@
 
 use {
     crate::{
+        Transport, TransportConfig,
         recv::RecvLane,
         sampling::{
             SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
             SessionStatsSampling,
         },
         send::SendLane,
-        Transport, TransportConfig,
     },
-    aeronet_io::{packet::PacketRtt, Session},
+    aeronet_io::{Session, packet::PacketRtt},
     bevy_app::prelude::*,
     bevy_core::Name,
     bevy_ecs::prelude::*,
     bevy_egui::{
-        egui::{self, epaint::Hsva},
         EguiContexts,
+        egui::{self, epaint::Hsva},
     },
     core::{hash::Hash, ops::RangeInclusive, time::Duration},
     itertools::Itertools,
