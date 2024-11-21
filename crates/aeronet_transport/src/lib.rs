@@ -21,7 +21,7 @@ pub mod visualizer;
 
 pub use aeronet_io as io;
 use {
-    aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
+    aeronet_io::{connection::Disconnect, packet::MtuTooSmall, IoSet, Session},
     arbitrary::Arbitrary,
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
@@ -36,7 +36,7 @@ use {
     send::TransportSend,
     seq_buf::SeqBuf,
     tracing::warn,
-    typesize::{TypeSize, derive::TypeSize},
+    typesize::{derive::TypeSize, TypeSize},
     web_time::Instant,
 };
 
@@ -243,6 +243,13 @@ impl Transport {
     #[must_use]
     pub const fn rtt(&self) -> &RttEstimator {
         &self.rtt
+    }
+
+    /// Gets the number of packets that have been flushed out to the peer, but
+    /// we have not received an acknowledgement from the peer for them yet.
+    #[must_use]
+    pub const fn num_unacked_packets(&self) -> usize {
+        self.flushed_packets.len()
     }
 
     /// Gets how many total bytes of memory this transport is using.
