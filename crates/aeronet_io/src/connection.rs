@@ -181,7 +181,7 @@ fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
             debug!("{entity} disconnected by user: {reason}");
         }
         DisconnectReason::Peer(reason) => {
-            debug!("{entity} disconnected by user: {reason}");
+            debug!("{entity} disconnected by peer: {reason}");
         }
         DisconnectReason::Error(err) => {
             debug!("{entity} disconnected due to error: {err:#}");

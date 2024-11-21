@@ -3,10 +3,12 @@
 use {
     crate::{
         Transport, TransportConfig,
+        recv::RecvLane,
         sampling::{
             SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
             SessionStatsSampling,
         },
+        send::SendLane,
     },
     aeronet_io::{Session, packet::PacketRtt},
     bevy_app::prelude::*,
@@ -20,6 +22,7 @@ use {
     itertools::Itertools,
     ringbuf::traits::Consumer,
     size_format::{BinaryPrefixes, PointSeparated, SizeFormatter},
+    thousands::Separable,
     web_time::Instant,
 };
 
@@ -282,42 +285,16 @@ impl SessionVisualizer {
         transport: &Transport,
         transport_config: &TransportConfig,
     ) {
-        let unknown = || "?".to_string();
-
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.label(format!(
-                    "{:.1?}",
-                    now.saturating_duration_since(session.connected_at())
-                ));
-                ui.separator();
+                show_connected_status(ui, session, now);
+                show_mtu_status(ui, session);
+                show_mem_status(ui, transport, transport_config);
+                show_tx_cap_status(ui, transport);
+                show_msg_buf_status(ui, transport);
+                show_rtt_status(ui, packet_rtt, transport);
 
-                ui.label("MTU");
-                ui.label(format!("{} ({} min)", session.mtu(), session.min_mtu()));
-                ui.separator();
-
-                ui.label("RTT");
-                ui.label(format!(
-                    "{} pkt / {:.1?} msg",
-                    packet_rtt.map_or_else(unknown, |rtt| format!("{rtt:.1?}")),
-                    transport.rtt().get(),
-                ));
-                ui.separator();
-
-                ui.label("MEM");
-                ui.label(format!(
-                    "{} / {}",
-                    fmt_bytes(transport.memory_used()),
-                    fmt_bytes(transport_config.max_memory_usage)
-                ));
-                ui.separator();
-
-                ui.label("TX CAP");
-                ui.label(format!(
-                    "{} / {}",
-                    fmt_bytes(transport.send_bytes_bucket().rem()),
-                    fmt_bytes(transport.send_bytes_bucket().cap()),
-                ));
+                ui.label("hover for details");
             });
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -327,6 +304,195 @@ impl SessionVisualizer {
             });
         });
     }
+}
+
+fn show_connected_status(ui: &mut egui::Ui, session: &Session, now: Instant) {
+    ui.group(|ui| {
+        ui.label(format!(
+            "{:.1?}",
+            now.saturating_duration_since(session.connected_at())
+        ));
+    })
+    .response
+    .on_hover_ui(|ui| {
+        ui.label("How long this session has been\nconnected for, in wall-clock time.");
+    });
+}
+
+fn show_mtu_status(ui: &mut egui::Ui, session: &Session) {
+    ui.group(|ui| {
+        ui.label("MTU");
+        ui.label(format!("{}", session.mtu()));
+    })
+    .response
+    .on_hover_ui(|ui| {
+        egui::Grid::new("mtu_details")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("Current");
+                ui.label(format!("{}", session.mtu()));
+                ui.end_row();
+
+                ui.label("Min");
+                ui.label(format!("{}", session.min_mtu()));
+                ui.end_row();
+            });
+
+        ui.label("Maximum transmissible unit (MTU) -\nmaximum size of an outgoing packet.");
+    });
+}
+
+fn show_mem_status(ui: &mut egui::Ui, transport: &Transport, transport_config: &TransportConfig) {
+    let mem_used = transport.memory_used();
+
+    ui.group(|ui| {
+        ui.label("MEM");
+        ui.label(format!(
+            "{} / {}",
+            fmt_bytes(mem_used),
+            fmt_bytes(transport_config.max_memory_usage)
+        ));
+    })
+    .response
+    .on_hover_ui(|ui| {
+        egui::Grid::new("mem_details")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("Current");
+                ui.label(fmt_thousands(mem_used));
+                ui.end_row();
+
+                ui.label("Max");
+                ui.label(fmt_thousands(transport_config.max_memory_usage));
+                ui.end_row();
+            });
+
+        ui.label("How much memory, in bytes,\nis being used by this session.");
+    });
+}
+
+fn show_tx_cap_status(ui: &mut egui::Ui, transport: &Transport) {
+    ui.group(|ui| {
+        ui.label("TX CAP");
+        ui.label(format!(
+            "{} / {}",
+            fmt_bytes(transport.send.bytes_bucket().rem()),
+            fmt_bytes(transport.send.bytes_bucket().cap()),
+        ));
+    })
+    .response
+    .on_hover_ui(|ui| {
+        egui::Grid::new("tx_cap_details")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("Remaining");
+                ui.label(fmt_thousands(transport.send.bytes_bucket().rem()));
+                ui.end_row();
+
+                ui.label("Capacity");
+                ui.label(fmt_thousands(transport.send.bytes_bucket().cap()));
+                ui.end_row();
+            });
+
+        ui.label("How many bytes this session is\nallowed to use to send out packets.");
+    });
+}
+
+fn show_msg_buf_status(ui: &mut egui::Ui, transport: &Transport) {
+    let total_recv = transport
+        .recv
+        .lanes()
+        .iter()
+        .map(RecvLane::num_reassembling_msgs)
+        .sum::<usize>();
+    let total_send = transport
+        .send
+        .lanes()
+        .iter()
+        .map(SendLane::num_queued_msgs)
+        .sum::<usize>();
+    let unacked = transport.num_unacked_packets();
+
+    ui.group(|ui| {
+        ui.label("MSG BUF");
+        ui.label(format!(
+            "{total_recv} recv / {total_send} send / {unacked} unacked"
+        ))
+    })
+    .response
+    .on_hover_ui(|ui| {
+        ui.heading("Recv lanes");
+
+        egui::Grid::new("recv_lane_details").show(ui, |ui| {
+            ui.scope(|_| {});
+            ui.label("Kind");
+            ui.label("# reassmbling msgs");
+            ui.label("# unordered msgs");
+            ui.end_row();
+
+            for (index, lane) in transport.recv.lanes().iter().enumerate() {
+                ui.label(format!("{index}"));
+                ui.label(format!("{:?}", lane.kind()));
+                ui.label(format!("{}", lane.num_reassembling_msgs()));
+                ui.label(format!("{}", lane.num_unordered_msgs()));
+                ui.end_row();
+            }
+        });
+
+        ui.heading("Send lanes");
+
+        egui::Grid::new("send_lane_stats").show(ui, |ui| {
+            ui.scope(|_| {});
+            ui.label("Kind");
+            ui.label("# queued msgs");
+            ui.end_row();
+
+            for (index, lane) in transport.send.lanes().iter().enumerate() {
+                ui.label(format!("{index}"));
+                ui.label(format!("{:?}", lane.kind()));
+                ui.label(format!("{}", lane.num_queued_msgs()));
+                ui.end_row();
+            }
+        });
+
+        ui.label(
+            "Number of buffered...\n• recv: incoming messages\n• send: outgoing messages\n• \
+             unacked: flushed packets which have not been acked",
+        );
+    });
+}
+
+fn show_rtt_status(ui: &mut egui::Ui, packet_rtt: Option<Duration>, transport: &Transport) {
+    let msg_rtt = transport.rtt();
+
+    ui.group(|ui| {
+        ui.label("RTT");
+        ui.label(format!(
+            "{} packet / {:.1?} msg",
+            packet_rtt.map_or_else(|| "?".into(), |rtt| format!("{rtt:.1?}")),
+            msg_rtt.get(),
+        ));
+    })
+    .response
+    .on_hover_ui(|ui| {
+        egui::Grid::new("rtt_detail").num_columns(2).show(ui, |ui| {
+            ui.label("Min");
+            ui.label(format!("{:.1?}", msg_rtt.min()));
+            ui.end_row();
+
+            ui.label("Conservative");
+            ui.label(format!("{:.1?}", msg_rtt.conservative()));
+            ui.end_row();
+
+            ui.label("PTO");
+            ui.label(format!("{:.1?}", msg_rtt.pto()));
+            ui.end_row();
+        });
+
+        ui.label(
+            "Round-trip time - time taken to send some data\nto the peer and get a response back.",
+        );
+    });
 }
 
 fn graph_x(index: usize, sample_rate: f64) -> f64 {
@@ -365,6 +531,10 @@ fn fmt_bytes(n: usize) -> String {
         "{:.0}",
         SizeFormatter::<_, BinaryPrefixes, PointSeparated>::new(n)
     )
+}
+
+fn fmt_thousands(n: usize) -> String {
+    n.separate_with_spaces()
 }
 
 fn fmt_bytes_y_axis(mark: egui_plot::GridMark, _range: &RangeInclusive<f64>) -> String {

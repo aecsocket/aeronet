@@ -26,13 +26,11 @@ use {
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
     bevy_reflect::Reflect,
-    bevy_time::{Real, Time},
     core::num::Saturating,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
-    limit::TokenBucket,
     octs::FixedEncodeLenHint,
-    packet::{Acknowledge, FragmentHeader, FragmentIndex, MessageSeq, PacketHeader, PacketSeq},
+    packet::{Acknowledge, FragmentHeader, FragmentIndex, MessageSeq, PacketHeader},
     recv::TransportRecv,
     rtt::RttEstimator,
     send::TransportSend,
@@ -55,11 +53,11 @@ impl Plugin for AeronetTransportPlugin {
             .add_systems(
                 PreUpdate,
                 (
-                    clear_recv_buffers.before(TransportSet::Poll),
+                    recv::clear_buffers.before(TransportSet::Poll),
                     (
                         recv::poll,
-                        update_config,
-                        refill_send_bytes,
+                        send::update_send_bytes_config,
+                        send::refill_send_bytes,
                         check_memory_limit,
                     )
                         .chain()
@@ -94,10 +92,11 @@ impl Plugin for AeronetTransportPlugin {
 ///
 /// - Use [`Transport::send`] to enqueue messages for sending, and to get a key
 ///   identifying the sent messages
-/// - Use [`Transport::recv_msgs`] to drain messages received from the IO layer
-/// - Use [`Transport::recv_acks`] to drain message acknowledgements for
-///   messages which you have sent out, and that the peer has now acknowledged
-///   that they have received.
+/// - Use [`Transport::recv`]'s [`TransportRecv::msgs`] to drain messages
+///   received from the IO layer
+/// - Use [`Transport::recv`]'s [`TransportRecv::acks`] to drain message
+///   acknowledgements for messages which you have sent out, and that the peer
+///   has now acknowledged that they have received.
 ///
 /// The `recv` buffers must be drained on every update, otherwise some may be
 /// lost, leading to incorrect behavior, and a warning will be logged.
@@ -108,24 +107,14 @@ pub struct Transport {
     flushed_packets: SeqBuf<FlushedPacket, 1024>,
     stats: MessageStats,
     peer_acks: Acknowledge,
-
-    // recv
-    recv_lanes: Box<[recv::Lane]>,
     rtt: RttEstimator,
-    /// Buffer of received messages.
+    /// Interface to the receiving half of this transport.
     ///
-    /// This must be drained by the user on every update.
-    pub recv_msgs: TransportRecv<RecvMessage>,
-    /// Buffer of received message acknowledgements for messages previously
-    /// sent via [`TransportSend::push`].
+    /// Use this to read received messages and acknowledgements.
+    pub recv: TransportRecv,
+    /// Interface to the sending half of this transport.
     ///
-    /// This must be drained by the user on every update.
-    pub recv_acks: TransportRecv<MessageKey>,
-
-    // send
-    send_bytes_bucket: TokenBucket,
-    next_packet_seq: PacketSeq,
-    /// Allows enqueueing messages to be sent along this transport.
+    /// Use this to enqueue messages to be sent along this transport.
     pub send: TransportSend,
 }
 
@@ -144,9 +133,7 @@ pub struct TransportConfig {
     ///
     /// By default, this is 4 MiB. Consider tuning this number if you see
     /// connections fail with an out-of-memory error, or you see
-    /// [`Transport::memory_used`] is too high (you can use the
-    #[cfg_attr(feature = "visualizer", doc = "[`visualizer`]")]
-    #[cfg_attr(not(feature = "visualizer"), doc = "`visualizer`")]
+    /// [`Transport::memory_used`] is too high (you can use the [`visualizer`]
     /// to see real-time statistics).
     pub max_memory_usage: usize,
     /// How many packet bytes we can flush out to the IO layer per second.
@@ -239,18 +226,8 @@ impl Transport {
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
             stats: MessageStats::default(),
             peer_acks: Acknowledge::default(),
-            //
-            recv_lanes: recv_lanes
-                .into_iter()
-                .map(Into::into)
-                .map(recv::Lane::new)
-                .collect(),
             rtt: RttEstimator::default(),
-            recv_msgs: TransportRecv::new(),
-            recv_acks: TransportRecv::new(),
-            //
-            send_bytes_bucket: TokenBucket::new(0),
-            next_packet_seq: PacketSeq::default(),
+            recv: TransportRecv::new(recv_lanes),
             send: TransportSend::new(max_frag_len, send_lanes),
         })
     }
@@ -261,17 +238,18 @@ impl Transport {
         self.stats
     }
 
-    /// Gets the current RTT estimation.
+    /// Gets access to the RTT estimator, allowing you to read the current RTT
+    /// estimates.
     #[must_use]
     pub const fn rtt(&self) -> &RttEstimator {
         &self.rtt
     }
 
-    /// Gets the [`TokenBucket`] for how many packet bytes we have left for
-    /// sending.
+    /// Gets the number of packets that have been flushed out to the peer, but
+    /// we have not received an acknowledgement from the peer for them yet.
     #[must_use]
-    pub const fn send_bytes_bucket(&self) -> &TokenBucket {
-        &self.send_bytes_bucket
+    pub const fn num_unacked_packets(&self) -> usize {
+        self.flushed_packets.len()
     }
 
     /// Gets how many total bytes of memory this transport is using.
@@ -308,7 +286,7 @@ pub enum TransportSet {
 /// [`TransportSend::push`] on this [`Transport`].
 ///
 /// After pushing a message to the transport, you can use the output of
-/// [`Transport::recv_acks`] to read what messages have received acknowledgement
+/// [`TransportRecv::acks`] to read what messages have received acknowledgement
 /// from the peer. If you see the same message key that you got from
 /// [`TransportSend::push`], that message was acknowledged.
 ///
@@ -335,14 +313,14 @@ pub struct MessageKey {
 #[derive(Debug, Clone, Copy, Default, TypeSize)] // force `#[derive]` on multiple lines
 #[derive(Add, AddAssign, Sub, SubAssign)]
 pub struct MessageStats {
-    /// Number of messages received into [`Transport::recv_msgs`].
+    /// Number of messages received into [`TransportRecv::msgs`].
     pub msgs_recv: Saturating<usize>,
     /// Number of messages sent out from [`Transport::send`].
     pub msgs_sent: Saturating<usize>,
     /// Number of packet acknowledgements received.
     pub packet_acks_recv: Saturating<usize>,
     /// Number of message acknowledgements received into
-    /// [`Transport::recv_acks`].
+    /// [`TransportRecv::acks`].
     pub msg_acks_recv: Saturating<usize>,
 }
 
@@ -380,33 +358,6 @@ fn init_config(
     }
 }
 
-/// Clears all [`Transport::recv_msgs`] and [`Transport::recv_acks`] buffers,
-/// emitting warnings if there were any items left in the buffers.
-///
-/// The equivalent for [`Transport::send`] does not exist, because this crate
-/// itself is responsible for draining that buffer.
-pub fn clear_recv_buffers(mut sessions: Query<(Entity, &mut Transport)>) {
-    for (entity, mut transport) in &mut sessions {
-        let len = transport.recv_msgs.0.len();
-        if len > 0 {
-            warn!(
-                "{entity} has {len} received messages which have not been consumed - this \
-                 indicates a bug in code above the transport layer"
-            );
-            transport.recv_msgs.0.clear();
-        }
-
-        let len = transport.recv_acks.0.len();
-        if len > 0 {
-            warn!(
-                "{entity} has {len} received acks which have not been consumed - this indicates a \
-                 bug in code above the transport layer"
-            );
-            transport.recv_acks.0.clear();
-        }
-    }
-}
-
 fn check_memory_limit(
     mut commands: Commands,
     sessions: Query<(Entity, &Transport, &TransportConfig)>,
@@ -418,26 +369,5 @@ fn check_memory_limit(
             warn!("{session} exceeded memory limit, disconnecting - {mem_used} / {mem_max} bytes");
             commands.trigger_targets(Disconnect::new("memory limit exceeded"), session);
         }
-    }
-}
-
-fn update_config(
-    mut sessions: Query<
-        (&mut Transport, &TransportConfig),
-        Or<(Added<Transport>, Changed<TransportConfig>)>,
-    >,
-) {
-    for (mut transport, config) in &mut sessions {
-        transport
-            .send_bytes_bucket
-            .set_cap(config.send_bytes_per_sec);
-    }
-}
-
-fn refill_send_bytes(time: Res<Time<Real>>, mut sessions: Query<&mut Transport>) {
-    for mut transport in &mut sessions {
-        transport
-            .send_bytes_bucket
-            .refill_portion(time.delta_seconds_f64());
     }
 }

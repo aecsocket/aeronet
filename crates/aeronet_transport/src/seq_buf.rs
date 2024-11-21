@@ -40,6 +40,7 @@ use {
 pub struct SeqBuf<T, const N: usize> {
     indices: Box<[u16; N]>,
     data: Box<[T; N]>,
+    len: usize,
 }
 
 const EMPTY: u16 = u16::MAX;
@@ -66,7 +67,59 @@ impl<T, const N: usize> SeqBuf<T, N> {
         Self {
             indices: Box::new([EMPTY; N]),
             data: Box::new(array::from_fn(cb)),
+            len: 0,
         }
+    }
+
+    /// Gets the number of elements in this sequence buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aeronet_transport::seq_buf::SeqBuf;
+    ///
+    /// let mut buf = SeqBuf::<String, 16>::new();
+    /// assert_eq!(0, buf.len());
+    ///
+    /// buf.insert(3, "hi #1".into());
+    /// assert_eq!(1, buf.len());
+    ///
+    /// buf.insert(5, "bye".into());
+    /// assert_eq!(2, buf.len());
+    ///
+    /// buf.insert(3, "hi #2".into());
+    /// assert_eq!(2, buf.len());
+    ///
+    /// buf.remove(3);
+    /// assert_eq!(1, buf.len());
+    ///
+    /// buf.remove(5);
+    /// assert_eq!(0, buf.len());
+    /// ```
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns `true` if there are no elements in this sequence buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aeronet_transport::seq_buf::SeqBuf;
+    ///
+    /// let mut buf = SeqBuf::<String, 16>::new();
+    /// assert!(buf.is_empty());
+    ///
+    /// buf.insert(0, "hi".into());
+    /// assert!(!buf.is_empty());
+    ///
+    /// buf.remove(0);
+    /// assert!(buf.is_empty());
+    /// ```
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     #[inline]
@@ -78,6 +131,21 @@ impl<T, const N: usize> SeqBuf<T, N> {
     }
 
     /// Gets a reference to the item at the given key.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aeronet_transport::seq_buf::SeqBuf;
+    ///
+    /// let mut buf = SeqBuf::<String, 16>::new();
+    /// assert!(buf.get(7).is_none());
+    ///
+    /// buf.insert(7, "hello world".into());
+    /// assert_eq!("hello world", buf.get(7).unwrap());
+    ///
+    /// buf.remove(7);
+    /// assert!(buf.get(7).is_none());
+    /// ```
     #[must_use]
     #[inline]
     #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
@@ -96,6 +164,18 @@ impl<T, const N: usize> SeqBuf<T, N> {
     }
 
     /// Gets a mutable reference to the item at the given key.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aeronet_transport::seq_buf::SeqBuf;
+    ///
+    /// let mut buf = SeqBuf::<String, 16>::new();
+    /// buf.insert(7, "hello world".into());
+    ///
+    /// *buf.get_mut(7).unwrap() = "goodbye world".into();
+    /// assert_eq!("goodbye world", buf.get(7).unwrap());
+    /// ```
     #[must_use]
     #[inline]
     #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
@@ -113,9 +193,36 @@ impl<T, const N: usize> SeqBuf<T, N> {
         }
     }
 
-    /// Inserts a value into this buffer at the given key.
+    /// Inserts a value into this buffer at the given key, overwriting any value
+    /// previously stored at that key.
+    ///
+    /// If this key is greater than `N`, this may overwrite a value previously
+    /// stored at a different key. More specifically, this will overwrite the
+    /// value stored at the index `key % N`. For example, if `N = 16`, then all
+    /// of the following keys will write into the same index, and overwrite the
+    /// same value:
+    /// - 1
+    /// - 17 (1 + 16)
+    /// - 33 (1 + 16 + 16)
+    /// - 49 (1 + 16 + 16 + 16)
     ///
     /// Returns a reference to the newly inserted value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aeronet_transport::seq_buf::SeqBuf;
+    ///
+    /// let mut buf = SeqBuf::<String, 16>::new();
+    /// let inserted = buf.insert(4, "hello world".into());
+    /// assert_eq!("hello world", inserted);
+    ///
+    /// let inserted = buf.insert(4, "hello".into());
+    /// assert_eq!("hello", inserted);
+    ///
+    /// let inserted = buf.insert(4 + 16, "world".into());
+    /// assert_eq!("world", inserted);
+    /// ```
     #[inline]
     #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
     pub fn insert(&mut self, key: u16, value: T) -> &mut T {
@@ -125,6 +232,12 @@ impl<T, const N: usize> SeqBuf<T, N> {
             .indices
             .get_mut(index_u)
             .expect("key % N should be < N");
+        if *index_slot == EMPTY {
+            self.len = self
+                .len
+                .checked_add(1)
+                .expect("`len` should never go above `usize::MAX`");
+        }
         *index_slot = key;
 
         let data_slot = self.data.get_mut(index_u).expect(
@@ -139,6 +252,16 @@ impl<T, const N: usize> SeqBuf<T, N> {
     /// default (meaningless) value.
     ///
     /// If `T: Default`, consider using [`SeqBuf::remove`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aeronet_transport::seq_buf::SeqBuf;
+    ///
+    /// let mut buf = SeqBuf::<String, 16>::new();
+    /// buf.insert(4, "hello world".into());
+    /// assert_eq!("hello world", buf.remove_with(4, String::new()).unwrap());
+    /// ```
     #[inline]
     #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
     pub fn remove_with(&mut self, key: u16, default: T) -> Option<T> {
@@ -154,6 +277,10 @@ impl<T, const N: usize> SeqBuf<T, N> {
                 "`index_u` is valid into `indices`, and `indices` is of the same length as \
                  `data`, so it should be a valid index into `data`",
             );
+            self.len = self
+                .len
+                .checked_sub(1)
+                .expect("`len` should never drop below 0");
             Some(mem::replace(data_slot, default))
         } else {
             None
@@ -176,6 +303,8 @@ impl<T: Default, const N: usize> SeqBuf<T, N> {
     }
 
     /// Removes a value from this buffer at the given key.
+    ///
+    /// See [`SeqBuf::remove_with`].
     #[inline]
     pub fn remove(&mut self, key: u16) -> Option<T> {
         self.remove_with(key, T::default())

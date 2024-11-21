@@ -158,6 +158,20 @@ impl fmt::Debug for FragmentReceiver {
 }
 
 impl FragmentReceiver {
+    /// Gets the number of messages which are currently being reassembled, but
+    /// have not been fully reassembled yet.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.msgs.len()
+    }
+
+    /// Returns `true` if there are no messages which are currently being
+    /// reassembled.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.msgs.is_empty()
+    }
+
     /// Receives a single message fragment created from [`split`] and attempts
     /// to reassemble it into a full message.
     ///

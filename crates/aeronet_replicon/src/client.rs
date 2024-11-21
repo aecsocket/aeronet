@@ -176,14 +176,14 @@ fn poll(
     mut clients: Query<&mut Transport, With<AeronetRepliconClient>>,
 ) {
     for mut transport in &mut clients {
-        for msg in transport.recv_msgs.drain() {
+        for msg in transport.recv.msgs.drain() {
             let Some(channel_id) = convert::to_channel_id(msg.lane) else {
                 continue;
             };
             replicon_client.insert_received(channel_id, msg.payload);
         }
 
-        for _ in transport.recv_acks.drain() {
+        for _ in transport.recv.acks.drain() {
             // we don't use the acks for anything
         }
     }
