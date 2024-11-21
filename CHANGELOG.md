@@ -16,6 +16,8 @@
 - All relevant `aeronet_io` types are now registered in the type registry
 - Added `aeronet_webtransport/self-signed` feature, mapping to `wtransport/self-signed`
   (enabled by default)
+- [#15](https://github.com/aecsocket/aeronet/issues/15): fixed a bug in `aeronet_transport` where
+  receiving a previously-received fragment (in a resent packet) would lead to an error death spiral
 
 # 0.9.0
 
