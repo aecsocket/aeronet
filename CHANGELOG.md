@@ -1,3 +1,7 @@
+# 0.10.1
+
+- Fixed crash in `SeqBuf::remove`
+
 # 0.10.0
 
 - Renamed `Endpoint` to `SessionEndpoint`
