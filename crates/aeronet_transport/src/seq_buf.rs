@@ -216,12 +216,15 @@ impl<T, const N: usize> SeqBuf<T, N> {
     /// let mut buf = SeqBuf::<String, 16>::new();
     /// let inserted = buf.insert(4, "hello world".into());
     /// assert_eq!("hello world", inserted);
+    /// assert_eq!(1, buf.len());
     ///
     /// let inserted = buf.insert(4, "hello".into());
     /// assert_eq!("hello", inserted);
+    /// assert_eq!(1, buf.len());
     ///
     /// let inserted = buf.insert(4 + 16, "world".into());
     /// assert_eq!("world", inserted);
+    /// assert_eq!(1, buf.len());
     /// ```
     #[inline]
     #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
@@ -260,7 +263,11 @@ impl<T, const N: usize> SeqBuf<T, N> {
     ///
     /// let mut buf = SeqBuf::<String, 16>::new();
     /// buf.insert(4, "hello world".into());
-    /// assert_eq!("hello world", buf.remove_with(4, String::new()).unwrap());
+    /// assert_eq!(1, buf.len());
+    ///
+    /// let removed = buf.remove_with(4, String::new()).unwrap();
+    /// assert_eq!("hello world", removed);
+    /// assert_eq!(0, buf.len());
     /// ```
     #[inline]
     #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
@@ -271,7 +278,8 @@ impl<T, const N: usize> SeqBuf<T, N> {
             .indices
             .get_mut(index_u)
             .expect("key % N should be < N");
-        if key == *index_slot {
+
+        if *index_slot != EMPTY && key == *index_slot {
             *index_slot = EMPTY;
             let data_slot = self.data.get_mut(index_u).expect(
                 "`index_u` is valid into `indices`, and `indices` is of the same length as \
@@ -399,5 +407,17 @@ mod tests {
         // we lose `111` since we overwrite that slot with `222`
         assert!(b.get(0).is_none());
         assert_eq!(222, *b.get(16).unwrap());
+    }
+
+    #[test]
+    fn u16_max_key() {
+        let mut b = SeqBuf::<u32, 16>::new();
+
+        assert!(b.remove(u16::MAX).is_none());
+        assert!(b.is_empty());
+
+        b.insert(u16::MAX, 1);
+        assert_eq!(1, *b.get(u16::MAX).unwrap());
+        assert_eq!(1, b.len());
     }
 }

@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "aeronet_io"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "bevy_app",
@@ -20,7 +20,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_transport"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "aeronet_io",
  "ahash",
@@ -48,6 +48,7 @@ name = "aeronet_transport_fuzz"
 version = "0.0.0"
 dependencies = [
  "aeronet_transport",
+ "arbitrary",
  "libfuzzer-sys",
 ]
 
