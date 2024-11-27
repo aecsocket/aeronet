@@ -29,8 +29,6 @@
 - [#15](https://github.com/aecsocket/aeronet/issues/15): fixed a bug in `aeronet_transport` where
   receiving a previously-received fragment (in a resent packet) would lead to an error death spiral
 
->>>>>>> ab87e99 (changelog)
-
 # 0.9.0
 
 - Redesigned to be Bevy native
