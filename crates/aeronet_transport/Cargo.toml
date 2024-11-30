@@ -23,13 +23,13 @@ ignored = [
 ]
 
 [features]
-## Allows serializing and deserializing some types with [`serde`]
+## Allows serializing and deserializing some types with [`serde`].
 ##
 ## [`serde`]: https://docs.rs/serde
 serde = ["dep:serde"]
 
 ## Allows using the `visualizer` module, which draws session statistics using [`bevy_egui`] and
-## [`egui_plot`]
+## [`egui_plot`].
 ##
 ## [`bevy_egui`]: https://docs.rs/bevy_egui
 ## [`egui_plot`]: https://docs.rs/egui_plot
