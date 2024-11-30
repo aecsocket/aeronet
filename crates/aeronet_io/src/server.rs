@@ -24,10 +24,10 @@ impl Plugin for ServerPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<ServerEndpoint>()
             .register_type::<Server>()
-            .observe(on_opening)
-            .observe(on_opened)
-            .observe(on_close)
-            .observe(on_closed);
+            .add_observer(on_opening)
+            .add_observer(on_opened)
+            .add_observer(on_close)
+            .add_observer(on_closed);
     }
 }
 
@@ -37,7 +37,7 @@ impl Plugin for ServerPlugin {
 /// - If a server entity only has [`ServerEndpoint`], it is still opening.
 /// - If a server entity has [`ServerEndpoint`] and [`Server`], it has
 ///   successfully opened.
-#[derive(Debug, Component, Reflect)]
+#[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 pub struct ServerEndpoint;
 
 /// Represents an [`Entity`] which listens for client connections, and spawns
@@ -70,7 +70,7 @@ pub struct ServerEndpoint;
 /// [`Session`]: crate::Session
 #[derive(Debug, Component, Reflect)]
 #[reflect(from_reflect = false, Component)]
-// TODO: required component `ServerEndpoint`
+#[require(ServerEndpoint)]
 pub struct Server {
     opened_at: Instant,
 }
@@ -226,7 +226,7 @@ mod tests {
             AeronetIoPlugin,
             connection::{DisconnectReason, Disconnected},
         },
-        bevy_hierarchy::BuildWorldChildren,
+        bevy_hierarchy::BuildChildren,
     };
 
     #[test]
@@ -274,10 +274,10 @@ mod tests {
         app.world_mut().trigger_targets(Close::new(REASON), server);
         app.update();
 
-        assert!(app.world().get_entity(client).is_none());
+        assert!(app.world().get_entity(client).is_err());
         assert!(app.world().resource::<HasDisconnected>().0);
 
-        assert!(app.world().get_entity(server).is_none());
+        assert!(app.world().get_entity(server).is_err());
         assert!(app.world().resource::<HasClosed>().0);
     }
 }

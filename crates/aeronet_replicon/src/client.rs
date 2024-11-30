@@ -57,7 +57,7 @@ impl Plugin for AeronetRepliconClientPlugin {
                     .in_set(ClientTransportSet::Flush)
                     .run_if(resource_exists::<RepliconClient>),
             )
-            .observe(on_client_connected);
+            .add_observer(on_client_connected);
     }
 }
 

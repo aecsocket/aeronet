@@ -60,8 +60,7 @@ impl Plugin for WebSocketSessionPlugin {
         app.init_resource::<WebSocketRuntime>()
             .add_systems(PreUpdate, poll.in_set(IoSet::Poll))
             .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
-            .observe(on_io_added)
-            .observe(on_disconnect);
+            .add_observer(on_disconnect);
     }
 }
 
@@ -74,10 +73,15 @@ impl Plugin for WebSocketSessionPlugin {
 /// You should not add or remove this component directly - it is managed
 /// entirely by the client and server implementations.
 #[derive(Debug, Component)]
+#[require(Session(new_session))]
 pub struct WebSocketIo {
     pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
+}
+
+fn new_session() -> Session {
+    Session::new(Instant::now(), IP_MTU)
 }
 
 /// Error that occurs when polling a session using the [`WebSocketIo`] IO
@@ -140,14 +144,6 @@ pub(crate) struct SessionFrontend {
     pub recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     pub send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub send_user_dc: oneshot::Sender<String>,
-}
-
-// TODO: required components
-fn on_io_added(trigger: Trigger<OnAdd, WebSocketIo>, mut commands: Commands) {
-    let entity = trigger.entity();
-    commands
-        .entity(entity)
-        .insert(Session::new(Instant::now(), IP_MTU));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebSocketIo>) {

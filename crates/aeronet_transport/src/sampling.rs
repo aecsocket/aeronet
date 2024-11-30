@@ -42,7 +42,7 @@ impl Plugin for SessionSamplingPlugin {
                     .chain()
                     .in_set(SampleSessionStats),
             )
-            .observe(add_session_stats);
+            .add_observer(add_session_stats);
     }
 }
 

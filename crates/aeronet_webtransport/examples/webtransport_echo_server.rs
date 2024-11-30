@@ -34,10 +34,10 @@ fn main() -> AppExit {
         ))
         .add_systems(Startup, open_server)
         .add_systems(Update, reply)
-        .observe(on_opened)
-        .observe(on_session_request)
-        .observe(on_connected)
-        .observe(on_disconnected)
+        .add_observer(on_opened)
+        .add_observer(on_session_request)
+        .add_observer(on_connected)
+        .add_observer(on_disconnected)
         .run()
 }
 
@@ -54,7 +54,7 @@ fn open_server(mut commands: Commands) {
     info!("************************");
 
     let config = server_config(&identity);
-    commands.spawn_empty().add(WebTransportServer::open(config));
+    commands.spawn_empty().queue(WebTransportServer::open(config));
 }
 
 fn server_config(identity: &wtransport::Identity) -> ServerConfig {
@@ -75,12 +75,11 @@ fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
 }
 
 fn on_session_request(
-    trigger: Trigger<SessionRequest>,
+    mut trigger: Trigger<SessionRequest>,
     clients: Query<&Parent>,
-    mut commands: Commands,
 ) {
     let client = trigger.entity();
-    let request = trigger.event();
+    let request = trigger.event_mut();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
     };
@@ -90,7 +89,7 @@ fn on_session_request(
         info!("  {header_key}: {header_value}");
     }
 
-    commands.trigger_targets(SessionResponse::Accepted, client);
+    request.respond(SessionResponse::Accepted);
 }
 
 fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>) {

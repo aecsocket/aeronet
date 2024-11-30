@@ -1,3 +1,9 @@
+# Unreleased
+
+- Update to Bevy 0.15
+- Made `SessionResponse` in `aeronet_webtransport` no longer an event which you trigger
+  - Moved to a field on `SessionRequest` which you have to update in your request observer
+
 # 0.10.1
 
 - Fixed crash in `SeqBuf::remove`

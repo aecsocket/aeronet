@@ -41,8 +41,7 @@ impl Plugin for WebSocketServerPlugin {
             (poll_servers, poll_clients)
                 .in_set(IoSet::Poll)
                 .before(session::poll),
-        )
-        .observe(on_server_added);
+        );
     }
 }
 
@@ -51,6 +50,7 @@ impl Plugin for WebSocketServerPlugin {
 ///
 /// Use [`WebSocketServer::open`] to start opening a server.
 #[derive(Debug, Component)]
+#[require(ServerEndpoint)]
 pub struct WebSocketServer(Frontend);
 
 impl WebSocketServer {
@@ -74,7 +74,7 @@ impl WebSocketServer {
     ///     .with_identity(identity);
     ///
     /// // using `Commands`
-    /// commands.spawn_empty().add(WebSocketServer::open(config));
+    /// commands.spawn_empty().queue(WebSocketServer::open(config));
     ///
     /// // using mutable `World` access
     /// # let config: ServerConfig = unimplemented!();
@@ -145,6 +145,7 @@ enum Frontend {
 }
 
 #[derive(Debug, Component)]
+#[require(SessionEndpoint)]
 enum ClientFrontend {
     Connecting {
         recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
@@ -174,12 +175,6 @@ struct ToConnecting {
 struct ToConnected {
     peer_addr: SocketAddr,
     frontend: SessionFrontend,
-}
-
-// TODO: required components
-fn on_server_added(trigger: Trigger<OnAdd, WebSocketServer>, mut commands: Commands) {
-    let server = trigger.entity();
-    commands.entity(server).insert(ServerEndpoint);
 }
 
 fn poll_servers(mut commands: Commands, mut servers: Query<(Entity, &mut WebSocketServer)>) {
@@ -242,7 +237,6 @@ fn poll_open(
             .spawn_empty()
             .set_parent(server)
             .insert((
-                SessionEndpoint, // TODO: required component of ClientFrontend
                 ClientFrontend::Connecting {
                     recv_dc: connecting.recv_dc,
                     recv_next: connecting.recv_next,

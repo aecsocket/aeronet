@@ -62,10 +62,10 @@ pub fn main() -> AppExit {
             MoveBoxPlugin,
         ))
         .add_systems(Startup, (open_web_transport_server, open_web_socket_server))
-        .observe(on_opened)
-        .observe(on_session_request)
-        .observe(on_connected)
-        .observe(on_disconnected)
+        .add_observer(on_opened)
+        .add_observer(on_session_request)
+        .add_observer(on_connected)
+        .add_observer(on_disconnected)
         .run()
 }
 
@@ -89,7 +89,7 @@ fn open_web_transport_server(mut commands: Commands, args: Res<Args>) {
     let config = web_transport_config(&identity, &args);
     let server = commands
         .spawn(AeronetRepliconServer)
-        .add(WebTransportServer::open(config))
+        .queue(WebTransportServer::open(config))
         .id();
     info!("Opening WebTransport server {server}");
 }
@@ -106,13 +106,9 @@ fn web_transport_config(identity: &wtransport::Identity, args: &Args) -> WebTran
         .build()
 }
 
-fn on_session_request(
-    trigger: Trigger<SessionRequest>,
-    clients: Query<&Parent>,
-    mut commands: Commands,
-) {
+fn on_session_request(mut trigger: Trigger<SessionRequest>, clients: Query<&Parent>) {
     let client = trigger.entity();
-    let request = trigger.event();
+    let request = trigger.event_mut();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
     };
@@ -122,7 +118,7 @@ fn on_session_request(
         info!("  {header_key}: {header_value}");
     }
 
-    commands.trigger_targets(SessionResponse::Accepted, client);
+    request.respond(SessionResponse::Accepted);
 }
 
 //
@@ -135,7 +131,7 @@ fn open_web_socket_server(mut commands: Commands, args: Res<Args>) {
     let config = web_socket_config(&args);
     let server = commands
         .spawn(AeronetRepliconServer)
-        .add(WebSocketServer::open(config))
+        .queue(WebSocketServer::open(config))
         .id();
     info!("Opening WebSocket server {server}");
 }

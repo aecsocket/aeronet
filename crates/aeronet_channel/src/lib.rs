@@ -29,8 +29,8 @@ impl Plugin for ChannelIoPlugin {
 
         app.add_systems(PreUpdate, poll.in_set(IoSet::Poll))
             .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
-            .observe(on_io_added)
-            .observe(on_disconnect);
+            .add_observer(on_io_added)
+            .add_observer(on_disconnect);
     }
 }
 
@@ -109,7 +109,7 @@ impl ChannelIo {
     /// let b = commands.spawn_empty().id();
     ///
     /// // using `Commands`
-    /// commands.add(ChannelIo::open(a, b));
+    /// commands.queue(ChannelIo::open(a, b));
     ///
     /// // using mutable `World` access
     /// ChannelIo::open(a, b).apply(world);

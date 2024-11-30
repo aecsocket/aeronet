@@ -67,6 +67,7 @@ impl Plugin for WebSocketClientPlugin {
 ///
 /// Use [`WebSocketClient::connect`] to start a connection.
 #[derive(Debug, Component)]
+#[require(SessionEndpoint)]
 pub struct WebSocketClient(ClientFrontend);
 
 impl WebSocketClient {
@@ -88,7 +89,7 @@ impl WebSocketClient {
     /// // using `Commands`
     /// commands
     ///     .spawn_empty()
-    ///     .add(WebSocketClient::connect(config, target));
+    ///     .queue(WebSocketClient::connect(config, target));
     ///
     /// // using mutable `World` access
     /// # let config = ClientConfig::default();
@@ -131,10 +132,12 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
         .instrument(debug_span!("client", %session)),
     );
 
-    world.entity_mut(session).insert((
-        SessionEndpoint, // TODO: required component of WebSocketClient
-        WebSocketClient(ClientFrontend::Connecting { recv_dc, recv_next }),
-    ));
+    world
+        .entity_mut(session)
+        .insert(WebSocketClient(ClientFrontend::Connecting {
+            recv_dc,
+            recv_next,
+        }));
 }
 
 /// [`WebSocketClient`] error.

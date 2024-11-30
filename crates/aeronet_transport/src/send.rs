@@ -210,7 +210,7 @@ pub(crate) fn refill_send_bytes(time: Res<Time<Real>>, mut sessions: Query<&mut 
         transport
             .send
             .bytes_bucket
-            .refill_portion(time.delta_seconds_f64());
+            .refill_portion(time.delta_secs_f64());
     }
 }
 

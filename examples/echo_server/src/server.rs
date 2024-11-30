@@ -35,9 +35,9 @@ pub fn main() -> AppExit {
         // Every frame, we receive messages and print them out.
         .add_systems(Update, echo_messages)
         // Set up some observers to run when the server or client state changes.
-        .observe(on_opened)
-        .observe(on_connected)
-        .observe(on_disconnected)
+        .add_observer(on_opened)
+        .add_observer(on_connected)
+        .add_observer(on_disconnected)
         .run()
 }
 
@@ -70,7 +70,7 @@ fn setup(mut commands: Commands) {
     let mut server = commands.spawn_empty();
     // Make an `EntityCommand` via `open`, which will set up and open this
     // server.
-    server.add(WebSocketServer::open(config));
+    server.queue(WebSocketServer::open(config));
 }
 
 // Observe state change events using `Trigger`s

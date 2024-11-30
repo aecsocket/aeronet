@@ -39,13 +39,13 @@ impl Plugin for MoveBoxPlugin {
                 (recv_input, apply_movement)
                     .chain()
                     .run_if(server_or_singleplayer),
-            )
-            .observe(on_player_added);
+            );
     }
 }
 
 /// Marker component for a player in the game.
 #[derive(Debug, Clone, Component, Serialize, Deserialize)]
+#[require(StateScoped<GameState>(|| StateScoped(GameState::Playing)))]
 pub struct Player;
 
 /// Player's box position.
@@ -65,14 +65,6 @@ pub struct PlayerInput {
     /// unnormalized vector! Authorities must ensure that they normalize or
     /// zero this vector before using it for movement updates.
     pub movement: Vec2,
-}
-
-// TODO: required components
-fn on_player_added(trigger: Trigger<OnAdd, Player>, mut commands: Commands) {
-    let player = trigger.entity();
-    commands
-        .entity(player)
-        .insert(StateScoped(GameState::Playing));
 }
 
 fn recv_input(
@@ -100,7 +92,7 @@ fn apply_movement(time: Res<Time>, mut players: Query<(&PlayerInput, &mut Player
         if let Some(movement) = input.movement.try_normalize() {
             // only change `position` if we actually have a movement vector to apply
             // this saves bandwidth; we don't replicate position if we don't change it
-            **position += movement * time.delta_seconds() * MOVE_SPEED;
+            **position += movement * time.delta_secs() * MOVE_SPEED;
         }
     }
 }

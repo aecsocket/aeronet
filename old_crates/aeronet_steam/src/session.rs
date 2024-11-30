@@ -33,9 +33,3 @@ impl Plugin for SteamIoPlugin {
 pub struct SteamIo {
     pub(crate) conn: NetConnection<ClientManager>,
 }
-
-// TODO: required components
-fn on_io_added(trigger: Trigger<OnAdd, SteamIo>, mut commands: Commands) {
-    let session = trigger.entity();
-    commands.entity(session).insert(Connected);
-}

@@ -26,7 +26,7 @@ fn setup() -> (App, Entity, Entity) {
     let world = app.world_mut();
     let a = world.spawn_empty().id();
     let b = world.spawn_empty().id();
-    world.commands().add(ChannelIo::open(a, b));
+    world.commands().queue(ChannelIo::open(a, b));
     app.update();
     (app, a, b)
 }
@@ -37,7 +37,7 @@ fn events_connect() {
     struct WhoConnected(Vec<Entity>);
 
     let mut app = app();
-    app.init_resource::<WhoConnected>().observe(
+    app.init_resource::<WhoConnected>().add_observer(
         |trigger: Trigger<OnAdd, Session>, mut who: ResMut<WhoConnected>| {
             who.0.push(trigger.entity());
         },
@@ -46,7 +46,7 @@ fn events_connect() {
     let world = app.world_mut();
     let a = world.spawn_empty().id();
     let b = world.spawn_empty().id();
-    world.commands().add(ChannelIo::open(a, b));
+    world.commands().queue(ChannelIo::open(a, b));
     app.update();
 
     assert_eq!(vec![a, b], app.world().resource::<WhoConnected>().0);
@@ -93,7 +93,7 @@ fn events_disconnect() {
     struct WhoDisconnected(Vec<(Entity, DisconnectReason<Never>)>);
 
     let (mut app, a, b) = setup();
-    app.init_resource::<WhoDisconnected>().observe(
+    app.init_resource::<WhoDisconnected>().add_observer(
         |trigger: Trigger<Disconnected>, mut who: ResMut<WhoDisconnected>| {
             let reason = match &trigger.event().reason {
                 DisconnectReason::User(reason) => DisconnectReason::User(reason.clone()),

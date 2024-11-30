@@ -20,10 +20,10 @@ use {
     bevy_hierarchy::BuildChildren,
     bevy_reflect::prelude::*,
     bytes::Bytes,
-    core::{net::SocketAddr, time::Duration},
+    core::{any::type_name, net::SocketAddr, time::Duration},
     derive_more::{Display, Error, From},
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug_span},
+    tracing::{Instrument, debug_span, warn},
     web_time::Instant,
     wtransport::error::ConnectionError,
 };
@@ -45,9 +45,7 @@ impl Plugin for WebTransportServerPlugin {
                 (poll_servers, poll_clients)
                     .in_set(IoSet::Poll)
                     .before(session::poll),
-            )
-            .observe(on_server_added)
-            .observe(on_connection_response);
+            );
     }
 }
 
@@ -56,6 +54,7 @@ impl Plugin for WebTransportServerPlugin {
 ///
 /// Use [`WebTransportServer::open`] to start opening a server.
 #[derive(Debug, Component)]
+#[require(ServerEndpoint)]
 pub struct WebTransportServer(Frontend);
 
 /// Configuration for the [`WebTransportServer`].
@@ -83,7 +82,9 @@ impl WebTransportServer {
     ///     .build();
     ///
     /// // using `Commands`
-    /// commands.spawn_empty().add(WebTransportServer::open(config));
+    /// commands
+    ///     .spawn_empty()
+    ///     .queue(WebTransportServer::open(config));
     ///
     /// // using mutable `World` access
     /// # let config: ServerConfig = unimplemented!();
@@ -121,52 +122,8 @@ fn open(server: Entity, world: &mut World, config: ServerConfig) {
 /// How should a [`WebTransportServer`] respond to a client wishing to connect
 /// to the server?
 ///
-/// After observing a [`Trigger<SessionRequest>`], trigger this event on the
-/// client to determine if the client should be allowed to connect or not.
-///
-/// If you do not trigger [`SessionResponse`], then the client will never
-/// connect.
-///
-/// # Examples
-///
-/// Accept all clients without any extra checks:
-///
-/// ```
-/// use {
-///     aeronet_webtransport::server::{SessionRequest, SessionResponse},
-///     bevy_ecs::prelude::*,
-/// };
-///
-/// fn on_session_request(trigger: Trigger<SessionRequest>, mut commands: Commands) {
-///     let client = trigger.entity();
-///     commands.trigger_targets(SessionResponse::Accepted, client);
-/// }
-/// ```
-///
-/// Check if the client has a given header before accepting them:
-///
-/// ```
-/// use {
-///     aeronet_webtransport::server::{SessionRequest, SessionResponse},
-///     bevy_ecs::prelude::*,
-/// };
-///
-/// fn on_session_request(trigger: Trigger<SessionRequest>, mut commands: Commands) {
-///     let client = trigger.entity();
-///     let request = trigger.event();
-///
-///     let mut response = SessionResponse::Forbidden;
-///     if let Some(auth_token) = request.headers.get(":auth-token") {
-///         if validate_auth_token(auth_token) {
-///             response = SessionResponse::Accepted;
-///         }
-///     }
-///
-///     commands.trigger_targets(response, client);
-/// }
-/// # fn validate_auth_token(_: &str) -> bool { unimplemented!() }
-/// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Event, Reflect)]
+/// See [`SessionRequest`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
 pub enum SessionResponse {
     /// Allow the client to connect to the server.
     Accepted,
@@ -179,10 +136,51 @@ pub enum SessionResponse {
 /// Triggered when a client requests to connect to a [`WebTransportServer`].
 ///
 /// Use the fields in this event to decide whether to accept the client's
-/// connection or not by triggering [`SessionResponse`] on this client.
+/// connection or not, and respond accordingly by calling
+/// [`SessionRequest::respond`].
 ///
-/// If you do not trigger [`SessionResponse`], then the client will never
-/// connect.
+/// At least one of your observers must `respond` to this request, otherwise
+/// the server will default to [`SessionResponse::NotFound`].
+///
+/// # Examples
+///
+/// Accept all clients without any extra checks:
+///
+/// ```
+/// use {
+///     aeronet_webtransport::server::{SessionRequest, SessionResponse},
+///     bevy_ecs::prelude::*,
+/// };
+///
+/// fn on_session_request(mut trigger: Trigger<SessionRequest>) {
+///     let client = trigger.entity();
+///     trigger.event_mut().respond(SessionResponse::Accepted);
+/// }
+/// ```
+///
+/// Check if the client has a given header before accepting them:
+///
+/// ```
+/// use {
+///     aeronet_webtransport::server::{SessionRequest, SessionResponse},
+///     bevy_ecs::prelude::*,
+/// };
+///
+/// fn on_session_request(mut trigger: Trigger<SessionRequest>) {
+///     let client = trigger.entity();
+///     let request = trigger.event_mut();
+///
+///     let mut response = SessionResponse::Forbidden;
+///     if let Some(auth_token) = request.headers.get(":auth-token") {
+///         if validate_auth_token(auth_token) {
+///             response = SessionResponse::Accepted;
+///         }
+///     }
+///
+///     request.respond(response);
+/// }
+/// # fn validate_auth_token(_: &str) -> bool { unimplemented!() }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Event, Reflect)]
 pub struct SessionRequest {
     /// `:authority` header.
@@ -195,6 +193,15 @@ pub struct SessionRequest {
     pub user_agent: Option<String>,
     /// Full map of request headers.
     pub headers: std::collections::HashMap<String, String>,
+    /// How should the server respond to this request?
+    pub response: Option<SessionResponse>,
+}
+
+impl SessionRequest {
+    /// Sets how the server should respond to this request.
+    pub fn respond(&mut self, response: SessionResponse) {
+        self.response = Some(response);
+    }
 }
 
 /// [`WebTransportServer`] error.
@@ -229,9 +236,9 @@ enum Frontend {
 }
 
 #[derive(Debug, Component)]
+#[require(SessionEndpoint)]
 enum ClientFrontend {
     Connecting {
-        send_session_response: Option<oneshot::Sender<SessionResponse>>,
         recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
         recv_next: oneshot::Receiver<ToConnected>,
     },
@@ -269,12 +276,6 @@ struct ToConnected {
     recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     send_user_dc: oneshot::Sender<String>,
-}
-
-// TODO: required components
-fn on_server_added(trigger: Trigger<OnAdd, WebTransportServer>, mut commands: Commands) {
-    let server = trigger.entity();
-    commands.entity(server).insert(ServerEndpoint);
 }
 
 fn poll_servers(mut commands: Commands, mut servers: Query<(Entity, &mut WebTransportServer)>) {
@@ -336,29 +337,36 @@ fn poll_open(
             // as soon as other components are added
             .spawn_empty()
             .set_parent(server)
-            .insert((
-                SessionEndpoint, // TODO: required component of ClientFrontend
+            .insert(
                 ClientFrontend::Connecting {
-                    send_session_response: Some(connecting.send_session_response),
                     recv_dc: connecting.recv_dc,
                     recv_next: connecting.recv_next,
                 },
-            ))
+            )
             .id();
         _ = connecting.send_session_entity.send(session);
 
-        // TODO: there may be a way to trigger SessionRequest on &mut World,
-        // immediately get a SessionResponse, and respond immediately
-        // without having to store send_session_response in Connecting
-        // https://github.com/bevyengine/bevy/pull/14894
-        let request = SessionRequest {
-            authority: connecting.authority,
-            path: connecting.path,
-            origin: connecting.origin,
-            user_agent: connecting.user_agent,
-            headers: connecting.headers,
-        };
-        commands.trigger_targets(request, session);
+        commands.queue(move |world: &mut World| {
+            let mut request = SessionRequest {
+                authority: connecting.authority,
+                path: connecting.path,
+                origin: connecting.origin,
+                user_agent: connecting.user_agent,
+                headers: connecting.headers,
+                response: None,
+            };
+            world.trigger_targets_ref(&mut request, session);
+
+            let response = request.response.unwrap_or_else(|| {
+                warn!(
+                    "Session {session} created on server {server} but no response was given, will \
+                     not allow this client to connect; you must `respond` to `{}`",
+                    type_name::<SessionRequest>()
+                );
+                SessionResponse::NotFound
+            });
+            _ = connecting.send_session_response.send(response);
+        });
     }
 
     Frontend::Open {
@@ -384,42 +392,12 @@ fn should_close(
     })
 }
 
-fn on_connection_response(
-    trigger: Trigger<SessionResponse>,
-    mut clients: Query<&mut ClientFrontend>,
-) {
-    let client = trigger.entity();
-    let Ok(mut frontend) = clients.get_mut(client) else {
-        return;
-    };
-    let ClientFrontend::Connecting {
-        send_session_response,
-        ..
-    } = frontend.as_mut()
-    else {
-        return;
-    };
-    let Some(sender) = send_session_response.take() else {
-        return;
-    };
-
-    _ = sender.send(*trigger.event());
-}
-
 fn poll_clients(mut commands: Commands, mut clients: Query<(Entity, &mut ClientFrontend)>) {
     for (client, mut frontend) in &mut clients {
         replace_with::replace_with_or_abort(&mut *frontend, |state| match state {
-            ClientFrontend::Connecting {
-                send_session_response,
-                recv_dc,
-                recv_next,
-            } => poll_connecting(
-                &mut commands,
-                client,
-                send_session_response,
-                recv_dc,
-                recv_next,
-            ),
+            ClientFrontend::Connecting { recv_dc, recv_next } => {
+                poll_connecting(&mut commands, client, recv_dc, recv_next)
+            }
             ClientFrontend::Connected { mut recv_dc } => {
                 if should_disconnect(&mut commands, client, &mut recv_dc) {
                     ClientFrontend::Disconnected
@@ -435,7 +413,6 @@ fn poll_clients(mut commands: Commands, mut clients: Query<(Entity, &mut ClientF
 fn poll_connecting(
     commands: &mut Commands,
     entity: Entity,
-    send_session_response: Option<oneshot::Sender<SessionResponse>>,
     mut recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
     mut recv_next: oneshot::Receiver<ToConnected>,
 ) -> ClientFrontend {
@@ -444,11 +421,7 @@ fn poll_connecting(
     }
 
     let Ok(Some(next)) = recv_next.try_recv() else {
-        return ClientFrontend::Connecting {
-            send_session_response,
-            recv_dc,
-            recv_next,
-        };
+        return ClientFrontend::Connecting { recv_dc, recv_next };
     };
 
     let mut session = Session::new(Instant::now(), MIN_MTU);

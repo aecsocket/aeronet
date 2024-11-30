@@ -69,6 +69,7 @@ impl Plugin for WebTransportClientPlugin {
 ///
 /// Use [`WebTransportClient::connect`] to start a connection.
 #[derive(Debug, Component)]
+#[require(SessionEndpoint)]
 pub struct WebTransportClient(ClientFrontend);
 
 impl WebTransportClient {
@@ -90,7 +91,7 @@ impl WebTransportClient {
     /// // using `Commands`
     /// commands
     ///     .spawn_empty()
-    ///     .add(WebTransportClient::connect(config, target));
+    ///     .queue(WebTransportClient::connect(config, target));
     ///
     /// // using mutable `World` access
     /// # let config = ClientConfig::default();
@@ -132,10 +133,12 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
         .instrument(debug_span!("client", %session)),
     );
 
-    world.entity_mut(session).insert((
-        SessionEndpoint, // TODO: required component of WebTransportClient
-        WebTransportClient(ClientFrontend::Connecting { recv_dc, recv_next }),
-    ));
+    world
+        .entity_mut(session)
+        .insert(WebTransportClient(ClientFrontend::Connecting {
+            recv_dc,
+            recv_next,
+        }));
 }
 
 /// [`WebTransportClient`] error.

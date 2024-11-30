@@ -15,10 +15,10 @@ pub(crate) struct ConnectionPlugin;
 
 impl Plugin for ConnectionPlugin {
     fn build(&self, app: &mut App) {
-        app.observe(on_connecting)
-            .observe(on_connected)
-            .observe(on_disconnect)
-            .observe(on_disconnected);
+        app.add_observer(on_connecting)
+            .add_observer(on_connected)
+            .add_observer(on_disconnect)
+            .add_observer(on_disconnected);
     }
 }
 
@@ -224,7 +224,7 @@ mod tests {
             .trigger_targets(Disconnect::new(REASON), entity);
         app.update();
 
-        assert!(app.world().get_entity(entity).is_none());
+        assert!(app.world().get_entity(entity).is_err());
         assert!(app.world().resource::<HasDisconnected>().0);
     }
 }
