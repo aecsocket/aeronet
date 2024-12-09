@@ -189,15 +189,21 @@ fn update_state(
         sum_bytes_sent += stats.packets_delta.bytes_sent;
     }
 
-    #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
     let (status, rtt, packet_loss, received_bps, sent_bps) = if num_connected.0 > 0 {
+        #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
         let num_connected = num_connected.0 as f64;
+        #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
+        let (received_bps, sent_bps) = (
+            (sum_bytes_recv.0 as f64 / num_connected) * sampling.rate(),
+            (sum_bytes_sent.0 as f64 / num_connected) * sampling.rate(),
+        );
+
         (
             RepliconClientStatus::Connected { client_id: None },
             sum_rtt.as_secs_f64() / num_connected,
             sum_packet_loss / num_connected,
-            (sum_bytes_sent.0 as f64 / num_connected) * sampling.rate(),
-            (sum_bytes_recv.0 as f64 / num_connected) * sampling.rate(),
+            received_bps,
+            sent_bps,
         )
     } else {
         let status = if endpoint_exists {
