@@ -117,6 +117,12 @@ impl SessionStats {
     pub fn with_capacity(capacity: usize) -> Self {
         Self(HeapRb::new(capacity))
     }
+
+    /// Gets the last sample which has been sampled into this stats buffer.
+    #[must_use]
+    pub fn last(&self) -> Option<&SessionStatsSample> {
+        self.0.iter().next_back()
+    }
 }
 
 /// Single sample of collected [`Session`] statistics.

@@ -4,13 +4,14 @@ use {
     crate::convert,
     aeronet_io::{Session, SessionEndpoint, connection::Disconnect, web_time::Instant},
     aeronet_transport::{
-        AeronetTransportPlugin, Transport, TransportSet, sampling::SessionSamplingPlugin,
+        AeronetTransportPlugin, Transport, TransportSet,
+        sampling::{SessionSamplingPlugin, SessionStats},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
-    std::time::Duration,
+    core::time::Duration,
     tracing::warn,
 };
 
@@ -152,31 +153,29 @@ fn on_client_connected(
 fn update_state(
     mut replicon_client: ResMut<RepliconClient>,
     clients: Query<
-        (Option<&Session>, Option<&Transport>),
+        (Option<&Session>, Option<&Transport>, Option<&SessionStats>),
         (With<SessionEndpoint>, With<AeronetRepliconClient>),
     >,
 ) {
     let mut status = RepliconClientStatus::Disconnected;
     let mut rtt = Duration::ZERO;
     let mut packet_loss = 0.0;
-    for (session, transport) in &clients {
-        if session.is_some() {
-            status = RepliconClientStatus::Connected { client_id: None };
-        } else if status == RepliconClientStatus::Disconnected {
+    for (session, transport, stats) in &clients {
+        let (Some(_), Some(transport), Some(stats)) = (session, transport, stats) else {
             status = RepliconClientStatus::Connecting;
-        }
+            continue;
+        };
+        status = RepliconClientStatus::Connected { client_id: None };
 
-        if let Some(transport) = transport {
-            rtt = rtt.max(transport.rtt().get());
-            // packet_loss = packet_loss.max(transport.)
-        }
+        rtt = rtt.max(transport.rtt().get());
+        packet_loss = stats.last().map(|stats| stats.loss).unwrap_or_default();
     }
 
     if replicon_client.status() != status {
         replicon_client.set_status(status);
     }
     replicon_client.set_rtt(rtt.as_secs_f64());
-    replicon_client.set_packet_loss();
+    replicon_client.set_packet_loss(packet_loss);
 }
 
 fn poll(
