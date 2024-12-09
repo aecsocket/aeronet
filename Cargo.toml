@@ -10,7 +10,6 @@ keywords = ["gamedev", "network", "bevy"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aecsocket/aeronet"
 rust-version = "1.82.0"
-version = "0.11.0"
 
 [workspace.lints.rust]
 missing_docs = "warn"
@@ -142,4 +141,4 @@ xwt-web-sys = "0.12.0"
 
 # aeronet_replicon
 
-bevy_replicon = { version = "0.29.0-rc.3", default-features = false }
+bevy_replicon = { version = "0.29.0", default-features = false }

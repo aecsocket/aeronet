@@ -3,11 +3,14 @@
 use {
     crate::convert,
     aeronet_io::{Session, SessionEndpoint, connection::Disconnect, web_time::Instant},
-    aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
+    aeronet_transport::{
+        AeronetTransportPlugin, Transport, TransportSet, sampling::SessionSamplingPlugin,
+    },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
+    std::time::Duration,
     tracing::warn,
 };
 
@@ -23,6 +26,9 @@ impl Plugin for AeronetRepliconClientPlugin {
     fn build(&self, app: &mut App) {
         if !app.is_plugin_added::<AeronetTransportPlugin>() {
             app.add_plugins(AeronetTransportPlugin);
+        }
+        if !app.is_plugin_added::<SessionSamplingPlugin>() {
+            app.add_plugins(SessionSamplingPlugin);
         }
 
         app.register_type::<AeronetRepliconClient>()
@@ -145,30 +151,32 @@ fn on_client_connected(
 
 fn update_state(
     mut replicon_client: ResMut<RepliconClient>,
-    clients: Query<Option<&Session>, (With<SessionEndpoint>, With<AeronetRepliconClient>)>,
+    clients: Query<
+        (Option<&Session>, Option<&Transport>),
+        (With<SessionEndpoint>, With<AeronetRepliconClient>),
+    >,
 ) {
-    let status =
-        clients.iter().fold(
-            RepliconClientStatus::Disconnected,
-            |status, session| match status {
-                // if we've already found a connected client, then we are considered connected
-                RepliconClientStatus::Connected { .. } => status,
-                _ => {
-                    // otherwise, we check if this client is connected..
-                    if session.is_some() {
-                        // ..and if so, then we're connected
-                        RepliconClientStatus::Connected { client_id: None }
-                    } else {
-                        // ..otherwise, we know we are at least connecting
-                        RepliconClientStatus::Connecting
-                    }
-                }
-            },
-        );
+    let mut status = RepliconClientStatus::Disconnected;
+    let mut rtt = Duration::ZERO;
+    let mut packet_loss = 0.0;
+    for (session, transport) in &clients {
+        if session.is_some() {
+            status = RepliconClientStatus::Connected { client_id: None };
+        } else if status == RepliconClientStatus::Disconnected {
+            status = RepliconClientStatus::Connecting;
+        }
+
+        if let Some(transport) = transport {
+            rtt = rtt.max(transport.rtt().get());
+            // packet_loss = packet_loss.max(transport.)
+        }
+    }
 
     if replicon_client.status() != status {
         replicon_client.set_status(status);
     }
+    replicon_client.set_rtt(rtt.as_secs_f64());
+    replicon_client.set_packet_loss();
 }
 
 fn poll(

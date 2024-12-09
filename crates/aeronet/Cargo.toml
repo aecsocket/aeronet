@@ -1,6 +1,7 @@
 [package]
 description = "Low-level networking for Bevy"
 name = "aeronet"
+version = "0.11.0"
 
 authors.workspace = true
 categories.workspace = true
@@ -9,7 +10,6 @@ keywords.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-version.workspace = true
 
 [lints]
 workspace = true
