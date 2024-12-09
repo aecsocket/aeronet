@@ -152,12 +152,20 @@ fn global_ui(
                 RepliconClientStatus::Connected { .. } => "Connected",
             });
             ui.separator();
+
             ui.label(format!("RTT {:.0}ms", replicon_client.rtt() * 1000.0));
             ui.separator();
+
             ui.label(format!(
                 "Pkt Loss {:.1}%",
                 replicon_client.packet_loss() * 100.0
             ));
+            ui.separator();
+
+            ui.label(format!("Rx {:.0}bps", replicon_client.received_bps()));
+            ui.separator();
+
+            ui.label(format!("Tx {:.0}bps", replicon_client.sent_bps()));
         });
         match sessions.get_single() {
             Ok((session, name, connected)) => {

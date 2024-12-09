@@ -104,7 +104,7 @@ impl Default for SessionStatsSampling {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub struct SampleSessionStats;
 
-/// Stores [`SessionStatsSample`]s for [`Session`] statistics.
+/// Stores [`SessionStatsSample`]s for [`Session`] and [`Transport`] statistics.
 ///
 /// This uses a [`HeapRb`] internally to overwrite old samples, and avoid
 /// unbounded growth.
@@ -125,7 +125,7 @@ impl SessionStats {
     }
 }
 
-/// Single sample of collected [`Session`] statistics.
+/// Single sample of collected [`Session`] and [`Transport`] statistics.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SessionStatsSample {
     /// [`PacketRtt`], if it was present on the [`Session`].
@@ -171,6 +171,7 @@ pub struct SessionStatsSample {
     /// Let's assume that we are calculating sample 100, and our RTT is such
     /// that we expect to have received acknowledgements for all packets sent up
     /// to sample 90 by now.
+    ///
     /// Up to sample 90, we received 950 acks and sent 1000 messages total.
     /// Therefore, at sample 100, we expect to have 1000 acks - we expect to
     /// have 50 more acks than we had at sample 90.

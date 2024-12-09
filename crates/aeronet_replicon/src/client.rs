@@ -5,13 +5,13 @@ use {
     aeronet_io::{Session, SessionEndpoint, connection::Disconnect, web_time::Instant},
     aeronet_transport::{
         AeronetTransportPlugin, Transport, TransportSet,
-        sampling::{SessionSamplingPlugin, SessionStats},
+        sampling::{SessionSamplingPlugin, SessionStats, SessionStatsSampling},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
-    core::time::Duration,
+    core::{num::Saturating, time::Duration},
     tracing::warn,
 };
 
@@ -156,26 +156,65 @@ fn update_state(
         (Option<&Session>, Option<&Transport>, Option<&SessionStats>),
         (With<SessionEndpoint>, With<AeronetRepliconClient>),
     >,
+    sampling: Res<SessionStatsSampling>,
 ) {
-    let mut status = RepliconClientStatus::Disconnected;
-    let mut rtt = Duration::ZERO;
-    let mut packet_loss = 0.0;
+    let (
+        mut endpoint_exists,
+        mut num_connected,
+        mut sum_rtt,
+        mut sum_packet_loss,
+        mut sum_bytes_recv,
+        mut sum_bytes_sent,
+    ) = (
+        false,
+        Saturating(0usize),
+        Duration::ZERO,
+        0.0,
+        Saturating(0usize),
+        Saturating(0usize),
+    );
+
     for (session, transport, stats) in &clients {
-        let (Some(_), Some(transport), Some(stats)) = (session, transport, stats) else {
-            status = RepliconClientStatus::Connecting;
+        endpoint_exists = true;
+
+        let (Some(_), Some(_), Some(stats)) = (session, transport, stats) else {
             continue;
         };
-        status = RepliconClientStatus::Connected { client_id: None };
+        let stats = stats.last().copied().unwrap_or_default();
 
-        rtt = rtt.max(transport.rtt().get());
-        packet_loss = stats.last().map(|stats| stats.loss).unwrap_or_default();
+        num_connected += 1;
+        sum_rtt += stats.msg_rtt;
+        sum_packet_loss += stats.loss;
+        sum_bytes_recv += stats.packets_delta.bytes_recv;
+        sum_bytes_sent += stats.packets_delta.bytes_sent;
     }
+
+    #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
+    let (status, rtt, packet_loss, received_bps, sent_bps) = if num_connected.0 > 0 {
+        let num_connected = num_connected.0 as f64;
+        (
+            RepliconClientStatus::Connected { client_id: None },
+            sum_rtt.as_secs_f64() / num_connected,
+            sum_packet_loss / num_connected,
+            (sum_bytes_sent.0 as f64 / num_connected) * sampling.rate(),
+            (sum_bytes_recv.0 as f64 / num_connected) * sampling.rate(),
+        )
+    } else {
+        let status = if endpoint_exists {
+            RepliconClientStatus::Connecting
+        } else {
+            RepliconClientStatus::Disconnected
+        };
+        (status, 0.0, 0.0, 0.0, 0.0)
+    };
 
     if replicon_client.status() != status {
         replicon_client.set_status(status);
     }
-    replicon_client.set_rtt(rtt.as_secs_f64());
+    replicon_client.set_rtt(rtt);
     replicon_client.set_packet_loss(packet_loss);
+    replicon_client.set_received_bps(received_bps);
+    replicon_client.set_sent_bps(sent_bps);
 }
 
 fn poll(
