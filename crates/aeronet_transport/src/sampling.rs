@@ -13,7 +13,7 @@ use {
     core::time::Duration,
     ringbuf::{
         HeapRb,
-        traits::{Consumer, RingBuffer},
+        traits::{Consumer, Observer, RingBuffer},
     },
 };
 
@@ -165,7 +165,8 @@ pub struct SessionStatsSample {
     /// sample. To do this, we find out how many packets, that we sent out
     /// earlier, should have been acknowledged by our peer by now; and how many
     /// of those have actually been acknowledged. "By now" is defined as a
-    /// function of the current RTT estimate. Currently it is just [the PTO],
+    /// function of the current RTT estimate. Currently it is [the PTO]
+    /// multiplied by [`TransportConfig::packet_lost_threshold_factor`],
     /// however the implementation may change this in the future.
     ///
     /// Let's assume that we are calculating sample 100, and our RTT is such
@@ -249,55 +250,76 @@ fn update_stats(
     }
 
     for (mut stats, session, packet_rtt, transport, transport_config) in &mut sessions {
-        let msg_rtt = transport.rtt();
-        let msg_stats = transport.stats();
-
+        let loss = compute_loss(session, transport, transport_config, &sampling, &stats);
         let last_sample = stats.iter().next_back().copied().unwrap_or_default();
-
-        let loss = {
-            // see `SessionStatsSample::loss`
-
-            let lost_thresh = msg_rtt.pto();
-            #[expect(
-                clippy::cast_sign_loss,
-                reason = "all floats involved should be positive"
-            )]
-            #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
-            let lost_thresh_index = (lost_thresh.as_secs_f64() * sampling.rate()).ceil() as usize;
-            let lost_thresh_sample = stats
-                .iter()
-                .rev()
-                .nth(lost_thresh_index)
-                .copied()
-                .unwrap_or_default();
-
-            let extra_acks_expected =
-                (session.stats.packets_sent - lost_thresh_sample.packets_total.packets_sent).0;
-
-            if extra_acks_expected == 0 {
-                0.0
-            } else {
-                let extra_acks_received =
-                    (msg_stats.packet_acks_recv - lost_thresh_sample.msgs_total.packet_acks_recv).0;
-                #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
-                let acked_frac = extra_acks_received as f64 / extra_acks_expected as f64;
-
-                1.0 - acked_frac.clamp(0.0, 1.0)
-            }
-        };
-
         let sample = SessionStatsSample {
             packet_rtt: packet_rtt.map(|rtt| **rtt),
-            msg_rtt: msg_rtt.get(),
-            msg_crtt: msg_rtt.conservative(),
+            msg_rtt: transport.rtt().get(),
+            msg_crtt: transport.rtt().conservative(),
             packets_total: session.stats,
             packets_delta: session.stats - last_sample.packets_total,
-            msgs_total: msg_stats,
-            msgs_delta: msg_stats - last_sample.msgs_total,
+            msgs_total: transport.stats(),
+            msgs_delta: transport.stats() - last_sample.msgs_total,
             mem_used: transport.memory_used(),
             mem_max: transport_config.max_memory_usage,
             loss,
         };
         stats.push_overwrite(sample);
     }
+}
+
+fn compute_loss(
+    session: &Session,
+    transport: &Transport,
+    transport_config: &TransportConfig,
+    sampling: &SessionStatsSampling,
+    stats: &SessionStats,
+) -> f64 {
+    // see `SessionStatsSample::loss`
+
+    // Early exit if not enough samples
+    if stats.is_empty() {
+        return 0.0;
+    }
+
+    let sampling_rate = sampling.rate();
+    let pto = transport.rtt().pto();
+    let lost_thresh = pto.as_secs_f64() * transport_config.packet_lost_threshold_factor;
+
+    // Convert lost threshold to sample index
+    #[expect(
+        clippy::cast_sign_loss,
+        reason = "all floats involved should be positive"
+    )]
+    #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
+    let lost_thresh_index = (lost_thresh * sampling_rate).ceil() as usize;
+
+    // Find the most recent sample that falls within the loss threshold
+    let lost_thresh_sample = stats
+        .iter()
+        .rev()
+        .enumerate()
+        .find(|(index, _)| *index <= lost_thresh_index)
+        .map_or_else(
+            || stats.iter().next_back().copied().unwrap_or_default(),
+            |(_, sample)| *sample,
+        );
+
+    // Calculate total packets sent and acked in the window
+    let total_packets_sent =
+        session.stats.packets_sent.0 - lost_thresh_sample.packets_total.packets_sent.0;
+    let total_packets_acked =
+        transport.stats().packet_acks_recv.0 - lost_thresh_sample.msgs_total.packet_acks_recv.0;
+
+    // Avoid division by zero and handle edge cases
+    if total_packets_sent == 0 {
+        return 0.0;
+    }
+
+    // Calculate packet loss percentage
+    #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
+    let packet_loss = 1.0 - (total_packets_acked as f64 / total_packets_sent as f64);
+
+    // Clamp to ensure it's between 0 and 1
+    packet_loss.clamp(0.0, 1.0)
 }

@@ -141,6 +141,26 @@ pub struct TransportConfig {
     ///
     /// By default, this is [`usize::MAX`].
     pub send_bytes_per_sec: usize,
+    /// Multiplier for how long it takes for an unacknowledged packet to be
+    /// marked as lost on our side.
+    ///
+    /// Packet loss is computed by calculating how many packets, that we have
+    /// sent out, should have been acknowledged by the peer by now (see
+    /// [`SessionStatsSample::loss`]). "By now" is defined as
+    /// [`Transport::rtt`]'s [`RttEstimator::pto`], multiplied by this config
+    /// value.
+    ///
+    /// If this value is set too low, or below 1, the packet loss value will be
+    /// an overestimate, as the peer will not have enough time to respond with
+    /// an acknowledgement.
+    /// If this value is set too high, the packet loss value will be an
+    /// underestimate, as packets which should be reasonably considered "lost"
+    /// will not be marked as such.
+    ///
+    /// By default, this is 1.5.
+    ///
+    /// [`SessionStatsSample::loss`]: crate::sampling::SessionStatsSample::loss
+    pub packet_lost_threshold_factor: f64,
 }
 
 impl Default for TransportConfig {
@@ -148,6 +168,7 @@ impl Default for TransportConfig {
         Self {
             max_memory_usage: 4 * 1024 * 1024,
             send_bytes_per_sec: usize::MAX,
+            packet_lost_threshold_factor: 1.5,
         }
     }
 }
