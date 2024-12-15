@@ -89,7 +89,7 @@ tokio = "1.39.2"
 
 gloo-timers = "0.3.0"
 js-sys = "0.3.70"
-wasm-bindgen = "0.2.93"
+wasm-bindgen = "0.2.99"
 wasm-bindgen-futures = "0.4.43"
 web-sys = "0.3.70"
 
