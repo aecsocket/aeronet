@@ -8,13 +8,16 @@ use {
         server::{Server, ServerEndpoint},
         web_time::Instant,
     },
-    aeronet_transport::{AeronetTransportPlugin, Transport, TransportSet},
+    aeronet_transport::{
+        AeronetTransportPlugin, Transport, TransportSet,
+        sampling::{SessionSamplingPlugin, SessionStats, SessionStatsSampling},
+    },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_hierarchy::Parent,
     bevy_reflect::Reflect,
     bevy_replicon::{
-        prelude::{RepliconChannels, RepliconServer},
+        prelude::{ConnectedClients, RepliconChannels, RepliconServer},
         server::{ServerEvent, ServerSet},
     },
     tracing::warn,
@@ -32,6 +35,9 @@ impl Plugin for AeronetRepliconServerPlugin {
     fn build(&self, app: &mut App) {
         if !app.is_plugin_added::<AeronetTransportPlugin>() {
             app.add_plugins(AeronetTransportPlugin);
+        }
+        if !app.is_plugin_added::<SessionSamplingPlugin>() {
+            app.add_plugins(SessionSamplingPlugin);
         }
 
         app.configure_sets(
@@ -54,7 +60,7 @@ impl Plugin for AeronetRepliconServerPlugin {
         )
         .add_systems(
             PreUpdate,
-            (poll, update_state)
+            (poll, update_state, update_client_data)
                 .chain()
                 .in_set(ServerTransportSet::Poll)
                 .run_if(resource_exists::<RepliconServer>),
@@ -181,7 +187,7 @@ fn on_connected(
 fn on_disconnected(
     trigger: Trigger<Disconnected>,
     // check for `Session` - clients which are already connected
-    // on the replicon side, if we disconnect a non-connected client,
+    // on the replicon side, because if we disconnect a non-connected client,
     // replicon panics
     connected_clients: Query<&Parent, With<Session>>,
     open_servers: Query<(), OpenedServer>,
@@ -223,6 +229,32 @@ fn poll(
 
         for _ in transport.recv.acks.drain() {
             // we don't use the acks for anything
+        }
+    }
+}
+
+fn update_client_data(
+    mut replicon_clients: ResMut<ConnectedClients>,
+    clients: Query<&SessionStats>,
+    sampling: Res<SessionStatsSampling>,
+) {
+    for client_data in replicon_clients.iter_mut() {
+        let client_id = client_data.id();
+        let Some(client_entity) = convert::to_entity(client_id) else {
+            warn!("Attempted to update data for client {client_id:?}, which is not a valid entity");
+            continue;
+        };
+        let Ok(stats) = clients.get(client_entity) else {
+            continue;
+        };
+
+        let stats = stats.last().copied().unwrap_or_default();
+        client_data.set_rtt(stats.msg_rtt.as_secs_f64());
+        client_data.set_packet_loss(stats.loss);
+        #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
+        {
+            client_data.set_received_bps(stats.packets_delta.bytes_recv.0 as f64 * sampling.rate());
+            client_data.set_sent_bps(stats.packets_delta.bytes_sent.0 as f64 * sampling.rate());
         }
     }
 }

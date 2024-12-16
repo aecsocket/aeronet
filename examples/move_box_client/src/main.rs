@@ -108,6 +108,7 @@ fn on_connected(
         .insert((SessionVisualizer::default(), TransportConfig {
             max_memory_usage: 64 * 1024,
             send_bytes_per_sec: 4 * 1024,
+            ..default()
         }));
 }
 
@@ -141,8 +142,32 @@ fn global_ui(
     mut egui: EguiContexts,
     global_ui: Res<GlobalUi>,
     sessions: Query<(Entity, &Name, Option<&Session>), With<SessionEndpoint>>,
+    replicon_client: Res<RepliconClient>,
 ) {
     egui::Window::new("Session Log").show(egui.ctx_mut(), |ui| {
+        ui.label("Replicon reports:");
+        ui.horizontal(|ui| {
+            ui.label(match replicon_client.status() {
+                RepliconClientStatus::Disconnected => "Disconnected",
+                RepliconClientStatus::Connecting => "Connecting",
+                RepliconClientStatus::Connected { .. } => "Connected",
+            });
+            ui.separator();
+
+            ui.label(format!("RTT {:.0}ms", replicon_client.rtt() * 1000.0));
+            ui.separator();
+
+            ui.label(format!(
+                "Pkt Loss {:.1}%",
+                replicon_client.packet_loss() * 100.0
+            ));
+            ui.separator();
+
+            ui.label(format!("Rx {:.0}bps", replicon_client.received_bps()));
+            ui.separator();
+
+            ui.label(format!("Tx {:.0}bps", replicon_client.sent_bps()));
+        });
         match sessions.get_single() {
             Ok((session, name, connected)) => {
                 if connected.is_some() {
@@ -150,6 +175,7 @@ fn global_ui(
                 } else {
                     ui.label(format!("{name} connecting"));
                 }
+
                 if ui.button("Disconnect").clicked() {
                     commands.trigger_targets(Disconnect::new("disconnected by user"), session);
                 }

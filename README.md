@@ -173,7 +173,7 @@ conditioning is applied at the lowest level possible.
 
 | `bevy` | `aeronet`           |
 |--------|---------------------|
-| `0.15` | `0.11.0`            |
+| `0.15` | `0.11.0` - `0.12.0` |
 | `0.14` | `0.9.0` - `0.10.0`  |
 
 [Bevy]: https://bevyengine.org

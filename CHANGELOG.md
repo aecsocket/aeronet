@@ -1,5 +1,14 @@
 # Unreleased
 
+- Improved packet loss computation algorithm
+  - Handle the edge case of PTO being too high and not having a sample to use
+  - Added `TransportConfig::packet_lost_threshold_factor`
+- Made each crate have its own separate version
+  - For now, all crates will share the same major and minor version number, but we are now free to bump the patch for individual subcrates
+- `aeronet_replicon` properly reports backend statistics to Replicon i.e. RTT, packet loss
+
+# 0.11.0
+
 - Update to Bevy 0.15
 - Made `SessionResponse` in `aeronet_webtransport` no longer an event which you trigger
   - Moved to a field on `SessionRequest` which you have to update in your request observer
