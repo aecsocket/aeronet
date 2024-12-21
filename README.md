@@ -40,6 +40,11 @@ cargo run --example channel
 - [`aeronet_websocket`]: over WebSockets (using TCP)
   - Native + WASM
   - ✅ Complete
+  - Note on examples:
+
+    This example shows how to set up an encrypted server and client with self-signed certificates.
+    WASM will not work with self-signed certificates - you will need a real certificate signed by an
+    authority that your browser trusts.
 
 ```sh
 cargo run --example websocket_echo_server -F server
@@ -53,6 +58,13 @@ cargo run --example websocket_client -F client --target wasm32-unknown-unknown
 - [`aeronet_webtransport`]: over WebTransport (using QUIC)
   - Native + WASM
   - ✅ Complete
+  - Note on examples:
+
+    On WASM, when running the client, you will not be able to paste into the text box using Ctrl+V.
+    To work around this:
+    1. click into the text box you want to paste into
+    2. click outside of the Bevy app (in the white area)
+    3. press Ctrl+V
 
 ```sh
 cargo run --example webtransport_echo_server -F server
