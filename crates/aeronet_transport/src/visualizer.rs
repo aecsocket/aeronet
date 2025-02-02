@@ -306,18 +306,20 @@ impl SessionVisualizer {
     }
 }
 
+fn as_code(text: impl Into<String>) -> egui::RichText {
+    egui::RichText::new(text).monospace()
+}
+
 fn show_connected_status(ui: &mut egui::Ui, session: &Session, now: Instant) {
     ui.group(|ui| {
-        ui.label(format!(
-            "{:.1?}",
-            now.saturating_duration_since(session.connected_at())
+        ui.label(fmt_duration(
+            now.saturating_duration_since(session.connected_at()),
         ));
     })
     .response
     .on_hover_ui(|ui| {
-        #[rustfmt::skip]
         ui.label(
-            "How long this session has been \n\
+            "How long this session has been\n\
             connected for, in wall-clock time.",
         );
     });
@@ -334,17 +336,16 @@ fn show_mtu_status(ui: &mut egui::Ui, session: &Session) {
             .num_columns(2)
             .show(ui, |ui| {
                 ui.label("Current");
-                ui.label(format!("{}", session.mtu()));
+                ui.label(as_code(fmt_count(session.mtu())));
                 ui.end_row();
 
                 ui.label("Min");
-                ui.label(format!("{}", session.min_mtu()));
+                ui.label(as_code(fmt_count(session.min_mtu())));
                 ui.end_row();
             });
 
-        #[rustfmt::skip]
         ui.label(
-            "Maximum transmissible unit (MTU) \n\
+            "Maximum transmissible unit (MTU) -\n\
             maximum size of an outgoing packet.",
         );
     });
@@ -367,17 +368,17 @@ fn show_mem_status(ui: &mut egui::Ui, transport: &Transport, transport_config: &
             .num_columns(2)
             .show(ui, |ui| {
                 ui.label("Current");
-                ui.label(fmt_thousands(mem_used));
+                ui.label(as_code(fmt_count(mem_used)));
                 ui.end_row();
 
                 ui.label("Max");
-                ui.label(fmt_thousands(transport_config.max_memory_usage));
+                ui.label(as_code(fmt_count(transport_config.max_memory_usage)));
                 ui.end_row();
             });
 
         #[rustfmt::skip]
         ui.label(
-            "How much memory, in bytes, \n\
+            "How much memory, in bytes,\n\
             is being used by this session.",
         );
     });
@@ -398,17 +399,16 @@ fn show_tx_cap_status(ui: &mut egui::Ui, transport: &Transport) {
             .num_columns(2)
             .show(ui, |ui| {
                 ui.label("Remaining");
-                ui.label(fmt_thousands(transport.send.bytes_bucket().rem()));
+                ui.label(as_code(fmt_count(transport.send.bytes_bucket().rem())));
                 ui.end_row();
 
                 ui.label("Capacity");
-                ui.label(fmt_thousands(transport.send.bytes_bucket().cap()));
+                ui.label(as_code(fmt_count(transport.send.bytes_bucket().cap())));
                 ui.end_row();
             });
 
-        #[rustfmt::skip]
         ui.label(
-            "How many bytes this session is \n\
+            "How many bytes this session is\n\
             allowed to use to send out packets.",
         );
     });
@@ -447,10 +447,10 @@ fn show_msg_buf_status(ui: &mut egui::Ui, transport: &Transport) {
             ui.end_row();
 
             for (index, lane) in transport.recv.lanes().iter().enumerate() {
-                ui.label(format!("{index}"));
+                ui.label(fmt_count(index));
                 ui.label(format!("{:?}", lane.kind()));
-                ui.label(format!("{}", lane.num_reassembling_msgs()));
-                ui.label(format!("{}", lane.num_unordered_msgs()));
+                ui.label(as_code(fmt_count(lane.num_reassembling_msgs())));
+                ui.label(as_code(fmt_count(lane.num_unordered_msgs())));
                 ui.end_row();
             }
         });
@@ -464,18 +464,17 @@ fn show_msg_buf_status(ui: &mut egui::Ui, transport: &Transport) {
             ui.end_row();
 
             for (index, lane) in transport.send.lanes().iter().enumerate() {
-                ui.label(format!("{index}"));
+                ui.label(fmt_count(index));
                 ui.label(format!("{:?}", lane.kind()));
-                ui.label(format!("{}", lane.num_queued_msgs()));
+                ui.label(as_code(fmt_count(lane.num_queued_msgs())));
                 ui.end_row();
             }
         });
 
-        #[rustfmt::skip]
         ui.label(
-            "Number of buffered... \n\
-            • recv: incoming messages \n\
-            • send: outgoing messages \n\
+            "Number of buffered...\n\
+            • recv: incoming messages\n\
+            • send: outgoing messages\n\
             • unacked: flushed packets which have not been acked",
         );
     });
@@ -496,20 +495,21 @@ fn show_rtt_status(ui: &mut egui::Ui, packet_rtt: Option<Duration>, transport: &
     .on_hover_ui(|ui| {
         egui::Grid::new("rtt_detail").num_columns(2).show(ui, |ui| {
             ui.label("Min");
-            ui.label(format!("{:.1?}", msg_rtt.min()));
+            ui.label(as_code(fmt_duration(msg_rtt.min())));
             ui.end_row();
 
             ui.label("Conservative");
-            ui.label(format!("{:.1?}", msg_rtt.conservative()));
+            ui.label(as_code(fmt_duration(msg_rtt.conservative())));
             ui.end_row();
 
             ui.label("PTO");
-            ui.label(format!("{:.1?}", msg_rtt.pto()));
+            ui.label(as_code(fmt_duration(msg_rtt.pto())));
             ui.end_row();
         });
 
         ui.label(
-            "Round-trip time - time taken to send some data\nto the peer and get a response back.",
+            "Round-trip time - time taken to send some data\n\
+            to the peer and get a response back.",
         );
     });
 }
@@ -552,8 +552,12 @@ fn fmt_bytes(n: usize) -> String {
     )
 }
 
-fn fmt_thousands(n: usize) -> String {
+fn fmt_count(n: usize) -> String {
     n.separate_with_spaces()
+}
+
+fn fmt_duration(d: Duration) -> String {
+    format!("{d:.1?}")
 }
 
 fn fmt_bytes_y_axis(mark: egui_plot::GridMark, _range: &RangeInclusive<f64>) -> String {

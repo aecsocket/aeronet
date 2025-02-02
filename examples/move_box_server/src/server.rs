@@ -88,7 +88,7 @@ fn open_web_transport_server(mut commands: Commands, args: Res<Args>) {
 
     let config = web_transport_config(&identity, &args);
     let server = commands
-        .spawn(AeronetRepliconServer)
+        .spawn((Name::new("WebTransport Server"), AeronetRepliconServer))
         .queue(WebTransportServer::open(config))
         .id();
     info!("Opening WebTransport server {server}");
@@ -130,7 +130,7 @@ type WebSocketServerConfig = aeronet_websocket::server::ServerConfig;
 fn open_web_socket_server(mut commands: Commands, args: Res<Args>) {
     let config = web_socket_config(&args);
     let server = commands
-        .spawn(AeronetRepliconServer)
+        .spawn((Name::new("WebSocket Server"), AeronetRepliconServer))
         .queue(WebSocketServer::open(config))
         .id();
     info!("Opening WebSocket server {server}");

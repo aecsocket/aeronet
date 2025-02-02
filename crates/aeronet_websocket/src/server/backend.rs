@@ -108,6 +108,8 @@ async fn handle_session(
     tls_acceptor: Option<TlsAcceptor>,
     send_next: oneshot::Sender<ToConnected>,
 ) -> Result<Never, DisconnectReason<ServerError>> {
+    debug!("Accepting session");
+
     let stream = if let Some(tls_acceptor) = tls_acceptor {
         tls_acceptor
             .accept(stream)
