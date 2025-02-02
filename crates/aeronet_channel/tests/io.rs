@@ -1,4 +1,4 @@
-#![expect(missing_docs, clippy::unwrap_used, reason = "testing")]
+#![expect(missing_docs, reason = "testing")]
 
 use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
