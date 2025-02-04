@@ -7,41 +7,34 @@ use aeronet_io::{
     packet::RecvPacket,
     server::{Server, ServerEndpoint},
 };
-use aeronet_websocket::{
-    client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
-    server::{Identity, ServerConfig, WebSocketServer, WebSocketServerPlugin},
+use aeronet_webtransport::{
+    client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
+    server::{
+        ServerConfig, SessionRequest, SessionResponse, WebTransportServer, WebTransportServerPlugin,
+    },
 };
 use bevy::prelude::*;
 use bytes::Bytes;
+use wtransport::Identity;
 
 const PING: Bytes = Bytes::from_static(b"ping");
 const PONG: Bytes = Bytes::from_static(b"pong");
 
 #[test]
-fn connect_unencrypted() {
-    const PORT: u16 = 29000;
-
-    ping_pong(
-        ServerConfig::builder()
-            .with_bind_default(PORT)
-            .with_no_encryption(),
-        ClientConfig::builder().with_no_encryption(),
-        format!("ws://[::1]:{PORT}"),
-    );
-}
-
-#[test]
-fn connect_encrypted() {
-    const PORT: u16 = 29001;
+fn connect() {
+    const PORT: u16 = 30000;
 
     let identity = Identity::self_signed(["127.0.0.1", "::1", "localhost"]).unwrap();
     ping_pong(
         ServerConfig::builder()
             .with_bind_default(PORT)
-            .with_identity(identity),
-        // TODO: add identity as an exception to cert validation
-        ClientConfig::builder().with_no_cert_validation(),
-        format!("wss://[::1]:{PORT}"),
+            .with_identity(&identity)
+            .build(),
+        ClientConfig::builder()
+            .with_bind_default()
+            .with_server_certificate_hashes([identity.certificate_chain().as_slice()[0].hash()])
+            .build(),
+        format!("https://[::1]:{PORT}"),
     );
 }
 
@@ -112,6 +105,10 @@ fn ping_pong(
             commands.insert_resource(ClientEntity(client));
         }
 
+        fn on_session_request(mut trigger: Trigger<SessionRequest>) {
+            trigger.respond(SessionResponse::Accepted);
+        }
+
         fn on_add_session(
             trigger: Trigger<OnAdd, Session>,
             expected_client: Res<ClientEntity>,
@@ -147,18 +144,19 @@ fn ping_pong(
         }
 
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, WebSocketServerPlugin))
+        app.add_plugins((MinimalPlugins, WebTransportServerPlugin))
             .init_resource::<SequenceTester<ServerEvent>>()
             .add_observer(on_add_server_endpoint)
             .add_observer(on_add_server)
             .add_observer(on_add_session_endpoint)
+            .add_observer(on_session_request)
             .add_observer(on_add_session)
             .add_systems(Update, recv_on_session.never_param_warn());
 
         let world = app.world_mut();
         let server = world.spawn_empty().id();
         world.insert_resource(ServerEntity(server));
-        WebSocketServer::open(server_config).apply(server, world);
+        WebTransportServer::open(server_config).apply(server, world);
 
         app
     };
@@ -217,7 +215,7 @@ fn ping_pong(
         }
 
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, WebSocketClientPlugin))
+        app.add_plugins((MinimalPlugins, WebTransportClientPlugin))
             .init_resource::<SequenceTester<ClientEvent>>()
             .add_observer(on_add_session_endpoint)
             .add_observer(on_add_session)
@@ -225,7 +223,7 @@ fn ping_pong(
 
         let world = app.world_mut();
         let client = world.spawn_empty().id();
-        WebSocketClient::connect(client_config, client_target.into()).apply(client, world);
+        WebTransportClient::connect(client_config, client_target.into()).apply(client, world);
 
         app
     };
