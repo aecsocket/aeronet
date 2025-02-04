@@ -16,6 +16,7 @@
 //! Non-guarantees:
 //! - the packet may not be sent.
 //! - the packet may not be received by the peer.
+//! - the packet may be received multiple times.
 //! - the packet may not arrive in any fixed amount of time.
 //! - the packet may arrive out of order relative to other packets.
 //!
