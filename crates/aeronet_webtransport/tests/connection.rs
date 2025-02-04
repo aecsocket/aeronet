@@ -26,6 +26,7 @@ const PONG: Bytes = Bytes::from_static(b"pong");
 fn connect() {
     const PORT: u16 = 30000;
 
+    _ = wtransport::tls::rustls::crypto::ring::default_provider().install_default();
     let identity = Identity::self_signed(["127.0.0.1", "::1", "localhost"]).unwrap();
     ping_pong(
         ServerConfig::builder()
