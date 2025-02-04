@@ -22,6 +22,7 @@ const PONG: Bytes = Bytes::from_static(b"pong");
 fn connect_unencrypted() {
     const PORT: u16 = 29000;
 
+    _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     ping_pong(
         ServerConfig::builder()
             .with_bind_default(PORT)
@@ -35,6 +36,7 @@ fn connect_unencrypted() {
 fn connect_encrypted() {
     const PORT: u16 = 29001;
 
+    _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let identity = Identity::self_signed(["127.0.0.1", "::1", "localhost"]).unwrap();
     ping_pong(
         ServerConfig::builder()
