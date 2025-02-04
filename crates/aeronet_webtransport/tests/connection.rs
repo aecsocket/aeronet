@@ -1,21 +1,23 @@
 #![expect(missing_docs, clippy::too_many_lines, reason = "testing")]
 
-use core::fmt::Debug;
-
-use aeronet_io::{
-    Session, SessionEndpoint,
-    packet::RecvPacket,
-    server::{Server, ServerEndpoint},
-};
-use aeronet_webtransport::{
-    client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
-    server::{
-        ServerConfig, SessionRequest, SessionResponse, WebTransportServer, WebTransportServerPlugin,
+use {
+    aeronet_io::{
+        Session, SessionEndpoint,
+        packet::RecvPacket,
+        server::{Server, ServerEndpoint},
     },
+    aeronet_webtransport::{
+        client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
+        server::{
+            ServerConfig, SessionRequest, SessionResponse, WebTransportServer,
+            WebTransportServerPlugin,
+        },
+    },
+    bevy::prelude::*,
+    bytes::Bytes,
+    core::fmt::Debug,
+    wtransport::Identity,
 };
-use bevy::prelude::*;
-use bytes::Bytes;
-use wtransport::Identity;
 
 const PING: Bytes = Bytes::from_static(b"ping");
 const PONG: Bytes = Bytes::from_static(b"pong");
@@ -240,9 +242,7 @@ fn ping_pong(
     }
 
     panic!(
-        "took too long to complete\n\
-            - server: {:?}\n\
-            - client: {:?}",
+        "took too long to complete\n- server: {:?}\n- client: {:?}",
         server
             .world()
             .resource::<SequenceTester<ServerEvent>>()
@@ -284,8 +284,7 @@ impl<E: Debug + PartialEq> NextSequence<'_, E> {
         let next = self.next;
         assert!(
             self.tester.events.is_empty(),
-            "expected first event to be {next:?}\n\
-            event stack: {:?}",
+            "expected first event to be {next:?}\nevent stack: {:?}",
             self.tester.events
         );
         self.tester.events.push(next);
@@ -296,15 +295,13 @@ impl<E: Debug + PartialEq> NextSequence<'_, E> {
         if let Some(our_last) = self.tester.events.last() {
             assert!(
                 last == *our_last,
-                "expected {last:?} then {next:?}, but was actually {our_last:?}\n\
-                event stack: {:?}",
+                "expected {last:?} then {next:?}, but was actually {our_last:?}\nevent stack: {:?}",
                 self.tester.events,
             );
             self.tester.events.push(next);
         } else {
             panic!(
-                "expected {last:?} then {next:?}, but this is the first event\n\
-                event stack: {:?}",
+                "expected {last:?} then {next:?}, but this is the first event\nevent stack: {:?}",
                 self.tester.events
             );
         }

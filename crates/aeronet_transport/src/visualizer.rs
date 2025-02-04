@@ -318,10 +318,7 @@ fn show_connected_status(ui: &mut egui::Ui, session: &Session, now: Instant) {
     })
     .response
     .on_hover_ui(|ui| {
-        ui.label(
-            "How long this session has been\n\
-            connected for, in wall-clock time.",
-        );
+        ui.label("How long this session has been\nconnected for, in wall-clock time.");
     });
 }
 
@@ -344,10 +341,7 @@ fn show_mtu_status(ui: &mut egui::Ui, session: &Session) {
                 ui.end_row();
             });
 
-        ui.label(
-            "Maximum transmissible unit (MTU) -\n\
-            maximum size of an outgoing packet.",
-        );
+        ui.label("Maximum transmissible unit (MTU) -\nmaximum size of an outgoing packet.");
     });
 }
 
@@ -407,10 +401,7 @@ fn show_tx_cap_status(ui: &mut egui::Ui, transport: &Transport) {
                 ui.end_row();
             });
 
-        ui.label(
-            "How many bytes this session is\n\
-            allowed to use to send out packets.",
-        );
+        ui.label("How many bytes this session is\nallowed to use to send out packets.");
     });
 }
 
@@ -472,10 +463,8 @@ fn show_msg_buf_status(ui: &mut egui::Ui, transport: &Transport) {
         });
 
         ui.label(
-            "Number of buffered...\n\
-            • recv: incoming messages\n\
-            • send: outgoing messages\n\
-            • unacked: flushed packets which have not been acked",
+            "Number of buffered...\n• recv: incoming messages\n• send: outgoing messages\n• \
+             unacked: flushed packets which have not been acked",
         );
     });
 }
@@ -508,8 +497,7 @@ fn show_rtt_status(ui: &mut egui::Ui, packet_rtt: Option<Duration>, transport: &
         });
 
         ui.label(
-            "Round-trip time - time taken to send some data\n\
-            to the peer and get a response back.",
+            "Round-trip time - time taken to send some data\nto the peer and get a response back.",
         );
     });
 }
