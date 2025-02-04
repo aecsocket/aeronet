@@ -103,9 +103,10 @@ impl Server {
 /// commands.trigger_targets(Close::new("show's over, go home"), server);
 ///
 /// // disconnect multiple sessions at once
-/// commands.trigger_targets(Close::new("show's over everyone, go home"), [
-///     server1, server2,
-/// ]);
+/// commands.trigger_targets(
+///     Close::new("show's over everyone, go home"),
+///     [server1, server2],
+/// );
 /// # }
 /// ```
 ///
