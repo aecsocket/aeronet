@@ -321,8 +321,6 @@ impl<T: Default, const N: usize> SeqBuf<T, N> {
 
 #[cfg(test)]
 mod tests {
-    #![expect(clippy::unwrap_used, reason = "testing")]
-
     use super::*;
 
     #[test]

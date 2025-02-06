@@ -385,7 +385,7 @@ fn should_close(
         Ok(Some(close_reason)) => Some(close_reason),
         Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
     };
-    close_reason.is_none_or(|reason| {
+    close_reason.is_some_and(|reason| {
         let reason = reason.map_err(anyhow::Error::new);
         commands.trigger_targets(Closed { reason }, server);
         true
@@ -459,7 +459,7 @@ fn should_disconnect(
         Ok(Some(dc_reason)) => Some(dc_reason),
         Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
     };
-    dc_reason.is_none_or(|reason| {
+    dc_reason.is_some_and(|reason| {
         let reason = reason.map_err(anyhow::Error::new);
         commands.trigger_targets(Disconnected { reason }, client);
         true
