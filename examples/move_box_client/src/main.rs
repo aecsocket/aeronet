@@ -254,7 +254,7 @@ type WebTransportClientConfig = aeronet_webtransport::client::ClientConfig;
 
 #[cfg(target_family = "wasm")]
 fn web_transport_config(cert_hash: String) -> WebTransportClientConfig {
-    use aeronet_webtransport::xwt_web_sys::{CertificateHash, HashAlgorithm};
+    use aeronet_webtransport::xwt_web::{CertificateHash, HashAlgorithm};
 
     let server_certificate_hashes = match cert::hash_from_b64(&cert_hash) {
         Ok(hash) => vec![CertificateHash {

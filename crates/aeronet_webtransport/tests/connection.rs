@@ -1,4 +1,9 @@
-#![expect(missing_docs, clippy::too_many_lines, reason = "testing")]
+#![expect(missing_docs, reason = "testing")]
+#![cfg(not(target_family = "wasm"))]
+#![cfg_attr(
+    not(target_family = "wasm"),
+    expect(clippy::too_many_lines, reason = "testing")
+)]
 
 use {
     aeronet_io::{
@@ -28,14 +33,15 @@ fn connect() {
 
     _ = wtransport::tls::rustls::crypto::ring::default_provider().install_default();
     let identity = Identity::self_signed(["127.0.0.1", "::1", "localhost"]).unwrap();
+    let cert_hash = identity.certificate_chain().as_slice()[0].hash();
     ping_pong(
         ServerConfig::builder()
             .with_bind_default(PORT)
-            .with_identity(&identity)
+            .with_identity(identity)
             .build(),
         ClientConfig::builder()
             .with_bind_default()
-            .with_server_certificate_hashes([identity.certificate_chain().as_slice()[0].hash()])
+            .with_server_certificate_hashes([cert_hash])
             .build(),
         format!("https://[::1]:{PORT}"),
     );
