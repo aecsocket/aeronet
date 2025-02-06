@@ -248,7 +248,7 @@ fn flush(
     for (channel_id, msg) in replicon_client.drain_sent() {
         let lane_index = convert::to_lane_index(channel_id);
         for mut transport in &mut clients {
-            transport.send.push(lane_index, msg.clone(), now);
+            _ = transport.send.push(lane_index, msg.clone(), now);
         }
     }
 }

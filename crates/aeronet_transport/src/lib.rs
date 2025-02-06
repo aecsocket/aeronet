@@ -58,6 +58,7 @@ impl Plugin for AeronetTransportPlugin {
                     recv::clear_buffers.before(TransportSet::Poll),
                     (
                         recv::poll,
+                        send::disconnect_errored,
                         send::update_send_bytes_config,
                         send::refill_send_bytes,
                         check_memory_limit,

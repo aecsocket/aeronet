@@ -284,6 +284,6 @@ fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Tr
         };
         let lane_index = convert::to_lane_index(channel_id);
 
-        transport.send.push(lane_index, msg, now);
+        _ = transport.send.push(lane_index, msg, now);
     }
 }
