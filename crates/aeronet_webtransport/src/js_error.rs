@@ -7,7 +7,7 @@ use {
 ///
 /// You can get one [from][`From`] a:
 /// - [`JsValue`]
-/// - [`xwt_web_sys::Error`]
+/// - [`xwt_web::Error`]
 #[derive(Debug, Clone)]
 pub struct JsError(pub String);
 

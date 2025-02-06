@@ -20,7 +20,6 @@ use {
         channel::{mpsc, oneshot},
         never::Never,
     },
-    js_sys::JsString,
     std::io,
     tracing::{trace, trace_span},
     web_time::Instant,
@@ -464,7 +463,7 @@ async fn disconnect(conn: Arc<Connection>, reason: &str) {
 
     #[cfg(target_family = "wasm")]
     {
-        use xwt_web::web_wt_sys::WebTransportCloseInfo;
+        use {js_sys::JsString, xwt_web::web_wt_sys::WebTransportCloseInfo};
 
         let close_info = WebTransportCloseInfo::new();
         close_info.set_close_code(DISCONNECT_ERROR_CODE);
