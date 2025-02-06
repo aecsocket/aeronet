@@ -1,5 +1,3 @@
-# `move_box`
-
 Demo app where clients can connect to a server and control a box with the arrow keys. Box positions
 are synced between clients and servers using [`bevy_replicon`] with the [`aeronet_replicon`]
 backend.
