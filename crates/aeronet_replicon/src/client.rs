@@ -140,8 +140,7 @@ fn on_client_connected(
     let transport = match Transport::new(session, recv_lanes, send_lanes, now) {
         Ok(transport) => transport,
         Err(err) => {
-            let err = anyhow::Error::new(err);
-            warn!("Failed to create transport for {client}: {err:#}");
+            warn!("Failed to create transport for {client}: {err:?}");
             commands.trigger_targets(Disconnect::new("failed to create transport"), client);
             return;
         }

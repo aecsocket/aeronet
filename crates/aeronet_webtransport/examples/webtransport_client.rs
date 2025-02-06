@@ -82,7 +82,7 @@ fn on_disconnected(
             format!("{name} disconnected by peer: {reason}")
         }
         DisconnectReason::Error(err) => {
-            format!("{name} disconnected due to error: {err:#}")
+            format!("{name} disconnected due to error: {err:?}")
         }
     });
 }
@@ -122,7 +122,7 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
                     Err(err) => {
                         ui_state
                             .log
-                            .push(format!("Failed to create client config: {err:#}"));
+                            .push(format!("Failed to create client config: {err:?}"));
                         return;
                     }
                 };

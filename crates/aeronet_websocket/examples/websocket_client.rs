@@ -77,7 +77,7 @@ fn on_disconnected(
             format!("{name} disconnected by peer: {reason}")
         }
         DisconnectReason::Error(err) => {
-            format!("{name} disconnected due to error: {err:#}")
+            format!("{name} disconnected due to error: {err:?}")
         }
     });
 }

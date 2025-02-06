@@ -103,14 +103,13 @@ fn on_connected(
     ui_state.log.push(format!("{name} connected"));
 
     game_state.set(GameState::Playing);
-    commands.entity(entity).insert((
-        SessionVisualizer::default(),
-        TransportConfig {
+    commands
+        .entity(entity)
+        .insert((SessionVisualizer::default(), TransportConfig {
             max_memory_usage: 64 * 1024,
             send_bytes_per_sec: 4 * 1024,
             ..default()
-        },
-    ));
+        }));
 }
 
 fn on_disconnected(
@@ -131,7 +130,7 @@ fn on_disconnected(
             format!("{name} disconnected by peer: {reason}")
         }
         DisconnectReason::Error(err) => {
-            format!("{name} disconnected due to error: {err:#}")
+            format!("{name} disconnected due to error: {err:?}")
         }
     });
     game_state.set(GameState::None);

@@ -182,8 +182,7 @@ pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut Transport, &T
 
         for packet in session.recv.drain(..) {
             if let Err(err) = recv_on(&mut transport, config, packet.recv_at, &packet.payload) {
-                let err = anyhow::Error::new(err);
-                trace!("Received invalid packet: {err:#}");
+                trace!("Received invalid packet: {err:?}");
             }
         }
     }
@@ -255,8 +254,7 @@ fn recv_on(
                 frags_recv += 1;
             }
             Err(err) => {
-                let err = anyhow::Error::new(err);
-                trace!("Failed to receive fragment: {err:#}");
+                trace!("Failed to receive fragment: {err:?}");
             }
         }
         frag_index += 1;
