@@ -27,7 +27,7 @@ cfg_if::cfg_if! {
         mod js_error;
         pub use js_error::JsError;
 
-        pub use xwt_web_sys;
+        pub use xwt_web;
     } else {
         #[cfg(feature = "server")]
         pub mod server;

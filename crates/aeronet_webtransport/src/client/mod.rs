@@ -26,7 +26,7 @@ use {
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         /// Configuration for the [`WebTransportClient`] on WASM platforms.
-        pub type ClientConfig = xwt_web_sys::WebTransportOptions;
+        pub type ClientConfig = xwt_web::WebTransportOptions;
 
         type ConnectTarget = String;
 

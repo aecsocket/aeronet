@@ -121,6 +121,10 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
 
 #[cfg(target_family = "wasm")]
 fn client_config() -> ClientConfig {
+    #[expect(
+        clippy::default_constructed_unit_structs,
+        reason = "keep parity with non-WASM"
+    )]
     ClientConfig::default()
 }
 

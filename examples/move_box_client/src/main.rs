@@ -103,14 +103,13 @@ fn on_connected(
     ui_state.log.push(format!("{name} connected"));
 
     game_state.set(GameState::Playing);
-    commands.entity(entity).insert((
-        SessionVisualizer::default(),
-        TransportConfig {
+    commands
+        .entity(entity)
+        .insert((SessionVisualizer::default(), TransportConfig {
             max_memory_usage: 64 * 1024,
             send_bytes_per_sec: 4 * 1024,
             ..default()
-        },
-    ));
+        }));
 }
 
 fn on_disconnected(
@@ -254,7 +253,7 @@ type WebTransportClientConfig = aeronet_webtransport::client::ClientConfig;
 
 #[cfg(target_family = "wasm")]
 fn web_transport_config(cert_hash: String) -> WebTransportClientConfig {
-    use aeronet_webtransport::xwt_web_sys::{CertificateHash, HashAlgorithm};
+    use aeronet_webtransport::xwt_web::{CertificateHash, HashAlgorithm};
 
     let server_certificate_hashes = match cert::hash_from_b64(&cert_hash) {
         Ok(hash) => vec![CertificateHash {

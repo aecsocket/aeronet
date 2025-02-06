@@ -20,7 +20,7 @@ pub async fn start(
         #[cfg(target_family = "wasm")]
         {
             debug!("Spawning backend task to connect to {target:?}");
-            xwt_web_sys::Endpoint {
+            xwt_web::Endpoint {
                 options: config.to_js(),
             }
         }

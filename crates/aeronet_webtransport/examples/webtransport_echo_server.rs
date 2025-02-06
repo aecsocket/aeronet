@@ -1,8 +1,6 @@
 //! Example server using WebTransport which listens for clients sending strings
 //! and sends back a string reply.
 
-use aeronet_io::{Session, server::Server};
-
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         fn main() {

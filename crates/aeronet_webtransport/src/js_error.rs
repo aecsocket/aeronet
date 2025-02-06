@@ -32,8 +32,8 @@ impl From<JsValue> for JsError {
     }
 }
 
-impl From<xwt_web_sys::Error> for JsError {
-    fn from(value: xwt_web_sys::Error) -> Self {
+impl From<xwt_web::Error> for JsError {
+    fn from(value: xwt_web::Error) -> Self {
         Self::from(value.0)
     }
 }

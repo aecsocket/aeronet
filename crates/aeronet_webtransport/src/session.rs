@@ -20,6 +20,7 @@ use {
         channel::{mpsc, oneshot},
         never::Never,
     },
+    js_sys::JsString,
     std::io,
     tracing::{trace, trace_span},
     web_time::Instant,
@@ -28,7 +29,7 @@ use {
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
-        type Connection = xwt_web_sys::Session;
+        type Connection = xwt_web::Session;
         type ConnectionError = crate::JsError;
     } else {
         type Connection = xwt_wtransport::Connection;
@@ -463,11 +464,11 @@ async fn disconnect(conn: Arc<Connection>, reason: &str) {
 
     #[cfg(target_family = "wasm")]
     {
-        use {wasm_bindgen_futures::JsFuture, xwt_web_sys::sys::WebTransportCloseInfo};
+        use xwt_web::web_wt_sys::WebTransportCloseInfo;
 
-        let mut close_info = WebTransportCloseInfo::new();
-        close_info.close_code(DISCONNECT_ERROR_CODE);
-        close_info.reason(reason);
+        let close_info = WebTransportCloseInfo::new();
+        close_info.set_close_code(DISCONNECT_ERROR_CODE);
+        close_info.set_reason(JsString::from(reason));
 
         // TODO: This seems to not close the connection properly
         // Could it be because of this?
@@ -475,8 +476,8 @@ async fn disconnect(conn: Arc<Connection>, reason: &str) {
         //
         // Tested: the server times us out instead of actually
         // reading the disconnect
-        conn.transport.close_with_close_info(&close_info);
-        _ = JsFuture::from(conn.transport.closed()).await;
+        conn.transport.close_with_info(&close_info);
+        _ = conn.transport.closed().await;
     }
 
     #[cfg(not(target_family = "wasm"))]
