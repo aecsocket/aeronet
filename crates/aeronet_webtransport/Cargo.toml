@@ -71,7 +71,7 @@ gloo-timers = { workspace = true, features = ["futures"] }
 js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
-xwt-web-sys = { workspace = true }
+xwt-web = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 spki = { workspace = true, features = ["fingerprint"] }

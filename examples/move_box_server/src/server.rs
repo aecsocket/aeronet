@@ -86,7 +86,7 @@ fn open_web_transport_server(mut commands: Commands, args: Res<Args>) {
     info!("  {cert_hash}");
     info!("************************");
 
-    let config = web_transport_config(&identity, &args);
+    let config = web_transport_config(identity, &args);
     let server = commands
         .spawn((Name::new("WebTransport Server"), AeronetRepliconServer))
         .queue(WebTransportServer::open(config))
@@ -96,7 +96,7 @@ fn open_web_transport_server(mut commands: Commands, args: Res<Args>) {
 
 type WebTransportServerConfig = aeronet_webtransport::server::ServerConfig;
 
-fn web_transport_config(identity: &wtransport::Identity, args: &Args) -> WebTransportServerConfig {
+fn web_transport_config(identity: wtransport::Identity, args: &Args) -> WebTransportServerConfig {
     WebTransportServerConfig::builder()
         .with_bind_default(args.wt_port)
         .with_identity(identity)

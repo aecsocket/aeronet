@@ -16,14 +16,10 @@ pub async fn start(
     target: ConnectTarget,
     send_next: oneshot::Sender<ToConnected>,
 ) -> Result<Never, DisconnectReason<ClientError>> {
-    // TODO: On native, debug log the target after this is merged:
-    // https://github.com/BiagioFesta/wtransport/pull/226
-    #[cfg(target_family = "wasm")]
-    debug!("Spawning backend task to connect to {target:?}");
-
     let endpoint = {
         #[cfg(target_family = "wasm")]
         {
+            debug!("Spawning backend task to connect to {target:?}");
             xwt_web_sys::Endpoint {
                 options: config.to_js(),
             }
@@ -31,6 +27,7 @@ pub async fn start(
 
         #[cfg(not(target_family = "wasm"))]
         {
+            debug!("Spawning backend task to connect to {:?}", target.url());
             wtransport::Endpoint::client(config)
                 .map(xwt_wtransport::Endpoint)
                 .map_err(SessionError::CreateEndpoint)

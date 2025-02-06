@@ -53,11 +53,11 @@ fn open_server(mut commands: Commands) {
     info!("  {cert_hash}");
     info!("************************");
 
-    let config = server_config(&identity);
+    let config = server_config(identity);
     commands.spawn_empty().queue(WebTransportServer::open(config));
 }
 
-fn server_config(identity: &wtransport::Identity) -> ServerConfig {
+fn server_config(identity: wtransport::Identity) -> ServerConfig {
     wtransport::ServerConfig::builder()
         .with_bind_default(25565)
         .with_identity(identity)

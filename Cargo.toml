@@ -128,16 +128,16 @@ tokio-tungstenite = "0.24.0"
 
 # aeronet_webtransport
 # core
-xwt-core = "0.5.0"
+xwt-core = "0.6.0"
 
 # native
 spki = "0.7.3"
-wtransport = "0.3.1"
+wtransport = "0.5.0"
 x509-cert = "0.2.5"
-xwt-wtransport = "0.10.0"
+xwt-wtransport = "0.13.0"
 
 # wasm
-xwt-web-sys = "0.12.0"
+xwt-web = "0.15.0"
 
 # aeronet_replicon
 
