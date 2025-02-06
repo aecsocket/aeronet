@@ -78,7 +78,7 @@ impl WebTransportServer {
     ///
     /// let config = ServerConfig::builder()
     ///     .with_bind_default(12345) // server port
-    ///     .with_identity(&identity)
+    ///     .with_identity(identity)
     ///     .build();
     ///
     /// // using `Commands`
