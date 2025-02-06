@@ -21,7 +21,6 @@ pub mod seq_buf;
 pub mod visualizer;
 
 pub use aeronet_io as io;
-use min_size::MinSize;
 use {
     aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
     arbitrary::Arbitrary,
@@ -31,6 +30,7 @@ use {
     core::num::Saturating,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
+    min_size::MinSize,
     octs::FixedEncodeLenHint,
     packet::{Acknowledge, FragmentHeader, MessageSeq, PacketHeader},
     recv::TransportRecv,

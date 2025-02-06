@@ -1,11 +1,12 @@
 //! See [`MinSize`].
 
-use core::num::TryFromIntError;
-
-use arbitrary::Arbitrary;
-use bevy_reflect::Reflect;
-use octs::{BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt, Write};
-use typesize::derive::TypeSize;
+use {
+    arbitrary::Arbitrary,
+    bevy_reflect::Reflect,
+    core::num::TryFromIntError,
+    octs::{BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt, Write},
+    typesize::derive::TypeSize,
+};
 
 #[cfg(target_pointer_width = "16")]
 compile_error!("`aeronet_transport` cannot safely compile for a 16-bit platform");

@@ -36,11 +36,9 @@ mod header;
 mod payload;
 mod seq;
 
-use crate::min_size::MinSize;
 pub use payload::*;
-
 use {
-    crate::lane::LaneIndex,
+    crate::{lane::LaneIndex, min_size::MinSize},
     arbitrary::Arbitrary,
     bevy_derive::{Deref, DerefMut},
     bevy_reflect::Reflect,
