@@ -11,6 +11,7 @@ cfg_if::cfg_if! {
 use {
     aeronet_io::{
         connection::{DisconnectReason, Disconnected, LocalAddr},
+        server::Server,
         SessionEndpoint, Session,
     },
     aeronet_websocket::server::{Identity, ServerConfig, WebSocketServer, WebSocketServerPlugin},
