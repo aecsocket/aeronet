@@ -138,13 +138,12 @@ pub(crate) struct SessionMeta {
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTransportIo>) {
     let session = trigger.entity();
-    let Disconnect { reason } = trigger.event();
     let Ok(mut io) = sessions.get_mut(session) else {
         return;
     };
 
     if let Some(send_dc) = io.send_user_dc.take() {
-        _ = send_dc.send(reason.clone());
+        _ = send_dc.send(trigger.reason.clone());
     }
 }
 

@@ -148,13 +148,12 @@ fn on_io_added(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelIo>) {
     let entity = trigger.entity();
-    let Disconnect { reason } = trigger.event();
     let Ok(mut io) = sessions.get_mut(entity) else {
         return;
     };
 
     if let Some(send_dc) = io.send_dc.take() {
-        _ = send_dc.into_inner().send(reason.clone());
+        _ = send_dc.into_inner().send(trigger.reason.clone());
     }
 }
 

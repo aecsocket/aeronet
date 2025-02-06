@@ -171,13 +171,13 @@ fn on_connected(trigger: Trigger<OnAdd, Session>) {
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
     let entity = trigger.entity();
-    let reason = DisconnectReason::User(trigger.event().reason.clone());
+    let reason = DisconnectReason::User(trigger.reason.clone());
     commands.trigger_targets(Disconnected { reason }, entity);
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
     let entity = trigger.entity();
-    match &trigger.event().reason {
+    match &trigger.reason {
         DisconnectReason::User(reason) => {
             debug!("{entity} disconnected by user: {reason}");
         }
@@ -213,7 +213,7 @@ mod tests {
         app.world_mut().entity_mut(entity).observe(
             |trigger: Trigger<Disconnected>, mut has_disconnected: ResMut<HasDisconnected>| {
                 assert!(matches!(
-                    &trigger.event().reason,
+                    &trigger.reason,
                     DisconnectReason::User(reason) if reason == REASON
                 ));
 

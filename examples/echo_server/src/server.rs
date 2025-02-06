@@ -121,7 +121,7 @@ fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
         return;
     };
 
-    match &trigger.event().reason {
+    match &trigger.reason {
         DisconnectReason::User(reason) => {
             info!("{client} disconnected from {server} by user: {reason}");
         }

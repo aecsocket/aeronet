@@ -120,11 +120,10 @@ fn on_disconnected(
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     let session = trigger.entity();
-    let Disconnected { reason } = trigger.event();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
-    ui_state.log.push(match reason {
+    ui_state.log.push(match &trigger.reason {
         DisconnectReason::User(reason) => {
             format!("{name} disconnected by user: {reason}")
         }
