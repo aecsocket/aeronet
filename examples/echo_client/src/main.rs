@@ -170,7 +170,7 @@ fn on_connected(
 
 fn on_disconnected(trigger: Trigger<Disconnected>) {
     let entity = trigger.entity();
-    match &trigger.event().reason {
+    match &trigger.reason {
         DisconnectReason::User(reason) => info!("{entity} disconnected by user: {reason}"),
         DisconnectReason::Peer(reason) => info!("{entity} disconnected by peer: {reason}"),
         DisconnectReason::Error(err) => warn!("{entity} disconnected due to error: {err:#}"),

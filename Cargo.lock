@@ -1368,9 +1368,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_replicon"
-version = "0.29.2"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "355ea11780dbb02ce46211ec7e8f38343549eef782e9bf2f66d125e7be156378"
+checksum = "bdc8e515c3ebc26a4ce43b3d1de99be32534a69dce2f4ad469873a8cb67af741"
 dependencies = [
  "bevy",
  "bincode",
@@ -1379,6 +1379,8 @@ dependencies = [
  "integer-encoding",
  "ordered-multimap",
  "serde",
+ "thiserror 2.0.11",
+ "typeid",
 ]
 
 [[package]]

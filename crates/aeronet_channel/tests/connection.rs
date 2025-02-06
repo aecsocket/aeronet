@@ -95,7 +95,7 @@ fn events_disconnect() {
     let (mut app, a, b) = setup();
     app.init_resource::<WhoDisconnected>().add_observer(
         |trigger: Trigger<Disconnected>, mut who: ResMut<WhoDisconnected>| {
-            let reason = match &trigger.event().reason {
+            let reason = match &trigger.reason {
                 DisconnectReason::User(reason) => DisconnectReason::User(reason.clone()),
                 DisconnectReason::Peer(reason) => DisconnectReason::Peer(reason.clone()),
                 DisconnectReason::Error(_) => panic!("should not disconnect with an error"),

@@ -106,9 +106,8 @@ fn web_transport_config(identity: &wtransport::Identity, args: &Args) -> WebTran
         .build()
 }
 
-fn on_session_request(mut trigger: Trigger<SessionRequest>, clients: Query<&Parent>) {
-    let client = trigger.entity();
-    let request = trigger.event_mut();
+fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&Parent>) {
+    let client = request.entity();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
     };
@@ -177,7 +176,7 @@ fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
         return;
     };
 
-    match &trigger.event().reason {
+    match &trigger.reason {
         DisconnectReason::User(reason) => {
             info!("{client} disconnected from {server} by user: {reason}");
         }

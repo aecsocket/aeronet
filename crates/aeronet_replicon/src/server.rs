@@ -12,14 +12,16 @@ use {
         AeronetTransportPlugin, Transport, TransportSet,
         sampling::{SessionSamplingPlugin, SessionStats, SessionStatsSampling},
     },
+    anyhow::anyhow,
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_hierarchy::Parent,
     bevy_reflect::Reflect,
     bevy_replicon::{
         prelude::{ConnectedClients, RepliconChannels, RepliconServer},
-        server::{ServerEvent, ServerSet},
+        server::{ClientConnected, ClientDisconnected, ServerSet},
     },
+    core::mem,
     tracing::warn,
 };
 
@@ -145,7 +147,6 @@ fn on_connected(
     sessions: Query<&Session>,
     parents: Query<&Parent>,
     open_servers: Query<(), OpenedServer>,
-    mut events: EventWriter<ServerEvent>,
     channels: Res<RepliconChannels>,
     mut commands: Commands,
 ) {
@@ -162,7 +163,7 @@ fn on_connected(
     }
 
     let client_id = convert::to_client_id(client);
-    events.send(ServerEvent::ClientConnected { client_id });
+    commands.trigger(ClientConnected { client_id });
 
     let recv_lanes = channels
         .client_channels()
@@ -185,13 +186,13 @@ fn on_connected(
 }
 
 fn on_disconnected(
-    trigger: Trigger<Disconnected>,
+    mut trigger: Trigger<Disconnected>,
     // check for `Session` - clients which are already connected
     // on the replicon side, because if we disconnect a non-connected client,
     // replicon panics
     connected_clients: Query<&Parent, With<Session>>,
     open_servers: Query<(), OpenedServer>,
-    mut events: EventWriter<ServerEvent>,
+    mut commands: Commands,
 ) {
     let client = trigger.entity();
     let Ok(server) = connected_clients.get(client).map(Parent::get) else {
@@ -202,11 +203,25 @@ fn on_disconnected(
     }
 
     let client_id = convert::to_client_id(client);
-    let reason = match &trigger.event().reason {
-        DisconnectReason::User(reason) | DisconnectReason::Peer(reason) => reason.clone(),
-        DisconnectReason::Error(err) => format!("{err:#}"),
+    let reason = match &mut trigger.reason {
+        DisconnectReason::User(_) => bevy_replicon::core::DisconnectReason::DisconnectedByServer,
+        DisconnectReason::Peer(_) => bevy_replicon::core::DisconnectReason::DisconnectedByClient,
+        DisconnectReason::Error(err) => {
+            // TODO: when we can order observers, make this one run right at the end
+            // so potential consumers of `Disconnected` never see this dummy error
+            let err = mem::replace(
+                err,
+                anyhow!(
+                    "real disconnect reason was replaced with a dummy value, and was passed to \
+                     `bevy_replicon` - if you want to read the real disconnect reason, access it \
+                     via `bevy_replicon`",
+                ),
+            );
+            bevy_replicon::core::DisconnectReason::Backend(err.into())
+        }
     };
-    events.send(ServerEvent::ClientDisconnected { client_id, reason });
+
+    commands.trigger(ClientDisconnected { client_id, reason });
 }
 
 fn poll(

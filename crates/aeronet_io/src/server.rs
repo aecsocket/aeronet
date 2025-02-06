@@ -194,7 +194,7 @@ fn on_opened(trigger: Trigger<OnAdd, Server>) {
 
 fn on_close(trigger: Trigger<Close>, mut commands: Commands) {
     let server = trigger.entity();
-    let reason = CloseReason::User(trigger.event().reason.clone());
+    let reason = CloseReason::User(trigger.reason.clone());
     commands.trigger_targets(Closed { reason }, server);
 }
 
@@ -204,7 +204,7 @@ fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands:
         .get(server)
         .map(|children| children.iter().copied().collect::<Vec<_>>())
         .unwrap_or_default();
-    match &trigger.event().reason {
+    match &trigger.reason {
         CloseReason::User(reason) => {
             debug!("{server} closed by user: {reason}");
             commands.trigger_targets(Disconnect::new(reason), children);
@@ -249,7 +249,7 @@ mod tests {
         app.world_mut().entity_mut(client).observe(
             |trigger: Trigger<Disconnected>, mut has_disconnected: ResMut<HasDisconnected>| {
                 assert!(matches!(
-                    &trigger.event().reason,
+                    &trigger.reason,
                     DisconnectReason::User(reason) if reason == REASON
                 ));
 
@@ -264,7 +264,7 @@ mod tests {
             .observe(
                 |trigger: Trigger<Closed>, mut has_closed: ResMut<HasClosed>| {
                     assert!(matches!(
-                        &trigger.event().reason,
+                        &trigger.reason,
                         CloseReason::User(reason) if reason == REASON
                     ));
 

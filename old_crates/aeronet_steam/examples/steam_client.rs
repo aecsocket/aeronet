@@ -9,7 +9,7 @@ use aeronet_io::{
 };
 use aeronet_steam::{client::SteamClient, config::SteamSessionConfig};
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use bevy_egui::{EguiContexts, EguiPlugin, egui};
 use bevy_steamworks::SteamworksPlugin;
 use steamworks::SteamId;
 
@@ -68,9 +68,8 @@ fn on_disconnected(
     mut ui_state: ResMut<GlobalUi>,
 ) {
     let session = trigger.entity();
-    let Disconnected { reason } = trigger.event();
     let name = names.get(session).unwrap();
-    ui_state.log.push(match reason {
+    ui_state.log.push(match &trigger.reason {
         DisconnectReason::User(reason) => {
             format!("{name} disconnected by user: {reason}")
         }
