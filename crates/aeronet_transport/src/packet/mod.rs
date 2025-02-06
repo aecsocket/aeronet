@@ -167,7 +167,7 @@ pub struct FragmentPosition(MinSize);
 /// the actual payload.
 ///
 /// The length of the underlying byte buffer must not exceed
-/// [`FragmentPayloadLen::MAX`], or it cannot be encoded.
+/// [`MinSize::MAX`], or it cannot be encoded.
 #[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut)]
 pub struct FragmentPayload(pub Bytes);
 

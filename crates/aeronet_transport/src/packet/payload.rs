@@ -6,7 +6,7 @@ use {
 };
 
 /// Attempted to [`Encode`] a [`FragmentPayload`] which was more than
-/// [`FragmentPayloadLen::MAX`] bytes long.
+/// [`MinSize::MAX`] bytes long.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Display, Error)]
 #[display("payload too large - {len} / {} bytes", MinSize::MAX.0)]
 pub struct PayloadTooLarge {

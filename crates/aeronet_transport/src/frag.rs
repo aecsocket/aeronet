@@ -45,8 +45,6 @@ use {
 ///
 /// Panics if `msg` is too large, and is split into too many fragments for
 /// [`FragmentPosition`] to be able to encode the fragment index.
-/// The range of [`FragmentIndex`] should be large enough so that you never run
-/// into this.
 ///
 /// [last fragment]: FragmentPosition::is_last
 pub fn split(

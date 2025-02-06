@@ -73,7 +73,6 @@ replace_with = "0.1.7"
 ringbuf = "0.4.1"
 serde = { version = "1.0.204", features = ["derive"] }
 size_format = "1.0.2"
-static_assertions = "1.1.0"
 sync_wrapper = "1.0.1"
 thousands = "0.2.0"
 tracing = { version = "0.1.40", default-features = false }
