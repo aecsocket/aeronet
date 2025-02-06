@@ -9,6 +9,7 @@ extern crate alloc;
 pub mod frag;
 pub mod lane;
 pub mod limit;
+pub mod min_size;
 pub mod packet;
 pub mod recv;
 pub mod rtt;
@@ -20,6 +21,7 @@ pub mod seq_buf;
 pub mod visualizer;
 
 pub use aeronet_io as io;
+use min_size::MinSize;
 use {
     aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
     arbitrary::Arbitrary,
@@ -30,7 +32,7 @@ use {
     derive_more::{Add, AddAssign, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
     octs::FixedEncodeLenHint,
-    packet::{Acknowledge, FragmentHeader, FragmentIndex, MessageSeq, PacketHeader},
+    packet::{Acknowledge, FragmentHeader, MessageSeq, PacketHeader},
     recv::TransportRecv,
     rtt::RttEstimator,
     send::TransportSend,
@@ -348,7 +350,7 @@ pub struct MessageStats {
 struct FragmentPath {
     lane_index: LaneIndex,
     msg_seq: MessageSeq,
-    frag_index: FragmentIndex,
+    frag_index: MinSize,
 }
 
 #[derive(Debug, Clone, TypeSize)]

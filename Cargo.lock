@@ -178,7 +178,6 @@ dependencies = [
  "ringbuf",
  "serde",
  "size_format",
- "static_assertions",
  "thousands",
  "tracing",
  "typesize",

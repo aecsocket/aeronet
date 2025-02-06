@@ -299,7 +299,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
         })
         .filter_map(|frag_path| {
             // for each of those fragments, we'll mark that fragment as acked
-            let lane_index = usize::from(frag_path.lane_index);
+            let lane_index = usize::from(frag_path.lane_index.0);
             let lane = send_lanes
                 .get_mut(lane_index)
                 .expect("frag path should point into a valid lane index");
@@ -341,7 +341,7 @@ fn recv_frag(
     let lane = transport
         .recv
         .lanes
-        .get_mut(usize::from(lane_index))
+        .get_mut(usize::from(lane_index.0))
         .ok_or(RecvError::InvalidLane { lane: lane_index })?;
     let msg = lane
         .frags
@@ -355,8 +355,8 @@ fn recv_frag(
         .map_err(RecvError::Reassemble)?;
 
     trace!(
-        lane_index = lane_index.0,
-        msg_seq = frag.header.seq.0 .0,
+        lane_index = lane_index.0.0,
+        msg_seq = frag.header.seq.0.0,
         pos = ?frag.header.position,
         "Received fragment"
     );

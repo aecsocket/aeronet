@@ -72,7 +72,6 @@ derive_more = { workspace = true }
 either = { workspace = true }
 octs = { workspace = true }
 ringbuf = { workspace = true }
-static_assertions = { workspace = true }
 tracing = { workspace = true }
 typesize = { workspace = true, features = [
   "bitvec",

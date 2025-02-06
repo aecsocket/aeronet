@@ -30,10 +30,10 @@
 //! just ignore them for certain IO layers.
 
 use {
+    crate::min_size::MinSize,
     arbitrary::Arbitrary,
     bevy_reflect::prelude::*,
-    octs::{BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt, Write},
-    static_assertions::const_assert,
+    octs::{BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, Write},
     typesize::derive::TypeSize,
 };
 
@@ -139,68 +139,49 @@ pub enum LaneReliability {
 
 /// Index of a [lane] on either the sender or receiver side.
 ///
-/// This type is guaranteed to be convertible to a [`usize`].
-///
 /// [lane]: crate::lane
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct LaneIndex(pub RawLaneIndex);
+pub struct LaneIndex(pub MinSize);
 
-/// Raw integer type backing [`LaneIndex`].
-pub type RawLaneIndex = u16;
-
-const_assert!(size_of::<usize>() >= size_of::<RawLaneIndex>());
-
-impl From<RawLaneIndex> for LaneIndex {
-    fn from(value: RawLaneIndex) -> Self {
-        Self(value)
+impl LaneIndex {
+    /// Creates a new lane index from a raw integer.
+    #[must_use]
+    pub const fn new(n: u32) -> Self {
+        Self(MinSize(n))
     }
 }
 
-impl From<LaneIndex> for RawLaneIndex {
-    fn from(value: LaneIndex) -> Self {
-        value.0
-    }
-}
-
-impl TryFrom<usize> for LaneIndex {
-    type Error = <RawLaneIndex as TryFrom<usize>>::Error;
-
-    fn try_from(value: usize) -> Result<Self, Self::Error> {
-        RawLaneIndex::try_from(value).map(Self)
-    }
-}
-
-impl From<LaneIndex> for usize {
-    fn from(value: LaneIndex) -> Self {
-        value.0 as Self // `usize` is at least as big as `RawLaneIndex` - checked statically
+impl<T: Into<MinSize>> From<T> for LaneIndex {
+    fn from(value: T) -> Self {
+        Self(value.into())
     }
 }
 
 impl FixedEncodeLenHint for LaneIndex {
-    const MIN_ENCODE_LEN: usize = <VarInt<RawLaneIndex> as FixedEncodeLenHint>::MIN_ENCODE_LEN;
+    const MIN_ENCODE_LEN: usize = <MinSize as FixedEncodeLenHint>::MIN_ENCODE_LEN;
 
-    const MAX_ENCODE_LEN: usize = <VarInt<RawLaneIndex> as FixedEncodeLenHint>::MAX_ENCODE_LEN;
+    const MAX_ENCODE_LEN: usize = <MinSize as FixedEncodeLenHint>::MAX_ENCODE_LEN;
 }
 
 impl EncodeLen for LaneIndex {
     fn encode_len(&self) -> usize {
-        VarInt(self.0).encode_len()
+        self.0.encode_len()
     }
 }
 
 impl Encode for LaneIndex {
-    type Error = <VarInt<RawLaneIndex> as Encode>::Error;
+    type Error = <MinSize as Encode>::Error;
 
-    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
-        dst.write(VarInt(self.0))
+    fn encode(&self, dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+        self.0.encode(dst)
     }
 }
 
 impl Decode for LaneIndex {
-    type Error = <VarInt<RawLaneIndex> as Decode>::Error;
+    type Error = <MinSize as Decode>::Error;
 
-    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
-        Ok(Self(src.read::<VarInt<RawLaneIndex>>()?.0))
+    fn decode(src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
+        MinSize::decode(src).map(Self)
     }
 }
