@@ -32,7 +32,6 @@ aeronet_io = { workspace = true }
 aeronet_transport = { workspace = true }
 
 anyhow = { workspace = true }
-derive_more = { workspace = true }
 tracing = { workspace = true }
 
 bevy_app = { workspace = true }

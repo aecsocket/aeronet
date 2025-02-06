@@ -148,7 +148,6 @@ dependencies = [
  "bevy_hierarchy",
  "bevy_reflect",
  "bevy_replicon",
- "derive_more",
  "document-features",
  "tracing",
 ]
