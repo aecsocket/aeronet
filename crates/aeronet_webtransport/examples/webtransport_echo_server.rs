@@ -11,6 +11,8 @@ cfg_if::cfg_if! {
 use {
     aeronet_io::{
         connection::{DisconnectReason, Disconnected, LocalAddr},
+        server::Server,
+        Session,
     },
     aeronet_webtransport::{
         cert,

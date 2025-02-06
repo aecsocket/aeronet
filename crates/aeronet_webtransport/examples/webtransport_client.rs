@@ -143,8 +143,10 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
 
 #[cfg(target_family = "wasm")]
 fn client_config(cert_hash: String) -> Result<ClientConfig, anyhow::Error> {
-    use aeronet_webtransport::xwt_web::{CertificateHash, HashAlgorithm};
-    use anyhow::bail;
+    use {
+        aeronet_webtransport::xwt_web::{CertificateHash, HashAlgorithm},
+        anyhow::bail,
+    };
 
     let server_certificate_hashes = if cert_hash.is_empty() {
         Vec::new()
