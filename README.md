@@ -1,4 +1,4 @@
-A set of [Bevy]-native networking crates, focused on providing robust and rock-solid data transfer
+Set of [Bevy]-native networking crates, focused on providing robust and rock-solid data transfer
 primitives.
 
 [![crates.io](https://img.shields.io/crates/v/aeronet.svg)](https://crates.io/crates/aeronet)
