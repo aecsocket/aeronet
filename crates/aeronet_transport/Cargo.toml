@@ -57,7 +57,6 @@ document-features = [
   # - Compile error!
   #
   # To get around this, when generating docs, we manually enable the `x11` feature.
-  "dep:bevy_winit",
   "bevy_winit/x11",
 ]
 

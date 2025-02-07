@@ -137,7 +137,6 @@ the top, add it and `aeronet` to your app, and start building!
 `aeronet` and its subcrates use a combination of:
 - unit tests, using `cargo`, for individual, self-contained features
 - integration tests, using `cargo`, for testing code in the context of a full Bevy app
-  - currently, only [`aeronet_channel`] has integration tests
 - fuzz tests, using [`cargo-fuzz`], for protocol-level features and parsing
   - used by [`aeronet_transport`]
 
