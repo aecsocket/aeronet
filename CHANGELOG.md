@@ -10,6 +10,8 @@
 - Updated `wtransport` to `0.5.0`, `xwt-wtransport` and `xwt-web`
 - Made integer/usize casts in `aeronet_transport` more safe and explicit
   - Replace `LaneIndex(n)` with `LaneIndex::new(n)` (works in `const`)
+- Made errors more explicit when using `TransportSend::push`
+  - `TransportSend::push` returns `Result<.., TransportSendError>`, but you can ignore the error
 
 # 0.11.0
 

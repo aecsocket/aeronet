@@ -158,6 +158,7 @@ version = "0.12.0"
 dependencies = [
  "aeronet_io",
  "ahash",
+ "anyhow",
  "arbitrary",
  "bevy_app",
  "bevy_core",

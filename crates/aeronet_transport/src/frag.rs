@@ -39,6 +39,12 @@ use {
 /// efficient as the receiver will have to resize its buffer when re-receiving
 /// `C` later, but the logic will still behave correctly.
 ///
+/// # Errors
+///
+/// Errors if the message is too big, and will be split into more than
+/// [`MinSize::MAX`] number of fragments. Realistically, you should never run
+/// into this as long as your messages are of reasonable length.
+///
 /// # Panics
 ///
 /// Panics if `max_frag_len == 0`.
@@ -50,20 +56,25 @@ use {
 pub fn split(
     max_frag_len: usize,
     msg: Bytes,
-) -> impl ExactSizeIterator<Item = (FragmentPosition, Bytes)> + DoubleEndedIterator + FusedIterator
-{
+) -> Result<
+    impl ExactSizeIterator<Item = (FragmentPosition, Bytes)> + DoubleEndedIterator + FusedIterator,
+    MessageTooBig,
+> {
     assert!(max_frag_len > 0);
 
-    let msg_len = msg.len();
+    let byte_len = msg.len();
     let iter = msg.byte_chunks(max_frag_len);
     let num_frags = iter.len();
-    iter.enumerate().rev().map(move |(index, payload)| {
-        // do this inside the iterator, since we now know
-        // that we have at least at least 1 item in this iterator.
-        // if we did this outside the iterator, and `num_frags` was 0,
-        // `num_frags - 1` would underflow.
-        let last_index = num_frags - 1;
 
+    let last_index = num_frags.saturating_sub(1);
+    if MinSize::try_from(last_index).is_err() {
+        return Err(MessageTooBig {
+            byte_len,
+            num_frags,
+        });
+    }
+
+    Ok(iter.enumerate().rev().map(move |(index, payload)| {
         let position = if index == last_index {
             MinSize::try_from(index)
                 .ok()
@@ -73,12 +84,21 @@ pub fn split(
                 .ok()
                 .and_then(FragmentPosition::non_last)
         }
-        .unwrap_or_else(|| {
-            panic!("too many fragments - msg length: {msg_len}, num frags: {num_frags}");
-        });
+        .expect("we check above that there should not be more than `MinSize::MAX` fragments");
 
         (position, payload)
-    })
+    }))
+}
+
+/// Passed a message to [`split`] which was too long in length, and cannot be
+/// represented in [`MinSize::MAX`] number of fragments.
+#[derive(Debug, Clone, Display, Error, TypeSize)]
+#[display("message too big - byte length: {byte_len}, num frags: {num_frags} / {}", MinSize::MAX.0)]
+pub struct MessageTooBig {
+    /// How long the message is, in bytes.
+    pub byte_len: usize,
+    /// How many fragments this message would take up.
+    pub num_frags: usize,
 }
 
 /// Receives fragments created by [`split`] and reassembles them into full
@@ -319,7 +339,7 @@ mod tests {
         let max_frag_len = 8;
         let msg = Bytes::from_static(b"hello world! goodbye woorld!");
 
-        let mut iter = split(max_frag_len, msg);
+        let mut iter = split(max_frag_len, msg).unwrap();
 
         let mut recv = FragmentReceiver::default();
         let mem_left = 30;

@@ -2,7 +2,8 @@
 
 use {
     crate::{
-        FlushedPacket, FragmentPath, MessageKey, Transport, TransportConfig, frag,
+        FlushedPacket, FragmentPath, MessageKey, Transport, TransportConfig,
+        frag::{self, MessageTooBig},
         lane::{LaneIndex, LaneKind, LaneReliability},
         limit::{Limit, TokenBucket},
         min_size::MinSize,
@@ -12,11 +13,15 @@ use {
         },
         rtt::RttEstimator,
     },
-    aeronet_io::Session,
+    aeronet_io::{
+        Session,
+        connection::{DisconnectReason, Disconnected},
+    },
     ahash::HashMap,
     bevy_ecs::prelude::*,
     bevy_time::{Real, Time},
     core::iter,
+    derive_more::derive::{Display, Error, From},
     octs::{Bytes, EncodeLen, Write},
     std::collections::hash_map::Entry,
     tracing::{trace, trace_span},
@@ -31,7 +36,7 @@ pub struct TransportSend {
     pub(crate) lanes: Box<[SendLane]>,
     bytes_bucket: TokenBucket,
     next_packet_seq: PacketSeq,
-    too_many_msgs: bool,
+    error: Option<TransportSendError>,
 }
 
 /// State of a lane used for sending outgoing messages on a [`Transport`].
@@ -74,7 +79,7 @@ impl TransportSend {
                 .collect(),
             bytes_bucket: TokenBucket::new(0),
             next_packet_seq: PacketSeq::default(),
-            too_many_msgs: false,
+            error: None,
         }
     }
 
@@ -101,14 +106,21 @@ impl TransportSend {
     /// [`TransportRecv::acks`], you can compare message keys to tell if the
     /// message you are pushing right now was the one that was acknowledged.
     ///
+    /// [^1]: See [`MessageKey`] for uniqueness guarantees.
+    ///
+    /// # Errors
+    ///
     /// If the message could not be enqueued (if e.g. there are already too many
-    /// messages buffered for sending), this returns [`None`], and the transport
+    /// messages buffered for sending), this returns [`Err`], and the transport
     /// will be forcibly disconnected on the next update. This is considered a
     /// fatal connection condition, because you may have sent a message along a
     /// reliable lane, and those [`LaneKind`]s provide strong guarantees that
     /// messages will be received by the peer.
     ///
-    /// [^1]: See [`MessageKey`] for uniqueness guarantees.
+    /// Normally, errors should not happen when pushing messages, so if an error
+    /// does occur, it should be treated as fatal. Feel free to ignore the error
+    /// if you don't want to handle it in any special way - the session will
+    /// automatically disconnect anyway.
     ///
     /// # Panics
     ///
@@ -147,34 +159,56 @@ impl TransportSend {
     /// ```
     ///
     /// [`TransportRecv::acks`]: crate::recv::TransportRecv::acks
-    pub fn push(&mut self, lane_index: LaneIndex, msg: Bytes, now: Instant) -> Option<MessageKey> {
-        let lane = &mut self.lanes[usize::from(lane_index.0)];
-        let msg_seq = lane.next_msg_seq;
-        let Entry::Vacant(entry) = lane.sent_msgs.entry(msg_seq) else {
-            self.too_many_msgs = true;
-            return None;
-        };
+    pub fn push(
+        &mut self,
+        lane_index: LaneIndex,
+        msg: Bytes,
+        now: Instant,
+    ) -> Result<MessageKey, TransportSendError> {
+        let result = (|| {
+            let lane = &mut self.lanes[usize::from(lane_index.0)];
+            let msg_seq = lane.next_msg_seq;
+            let Entry::Vacant(entry) = lane.sent_msgs.entry(msg_seq) else {
+                return Err(TransportSendError::TooManyMessages);
+            };
 
-        let frags = frag::split(self.max_frag_len, msg);
-        entry.insert(SentMessage {
-            frags: frags
-                .map(|(position, payload)| {
-                    Some(SentFragment {
-                        position,
-                        payload,
-                        sent_at: now,
-                        next_flush_at: now,
+            let frags = frag::split(self.max_frag_len, msg)?;
+            entry.insert(SentMessage {
+                frags: frags
+                    .map(|(position, payload)| {
+                        Some(SentFragment {
+                            position,
+                            payload,
+                            sent_at: now,
+                            next_flush_at: now,
+                        })
                     })
-                })
-                .collect(),
-        });
+                    .collect(),
+            });
 
-        lane.next_msg_seq += MessageSeq::new(1);
-        Some(MessageKey {
-            lane: lane_index,
-            seq: msg_seq,
-        })
+            lane.next_msg_seq += MessageSeq::new(1);
+            Ok(MessageKey {
+                lane: lane_index,
+                seq: msg_seq,
+            })
+        })();
+
+        if let Err(err) = &result {
+            self.error = Some(err.clone());
+        }
+        result
     }
+}
+
+/// Failed to enqueue a message for sending using [`TransportSend::push`].
+#[derive(Debug, Clone, Display, Error, From, TypeSize)]
+pub enum TransportSendError {
+    /// Too many messages were already buffered for sending, and we would be
+    /// overwriting the sequence number of an existing message.
+    #[display("too many buffered messages")]
+    TooManyMessages,
+    /// Message was too big to enqueue for sending.
+    MessageTooBig(MessageTooBig),
 }
 
 impl SendLane {
@@ -206,23 +240,35 @@ pub(crate) fn update_send_bytes_config(
     }
 }
 
-pub(crate) fn refill_send_bytes(time: Res<Time<Real>>, mut sessions: Query<&mut Transport>) {
+pub(crate) fn disconnect_errored(mut sessions: Query<&mut Transport>, mut commands: Commands) {
     for mut transport in &mut sessions {
+        if let Some(err) = transport.send.error.take() {
+            commands.trigger(Disconnected {
+                reason: DisconnectReason::Error(anyhow::Error::new(err)),
+            });
+        }
+    }
+}
+
+pub(crate) fn refill_send_bytes(time: Res<Time<Real>>, mut sessions: Query<&mut Transport>) {
+    sessions.par_iter_mut().for_each(|mut transport| {
         transport
             .send
             .bytes_bucket
             .refill_portion(time.delta_secs_f64());
-    }
+    });
 }
 
 pub(crate) fn flush(mut sessions: Query<(&mut Session, &mut Transport)>) {
     let now = Instant::now();
-    for (mut session, mut transport) in &mut sessions {
-        let packet_mtu = session.mtu();
-        session
-            .send
-            .extend(flush_on(&mut transport, now, packet_mtu));
-    }
+    sessions
+        .par_iter_mut()
+        .for_each(|(mut session, mut transport)| {
+            let packet_mtu = session.mtu();
+            session
+                .send
+                .extend(flush_on(&mut transport, now, packet_mtu));
+        });
 }
 
 /// Exposes `flush_on` for fuzz tests.
