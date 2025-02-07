@@ -63,11 +63,18 @@ pub struct SessionEndpoint;
 /// different protocols, such as raw UDP datagrams alongside Steam networking
 /// sockets, so that you can e.g. support crossplay between different platforms.
 ///
+/// # Interaction with IO layer implementation
+///
 /// The [`Session`] component is created by your chosen IO layer implementation,
 /// so you should not create it yourself. See your IO layer's documentation for
 /// how to spawn an entity with [`Session`]. There are also constraints on which
 /// fields of this component you can modify, and how. See each field's
 /// documentation for how you can use it.
+///
+/// Each entity with a [`Session`] should only ever have a single IO layer
+/// implementation that drives it. **Adding multiple transports onto the same
+/// entity is not supported**, but you can always have multiple entities each
+/// with their own [`Session`] and their own transport.
 ///
 /// # Lifecycle
 ///

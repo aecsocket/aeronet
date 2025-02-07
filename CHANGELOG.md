@@ -1,4 +1,4 @@
-# Unreleased
+# 0.12.0
 
 - Improved packet loss computation algorithm
   - Handle the edge case of PTO being too high and not having a sample to use
@@ -6,7 +6,7 @@
 - Made each crate have its own separate version
   - For now, all crates will share the same major and minor version number, but we are now free to bump the patch for individual subcrates
 - `aeronet_replicon` properly reports backend statistics to Replicon i.e. RTT, packet loss
-- Updated `bevy_replicon` to `0.30.0`
+- Updated `bevy_replicon` to `0.30.1`
 - Updated `wtransport` to `0.5.0`, `xwt-wtransport` and `xwt-web`
 - Made integer/usize casts in `aeronet_transport` more safe and explicit
   - Replace `LaneIndex(n)` with `LaneIndex::new(n)` (works in `const`)

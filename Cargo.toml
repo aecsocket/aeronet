@@ -140,4 +140,4 @@ xwt-web = "0.15.0"
 
 # aeronet_replicon
 
-bevy_replicon = { version = "0.30.0", default-features = false }
+bevy_replicon = { version = "0.30.1", default-features = false }
