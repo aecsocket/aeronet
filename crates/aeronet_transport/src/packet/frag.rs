@@ -18,7 +18,7 @@ impl FragmentPosition {
     /// ```
     /// use aeronet_transport::packet::FragmentPosition;
     ///
-    /// let pos = FragmentPosition::non_last(3).unwrap();
+    /// let pos = FragmentPosition::non_last(3u32).unwrap();
     /// assert_eq!(3, pos.index().0);
     /// assert!(!pos.is_last());
     /// ```
@@ -35,7 +35,7 @@ impl FragmentPosition {
     /// ```
     /// use aeronet_transport::packet::FragmentPosition;
     ///
-    /// let pos = FragmentPosition::last(3).unwrap();
+    /// let pos = FragmentPosition::last(3u32).unwrap();
     /// assert_eq!(3, pos.index().0);
     /// assert!(pos.is_last());
     /// ```
