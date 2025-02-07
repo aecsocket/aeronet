@@ -314,12 +314,13 @@ fn flush_on(
         }
 
         trace!(num_frags = packet_frags.len(), "Flushed packet");
-        transport
-            .flushed_packets
-            .insert(packet_seq.0.0, FlushedPacket {
+        transport.flushed_packets.insert(
+            packet_seq.0.0,
+            FlushedPacket {
                 flushed_at: now,
                 frags: packet_frags.into_boxed_slice(),
-            });
+            },
+        );
 
         transport.send.next_packet_seq += PacketSeq::new(1);
         sent_packet_yet = true;
