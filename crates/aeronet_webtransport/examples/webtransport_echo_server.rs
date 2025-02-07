@@ -114,7 +114,7 @@ fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
             info!("{client} disconnected from {server} by peer: {reason}");
         }
         DisconnectReason::Error(err) => {
-            warn!("{client} disconnected from {server} due to error: {err:#}");
+            warn!("{client} disconnected from {server} due to error: {err:?}");
         }
     }
 }

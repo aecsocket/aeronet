@@ -86,7 +86,7 @@ const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
 // When sending out messages, we have to specify what lane we're sending out on.
 // This determines the delivery guarantees e.g. reliability and ordering.
 // Since we configured only 1 lane (index 0), we'll send on that lane.
-const SEND_LANE: LaneIndex = LaneIndex(0);
+const SEND_LANE: LaneIndex = LaneIndex::new(0);
 
 fn setup(mut commands: Commands) {
     // Let's start a connection to a WebSocket server.
@@ -173,7 +173,7 @@ fn on_disconnected(trigger: Trigger<Disconnected>) {
     match &trigger.reason {
         DisconnectReason::User(reason) => info!("{entity} disconnected by user: {reason}"),
         DisconnectReason::Peer(reason) => info!("{entity} disconnected by peer: {reason}"),
-        DisconnectReason::Error(err) => warn!("{entity} disconnected due to error: {err:#}"),
+        DisconnectReason::Error(err) => warn!("{entity} disconnected due to error: {err:?}"),
     }
 }
 

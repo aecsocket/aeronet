@@ -65,14 +65,12 @@ document-features = [
 aeronet_io = { workspace = true }
 
 ahash = { workspace = true }
-anyhow = { workspace = true }
 arbitrary = { workspace = true }
 bitvec = { workspace = true }
 derive_more = { workspace = true }
 either = { workspace = true }
 octs = { workspace = true }
 ringbuf = { workspace = true }
-static_assertions = { workspace = true }
 tracing = { workspace = true }
 typesize = { workspace = true, features = [
   "bitvec",

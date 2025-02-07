@@ -210,7 +210,7 @@ fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands:
             commands.trigger_targets(Disconnect::new(reason), children);
         }
         CloseReason::Error(err) => {
-            debug!("{server} closed due to error: {err:#}");
+            debug!("{server} closed due to error: {err:?}");
         }
     }
 

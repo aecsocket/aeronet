@@ -38,13 +38,12 @@ mod seq;
 
 pub use payload::*;
 use {
-    crate::lane::LaneIndex,
+    crate::{lane::LaneIndex, min_size::MinSize},
     arbitrary::Arbitrary,
     bevy_derive::{Deref, DerefMut},
     bevy_reflect::Reflect,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     octs::Bytes,
-    static_assertions::const_assert,
     typesize::derive::TypeSize,
 };
 
@@ -147,11 +146,12 @@ pub struct PacketHeader {
 /// are sending over (since fragments may be received out of order), and defines
 /// whether this fragment is the last one in this message.
 ///
-/// To achieve this while still being efficient, the position is internally a
-/// [`u16`], where *even* values are considered non-last, and *odd* values are
-/// considered last, and this position is encoded on the wire as a varint to
-/// avoid potentially encoding an extra byte (most messages should be smaller
-/// than 128 fragments).
+/// To achieve this while still being efficient:
+/// - the position is encoded as a varint
+///   - most messages should be smaller than 128 fragments, so there should be
+///     minimal overhead in most cases
+/// - even values are considered *non-last*
+/// - odd values are considered *last*
 ///
 /// - `0`: non-last
 /// - `1`: last
@@ -159,10 +159,7 @@ pub struct PacketHeader {
 /// - ...
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct FragmentPosition(FragmentIndex);
-
-/// Underlying type used by [`FragmentPosition`].
-pub type FragmentIndex = u16;
+pub struct FragmentPosition(MinSize);
 
 /// Wrapper for the actual contents of a [`Fragment`].
 ///
@@ -170,16 +167,9 @@ pub type FragmentIndex = u16;
 /// the actual payload.
 ///
 /// The length of the underlying byte buffer must not exceed
-/// [`FragmentPayloadLen::MAX`], or it cannot be encoded.
+/// [`MinSize::MAX`], or it cannot be encoded.
 #[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut)]
 pub struct FragmentPayload(pub Bytes);
-
-/// Defines the type used for representing the length of a [`FragmentPayload`].
-///
-/// This must be the same size or smaller than [`usize`].
-pub type FragmentPayloadLen = u32;
-
-const_assert!(size_of::<usize>() >= size_of::<FragmentPayloadLen>());
 
 /// Front-loaded [`Fragment`] metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]

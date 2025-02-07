@@ -2,9 +2,9 @@
 
 use {
     aeronet_transport::{
-        io::{bytes::Bytes, web_time::Instant, Session},
-        lane::{LaneIndex, LaneKind},
         Transport,
+        io::{Session, bytes::Bytes, web_time::Instant},
+        lane::{LaneIndex, LaneKind},
     },
     libfuzzer_sys::fuzz_target,
 };
@@ -24,7 +24,7 @@ fuzz_target!(|input: (LaneKind, &[u8])| {
     let session = Session::new(now, MTU);
     let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
 
-    let lane_index = LaneIndex::try_from(lane_kind as usize).unwrap();
+    let lane_index = LaneIndex::new(lane_kind as u32);
     let msg = Bytes::from(msg.to_vec());
     _ = transport.send.push(lane_index, msg, now).unwrap();
 

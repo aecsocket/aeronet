@@ -255,8 +255,12 @@ fn should_disconnect(
         Err(_) => Some(ClientError::Session(SessionError::BackendClosed).into()),
     };
     dc_reason.is_some_and(|reason| {
-        let reason = reason.map_err(anyhow::Error::new);
-        commands.trigger_targets(Disconnected { reason }, session);
+        commands.trigger_targets(
+            Disconnected {
+                reason: reason.map_err(anyhow::Error::new),
+            },
+            session,
+        );
         true
     })
 }

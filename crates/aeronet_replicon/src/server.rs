@@ -21,7 +21,7 @@ use {
         prelude::{ConnectedClients, RepliconChannels, RepliconServer},
         server::{ClientConnected, ClientDisconnected, ServerSet},
     },
-    core::mem,
+    core::{any::type_name, mem},
     tracing::warn,
 };
 
@@ -176,8 +176,7 @@ fn on_connected(
     let transport = match Transport::new(session, recv_lanes, send_lanes, Instant::now()) {
         Ok(transport) => transport,
         Err(err) => {
-            let err = anyhow::Error::new(err);
-            warn!("Failed to create transport for {client} connecting to {server}: {err:#}");
+            warn!("Failed to create transport for {client} connecting to {server}: {err:?}");
             return;
         }
     };
@@ -214,7 +213,8 @@ fn on_disconnected(
                 anyhow!(
                     "real disconnect reason was replaced with a dummy value, and was passed to \
                      `bevy_replicon` - if you want to read the real disconnect reason, access it \
-                     via `bevy_replicon`",
+                     via `{}`",
+                    type_name::<bevy_replicon::server::ClientDisconnected>(),
                 ),
             );
             bevy_replicon::core::DisconnectReason::Backend(err.into())

@@ -385,8 +385,12 @@ fn should_close(
         Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
     };
     close_reason.is_some_and(|reason| {
-        let reason = reason.map_err(anyhow::Error::new);
-        commands.trigger_targets(Closed { reason }, server);
+        commands.trigger_targets(
+            Closed {
+                reason: reason.map_err(anyhow::Error::new),
+            },
+            server,
+        );
         true
     })
 }
@@ -459,8 +463,12 @@ fn should_disconnect(
         Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
     };
     dc_reason.is_some_and(|reason| {
-        let reason = reason.map_err(anyhow::Error::new);
-        commands.trigger_targets(Disconnected { reason }, client);
+        commands.trigger_targets(
+            Disconnected {
+                reason: reason.map_err(anyhow::Error::new),
+            },
+            client,
+        );
         true
     })
 }

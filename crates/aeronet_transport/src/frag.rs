@@ -9,7 +9,10 @@
 //! [`FragmentReceiver`]).
 
 use {
-    crate::packet::{FragmentIndex, FragmentPosition, MessageSeq},
+    crate::{
+        min_size::MinSize,
+        packet::{FragmentPosition, MessageSeq},
+    },
     ahash::HashMap,
     bitvec::vec::BitVec,
     core::{fmt, iter::FusedIterator},
@@ -42,8 +45,6 @@ use {
 ///
 /// Panics if `msg` is too large, and is split into too many fragments for
 /// [`FragmentPosition`] to be able to encode the fragment index.
-/// The range of [`FragmentIndex`] should be large enough so that you never run
-/// into this.
 ///
 /// [last fragment]: FragmentPosition::is_last
 pub fn split(
@@ -51,7 +52,7 @@ pub fn split(
     msg: Bytes,
 ) -> impl ExactSizeIterator<Item = (FragmentPosition, Bytes)> + DoubleEndedIterator + FusedIterator
 {
-    debug_assert!(max_frag_len > 0);
+    assert!(max_frag_len > 0);
 
     let msg_len = msg.len();
     let iter = msg.byte_chunks(max_frag_len);
@@ -64,11 +65,11 @@ pub fn split(
         let last_index = num_frags - 1;
 
         let position = if index == last_index {
-            FragmentIndex::try_from(index)
+            MinSize::try_from(index)
                 .ok()
                 .and_then(FragmentPosition::last)
         } else {
-            FragmentIndex::try_from(index)
+            MinSize::try_from(index)
                 .ok()
                 .and_then(FragmentPosition::non_last)
         }
@@ -206,8 +207,11 @@ impl FragmentReceiver {
     /// conditions such as duplicated or lost packets. Errors will not cause any
     /// invalid state.
     ///
+    /// # Panics
+    ///
+    /// Panics if `max_frag_len` is 0.
+    ///
     /// [`TransportConfig::max_memory_usage`]: crate::TransportConfig::max_memory_usage
-    #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
     pub fn reassemble(
         &mut self,
         max_frag_len: usize,
@@ -216,7 +220,7 @@ impl FragmentReceiver {
         position: FragmentPosition,
         payload: &[u8],
     ) -> Result<Option<Vec<u8>>, ReassembleError> {
-        debug_assert!(max_frag_len > 0);
+        assert!(max_frag_len > 0);
 
         let buf = self.msgs.entry(msg_seq).or_default();
         let frag_index = usize::from(position.index());

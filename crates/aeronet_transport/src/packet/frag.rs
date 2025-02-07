@@ -1,12 +1,9 @@
 use {
-    super::{
-        Fragment, FragmentHeader, FragmentIndex, FragmentPosition, MessageSeq, PayloadTooLarge,
-    },
-    crate::lane::LaneIndex,
+    super::{Fragment, FragmentHeader, FragmentPosition, MessageSeq, PayloadTooLarge},
+    crate::{lane::LaneIndex, min_size::MinSize},
     core::{convert::Infallible, fmt},
     octs::{
-        BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt, VarIntTooLarge,
-        Write,
+        BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarIntTooLarge, Write,
     },
 };
 
@@ -19,15 +16,15 @@ impl FragmentPosition {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_transport::packet::{FragmentIndex, FragmentPosition};
+    /// use aeronet_transport::packet::FragmentPosition;
     ///
-    /// let pos = FragmentPosition::non_last(3).unwrap();
-    /// assert_eq!(3, pos.index());
+    /// let pos = FragmentPosition::non_last(3u32).unwrap();
+    /// assert_eq!(3, pos.index().0);
     /// assert!(!pos.is_last());
     /// ```
     #[must_use]
-    pub fn non_last(index: FragmentIndex) -> Option<Self> {
-        index.checked_mul(2).map(Self)
+    pub fn non_last(index: impl Into<MinSize>) -> Option<Self> {
+        index.into().0.checked_mul(2).map(|n| Self(MinSize(n)))
     }
 
     /// Creates a position for a fragment which *is* the last one in the
@@ -36,18 +33,20 @@ impl FragmentPosition {
     /// # Examples
     ///
     /// ```
-    /// use aeronet_transport::packet::{FragmentIndex, FragmentPosition};
+    /// use aeronet_transport::packet::FragmentPosition;
     ///
-    /// let pos = FragmentPosition::last(3).unwrap();
-    /// assert_eq!(3, pos.index());
+    /// let pos = FragmentPosition::last(3u32).unwrap();
+    /// assert_eq!(3, pos.index().0);
     /// assert!(pos.is_last());
     /// ```
     #[must_use]
-    pub fn last(index: FragmentIndex) -> Option<Self> {
+    pub fn last(index: impl Into<MinSize>) -> Option<Self> {
         index
+            .into()
+            .0
             .checked_mul(2)
             .and_then(|n| n.checked_add(1))
-            .map(Self)
+            .map(|n| Self(MinSize(n)))
     }
 
     /// Creates a position which may be last or not.
@@ -55,7 +54,7 @@ impl FragmentPosition {
     /// Prefer [`FragmentPosition::non_last`] or [`FragmentPosition::last`] if
     /// you know statically if the position is last or not.
     #[must_use]
-    pub fn new(index: FragmentIndex, last: bool) -> Option<Self> {
+    pub fn new(index: impl Into<MinSize>, last: bool) -> Option<Self> {
         if last {
             Self::last(index)
         } else {
@@ -65,14 +64,14 @@ impl FragmentPosition {
 
     /// Gets the fragment index of this position.
     #[must_use]
-    pub const fn index(self) -> FragmentIndex {
-        self.0 / 2
+    pub const fn index(self) -> MinSize {
+        MinSize(self.0.0 / 2)
     }
 
     /// Gets if this position represents the last fragment in a message.
     #[must_use]
     pub const fn is_last(self) -> bool {
-        self.0 % 2 == 1
+        self.0.0 % 2 == 1
     }
 }
 
@@ -86,30 +85,30 @@ impl fmt::Debug for FragmentPosition {
 }
 
 impl FixedEncodeLenHint for FragmentPosition {
-    const MIN_ENCODE_LEN: usize = <VarInt<FragmentIndex> as FixedEncodeLenHint>::MIN_ENCODE_LEN;
+    const MIN_ENCODE_LEN: usize = <MinSize as FixedEncodeLenHint>::MIN_ENCODE_LEN;
 
-    const MAX_ENCODE_LEN: usize = <VarInt<FragmentIndex> as FixedEncodeLenHint>::MAX_ENCODE_LEN;
+    const MAX_ENCODE_LEN: usize = <MinSize as FixedEncodeLenHint>::MAX_ENCODE_LEN;
 }
 
 impl EncodeLen for FragmentPosition {
     fn encode_len(&self) -> usize {
-        VarInt(self.0).encode_len()
+        self.0.encode_len()
     }
 }
 
 impl Encode for FragmentPosition {
-    type Error = <VarInt<FragmentIndex> as Encode>::Error;
+    type Error = <MinSize as Encode>::Error;
 
-    fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
-        dst.write(VarInt(self.0))
+    fn encode(&self, dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
+        self.0.encode(dst)
     }
 }
 
 impl Decode for FragmentPosition {
-    type Error = <VarInt<FragmentIndex> as Decode>::Error;
+    type Error = <MinSize as Decode>::Error;
 
-    fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
-        Ok(Self(src.read::<VarInt<FragmentIndex>>()?.0))
+    fn decode(src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
+        MinSize::decode(src).map(Self)
     }
 }
 

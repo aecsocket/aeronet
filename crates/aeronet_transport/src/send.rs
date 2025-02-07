@@ -5,9 +5,10 @@ use {
         FlushedPacket, FragmentPath, MessageKey, Transport, TransportConfig, frag,
         lane::{LaneIndex, LaneKind, LaneReliability},
         limit::{Limit, TokenBucket},
+        min_size::MinSize,
         packet::{
-            Fragment, FragmentHeader, FragmentIndex, FragmentPayload, FragmentPosition, MessageSeq,
-            PacketHeader, PacketSeq,
+            Fragment, FragmentHeader, FragmentPayload, FragmentPosition, MessageSeq, PacketHeader,
+            PacketSeq,
         },
         rtt::RttEstimator,
     },
@@ -127,7 +128,7 @@ impl TransportSend {
     ///     web_time::Instant,
     /// };
     ///
-    /// const SEND_LANE: LaneIndex = LaneIndex(0);
+    /// const SEND_LANE: LaneIndex = LaneIndex::new(0);
     ///
     /// fn send_msgs(transport: &mut Transport) {
     ///     let msg_key = transport
@@ -147,7 +148,7 @@ impl TransportSend {
     ///
     /// [`TransportRecv::acks`]: crate::recv::TransportRecv::acks
     pub fn push(&mut self, lane_index: LaneIndex, msg: Bytes, now: Instant) -> Option<MessageKey> {
-        let lane = &mut self.lanes[usize::from(lane_index)];
+        let lane = &mut self.lanes[usize::from(lane_index.0)];
         let msg_seq = lane.next_msg_seq;
         let Entry::Vacant(entry) = lane.sent_msgs.entry(msg_seq) else {
             self.too_many_msgs = true;
@@ -332,7 +333,10 @@ fn frag_paths_in_lane(
     lane_index: usize,
     lane: &mut SendLane,
 ) -> impl Iterator<Item = (FragmentPath, Instant)> + '_ {
-    let lane_index = LaneIndex::try_from(lane_index).expect("lane index too large");
+    let lane_index = LaneIndex(
+        MinSize::try_from(lane_index)
+            .expect("we should not have more lanes than can fit in `MinSize`"),
+    );
 
     // drop any messages which have no frags to send
     lane.sent_msgs
@@ -349,8 +353,8 @@ fn frag_paths_in_lane(
             .filter_map(|(i, frag)| frag.as_ref().map(|frag| (i, frag)))
             .filter(move |(_, frag)| now >= frag.next_flush_at)
             .map(move |(frag_index, frag)| {
-                let frag_index = FragmentIndex::try_from(frag_index)
-                    .expect("number of frags should fit into `FragmentIndex`");
+                let frag_index = MinSize::try_from(frag_index)
+                    .expect("number of frags should fit into `MinSize`");
                 (
                     FragmentPath {
                         lane_index,
@@ -372,7 +376,7 @@ fn write_frag_at_path(
     path: FragmentPath,
 ) -> Result<(), ()> {
     let lane = lanes
-        .get_mut(usize::from(path.lane_index))
+        .get_mut(usize::from(path.lane_index.0))
         .expect("frag path should point to a valid lane");
 
     let msg = lane
