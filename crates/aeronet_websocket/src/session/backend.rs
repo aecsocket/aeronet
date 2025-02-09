@@ -161,7 +161,6 @@ pub mod native {
     use {
         crate::session::{SessionError, SessionFrontend},
         aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
-        alloc::borrow::Cow,
         bytes::Bytes,
         futures::{
             SinkExt, StreamExt,
@@ -172,7 +171,7 @@ pub mod native {
         tokio_tungstenite::{
             WebSocketStream,
             tungstenite::{
-                Message,
+                Message, Utf8Bytes,
                 protocol::{CloseFrame, frame::coding::CloseCode},
             },
         },
@@ -248,9 +247,9 @@ pub mod native {
                     return Err(SessionError::DisconnectedWithoutReason.into());
                 }
                 Message::Close(Some(frame)) => {
-                    return Err(DisconnectReason::Peer(frame.reason.into_owned()));
+                    return Err(DisconnectReason::Peer(frame.reason.to_string()));
                 }
-                msg => Bytes::from(msg.into_data()),
+                msg => msg.into_data(),
             };
             let now = Instant::now();
 
@@ -278,7 +277,7 @@ pub mod native {
         ) -> Result<(), DisconnectReason<SessionError>> {
             let close_frame = CloseFrame {
                 code: CloseCode::Normal,
-                reason: Cow::Owned(reason),
+                reason: Utf8Bytes::from(reason),
             };
             stream
                 .close(Some(close_frame))

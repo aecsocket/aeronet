@@ -5,6 +5,9 @@
 #![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
 
 extern crate alloc;
+// so that `cargo-shear` doesn't mark this dependency as unused
+#[cfg(feature = "document-features")]
+extern crate bevy_winit;
 
 pub mod frag;
 pub mod lane;

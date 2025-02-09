@@ -17,11 +17,6 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-[package.metadata.cargo-shear]
-ignored = [
-  "bevy_winit", # see `document-features`
-]
-
 [features]
 ## Allows serializing and deserializing some types with [`serde`].
 ##
