@@ -1,0 +1,28 @@
+{
+	"name": "Rust",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"remoteUser": "root",
+	"mounts": [
+		{
+			"source": "/dev/dri",
+			"target": "/dev/dri",
+			"type": "bind"
+		}
+	],
+	"runArgs": [
+		"--device=/dev/dri/card0",
+		"--device=/dev/dri/renderD128"
+	],
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"rust-lang.rust-analyzer",
+				"tamasfe.even-better-toml",
+				"fill-labs.dependi",
+				"vadimcn.vscode-lldb"
+			]
+		}
+	}
+}

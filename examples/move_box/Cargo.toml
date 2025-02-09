@@ -19,5 +19,5 @@ aeronet_replicon = { workspace = true }
 
 serde = { workspace = true }
 
-bevy = { workspace = true, features = ["wayland"] }
+bevy = { workspace = true, features = ["bevy_state", "bevy_color"] }
 bevy_replicon = { workspace = true }

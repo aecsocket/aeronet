@@ -17,7 +17,13 @@ workspace = true
 [dependencies]
 move_box = { path = "../move_box" }
 
-bevy = { workspace = true }
+bevy = { workspace = true, features = [
+  "bevy_gizmos",
+  "bevy_pbr",
+  "bevy_winit",
+  "x11",
+  "wayland",
+] }
 bevy_egui = { workspace = true }
 
 aeronet = { workspace = true, features = ["visualizer"] }

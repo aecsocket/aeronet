@@ -17,7 +17,7 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-[package.metadata.cargo-machete]
+[package.metadata.cargo-shear]
 ignored = [
   "bevy_winit", # see `document-features`
 ]
