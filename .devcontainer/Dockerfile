@@ -1,7 +1,7 @@
 FROM archlinux:base-devel
 
 RUN pacman -Syu --noconfirm \
-    git gnupg fish starship ripgrep fzf bat exa zoxide yq && \
+    git openssh gnupg fish starship ripgrep fzf bat exa zoxide yq && \
     chsh -s /usr/bin/fish root && \
     mkdir -p "$HOME/.config/fish" && \
     echo "
