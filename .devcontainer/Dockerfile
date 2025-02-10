@@ -2,12 +2,16 @@ FROM archlinux:base-devel
 
 RUN pacman -Syu --noconfirm \
     git openssh gnupg fish starship ripgrep fzf bat exa zoxide yq && \
-    chsh -s /usr/bin/fish root && \
-    mkdir -p "$HOME/.config/fish" && \
-    echo "
-set fish_greeting
-starship init fish | source
-" >> "$HOME/.config/fish/config.fish"
+    chsh -s /usr/bin/fish root
+
+RUN mkdir -p "$HOME/.config/fish" && \
+    echo -e "\
+    set fish_greeting\n\
+    starship init fish | source\n\
+    zoxide init fish | source\n\
+    alias ls 'exa -l'\n\
+    alias la 'exa -la'\n\
+    alias cd 'z'" > "$HOME/.config/fish/config.fish"
 
 RUN pacman -Syu --noconfirm \
     rustup pkgconf alsa-lib libxkbcommon vulkan-radeon && \
