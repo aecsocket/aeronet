@@ -18,9 +18,12 @@ workspace = true
 move_box = { path = "../move_box" }
 
 bevy = { workspace = true, features = [
-  "bevy_gizmos",
-  "bevy_pbr",
   "bevy_winit",
+  "bevy_render",
+  "bevy_core_pipeline",
+  "bevy_sprite",
+  "bevy_gizmos",
+  "bevy_picking",
   "x11",
   "wayland",
 ] }

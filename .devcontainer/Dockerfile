@@ -1,21 +1,17 @@
-FROM mcr.microsoft.com/devcontainers/rust:1-1-bullseye
+FROM archlinux:base-devel
 
-# https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libx11-dev \
-    libasound2-dev \
-    libudev-dev \
-    libxkbcommon-dev \
-    libxkbcommon0 \
-    libxkbcommon-x11-0 \
-    libxcursor1 \
-    libx11-xcb1 \
-    libxi6 \
-    libwayland-dev \
-    libwayland-client0 \
-    # TODO
-    vulkan-tools \
-    mesa-utils
+RUN pacman -Syu --noconfirm \
+    git gnupg fish starship ripgrep fzf bat exa zoxide yq && \
+    chsh -s /usr/bin/fish root && \
+    mkdir -p "$HOME/.config/fish" && \
+    echo "
+set fish_greeting
+starship init fish | source
+" >> "$HOME/.config/fish/config.fish"
 
-RUN cargo install cargo-shear
+RUN pacman -Syu --noconfirm \
+    rustup pkgconf alsa-lib libxkbcommon vulkan-radeon && \
+    rustup default stable && \
+    rustup install nightly && \
+    curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | sh && \
+    cargo binstall cargo-shear
