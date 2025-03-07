@@ -1,0 +1,42 @@
+{
+  "name": "aeronet",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": [
+    "--device=/dev/dri"
+  ],
+  "mounts": [
+    {
+      "type": "volume",
+      "source": "aeronet-profile",
+      "target": "/home/dev"
+    },
+    {
+      "type": "volume",
+      "target": "/home/dev/.vscode-server"
+    },
+    {
+      "type": "bind",
+      "source": "${env:XDG_RUNTIME_DIR}/bus",
+      "target": "${localEnv:XDG_RUNTIME_DIR}/bus"
+    }
+  ],
+  "containerEnv": {
+    "DBUS_SESSION_BUS_ADDRESS": "unix:path=${localEnv:XDG_RUNTIME_DIR}/bus"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // generic
+        "ms-azuretools.vscode-docker",
+        "GitHub.vscode-pull-request-github",
+        // rust
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "tamasfe.even-better-toml",
+        "fill-labs.dependi"
+      ]
+    }
+  }
+}
