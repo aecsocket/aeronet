@@ -72,13 +72,11 @@ fn recv_input(
     mut players: Query<&mut PlayerInput>,
 ) {
     for &FromClient {
-        client_id,
+        client_entity,
         event: ref new_input,
     } in inputs.read()
     {
-        let Some(mut input) = aeronet_replicon::convert::to_entity(client_id)
-            .and_then(|client| players.get_mut(client).ok())
-        else {
+        let Ok(mut input) = players.get_mut(client_entity) else {
             continue;
         };
         *input = new_input.clone();

@@ -1,3 +1,9 @@
+# 0.13.0
+
+## `aeronet_replicon`
+
+- Updated `bevy_replicon` to `0.31.0`
+
 # 0.12.0
 
 - Improved packet loss computation algorithm

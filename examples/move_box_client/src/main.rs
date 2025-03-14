@@ -144,6 +144,7 @@ fn global_ui(
     sessions: Query<(Entity, &Name, Option<&Session>), With<SessionEndpoint>>,
     replicon_client: Res<RepliconClient>,
 ) {
+    let stats = replicon_client.stats();
     egui::Window::new("Session Log").show(egui.ctx_mut(), |ui| {
         ui.label("Replicon reports:");
         ui.horizontal(|ui| {
@@ -154,19 +155,16 @@ fn global_ui(
             });
             ui.separator();
 
-            ui.label(format!("RTT {:.0}ms", replicon_client.rtt() * 1000.0));
+            ui.label(format!("RTT {:.0}ms", stats.rtt * 1000.0));
             ui.separator();
 
-            ui.label(format!(
-                "Pkt Loss {:.1}%",
-                replicon_client.packet_loss() * 100.0
-            ));
+            ui.label(format!("Pkt Loss {:.1}%", stats.packet_loss * 100.0));
             ui.separator();
 
-            ui.label(format!("Rx {:.0}bps", replicon_client.received_bps()));
+            ui.label(format!("Rx {:.0}bps", stats.received_bps));
             ui.separator();
 
-            ui.label(format!("Tx {:.0}bps", replicon_client.sent_bps()));
+            ui.label(format!("Tx {:.0}bps", stats.sent_bps));
         });
         match sessions.get_single() {
             Ok((session, name, connected)) => {

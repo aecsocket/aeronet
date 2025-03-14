@@ -21,7 +21,7 @@ use {
     bevy_ecs::prelude::*,
     bevy_time::{Real, Time},
     core::iter,
-    derive_more::derive::{Display, Error, From},
+    derive_more::{Display, Error, From},
     octs::{Bytes, EncodeLen, Write},
     std::collections::hash_map::Entry,
     tracing::{trace, trace_span},

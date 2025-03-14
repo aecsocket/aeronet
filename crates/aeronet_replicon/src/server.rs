@@ -4,7 +4,6 @@ use {
     crate::convert,
     aeronet_io::{
         Session,
-        connection::{DisconnectReason, Disconnected},
         server::{Server, ServerEndpoint},
         web_time::Instant,
     },
@@ -12,16 +11,11 @@ use {
         AeronetTransportPlugin, Transport, TransportSet,
         sampling::{SessionSamplingPlugin, SessionStats, SessionStatsSampling},
     },
-    anyhow::anyhow,
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_hierarchy::Parent,
     bevy_reflect::Reflect,
-    bevy_replicon::{
-        prelude::{ConnectedClients, RepliconChannels, RepliconServer},
-        server::{ClientConnected, ClientDisconnected, ServerSet},
-    },
-    core::{any::type_name, mem},
+    bevy_replicon::{core::connected_client::ClientId, prelude::*, server::ServerSet},
     tracing::warn,
 };
 
@@ -73,8 +67,7 @@ impl Plugin for AeronetRepliconServerPlugin {
                 .in_set(ServerTransportSet::Flush)
                 .run_if(resource_exists::<RepliconServer>),
         )
-        .add_observer(on_connected)
-        .add_observer(on_disconnected);
+        .add_observer(on_connected);
     }
 }
 
@@ -162,9 +155,6 @@ fn on_connected(
         return;
     }
 
-    let client_id = convert::to_client_id(client);
-    commands.trigger(ClientConnected { client_id });
-
     let recv_lanes = channels
         .client_channels()
         .iter()
@@ -181,47 +171,12 @@ fn on_connected(
         }
     };
 
-    commands.entity(client).insert(transport);
-}
-
-fn on_disconnected(
-    mut trigger: Trigger<Disconnected>,
-    // check for `Session` - clients which are already connected
-    // on the replicon side, because if we disconnect a non-connected client,
-    // replicon panics
-    connected_clients: Query<&Parent, With<Session>>,
-    open_servers: Query<(), OpenedServer>,
-    mut commands: Commands,
-) {
-    let client = trigger.entity();
-    let Ok(server) = connected_clients.get(client).map(Parent::get) else {
-        return;
-    };
-    if open_servers.get(server).is_err() {
-        return;
-    }
-
-    let client_id = convert::to_client_id(client);
-    let reason = match &mut trigger.reason {
-        DisconnectReason::User(_) => bevy_replicon::core::DisconnectReason::DisconnectedByServer,
-        DisconnectReason::Peer(_) => bevy_replicon::core::DisconnectReason::DisconnectedByClient,
-        DisconnectReason::Error(err) => {
-            // TODO: when we can order observers, make this one run right at the end
-            // so potential consumers of `Disconnected` never see this dummy error
-            let err = mem::replace(
-                err,
-                anyhow!(
-                    "real disconnect reason was replaced with a dummy value, and was passed to \
-                     `bevy_replicon` - if you want to read the real disconnect reason, access it \
-                     via `{}`",
-                    type_name::<bevy_replicon::server::ClientDisconnected>(),
-                ),
-            );
-            bevy_replicon::core::DisconnectReason::Backend(err.into())
-        }
-    };
-
-    commands.trigger(ClientDisconnected { client_id, reason });
+    commands.entity(client).insert((
+        // TODO: `ClientId` here does not uphold the persistent identifier guarantees
+        // But these will be relaxed in upstream soon anyway
+        ConnectedClient::new(ClientId::new(client.to_bits()), session.mtu()),
+        transport,
+    ));
 }
 
 fn poll(
@@ -234,12 +189,12 @@ fn poll(
             continue;
         }
 
-        let client_id = convert::to_client_id(client);
         for msg in transport.recv.msgs.drain() {
             let Some(channel_id) = convert::to_channel_id(msg.lane) else {
+                warn!("Lane {:?} is too large to convert to a channel", msg.lane);
                 continue;
             };
-            replicon_server.insert_received(client_id, channel_id, msg.payload);
+            replicon_server.insert_received(client, channel_id, msg.payload);
         }
 
         for _ in transport.recv.acks.drain() {
@@ -249,37 +204,32 @@ fn poll(
 }
 
 fn update_client_data(
-    mut replicon_clients: ResMut<ConnectedClients>,
-    clients: Query<&SessionStats>,
+    mut clients: Query<(
+        &Session,
+        &SessionStats,
+        &mut ConnectedClient,
+        &mut NetworkStats,
+    )>,
     sampling: Res<SessionStatsSampling>,
 ) {
-    for client_data in replicon_clients.iter_mut() {
-        let client_id = client_data.id();
-        let Some(client_entity) = convert::to_entity(client_id) else {
-            warn!("Attempted to update data for client {client_id:?}, which is not a valid entity");
-            continue;
-        };
-        let Ok(stats) = clients.get(client_entity) else {
-            continue;
-        };
-
-        let stats = stats.last().copied().unwrap_or_default();
-        client_data.set_rtt(stats.msg_rtt.as_secs_f64());
-        client_data.set_packet_loss(stats.loss);
+    for (session, session_stats, mut connected_client, mut network_stats) in &mut clients {
+        let stats = session_stats.last().copied().unwrap_or_default();
+        connected_client.max_size = session.mtu();
+        network_stats.rtt = stats.msg_rtt.as_secs_f64();
+        network_stats.packet_loss = stats.loss;
         #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
         {
-            client_data.set_received_bps(stats.packets_delta.bytes_recv.0 as f64 * sampling.rate());
-            client_data.set_sent_bps(stats.packets_delta.bytes_sent.0 as f64 * sampling.rate());
+            network_stats.received_bps = stats.packets_delta.bytes_recv.0 as f64 * sampling.rate();
+            network_stats.sent_bps = stats.packets_delta.bytes_sent.0 as f64 * sampling.rate();
         }
     }
 }
 
 fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Transport>) {
     let now = Instant::now();
-    for (client_id, channel_id, msg) in replicon_server.drain_sent() {
-        let Some(mut transport) =
-            convert::to_entity(client_id).and_then(|client| clients.get_mut(client).ok())
-        else {
+    for (client, channel_id, msg) in replicon_server.drain_sent() {
+        let Ok(mut transport) = clients.get_mut(client) else {
+            warn!("Sending to non-existent client {client}");
             continue;
         };
         let lane_index = convert::to_lane_index(channel_id);

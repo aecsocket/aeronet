@@ -17,7 +17,7 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-[package.metadata.cargo-machete]
+[package.metadata.cargo-shear]
 ignored = [
   "bevy_winit", # see `document-features`
 ]
@@ -67,7 +67,7 @@ ahash = { workspace = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true }
 bitvec = { workspace = true }
-derive_more = { workspace = true }
+derive_more = { workspace = true, features = ["display", "error", "from"] }
 either = { workspace = true }
 octs = { workspace = true }
 ringbuf = { workspace = true }

@@ -5,36 +5,8 @@ use {
         lane::{LaneIndex, LaneKind},
         min_size::MinSize,
     },
-    bevy_ecs::prelude::*,
     bevy_replicon::prelude::*,
 };
-
-// Entity <-> ClientId
-
-/// Converts an [`Entity`] into a [`ClientId`].
-///
-/// [`bevy_replicon`] requires a [`ClientId`] to identify clients connected to a
-/// server. To satisfy this, we use the raw [`u64`] of the [`Entity`] session as
-/// the [`ClientId`]. This means that once a client session [`Entity`] has been
-/// created, only that entity alone must refer to that client for the rest of
-/// the client's lifetime.
-///
-/// See [`to_entity`].
-#[must_use]
-pub const fn to_client_id(entity: Entity) -> ClientId {
-    ClientId::new(entity.to_bits())
-}
-
-/// Attempts to convert a [`ClientId`] into an [`Entity`].
-///
-/// Returns [`None`] if the client ID does not represent a valid entity.
-/// Any value created from [`to_client_id`] will be valid for this function.
-///
-/// See [`to_client_id`].
-#[must_use]
-pub fn to_entity(client_id: ClientId) -> Option<Entity> {
-    Entity::try_from_bits(client_id.get()).ok()
-}
 
 // ChannelKind -> LaneKind
 

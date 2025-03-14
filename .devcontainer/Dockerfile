@@ -17,11 +17,14 @@ ENV EDITOR=/usr/bin/helix
 
 # install Rust
 RUN yay -Syu --noconfirm \
-    rustup clang lld && \
+    rustup clang lld taplo && \
     rustup default stable && \
     rustup install nightly && \
     curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | sh && \
-    cargo binstall cargo-shear
+    cargo binstall cargo-shear && \
+
+# install Rust fuzzing tools
+RUN cargo binstall cargo-fuzz
 
 # install Bevy libraries
 RUN yay -Syu --noconfirm alsa-lib libxkbcommon vulkan-radeon

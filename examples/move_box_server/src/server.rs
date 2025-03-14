@@ -1,9 +1,10 @@
 use {
-    aeronet::io::{Session, connection::LocalAddr, server::Server},
-    aeronet_replicon::{
-        convert,
-        server::{AeronetRepliconServer, AeronetRepliconServerPlugin},
+    aeronet::io::{
+        Session,
+        connection::{DisconnectReason, Disconnected, LocalAddr},
+        server::Server,
     },
+    aeronet_replicon::server::{AeronetRepliconServer, AeronetRepliconServerPlugin},
     aeronet_websocket::server::{WebSocketServer, WebSocketServerPlugin},
     aeronet_webtransport::{
         cert,
@@ -14,6 +15,7 @@ use {
     bevy_replicon::prelude::*,
     core::time::Duration,
     move_box::{MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition, TICK_RATE},
+    std::time::SystemTime,
 };
 
 const WEB_TRANSPORT_PORT: u16 = 25565;
@@ -159,7 +161,17 @@ fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>, mut c
     };
     info!("{client} connected to {server}");
 
-    let color = Color::srgb(rand::random(), rand::random(), rand::random());
+    // generate a random-looking color
+    let time = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("current system time should be after unix epoch")
+        .as_millis();
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "truncation is what we want"
+    )]
+    let color = Color::srgb_u8((time * 3) as u8, (time * 5) as u8, (time * 7) as u8);
+
     commands.entity(client).insert((
         Player,
         PlayerPosition(Vec2::ZERO),
@@ -169,22 +181,20 @@ fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>, mut c
     ));
 }
 
-fn on_disconnected(trigger: Trigger<ClientDisconnected>, clients: Query<&Parent>) {
-    let Some(client) = convert::to_entity(trigger.client_id) else {
-        return;
-    };
+fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
+    let client = trigger.entity();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
     };
 
     match &trigger.reason {
-        DisconnectReason::DisconnectedByClient => {
-            info!("{client} disconnected from {server} by client");
+        DisconnectReason::User(reason) => {
+            info!("{client} disconnected from {server} by user: {reason}");
         }
-        DisconnectReason::DisconnectedByServer => {
-            info!("{client} disconnected from {server} by server");
+        DisconnectReason::Peer(reason) => {
+            info!("{client} disconnected from {server} by peer: {reason}");
         }
-        DisconnectReason::Backend(err) => {
+        DisconnectReason::Error(err) => {
             warn!("{client} disconnected from {server} due to error: {err:?}");
         }
     }
