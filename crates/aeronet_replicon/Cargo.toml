@@ -31,7 +31,6 @@ document-features = ["dep:document-features"]
 aeronet_io = { workspace = true }
 aeronet_transport = { workspace = true }
 
-anyhow = { workspace = true }
 tracing = { workspace = true }
 
 bevy_app = { workspace = true }

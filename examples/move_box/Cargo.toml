@@ -15,8 +15,6 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-aeronet_replicon = { workspace = true }
-
 serde = { workspace = true }
 
 bevy = { workspace = true, features = ["wayland"] }
