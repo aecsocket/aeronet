@@ -212,7 +212,7 @@ fn update_client_data(
     )>,
     sampling: Res<SessionStatsSampling>,
 ) {
-    for (session, session_stats, mut connected_client, mut network_stats) in clients.iter_mut() {
+    for (session, session_stats, mut connected_client, mut network_stats) in &mut clients {
         let stats = session_stats.last().copied().unwrap_or_default();
         connected_client.max_size = session.mtu();
         network_stats.rtt = stats.msg_rtt.as_secs_f64();
