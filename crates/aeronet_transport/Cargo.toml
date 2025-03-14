@@ -67,7 +67,7 @@ ahash = { workspace = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true }
 bitvec = { workspace = true }
-derive_more = { workspace = true }
+derive_more = { workspace = true, features = ["display", "error", "from"] }
 either = { workspace = true }
 octs = { workspace = true }
 ringbuf = { workspace = true }

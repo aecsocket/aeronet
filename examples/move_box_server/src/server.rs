@@ -166,6 +166,10 @@ fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>, mut c
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("current system time should be after unix epoch")
         .as_millis();
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "truncation is what we want"
+    )]
     let color = Color::srgb_u8((time * 3) as u8, (time * 5) as u8, (time * 7) as u8);
 
     commands.entity(client).insert((
