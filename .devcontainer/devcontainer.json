@@ -6,6 +6,9 @@
   "runArgs": [
     "--device=/dev/dri"
   ],
+  "containerEnv": {
+    "DBUS_SESSION_BUS_ADDRESS": "unix:path=${localEnv:XDG_RUNTIME_DIR}/bus"
+  },
   "mounts": [
     {
       "type": "volume",
@@ -13,30 +16,14 @@
       "target": "/home/dev"
     },
     {
-      "type": "volume",
-      "target": "/home/dev/.vscode-server"
+      "type": "bind",
+      "source": "${env:XDG_RUNTIME_DIR}/${env:WAYLAND_DISPLAY}",
+      "target": "${localEnv:XDG_RUNTIME_DIR}/wayland-0"
     },
     {
       "type": "bind",
       "source": "${env:XDG_RUNTIME_DIR}/bus",
       "target": "${localEnv:XDG_RUNTIME_DIR}/bus"
-    }
-  ],
-  "containerEnv": {
-    "DBUS_SESSION_BUS_ADDRESS": "unix:path=${localEnv:XDG_RUNTIME_DIR}/bus"
-  },
-  "customizations": {
-    "vscode": {
-      "extensions": [
-        // generic
-        "ms-azuretools.vscode-docker",
-        "GitHub.vscode-pull-request-github",
-        // rust
-        "rust-lang.rust-analyzer",
-        "vadimcn.vscode-lldb",
-        "tamasfe.even-better-toml",
-        "fill-labs.dependi"
-      ]
-    }
-  }
+    },
+  ]
 }
