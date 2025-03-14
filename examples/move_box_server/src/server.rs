@@ -15,6 +15,7 @@ use {
     bevy_replicon::prelude::*,
     core::time::Duration,
     move_box::{MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition, TICK_RATE},
+    std::time::SystemTime,
 };
 
 const WEB_TRANSPORT_PORT: u16 = 25565;
@@ -160,7 +161,13 @@ fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>, mut c
     };
     info!("{client} connected to {server}");
 
-    let color = Color::srgb(rand::random(), rand::random(), rand::random());
+    // generate a random-looking color
+    let time = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("current system time should be after unix epoch")
+        .as_millis();
+    let color = Color::srgb_u8((time * 3) as u8, (time * 5) as u8, (time * 7) as u8);
+
     commands.entity(client).insert((
         Player,
         PlayerPosition(Vec2::ZERO),

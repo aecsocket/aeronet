@@ -3789,7 +3789,6 @@ dependencies = [
  "bevy_replicon",
  "clap",
  "move_box",
- "rand 0.9.0",
 ]
 
 [[package]]

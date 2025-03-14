@@ -19,7 +19,6 @@ move_box = { path = "../move_box" }
 
 bevy = { workspace = true }
 clap = { workspace = true }
-rand = { workspace = true }
 
 aeronet = { workspace = true }
 aeronet_websocket = { workspace = true, features = ["server"] }

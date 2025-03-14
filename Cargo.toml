@@ -63,7 +63,6 @@ futures = "0.3.30"
 itertools = "0.14.0"
 octs = "1.0.0"
 oneshot = "0.1.11"
-rand = "0.9.0"
 replace_with = "0.1.7"
 ringbuf = "0.4.1"
 serde = { version = "1.0.219", features = ["derive"] }
