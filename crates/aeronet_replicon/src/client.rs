@@ -198,7 +198,7 @@ fn update_state(
         );
 
         (
-            RepliconClientStatus::Connected { client_id: None },
+            RepliconClientStatus::Connected,
             sum_rtt.as_secs_f64() / num_connected,
             sum_packet_loss / num_connected,
             received_bps,
@@ -216,10 +216,11 @@ fn update_state(
     if replicon_client.status() != status {
         replicon_client.set_status(status);
     }
-    replicon_client.set_rtt(rtt);
-    replicon_client.set_packet_loss(packet_loss);
-    replicon_client.set_received_bps(received_bps);
-    replicon_client.set_sent_bps(sent_bps);
+    let stats = replicon_client.stats_mut();
+    stats.rtt = rtt;
+    stats.packet_loss = packet_loss;
+    stats.received_bps = received_bps;
+    stats.sent_bps = sent_bps;
 }
 
 fn poll(
@@ -229,6 +230,7 @@ fn poll(
     for mut transport in &mut clients {
         for msg in transport.recv.msgs.drain() {
             let Some(channel_id) = convert::to_channel_id(msg.lane) else {
+                warn!("Lane {:?} is too large to convert to a channel", msg.lane);
                 continue;
             };
             replicon_client.insert_received(channel_id, msg.payload);

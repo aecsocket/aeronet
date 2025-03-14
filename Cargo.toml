@@ -45,7 +45,7 @@ aeronet_websocket = { version = "0.12.0", path = "crates/aeronet_websocket" }
 aeronet_webtransport = { version = "0.12.0", path = "crates/aeronet_webtransport" }
 
 # integration
-aeronet_replicon = { version = "0.12.0", path = "crates/aeronet_replicon" }
+aeronet_replicon = { version = "0.13.0", path = "crates/aeronet_replicon" }
 
 # generic
 
@@ -140,4 +140,4 @@ xwt-web = "0.15.0"
 
 # aeronet_replicon
 
-bevy_replicon = { version = "0.30.1", default-features = false }
+bevy_replicon = { version = "0.31.0", default-features = false }

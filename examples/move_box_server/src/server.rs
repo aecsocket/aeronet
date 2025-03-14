@@ -1,9 +1,10 @@
 use {
-    aeronet::io::{Session, connection::LocalAddr, server::Server},
-    aeronet_replicon::{
-        convert,
-        server::{AeronetRepliconServer, AeronetRepliconServerPlugin},
+    aeronet::io::{
+        Session,
+        connection::{DisconnectReason, Disconnected, LocalAddr},
+        server::Server,
     },
+    aeronet_replicon::server::{AeronetRepliconServer, AeronetRepliconServerPlugin},
     aeronet_websocket::server::{WebSocketServer, WebSocketServerPlugin},
     aeronet_webtransport::{
         cert,
@@ -169,22 +170,20 @@ fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>, mut c
     ));
 }
 
-fn on_disconnected(trigger: Trigger<ClientDisconnected>, clients: Query<&Parent>) {
-    let Some(client) = convert::to_entity(trigger.client_id) else {
-        return;
-    };
+fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
+    let client = trigger.entity();
     let Ok(server) = clients.get(client).map(Parent::get) else {
         return;
     };
 
     match &trigger.reason {
-        DisconnectReason::DisconnectedByClient => {
-            info!("{client} disconnected from {server} by client");
+        DisconnectReason::User(reason) => {
+            info!("{client} disconnected from {server} by user: {reason}");
         }
-        DisconnectReason::DisconnectedByServer => {
-            info!("{client} disconnected from {server} by server");
+        DisconnectReason::Peer(reason) => {
+            info!("{client} disconnected from {server} by peer: {reason}");
         }
-        DisconnectReason::Backend(err) => {
+        DisconnectReason::Error(err) => {
             warn!("{client} disconnected from {server} due to error: {err:?}");
         }
     }
