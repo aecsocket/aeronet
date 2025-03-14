@@ -139,5 +139,5 @@ bevy_replicon = { version = "0.31.0", default-features = false }
 
 [workspace.metadata.cargo-shear]
 ignored = [
-    "bevy_winit", # see `aeronet_transport` feature `document-features`
+  "bevy_winit", # see `aeronet_transport` feature `document-features`
 ]
