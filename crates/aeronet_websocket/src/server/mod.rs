@@ -17,7 +17,6 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
-    bevy_hierarchy::BuildChildren,
     core::net::SocketAddr,
     derive_more::{Display, Error, derive::From},
     futures::channel::{mpsc, oneshot},

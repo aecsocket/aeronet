@@ -22,10 +22,10 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 anyhow = { workspace = true, default-features = false }
 bytes = { workspace = true, default-features = false }
 derive_more = { workspace = true, default-features = false, features = [
-  "display",
-  "error",
-  "add",
-  "add_assign",
+    "display",
+    "error",
+    "add",
+    "add_assign",
 ] }
 tracing = { workspace = true, default-features = false }
 web-time = { workspace = true }
@@ -33,7 +33,4 @@ web-time = { workspace = true }
 bevy_app = { workspace = true, features = ["bevy_reflect"] }
 bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true, features = ["bevy_reflect"] }
-bevy_hierarchy = { workspace = true, features = [
-  "reflect", # TODO: https://github.com/bevyengine/bevy/pull/16428
-] }
 bevy_reflect = { workspace = true }

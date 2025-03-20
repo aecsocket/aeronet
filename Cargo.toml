@@ -1,15 +1,15 @@
 [workspace]
 members = ["crates/*", "examples/*"]
-resolver = "2"
+resolver = "3"
 
 [workspace.package]
 authors = ["aecsocket <aecsocket@tutanota.com>"]
 categories = ["game-development", "network-programming"]
-edition = "2021"
+edition = "2024"
 keywords = ["gamedev", "network", "bevy"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aecsocket/aeronet"
-rust-version = "1.82.0"
+rust-version = "1.85.0"
 
 [workspace.lints.rust]
 missing_docs = "warn"
@@ -47,7 +47,6 @@ aeronet_replicon = { version = "0.13.0", path = "crates/aeronet_replicon" }
 
 # generic
 
-ahash = "0.8.11"
 anyhow = { version = "1.0.97", default-features = false }
 arbitrary = { version = "1.3.2", features = ["derive"] }
 base64 = "0.22.1"
@@ -87,15 +86,13 @@ web-sys = "0.3.70"
 
 # bevy
 
-bevy = { version = "0.15.3" }
-bevy_app = { version = "0.15.3", default-features = false }
-bevy_core = { version = "0.15.3", default-features = false }
-bevy_derive = { version = "0.15.3", default-features = false }
-bevy_ecs = { version = "0.15.3", default-features = false }
-bevy_hierarchy = { version = "0.15.3", default-features = false }
-bevy_reflect = { version = "0.15.3", default-features = false }
-bevy_time = { version = "0.15.3", default-features = false }
-bevy_winit = { version = "0.15.3", default-features = false }
+bevy = { version = "0.16.0-rc.1" }
+bevy_app = { version = "0.16.0-rc.1", default-features = false }
+bevy_derive = { version = "0.16.0-rc.1", default-features = false }
+bevy_ecs = { version = "0.16.0-rc.1", default-features = false }
+bevy_reflect = { version = "0.16.0-rc.1", default-features = false }
+bevy_time = { version = "0.16.0-rc.1", default-features = false }
+bevy_winit = { version = "0.16.0-rc.1", default-features = false }
 
 bevy_egui = "0.31.1"
 
@@ -138,5 +135,5 @@ bevy_replicon = { version = "0.31.0", default-features = false }
 
 [workspace.metadata.cargo-shear]
 ignored = [
-  "bevy_winit", # see `aeronet_transport` feature `document-features`
+    "bevy_winit", # see `aeronet_transport` feature `document-features`
 ]

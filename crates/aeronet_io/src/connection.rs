@@ -5,7 +5,6 @@ use {
     bevy_app::prelude::*,
     bevy_derive::Deref,
     bevy_ecs::prelude::*,
-    bevy_hierarchy::DespawnRecursiveExt,
     core::{fmt::Debug, net::SocketAddr},
     tracing::debug,
 };
@@ -160,38 +159,36 @@ pub struct LocalAddr(pub SocketAddr);
 pub struct PeerAddr(pub SocketAddr);
 
 fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>) {
-    let entity = trigger.entity();
-    debug!("{entity} connecting");
+    let session = trigger.target();
+    debug!("{session} connecting");
 }
 
 fn on_connected(trigger: Trigger<OnAdd, Session>) {
-    let entity = trigger.entity();
-    debug!("{entity} connected");
+    let session = trigger.target();
+    debug!("{session} connected");
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
-    let entity = trigger.entity();
+    let session = trigger.target();
     let reason = DisconnectReason::User(trigger.reason.clone());
-    commands.trigger_targets(Disconnected { reason }, entity);
+    commands.trigger_targets(Disconnected { reason }, session);
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
-    let entity = trigger.entity();
+    let target = trigger.target();
     match &trigger.reason {
         DisconnectReason::User(reason) => {
-            debug!("{entity} disconnected by user: {reason}");
+            debug!("{target} disconnected by user: {reason}");
         }
         DisconnectReason::Peer(reason) => {
-            debug!("{entity} disconnected by peer: {reason}");
+            debug!("{target} disconnected by peer: {reason}");
         }
         DisconnectReason::Error(err) => {
-            debug!("{entity} disconnected due to error: {err:?}");
+            debug!("{target} disconnected due to error: {err:?}");
         }
     }
 
-    if let Some(entity) = commands.get_entity(entity) {
-        entity.despawn_recursive();
-    }
+    commands.entity(target).despawn();
 }
 
 #[cfg(test)]

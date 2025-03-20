@@ -13,7 +13,6 @@ use {
         min_size::MinSize,
         packet::{FragmentPosition, MessageSeq},
     },
-    ahash::HashMap,
     bitvec::vec::BitVec,
     core::{fmt, iter::FusedIterator},
     derive_more::{Display, Error},

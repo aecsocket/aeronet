@@ -12,7 +12,6 @@ use {
     },
     aeronet_io::{Session, packet::PacketRtt},
     bevy_app::prelude::*,
-    bevy_core::Name,
     bevy_ecs::prelude::*,
     bevy_egui::{
         EguiContexts,

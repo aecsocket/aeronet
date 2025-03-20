@@ -13,7 +13,6 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
-    bevy_hierarchy::Parent,
     bevy_reflect::Reflect,
     bevy_replicon::{core::connected_client::ClientId, prelude::*, server::ServerSet},
     tracing::warn,

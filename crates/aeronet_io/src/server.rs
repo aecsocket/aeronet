@@ -8,13 +8,8 @@
 //! [`Session`]: crate::Session
 
 use {
-    crate::connection::Disconnect,
-    bevy_app::prelude::*,
-    bevy_ecs::prelude::*,
-    bevy_hierarchy::{Children, DespawnRecursiveExt},
-    bevy_reflect::prelude::*,
-    tracing::debug,
-    web_time::Instant,
+    crate::connection::Disconnect, bevy_app::prelude::*, bevy_ecs::prelude::*,
+    bevy_reflect::prelude::*, tracing::debug, web_time::Instant,
 };
 
 #[derive(Debug)]
@@ -183,26 +178,26 @@ impl<E> From<E> for CloseReason<E> {
 }
 
 fn on_opening(trigger: Trigger<OnAdd, ServerEndpoint>) {
-    let server = trigger.entity();
+    let server = trigger.target();
     debug!("{server} opening");
 }
 
 fn on_opened(trigger: Trigger<OnAdd, Server>) {
-    let server = trigger.entity();
+    let server = trigger.target();
     debug!("{server} opened");
 }
 
 fn on_close(trigger: Trigger<Close>, mut commands: Commands) {
-    let server = trigger.entity();
+    let server = trigger.target();
     let reason = CloseReason::User(trigger.reason.clone());
     commands.trigger_targets(Closed { reason }, server);
 }
 
 fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands: Commands) {
-    let server = trigger.entity();
+    let server = trigger.target();
     let children = children
         .get(server)
-        .map(|children| children.iter().copied().collect::<Vec<_>>())
+        .map(|children| children.iter().collect::<Vec<_>>())
         .unwrap_or_default();
     match &trigger.reason {
         CloseReason::User(reason) => {
@@ -214,9 +209,7 @@ fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands:
         }
     }
 
-    if let Some(server) = commands.get_entity(server) {
-        server.despawn_recursive();
-    }
+    commands.entity(server).despawn();
 }
 
 #[cfg(test)]
@@ -227,7 +220,6 @@ mod tests {
             AeronetIoPlugin,
             connection::{DisconnectReason, Disconnected},
         },
-        bevy_hierarchy::BuildChildren,
     };
 
     #[test]
