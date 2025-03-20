@@ -183,38 +183,38 @@ impl<E> From<E> for CloseReason<E> {
 }
 
 fn on_opening(trigger: Trigger<OnAdd, ServerEndpoint>) {
-    let server = trigger.target();
-    debug!("{server} opening");
+    let target = trigger.target();
+    debug!("{target} opening");
 }
 
 fn on_opened(trigger: Trigger<OnAdd, Server>) {
-    let server = trigger.target();
-    debug!("{server} opened");
+    let target = trigger.target();
+    debug!("{target} opened");
 }
 
 fn on_close(trigger: Trigger<Close>, mut commands: Commands) {
-    let server = trigger.target();
+    let target = trigger.target();
     let reason = CloseReason::User(trigger.reason.clone());
-    commands.trigger_targets(Closed { reason }, server);
+    commands.trigger_targets(Closed { reason }, target);
 }
 
 fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands: Commands) {
-    let server = trigger.target();
+    let target = trigger.target();
     let children = children
-        .get(server)
+        .get(target)
         .map(|children| children.iter().collect::<Vec<_>>())
         .unwrap_or_default();
     match &trigger.reason {
         CloseReason::User(reason) => {
-            debug!("{server} closed by user: {reason}");
+            debug!("{target} closed by user: {reason}");
             commands.trigger_targets(Disconnect::new(reason), children);
         }
         CloseReason::Error(err) => {
-            debug!("{server} closed due to error: {err:?}");
+            debug!("{target} closed due to error: {err:?}");
         }
     }
 
-    commands.entity(server).despawn();
+    commands.entity(target).despawn();
 }
 
 #[cfg(test)]

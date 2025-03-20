@@ -32,5 +32,5 @@ tracing = { workspace = true, default-features = false }
 
 bevy_app = { workspace = true, features = ["bevy_reflect"] }
 bevy_ecs = { workspace = true, features = ["bevy_reflect"] }
-bevy_platform_support = { workspace = true }
+bevy_platform_support = { workspace = true, features = ["alloc"] }
 bevy_reflect = { workspace = true }

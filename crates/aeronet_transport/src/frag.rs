@@ -13,6 +13,8 @@ use {
         min_size::MinSize,
         packet::{FragmentPosition, MessageSeq},
     },
+    alloc::vec::Vec,
+    bevy_platform_support::collections::HashMap,
     bitvec::vec::BitVec,
     core::{fmt, iter::FusedIterator},
     derive_more::{Display, Error},
@@ -329,7 +331,10 @@ impl FragmentReceiver {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
     use super::*;
+    use std::println;
 
     // TODO
 

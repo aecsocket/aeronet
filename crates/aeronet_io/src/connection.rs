@@ -160,19 +160,19 @@ pub struct LocalAddr(pub SocketAddr);
 pub struct PeerAddr(pub SocketAddr);
 
 fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>) {
-    let session = trigger.target();
-    debug!("{session} connecting");
+    let target = trigger.target();
+    debug!("{target} connecting");
 }
 
 fn on_connected(trigger: Trigger<OnAdd, Session>) {
-    let session = trigger.target();
-    debug!("{session} connected");
+    let target = trigger.target();
+    debug!("{target} connected");
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
-    let session = trigger.target();
+    let target = trigger.target();
     let reason = DisconnectReason::User(trigger.reason.clone());
-    commands.trigger_targets(Disconnected { reason }, session);
+    commands.trigger_targets(Disconnected { reason }, target);
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {

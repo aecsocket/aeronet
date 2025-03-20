@@ -31,7 +31,6 @@
 
 use {
     crate::min_size::MinSize,
-    arbitrary::Arbitrary,
     bevy_reflect::prelude::*,
     octs::{BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, Write},
     typesize::derive::TypeSize,
@@ -40,7 +39,8 @@ use {
 /// What guarantees a kind of [lane] provides about message delivery.
 ///
 /// [lane]: crate::lane
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LaneKind {
     /// No guarantees given on *reliability* or *ordering*.
@@ -140,7 +140,8 @@ pub enum LaneReliability {
 /// Index of a [lane] on either the sender or receiver side.
 ///
 /// [lane]: crate::lane
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LaneIndex(pub MinSize);
 

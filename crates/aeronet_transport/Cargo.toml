@@ -23,6 +23,14 @@ ignored = [
 ]
 
 [features]
+## Enables standard library support.
+std = ["bevy_platform_support/std"]
+
+## Allows generating arbitrary values of some types with [`arbitrary`], useful for fuzz testing.
+##
+## [`arbitrary`]: https://docs.rs/arbitrary
+arbitrary = ["std", "dep:arbitrary"]
+
 ## Allows serializing and deserializing some types with [`serde`].
 ##
 ## [`serde`]: https://docs.rs/serde
@@ -34,6 +42,7 @@ serde = ["dep:serde"]
 ## [`bevy_egui`]: https://docs.rs/bevy_egui
 ## [`egui_plot`]: https://docs.rs/egui_plot
 visualizer = [
+    "std",
     "dep:bevy_egui",
     "dep:egui_plot",
     "dep:itertools",
@@ -64,9 +73,16 @@ document-features = [
 aeronet_io = { workspace = true }
 
 anyhow = { workspace = true }
-arbitrary = { workspace = true }
 bitvec = { workspace = true }
-derive_more = { workspace = true, features = ["display", "error", "from"] }
+derive_more = { workspace = true, features = [
+    "display",
+    "error",
+    "add",
+    "add_assign",
+    "from",
+    "deref",
+    "deref_mut",
+] }
 either = { workspace = true }
 octs = { workspace = true }
 ringbuf = { workspace = true }
@@ -80,8 +96,11 @@ web-time = { workspace = true }
 
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
+bevy_platform_support = { workspace = true, features = ["alloc"] }
 bevy_reflect = { workspace = true }
 bevy_time = { workspace = true }
+
+arbitrary = { workspace = true, optional = true }
 
 serde = { workspace = true, optional = true }
 
