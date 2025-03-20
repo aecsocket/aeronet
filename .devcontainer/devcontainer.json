@@ -3,7 +3,7 @@
     "build": {
         "dockerfile": "Dockerfile"
     },
-    "runArgs": ["--device=/dev/dri"],
+    "runArgs": ["--device=/dev/dri", "--security-opt=seccomp=unconfined"],
     "containerEnv": {
         "XDG_RUNTIME_DIR": "/tmp/user/1000",
         "WAYLAND_DISPLAY": "${localEnv:XDG_RUNTIME_DIR}/wayland-0",
