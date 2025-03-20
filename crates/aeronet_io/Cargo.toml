@@ -26,11 +26,11 @@ derive_more = { workspace = true, default-features = false, features = [
     "error",
     "add",
     "add_assign",
+    "deref",
 ] }
 tracing = { workspace = true, default-features = false }
-web-time = { workspace = true }
 
 bevy_app = { workspace = true, features = ["bevy_reflect"] }
-bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true, features = ["bevy_reflect"] }
+bevy_platform_support = { workspace = true }
 bevy_reflect = { workspace = true }

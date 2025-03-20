@@ -8,8 +8,13 @@
 //! [`Session`]: crate::Session
 
 use {
-    crate::connection::Disconnect, bevy_app::prelude::*, bevy_ecs::prelude::*,
-    bevy_reflect::prelude::*, tracing::debug, web_time::Instant,
+    crate::connection::Disconnect,
+    alloc::{string::String, vec::Vec},
+    bevy_app::prelude::*,
+    bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
+    bevy_reflect::prelude::*,
+    tracing::debug,
 };
 
 #[derive(Debug)]

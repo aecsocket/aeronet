@@ -79,7 +79,6 @@ typesize = { workspace = true, features = [
 web-time = { workspace = true }
 
 bevy_app = { workspace = true }
-bevy_derive = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_reflect = { workspace = true }
 bevy_time = { workspace = true }

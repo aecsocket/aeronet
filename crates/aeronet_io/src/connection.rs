@@ -2,10 +2,11 @@
 
 use {
     crate::{Session, SessionEndpoint},
+    alloc::string::String,
     bevy_app::prelude::*,
-    bevy_derive::Deref,
     bevy_ecs::prelude::*,
     core::{fmt::Debug, net::SocketAddr},
+    derive_more::Deref,
     tracing::debug,
 };
 

@@ -40,7 +40,6 @@ pub use payload::*;
 use {
     crate::{lane::LaneIndex, min_size::MinSize},
     arbitrary::Arbitrary,
-    bevy_derive::{Deref, DerefMut},
     bevy_reflect::Reflect,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     octs::Bytes,

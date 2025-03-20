@@ -7,7 +7,6 @@ use {
         packet::{PacketRtt, PacketStats},
     },
     bevy_app::prelude::*,
-    bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
     bevy_time::{Real, Time, Timer, TimerMode},
     core::time::Duration,
