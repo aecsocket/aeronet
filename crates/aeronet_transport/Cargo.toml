@@ -23,6 +23,8 @@ ignored = [
 ]
 
 [features]
+default = ["std"]
+
 ## Enables standard library support.
 std = ["bevy_platform_support/std"]
 
@@ -89,7 +91,7 @@ ringbuf = { workspace = true }
 tracing = { workspace = true }
 typesize = { workspace = true, features = [
     "bitvec",
-    "web-time",
+    "hashbrown_15",
     "saturating_impls",
 ] }
 web-time = { workspace = true }

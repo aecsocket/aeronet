@@ -18,13 +18,13 @@ pub mod sampling;
 pub mod send;
 pub mod seq_buf;
 
-#[cfg(feature = "visualizer")]
-pub mod visualizer;
+// #[cfg(feature = "visualizer")]
+// pub mod visualizer;
 
 pub use aeronet_io as io;
-use alloc::{boxed::Box, vec::Vec};
 use {
     aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
+    alloc::{boxed::Box, vec::Vec},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
     bevy_reflect::Reflect,

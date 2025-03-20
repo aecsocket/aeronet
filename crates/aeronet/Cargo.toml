@@ -18,13 +18,18 @@ workspace = true
 all-features = true
 
 [features]
+default = ["std"]
+
+## Enables standard library support.
+std = ["aeronet_transport/std"]
+
 ## Enables `aeronet_transport/visualizer`.
 visualizer = ["aeronet_transport/visualizer"]
 
 ## Enable this when generating docs.
 document-features = [
-  "aeronet_transport/document-features",
-  "dep:document-features",
+    "aeronet_transport/document-features",
+    "dep:document-features",
 ]
 
 [dependencies]

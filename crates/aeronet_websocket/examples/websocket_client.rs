@@ -41,9 +41,9 @@ fn on_connecting(
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {
-    let entity = trigger.entity();
+    let target = trigger.target();
     let name = names
-        .get(entity)
+        .get(target)
         .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connected"));
 }
@@ -53,9 +53,9 @@ fn on_connected(
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {
-    let entity = trigger.entity();
+    let target = trigger.target();
     let name = names
-        .get(entity)
+        .get(target)
         .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connected"));
 }
@@ -65,9 +65,9 @@ fn on_disconnected(
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {
-    let session = trigger.entity();
+    let target = trigger.target();
     let name = names
-        .get(session)
+        .get(target)
         .expect("our session entity should have a name");
     ui_state.log.push(match &trigger.reason {
         DisconnectReason::User(reason) => {

@@ -6995,8 +6995,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e29e4cac0f1acdbbe7b4deb46876a04246dc6abf60b6f2587bef8ae327cd134c"
 dependencies = [
  "bitvec",
+ "hashbrown 0.15.2",
  "typesize-derive",
- "web-time",
 ]
 
 [[package]]

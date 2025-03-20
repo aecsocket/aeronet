@@ -333,8 +333,7 @@ impl FragmentReceiver {
 mod tests {
     extern crate std;
 
-    use super::*;
-    use std::println;
+    use {super::*, std::println};
 
     // TODO
 

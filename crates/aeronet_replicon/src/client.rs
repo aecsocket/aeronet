@@ -2,7 +2,7 @@
 
 use {
     crate::convert,
-    aeronet_io::{Session, SessionEndpoint, connection::Disconnect, web_time::Instant},
+    aeronet_io::{Session, SessionEndpoint, connection::Disconnect},
     aeronet_transport::{
         AeronetTransportPlugin, Transport, TransportSet,
         sampling::{SessionSamplingPlugin, SessionStats, SessionStatsSampling},

@@ -147,8 +147,8 @@ pub(crate) struct SessionFrontend {
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebSocketIo>) {
-    let session = trigger.entity();
-    let Ok(mut io) = sessions.get_mut(session) else {
+    let target = trigger.target();
+    let Ok(mut io) = sessions.get_mut(target) else {
         return;
     };
 

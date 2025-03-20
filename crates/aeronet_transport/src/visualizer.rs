@@ -11,7 +11,11 @@ use {
         send::SendLane,
     },
     aeronet_io::{Session, packet::PacketRtt},
-    alloc::{format, string::String},
+    alloc::{
+        format,
+        string::{String, ToString},
+        vec::{self, Vec},
+    },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_egui::{
