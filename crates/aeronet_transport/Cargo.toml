@@ -19,7 +19,7 @@ all-features = true
 
 [package.metadata.cargo-shear]
 ignored = [
-    "bevy_winit", # see `document-features`
+  "bevy_winit", # see `document-features`
 ]
 
 [features]
@@ -44,31 +44,31 @@ serde = ["dep:serde"]
 ## [`bevy_egui`]: https://docs.rs/bevy_egui
 ## [`egui_plot`]: https://docs.rs/egui_plot
 visualizer = [
-    "std",
-    "dep:bevy_egui",
-    "dep:egui_plot",
-    "dep:itertools",
-    "dep:size_format",
-    "dep:thousands",
+  "std",
+  "dep:bevy_egui",
+  "dep:egui_plot",
+  "dep:itertools",
+  "dep:size_format",
+  "dep:thousands",
 ]
 
 ## Enable this when generating docs.
 document-features = [
-    "dep:document-features",
-    # "Wait - why the hell does `document-features` enable `bevy_winit`!?!?"
-    #
-    # Without this, generating docs with `cargo doc --all-features` will fail because of a specific
-    # combination of factors:
-    # - `--all-features` enables `visualizer`, which enables `bevy_egui`
-    # - `bevy_egui` depends on `bevy_winit`, which depends on `winit`
-    # - `winit` will fail to compile if there are no backends that it can use
-    # - On Linux, you must explicitly enable `x11` or `wayland` to tell `winit` which backend to use
-    # - When compiling the entire workspace, `bevy` enables `x11` by default. But when only compiling
-    #   this crate, we don't depend on `bevy`, so we never enable any of the backends.
-    # - Compile error!
-    #
-    # To get around this, when generating docs, we manually enable the `x11` feature.
-    "bevy_winit/x11",
+  "dep:document-features",
+  # "Wait - why the hell does `document-features` enable `bevy_winit`!?!?"
+  #
+  # Without this, generating docs with `cargo doc --all-features` will fail because of a specific
+  # combination of factors:
+  # - `--all-features` enables `visualizer`, which enables `bevy_egui`
+  # - `bevy_egui` depends on `bevy_winit`, which depends on `winit`
+  # - `winit` will fail to compile if there are no backends that it can use
+  # - On Linux, you must explicitly enable `x11` or `wayland` to tell `winit` which backend to use
+  # - When compiling the entire workspace, `bevy` enables `x11` by default. But when only compiling
+  #   this crate, we don't depend on `bevy`, so we never enable any of the backends.
+  # - Compile error!
+  #
+  # To get around this, when generating docs, we manually enable the `x11` feature.
+  "bevy_winit/x11",
 ]
 
 [dependencies]
@@ -77,22 +77,22 @@ aeronet_io = { workspace = true }
 anyhow = { workspace = true }
 bitvec = { workspace = true }
 derive_more = { workspace = true, features = [
-    "display",
-    "error",
-    "add",
-    "add_assign",
-    "from",
-    "deref",
-    "deref_mut",
+  "display",
+  "error",
+  "add",
+  "add_assign",
+  "from",
+  "deref",
+  "deref_mut",
 ] }
 either = { workspace = true }
 octs = { workspace = true }
 ringbuf = { workspace = true }
 tracing = { workspace = true }
 typesize = { workspace = true, features = [
-    "bitvec",
-    "hashbrown_15",
-    "saturating_impls",
+  "bitvec",
+  "hashbrown_15",
+  "saturating_impls",
 ] }
 web-time = { workspace = true }
 

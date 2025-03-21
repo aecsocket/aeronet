@@ -28,8 +28,8 @@ visualizer = ["aeronet_transport/visualizer"]
 
 ## Enable this when generating docs.
 document-features = [
-    "aeronet_transport/document-features",
-    "dep:document-features",
+  "aeronet_transport/document-features",
+  "dep:document-features",
 ]
 
 [dependencies]

@@ -131,9 +131,10 @@ xwt-web = "0.15.0"
 
 # aeronet_replicon
 
-bevy_replicon = { version = "0.31.0", default-features = false }
+# bevy_replicon = { version = "0.31.0", default-features = false }
+bevy_replicon = { git = "https://github.com/projectharmonia/bevy_replicon", rev = "f0e1fba566a5839ccf16c95abd7c41eb5258f307" }
 
 [workspace.metadata.cargo-shear]
 ignored = [
-    "bevy_winit", # see `aeronet_transport` feature `document-features`
+  "bevy_winit", # see `aeronet_transport` feature `document-features`
 ]

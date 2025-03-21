@@ -9,6 +9,7 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
     core::{num::Saturating, time::Duration},
@@ -122,8 +123,8 @@ fn on_client_connected(
     clients: Query<&Session, With<AeronetRepliconClient>>,
     channels: Res<RepliconChannels>,
 ) {
-    let client = trigger.entity();
-    let Ok(session) = clients.get(client) else {
+    let target = trigger.target();
+    let Ok(session) = clients.get(target) else {
         return;
     };
 
@@ -140,13 +141,13 @@ fn on_client_connected(
     let transport = match Transport::new(session, recv_lanes, send_lanes, now) {
         Ok(transport) => transport,
         Err(err) => {
-            warn!("Failed to create transport for {client}: {err:?}");
-            commands.trigger_targets(Disconnect::new("failed to create transport"), client);
+            warn!("Failed to create transport for {target}: {err:?}");
+            commands.trigger_targets(Disconnect::new("failed to create transport"), target);
             return;
         }
     };
 
-    commands.entity(client).insert(transport);
+    commands.entity(target).insert(transport);
 }
 
 fn update_state(

@@ -22,11 +22,11 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 anyhow = { workspace = true, default-features = false }
 bytes = { workspace = true, default-features = false }
 derive_more = { workspace = true, default-features = false, features = [
-    "display",
-    "error",
-    "add",
-    "add_assign",
-    "deref",
+  "display",
+  "error",
+  "add",
+  "add_assign",
+  "deref",
 ] }
 tracing = { workspace = true, default-features = false }
 

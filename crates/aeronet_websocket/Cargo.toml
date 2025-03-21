@@ -57,11 +57,11 @@ js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 web-sys = { workspace = true, features = [
-    "WebSocket",
-    "BinaryType",
-    "MessageEvent",
-    "CloseEvent",
-    "ErrorEvent",
+  "WebSocket",
+  "BinaryType",
+  "MessageEvent",
+  "CloseEvent",
+  "ErrorEvent",
 ] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]

@@ -5,7 +5,6 @@ use {
     aeronet_io::{
         Session,
         server::{Server, ServerEndpoint},
-        web_time::Instant,
     },
     aeronet_transport::{
         AeronetTransportPlugin, Transport, TransportSet,
@@ -13,8 +12,9 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bevy_reflect::Reflect,
-    bevy_replicon::{core::connected_client::ClientId, prelude::*, server::ServerSet},
+    bevy_replicon::{prelude::*, server::ServerSet},
     tracing::warn,
 };
 
@@ -137,17 +137,17 @@ fn update_state(
 fn on_connected(
     trigger: Trigger<OnAdd, Session>,
     sessions: Query<&Session>,
-    parents: Query<&Parent>,
+    child_of: Query<&ChildOf>,
     open_servers: Query<(), OpenedServer>,
     channels: Res<RepliconChannels>,
     mut commands: Commands,
 ) {
-    let client = trigger.entity();
+    let client = trigger.target();
     let session = sessions
         .get(client)
         .expect("we are adding this component to this entity");
 
-    let Ok(server) = parents.get(client).map(Parent::get) else {
+    let Ok(&ChildOf { parent: server }) = child_of.get(client) else {
         return;
     };
     if open_servers.get(server).is_err() {
@@ -171,20 +171,20 @@ fn on_connected(
     };
 
     commands.entity(client).insert((
-        // TODO: `ClientId` here does not uphold the persistent identifier guarantees
-        // But these will be relaxed in upstream soon anyway
-        ConnectedClient::new(ClientId::new(client.to_bits()), session.mtu()),
+        ConnectedClient {
+            max_size: session.mtu(),
+        },
         transport,
     ));
 }
 
 fn poll(
     mut replicon_server: ResMut<RepliconServer>,
-    mut clients: Query<(Entity, &mut Transport, &Parent)>,
+    mut clients: Query<(Entity, &mut Transport, &ChildOf)>,
     open_servers: Query<(), OpenedServer>,
 ) {
-    for (client, mut transport, server) in &mut clients {
-        if open_servers.get(server.get()).is_err() {
+    for (client, mut transport, &ChildOf { parent: server }) in &mut clients {
+        if open_servers.get(server).is_err() {
             continue;
         }
 
