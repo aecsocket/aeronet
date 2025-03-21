@@ -3,6 +3,7 @@
 //!
 //! ## Feature flags
 #![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
+#![no_std]
 
 extern crate alloc;
 
@@ -17,13 +18,13 @@ pub mod sampling;
 pub mod send;
 pub mod seq_buf;
 
-#[cfg(feature = "visualizer")]
-pub mod visualizer;
+// #[cfg(feature = "visualizer")]
+// pub mod visualizer;
 
 pub use aeronet_io as io;
 use {
     aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
-    arbitrary::Arbitrary,
+    alloc::{boxed::Box, vec::Vec},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
     bevy_reflect::Reflect,
@@ -324,7 +325,8 @@ pub enum TransportSet {
 /// key - it's very likely to have the same key as another message later.
 ///
 /// [`Seq`]: packet::Seq
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct MessageKey {
     /// Lane index on which the message was sent.
     pub lane: LaneIndex,

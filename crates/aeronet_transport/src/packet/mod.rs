@@ -39,10 +39,8 @@ mod seq;
 pub use payload::*;
 use {
     crate::{lane::LaneIndex, min_size::MinSize},
-    arbitrary::Arbitrary,
-    bevy_derive::{Deref, DerefMut},
     bevy_reflect::Reflect,
-    derive_more::{Add, AddAssign, Sub, SubAssign},
+    derive_more::{Add, AddAssign, Deref, DerefMut, Sub, SubAssign},
     octs::Bytes,
     typesize::derive::TypeSize,
 };
@@ -74,7 +72,8 @@ use {
 /// [Addition](std::ops::Add) and [subtraction](std::ops::Sub) will always wrap.
 ///
 /// See <https://gafferongames.com/post/packet_fragmentation_and_reassembly/>, *Fragment Packet Structure*.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, TypeSize, Reflect)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Seq(pub u16);
 
@@ -82,16 +81,18 @@ pub struct Seq(pub u16);
 ///
 /// This is used in [`PacketHeader`] for tracking packet-level acknowledgements
 /// (see [`Acknowledge`]).
-#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Arbitrary, TypeSize)] // force `#[derive]` on multiple lines
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, TypeSize)] // force `#[derive]` on multiple lines
 #[derive(Deref, DerefMut, Add, AddAssign, Sub, SubAssign, Reflect)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PacketSeq(pub Seq);
 
 /// Sequence number of a message in transit.
 ///
 /// This is used for fragmentation, reassembly, reliability, and ordering.
-#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Arbitrary, TypeSize)] // force `#[derive]` on multiple lines
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, TypeSize)] // force `#[derive]` on multiple lines
 #[derive(Deref, DerefMut, Add, AddAssign, Sub, SubAssign, Reflect)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MessageSeq(pub Seq);
 
@@ -120,7 +121,8 @@ pub struct MessageSeq(pub Seq);
 /// are sent, giving a lot of reliability and redundancy for acks.
 ///
 /// [*Gaffer On Games*]: https://gafferongames.com/post/reliable_ordered_messages/#packet-levelacks
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, TypeSize, Reflect)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Acknowledge {
     /// Last packet sequence number that the receiver received.
@@ -131,7 +133,8 @@ pub struct Acknowledge {
 }
 
 /// Metadata for a single packet.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, TypeSize, Reflect)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PacketHeader {
     /// Monotonically increasing sequence number of this packet.
@@ -157,7 +160,8 @@ pub struct PacketHeader {
 /// - `1`: last
 /// - `2`: non-last
 /// - ...
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FragmentPosition(MinSize);
 
@@ -172,7 +176,8 @@ pub struct FragmentPosition(MinSize);
 pub struct FragmentPayload(pub Bytes);
 
 /// Front-loaded [`Fragment`] metadata.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize, Reflect)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FragmentHeader {
     /// Lane index of this fragment's message, relative to the receiver's

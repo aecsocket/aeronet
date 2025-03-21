@@ -39,7 +39,7 @@ fn events_connect() {
     let mut app = app();
     app.init_resource::<WhoConnected>().add_observer(
         |trigger: Trigger<OnAdd, Session>, mut who: ResMut<WhoConnected>| {
-            who.0.push(trigger.entity());
+            who.0.push(trigger.target());
         },
     );
 
@@ -100,7 +100,7 @@ fn events_disconnect() {
                 DisconnectReason::Peer(reason) => DisconnectReason::Peer(reason.clone()),
                 DisconnectReason::Error(_) => panic!("should not disconnect with an error"),
             };
-            who.0.push((trigger.entity(), reason));
+            who.0.push((trigger.target(), reason));
         },
     );
 

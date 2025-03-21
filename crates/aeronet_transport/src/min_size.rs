@@ -1,7 +1,6 @@
 //! See [`MinSize`].
 
 use {
-    arbitrary::Arbitrary,
     bevy_reflect::Reflect,
     core::num::TryFromIntError,
     octs::{BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt, Write},
@@ -22,9 +21,8 @@ compile_error!("`aeronet_transport` cannot safely compile for a 16-bit platform"
 /// any platforms where `usize` is smaller than [`u32`].
 ///
 /// This value is always encoded as a [`VarInt`] on the wire.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Arbitrary, TypeSize, Reflect,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, TypeSize, Reflect)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MinSize(pub u32);
 

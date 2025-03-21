@@ -8,7 +8,7 @@ use {
         packet::RecvPacket,
     },
     bevy_app::prelude::*,
-    bevy_ecs::{prelude::*, world::Command},
+    bevy_ecs::prelude::*,
     bytes::Bytes,
     core::num::Saturating,
     derive_more::{Display, Error},
@@ -141,14 +141,14 @@ pub struct ChannelDisconnected;
 const MTU: usize = usize::MAX;
 
 fn on_io_added(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
-    let entity = trigger.entity();
+    let target = trigger.target();
     let session = Session::new(Instant::now(), MTU);
-    commands.entity(entity).insert((SessionEndpoint, session));
+    commands.entity(target).insert((SessionEndpoint, session));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelIo>) {
-    let entity = trigger.entity();
-    let Ok(mut io) = sessions.get_mut(entity) else {
+    let target = trigger.target();
+    let Ok(mut io) = sessions.get_mut(target) else {
         return;
     };
 

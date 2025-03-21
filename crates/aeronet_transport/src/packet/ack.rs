@@ -1,5 +1,6 @@
 use {
     crate::packet::{Acknowledge, PacketSeq},
+    alloc::format,
     core::{convert::Infallible, fmt},
     octs::{BufTooShortOr, Decode, Encode, FixedEncodeLen, Read, Write},
 };

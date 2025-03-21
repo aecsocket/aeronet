@@ -1,6 +1,7 @@
 //! See [`SeqBuf`].
 
 use {
+    alloc::boxed::Box,
     core::{array, mem},
     typesize::TypeSize,
 };

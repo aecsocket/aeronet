@@ -1,19 +1,23 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![no_std]
+
+extern crate alloc;
 
 pub mod connection;
 pub mod packet;
 pub mod server;
 
-pub use {anyhow, bytes, web_time};
 use {
+    alloc::vec::Vec,
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bevy_reflect::prelude::*,
     bytes::Bytes,
     packet::{MtuTooSmall, PacketStats, RecvPacket},
-    web_time::Instant,
 };
+pub use {anyhow, bytes};
 
 /// Sets up the IO layer functionality.
 ///

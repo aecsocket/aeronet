@@ -115,12 +115,12 @@ impl WebSocketClient {
                 target.into_client_request()
             }
         };
-        move |session: Entity, world: &mut World| connect(session, world, config, target)
+        move |entity: EntityWorldMut| connect(entity, config, target)
     }
 }
 
-fn connect(session: Entity, world: &mut World, config: ClientConfig, target: ConnectTarget) {
-    let runtime = world.resource::<WebSocketRuntime>().clone();
+fn connect(mut entity: EntityWorldMut, config: ClientConfig, target: ConnectTarget) {
+    let runtime = entity.world().resource::<WebSocketRuntime>().clone();
 
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
@@ -129,15 +129,13 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
             let Err(reason) = backend::start(config, target, send_next).await;
             _ = send_dc.send(reason);
         }
-        .instrument(debug_span!("client", %session)),
+        .instrument(debug_span!("client", entity = %entity.id())),
     );
 
-    world
-        .entity_mut(session)
-        .insert(WebSocketClient(ClientFrontend::Connecting {
-            recv_dc,
-            recv_next,
-        }));
+    entity.insert(WebSocketClient(ClientFrontend::Connecting {
+        recv_dc,
+        recv_next,
+    }));
 }
 
 /// [`WebSocketClient`] error.

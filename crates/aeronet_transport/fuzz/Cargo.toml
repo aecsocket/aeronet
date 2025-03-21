@@ -15,7 +15,7 @@ cargo-fuzz = true
 arbitrary = "1.4"
 libfuzzer-sys = "0.4"
 
-aeronet_transport = { path = ".." }
+aeronet_transport = { path = "..", features = ["arbitrary"] }
 
 [[bin]]
 name = "frag_recv"

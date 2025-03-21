@@ -21,10 +21,16 @@ RUN yay -Syu --noconfirm \
     rustup default stable && \
     rustup install nightly && \
     curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | sh && \
-    cargo binstall cargo-shear && \
+    cargo binstall cargo-shear
 
 # install Rust fuzzing tools
 RUN cargo binstall cargo-fuzz
 
 # install Bevy libraries
-RUN yay -Syu --noconfirm alsa-lib libxkbcommon vulkan-radeon
+# RUN yay -Syu --noconfirm alsa-lib libxkbcommon vulkan-tools mesa vulkan-radeon
+RUN yay -Syu --noconfirm alsa-lib libxkbcommon vulkan-tools && \
+    # install mesa 24.3.4 because 25.0 has a regression on AMD Radeon 780M where conformanceVersion reports as 0.0.0.0,
+    # making it fail with wgpu adapter initialization
+    # <https://github.com/warpdotdev/Warp/issues/6015>
+    sudo pacman -U --noconfirm https://archive.archlinux.org/packages/m/mesa/mesa-1%3A24.3.4-1-x86_64.pkg.tar.zst && \
+    sudo pacman -U --noconfirm https://archive.archlinux.org/packages/v/vulkan-radeon/vulkan-radeon-1%3A24.3.4-1-x86_64.pkg.tar.zst

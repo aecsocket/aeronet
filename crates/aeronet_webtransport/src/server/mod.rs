@@ -17,7 +17,6 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
-    bevy_hierarchy::BuildChildren,
     bevy_reflect::prelude::*,
     bytes::Bytes,
     core::{any::type_name, net::SocketAddr, time::Duration},
