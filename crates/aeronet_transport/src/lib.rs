@@ -17,11 +17,13 @@ pub mod rtt;
 pub mod sampling;
 pub mod send;
 pub mod seq_buf;
+mod util;
 
 // #[cfg(feature = "visualizer")]
 // pub mod visualizer;
 
 pub use aeronet_io as io;
+use bevy_platform_support::time::Instant;
 use {
     aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
     alloc::{boxed::Box, vec::Vec},
@@ -31,6 +33,7 @@ use {
     core::num::Saturating,
     derive_more::{Add, AddAssign, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
+    log::warn,
     min_size::MinSize,
     octs::FixedEncodeLenHint,
     packet::{Acknowledge, FragmentHeader, MessageSeq, PacketHeader},
@@ -38,9 +41,7 @@ use {
     rtt::RttEstimator,
     send::TransportSend,
     seq_buf::SeqBuf,
-    tracing::warn,
     typesize::{TypeSize, derive::TypeSize},
-    web_time::Instant,
 };
 
 /// Sets up the transport layer functionality.
@@ -184,6 +185,7 @@ pub struct RecvMessage {
     /// Lane index on which this message was received.
     pub lane: LaneIndex,
     /// Instant at which the final fragment of this message was received.
+    #[typesize(with = crate::util::size_of_instant)]
     pub recv_at: Instant,
     /// Raw byte data of this message.
     pub payload: Vec<u8>,
@@ -358,6 +360,7 @@ struct FragmentPath {
 
 #[derive(Debug, Clone, TypeSize)]
 struct FlushedPacket {
+    #[typesize(with = crate::util::size_of_instant)]
     flushed_at: Instant,
     frags: Box<[FragmentPath]>,
 }

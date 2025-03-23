@@ -14,7 +14,7 @@ use {
     bevy_ecs::prelude::*,
     bevy_platform_support::time::Instant,
     bevy_reflect::prelude::*,
-    tracing::debug,
+    log::debug,
 };
 
 #[derive(Debug)]

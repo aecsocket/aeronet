@@ -7,7 +7,7 @@ use {
     bevy_ecs::prelude::*,
     core::{fmt::Debug, net::SocketAddr},
     derive_more::Deref,
-    tracing::debug,
+    log::debug,
 };
 
 #[derive(Debug)]

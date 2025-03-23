@@ -20,6 +20,8 @@ RUN yay -Syu --noconfirm \
     rustup clang lld taplo && \
     rustup default stable && \
     rustup install nightly && \
+    rustup target add x86_64-unknown-none && \
+    rustup target add thumbv6m-none-eabi && \
     curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | sh && \
     cargo binstall cargo-shear
 

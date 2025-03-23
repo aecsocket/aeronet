@@ -11,10 +11,7 @@ use {
     bevy_time::{Real, Time, Timer, TimerMode},
     core::time::Duration,
     derive_more::{Deref, DerefMut},
-    ringbuf::{
-        HeapRb,
-        traits::{Consumer, Observer, RingBuffer},
-    },
+    ringbuf::traits::{Consumer, Observer, RingBuffer},
 };
 
 /// Periodically samples the state of [`Session`]s to gather statistics on the
@@ -292,7 +289,7 @@ fn compute_loss(
         reason = "all floats involved should be positive"
     )]
     #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
-    let lost_thresh_index = (lost_thresh * sampling_rate).ceil() as usize;
+    let lost_thresh_index = (lost_thresh * sampling_rate) as usize;
 
     // Find the most recent sample that falls within the loss threshold
     let lost_thresh_sample = stats

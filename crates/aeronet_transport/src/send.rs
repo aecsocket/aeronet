@@ -19,14 +19,16 @@ use {
     },
     alloc::{boxed::Box, vec::Vec},
     bevy_ecs::prelude::*,
-    bevy_platform_support::collections::{HashMap, hash_map::Entry},
+    bevy_platform_support::{
+        collections::{HashMap, hash_map::Entry},
+        time::Instant,
+    },
     bevy_time::{Real, Time},
     core::iter,
     derive_more::{Display, Error, From},
+    log::trace,
     octs::{Bytes, EncodeLen, Write},
-    tracing::{trace, trace_span},
     typesize::derive::TypeSize,
-    web_time::Instant,
 };
 
 /// Allows buffering up messages to be sent on a [`Transport`].
@@ -57,7 +59,9 @@ pub(crate) struct SentFragment {
     position: FragmentPosition,
     #[typesize(with = Bytes::len)]
     payload: Bytes,
+    #[typesize(with = crate::util::size_of_instant)]
     sent_at: Instant,
+    #[typesize(with = crate::util::size_of_instant)]
     next_flush_at: Instant,
 }
 
@@ -324,9 +328,6 @@ fn flush_on(
             .write(&header)
             .expect("should grow the buffer when writing over capacity");
 
-        let span = trace_span!("flush", packet = packet_seq.0.0);
-        let _span = span.enter();
-
         // collect the paths of the frags we want to put into this packet
         // so that we can track which ones have been acked later
         let mut packet_frags = Vec::new();
@@ -359,7 +360,11 @@ fn flush_on(
             return None;
         }
 
-        trace!(num_frags = packet_frags.len(), "Flushed packet");
+        trace!(
+            "Flushed packet {} with {} fragments",
+            packet_seq.0.0,
+            packet_frags.len()
+        );
         transport.flushed_packets.insert(
             packet_seq.0.0,
             FlushedPacket {

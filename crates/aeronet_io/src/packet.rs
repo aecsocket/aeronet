@@ -46,7 +46,7 @@ use {
     bytes::Bytes,
     core::{num::Saturating, time::Duration},
     derive_more::{Add, AddAssign, Deref, Display, Error, Sub, SubAssign},
-    tracing::warn,
+    log::warn,
 };
 
 #[derive(Debug)]
