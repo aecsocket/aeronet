@@ -19,7 +19,6 @@ use {
             Session, SessionEndpoint,
             bytes::Bytes,
             connection::{Disconnect, DisconnectReason, Disconnected},
-            web_time,
         },
         transport::{
             AeronetTransportPlugin, Transport, TransportConfig,
@@ -135,7 +134,7 @@ fn setup(mut commands: Commands) {
 
 // Observe state change events using `Trigger`s.
 fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>, mut sessions: Query<&mut UiState>) {
-    let entity = trigger.entity();
+    let entity = trigger.target();
     let mut ui_state = sessions
         .get_mut(entity)
         .expect("our sessions should have these components");
@@ -147,7 +146,7 @@ fn on_connected(
     mut sessions: Query<(&Session, &mut UiState)>,
     mut commands: Commands,
 ) {
-    let entity = trigger.entity();
+    let entity = trigger.target();
     let (session, mut ui_state) = sessions
         .get_mut(entity)
         .expect("our sessions should have these components");
@@ -160,16 +159,15 @@ fn on_connected(
         LANES,
         LANES,
         // Don't use `std::time::Instant::now`!
-        // On WASM that function will panic.
-        // Instead, use the re-exported `web_time`.
-        web_time::Instant::now(),
+        // Instead, use `bevy::platform_support::time::Instant`.
+        bevy::platform_support::time::Instant::now(),
     )
     .expect("packet MTU should be large enough to support transport");
     commands.entity(entity).insert(transport);
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>) {
-    let entity = trigger.entity();
+    let entity = trigger.target();
     match &trigger.reason {
         DisconnectReason::User(reason) => info!("{entity} disconnected by user: {reason}"),
         DisconnectReason::Peer(reason) => info!("{entity} disconnected by peer: {reason}"),
@@ -185,8 +183,8 @@ fn recv_messages(
             &mut Transport, // ..the messages received by the transport layer
             &mut UiState,   // ..and push the messages into `UiState::log`
         ),
-        Without<Parent>, /* ..for all sessions which aren't parented to a server (so only our
-                          * own local clients) */
+        Without<ChildOf>, /* ..for all sessions which aren't parented to a server (so only our
+                           * own local clients) */
     >,
 ) {
     for (mut transport, mut ui_state) in &mut sessions {
@@ -215,7 +213,7 @@ fn ui(
     mut commands: Commands,
     // Technically, this query can run for multiple sessions, so we can have
     // multiple `egui` windows. But there will only ever be 1 session active.
-    mut sessions: Query<(Entity, &mut Transport, &mut UiState), Without<Parent>>,
+    mut sessions: Query<(Entity, &mut Transport, &mut UiState), Without<ChildOf>>,
 ) {
     for (entity, mut transport, mut ui_state) in &mut sessions {
         egui::Window::new("Log").show(egui.ctx_mut(), |ui| {
@@ -228,9 +226,11 @@ fn ui(
 
                 let msg = Bytes::from(msg);
                 // We ignore the resulting `MessageKey`, since we don't need it.
-                _ = transport
-                    .send
-                    .push(SEND_LANE, msg, web_time::Instant::now());
+                _ = transport.send.push(
+                    SEND_LANE,
+                    msg,
+                    bevy::platform_support::time::Instant::now(),
+                );
             }
 
             if ui.button("Disconnect").clicked() {

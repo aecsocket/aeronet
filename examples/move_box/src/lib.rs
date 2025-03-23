@@ -57,7 +57,7 @@ pub struct PlayerPosition(pub Vec2);
 pub struct PlayerColor(pub Color);
 
 /// Player's inputs that they send to control their box.
-#[derive(Debug, Clone, Default, Event, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Component, Event, Serialize, Deserialize)]
 pub struct PlayerInput {
     /// Lateral movement vector.
     ///

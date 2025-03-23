@@ -5,7 +5,6 @@ use {
             bytes::Bytes,
             connection::{DisconnectReason, Disconnected, LocalAddr},
             server::Server,
-            web_time,
         },
         transport::{AeronetTransportPlugin, Transport, lane::LaneKind},
     },
@@ -75,7 +74,7 @@ fn setup(mut commands: Commands) {
 
 // Observe state change events using `Trigger`s
 fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
-    let server = trigger.entity();
+    let server = trigger.target();
     let local_addr = servers
         .get(server)
         .expect("opened server should have a binding socket `LocalAddr`");
@@ -85,15 +84,15 @@ fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
 fn on_connected(
     trigger: Trigger<OnAdd, Session>,
     sessions: Query<&Session>,
-    clients: Query<&Parent>,
+    clients: Query<&ChildOf>,
     mut commands: Commands,
 ) {
-    let client = trigger.entity();
+    let client = trigger.target();
     let session = sessions
         .get(client)
         .expect("we are adding this component to this entity");
-    // A `Connected` `Session` which has a `Parent` is a client of a server.
-    let Ok(server) = clients.get(client).map(Parent::get) else {
+    // A `Connected` `Session` which is a `ChildOf` is a client of a server.
+    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
         return;
     };
     info!("{client} connected to {server}");
@@ -105,19 +104,16 @@ fn on_connected(
         LANES,
         LANES,
         // Don't use `std::time::Instant::now`!
-        // On WASM that function will panic.
-        // Instead, use the re-exported `web_time`.
-        // (We're writing a server, so we'll never run it on WASM.
-        // But still, use `web_time` for consistency with the client code.)
-        web_time::Instant::now(),
+        // Instead, use `bevy::platform_support::time::Instant`.
+        bevy::platform_support::time::Instant::now(),
     )
     .expect("packet MTU should be large enough to support transport");
     commands.entity(client).insert(transport);
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
-    let client = trigger.entity();
-    let Ok(server) = clients.get(client).map(Parent::get) else {
+fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
+    let client = trigger.target();
+    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
         return;
     };
 
@@ -143,8 +139,8 @@ fn echo_messages(
             &mut Transport, // ..and the transport layer access
         ),
         (
-            With<Parent>, /* ..for all sessions which are connected to one of our servers
-                          (excludes local dedicated clients) */
+            With<ChildOf>, /* ..for all sessions which are connected to one of our servers
+                           (excludes local dedicated clients) */
         ),
     >,
 ) {
@@ -166,9 +162,11 @@ fn echo_messages(
             info!("{client} < {reply}");
             // Convert our `String` into a `Bytes` to send it out.
             // We ignore the resulting `MessageKey`, since we don't need it.
-            _ = transport
-                .send
-                .push(msg.lane, Bytes::from(reply), web_time::Instant::now());
+            _ = transport.send.push(
+                msg.lane,
+                Bytes::from(reply),
+                bevy::platform_support::time::Instant::now(),
+            );
         }
 
         for _ in transport.recv.acks.drain() {

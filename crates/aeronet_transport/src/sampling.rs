@@ -11,7 +11,10 @@ use {
     bevy_time::{Real, Time, Timer, TimerMode},
     core::time::Duration,
     derive_more::{Deref, DerefMut},
-    ringbuf::traits::{Consumer, Observer, RingBuffer},
+    ringbuf::{
+        HeapRb,
+        traits::{Consumer, Observer, RingBuffer},
+    },
 };
 
 /// Periodically samples the state of [`Session`]s to gather statistics on the

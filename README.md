@@ -45,7 +45,7 @@ cargo run --example channel
     authority that your browser trusts.
 
 ```sh
-cargo run --example websocket_echo_server -F server
+cargo run --example websocket_server -F server
 cargo run --example websocket_client -F client
 
 # WASM
@@ -65,7 +65,7 @@ cargo run --example websocket_client -F client --target wasm32-unknown-unknown
     3. press Ctrl+V
 
 ```sh
-cargo run --example webtransport_echo_server -F server
+cargo run --example webtransport_server -F server
 cargo run --example webtransport_client -F client,dangerous-configuration
 
 # WASM
@@ -78,7 +78,7 @@ cargo run --example webtransport_client -F client --target wasm32-unknown-unknow
   - 🛠️ WIP
 
 ```sh
-cargo run --example steam_echo_server -F server
+cargo run --example steam_server -F server
 cargo run --example steam_client -F client
 ```
 
