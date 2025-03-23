@@ -88,7 +88,7 @@ fn ping_pong(
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
-            assert_eq!(trigger.entity(), expected_server.0);
+            assert_eq!(trigger.target(), expected_server.0);
             seq.event(ServerEvent::NewServerEndpoint).expect_first();
         }
 
@@ -97,7 +97,7 @@ fn ping_pong(
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
-            assert_eq!(trigger.entity(), expected_server.0);
+            assert_eq!(trigger.target(), expected_server.0);
             seq.event(ServerEvent::NewServer)
                 .expect_after(ServerEvent::NewServerEndpoint);
         }

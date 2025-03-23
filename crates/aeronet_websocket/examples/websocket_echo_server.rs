@@ -43,32 +43,32 @@ fn open_server(mut commands: Commands) {
 }
 
 fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
-    let server = trigger.entity();
+    let server = trigger.target();
     let local_addr = servers.get(server).expect("opened server should have a binding socket `LocalAddr`");
     info!("{server} opened on {}", **local_addr);
 }
 
-fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>, clients: Query<&Parent>) {
-    let client = trigger.entity();
-    let Ok(server) = clients.get(client).map(Parent::get) else {
+fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>, clients: Query<&ChildOf>) {
+    let client = trigger.target();
+    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
         return;
     };
 
     info!("{client} connecting to {server}");
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>) {
-    let client = trigger.entity();
-    let Ok(server) = clients.get(client).map(Parent::get) else {
+fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&ChildOf>) {
+    let client = trigger.target();
+    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
         return;
     };
 
     info!("{client} connected to {server}");
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
-    let client = trigger.entity();
-    let Ok(server) = clients.get(client).map(Parent::get) else {
+fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
+    let client = trigger.target();
+    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
         return;
     };
 
@@ -85,7 +85,7 @@ fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
     }
 }
 
-fn reply(mut clients: Query<(Entity, &mut Session), With<Parent>>) {
+fn reply(mut clients: Query<(Entity, &mut Session), With<ChildOf>>) {
     for (client, mut session) in &mut clients {
         // explicit deref so we can access disjoint fields
         let session = &mut *session;

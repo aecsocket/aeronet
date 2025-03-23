@@ -70,8 +70,7 @@ size_format = "1.0.2"
 sync_wrapper = "1.0.1"
 thousands = "0.2.0"
 tracing = { version = "0.1.40", default-features = false }
-# typesize = { version = "0.1.13", default-features = false }
-typesize = { git = "https://github.com/aecsocket/typesize", branch = "fix-no-std", default-features = false }
+typesize = { version = "0.1.13", default-features = false }
 web-time = "1.1.0"
 
 # native
@@ -96,7 +95,7 @@ bevy_reflect = { version = "0.16.0-rc.1", default-features = false }
 bevy_time = { version = "0.16.0-rc.1", default-features = false }
 bevy_winit = { version = "0.16.0-rc.1", default-features = false }
 
-bevy_egui = "0.31.1"
+bevy_egui = "0.33.0"
 
 # tls
 
@@ -133,10 +132,14 @@ xwt-web = "0.15.0"
 
 # aeronet_replicon
 
-# bevy_replicon = { version = "0.31.0", default-features = false }
-bevy_replicon = { git = "https://github.com/projectharmonia/bevy_replicon", rev = "f0e1fba566a5839ccf16c95abd7c41eb5258f307" }
+bevy_replicon = { version = "0.31.0", default-features = false }
 
 [workspace.metadata.cargo-shear]
 ignored = [
     "bevy_winit", # see `aeronet_transport` feature `document-features`
 ]
+
+[patch.crates-io]
+bevy_egui = { git = "https://github.com/Friz64/bevy_egui", branch = "bevy-0.16" }
+bevy_replicon = { git = "https://github.com/projectharmonia/bevy_replicon", rev = "f0e1fba566a5839ccf16c95abd7c41eb5258f307" }
+typesize = { git = "https://github.com/aecsocket/typesize", branch = "fix-no-std" }
