@@ -107,9 +107,9 @@ fn web_transport_config(identity: wtransport::Identity, args: &Args) -> WebTrans
         .build()
 }
 
-fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&Parent>) {
-    let client = request.entity();
-    let Ok(server) = clients.get(client).map(Parent::get) else {
+fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&ChildOf>) {
+    let client = request.target();
+    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
         return;
     };
 
@@ -147,16 +147,20 @@ fn web_socket_config(args: &Args) -> WebSocketServerConfig {
 //
 
 fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
-    let server = trigger.entity();
+    let server = trigger.target();
     let local_addr = servers
         .get(server)
         .expect("opened server should have a binding socket `LocalAddr`");
     info!("{server} opened on {}", **local_addr);
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>, mut commands: Commands) {
-    let client = trigger.entity();
-    let Ok(server) = clients.get(client).map(Parent::get) else {
+fn on_connected(
+    trigger: Trigger<OnAdd, Session>,
+    clients: Query<&ChildOf>,
+    mut commands: Commands,
+) {
+    let client = trigger.target();
+    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
         return;
     };
     info!("{client} connected to {server}");
@@ -181,9 +185,9 @@ fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&Parent>, mut c
     ));
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&Parent>) {
-    let client = trigger.entity();
-    let Ok(server) = clients.get(client).map(Parent::get) else {
+fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
+    let client = trigger.target();
+    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
         return;
     };
 

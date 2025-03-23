@@ -19,16 +19,16 @@ pub mod send;
 pub mod seq_buf;
 mod util;
 
-// #[cfg(feature = "visualizer")]
-// pub mod visualizer;
+#[cfg(feature = "visualizer")]
+pub mod visualizer;
 
 pub use aeronet_io as io;
-use bevy_platform_support::time::Instant;
 use {
     aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
     alloc::{boxed::Box, vec::Vec},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
+    bevy_platform_support::time::Instant,
     bevy_reflect::Reflect,
     core::num::Saturating,
     derive_more::{Add, AddAssign, Sub, SubAssign},

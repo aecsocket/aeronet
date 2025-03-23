@@ -82,7 +82,7 @@ fn on_connecting(
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {
-    let entity = trigger.entity();
+    let entity = trigger.target();
     let name = names
         .get(entity)
         .expect("our session entity should have a name");
@@ -96,7 +96,7 @@ fn on_connected(
     mut game_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
 ) {
-    let entity = trigger.entity();
+    let entity = trigger.target();
     let name = names
         .get(entity)
         .expect("our session entity should have a name");
@@ -119,7 +119,7 @@ fn on_disconnected(
     mut ui_state: ResMut<GlobalUi>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
-    let session = trigger.entity();
+    let session = trigger.target();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
@@ -166,7 +166,7 @@ fn global_ui(
 
             ui.label(format!("Tx {:.0}bps", stats.sent_bps));
         });
-        match sessions.get_single() {
+        match sessions.single() {
             Ok((session, name, connected)) => {
                 if connected.is_some() {
                     ui.label(format!("{name} connected"));
@@ -376,7 +376,7 @@ fn handle_inputs(mut inputs: EventWriter<PlayerInput>, input: Res<ButtonInput<Ke
     }
 
     // don't normalize here, since the server will normalize anyway
-    inputs.send(PlayerInput { movement });
+    inputs.write(PlayerInput { movement });
 }
 
 fn draw_boxes(mut gizmos: Gizmos, players: Query<(&PlayerPosition, &PlayerColor)>) {
