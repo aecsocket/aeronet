@@ -94,12 +94,12 @@ impl WebTransportServer {
     #[must_use]
     pub fn open(config: impl Into<ServerConfig>) -> impl EntityCommand {
         let config = config.into();
-        |server: Entity, world: &mut World| open(server, world, config)
+        move |entity: EntityWorldMut| open(entity, config)
     }
 }
 
-fn open(server: Entity, world: &mut World, config: ServerConfig) {
-    let runtime = world.resource::<WebTransportRuntime>().clone();
+fn open(mut entity: EntityWorldMut, config: ServerConfig) {
+    let runtime = entity.world().resource::<WebTransportRuntime>().clone();
     let (send_closed, recv_closed) = oneshot::channel::<CloseReason<ServerError>>();
     let (send_next, recv_next) = oneshot::channel::<ToOpen>();
     runtime.spawn_on_self(
@@ -107,15 +107,13 @@ fn open(server: Entity, world: &mut World, config: ServerConfig) {
             let Err(err) = backend::start(config, send_next).await;
             _ = send_closed.send(CloseReason::Error(err));
         }
-        .instrument(debug_span!("server", %server)),
+        .instrument(debug_span!("server", entity = %entity.id())),
     );
 
-    world
-        .entity_mut(server)
-        .insert(WebTransportServer(Frontend::Opening {
-            recv_closed,
-            recv_next,
-        }));
+    entity.insert(WebTransportServer(Frontend::Opening {
+        recv_closed,
+        recv_next,
+    }));
 }
 
 /// How should a [`WebTransportServer`] respond to a client wishing to connect
@@ -331,16 +329,13 @@ fn poll_open(
 
     while let Ok(Some(connecting)) = recv_connecting.try_next() {
         let session = commands
-            // spawn -> parent -> insert, so that Parent is available
-            // as soon as other components are added
-            .spawn_empty()
-            .set_parent(server)
-            .insert(
+            .spawn((
+                ChildOf { parent: server },
                 ClientFrontend::Connecting {
                     recv_dc: connecting.recv_dc,
                     recv_next: connecting.recv_next,
                 },
-            )
+            ))
             .id();
         _ = connecting.send_session_entity.send(session);
 

@@ -117,12 +117,12 @@ impl WebTransportClient {
                 target.into_options()
             }
         };
-        move |session: Entity, world: &mut World| connect(session, world, config, target)
+        move |entity: EntityWorldMut| connect(entity, config, target)
     }
 }
 
-fn connect(session: Entity, world: &mut World, config: ClientConfig, target: ConnectTarget) {
-    let runtime = world.resource::<WebTransportRuntime>().clone();
+fn connect(mut entity: EntityWorldMut, config: ClientConfig, target: ConnectTarget) {
+    let runtime = entity.world().resource::<WebTransportRuntime>().clone();
     let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     runtime.spawn_on_self(
@@ -130,15 +130,13 @@ fn connect(session: Entity, world: &mut World, config: ClientConfig, target: Con
             let Err(reason) = backend::start(config, target, send_next).await;
             _ = send_dc.send(reason);
         }
-        .instrument(debug_span!("client", %session)),
+        .instrument(debug_span!("client", entity = %entity.id())),
     );
 
-    world
-        .entity_mut(session)
-        .insert(WebTransportClient(ClientFrontend::Connecting {
-            recv_dc,
-            recv_next,
-        }));
+    entity.insert(WebTransportClient(ClientFrontend::Connecting {
+        recv_dc,
+        recv_next,
+    }));
 }
 
 /// [`WebTransportClient`] error.
