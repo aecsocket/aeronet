@@ -18,6 +18,16 @@ workspace = true
 all-features = true
 
 [features]
+default = ["std"]
+
+## Enables [`portable-atomic/critical-section`][cs], used for targets without native atomic CAS.
+##
+## [cs]: https://docs.rs/portable-atomic/latest/portable_atomic/
+critical-section = ["aeronet_transport/critical-section"]
+
+## Enables standard library support.
+std = ["aeronet_transport/std"]
+
 ## Enables support for `bevy_replicon/client`.
 client = ["bevy_replicon/client"]
 

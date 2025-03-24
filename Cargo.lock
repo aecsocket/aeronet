@@ -5309,11 +5309,11 @@ dependencies = [
 [[package]]
 name = "ringbuf"
 version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "726bb493fe9cac765e8f96a144c3a8396bdf766dedad22e504b70b908dcbceb4"
+source = "git+https://github.com/aecsocket/ringbuf?branch=fix-alloc-pa#04eefb5fdb4ab8debfe29d3de819fcf50f605c83"
 dependencies = [
  "crossbeam-utils",
  "portable-atomic",
+ "portable-atomic-util",
 ]
 
 [[package]]

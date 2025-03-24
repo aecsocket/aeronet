@@ -143,3 +143,4 @@ ignored = [
 bevy_egui = { git = "https://github.com/Friz64/bevy_egui", branch = "bevy-0.16" }
 bevy_replicon = { git = "https://github.com/projectharmonia/bevy_replicon", rev = "f0e1fba566a5839ccf16c95abd7c41eb5258f307" }
 typesize = { git = "https://github.com/aecsocket/typesize", branch = "fix-no-std" }
+ringbuf = { git = "https://github.com/aecsocket/ringbuf", branch = "fix-alloc-pa" }

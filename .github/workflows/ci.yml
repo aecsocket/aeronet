@@ -87,6 +87,17 @@ jobs:
       - run: cargo install cargo-fuzz
       - run: cd crates/aeronet_transport && cargo +nightly fuzz build
 
+  build-minimal:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: ["aeronet_io", "aeronet_transport", "aeronet_replicon"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/install-bevy-deps
+      - run: cargo build --target thumbv6m-none-eabi --package '${{ matrix.package }}' --no-default-features --features critical-section
+
   test:
     runs-on: ubuntu-latest
     env:
