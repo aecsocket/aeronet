@@ -160,7 +160,7 @@ fn ping_pong(
             .add_observer(on_add_server)
             .add_observer(on_add_session_endpoint)
             .add_observer(on_add_session)
-            .add_systems(Update, recv_on_session.never_param_warn());
+            .add_systems(Update, recv_on_session);
 
         let world = app.world_mut();
         let server = world.spawn_empty().id();

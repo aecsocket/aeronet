@@ -59,9 +59,9 @@ pub(crate) struct SentFragment {
     position: FragmentPosition,
     #[typesize(with = Bytes::len)]
     payload: Bytes,
-    #[typesize(with = crate::util::size_of_instant)]
+    #[typesize(skip)]
     sent_at: Instant,
-    #[typesize(with = crate::util::size_of_instant)]
+    #[typesize(skip)]
     next_flush_at: Instant,
 }
 

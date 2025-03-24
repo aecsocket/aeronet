@@ -18,6 +18,7 @@ primitives.
 - Swappable IO layer
   - Use whatever you like as the underlying byte transfer mechanism
   - You can use multiple IO layers at the same time, e.g. Steam + WebTransport
+  - Supports `no_std` and platforms with limited atomic support via `critical-section`
 
 High-level networking features such as replication, rollback, and prediction are explicit
 **non-goals** for this crate. Instead, this crate aims to provide a solid foundation for
@@ -182,6 +183,7 @@ conditioning is applied at the lowest level possible.
 
 | `bevy` | `aeronet`           |
 |--------|---------------------|
+| `0.16` | `0.13.0`            |
 | `0.15` | `0.11.0` - `0.12.0` |
 | `0.14` | `0.9.0` - `0.10.0`  |
 

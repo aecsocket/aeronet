@@ -82,7 +82,7 @@ fn ping_pong(
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
-            assert_eq!(trigger.entity(), expected_server.0);
+            assert_eq!(trigger.target(), expected_server.0);
             seq.event(ServerEvent::NewServerEndpoint).expect_first();
         }
 
@@ -91,22 +91,21 @@ fn ping_pong(
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
-            assert_eq!(trigger.entity(), expected_server.0);
+            assert_eq!(trigger.target(), expected_server.0);
             seq.event(ServerEvent::NewServer)
                 .expect_after(ServerEvent::NewServerEndpoint);
         }
 
         fn on_add_session_endpoint(
             trigger: Trigger<OnAdd, SessionEndpoint>,
-            parents: Query<&Parent>,
+            parents: Query<&ChildOf>,
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
             mut commands: Commands,
         ) {
-            let client = trigger.entity();
-            let parent = parents
+            let client = trigger.target();
+            let &ChildOf { parent } = parents
                 .get(client)
-                .map(Parent::get)
                 .expect("parent server of client session should exist");
             assert_eq!(expected_server.0, parent);
             seq.event(ServerEvent::NewClientEndpoint)
@@ -165,7 +164,7 @@ fn ping_pong(
         let world = app.world_mut();
         let server = world.spawn_empty().id();
         world.insert_resource(ServerEntity(server));
-        WebTransportServer::open(server_config).apply(server, world);
+        WebTransportServer::open(server_config).apply(world.entity_mut(server));
 
         app
     };
@@ -232,7 +231,8 @@ fn ping_pong(
 
         let world = app.world_mut();
         let client = world.spawn_empty().id();
-        WebTransportClient::connect(client_config, client_target.into()).apply(client, world);
+        WebTransportClient::connect(client_config, client_target.into())
+            .apply(world.entity_mut(client));
 
         app
     };

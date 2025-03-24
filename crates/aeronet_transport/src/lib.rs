@@ -3,7 +3,7 @@
 //!
 //! ## Feature flags
 #![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
@@ -17,7 +17,6 @@ pub mod rtt;
 pub mod sampling;
 pub mod send;
 pub mod seq_buf;
-mod util;
 
 #[cfg(feature = "visualizer")]
 pub mod visualizer;
@@ -185,7 +184,7 @@ pub struct RecvMessage {
     /// Lane index on which this message was received.
     pub lane: LaneIndex,
     /// Instant at which the final fragment of this message was received.
-    #[typesize(with = crate::util::size_of_instant)]
+    #[typesize(skip)]
     pub recv_at: Instant,
     /// Raw byte data of this message.
     pub payload: Vec<u8>,
@@ -360,7 +359,7 @@ struct FragmentPath {
 
 #[derive(Debug, Clone, TypeSize)]
 struct FlushedPacket {
-    #[typesize(with = crate::util::size_of_instant)]
+    #[typesize(skip)]
     flushed_at: Instant,
     frags: Box<[FragmentPath]>,
 }
