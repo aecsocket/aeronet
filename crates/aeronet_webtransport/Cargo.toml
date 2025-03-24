@@ -89,6 +89,6 @@ path = "examples/webtransport_client.rs"
 required-features = ["client"]
 
 [[example]]
-name = "webtransport_echo_server"
-path = "examples/webtransport_echo_server.rs"
+name = "webtransport_server"
+path = "examples/webtransport_server.rs"
 required-features = ["server", "self-signed"]

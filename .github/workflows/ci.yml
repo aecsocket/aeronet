@@ -95,6 +95,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv6m-none-eabi
       - uses: ./.github/actions/install-bevy-deps
       - run: cargo build --target thumbv6m-none-eabi --package '${{ matrix.package }}' --no-default-features --features critical-section
 

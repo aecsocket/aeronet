@@ -83,6 +83,6 @@ path = "examples/websocket_client.rs"
 required-features = ["client"]
 
 [[example]]
-name = "websocket_echo_server"
-path = "examples/websocket_echo_server.rs"
+name = "websocket_server"
+path = "examples/websocket_server.rs"
 required-features = ["server"]

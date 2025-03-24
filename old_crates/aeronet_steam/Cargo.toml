@@ -49,6 +49,6 @@ path = "examples/steam_client.rs"
 required-features = ["client"]
 
 [[example]]
-name = "steam_echo_server"
-path = "examples/steam_echo_server.rs"
+name = "steam_server"
+path = "examples/steam_server.rs"
 required-features = ["server"]
