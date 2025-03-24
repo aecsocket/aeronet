@@ -31,7 +31,7 @@ default = ["std"]
 critical-section = ["aeronet_io/critical-section"]
 
 ## Enables standard library support.
-std = ["bevy_platform_support/std"]
+std = ["aeronet_io/std"]
 
 ## Allows generating arbitrary values of some types with [`arbitrary`], useful for fuzz testing.
 ##

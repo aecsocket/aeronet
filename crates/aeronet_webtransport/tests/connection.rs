@@ -122,7 +122,7 @@ fn ping_pong(
             expected_client: Res<ClientEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
-            assert_eq!(expected_client.0, trigger.entity());
+            assert_eq!(expected_client.0, trigger.target());
             seq.event(ServerEvent::NewClient)
                 .expect_after(ServerEvent::NewClientEndpoint);
         }
@@ -146,7 +146,7 @@ fn ping_pong(
                     seq.event(ServerEvent::RecvPing)
                         .expect_after(ServerEvent::NewClient);
                     session.send.push(PONG);
-                    exit.send(AppExit::Success);
+                    exit.write(AppExit::Success);
                 }
             }
         }
@@ -159,7 +159,7 @@ fn ping_pong(
             .add_observer(on_add_session_endpoint)
             .add_observer(on_session_request)
             .add_observer(on_add_session)
-            .add_systems(Update, recv_on_session.never_param_warn());
+            .add_systems(Update, recv_on_session);
 
         let world = app.world_mut();
         let server = world.spawn_empty().id();
@@ -178,7 +178,7 @@ fn ping_pong(
             mut seq: ResMut<SequenceTester<ClientEvent>>,
             mut commands: Commands,
         ) {
-            let client = trigger.entity();
+            let client = trigger.target();
             seq.event(ClientEvent::NewSessionEndpoint).expect_first();
             commands.insert_resource(ClientEntity(client));
         }
@@ -189,7 +189,7 @@ fn ping_pong(
             mut seq: ResMut<SequenceTester<ClientEvent>>,
             mut sessions: Query<&mut Session>,
         ) {
-            let client = trigger.entity();
+            let client = trigger.target();
             assert_eq!(expected_client.0, client);
             seq.event(ClientEvent::NewSession)
                 .expect_after(ClientEvent::NewSessionEndpoint);
@@ -217,7 +217,7 @@ fn ping_pong(
                 if payload == PONG {
                     seq.event(ClientEvent::RecvPong)
                         .expect_after(ClientEvent::NewSession);
-                    exit.send(AppExit::Success);
+                    exit.write(AppExit::Success);
                 }
             }
         }
