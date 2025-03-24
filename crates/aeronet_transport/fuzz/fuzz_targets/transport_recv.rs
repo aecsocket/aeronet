@@ -1,12 +1,9 @@
 #![no_main]
 
 use {
-    aeronet_transport::{
-        io::{web_time::Instant, Session},
-        lane::LaneKind,
-        Transport,
-    },
+    aeronet_transport::{Transport, io::Session, lane::LaneKind},
     libfuzzer_sys::fuzz_target,
+    std::time::Instant,
 };
 
 fuzz_target!(|packet: &[u8]| {
