@@ -91,7 +91,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: ["aeronet_io", "aeronet_transport", "aeronet_replicon"]
+        package: ["aeronet_io", "aeronet_transport"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
