@@ -21,14 +21,8 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 [features]
 default = ["std"]
 
-## Enables [`portable-atomic/critical-section`][cs], used for targets without native atomic CAS.
-##
-## [cs]: https://docs.rs/portable-atomic/latest/portable_atomic/
-critical-section = [
-  "bevy_ecs/critical-section",
-  "bevy_platform_support/critical-section",
-  "bytes/extra-platforms",
-]
+## Enables support for targets without native atomic CAS.
+extra-platforms = ["bytes/extra-platforms"]
 
 ## Enables standard library support.
 std = ["anyhow/std", "bytes/std", "log/std", "bevy_platform_support/std"]

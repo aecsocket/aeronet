@@ -25,10 +25,8 @@ ignored = [
 [features]
 default = ["std"]
 
-## Enables [`portable-atomic/critical-section`][cs], used for targets without native atomic CAS.
-##
-## [cs]: https://docs.rs/portable-atomic/latest/portable_atomic/
-critical-section = ["aeronet_io/critical-section"]
+## Enables support for targets without native atomic CAS.
+extra-platforms = ["aeronet_io/extra-platforms"]
 
 ## Enables standard library support.
 std = ["aeronet_io/std"]
