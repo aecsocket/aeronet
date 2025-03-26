@@ -1,5 +1,4 @@
-Set of [Bevy]-native networking crates, focused on providing robust and rock-solid data transfer
-primitives.
+Set of [Bevy]-native networking crates, focused on providing robust and rock-solid data transfer primitives.
 
 [![crates.io](https://img.shields.io/crates/v/aeronet.svg)](https://crates.io/crates/aeronet)
 [![docs.rs](https://img.shields.io/docsrs/aeronet)](https://docs.rs/aeronet)
@@ -20,9 +19,7 @@ primitives.
   - You can use multiple IO layers at the same time, e.g. Steam + WebTransport
   - Supports `no_std` and platforms with limited atomic support via `critical-section`
 
-High-level networking features such as replication, rollback, and prediction are explicit
-**non-goals** for this crate. Instead, this crate aims to provide a solid foundation for
-implementing these features.
+High-level networking features such as replication, rollback, and prediction are explicit **non-goals** for this crate. Instead, this crate aims to provide a solid foundation for implementing these features.
 
 # Crates
 
@@ -41,9 +38,7 @@ cargo run --example channel
   - ✅ Complete
   - Note on examples:
 
-    This example shows how to set up an encrypted server and client with self-signed certificates.
-    WASM will not work with self-signed certificates - you will need a real certificate signed by an
-    authority that your browser trusts.
+    This example shows how to set up an encrypted server and client with self-signed certificates. WASM will not work with self-signed certificates - you will need a real certificate signed by an authority that your browser trusts.
 
 ```sh
 cargo run --example websocket_server -F server
@@ -59,8 +54,7 @@ cargo run --example websocket_client -F client --target wasm32-unknown-unknown
   - ✅ Complete
   - Note on examples:
 
-    On WASM, when running the client, you will not be able to paste into the text box using Ctrl+V.
-    To work around this:
+    On WASM, when running the client, you will not be able to paste into the text box using Ctrl+V. To work around this:
     1. click into the text box you want to paste into
     2. click outside of the Bevy app (in the white area)
     3. press Ctrl+V
@@ -108,28 +102,19 @@ cargo run --bin move_box_client
   - User-swappable - can have multiple in a single app
 - Transport layer - [`aeronet_transport`]
   - Handles fragmentation, reliability, and ordering of messages
-  - Splits messages into packets, and reassembles packets into messages, which can be used by layers
-    above
+  - Splits messages into packets, and reassembles packets into messages, which can be used by layers above
   - Allows receiving acknowledgement of sent message acknowledgements
-  - Technically user-swappable, but most code above this layer relies on [`aeronet_transport`]
-    specifically
+  - Technically user-swappable, but most code above this layer relies on [`aeronet_transport`] specifically
 - Component replication, rollback, etc.
-  - This is not provided as part of `aeronet`, but you can use a crate which integrates `aeronet`
-    with one of these e.g. [`aeronet_replicon`]
+  - This is not provided as part of `aeronet`, but you can use a crate which integrates `aeronet` with one of these e.g. [`aeronet_replicon`]
 
 ## Getting started
 
-To learn about how to use this crate, it is recommended that you learn the architecture by skimming
-the examples and reading the documentation of important types such as [`Session`]. If you're not
-sure where to start, take a look at the [`echo_client`] and [`echo_server`] crates. The examples are
-designed to be self-contained and self-documenting, giving you an easy jumping-off point for
-learning.
+To learn about how to use this crate, it is recommended that you learn the architecture by skimming the examples and reading the documentation of important types such as [`Session`]. If you're not sure where to start, take a look at the [`echo_client`] and [`echo_server`] crates. The examples are designed to be self-contained and self-documenting, giving you an easy jumping-off point for learning.
 
-Crates and items are thoroughly documented through rustdoc, and are the most likely to be up to
-date, so you should use that as the definitive reference for information on specific items.
+Crates and items are thoroughly documented through rustdoc, and are the most likely to be up to date, so you should use that as the definitive reference for information on specific items.
 
-Once you have a rough idea of the architecture, choose an IO layer implementation from the list at
-the top, add it and `aeronet` to your app, and start building!
+Once you have a rough idea of the architecture, choose an IO layer implementation from the list at the top, add it and `aeronet` to your app, and start building!
 
 # Testing
 
@@ -153,15 +138,11 @@ cargo +nightly fuzz run <fuzz target>
 
 ### Visualizer
 
-As a debug tool, you may want to see the state of your session over time while you are in the app.
-If using [`aeronet_transport`], you can use the `visualizer` feature to enable an [`egui_plot`]
-visualizer which displays statistics on sessions. This includes data such as round-trip time and
-packet loss percentage.
+As a debug tool, you may want to see the state of your session over time while you are in the app. If using [`aeronet_transport`], you can use the `visualizer` feature to enable an [`egui_plot`] visualizer which displays statistics on sessions. This includes data such as round-trip time and packet loss percentage.
 
 ### Conditioning
 
-Using a conditioner allows you to emulate poor network conditions locally, and see how your app
-copes with problems such as duplicate or lost packets, delay, and jitter.
+Using a conditioner allows you to emulate poor network conditions locally, and see how your app copes with problems such as duplicate or lost packets, delay, and jitter.
 
 Some example tools you may use are:
 - Linux
@@ -175,9 +156,7 @@ Some example tools you may use are:
 - Windows
   - [`clumsy`](https://github.com/jagt/clumsy)
 
-`aeronet` does not provide support for conditioning within the networking crate itself, since
-conditioning testing is more effective (and representative of real-world results) when the
-conditioning is applied at the lowest level possible.
+`aeronet` does not provide support for conditioning within the networking crate itself, since conditioning testing is more effective (and representative of real-world results) when the conditioning is applied at the lowest level possible.
 
 # Versions
 
