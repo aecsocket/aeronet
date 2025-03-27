@@ -88,7 +88,7 @@ wasm-bindgen          = { version = "0.2.99" }
 wasm-bindgen-futures  = { version = "0.4.43" }
 web-sys               = { version = "0.3.70" }
 web-time              = { version = "1.1.0" }
-wtransport            = { version = "0.6.0" }
+wtransport            = { version = "0.6.1" }
 x509-cert             = { version = "0.2.5" }
 xwt-core              = { version = "0.6.0" }
 xwt-web               = { version = "0.15.0" }
