@@ -4,10 +4,7 @@ use {
         config::SteamSessionConfig,
         session::{SteamNetIo, SteamNetSessionPlugin},
     },
-    aeronet_io::{
-        IoSet, SessionEndpoint,
-        connection::{Disconnected, Disconnected},
-    },
+    aeronet_io::{IoSet, SessionEndpoint, connection::Disconnected},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     core::net::SocketAddr,
@@ -130,22 +127,13 @@ fn poll_connecting(
         let conn = match client.recv_next.get_mut().try_recv() {
             Ok(Ok(conn)) => conn,
             Ok(Err(err)) => {
-                commands.trigger_targets(
-                    Disconnected {
-                        reason: Disconnected::ByError(err.into()),
-                    },
-                    entity,
-                );
+                commands.trigger_targets(Disconnected::by_error(err), entity);
                 continue;
             }
             Err(oneshot::TryRecvError::Empty) => continue,
             Err(oneshot::TryRecvError::Disconnected) => {
-                commands.trigger_targets(
-                    Disconnected {
-                        reason: Disconnected::ByError(ClientError::BackendClosed.into()),
-                    },
-                    entity,
-                );
+                commands
+                    .trigger_targets(Disconnected::by_error(ClientError::BackendClosed), entity);
                 continue;
             }
         };
@@ -156,12 +144,7 @@ fn poll_connecting(
         )]
         let user_data = entity.to_bits() as i64;
         if conn.set_connection_user_data(user_data).is_err() {
-            commands.trigger_targets(
-                Disconnected {
-                    reason: Disconnected::ByError(ClientError::Steam.into()),
-                },
-                entity,
-            );
+            commands.trigger_targets(Disconnected::by_error(ClientError::Steam), entity);
             continue;
         }
 

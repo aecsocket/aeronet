@@ -4,7 +4,6 @@ mod backend;
 mod config;
 
 pub use config::*;
-use tracing::debug;
 use {
     crate::{
         WebSocketRuntime,
@@ -22,7 +21,7 @@ use {
     derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
     std::io,
-    tracing::{Instrument, debug_span},
+    tracing::{Instrument, debug, debug_span},
     web_time::Instant,
 };
 

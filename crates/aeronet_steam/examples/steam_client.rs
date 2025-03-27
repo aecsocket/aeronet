@@ -4,7 +4,7 @@
 use {
     aeronet_io::{
         Session, SessionEndpoint,
-        connection::{Disconnect, Disconnected, Disconnected},
+        connection::{Disconnect, Disconnected},
     },
     aeronet_steam::{
         SteamworksClient,
@@ -71,7 +71,7 @@ fn on_disconnected(trigger: Trigger<Disconnected>, names: Query<&Name>, mut log:
     let name = names
         .get(session)
         .expect("our session entity should have a name");
-    log.push(match &trigger.reason {
+    log.push(match &*trigger {
         Disconnected::ByUser(reason) => {
             format!("{name} disconnected by user: {reason}")
         }

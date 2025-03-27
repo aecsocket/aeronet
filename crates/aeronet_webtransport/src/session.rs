@@ -193,11 +193,7 @@ pub(crate) fn poll(
             session.recv.push(packet);
         }
 
-        trace!(
-            num_packets = num_packets.0,
-            num_bytes = num_bytes.0,
-            "Received packets",
-        );
+        trace!(%num_packets, %num_bytes, "Received packets");
     }
 }
 
@@ -221,11 +217,7 @@ fn flush(mut sessions: Query<(Entity, &mut Session, &WebTransportIo)>) {
             _ = io.send_packet_f2b.unbounded_send(packet);
         }
 
-        trace!(
-            num_packets = num_packets.0,
-            num_bytes = num_bytes.0,
-            "Flushed packets",
-        );
+        trace!(%num_packets, %num_bytes, "Flushed packets");
     }
 }
 

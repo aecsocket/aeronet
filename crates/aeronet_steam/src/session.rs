@@ -1,17 +1,19 @@
-use aeronet_io::{IoSet, Session, connection::Disconnected, packet::RecvPacket};
-use bevy_app::prelude::*;
-use bevy_ecs::prelude::*;
-use bevy_platform_support::time::Instant;
-use bytes::Bytes;
-use derive_more::{Deref, DerefMut, Display, Error};
-use steamworks::{
-    ClientManager,
-    networking_sockets::{NetConnection, NetPollGroup},
-    networking_types::{NetConnectionStatusChanged, NetworkingConnectionState, SendFlags},
+use {
+    crate::SteamworksClient,
+    aeronet_io::{IoSet, Session, connection::Disconnected, packet::RecvPacket},
+    bevy_app::prelude::*,
+    bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
+    bytes::Bytes,
+    core::num::Saturating,
+    derive_more::{Deref, DerefMut, Display, Error},
+    steamworks::{
+        ClientManager,
+        networking_sockets::{NetConnection, NetPollGroup},
+        networking_types::{NetConnectionStatusChanged, NetworkingConnectionState, SendFlags},
+    },
+    tracing::{trace, trace_span, warn},
 };
-use tracing::warn;
-
-use crate::SteamworksClient;
 
 #[derive(Debug)]
 pub(crate) struct SteamNetSessionPlugin;
@@ -53,7 +55,7 @@ pub enum SessionError {
 #[derive(Debug)]
 enum NetEvent {
     Connected,
-    Disconnected { reason: Disconnected<SessionError> },
+    Disconnected { reason: Disconnected },
 }
 
 #[derive(Deref, DerefMut, Resource)]
@@ -165,7 +167,8 @@ fn poll_net_events(
             Ok(data) => data,
             Err(err) => {
                 warn!(
-                    "Received connection event for entity {entity} which is not a valid session: {err:?}"
+                    "Received connection event for entity {entity} which is not a valid session: \
+                     {err:?}"
                 );
                 continue;
             }
@@ -185,26 +188,33 @@ fn poll_net_events(
                     .insert(Session::new(Instant::now(), io.mtu));
             }
             NetEvent::Disconnected { reason } => {
-                commands.trigger_targets(
-                    Disconnected {
-                        reason: reason.map_err(From::from),
-                    },
-                    entity,
-                );
+                commands.trigger_targets(reason, entity);
             }
         }
     }
 }
 
-fn flush(mut sessions: Query<(&mut Session, &SteamNetIo)>) {
-    for (mut session, io) in &mut sessions {
+fn flush(mut sessions: Query<(Entity, &mut Session, &SteamNetIo)>) {
+    for (entity, mut session, io) in &mut sessions {
+        let span = trace_span!("flush", %entity);
+        let _span = span.enter();
+
         // explicit deref so we can access disjoint fields
         let session = &mut *session;
+        let mut num_packets = Saturating(0);
+        let mut num_bytes = Saturating(0);
         for packet in session.send.drain(..) {
+            num_packets += 1;
             session.stats.packets_sent += 1;
+
+            num_bytes += packet.len();
             session.stats.bytes_sent += packet.len();
 
-            _ = io.conn.send_message(&packet, SendFlags::UNRELIABLE);
+            _ = io
+                .conn
+                .send_message(&packet, SendFlags::UNRELIABLE | SendFlags::NO_NAGLE);
         }
+
+        trace!(%num_packets, %num_bytes, "Flushed packets");
     }
 }

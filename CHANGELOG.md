@@ -1,5 +1,10 @@
 # 0.13.0
 
+- Merged `DisconnectReason` and `Disconnected` into one
+  - `Disconnected::reason` has been flattened into `enum Disconnected` itself
+- Merged `CloseReason` and `Closed` into one
+  - `Closed::reason` has been flattened into `enum CloseReason` itself
+
 ## `aeronet_replicon`
 
 - Updated `bevy_replicon` to `0.31.0`
