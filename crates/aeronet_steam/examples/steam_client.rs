@@ -1,31 +1,41 @@
 //! Example showing a Steam sockets client which can send and receive UTF-8
 //! strings.
 
-use std::{mem, net::SocketAddr};
-
-use aeronet_io::{
-    connection::{Connected, Disconnect, DisconnectReason, Disconnected, Session},
-    packet::{PacketBuffers, PacketMtu, PacketRtt, PacketStats},
+use {
+    aeronet_io::{
+        Session, SessionEndpoint,
+        connection::{Disconnect, DisconnectReason, Disconnected},
+        packet::{PacketRtt, PacketStats},
+    },
+    aeronet_steam::{
+        SteamworksClient,
+        client::{SteamNetClient, SteamNetClientPlugin},
+        config::SteamSessionConfig,
+    },
+    bevy::prelude::*,
+    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    std::{mem, net::SocketAddr},
+    steamworks::SteamId,
 };
-use aeronet_steam::{client::SteamClient, config::SteamSessionConfig};
-use bevy::prelude::*;
-use bevy_egui::{EguiContexts, EguiPlugin, egui};
-use bevy_steamworks::SteamworksPlugin;
-use steamworks::SteamId;
 
 fn main() -> AppExit {
+    let (steam, steam_single) =
+        steamworks::Client::init_app(480).expect("failed to initialize steam");
     App::new()
-        .add_plugins((
-            DefaultPlugins,
-            EguiPlugin,
-            SteamworksPlugin::init_app(480).unwrap(),
-        ))
+        .insert_resource(SteamworksClient(steam))
+        .insert_non_send_resource(steam_single)
+        .add_systems(PreUpdate, run_steam_callbacks)
+        .add_plugins((DefaultPlugins, EguiPlugin, SteamNetClientPlugin))
         .init_resource::<GlobalUi>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
         .observe(on_connecting)
         .observe(on_connected)
         .observe(on_disconnected)
         .run()
+}
+
+fn run_steam_callbacks(steam: NonSend<steamworks::SingleClient>) {
+    steam.run_callbacks();
 }
 
 #[derive(Debug, Default, Resource)]
@@ -43,22 +53,26 @@ struct SessionUi {
 }
 
 fn on_connecting(
-    trigger: Trigger<OnAdd, Session>,
+    trigger: Trigger<OnAdd, SessionEndpoint>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {
-    let session = trigger.entity();
-    let name = names.get(session).unwrap();
+    let session = trigger.target();
+    let name = names
+        .get(session)
+        .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connecting"));
 }
 
 fn on_connected(
-    trigger: Trigger<OnAdd, Connected>,
+    trigger: Trigger<OnAdd, Session>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {
-    let session = trigger.entity();
-    let name = names.get(session).unwrap();
+    let session = trigger.target();
+    let name = names
+        .get(session)
+        .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connected"));
 }
 
@@ -67,8 +81,10 @@ fn on_disconnected(
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
 ) {
-    let session = trigger.entity();
-    let name = names.get(session).unwrap();
+    let session = trigger.target();
+    let name = names
+        .get(session)
+        .expect("our session entity should have a name");
     ui_state.log.push(match &trigger.reason {
         DisconnectReason::User(reason) => {
             format!("{name} disconnected by user: {reason}")
@@ -82,9 +98,9 @@ fn on_disconnected(
     });
 }
 
-const DEFAULT_TARGET: &str = "127.0.0.1:25565";
-
 fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMut<GlobalUi>) {
+    const DEFAULT_TARGET: &str = "127.0.0.1:25565";
+
     egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
@@ -118,9 +134,9 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
                 Ok(target) => {
                     ui_state.session_id += 1;
                     let name = format!("{}. {target}", ui_state.session_id);
-                    commands
-                        .spawn((Name::new(name), SessionUi::default()))
-                        .add(SteamClient::connect(SteamSessionConfig::default(), target));
+                    commands.spawn((Name::new(name), SessionUi::default())).add(
+                        SteamNetClient::connect(SteamSessionConfig::default(), target),
+                    );
                 }
                 Err(err) => {
                     ui_state
@@ -138,9 +154,9 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
                     let target = SteamId::from_raw(target);
                     ui_state.session_id += 1;
                     let name = format!("{}. {target:?}", ui_state.session_id);
-                    commands
-                        .spawn((Name::new(name), SessionUi::default()))
-                        .add(SteamClient::connect(SteamSessionConfig::default(), target));
+                    commands.spawn((Name::new(name), SessionUi::default())).add(
+                        SteamNetClient::connect(SteamSessionConfig::default(), target),
+                    );
                 }
                 Err(err) => {
                     ui_state

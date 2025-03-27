@@ -129,10 +129,11 @@ fn ping_pong(
 
         fn recv_on_session(
             mut sessions: Query<&mut Session>,
-            client: Res<ClientEntity>,
+            client: Option<Res<ClientEntity>>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
             mut exit: EventWriter<AppExit>,
         ) {
+            let Some(client) = client else { return };
             let Ok(mut session) = sessions.get_mut(client.0) else {
                 return;
             };
@@ -202,10 +203,11 @@ fn ping_pong(
 
         fn recv_on_session(
             mut sessions: Query<&mut Session>,
-            client: Res<ClientEntity>,
+            client: Option<Res<ClientEntity>>,
             mut seq: ResMut<SequenceTester<ClientEvent>>,
             mut exit: EventWriter<AppExit>,
         ) {
+            let Some(client) = client else { return };
             let Ok(mut session) = sessions.get_mut(client.0) else {
                 return;
             };

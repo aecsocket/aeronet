@@ -160,9 +160,13 @@ dependencies = [
  "bevy_egui",
  "bevy_platform_support",
  "blocking",
+ "bytes",
  "derive_more 2.0.1",
- "futures",
+ "flume",
+ "oneshot",
  "steamworks",
+ "sync_wrapper",
+ "tracing",
 ]
 
 [[package]]

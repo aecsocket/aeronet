@@ -1,6 +1,7 @@
-use std::time::Duration;
-
-use steamworks::networking_types::{NetworkingConfigEntry, NetworkingConfigValue};
+use {
+    core::time::Duration,
+    steamworks::networking_types::{NetworkingConfigEntry, NetworkingConfigValue},
+};
 
 #[derive(Debug, Clone)]
 pub struct SteamSessionConfig {
@@ -51,9 +52,9 @@ impl Default for SteamSessionConfig {
 }
 
 impl SteamSessionConfig {
+    #[must_use]
     pub fn to_options(&self) -> Vec<NetworkingConfigEntry> {
-        use NetworkingConfigEntry as Entry;
-        use NetworkingConfigValue as Key;
+        use {NetworkingConfigEntry as Entry, NetworkingConfigValue as Key};
 
         vec![
             Entry::new_float(Key::FakePacketLossSend, self.fake_packet_loss_send * 100.0),
@@ -93,7 +94,7 @@ impl SteamSessionConfig {
             Entry::new_int32(Key::SendRateMin, usize_to_i32(self.send_rate_min)),
             Entry::new_int32(Key::SendRateMax, usize_to_i32(self.send_rate_max)),
             Entry::new_int32(Key::MTUPacketSize, usize_to_i32(self.mtu_packet_size)),
-            Entry::new_int32(Key::SymmetricConnect, self.symmetric_connect as i32),
+            Entry::new_int32(Key::SymmetricConnect, i32::from(self.symmetric_connect)),
             Entry::new_int32(Key::LocalVirtualPort, self.local_virtual_port),
         ]
     }

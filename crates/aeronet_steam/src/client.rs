@@ -1,25 +1,42 @@
-use std::net::SocketAddr;
-
-use aeronet_io::{
-    Session,
-    connection::{DisconnectReason, Disconnected},
+use {
+    crate::{
+        SteamworksClient,
+        config::SteamSessionConfig,
+        session::{SteamNetIo, SteamNetSessionPlugin},
+    },
+    aeronet_io::{
+        IoSet, Session, SessionEndpoint,
+        connection::{DisconnectReason, Disconnected},
+    },
+    bevy_app::prelude::*,
+    bevy_ecs::{prelude::*, system::EntityCommand},
+    bevy_platform_support::time::Instant,
+    core::net::SocketAddr,
+    derive_more::{Display, Error},
+    steamworks::{
+        ClientManager, SteamId, networking_sockets::NetConnection,
+        networking_types::NetworkingIdentity,
+    },
+    sync_wrapper::SyncWrapper,
 };
-use bevy_ecs::{prelude::*, system::EntityCommand};
-use bevy_platform_support::time::Instant;
-use derive_more::{Display, Error};
-use futures::channel::oneshot;
-use steamworks::{
-    ClientManager, SteamId, networking_sockets::NetConnection, networking_types::NetworkingIdentity,
-};
 
-use crate::{SteamworksClient, config::SteamSessionConfig};
+/// Allows using [`SteamNetClient`].
+#[derive(Debug)]
+pub struct SteamNetClientPlugin;
 
-#[derive(Component)]
-pub struct SteamClient {
-    recv_connect_result: Option<oneshot::Receiver<ConnectResult>>,
+impl Plugin for SteamNetClientPlugin {
+    fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<SteamNetSessionPlugin>() {
+            app.add_plugins(SteamNetSessionPlugin);
+        }
+
+        app.add_systems(PreUpdate, poll_connecting.in_set(IoSet::Poll));
+    }
 }
 
-type ConnectResult = Result<NetConnection<ClientManager>, SteamError>;
+#[derive(Debug, Component)]
+#[require(SessionEndpoint)]
+pub struct SteamNetClient(());
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConnectTarget {
@@ -45,11 +62,7 @@ impl From<SteamId> for ConnectTarget {
     }
 }
 
-#[derive(Debug, Clone, Copy, Display, Error)]
-#[display("steam error")]
-pub struct SteamError;
-
-impl SteamClient {
+impl SteamNetClient {
     #[must_use]
     pub fn connect(
         config: SteamSessionConfig,
@@ -64,7 +77,7 @@ fn connect(mut entity: EntityWorldMut, config: SteamSessionConfig, target: Conne
     let steam = entity.world().resource::<SteamworksClient>().clone();
 
     let mtu = config.send_buffer_size;
-    let (send_connect_result, recv_connect_result) = oneshot::channel::<ConnectResult>();
+    let (send_next, recv_next) = oneshot::channel::<ConnectResult>();
     blocking::unblock(move || {
         let result = match target {
             ConnectTarget::Addr(addr) => steam
@@ -80,15 +93,16 @@ fn connect(mut entity: EntityWorldMut, config: SteamSessionConfig, target: Conne
             ),
         };
 
-        _ = send_connect_result.send(result.map_err(|_| SteamError));
+        _ = send_next.send(result.map_err(|_| ClientError::Steam));
     })
     .detach();
 
     entity.insert((
-        SteamClient {
-            recv_connect_result: Some(recv_connect_result),
+        SteamNetClient(()),
+        Connecting {
+            recv_next: SyncWrapper::new(recv_next),
+            mtu,
         },
-        Session::new(Instant::now(), mtu),
     ));
 }
 
@@ -97,31 +111,64 @@ fn connect(mut entity: EntityWorldMut, config: SteamSessionConfig, target: Conne
 pub enum ClientError {
     #[display("backend closed")]
     BackendClosed,
+    #[display("steam error")]
+    Steam,
 }
 
-fn poll_clients(mut commands: Commands, mut frontends: Query<(Entity, &mut SteamClient)>) {
-    for (entity, mut frontend) in &mut frontends {
-        if let Some(recv_connect_result) = &mut frontend.recv_connect_result {
-            match recv_connect_result.try_recv() {
-                Ok(Some(result)) => {
-                    todo!()
-                }
-                Ok(None) => {}
-                Err(oneshot::Canceled) => {
-                    commands.trigger_targets(
-                        Disconnected {
-                            reason: DisconnectReason::Error(ClientError::BackendClosed.into()),
-                        },
-                        entity,
-                    );
-                }
+#[derive(Component)]
+struct Connecting {
+    recv_next: SyncWrapper<oneshot::Receiver<ConnectResult>>,
+    mtu: usize,
+}
+
+type ConnectResult = Result<NetConnection<ClientManager>, ClientError>;
+
+fn poll_connecting(
+    mut commands: Commands,
+    mut clients: Query<(Entity, &mut Connecting), With<SteamNetClient>>,
+) {
+    for (entity, mut client) in &mut clients {
+        let conn = match client.recv_next.get_mut().try_recv() {
+            Ok(Ok(conn)) => conn,
+            Ok(Err(err)) => {
+                commands.trigger_targets(
+                    Disconnected {
+                        reason: DisconnectReason::Error(err.into()),
+                    },
+                    entity,
+                );
+                continue;
             }
-        }
-    }
-}
+            Err(oneshot::TryRecvError::Empty) => continue,
+            Err(oneshot::TryRecvError::Disconnected) => {
+                commands.trigger_targets(
+                    Disconnected {
+                        reason: DisconnectReason::Error(ClientError::BackendClosed.into()),
+                    },
+                    entity,
+                );
+                continue;
+            }
+        };
 
-fn poll_client(entity: Entity, frontend: &mut SteamClient) -> Result<(), ClientError> {
-    let Some(recv_connect_result) = frontend.recv_connect_result else {
-        return Ok(());
-    };
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "we treat the entity as an opaque identifier"
+        )]
+        let user_data = entity.to_bits() as i64;
+        if conn.set_connection_user_data(user_data).is_err() {
+            commands.trigger_targets(
+                Disconnected {
+                    reason: DisconnectReason::Error(ClientError::Steam.into()),
+                },
+                entity,
+            );
+            continue;
+        }
+
+        commands.entity(entity).remove::<Connecting>().insert((
+            SteamNetIo { conn },
+            Session::new(Instant::now(), client.mtu),
+        ));
+    }
 }
