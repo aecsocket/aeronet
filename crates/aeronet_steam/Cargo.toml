@@ -25,14 +25,22 @@ client = []
 server = []
 
 [dependencies]
-bevy_ecs = { workspace = true }
+aeronet_io            = { workspace = true }
+bevy_app              = { workspace = true }
+bevy_ecs              = { workspace = true }
+bevy_platform_support = { workspace = true }
+blocking              = { workspace = true }
+futures               = { workspace = true }
+
+derive_more = { workspace = true, features = [
+  "display",
+  "error",
+  "deref",
+  "deref_mut",
+] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-aeronet_io      = { workspace = true }
-bevy-steamworks = { workspace = true }
-bevy_app        = { workspace = true }
-derive_more     = { workspace = true, features = ["display", "error"] }
-steamworks      = { workspace = true }
+steamworks = { workspace = true }
 
 [dev-dependencies]
 bevy      = { workspace = true }
