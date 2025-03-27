@@ -7,8 +7,7 @@ use {
     aeronet_io::{IoSet, SessionEndpoint, connection::Disconnected},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
-    core::marker::PhantomData,
-    core::net::SocketAddr,
+    core::{marker::PhantomData, net::SocketAddr},
     derive_more::{Display, Error},
     steamworks::{
         SteamId, networking_sockets::NetConnection, networking_types::NetworkingIdentity,
@@ -85,25 +84,24 @@ fn connect<M: SteamManager>(
     config: SteamSessionConfig,
     target: ConnectTarget,
 ) {
-    let steam = entity.world().resource::<SteamworksClient<M>>().clone();
-
     let mtu = config.send_buffer_size;
+    let sockets = entity
+        .world()
+        .resource::<SteamworksClient<M>>()
+        .networking_sockets();
     let (send_next, recv_next) = oneshot::channel::<ConnectResult<M>>();
     blocking::unblock(move || {
         let result = match target {
-            ConnectTarget::Addr(addr) => steam
-                .networking_sockets()
-                .connect_by_ip_address(addr, config.to_options()),
+            ConnectTarget::Addr(addr) => sockets.connect_by_ip_address(addr, config.to_options()),
             ConnectTarget::Peer {
                 steam_id,
                 virtual_port,
-            } => steam.networking_sockets().connect_p2p(
+            } => sockets.connect_p2p(
                 NetworkingIdentity::new_steam_id(steam_id),
                 virtual_port,
                 config.to_options(),
             ),
         };
-
         _ = send_next.send(result.map_err(|_| ClientError::Steam));
     })
     .detach();
@@ -128,13 +126,13 @@ pub enum ClientError {
     Steam,
 }
 
+type ConnectResult<M> = Result<NetConnection<M>, ClientError>;
+
 #[derive(Component)]
 struct Connecting<M> {
     recv_next: SyncWrapper<oneshot::Receiver<ConnectResult<M>>>,
     mtu: usize,
 }
-
-type ConnectResult<M> = Result<NetConnection<M>, ClientError>;
 
 fn poll_connecting<M: SteamManager>(
     mut commands: Commands,

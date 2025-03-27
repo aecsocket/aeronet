@@ -5,11 +5,10 @@ use {
     bevy_ecs::prelude::*,
     bevy_platform_support::time::Instant,
     bytes::Bytes,
-    core::marker::PhantomData,
-    core::num::Saturating,
+    core::{marker::PhantomData, num::Saturating},
     derive_more::{Deref, DerefMut, Display, Error},
     steamworks::{
-        networking_sockets::{NetConnection, NetPollGroup},
+        networking_sockets::{NetConnection, NetPollGroup, NetworkingSockets},
         networking_types::{NetConnectionStatusChanged, NetworkingConnectionState, SendFlags},
     },
     tracing::{trace, trace_span, warn},
@@ -41,7 +40,12 @@ impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
             .insert_resource(RecvNetEvent(recv_net_event))
             .add_systems(
                 PreUpdate,
-                (poll_messages::<M>, poll_net_events::<M>).in_set(IoSet::Poll),
+                (
+                    poll_messages::<M>,
+                    poll_net_events::<M>,
+                    disconnect_if_invalid::<M>,
+                )
+                    .in_set(IoSet::Poll),
             )
             .add_systems(PostUpdate, flush::<M>.in_set(IoSet::Flush));
     }
@@ -49,6 +53,7 @@ impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
 
 #[derive(Component)]
 pub struct SteamNetIo<M> {
+    pub(crate) sockets: NetworkingSockets<M>,
     pub(crate) conn: NetConnection<M>,
     pub(crate) mtu: usize,
 }
@@ -199,6 +204,20 @@ fn poll_net_events<M: SteamManager>(
             NetEvent::Disconnected { reason } => {
                 commands.trigger_targets(reason, entity);
             }
+        }
+    }
+}
+
+fn disconnect_if_invalid<M: SteamManager>(
+    mut commands: Commands,
+    sessions: Query<(Entity, &SteamNetIo<M>)>,
+) {
+    for (entity, session) in &sessions {
+        if session.sockets.get_connection_info(&session.conn).is_err() {
+            commands.trigger_targets(
+                Disconnected::by_error(SessionError::InvalidConnection),
+                entity,
+            );
         }
     }
 }
