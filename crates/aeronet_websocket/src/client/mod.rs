@@ -13,7 +13,7 @@ use {
     core::mem,
     derive_more::{Display, Error},
     futures::{channel::oneshot, never::Never},
-    tracing::{Instrument, debug_span},
+    tracing::{Instrument, debug, debug_span},
     web_time::Instant,
 };
 
@@ -127,6 +127,7 @@ fn connect(mut entity: EntityWorldMut, config: ClientConfig, target: ConnectTarg
     runtime.spawn_on_self(
         async move {
             let Err(disconnected) = backend::start(config, target, send_next).await;
+            debug!("Client disconnected: {disconnected:?}");
             _ = send_dc.send(disconnected);
         }
         .instrument(debug_span!("client", entity = %entity.id())),

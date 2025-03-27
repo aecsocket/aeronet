@@ -1,6 +1,8 @@
 //! Example server using WebSocket which listens for clients sending strings
 //! and sends back a string reply.
 
+use aeronet_io::server::Closed;
+
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         fn main() {
@@ -24,6 +26,7 @@ fn main() -> AppExit {
         .add_systems(Startup, open_server)
         .add_systems(Update, reply)
         .add_observer(on_opened)
+        .add_observer(on_closed)
         .add_observer(on_connecting)
         .add_observer(on_connected)
         .add_observer(on_disconnected)
@@ -40,6 +43,10 @@ fn server_config() -> ServerConfig {
 fn open_server(mut commands: Commands) {
     let config = server_config();
     commands.spawn_empty().queue(WebSocketServer::open(config));
+}
+
+fn on_closed(trigger: Trigger<Closed>) {
+    panic!("server closed: {:?}", trigger.event());
 }
 
 fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {

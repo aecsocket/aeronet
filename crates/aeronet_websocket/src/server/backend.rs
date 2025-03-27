@@ -87,12 +87,10 @@ async fn accept_session(
             recv_next,
         })
         .await
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ServerError::Session)?;
+        .map_err(|_| SessionError::FrontendClosed)?;
     let session = recv_session_entity
         .await
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ServerError::Session)?;
+        .map_err(|_| SessionError::FrontendClosed)?;
 
     let Err(dc_reason) = handle_session(stream, peer_addr, socket_config, tls_acceptor, send_next)
         .instrument(debug_span!("session", %session))
@@ -133,8 +131,7 @@ async fn handle_session(
 
     send_next
         .send(connected)
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ServerError::Session)?;
+        .map_err(|_| SessionError::FrontendClosed)?;
 
     debug!("Starting session loop");
     backend.start().await

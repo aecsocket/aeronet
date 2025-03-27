@@ -4,6 +4,7 @@ mod backend;
 mod config;
 
 pub use config::*;
+use tracing::debug;
 use {
     crate::{
         WebSocketRuntime,
@@ -18,7 +19,7 @@ use {
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     core::{mem, net::SocketAddr},
-    derive_more::{Display, Error, derive::From},
+    derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
     std::io,
     tracing::{Instrument, debug_span},
@@ -101,6 +102,7 @@ fn open(mut entity: EntityWorldMut, config: ServerConfig) {
     runtime.spawn_on_self(
         async move {
             let Err(closed) = backend::start(config, send_next).await;
+            debug!("Server closed: {closed:?}");
             _ = send_closed.send(closed);
         }
         .instrument(debug_span!("server", entity = %entity.id())),
@@ -118,7 +120,7 @@ fn open(mut entity: EntityWorldMut, config: ServerConfig) {
 /// [`WebSocketServer`]-specific error.
 ///
 /// For generic WebSocket errors, see [`SessionError`].
-#[derive(Debug, Display, Error, From)]
+#[derive(Debug, Display, Error)]
 #[non_exhaustive]
 pub enum ServerError {
     /// Failed to bind a socket to the address given in [`ServerConfig`].
@@ -133,9 +135,6 @@ pub enum ServerError {
     /// Failed to accept the client due to a WebSocket protocol error.
     #[display("failed to accept client")]
     AcceptClient(tungstenite::Error),
-    /// Generic session error.
-    #[from]
-    Session(SessionError),
 }
 
 #[derive(Debug, Component)]

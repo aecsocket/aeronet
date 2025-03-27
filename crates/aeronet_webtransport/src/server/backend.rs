@@ -43,6 +43,7 @@ pub async fn start(
     debug!("Starting server loop");
     loop {
         let session = endpoint.accept().await;
+        debug!("Accepting new session");
 
         WebTransportRuntime::spawn({
             let send_connecting = send_connecting.clone();

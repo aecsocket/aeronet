@@ -16,7 +16,7 @@ use {
     core::mem,
     derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug_span},
+    tracing::{Instrument, debug, debug_span},
     web_time::Instant,
 };
 
@@ -126,8 +126,9 @@ fn connect(mut entity: EntityWorldMut, config: ClientConfig, target: ConnectTarg
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     runtime.spawn_on_self(
         async move {
-            let Err(reason) = backend::start(config, target, send_next).await;
-            _ = send_dc.send(reason);
+            let Err(disconnected) = backend::start(config, target, send_next).await;
+            debug!("Client disconnected: {disconnected:?}");
+            _ = send_dc.send(disconnected);
         }
         .instrument(debug_span!("client", entity = %entity.id())),
     );

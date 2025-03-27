@@ -22,7 +22,7 @@ use {
     core::{any::type_name, mem, net::SocketAddr, time::Duration},
     derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug_span, warn},
+    tracing::{Instrument, debug, debug_span, warn},
     web_time::Instant,
     wtransport::error::ConnectionError,
 };
@@ -110,6 +110,7 @@ fn open(mut entity: EntityWorldMut, config: ServerConfig) {
     runtime.spawn_on_self(
         async move {
             let Err(closed) = backend::start(config, send_next).await;
+            debug!("Server closed: {closed:?}");
             _ = send_closed.send(closed);
         }
         .instrument(debug_span!("server", entity = %entity.id())),
@@ -291,7 +292,7 @@ fn poll_opening(
 
         let (_, dummy) = oneshot::channel();
         let recv_closed = mem::replace(&mut server.recv_closed, dummy);
-        commands.entity(entity).insert((
+        commands.entity(entity).remove::<Opening>().insert((
             Server::new(Instant::now()),
             Opened {
                 recv_closed,
