@@ -42,12 +42,19 @@ bevy_app          = { workspace = true }
 bevy_ecs          = { workspace = true }
 bytes             = { workspace = true }
 cfg-if            = { workspace = true }
-derive_more       = { workspace = true, features = ["display", "error", "from"] }
 document-features = { workspace = true, optional = true }
 futures           = { workspace = true }
 replace_with      = { workspace = true }
 tracing           = { workspace = true }
 web-time          = { workspace = true }
+
+derive_more = { workspace = true, features = [
+  "display",
+  "error",
+  "from",
+  "deref",
+  "deref_mut",
+] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 js-sys               = { workspace = true }
