@@ -22,7 +22,6 @@ pub use {anyhow, bytes};
 /// Sets up the IO layer functionality.
 ///
 /// See [`Session`].
-#[derive(Debug)]
 pub struct AeronetIoPlugin;
 
 impl Plugin for AeronetIoPlugin {

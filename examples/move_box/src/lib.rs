@@ -13,7 +13,6 @@ const MOVE_SPEED: f32 = 250.0;
 pub const TICK_RATE: u16 = 128;
 
 /// Sets up replication and basic game systems.
-#[derive(Debug)]
 pub struct MoveBoxPlugin;
 
 /// Whether the game is currently being simulated or not.

@@ -1,26 +1,35 @@
 use {
-    crate::SteamworksClient,
+    crate::{SteamManager, SteamworksClient},
     aeronet_io::{IoSet, Session, connection::Disconnected, packet::RecvPacket},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_platform_support::time::Instant,
     bytes::Bytes,
+    core::marker::PhantomData,
     core::num::Saturating,
     derive_more::{Deref, DerefMut, Display, Error},
     steamworks::{
-        ClientManager,
         networking_sockets::{NetConnection, NetPollGroup},
         networking_types::{NetConnectionStatusChanged, NetworkingConnectionState, SendFlags},
     },
     tracing::{trace, trace_span, warn},
 };
 
-#[derive(Debug)]
-pub(crate) struct SteamNetSessionPlugin;
+pub(crate) struct SteamNetSessionPlugin<M: SteamManager> {
+    _phantom: PhantomData<M>,
+}
 
-impl Plugin for SteamNetSessionPlugin {
+impl<M: SteamManager> Default for SteamNetSessionPlugin<M> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
     fn build(&self, app: &mut App) {
-        let steam = app.world().resource::<SteamworksClient>();
+        let steam = app.world().resource::<SteamworksClient<M>>();
 
         let (send_net_event, recv_net_event) = flume::unbounded();
         steam.register_callback(move |event: NetConnectionStatusChanged| {
@@ -32,15 +41,15 @@ impl Plugin for SteamNetSessionPlugin {
             .insert_resource(RecvNetEvent(recv_net_event))
             .add_systems(
                 PreUpdate,
-                (poll_messages, poll_net_events).in_set(IoSet::Poll),
+                (poll_messages::<M>, poll_net_events::<M>).in_set(IoSet::Poll),
             )
-            .add_systems(PostUpdate, flush.in_set(IoSet::Flush));
+            .add_systems(PostUpdate, flush::<M>.in_set(IoSet::Flush));
     }
 }
 
 #[derive(Component)]
-pub struct SteamNetIo {
-    pub(crate) conn: NetConnection<ClientManager>,
+pub struct SteamNetIo<M> {
+    pub(crate) conn: NetConnection<M>,
     pub(crate) mtu: usize,
 }
 
@@ -59,7 +68,7 @@ enum NetEvent {
 }
 
 #[derive(Deref, DerefMut, Resource)]
-struct PollGroup(NetPollGroup<ClientManager>);
+struct PollGroup<M>(NetPollGroup<M>);
 
 #[derive(Debug, Deref, DerefMut, Resource)]
 struct RecvNetEvent(flume::Receiver<(Entity, NetEvent)>);
@@ -105,9 +114,9 @@ fn on_status_changed(
     }
 }
 
-fn poll_messages(
-    mut clients: Query<&mut Session, With<SteamNetIo>>,
-    mut poll_group: ResMut<PollGroup>,
+fn poll_messages<M: SteamManager>(
+    mut clients: Query<&mut Session, With<SteamNetIo<M>>>,
+    mut poll_group: ResMut<PollGroup<M>>,
 ) {
     const POLL_BATCH_SIZE: usize = 128;
 
@@ -156,10 +165,10 @@ fn poll_messages(
     }
 }
 
-fn poll_net_events(
+fn poll_net_events<M: SteamManager>(
     recv_net_event: Res<RecvNetEvent>,
     mut commands: Commands,
-    io: Query<&SteamNetIo>,
+    io: Query<&SteamNetIo<M>>,
     sessions: Query<(), With<Session>>,
 ) {
     for (entity, event) in recv_net_event.try_iter() {
@@ -194,7 +203,7 @@ fn poll_net_events(
     }
 }
 
-fn flush(mut sessions: Query<(Entity, &mut Session, &SteamNetIo)>) {
+fn flush<M: SteamManager>(mut sessions: Query<(Entity, &mut Session, &SteamNetIo<M>)>) {
     for (entity, mut session, io) in &mut sessions {
         let span = trace_span!("flush", %entity);
         let _span = span.enter();

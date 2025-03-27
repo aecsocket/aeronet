@@ -17,7 +17,6 @@ use {
     log::debug,
 };
 
-#[derive(Debug)]
 pub(crate) struct ServerPlugin;
 
 impl Plugin for ServerPlugin {

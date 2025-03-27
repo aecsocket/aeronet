@@ -1,38 +1,49 @@
 use {
     crate::{
-        SteamworksClient,
+        SteamManager, SteamworksClient,
         config::SteamSessionConfig,
         session::{SteamNetIo, SteamNetSessionPlugin},
     },
     aeronet_io::{IoSet, SessionEndpoint, connection::Disconnected},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
+    core::marker::PhantomData,
     core::net::SocketAddr,
     derive_more::{Display, Error},
     steamworks::{
-        ClientManager, SteamId, networking_sockets::NetConnection,
-        networking_types::NetworkingIdentity,
+        SteamId, networking_sockets::NetConnection, networking_types::NetworkingIdentity,
     },
     sync_wrapper::SyncWrapper,
 };
 
 /// Allows using [`SteamNetClient`].
-#[derive(Debug)]
-pub struct SteamNetClientPlugin;
+pub struct SteamNetClientPlugin<M: SteamManager> {
+    _phantom: PhantomData<M>,
+}
 
-impl Plugin for SteamNetClientPlugin {
+impl<M: SteamManager> Default for SteamNetClientPlugin<M> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<M: SteamManager> Plugin for SteamNetClientPlugin<M> {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<SteamNetSessionPlugin>() {
-            app.add_plugins(SteamNetSessionPlugin);
+        if !app.is_plugin_added::<SteamNetSessionPlugin<M>>() {
+            app.add_plugins(SteamNetSessionPlugin::<M>::default());
         }
 
-        app.add_systems(PreUpdate, poll_connecting.in_set(IoSet::Poll));
+        app.add_systems(PreUpdate, poll_connecting::<M>.in_set(IoSet::Poll));
     }
 }
 
 #[derive(Debug, Component)]
 #[require(SessionEndpoint)]
-pub struct SteamNetClient(());
+pub struct SteamNetClient<M: SteamManager> {
+    _phantom: PhantomData<M>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConnectTarget {
@@ -58,22 +69,26 @@ impl From<SteamId> for ConnectTarget {
     }
 }
 
-impl SteamNetClient {
+impl<M: SteamManager> SteamNetClient<M> {
     #[must_use]
     pub fn connect(
         config: SteamSessionConfig,
         target: impl Into<ConnectTarget>,
     ) -> impl EntityCommand {
         let target = target.into();
-        move |entity: EntityWorldMut| connect(entity, config, target)
+        move |entity: EntityWorldMut| connect::<M>(entity, config, target)
     }
 }
 
-fn connect(mut entity: EntityWorldMut, config: SteamSessionConfig, target: ConnectTarget) {
-    let steam = entity.world().resource::<SteamworksClient>().clone();
+fn connect<M: SteamManager>(
+    mut entity: EntityWorldMut,
+    config: SteamSessionConfig,
+    target: ConnectTarget,
+) {
+    let steam = entity.world().resource::<SteamworksClient<M>>().clone();
 
     let mtu = config.send_buffer_size;
-    let (send_next, recv_next) = oneshot::channel::<ConnectResult>();
+    let (send_next, recv_next) = oneshot::channel::<ConnectResult<M>>();
     blocking::unblock(move || {
         let result = match target {
             ConnectTarget::Addr(addr) => steam
@@ -94,7 +109,9 @@ fn connect(mut entity: EntityWorldMut, config: SteamSessionConfig, target: Conne
     .detach();
 
     entity.insert((
-        SteamNetClient(()),
+        SteamNetClient::<M> {
+            _phantom: PhantomData,
+        },
         Connecting {
             recv_next: SyncWrapper::new(recv_next),
             mtu,
@@ -112,16 +129,16 @@ pub enum ClientError {
 }
 
 #[derive(Component)]
-struct Connecting {
-    recv_next: SyncWrapper<oneshot::Receiver<ConnectResult>>,
+struct Connecting<M> {
+    recv_next: SyncWrapper<oneshot::Receiver<ConnectResult<M>>>,
     mtu: usize,
 }
 
-type ConnectResult = Result<NetConnection<ClientManager>, ClientError>;
+type ConnectResult<M> = Result<NetConnection<M>, ClientError>;
 
-fn poll_connecting(
+fn poll_connecting<M: SteamManager>(
     mut commands: Commands,
-    mut clients: Query<(Entity, &mut Connecting), With<SteamNetClient>>,
+    mut clients: Query<(Entity, &mut Connecting<M>), With<SteamNetClient<M>>>,
 ) {
     for (entity, mut client) in &mut clients {
         let conn = match client.recv_next.get_mut().try_recv() {
@@ -150,7 +167,7 @@ fn poll_connecting(
 
         commands
             .entity(entity)
-            .remove::<Connecting>()
+            .remove::<Connecting<M>>()
             .insert(SteamNetIo {
                 conn,
                 mtu: client.mtu,

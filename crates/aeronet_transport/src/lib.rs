@@ -46,7 +46,6 @@ use {
 /// Sets up the transport layer functionality.
 ///
 /// See [`Transport`].
-#[derive(Debug)]
 pub struct AeronetTransportPlugin;
 
 impl Plugin for AeronetTransportPlugin {

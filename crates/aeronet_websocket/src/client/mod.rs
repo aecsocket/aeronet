@@ -44,7 +44,6 @@ cfg_if::cfg_if! {
 }
 
 /// Allows using [`WebSocketClient`].
-#[derive(Debug)]
 pub struct WebSocketClientPlugin;
 
 impl Plugin for WebSocketClientPlugin {

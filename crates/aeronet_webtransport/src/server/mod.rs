@@ -28,7 +28,6 @@ use {
 };
 
 /// Allows using [`WebTransportServer`].
-#[derive(Debug)]
 pub struct WebTransportServerPlugin;
 
 impl Plugin for WebTransportServerPlugin {

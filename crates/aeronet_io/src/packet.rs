@@ -49,7 +49,6 @@ use {
     log::warn,
 };
 
-#[derive(Debug)]
 pub(crate) struct PacketPlugin;
 
 impl Plugin for PacketPlugin {

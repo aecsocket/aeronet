@@ -21,7 +21,6 @@ use {
 ///
 /// To make a [`Session`] be used by [`bevy_replicon`], add the
 /// [`AeronetRepliconClient`] component.
-#[derive(Debug)]
 pub struct AeronetRepliconClientPlugin;
 
 impl Plugin for AeronetRepliconClientPlugin {

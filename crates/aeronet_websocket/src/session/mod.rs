@@ -34,7 +34,6 @@ cfg_if::cfg_if! {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct WebSocketSessionPlugin;
 
 impl Plugin for WebSocketSessionPlugin {

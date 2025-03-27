@@ -26,7 +26,6 @@ use {
 };
 
 /// Allows using [`WebSocketServer`].
-#[derive(Debug)]
 pub struct WebSocketServerPlugin;
 
 impl Plugin for WebSocketServerPlugin {

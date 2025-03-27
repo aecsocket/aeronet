@@ -39,7 +39,6 @@ use {
 /// Without this plugin, you can still use [`SessionVisualizer`] manually.
 ///
 /// This automatically adds [`SessionSamplingPlugin`].
-#[derive(Debug)]
 pub struct SessionVisualizerPlugin;
 
 impl Plugin for SessionVisualizerPlugin {

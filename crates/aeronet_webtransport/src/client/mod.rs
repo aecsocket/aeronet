@@ -45,7 +45,6 @@ cfg_if::cfg_if! {
 }
 
 /// Allows using [`WebTransportClient`].
-#[derive(Debug)]
 pub struct WebTransportClientPlugin;
 
 impl Plugin for WebTransportClientPlugin {

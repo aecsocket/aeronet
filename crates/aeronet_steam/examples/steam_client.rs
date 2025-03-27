@@ -14,7 +14,7 @@ use {
     bevy::prelude::*,
     bevy_egui::{EguiContexts, EguiPlugin, egui},
     core::{mem, net::SocketAddr},
-    steamworks::SteamId,
+    steamworks::{ClientManager, SteamId},
 };
 
 fn main() -> AppExit {
@@ -24,7 +24,11 @@ fn main() -> AppExit {
         .insert_resource(SteamworksClient(steam))
         .insert_non_send_resource(steam_single)
         .add_systems(PreUpdate, run_steam_callbacks)
-        .add_plugins((DefaultPlugins, EguiPlugin, SteamNetClientPlugin))
+        .add_plugins((
+            DefaultPlugins,
+            EguiPlugin,
+            SteamNetClientPlugin::<ClientManager>::default(),
+        ))
         .init_resource::<Log>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
         .add_observer(on_connecting)
@@ -129,7 +133,7 @@ fn global_ui(
                     let name = format!("{}. {target}", *session_id);
                     commands
                         .spawn((Name::new(name), SessionUi::default()))
-                        .queue(SteamNetClient::connect(
+                        .queue(SteamNetClient::<ClientManager>::connect(
                             SteamSessionConfig::default(),
                             target,
                         ));
@@ -150,7 +154,7 @@ fn global_ui(
                     let name = format!("{}. {target:?}", *session_id);
                     commands
                         .spawn((Name::new(name), SessionUi::default()))
-                        .queue(SteamNetClient::connect(
+                        .queue(SteamNetClient::<ClientManager>::connect(
                             SteamSessionConfig::default(),
                             target,
                         ));

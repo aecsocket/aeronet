@@ -18,7 +18,6 @@ use {
 };
 
 /// Allows using [`ChannelIo`].
-#[derive(Debug)]
 pub struct ChannelIoPlugin;
 
 impl Plugin for ChannelIoPlugin {

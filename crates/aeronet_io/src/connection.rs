@@ -10,7 +10,6 @@ use {
     log::debug,
 };
 
-#[derive(Debug)]
 pub(crate) struct ConnectionPlugin;
 
 impl Plugin for ConnectionPlugin {

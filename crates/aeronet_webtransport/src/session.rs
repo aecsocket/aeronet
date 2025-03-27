@@ -36,7 +36,6 @@ cfg_if::cfg_if! {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct WebTransportSessionPlugin;
 
 impl Plugin for WebTransportSessionPlugin {

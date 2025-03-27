@@ -23,7 +23,6 @@ use {
 ///
 /// To make a [`Server`] be used by [`bevy_replicon`], add the
 /// [`AeronetRepliconServer`] component.
-#[derive(Debug)]
 pub struct AeronetRepliconServerPlugin;
 
 impl Plugin for AeronetRepliconServerPlugin {
