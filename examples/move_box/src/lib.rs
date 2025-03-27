@@ -33,7 +33,7 @@ impl Plugin for MoveBoxPlugin {
             .replicate::<Player>()
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
-            .add_client_event::<PlayerInput>(ChannelKind::Unreliable)
+            .add_client_event::<PlayerInput>(Channel::Unreliable)
             .add_systems(
                 FixedUpdate,
                 (recv_input, apply_movement)
@@ -45,7 +45,7 @@ impl Plugin for MoveBoxPlugin {
 
 /// Marker component for a player in the game.
 #[derive(Debug, Clone, Component, Serialize, Deserialize)]
-#[require(StateScoped<GameState>(|| StateScoped(GameState::Playing)))]
+#[require(StateScoped::<GameState>(GameState::Playing))]
 pub struct Player;
 
 /// Player's box position.

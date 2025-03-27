@@ -131,11 +131,11 @@ fn on_client_connected(
     let recv_lanes = channels
         .server_channels()
         .iter()
-        .map(|channel| convert::to_lane_kind(channel.kind));
+        .map(|channel| convert::to_lane_kind(*channel));
     let send_lanes = channels
         .client_channels()
         .iter()
-        .map(|channel| convert::to_lane_kind(channel.kind));
+        .map(|channel| convert::to_lane_kind(*channel));
     let now = Instant::now();
 
     let transport = match Transport::new(session, recv_lanes, send_lanes, now) {
@@ -230,10 +230,7 @@ fn poll(
 ) {
     for mut transport in &mut clients {
         for msg in transport.recv.msgs.drain() {
-            let Some(channel_id) = convert::to_channel_id(msg.lane) else {
-                warn!("Lane {:?} is too large to convert to a channel", msg.lane);
-                continue;
-            };
+            let channel_id = convert::to_channel_id(msg.lane);
             replicon_client.insert_received(channel_id, msg.payload);
         }
 
@@ -249,7 +246,10 @@ fn flush(
 ) {
     let now = Instant::now();
     for (channel_id, msg) in replicon_client.drain_sent() {
-        let lane_index = convert::to_lane_index(channel_id);
+        let Some(lane_index) = convert::to_lane_index(channel_id) else {
+            warn!("Channel {channel_id} is too large to convert to a lane index");
+            continue;
+        };
         for mut transport in &mut clients {
             _ = transport.send.push(lane_index, msg.clone(), now);
         }

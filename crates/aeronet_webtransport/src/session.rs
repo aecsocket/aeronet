@@ -73,16 +73,12 @@ impl Plugin for WebTransportSessionPlugin {
 /// You should not add or remove this component directly - it is managed
 /// entirely by the client and server implementations.
 #[derive(Debug, Component)]
-#[require(Session(new_session))]
+#[require(Session::new(Instant::now(), IP_MTU))]
 pub struct WebTransportIo {
     pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,
     pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
-}
-
-fn new_session() -> Session {
-    Session::new(Instant::now(), IP_MTU)
 }
 
 /// Error that occurs when polling a session using the [`WebTransportIo`]

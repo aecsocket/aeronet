@@ -87,13 +87,13 @@ web-sys = "0.3.70"
 
 # bevy
 
-bevy = { version = "0.16.0-rc.1" }
-bevy_app = { version = "0.16.0-rc.1", default-features = false }
-bevy_ecs = { version = "0.16.0-rc.1", default-features = false }
-bevy_platform_support = { version = "0.16.0-rc.1", default-features = false }
-bevy_reflect = { version = "0.16.0-rc.1", default-features = false }
-bevy_time = { version = "0.16.0-rc.1", default-features = false }
-bevy_winit = { version = "0.16.0-rc.1", default-features = false }
+bevy = { version = "0.16.0-rc.2" }
+bevy_app = { version = "0.16.0-rc.2", default-features = false }
+bevy_ecs = { version = "0.16.0-rc.2", default-features = false }
+bevy_platform_support = { version = "0.16.0-rc.2", default-features = false }
+bevy_reflect = { version = "0.16.0-rc.2", default-features = false }
+bevy_time = { version = "0.16.0-rc.2", default-features = false }
+bevy_winit = { version = "0.16.0-rc.2", default-features = false }
 
 bevy_egui = "0.33.0"
 
@@ -132,7 +132,7 @@ xwt-web = "0.15.0"
 
 # aeronet_replicon
 
-bevy_replicon = { version = "0.31.0", default-features = false }
+bevy_replicon = { version = "0.32.0-rc.2", default-features = false }
 
 [workspace.metadata.cargo-shear]
 ignored = [
@@ -141,5 +141,4 @@ ignored = [
 
 [patch.crates-io]
 bevy_egui = { git = "https://github.com/Friz64/bevy_egui", branch = "bevy-0.16" }
-bevy_replicon = { git = "https://github.com/projectharmonia/bevy_replicon", rev = "f0e1fba566a5839ccf16c95abd7c41eb5258f307" }
-typesize = { git = "https://github.com/aecsocket/typesize", branch = "fix-no-std" }
+typesize = { git = "https://github.com/GnomedDev/typesize", rev = "358951ce95b10473387b2a54a8d6e3218d696ca6" }
