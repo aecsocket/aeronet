@@ -2,7 +2,6 @@
 
 use std::any::type_name;
 
-use aeronet_io::connection::Connected;
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_steamworks::SteamworksPlugin;
