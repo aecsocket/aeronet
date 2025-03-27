@@ -131,7 +131,7 @@ impl<E> From<E> for DisconnectReason<E> {
 /// IO layer implementations may use this as a default disconnection reason when
 /// their IO component is dropped, instead of being explicitly disconnected via
 /// [`Disconnect`].
-pub const DROP_DISCONNECT_REASON: &str = "dropped";
+pub const DROP_DISCONNECT_REASON: &str = "(dropped)";
 
 /// Local socket address that this entity uses for connections.
 ///

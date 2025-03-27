@@ -29,10 +29,8 @@ RUN yay -Syu --noconfirm \
 RUN cargo binstall cargo-fuzz
 
 # install Bevy libraries
-# RUN yay -Syu --noconfirm alsa-lib libxkbcommon vulkan-tools mesa vulkan-radeon
-RUN yay -Syu --noconfirm alsa-lib libxkbcommon vulkan-tools && \
-    # install mesa 24.3.4 because 25.0 has a regression on AMD Radeon 780M where conformanceVersion reports as 0.0.0.0,
-    # making it fail with wgpu adapter initialization
-    # <https://github.com/warpdotdev/Warp/issues/6015>
-    sudo pacman -U --noconfirm https://archive.archlinux.org/packages/m/mesa/mesa-1%3A24.3.4-1-x86_64.pkg.tar.zst && \
-    sudo pacman -U --noconfirm https://archive.archlinux.org/packages/v/vulkan-radeon/vulkan-radeon-1%3A24.3.4-1-x86_64.pkg.tar.zst
+RUN yay -Syu --noconfirm alsa-lib libxkbcommon vulkan-tools mesa vulkan-radeon
+
+# install Steam libraries
+RUN echo -e "[multilib]\nInclude = /etc/pacman.d/mirrorlist" | sudo tee -a /etc/pacman.conf && \
+    yay -Syu --noconfirm steam

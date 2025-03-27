@@ -1,13 +1,17 @@
-use aeronet_io::{IoSet, Session, packet::RecvPacket};
+use aeronet_io::{
+    IoSet, Session,
+    connection::{DisconnectReason, Disconnected},
+    packet::RecvPacket,
+};
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_platform_support::time::Instant;
 use bytes::Bytes;
-use derive_more::{Deref, DerefMut};
+use derive_more::{Deref, DerefMut, Display, Error};
 use steamworks::{
     ClientManager,
     networking_sockets::{NetConnection, NetPollGroup},
-    networking_types::NetConnectionStatusChanged,
+    networking_types::{NetConnectionStatusChanged, NetworkingConnectionState, SendFlags},
 };
 use tracing::warn;
 
@@ -28,22 +32,46 @@ impl Plugin for SteamNetSessionPlugin {
         let poll_group = steam.networking_sockets().create_poll_group();
         app.insert_resource(PollGroup(poll_group))
             .insert_resource(RecvNetEvent(recv_net_event))
-            .add_systems(PreUpdate, (poll_messages).in_set(IoSet::Poll));
+            .add_systems(
+                PreUpdate,
+                (poll_messages, poll_net_events).in_set(IoSet::Poll),
+            )
+            .add_systems(PostUpdate, flush.in_set(IoSet::Flush));
     }
+}
+
+#[derive(Component)]
+pub struct SteamNetIo {
+    pub(crate) conn: NetConnection<ClientManager>,
+    pub(crate) mtu: usize,
+}
+
+#[derive(Debug, Display, Error)]
+pub enum SessionError {
+    #[display("invalid connection")]
+    InvalidConnection,
+    #[display("problem detected locally")]
+    ProblemDetectedLocally,
+}
+
+#[derive(Debug)]
+enum NetEvent {
+    Connected,
+    Disconnected {
+        reason: DisconnectReason<SessionError>,
+    },
 }
 
 #[derive(Deref, DerefMut, Resource)]
 struct PollGroup(NetPollGroup<ClientManager>);
 
 #[derive(Debug, Deref, DerefMut, Resource)]
-struct RecvNetEvent(flume::Receiver<()>);
+struct RecvNetEvent(flume::Receiver<(Entity, NetEvent)>);
 
-#[derive(Component)]
-pub struct SteamNetIo {
-    pub(crate) conn: NetConnection<ClientManager>,
-}
-
-fn on_status_changed(send_event: &flume::Sender<()>, event: NetConnectionStatusChanged) {
+fn on_status_changed(
+    send_net_event: &flume::Sender<(Entity, NetEvent)>,
+    event: NetConnectionStatusChanged,
+) {
     let user_data = event.connection_info.user_data();
     #[expect(
         clippy::cast_sign_loss,
@@ -63,7 +91,22 @@ fn on_status_changed(send_event: &flume::Sender<()>, event: NetConnectionStatusC
         }
     };
 
-    todo!();
+    let event = match event.connection_info.state() {
+        Ok(NetworkingConnectionState::Connecting | NetworkingConnectionState::FindingRoute) => None,
+        Ok(NetworkingConnectionState::Connected) => Some(NetEvent::Connected),
+        Ok(NetworkingConnectionState::ClosedByPeer) => Some(NetEvent::Disconnected {
+            reason: DisconnectReason::Peer("(unknown reason)".into()),
+        }),
+        Ok(NetworkingConnectionState::None) | Err(_) => Some(NetEvent::Disconnected {
+            reason: DisconnectReason::Error(SessionError::InvalidConnection),
+        }),
+        Ok(NetworkingConnectionState::ProblemDetectedLocally) => Some(NetEvent::Disconnected {
+            reason: DisconnectReason::Error(SessionError::ProblemDetectedLocally),
+        }),
+    };
+    if let Some(net_event) = event {
+        _ = send_net_event.send((entity, net_event));
+    }
 }
 
 fn poll_messages(
@@ -113,6 +156,61 @@ fn poll_messages(
                 recv_at: Instant::now(),
                 payload,
             });
+        }
+    }
+}
+
+fn poll_net_events(
+    recv_net_event: Res<RecvNetEvent>,
+    mut commands: Commands,
+    io: Query<&SteamNetIo>,
+    sessions: Query<(), With<Session>>,
+) {
+    for (entity, event) in recv_net_event.try_iter() {
+        let io = match io.get(entity) {
+            Ok(data) => data,
+            Err(err) => {
+                warn!(
+                    "Received connection event for entity {entity} which is not a valid session: {err:?}"
+                );
+                continue;
+            }
+        };
+
+        match event {
+            NetEvent::Connected => {
+                if sessions.get(entity).is_ok() {
+                    warn!(
+                        "Received connected event for entity {entity} which is already connected"
+                    );
+                    continue;
+                }
+
+                commands
+                    .entity(entity)
+                    .insert(Session::new(Instant::now(), io.mtu));
+            }
+            NetEvent::Disconnected { reason } => {
+                commands.trigger_targets(
+                    Disconnected {
+                        reason: reason.map_err(From::from),
+                    },
+                    entity,
+                );
+            }
+        }
+    }
+}
+
+fn flush(mut sessions: Query<(&mut Session, &SteamNetIo)>) {
+    for (mut session, io) in &mut sessions {
+        // explicit deref so we can access disjoint fields
+        let session = &mut *session;
+        for packet in session.send.drain(..) {
+            session.stats.packets_sent += 1;
+            session.stats.bytes_sent += packet.len();
+
+            _ = io.conn.send_message(&packet, SendFlags::UNRELIABLE);
         }
     }
 }

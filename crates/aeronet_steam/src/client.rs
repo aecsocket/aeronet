@@ -5,12 +5,11 @@ use {
         session::{SteamNetIo, SteamNetSessionPlugin},
     },
     aeronet_io::{
-        IoSet, Session, SessionEndpoint,
+        IoSet, SessionEndpoint,
         connection::{DisconnectReason, Disconnected},
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
-    bevy_platform_support::time::Instant,
     core::net::SocketAddr,
     derive_more::{Display, Error},
     steamworks::{
@@ -166,9 +165,12 @@ fn poll_connecting(
             continue;
         }
 
-        commands.entity(entity).remove::<Connecting>().insert((
-            SteamNetIo { conn },
-            Session::new(Instant::now(), client.mtu),
-        ));
+        commands
+            .entity(entity)
+            .remove::<Connecting>()
+            .insert(SteamNetIo {
+                conn,
+                mtu: client.mtu,
+            });
     }
 }
