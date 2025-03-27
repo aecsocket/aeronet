@@ -5,7 +5,6 @@ use {
     aeronet_io::{
         Session, SessionEndpoint,
         connection::{Disconnect, DisconnectReason, Disconnected},
-        packet::{PacketRtt, PacketStats},
     },
     aeronet_steam::{
         SteamworksClient,
@@ -14,7 +13,7 @@ use {
     },
     bevy::prelude::*,
     bevy_egui::{EguiContexts, EguiPlugin, egui},
-    std::{mem, net::SocketAddr},
+    core::{mem, net::SocketAddr},
     steamworks::SteamId,
 };
 
@@ -26,11 +25,11 @@ fn main() -> AppExit {
         .insert_non_send_resource(steam_single)
         .add_systems(PreUpdate, run_steam_callbacks)
         .add_plugins((DefaultPlugins, EguiPlugin, SteamNetClientPlugin))
-        .init_resource::<GlobalUi>()
+        .init_resource::<Log>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
-        .observe(on_connecting)
-        .observe(on_connected)
-        .observe(on_disconnected)
+        .add_observer(on_connecting)
+        .add_observer(on_connected)
+        .add_observer(on_disconnected)
         .run()
 }
 
@@ -38,13 +37,8 @@ fn run_steam_callbacks(steam: NonSend<steamworks::SingleClient>) {
     steam.run_callbacks();
 }
 
-#[derive(Debug, Default, Resource)]
-struct GlobalUi {
-    target_addr: String,
-    target_peer: String,
-    session_id: usize,
-    log: Vec<String>,
-}
+#[derive(Debug, Default, Deref, DerefMut, Resource)]
+struct Log(Vec<String>);
 
 #[derive(Debug, Default, Component)]
 struct SessionUi {
@@ -55,37 +49,29 @@ struct SessionUi {
 fn on_connecting(
     trigger: Trigger<OnAdd, SessionEndpoint>,
     names: Query<&Name>,
-    mut ui_state: ResMut<GlobalUi>,
+    mut log: ResMut<Log>,
 ) {
     let session = trigger.target();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
-    ui_state.log.push(format!("{name} connecting"));
+    log.push(format!("{name} connecting"));
 }
 
-fn on_connected(
-    trigger: Trigger<OnAdd, Session>,
-    names: Query<&Name>,
-    mut ui_state: ResMut<GlobalUi>,
-) {
+fn on_connected(trigger: Trigger<OnAdd, Session>, names: Query<&Name>, mut log: ResMut<Log>) {
     let session = trigger.target();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
-    ui_state.log.push(format!("{name} connected"));
+    log.push(format!("{name} connected"));
 }
 
-fn on_disconnected(
-    trigger: Trigger<Disconnected>,
-    names: Query<&Name>,
-    mut ui_state: ResMut<GlobalUi>,
-) {
+fn on_disconnected(trigger: Trigger<Disconnected>, names: Query<&Name>, mut log: ResMut<Log>) {
     let session = trigger.target();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
-    ui_state.log.push(match &trigger.reason {
+    log.push(match &trigger.reason {
         DisconnectReason::User(reason) => {
             format!("{name} disconnected by user: {reason}")
         }
@@ -98,8 +84,15 @@ fn on_disconnected(
     });
 }
 
-fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMut<GlobalUi>) {
-    const DEFAULT_TARGET: &str = "127.0.0.1:25565";
+fn global_ui(
+    mut egui: EguiContexts,
+    mut commands: Commands,
+    mut log: ResMut<Log>,
+    mut target_addr: Local<String>,
+    mut target_peer: Local<String>,
+    mut session_id: Local<usize>,
+) {
+    const DEFAULT_TARGET: &str = "127.0.0.1:25567";
 
     egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -107,7 +100,7 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
         let mut connect_addr = false;
         ui.horizontal(|ui| {
             let resp = ui.add(
-                egui::TextEdit::singleline(&mut ui_state.target_addr)
+                egui::TextEdit::singleline(&mut *target_addr)
                     .hint_text(format!("{DEFAULT_TARGET} | [enter] to connect")),
             );
             connect_addr |= resp.lost_focus() && enter_pressed;
@@ -117,7 +110,7 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
         let mut connect_peer = false;
         ui.horizontal(|ui| {
             let resp = ui.add(
-                egui::TextEdit::singleline(&mut ui_state.target_peer)
+                egui::TextEdit::singleline(&mut *target_peer)
                     .hint_text("Steam ID | [enter] to connect"),
             );
             connect_peer |= resp.lost_focus() && enter_pressed;
@@ -125,57 +118,60 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
         });
 
         if connect_addr {
-            let mut target = ui_state.target_addr.clone();
+            let mut target = target_addr.clone();
             if target.is_empty() {
-                target = DEFAULT_TARGET.to_owned();
+                DEFAULT_TARGET.clone_into(&mut target);
             }
 
             match target.parse::<SocketAddr>() {
                 Ok(target) => {
-                    ui_state.session_id += 1;
-                    let name = format!("{}. {target}", ui_state.session_id);
-                    commands.spawn((Name::new(name), SessionUi::default())).add(
-                        SteamNetClient::connect(SteamSessionConfig::default(), target),
-                    );
+                    *session_id += 1;
+                    let name = format!("{}. {target}", *session_id);
+                    commands
+                        .spawn((Name::new(name), SessionUi::default()))
+                        .queue(SteamNetClient::connect(
+                            SteamSessionConfig::default(),
+                            target,
+                        ));
                 }
                 Err(err) => {
-                    ui_state
-                        .log
-                        .push(format!("Invalid address `{target}`: {err:?}"));
+                    log.push(format!("Invalid address `{target}`: {err:?}"));
                 }
             }
         }
 
         if connect_peer {
-            let target = ui_state.target_peer.clone();
+            let target = target_peer.clone();
 
             match target.parse::<u64>() {
                 Ok(target) => {
                     let target = SteamId::from_raw(target);
-                    ui_state.session_id += 1;
-                    let name = format!("{}. {target:?}", ui_state.session_id);
-                    commands.spawn((Name::new(name), SessionUi::default())).add(
-                        SteamNetClient::connect(SteamSessionConfig::default(), target),
-                    );
+                    *session_id += 1;
+                    let name = format!("{}. {target:?}", *session_id);
+                    commands
+                        .spawn((Name::new(name), SessionUi::default()))
+                        .queue(SteamNetClient::connect(
+                            SteamSessionConfig::default(),
+                            target,
+                        ));
                 }
                 Err(err) => {
-                    ui_state
-                        .log
-                        .push(format!("Invalid Steam ID `{target}`: {err:?}"));
+                    log.push(format!("Invalid Steam ID `{target}`: {err:?}"));
                 }
             }
         }
 
-        for msg in &ui_state.log {
+        for msg in log.iter() {
             ui.label(msg);
         }
     });
 }
 
-fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
-    for (mut ui_state, mut bufs) in &mut sessions {
-        for msg in bufs.drain_recv() {
-            let msg = String::from_utf8(msg.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut Session)>) {
+    for (mut ui_state, mut session) in &mut sessions {
+        for packet in session.recv.drain(..) {
+            let msg =
+                String::from_utf8(packet.payload.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             ui_state.log.push(format!("> {msg}"));
         }
     }
@@ -184,25 +180,19 @@ fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut PacketBuffers)>) {
 fn session_ui(
     mut egui: EguiContexts,
     mut commands: Commands,
-    mut sessions: Query<(
-        Entity,
-        &Name,
-        &mut SessionUi,
-        &mut PacketBuffers,
-        Option<&PacketRtt>,
-        &PacketMtu,
-        &PacketStats,
-    )>,
+    mut sessions: Query<(Entity, &Name, &mut SessionUi, Option<&mut Session>)>,
 ) {
-    for (session, name, mut ui_state, mut bufs, packet_rtt, packet_mtu, packet_stats) in
-        &mut sessions
-    {
+    for (entity, name, mut ui_state, mut session) in &mut sessions {
         egui::Window::new(name.to_string()).show(egui.ctx_mut(), |ui| {
             let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
             let mut send_msg = false;
             let msg_resp = ui
                 .horizontal(|ui| {
+                    if session.is_none() {
+                        ui.disable();
+                    }
+
                     let msg_resp = ui.add(
                         egui::TextEdit::singleline(&mut ui_state.msg).hint_text("[enter] to send"),
                     );
@@ -213,41 +203,31 @@ fn session_ui(
                 .inner;
 
             if send_msg {
-                let msg = mem::take(&mut ui_state.msg);
-                ui_state.log.push(format!("< {msg}"));
-                bufs.push_send(msg.into());
-                ui.memory_mut(|m| m.request_focus(msg_resp.id));
+                if let Some(session) = &mut session {
+                    let msg = mem::take(&mut ui_state.msg);
+                    ui_state.log.push(format!("< {msg}"));
+                    session.send.push(msg.into());
+                    ui.memory_mut(|m| m.request_focus(msg_resp.id));
+                }
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.trigger_targets(Disconnect::new("disconnected by user"), session);
+                commands.trigger_targets(Disconnect::new("disconnected by user"), entity);
             }
 
-            egui::Grid::new("stats").show(ui, |ui| {
-                ui.label("Packet RTT");
-                ui.label(
-                    packet_rtt
-                        .map(|PacketRtt(rtt)| format!("{rtt:?}"))
-                        .unwrap_or_default(),
-                );
-                ui.end_row();
+            let stats = session.as_ref().map(|s| s.stats).unwrap_or_default();
 
+            egui::Grid::new("stats").show(ui, |ui| {
                 ui.label("Packet MTU");
-                ui.label(format!("{:?}", **packet_mtu));
+                ui.label(format!("{}", session.map(|s| s.mtu()).unwrap_or_default()));
                 ui.end_row();
 
                 ui.label("Packets recv/sent");
-                ui.label(format!(
-                    "{} / {}",
-                    packet_stats.packets_recv, packet_stats.packets_sent
-                ));
+                ui.label(format!("{} / {}", stats.packets_recv, stats.packets_sent));
                 ui.end_row();
 
                 ui.label("Bytes recv/sent");
-                ui.label(format!(
-                    "{} / {}",
-                    packet_stats.packets_recv, packet_stats.packets_sent
-                ));
+                ui.label(format!("{} / {}", stats.bytes_recv, stats.bytes_sent));
                 ui.end_row();
             });
 
