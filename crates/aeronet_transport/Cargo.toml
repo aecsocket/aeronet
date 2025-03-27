@@ -1,14 +1,14 @@
 [package]
 description = "Transport layer implementation for `aeronet`"
-name = "aeronet_transport"
-version = "0.12.0"
+name        = "aeronet_transport"
+version     = "0.12.0"
 
-authors.workspace = true
-categories.workspace = true
-edition.workspace = true
-keywords.workspace = true
-license.workspace = true
-repository.workspace = true
+authors.workspace      = true
+categories.workspace   = true
+edition.workspace      = true
+keywords.workspace     = true
+license.workspace      = true
+repository.workspace   = true
 rust-version.workspace = true
 
 [lints]
@@ -24,9 +24,6 @@ ignored = [
 
 [features]
 default = ["std"]
-
-## Enables support for targets without native atomic CAS.
-extra-platforms = ["aeronet_io/extra-platforms"]
 
 ## Enables standard library support.
 std = ["aeronet_io/std"]
@@ -75,10 +72,28 @@ document-features = [
 ]
 
 [dependencies]
-aeronet_io = { workspace = true }
+aeronet_io            = { workspace = true }
+anyhow                = { workspace = true }
+arbitrary             = { workspace = true, optional = true }
+bevy_app              = { workspace = true }
+bevy_ecs              = { workspace = true }
+bevy_egui             = { workspace = true, optional = true }
+bevy_platform_support = { workspace = true, features = ["alloc"] }
+bevy_reflect          = { workspace = true }
+bevy_time             = { workspace = true }
+bevy_winit            = { workspace = true, optional = true }
+bit-vec               = { workspace = true }
+document-features     = { workspace = true, optional = true }
+egui_plot             = { workspace = true, optional = true }
+either                = { workspace = true }
+itertools             = { workspace = true, optional = true }
+log                   = { workspace = true }
+octs                  = { workspace = true }
+ringbuf               = { workspace = true, features = ["alloc", "portable-atomic"] }
+serde                 = { workspace = true, optional = true }
+size_format           = { workspace = true, optional = true }
+thousands             = { workspace = true, optional = true }
 
-anyhow = { workspace = true }
-bit-vec = { workspace = true }
 derive_more = { workspace = true, features = [
   "display",
   "error",
@@ -88,31 +103,8 @@ derive_more = { workspace = true, features = [
   "deref",
   "deref_mut",
 ] }
-either = { workspace = true }
-log = { workspace = true }
-octs = { workspace = true }
-ringbuf = { workspace = true, features = ["alloc", "portable-atomic"] }
 typesize = { workspace = true, features = [
   # "bitvec",
   "hashbrown_15",
   "saturating_impls",
 ] }
-
-bevy_app = { workspace = true }
-bevy_ecs = { workspace = true }
-bevy_platform_support = { workspace = true, features = ["alloc"] }
-bevy_reflect = { workspace = true }
-bevy_time = { workspace = true }
-
-arbitrary = { workspace = true, optional = true }
-
-serde = { workspace = true, optional = true }
-
-bevy_egui = { workspace = true, optional = true }
-egui_plot = { workspace = true, optional = true }
-itertools = { workspace = true, optional = true }
-size_format = { workspace = true, optional = true }
-thousands = { workspace = true, optional = true }
-
-bevy_winit = { workspace = true, optional = true }
-document-features = { workspace = true, optional = true }

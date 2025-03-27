@@ -1,14 +1,14 @@
 [package]
 description = "`aeronet` backend implementation for `bevy_replicon`"
-name = "aeronet_replicon"
-version = "0.13.0"
+name        = "aeronet_replicon"
+version     = "0.13.0"
 
-authors.workspace = true
-categories.workspace = true
-edition.workspace = true
-keywords.workspace = true
-license.workspace = true
-repository.workspace = true
+authors.workspace      = true
+categories.workspace   = true
+edition.workspace      = true
+keywords.workspace     = true
+license.workspace      = true
+repository.workspace   = true
 rust-version.workspace = true
 
 [lints]
@@ -19,9 +19,6 @@ all-features = true
 
 [features]
 default = ["std"]
-
-## Enables support for targets without native atomic CAS.
-extra-platforms = ["aeronet_transport/extra-platforms"]
 
 ## Enables standard library support.
 std = ["aeronet_transport/std"]
@@ -36,16 +33,12 @@ server = ["bevy_replicon/server"]
 document-features = ["dep:document-features"]
 
 [dependencies]
-aeronet_io = { workspace = true }
-aeronet_transport = { workspace = true }
-
-tracing = { workspace = true }
-
-bevy_app = { workspace = true }
-bevy_ecs = { workspace = true }
+aeronet_io            = { workspace = true }
+aeronet_transport     = { workspace = true }
+bevy_app              = { workspace = true }
+bevy_ecs              = { workspace = true }
 bevy_platform_support = { workspace = true, features = ["alloc"] }
-bevy_reflect = { workspace = true }
-
-bevy_replicon = { workspace = true }
-
-document-features = { workspace = true, optional = true }
+bevy_reflect          = { workspace = true }
+bevy_replicon         = { workspace = true }
+document-features     = { workspace = true, optional = true }
+tracing               = { workspace = true }

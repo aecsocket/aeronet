@@ -1,4 +1,4 @@
 [target.wasm32-unknown-unknown]
-runner = "wasm-server-runner"
+runner       = "wasm-server-runner"
 rustdocflags = ["--cfg=web_sys_unstable_apis"]
-rustflags = ["--cfg=web_sys_unstable_apis"]
+rustflags    = ["--cfg=web_sys_unstable_apis"]

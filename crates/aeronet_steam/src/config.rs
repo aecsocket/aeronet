@@ -99,14 +99,10 @@ impl SteamSessionConfig {
     }
 }
 
-fn u128_to_i32(n: u128) -> i32 {
-    n.min(i32::MAX as u128) as i32
-}
-
 fn usize_to_i32(n: usize) -> i32 {
-    n.min(i32::MAX as usize) as i32
+    i32::try_from(n).unwrap_or(i32::MAX)
 }
 
 fn duration_to_ms(duration: Duration) -> i32 {
-    u128_to_i32(duration.as_millis())
+    i32::try_from(duration.as_millis()).unwrap_or(i32::MAX)
 }

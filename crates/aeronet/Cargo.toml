@@ -1,14 +1,14 @@
 [package]
 description = "Low-level networking for Bevy"
-name = "aeronet"
-version = "0.12.0"
+name        = "aeronet"
+version     = "0.12.0"
 
-authors.workspace = true
-categories.workspace = true
-edition.workspace = true
-keywords.workspace = true
-license.workspace = true
-repository.workspace = true
+authors.workspace      = true
+categories.workspace   = true
+edition.workspace      = true
+keywords.workspace     = true
+license.workspace      = true
+repository.workspace   = true
 rust-version.workspace = true
 
 [lints]
@@ -33,9 +33,7 @@ document-features = [
 ]
 
 [dependencies]
-aeronet_io = { workspace = true }
+aeronet_io        = { workspace = true }
 aeronet_transport = { workspace = true }
-
-bevy_app = { workspace = true }
-
+bevy_app          = { workspace = true }
 document-features = { workspace = true, optional = true }

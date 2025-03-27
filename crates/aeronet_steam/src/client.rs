@@ -1,14 +1,11 @@
 use std::net::SocketAddr;
 
-use aeronet_io::{
-    connection::{DisconnectReason, Disconnected, Session},
-    packet::PacketMtu,
-};
+use aeronet_io::connection::{DisconnectReason, Disconnected};
 use bevy_ecs::{prelude::*, system::EntityCommand};
+use derive_more::{Display, Error};
 use steamworks::{
-    networking_sockets::InvalidHandle, networking_types::NetworkingIdentity, SteamId,
+    SteamId, networking_sockets::InvalidHandle, networking_types::NetworkingIdentity,
 };
-use thiserror::Error;
 
 use crate::{config::SteamSessionConfig, session::SteamIo};
 
@@ -39,8 +36,8 @@ impl From<SteamId> for ConnectTarget {
     }
 }
 
-#[derive(Debug, Clone, Copy, Error)]
-#[error("steam error")]
+#[derive(Debug, Clone, Copy, Display, Error)]
+#[display("steam error")]
 pub struct SteamError;
 
 impl SteamClient {
@@ -50,12 +47,12 @@ impl SteamClient {
         target: impl Into<ConnectTarget>,
     ) -> impl EntityCommand {
         let target = target.into();
-        move |session: Entity, world: &mut World| connect(session, world, config, target)
+        move |entity: EntityWorldMut| connect(entity, config, target)
     }
 }
 
-fn connect(session: Entity, world: &mut World, config: SteamSessionConfig, target: ConnectTarget) {
-    let steam = world.resource::<bevy_steamworks::Client>().clone();
+fn connect(mut entity: EntityWorldMut, config: SteamSessionConfig, target: ConnectTarget) {
+    let steam = entity.world().resource::<bevy_steamworks::Client>().clone();
 
     world.entity_mut(session).insert(Session);
 

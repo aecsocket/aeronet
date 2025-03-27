@@ -7,7 +7,7 @@ use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_steamworks::SteamworksPlugin;
 use steamworks::{
-    networking_sockets::NetConnection, networking_types::NetConnectionStatusChanged, ClientManager,
+    ClientManager, networking_sockets::NetConnection, networking_types::NetConnectionStatusChanged,
 };
 
 #[derive(Debug)]
