@@ -5,7 +5,7 @@ pub mod wasm {
             JsError,
             session::{SessionError, SessionFrontend},
         },
-        aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
+        aeronet_io::{connection::Disconnected, packet::RecvPacket},
         bytes::Bytes,
         futures::{
             SinkExt, StreamExt,
@@ -160,7 +160,7 @@ pub mod wasm {
 pub mod native {
     use {
         crate::session::{SessionError, SessionFrontend},
-        aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
+        aeronet_io::{connection::Disconnected, packet::RecvPacket},
         bytes::Bytes,
         futures::{
             SinkExt, StreamExt,
@@ -209,7 +209,7 @@ pub mod native {
     }
 
     impl<S: Send + AsyncRead + AsyncWrite + Unpin> SessionBackend<S> {
-        pub async fn start(self) -> Result<Never, DisconnectReason<SessionError>> {
+        pub async fn start(self) -> Result<Never, Disconnected> {
             let Self {
                 mut stream,
                 send_packet_b2f,
@@ -232,7 +232,7 @@ pub mod native {
                     reason = recv_user_dc => {
                         let reason = reason.map_err(|_| SessionError::FrontendClosed)?;
                         Self::close(&mut stream, reason.clone()).await?;
-                        return Err(DisconnectReason::User(reason));
+                        return Err(Disconnected::ByUser(reason));
                     }
                 }
             }
@@ -241,13 +241,13 @@ pub mod native {
         fn recv(
             send_packet_b2f: &mpsc::UnboundedSender<RecvPacket>,
             msg: Message,
-        ) -> Result<(), DisconnectReason<SessionError>> {
+        ) -> Result<(), Disconnected> {
             let packet = match msg {
                 Message::Close(None) => {
                     return Err(SessionError::DisconnectedWithoutReason.into());
                 }
                 Message::Close(Some(frame)) => {
-                    return Err(DisconnectReason::Peer(frame.reason.to_string()));
+                    return Err(Disconnected::ByPeer(frame.reason.to_string()));
                 }
                 msg => msg.into_data(),
             };
@@ -262,10 +262,7 @@ pub mod native {
             Ok(())
         }
 
-        async fn send(
-            stream: &mut WebSocketStream<S>,
-            packet: Bytes,
-        ) -> Result<(), DisconnectReason<SessionError>> {
+        async fn send(stream: &mut WebSocketStream<S>, packet: Bytes) -> Result<(), Disconnected> {
             let msg = Message::binary(packet);
             stream.send(msg).await.map_err(SessionError::Connection)?;
             Ok(())
@@ -274,7 +271,7 @@ pub mod native {
         async fn close(
             stream: &mut WebSocketStream<S>,
             reason: String,
-        ) -> Result<(), DisconnectReason<SessionError>> {
+        ) -> Result<(), Disconnected> {
             let close_frame = CloseFrame {
                 code: CloseCode::Normal,
                 reason: Utf8Bytes::from(reason),

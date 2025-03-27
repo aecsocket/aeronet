@@ -7,14 +7,11 @@ use {
         WebSocketRuntime,
         session::{self, MTU, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
     },
-    aeronet_io::{
-        IoSet, Session, SessionEndpoint,
-        connection::{DisconnectReason, Disconnected},
-    },
+    aeronet_io::{IoSet, Session, SessionEndpoint, connection::Disconnected},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     core::mem,
-    derive_more::{Display, Error, From},
+    derive_more::{Display, Error},
     futures::{channel::oneshot, never::Never},
     tracing::{Instrument, debug_span},
     web_time::Instant,
@@ -125,12 +122,12 @@ impl WebSocketClient {
 fn connect(mut entity: EntityWorldMut, config: ClientConfig, target: ConnectTarget) {
     let runtime = entity.world().resource::<WebSocketRuntime>().clone();
 
-    let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
+    let (send_dc, recv_dc) = oneshot::channel::<Disconnected>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     runtime.spawn_on_self(
         async move {
-            let Err(reason) = backend::start(config, target, send_next).await;
-            _ = send_dc.send(reason);
+            let Err(disconnected) = backend::start(config, target, send_next).await;
+            _ = send_dc.send(disconnected);
         }
         .instrument(debug_span!("client", entity = %entity.id())),
     );
@@ -138,8 +135,10 @@ fn connect(mut entity: EntityWorldMut, config: ClientConfig, target: ConnectTarg
     entity.insert((WebSocketClient(()), Connecting { recv_dc, recv_next }));
 }
 
-/// [`WebSocketClient`] error.
-#[derive(Debug, Display, Error, From)]
+/// [`WebSocketClient`]-specific error.
+///
+/// For generic WebSocket errors, see [`SessionError`].
+#[derive(Debug, Display, Error)]
 #[non_exhaustive]
 pub enum ClientError {
     /// Failed to convert the `target` passed into [`WebSocketClient::connect`]
@@ -152,20 +151,17 @@ pub enum ClientError {
     /// Failed to connect to the target.
     #[display("failed to connect")]
     Connect(ConnectError),
-    /// Generic session error.
-    #[from]
-    Session(SessionError),
 }
 
 #[derive(Debug, Component)]
 struct Connecting {
-    recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
+    recv_dc: oneshot::Receiver<Disconnected>,
     recv_next: oneshot::Receiver<ToConnected>,
 }
 
 #[derive(Debug, Component)]
 struct Connected {
-    recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
+    recv_dc: oneshot::Receiver<Disconnected>,
 }
 
 #[derive(Debug)]
@@ -220,20 +216,15 @@ fn poll_connected(
 fn try_disconnect(
     commands: &mut Commands,
     entity: Entity,
-    recv_dc: &mut oneshot::Receiver<DisconnectReason<ClientError>>,
+    recv_dc: &mut oneshot::Receiver<Disconnected>,
 ) -> bool {
-    let dc_reason = match recv_dc.try_recv() {
+    let disconnected = match recv_dc.try_recv() {
         Ok(None) => None,
-        Ok(Some(dc_reason)) => Some(dc_reason),
-        Err(_) => Some(ClientError::Session(SessionError::BackendClosed).into()),
+        Ok(Some(disconnected)) => Some(disconnected),
+        Err(_) => Some(SessionError::BackendClosed.into()),
     };
-    dc_reason.is_some_and(|reason| {
-        commands.trigger_targets(
-            Disconnected {
-                reason: reason.map_err(anyhow::Error::new),
-            },
-            entity,
-        );
+    disconnected.is_some_and(|disconnected| {
+        commands.trigger_targets(disconnected, entity);
         true
     })
 }

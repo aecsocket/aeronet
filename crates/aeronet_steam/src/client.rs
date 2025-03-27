@@ -6,7 +6,7 @@ use {
     },
     aeronet_io::{
         IoSet, SessionEndpoint,
-        connection::{DisconnectReason, Disconnected},
+        connection::{Disconnected, Disconnected},
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -132,7 +132,7 @@ fn poll_connecting(
             Ok(Err(err)) => {
                 commands.trigger_targets(
                     Disconnected {
-                        reason: DisconnectReason::Error(err.into()),
+                        reason: Disconnected::ByError(err.into()),
                     },
                     entity,
                 );
@@ -142,7 +142,7 @@ fn poll_connecting(
             Err(oneshot::TryRecvError::Disconnected) => {
                 commands.trigger_targets(
                     Disconnected {
-                        reason: DisconnectReason::Error(ClientError::BackendClosed.into()),
+                        reason: Disconnected::ByError(ClientError::BackendClosed.into()),
                     },
                     entity,
                 );
@@ -158,7 +158,7 @@ fn poll_connecting(
         if conn.set_connection_user_data(user_data).is_err() {
             commands.trigger_targets(
                 Disconnected {
-                    reason: DisconnectReason::Error(ClientError::Steam.into()),
+                    reason: Disconnected::ByError(ClientError::Steam.into()),
                 },
                 entity,
             );

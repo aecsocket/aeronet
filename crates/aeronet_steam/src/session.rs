@@ -1,8 +1,4 @@
-use aeronet_io::{
-    IoSet, Session,
-    connection::{DisconnectReason, Disconnected},
-    packet::RecvPacket,
-};
+use aeronet_io::{IoSet, Session, connection::Disconnected, packet::RecvPacket};
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_platform_support::time::Instant;
@@ -57,9 +53,7 @@ pub enum SessionError {
 #[derive(Debug)]
 enum NetEvent {
     Connected,
-    Disconnected {
-        reason: DisconnectReason<SessionError>,
-    },
+    Disconnected { reason: Disconnected<SessionError> },
 }
 
 #[derive(Deref, DerefMut, Resource)]
@@ -95,13 +89,13 @@ fn on_status_changed(
         Ok(NetworkingConnectionState::Connecting | NetworkingConnectionState::FindingRoute) => None,
         Ok(NetworkingConnectionState::Connected) => Some(NetEvent::Connected),
         Ok(NetworkingConnectionState::ClosedByPeer) => Some(NetEvent::Disconnected {
-            reason: DisconnectReason::Peer("(unknown reason)".into()),
+            reason: Disconnected::ByPeer("(unknown reason)".into()),
         }),
         Ok(NetworkingConnectionState::None) | Err(_) => Some(NetEvent::Disconnected {
-            reason: DisconnectReason::Error(SessionError::InvalidConnection),
+            reason: Disconnected::by_error(SessionError::InvalidConnection),
         }),
         Ok(NetworkingConnectionState::ProblemDetectedLocally) => Some(NetEvent::Disconnected {
-            reason: DisconnectReason::Error(SessionError::ProblemDetectedLocally),
+            reason: Disconnected::by_error(SessionError::ProblemDetectedLocally),
         }),
     };
     if let Some(net_event) = event {

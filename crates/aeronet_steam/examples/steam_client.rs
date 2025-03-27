@@ -4,7 +4,7 @@
 use {
     aeronet_io::{
         Session, SessionEndpoint,
-        connection::{Disconnect, DisconnectReason, Disconnected},
+        connection::{Disconnect, Disconnected, Disconnected},
     },
     aeronet_steam::{
         SteamworksClient,
@@ -72,13 +72,13 @@ fn on_disconnected(trigger: Trigger<Disconnected>, names: Query<&Name>, mut log:
         .get(session)
         .expect("our session entity should have a name");
     log.push(match &trigger.reason {
-        DisconnectReason::User(reason) => {
+        Disconnected::ByUser(reason) => {
             format!("{name} disconnected by user: {reason}")
         }
-        DisconnectReason::Peer(reason) => {
+        Disconnected::ByPeer(reason) => {
             format!("{name} disconnected by peer: {reason}")
         }
-        DisconnectReason::Error(err) => {
+        Disconnected::ByError(err) => {
             format!("{name} disconnected due to error: {err:?}")
         }
     });
@@ -212,7 +212,7 @@ fn session_ui(
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.trigger_targets(Disconnect::new("disconnected by user"), entity);
+                commands.trigger_targets(Disconnect::new("pressed disconnect button"), entity);
             }
 
             let stats = session.as_ref().map(|s| s.stats).unwrap_or_default();

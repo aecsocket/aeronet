@@ -11,16 +11,16 @@ use {
     },
     aeronet_io::{
         IoSet, Session, SessionEndpoint,
-        connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
+        connection::{Disconnected, LocalAddr, PeerAddr},
         packet::{PacketRtt, RecvPacket},
-        server::{CloseReason, Closed, Server, ServerEndpoint},
+        server::{Closed, Server, ServerEndpoint},
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_reflect::prelude::*,
     bytes::Bytes,
     core::{any::type_name, mem, net::SocketAddr, time::Duration},
-    derive_more::{Display, Error, From},
+    derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
     tracing::{Instrument, debug_span, warn},
     web_time::Instant,
@@ -105,12 +105,12 @@ impl WebTransportServer {
 
 fn open(mut entity: EntityWorldMut, config: ServerConfig) {
     let runtime = entity.world().resource::<WebTransportRuntime>().clone();
-    let (send_closed, recv_closed) = oneshot::channel::<CloseReason<ServerError>>();
+    let (send_closed, recv_closed) = oneshot::channel::<Closed>();
     let (send_next, recv_next) = oneshot::channel::<ToOpen>();
     runtime.spawn_on_self(
         async move {
-            let Err(err) = backend::start(config, send_next).await;
-            _ = send_closed.send(CloseReason::Error(err));
+            let Err(closed) = backend::start(config, send_next).await;
+            _ = send_closed.send(closed);
         }
         .instrument(debug_span!("server", entity = %entity.id())),
     );
@@ -209,7 +209,7 @@ impl SessionRequest {
 }
 
 /// [`WebTransportServer`] error.
-#[derive(Debug, Display, Error, From)]
+#[derive(Debug, Display, Error)]
 #[non_exhaustive]
 pub enum ServerError {
     /// Failed to await an incoming session request.
@@ -221,32 +221,29 @@ pub enum ServerError {
     /// Failed to accept the incoming session request.
     #[display("failed to accept session")]
     AcceptSessionRequest(ConnectionError),
-    /// Generic session error.
-    #[from]
-    Session(SessionError),
 }
 
 #[derive(Debug, Component)]
 struct Opening {
-    recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+    recv_closed: oneshot::Receiver<Closed>,
     recv_next: oneshot::Receiver<ToOpen>,
 }
 
 #[derive(Debug, Component)]
 struct Opened {
-    recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+    recv_closed: oneshot::Receiver<Closed>,
     recv_connecting: mpsc::Receiver<ToConnecting>,
 }
 
 #[derive(Debug, Component)]
 struct Connecting {
-    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+    recv_dc: oneshot::Receiver<Disconnected>,
     recv_next: oneshot::Receiver<ToConnected>,
 }
 
 #[derive(Debug, Component)]
 struct Connected {
-    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+    recv_dc: oneshot::Receiver<Disconnected>,
 }
 
 #[derive(Debug)]
@@ -264,7 +261,7 @@ struct ToConnecting {
     headers: std::collections::HashMap<String, String>,
     send_session_entity: oneshot::Sender<Entity>,
     send_session_response: oneshot::Sender<SessionResponse>,
-    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+    recv_dc: oneshot::Receiver<Disconnected>,
     recv_next: oneshot::Receiver<ToConnected>,
 }
 
@@ -355,20 +352,15 @@ fn poll_opened(
 fn try_close(
     commands: &mut Commands,
     entity: Entity,
-    recv_closed: &mut oneshot::Receiver<CloseReason<ServerError>>,
+    recv_closed: &mut oneshot::Receiver<Closed>,
 ) -> bool {
-    let close_reason = match recv_closed.try_recv() {
+    let closed = match recv_closed.try_recv() {
         Ok(None) => None,
-        Ok(Some(close_reason)) => Some(close_reason),
-        Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
+        Ok(Some(closed)) => Some(closed),
+        Err(_) => Some(SessionError::BackendClosed.into()),
     };
-    close_reason.is_some_and(|reason| {
-        commands.trigger_targets(
-            Closed {
-                reason: reason.map_err(anyhow::Error::new),
-            },
-            entity,
-        );
+    closed.is_some_and(|closed| {
+        commands.trigger_targets(closed, entity);
         true
     })
 }
@@ -389,9 +381,7 @@ fn poll_connecting(
         let mut session = Session::new(Instant::now(), MIN_MTU);
         if let Err(err) = session.set_mtu(next.initial_mtu) {
             commands.trigger_targets(
-                Disconnected {
-                    reason: DisconnectReason::Error(SessionError::MtuTooSmall(err).into()),
-                },
+                Disconnected::by_error(SessionError::MtuTooSmall(err)),
                 entity,
             );
             continue;
@@ -426,20 +416,15 @@ fn poll_connected(
 fn try_disconnect(
     commands: &mut Commands,
     entity: Entity,
-    recv_dc: &mut oneshot::Receiver<DisconnectReason<ServerError>>,
+    recv_dc: &mut oneshot::Receiver<Disconnected>,
 ) -> bool {
-    let dc_reason = match recv_dc.try_recv() {
+    let disconnected = match recv_dc.try_recv() {
         Ok(None) => None,
-        Ok(Some(dc_reason)) => Some(dc_reason),
-        Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
+        Ok(Some(disconnected)) => Some(disconnected),
+        Err(_) => Some(SessionError::BackendClosed.into()),
     };
-    dc_reason.is_some_and(|reason| {
-        commands.trigger_targets(
-            Disconnected {
-                reason: reason.map_err(anyhow::Error::new),
-            },
-            entity,
-        );
+    disconnected.is_some_and(|disconnected| {
+        commands.trigger_targets(disconnected, entity);
         true
     })
 }

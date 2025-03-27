@@ -18,7 +18,7 @@ use {
         io::{
             Session, SessionEndpoint,
             bytes::Bytes,
-            connection::{Disconnect, DisconnectReason, Disconnected},
+            connection::{Disconnect, Disconnected},
         },
         transport::{
             AeronetTransportPlugin, Transport, TransportConfig,
@@ -168,10 +168,10 @@ fn on_connected(
 
 fn on_disconnected(trigger: Trigger<Disconnected>) {
     let entity = trigger.target();
-    match &trigger.reason {
-        DisconnectReason::User(reason) => info!("{entity} disconnected by user: {reason}"),
-        DisconnectReason::Peer(reason) => info!("{entity} disconnected by peer: {reason}"),
-        DisconnectReason::Error(err) => warn!("{entity} disconnected due to error: {err:?}"),
+    match &*trigger {
+        Disconnected::ByUser(reason) => info!("{entity} disconnected by user: {reason}"),
+        Disconnected::ByPeer(reason) => info!("{entity} disconnected by peer: {reason}"),
+        Disconnected::ByError(err) => warn!("{entity} disconnected due to error: {err:?}"),
     }
 }
 
@@ -235,8 +235,8 @@ fn ui(
 
             if ui.button("Disconnect").clicked() {
                 // Here's how you disconnect the session with a given reason.
-                // Don't just remove components - use `Disconnect` instead!
-                commands.trigger_targets(Disconnect::new("disconnected by user"), entity);
+                // Don't just remove components or despawn entities - use `Disconnect` instead!
+                commands.trigger_targets(Disconnect::new("pressed disconnect button"), entity);
             }
 
             for line in &ui_state.log {

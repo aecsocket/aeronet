@@ -51,7 +51,6 @@ web-time          = { workspace = true }
 derive_more = { workspace = true, features = [
   "display",
   "error",
-  "from",
   "deref",
   "deref_mut",
 ] }

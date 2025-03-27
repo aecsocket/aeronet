@@ -4,7 +4,7 @@ use {
     aeronet::{
         io::{
             Session, SessionEndpoint,
-            connection::{Disconnect, DisconnectReason, Disconnected},
+            connection::{Disconnect, Disconnected},
         },
         transport::{
             TransportConfig,
@@ -123,14 +123,14 @@ fn on_disconnected(
     let name = names
         .get(session)
         .expect("our session entity should have a name");
-    ui_state.log.push(match &trigger.reason {
-        DisconnectReason::User(reason) => {
+    ui_state.log.push(match &*trigger {
+        Disconnected::ByUser(reason) => {
             format!("{name} disconnected by user: {reason}")
         }
-        DisconnectReason::Peer(reason) => {
+        Disconnected::ByPeer(reason) => {
             format!("{name} disconnected by peer: {reason}")
         }
-        DisconnectReason::Error(err) => {
+        Disconnected::ByError(err) => {
             format!("{name} disconnected due to error: {err:?}")
         }
     });
@@ -175,7 +175,7 @@ fn global_ui(
                 }
 
                 if ui.button("Disconnect").clicked() {
-                    commands.trigger_targets(Disconnect::new("disconnected by user"), session);
+                    commands.trigger_targets(Disconnect::new("pressed disconnect button"), session);
                 }
             }
             Err(QuerySingleError::NoEntities(_)) => {

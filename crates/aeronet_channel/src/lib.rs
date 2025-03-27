@@ -4,7 +4,7 @@
 use {
     aeronet_io::{
         AeronetIoPlugin, IoSet, Session, SessionEndpoint,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected},
+        connection::{DROP_DISCONNECT_REASON, Disconnect, Disconnected},
         packet::RecvPacket,
     },
     bevy_app::prelude::*,
@@ -162,15 +162,15 @@ fn poll(mut commands: Commands, mut sessions: Query<(Entity, &mut Session, &mut 
         let span = trace_span!("poll", %entity);
         let _span = span.enter();
 
-        let dc_reason = match io.recv_dc.get_mut().try_recv() {
-            Ok(reason) => Some(DisconnectReason::Peer(reason)),
+        let disconnected = match io.recv_dc.get_mut().try_recv() {
+            Ok(reason) => Some(Disconnected::ByPeer(reason)),
             Err(oneshot::TryRecvError::Disconnected) => {
-                Some(DisconnectReason::Error(ChannelDisconnected.into()))
+                Some(Disconnected::ByError(ChannelDisconnected.into()))
             }
             Err(oneshot::TryRecvError::Empty) => None,
         };
-        if let Some(reason) = dc_reason {
-            commands.trigger_targets(Disconnected { reason }, entity);
+        if let Some(disconnected) = disconnected {
+            commands.trigger_targets(disconnected, entity);
             continue;
         }
 

@@ -51,7 +51,7 @@ impl Plugin for ConnectionPlugin {
 pub struct Disconnect {
     /// User-provided disconnection reason.
     ///
-    /// Will be used as the reason in [`DisconnectReason::User`].
+    /// Will be used as the reason in [`Disconnected::User`].
     pub reason: String,
 }
 
@@ -67,34 +67,29 @@ impl Disconnect {
 
 /// Triggered when a [`Session`] loses connection for any reason.
 ///
-/// Immediately after this, the session will be despawned.
+/// Immediately after this, the session will be despawned **without a graceful
+/// disconnect**. If you want to *request* the session to disconnect gracefully
+/// via the IO layer, see [`Disconnect`].
 ///
-/// This must only be triggered by the IO layer when it detects that the peer
-/// has disconnected from us, or when it detects a connection error.
+/// This must be triggered by the IO layer when it detects that the peer has
+/// disconnected from us, or when it detects a connection error.
 ///
-/// If you want to get the concrete error type of the
-/// [`DisconnectReason::Error`], use [`anyhow::Error::downcast_ref`].
+/// This may also be used by code above the IO layer for e.g. signaling
+/// transport errors, however this is not guaranteed.
 #[derive(Debug, Event)]
-pub struct Disconnected {
-    /// Why the session was disconnected.
-    pub reason: DisconnectReason<anyhow::Error>,
-}
-
-/// Why a [`Session`] was disconnected from its peer.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DisconnectReason<E> {
+pub enum Disconnected {
     /// Session was disconnected by the user on our side, with a provided
     /// reason.
     ///
-    /// On the peer, this will be interpreted as a [`DisconnectReason::Peer`]
+    /// On the peer, this will be interpreted as a [`Disconnected::Peer`]
     /// with the same reason.
-    User(String),
+    ByUser(String),
     /// Session was disconnected by the peer on the other side, with a provided
     /// reason.
     ///
-    /// On the peer, this will be interpreted as a [`DisconnectReason::User`]
+    /// On the peer, this will be interpreted as a [`Disconnected::User`]
     /// with the same reason.
-    Peer(String),
+    ByPeer(String),
     /// Session encountered a fatal connection error, and communication between
     /// this session and the peer is no longer possible.
     ///
@@ -105,24 +100,46 @@ pub enum DisconnectReason<E> {
     /// - the peer pretending like there are network errors to discreetly force
     ///   us to disconnect
     /// - ..and more
-    Error(E),
+    ///
+    /// If you want to get the concrete error type, use
+    /// [`anyhow::Error::downcast_ref`].
+    ByError(anyhow::Error),
 }
 
-impl<E> DisconnectReason<E> {
-    /// Maps a [`DisconnectReason<E>`] to a [`DisconnectReason<F>`] by mapping
-    /// the [`DisconnectReason::Error`] variant.
-    pub fn map_err<F>(self, f: impl FnOnce(E) -> F) -> DisconnectReason<F> {
+impl Disconnected {
+    /// Creates a [`Disconnected::ByUser`] from the given reason.
+    #[must_use]
+    pub fn by_user(reason: impl Into<String>) -> Self {
+        Self::ByUser(reason.into())
+    }
+
+    /// Creates a [`Disconnected::ByPeer`] from the given reason.
+    #[must_use]
+    pub fn by_peer(reason: impl Into<String>) -> Self {
+        Self::ByPeer(reason.into())
+    }
+
+    /// Creates a [`Disconnected::ByError`] from the given reason.
+    #[must_use]
+    pub fn by_error(reason: impl Into<anyhow::Error>) -> Self {
+        Self::ByError(reason.into())
+    }
+
+    /// If this value is a [`Disconnected::Error`], creates a new
+    /// [`Disconnected::Error`] using the mapping function.
+    #[must_use]
+    pub fn map_err(self, f: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
         match self {
-            Self::User(reason) => DisconnectReason::User(reason),
-            Self::Peer(reason) => DisconnectReason::Peer(reason),
-            Self::Error(err) => DisconnectReason::Error(f(err)),
+            Self::ByUser(reason) => Self::ByUser(reason),
+            Self::ByPeer(reason) => Self::ByPeer(reason),
+            Self::ByError(err) => Self::ByError(f(err)),
         }
     }
 }
 
-impl<E> From<E> for DisconnectReason<E> {
+impl<E: Into<anyhow::Error>> From<E> for Disconnected {
     fn from(value: E) -> Self {
-        Self::Error(value)
+        Self::by_error(value)
     }
 }
 
@@ -171,20 +188,19 @@ fn on_connected(trigger: Trigger<OnAdd, Session>) {
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
     let target = trigger.target();
-    let reason = DisconnectReason::User(trigger.reason.clone());
-    commands.trigger_targets(Disconnected { reason }, target);
+    commands.trigger_targets(Disconnected::ByUser(trigger.reason.clone()), target);
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
     let target = trigger.target();
-    match &trigger.reason {
-        DisconnectReason::User(reason) => {
+    match &*trigger {
+        Disconnected::ByUser(reason) => {
             debug!("{target} disconnected by user: {reason}");
         }
-        DisconnectReason::Peer(reason) => {
+        Disconnected::ByPeer(reason) => {
             debug!("{target} disconnected by peer: {reason}");
         }
-        DisconnectReason::Error(err) => {
+        Disconnected::ByError(err) => {
             debug!("{target} disconnected due to error: {err:?}");
         }
     }
@@ -211,8 +227,8 @@ mod tests {
         app.world_mut().entity_mut(entity).observe(
             |trigger: Trigger<Disconnected>, mut has_disconnected: ResMut<HasDisconnected>| {
                 assert!(matches!(
-                    &trigger.reason,
-                    DisconnectReason::User(reason) if reason == REASON
+                    &*trigger,
+                    Disconnected::ByUser(reason) if reason == REASON
                 ));
 
                 has_disconnected.0 = true;

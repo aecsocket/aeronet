@@ -6,7 +6,7 @@ use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
         AeronetIoPlugin, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, PeerAddr},
+        connection::{DROP_DISCONNECT_REASON, Disconnect, Disconnected, PeerAddr},
         packet::{IP_MTU, MtuTooSmall, PacketRtt, RecvPacket},
     },
     alloc::sync::Arc,
@@ -239,7 +239,7 @@ pub(crate) struct SessionBackend {
 }
 
 impl SessionBackend {
-    pub async fn start(self) -> DisconnectReason<SessionError> {
+    pub async fn start(self) -> Disconnected {
         let Self {
             conn,
             send_meta,
@@ -289,9 +289,9 @@ impl SessionBackend {
             reason = recv_user_dc => {
                 if let Ok(reason) = reason {
                     disconnect(conn, &reason).await;
-                    DisconnectReason::User(reason)
+                    Disconnected::ByUser(reason)
                 } else {
-                    DisconnectReason::Error(SessionError::FrontendClosed)
+                    Disconnected::by_error(SessionError::FrontendClosed)
                 }
             }
         }
@@ -429,7 +429,7 @@ async fn send_loop(
         reason = "the current implementation is temporary"
     )
 )]
-fn get_disconnect_reason(err: SessionError) -> DisconnectReason<SessionError> {
+fn get_disconnect_reason(err: SessionError) -> Disconnected {
     #[cfg(target_family = "wasm")]
     {
         // TODO: I don't know how the app-initiated disconnect message looks
@@ -437,7 +437,7 @@ fn get_disconnect_reason(err: SessionError) -> DisconnectReason<SessionError> {
         // https://github.com/BiagioFesta/wtransport/issues/182
         //
         // Tested: when the server disconnects us, all we get is "Connection lost."
-        DisconnectReason::Error(err)
+        Disconnected::by_error(err)
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -447,9 +447,9 @@ fn get_disconnect_reason(err: SessionError) -> DisconnectReason<SessionError> {
         match err {
             SessionError::Connection(ConnectionError::ApplicationClosed(err)) => {
                 let reason = String::from_utf8_lossy(err.reason()).into_owned();
-                DisconnectReason::Peer(reason)
+                Disconnected::ByPeer(reason)
             }
-            err => DisconnectReason::Error(err),
+            err => Disconnected::by_error(err),
         }
     }
 }

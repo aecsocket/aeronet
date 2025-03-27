@@ -12,8 +12,8 @@ use {
     },
     aeronet_io::{
         IoSet, SessionEndpoint,
-        connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
-        server::{CloseReason, Closed, Server, ServerEndpoint},
+        connection::{Disconnected, LocalAddr, PeerAddr},
+        server::{Closed, Server, ServerEndpoint},
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -96,12 +96,12 @@ impl WebSocketServer {
 fn open(mut entity: EntityWorldMut, config: ServerConfig) {
     let runtime = entity.world().resource::<WebSocketRuntime>().clone();
 
-    let (send_closed, recv_closed) = oneshot::channel::<CloseReason<ServerError>>();
+    let (send_closed, recv_closed) = oneshot::channel::<Closed>();
     let (send_next, recv_next) = oneshot::channel::<ToOpen>();
     runtime.spawn_on_self(
         async move {
-            let Err(err) = backend::start(config, send_next).await;
-            _ = send_closed.send(CloseReason::Error(err));
+            let Err(closed) = backend::start(config, send_next).await;
+            _ = send_closed.send(closed);
         }
         .instrument(debug_span!("server", entity = %entity.id())),
     );
@@ -115,7 +115,9 @@ fn open(mut entity: EntityWorldMut, config: ServerConfig) {
     ));
 }
 
-/// [`WebSocketServer`] error.
+/// [`WebSocketServer`]-specific error.
+///
+/// For generic WebSocket errors, see [`SessionError`].
 #[derive(Debug, Display, Error, From)]
 #[non_exhaustive]
 pub enum ServerError {
@@ -138,25 +140,25 @@ pub enum ServerError {
 
 #[derive(Debug, Component)]
 struct Opening {
-    recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+    recv_closed: oneshot::Receiver<Closed>,
     recv_next: oneshot::Receiver<ToOpen>,
 }
 
 #[derive(Debug, Component)]
 struct Opened {
-    recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+    recv_closed: oneshot::Receiver<Closed>,
     recv_connecting: mpsc::Receiver<ToConnecting>,
 }
 
 #[derive(Debug, Component)]
 struct Connecting {
-    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+    recv_dc: oneshot::Receiver<Disconnected>,
     recv_next: oneshot::Receiver<ToConnected>,
 }
 
 #[derive(Debug, Component)]
 struct Connected {
-    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+    recv_dc: oneshot::Receiver<Disconnected>,
 }
 
 #[derive(Debug)]
@@ -169,7 +171,7 @@ struct ToOpen {
 struct ToConnecting {
     peer_addr: SocketAddr,
     send_session_entity: oneshot::Sender<Entity>,
-    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+    recv_dc: oneshot::Receiver<Disconnected>,
     recv_next: oneshot::Receiver<ToConnected>,
 }
 
@@ -234,20 +236,15 @@ fn poll_opened(
 fn try_close(
     commands: &mut Commands,
     entity: Entity,
-    recv_closed: &mut oneshot::Receiver<CloseReason<ServerError>>,
+    recv_closed: &mut oneshot::Receiver<Closed>,
 ) -> bool {
-    let close_reason = match recv_closed.try_recv() {
+    let closed = match recv_closed.try_recv() {
         Ok(None) => None,
-        Ok(Some(close_reason)) => Some(close_reason),
-        Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
+        Ok(Some(closed)) => Some(closed),
+        Err(_) => Some(SessionError::BackendClosed.into()),
     };
-    close_reason.is_some_and(|reason| {
-        commands.trigger_targets(
-            Closed {
-                reason: reason.map_err(anyhow::Error::new),
-            },
-            entity,
-        );
+    closed.is_some_and(|closed| {
+        commands.trigger_targets(closed, entity);
         true
     })
 }
@@ -291,20 +288,15 @@ fn poll_connected(
 fn try_disconnect(
     commands: &mut Commands,
     entity: Entity,
-    recv_dc: &mut oneshot::Receiver<DisconnectReason<ServerError>>,
+    recv_dc: &mut oneshot::Receiver<Disconnected>,
 ) -> bool {
-    let dc_reason = match recv_dc.try_recv() {
+    let disconnected = match recv_dc.try_recv() {
         Ok(None) => None,
-        Ok(Some(dc_reason)) => Some(dc_reason),
-        Err(_) => Some(ServerError::Session(SessionError::BackendClosed).into()),
+        Ok(Some(disconnected)) => Some(disconnected),
+        Err(_) => Some(SessionError::BackendClosed.into()),
     };
-    dc_reason.is_some_and(|reason| {
-        commands.trigger_targets(
-            Disconnected {
-                reason: reason.map_err(anyhow::Error::new),
-            },
-            entity,
-        );
+    disconnected.is_some_and(|disconnected| {
+        commands.trigger_targets(disconnected, entity);
         true
     })
 }

@@ -1,7 +1,7 @@
 use {
     super::{ServerConfig, ServerError, ToConnected, ToOpen},
     crate::{server::ToConnecting, session::SessionError},
-    aeronet_io::connection::DisconnectReason,
+    aeronet_io::{connection::Disconnected, server::Closed},
     bevy_ecs::prelude::*,
     core::{
         net::SocketAddr,
@@ -25,7 +25,7 @@ use {
 pub async fn start(
     config: ServerConfig,
     send_next: oneshot::Sender<ToOpen>,
-) -> Result<Never, ServerError> {
+) -> Result<Never, Closed> {
     let tls_acceptor = config.tls.map(TlsAcceptor::from);
     let listener = TcpListener::bind(config.bind_address)
         .await
@@ -75,9 +75,9 @@ async fn accept_session(
     socket_config: WebSocketConfig,
     tls_acceptor: Option<TlsAcceptor>,
     mut send_connecting: mpsc::Sender<ToConnecting>,
-) -> Result<(), DisconnectReason<ServerError>> {
+) -> Result<(), Disconnected> {
     let (send_session_entity, recv_session_entity) = oneshot::channel::<Entity>();
-    let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ServerError>>();
+    let (send_dc, recv_dc) = oneshot::channel::<Disconnected>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     send_connecting
         .send(ToConnecting {
@@ -107,7 +107,7 @@ async fn handle_session(
     socket_config: WebSocketConfig,
     tls_acceptor: Option<TlsAcceptor>,
     send_next: oneshot::Sender<ToConnected>,
-) -> Result<Never, DisconnectReason<ServerError>> {
+) -> Result<Never, Disconnected> {
     debug!("Accepting session");
 
     let stream = if let Some(tls_acceptor) = tls_acceptor {
@@ -137,10 +137,7 @@ async fn handle_session(
         .map_err(ServerError::Session)?;
 
     debug!("Starting session loop");
-    backend
-        .start()
-        .await
-        .map_err(|reason| reason.map_err(ServerError::Session))
+    backend.start().await
 }
 
 #[derive(Debug)]

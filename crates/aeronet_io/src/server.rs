@@ -115,8 +115,8 @@ impl Server {
 pub struct Close {
     /// User-provided closing reason.
     ///
-    /// Will be used as the disconnection reason when disconnecting sessions
-    /// connected to this server.
+    /// Will be used as the reason in [`Closed::User`], and as the disconnection
+    /// reason when disconnecting sessions connected to this server.
     pub reason: String,
 }
 
@@ -133,27 +133,19 @@ impl Close {
 /// Triggered when a [`Server`] is no longer able to accept or manage client
 /// connections.
 ///
-/// Immediately after this, the server and its clients will be despawned.
+/// Immediately after this, the server and its clients will be despawned
+/// **without a graceful disconnect**. If you want to *request* the server to
+/// close and disconnect its clients gracefully via the IO layer, see [`Close`].
 ///
-/// This must only be triggered by the IO layer when it detects a fatal server
-/// error. If the error only concerns a single client, that client must be
-/// disconnected instead of the entire server.
-///
-/// If you want to get the concrete error type of the
-/// [`CloseReason::Error`], use [`anyhow::Error::downcast_ref`].
+/// This must be triggered by the IO layer when it detects a fatal server error.
+/// If the error only concerns a single client, that client must be disconnected
+/// instead of closing the entire server.
 #[derive(Debug, Event)]
-pub struct Closed {
-    /// Why the server was closed.
-    pub reason: CloseReason<anyhow::Error>,
-}
-
-/// Why a [`Server`] was closed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CloseReason<E> {
+pub enum Closed {
     /// Server was closed by the user on our side, with a provided reason.
     ///
     /// Connected clients will be disconnected with the same reason.
-    User(String),
+    ByUser(String),
     /// Server encountered a fatal connection error, and can no longer accept
     /// new clients or update existing clients.
     ///
@@ -162,23 +154,39 @@ pub enum CloseReason<E> {
     /// sort of illegal state or performs an illegal action, only that single
     /// client will be disconnected instead of the entire server being torn
     /// down.
-    Error(E),
+    ///
+    /// If you want to get the concrete error type, use
+    /// [`anyhow::Error::downcast_ref`].
+    ByError(anyhow::Error),
 }
 
-impl<E> CloseReason<E> {
-    /// Maps a [`CloseReason<E>`] to a [`CloseReason<F>`] by mapping the
-    /// [`CloseReason::Error`] variant.
-    pub fn map_err<F>(self, f: impl FnOnce(E) -> F) -> CloseReason<F> {
+impl Closed {
+    /// Creates a [`Closed::ByUser`] from the given reason.
+    #[must_use]
+    pub fn by_user(reason: impl Into<String>) -> Self {
+        Self::ByUser(reason.into())
+    }
+
+    /// Creates a [`Closed::ByError`] from the given reason.
+    #[must_use]
+    pub fn by_error(reason: impl Into<anyhow::Error>) -> Self {
+        Self::ByError(reason.into())
+    }
+
+    /// If this value is a [`Closed::Error`], creates a new [`Closed::Error`]
+    /// using the mapping function.
+    #[must_use]
+    pub fn map_err(self, f: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
         match self {
-            Self::User(reason) => CloseReason::User(reason),
-            Self::Error(err) => CloseReason::Error(f(err)),
+            Self::ByUser(reason) => Self::ByUser(reason),
+            Self::ByError(err) => Self::ByError(f(err)),
         }
     }
 }
 
-impl<E> From<E> for CloseReason<E> {
+impl<E: Into<anyhow::Error>> From<E> for Closed {
     fn from(value: E) -> Self {
-        Self::Error(value)
+        Self::by_error(value)
     }
 }
 
@@ -194,8 +202,7 @@ fn on_opened(trigger: Trigger<OnAdd, Server>) {
 
 fn on_close(trigger: Trigger<Close>, mut commands: Commands) {
     let target = trigger.target();
-    let reason = CloseReason::User(trigger.reason.clone());
-    commands.trigger_targets(Closed { reason }, target);
+    commands.trigger_targets(Closed::by_user(&trigger.reason), target);
 }
 
 fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands: Commands) {
@@ -204,12 +211,12 @@ fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands:
         .get(target)
         .map(|children| children.iter().collect::<Vec<_>>())
         .unwrap_or_default();
-    match &trigger.reason {
-        CloseReason::User(reason) => {
+    match &*trigger {
+        Closed::ByUser(reason) => {
             debug!("{target} closed by user: {reason}");
             commands.trigger_targets(Disconnect::new(reason), children);
         }
-        CloseReason::Error(err) => {
+        Closed::ByError(err) => {
             debug!("{target} closed due to error: {err:?}");
         }
     }
@@ -221,10 +228,7 @@ fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands:
 mod tests {
     use {
         super::*,
-        crate::{
-            AeronetIoPlugin,
-            connection::{DisconnectReason, Disconnected},
-        },
+        crate::{AeronetIoPlugin, connection::Disconnected},
     };
 
     #[test]
@@ -246,8 +250,8 @@ mod tests {
         app.world_mut().entity_mut(client).observe(
             |trigger: Trigger<Disconnected>, mut has_disconnected: ResMut<HasDisconnected>| {
                 assert!(matches!(
-                    &trigger.reason,
-                    DisconnectReason::User(reason) if reason == REASON
+                    &*trigger,
+                    Disconnected::ByUser(reason) if reason == REASON
                 ));
 
                 has_disconnected.0 = true;
@@ -261,8 +265,8 @@ mod tests {
             .observe(
                 |trigger: Trigger<Closed>, mut has_closed: ResMut<HasClosed>| {
                     assert!(matches!(
-                        &trigger.reason,
-                        CloseReason::User(reason) if reason == REASON
+                        &*trigger,
+                        Closed::ByUser(reason) if reason == REASON
                     ));
 
                     has_closed.0 = true;

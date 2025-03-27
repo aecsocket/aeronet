@@ -3,7 +3,7 @@ use {
         io::{
             Session,
             bytes::Bytes,
-            connection::{DisconnectReason, Disconnected, LocalAddr},
+            connection::{Disconnected, LocalAddr},
             server::Server,
         },
         transport::{AeronetTransportPlugin, Transport, lane::LaneKind},
@@ -117,14 +117,14 @@ fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
         return;
     };
 
-    match &trigger.reason {
-        DisconnectReason::User(reason) => {
+    match &*trigger {
+        Disconnected::ByUser(reason) => {
             info!("{client} disconnected from {server} by user: {reason}");
         }
-        DisconnectReason::Peer(reason) => {
+        Disconnected::ByPeer(reason) => {
             info!("{client} disconnected from {server} by peer: {reason}");
         }
-        DisconnectReason::Error(err) => {
+        Disconnected::ByError(err) => {
             warn!("{client} disconnected from {server} due to error: {err:?}");
         }
     }

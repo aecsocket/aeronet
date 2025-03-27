@@ -13,10 +13,7 @@ use {
         },
         rtt::RttEstimator,
     },
-    aeronet_io::{
-        Session,
-        connection::{DisconnectReason, Disconnected},
-    },
+    aeronet_io::{Session, connection::Disconnected},
     alloc::{boxed::Box, vec::Vec},
     bevy_ecs::prelude::*,
     bevy_platform_support::{
@@ -247,9 +244,7 @@ pub(crate) fn update_send_bytes_config(
 pub(crate) fn disconnect_errored(mut sessions: Query<&mut Transport>, mut commands: Commands) {
     for mut transport in &mut sessions {
         if let Some(err) = transport.send.error.take() {
-            commands.trigger(Disconnected {
-                reason: DisconnectReason::Error(anyhow::Error::new(err)),
-            });
+            commands.trigger(Disconnected::by_error(err));
         }
     }
 }
