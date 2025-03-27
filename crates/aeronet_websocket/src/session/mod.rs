@@ -73,12 +73,25 @@ impl Plugin for WebSocketSessionPlugin {
 /// You should not add or remove this component directly - it is managed
 /// entirely by the client and server implementations.
 #[derive(Debug, Component)]
-#[require(Session::new(Instant::now(), IP_MTU))]
+#[require(Session::new(Instant::now(), MTU))]
 pub struct WebSocketIo {
     pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
 }
+
+/// Packet MTU of [`WebSocketIo`] sessions.
+///
+/// This is made up of the [`IP_MTU`] minus:
+/// - maximum TCP header size
+///   - <https://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_segment_structure>
+/// - IPv6 header size without extensions
+///   - <https://en.wikipedia.org/wiki/IPv6_packet#Fixed_header>
+/// - WebSocket frame header size without extensions
+///   - <https://en.wikipedia.org/wiki/WebSocket#Frame_structure>
+///
+/// For a WebSocket, the minimum MTU is always the same as the current MTU.
+pub const MTU: usize = IP_MTU - 60 - 40 - 14;
 
 /// Error that occurs when polling a session using the [`WebSocketIo`] IO
 /// layer.
@@ -123,17 +136,6 @@ impl Drop for WebSocketIo {
         }
     }
 }
-
-/// Packet MTU of [`WebSocketIo`] sessions.
-///
-/// This is made up of the [`IP_MTU`] minus:
-/// - maximum TCP header size
-///   - <https://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_segment_structure>
-/// - IPv6 header size without extensions
-///   - <https://en.wikipedia.org/wiki/IPv6_packet#Fixed_header>
-/// - WebSocket frame header size without extensions
-///   - <https://en.wikipedia.org/wiki/WebSocket#Frame_structure>
-pub const MTU: usize = IP_MTU - 60 - 40 - 14;
 
 #[derive(Debug)]
 pub(crate) struct SessionFrontend {

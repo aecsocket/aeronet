@@ -17,7 +17,7 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
-    core::net::SocketAddr,
+    core::{mem, net::SocketAddr},
     derive_more::{Display, Error, derive::From},
     futures::channel::{mpsc, oneshot},
     std::io,
@@ -37,7 +37,7 @@ impl Plugin for WebSocketServerPlugin {
 
         app.add_systems(
             PreUpdate,
-            (poll_servers, poll_clients)
+            (poll_opening, poll_opened, poll_connecting, poll_connected)
                 .in_set(IoSet::Poll)
                 .before(session::poll),
         );
@@ -50,7 +50,12 @@ impl Plugin for WebSocketServerPlugin {
 /// Use [`WebSocketServer::open`] to start opening a server.
 #[derive(Debug, Component)]
 #[require(ServerEndpoint)]
-pub struct WebSocketServer(Frontend);
+pub struct WebSocketServer(());
+
+/// Marks a client connected to a [`WebSocketServer`].
+#[derive(Debug, Component)]
+#[require(SessionEndpoint)]
+pub struct WebSocketServerClient(());
 
 impl WebSocketServer {
     /// Creates an [`EntityCommand`] to set up a server and have it start
@@ -78,7 +83,7 @@ impl WebSocketServer {
     /// // using mutable `World` access
     /// # let config: ServerConfig = unimplemented!();
     /// let server = world.spawn_empty().id();
-    /// WebSocketServer::open(config).apply(server, world);
+    /// WebSocketServer::open(config).apply(world.entity_mut(server));
     /// # }
     /// ```
     #[must_use]
@@ -101,10 +106,13 @@ fn open(mut entity: EntityWorldMut, config: ServerConfig) {
         .instrument(debug_span!("server", entity = %entity.id())),
     );
 
-    entity.insert(WebSocketServer(Frontend::Opening {
-        recv_closed,
-        recv_next,
-    }));
+    entity.insert((
+        WebSocketServer(()),
+        Opening {
+            recv_closed,
+            recv_next,
+        },
+    ));
 }
 
 /// [`WebSocketServer`] error.
@@ -129,29 +137,26 @@ pub enum ServerError {
 }
 
 #[derive(Debug, Component)]
-enum Frontend {
-    Opening {
-        recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
-        recv_next: oneshot::Receiver<ToOpen>,
-    },
-    Open {
-        recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
-        recv_connecting: mpsc::Receiver<ToConnecting>,
-    },
-    Closed,
+struct Opening {
+    recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+    recv_next: oneshot::Receiver<ToOpen>,
 }
 
 #[derive(Debug, Component)]
-#[require(SessionEndpoint)]
-enum ClientFrontend {
-    Connecting {
-        recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
-        recv_next: oneshot::Receiver<ToConnected>,
-    },
-    Connected {
-        recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
-    },
-    Disconnected,
+struct Opened {
+    recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
+    recv_connecting: mpsc::Receiver<ToConnecting>,
+}
+
+#[derive(Debug, Component)]
+struct Connecting {
+    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
+    recv_next: oneshot::Receiver<ToConnected>,
+}
+
+#[derive(Debug, Component)]
+struct Connected {
+    recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
 }
 
 #[derive(Debug)]
@@ -174,82 +179,61 @@ struct ToConnected {
     frontend: SessionFrontend,
 }
 
-fn poll_servers(mut commands: Commands, mut servers: Query<(Entity, &mut WebSocketServer)>) {
-    for (server, mut frontend) in &mut servers {
-        replace_with::replace_with_or_abort(&mut frontend.0, |state| match state {
-            Frontend::Opening {
-                recv_closed,
-                recv_next,
-            } => poll_opening(&mut commands, server, recv_closed, recv_next),
-            Frontend::Open {
-                recv_closed,
-                recv_connecting,
-            } => poll_open(&mut commands, server, recv_closed, recv_connecting),
-            Frontend::Closed => state,
-        });
-    }
-}
-
 fn poll_opening(
-    commands: &mut Commands,
-    server: Entity,
-    mut recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
-    mut recv_next: oneshot::Receiver<ToOpen>,
-) -> Frontend {
-    if should_close(commands, server, &mut recv_closed) {
-        return Frontend::Closed;
-    }
+    mut commands: Commands,
+    mut servers: Query<(Entity, &mut Opening), With<WebSocketServer>>,
+) {
+    for (entity, mut server) in &mut servers {
+        if try_close(&mut commands, entity, &mut server.recv_closed) {
+            continue;
+        }
 
-    let Ok(Some(next)) = recv_next.try_recv() else {
-        return Frontend::Opening {
-            recv_closed,
-            recv_next,
+        let Ok(Some(next)) = server.recv_next.try_recv() else {
+            continue;
         };
-    };
 
-    let now = Instant::now();
-    commands
-        .entity(server)
-        .insert((Server::new(now), LocalAddr(next.local_addr)));
-    Frontend::Open {
-        recv_closed,
-        recv_connecting: next.recv_connecting,
+        let (_, dummy) = oneshot::channel();
+        let recv_closed = mem::replace(&mut server.recv_closed, dummy);
+        commands.entity(entity).remove::<Opening>().insert((
+            Opened {
+                recv_closed,
+                recv_connecting: next.recv_connecting,
+            },
+            Server::new(Instant::now()),
+            LocalAddr(next.local_addr),
+        ));
     }
 }
 
-fn poll_open(
-    commands: &mut Commands,
-    server: Entity,
-    mut recv_closed: oneshot::Receiver<CloseReason<ServerError>>,
-    mut recv_connecting: mpsc::Receiver<ToConnecting>,
-) -> Frontend {
-    if should_close(commands, server, &mut recv_closed) {
-        return Frontend::Closed;
-    }
+fn poll_opened(
+    mut commands: Commands,
+    mut servers: Query<(Entity, &mut Opened), With<WebSocketServer>>,
+) {
+    for (entity, mut server) in &mut servers {
+        if try_close(&mut commands, entity, &mut server.recv_closed) {
+            continue;
+        }
 
-    while let Ok(Some(connecting)) = recv_connecting.try_next() {
-        let session = commands
-            .spawn((
-                ChildOf { parent: server },
-                ClientFrontend::Connecting {
-                    recv_dc: connecting.recv_dc,
-                    recv_next: connecting.recv_next,
-                },
-                PeerAddr(connecting.peer_addr),
-            ))
-            .id();
-        _ = connecting.send_session_entity.send(session);
-    }
-
-    Frontend::Open {
-        recv_closed,
-        recv_connecting,
+        while let Ok(Some(connecting)) = server.recv_connecting.try_next() {
+            let session = commands
+                .spawn((
+                    ChildOf { parent: entity },
+                    WebSocketServerClient(()),
+                    Connecting {
+                        recv_dc: connecting.recv_dc,
+                        recv_next: connecting.recv_next,
+                    },
+                    PeerAddr(connecting.peer_addr),
+                ))
+                .id();
+            _ = connecting.send_session_entity.send(session);
+        }
     }
 }
 
-fn should_close(
+fn try_close(
     commands: &mut Commands,
-    server: Entity,
+    entity: Entity,
     recv_closed: &mut oneshot::Receiver<CloseReason<ServerError>>,
 ) -> bool {
     let close_reason = match recv_closed.try_recv() {
@@ -262,58 +246,51 @@ fn should_close(
             Closed {
                 reason: reason.map_err(anyhow::Error::new),
             },
-            server,
+            entity,
         );
         true
     })
 }
 
-fn poll_clients(mut commands: Commands, mut clients: Query<(Entity, &mut ClientFrontend)>) {
-    for (client, mut frontend) in &mut clients {
-        replace_with::replace_with_or_abort(&mut *frontend, |state| match state {
-            ClientFrontend::Connecting { recv_dc, recv_next } => {
-                poll_connecting(&mut commands, client, recv_dc, recv_next)
-            }
-            ClientFrontend::Connected { mut recv_dc } => {
-                if should_disconnect(&mut commands, client, &mut recv_dc) {
-                    ClientFrontend::Disconnected
-                } else {
-                    ClientFrontend::Connected { recv_dc }
-                }
-            }
-            ClientFrontend::Disconnected => state,
-        });
-    }
-}
-
 fn poll_connecting(
-    commands: &mut Commands,
-    client: Entity,
-    mut recv_dc: oneshot::Receiver<DisconnectReason<ServerError>>,
-    mut recv_next: oneshot::Receiver<ToConnected>,
-) -> ClientFrontend {
-    if should_disconnect(commands, client, &mut recv_dc) {
-        return ClientFrontend::Disconnected;
+    mut commands: Commands,
+    mut clients: Query<(Entity, &mut Connecting), With<WebSocketServerClient>>,
+) {
+    for (entity, mut client) in &mut clients {
+        if try_disconnect(&mut commands, entity, &mut client.recv_dc) {
+            continue;
+        }
+
+        let Ok(Some(next)) = client.recv_next.try_recv() else {
+            continue;
+        };
+
+        let (_, dummy) = oneshot::channel();
+        let recv_dc = mem::replace(&mut client.recv_dc, dummy);
+        commands.entity(entity).remove::<Connecting>().insert((
+            WebSocketIo {
+                recv_packet_b2f: next.frontend.recv_packet_b2f,
+                send_packet_f2b: next.frontend.send_packet_f2b,
+                send_user_dc: Some(next.frontend.send_user_dc),
+            },
+            Connected { recv_dc },
+            PeerAddr(next.peer_addr),
+        ));
     }
-
-    let Ok(Some(next)) = recv_next.try_recv() else {
-        return ClientFrontend::Connecting { recv_dc, recv_next };
-    };
-
-    commands.entity(client).insert((
-        WebSocketIo {
-            recv_packet_b2f: next.frontend.recv_packet_b2f,
-            send_packet_f2b: next.frontend.send_packet_f2b,
-            send_user_dc: Some(next.frontend.send_user_dc),
-        },
-        PeerAddr(next.peer_addr),
-    ));
-    ClientFrontend::Connected { recv_dc }
 }
 
-fn should_disconnect(
+fn poll_connected(
+    mut commands: Commands,
+    mut clients: Query<(Entity, &mut Connected), With<WebSocketServerClient>>,
+) {
+    for (entity, mut client) in &mut clients {
+        try_disconnect(&mut commands, entity, &mut client.recv_dc);
+    }
+}
+
+fn try_disconnect(
     commands: &mut Commands,
-    client: Entity,
+    entity: Entity,
     recv_dc: &mut oneshot::Receiver<DisconnectReason<ServerError>>,
 ) -> bool {
     let dc_reason = match recv_dc.try_recv() {
@@ -326,7 +303,7 @@ fn should_disconnect(
             Disconnected {
                 reason: reason.map_err(anyhow::Error::new),
             },
-            client,
+            entity,
         );
         true
     })
