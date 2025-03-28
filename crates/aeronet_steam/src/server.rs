@@ -1,54 +1,78 @@
 use {
     crate::{
-        SteamManager, SteamworksClient, config::SteamSessionConfig, session::SteamNetSessionPlugin,
+        SteamManager, Steamworks,
+        config::SteamSessionConfig,
+        session::{SteamNetIo, SteamNetSessionPlugin, entity_to_user_data},
     },
     aeronet_io::{
-        SessionEndpoint,
+        IoSet, SessionEndpoint,
+        connection::Disconnected,
         server::{Closed, Server, ServerEndpoint},
     },
+    anyhow::{Context, Result, bail},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
-    bevy_platform_support::{collections::HashMap, time::Instant},
-    core::{marker::PhantomData, net::SocketAddr},
+    bevy_platform_support::{
+        collections::{HashMap, hash_map::Entry},
+        time::Instant,
+    },
+    core::{any::type_name, marker::PhantomData, net::SocketAddr},
     derive_more::{Display, Error},
     steamworks::{
+        ClientManager, SteamId,
         networking_sockets::ListenSocket,
-        networking_types::{ConnectionRequest, ListenSocketEvent},
+        networking_types::{
+            ConnectedEvent, ConnectionRequest, DisconnectedEvent, ListenSocketEvent,
+            NetConnectionEnd, NetworkingIdentity,
+        },
     },
     sync_wrapper::SyncWrapper,
+    tracing::{debug, debug_span, warn},
 };
 
-pub struct SteamNetServerPlugin<M: SteamManager> {
-    _phantom: PhantomData<M>,
-}
+pub struct SteamNetServerPlugin;
 
-impl<M: SteamManager> Default for SteamNetServerPlugin<M> {
-    fn default() -> Self {
-        Self {
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<M: SteamManager> Plugin for SteamNetServerPlugin<M> {
+impl Plugin for SteamNetServerPlugin {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<SteamNetSessionPlugin<M>>() {
-            app.add_plugins(SteamNetSessionPlugin::<M>::default());
+        if !app.is_plugin_added::<SteamNetSessionPlugin<ClientManager>>() {
+            app.add_plugins(SteamNetSessionPlugin::<ClientManager>::default());
         }
+
+        app.add_systems(
+            PreUpdate,
+            (poll_opening::<ClientManager>, poll_opened::<ClientManager>).in_set(IoSet::Poll),
+        )
+        .add_observer(on_remove_client::<ClientManager>);
     }
 }
 
-#[derive(Debug, Component)]
+#[derive(Component)]
 #[require(ServerEndpoint)]
-pub struct SteamNetServer<M: SteamManager> {
+pub struct SteamNetServer<M: SteamManager = ClientManager> {
     _phantom: PhantomData<M>,
-    clients: HashMap<O>,
+    mtu: usize,
+    clients: HashMap<SteamId, Entity>,
+}
+
+impl<M: SteamManager> SteamNetServer<M> {
+    #[must_use]
+    pub fn client_by_steam_id(&self, steam_id: SteamId) -> Option<Entity> {
+        self.clients.get(&steam_id).copied()
+    }
 }
 
 #[derive(Debug, Component)]
 #[require(SessionEndpoint)]
-pub struct SteamNetServerClient<M: SteamManager> {
+pub struct SteamNetServerClient<M: SteamManager = ClientManager> {
     _phantom: PhantomData<M>,
+    steam_id: SteamId,
+}
+
+impl<M: SteamManager> SteamNetServerClient<M> {
+    #[must_use]
+    pub const fn steam_id(&self) -> SteamId {
+        self.steam_id
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -63,11 +87,11 @@ impl From<SocketAddr> for ListenTarget {
     }
 }
 
-impl<M: SteamManager> SteamNetServer<M> {
+impl SteamNetServer<ClientManager> {
     #[must_use]
     pub fn open(config: SteamSessionConfig, target: impl Into<ListenTarget>) -> impl EntityCommand {
         let target = target.into();
-        move |entity: EntityWorldMut| open::<M>(entity, config, target)
+        move |entity: EntityWorldMut| open::<ClientManager>(entity, config, target)
     }
 }
 
@@ -76,11 +100,12 @@ fn open<M: SteamManager>(
     config: SteamSessionConfig,
     target: ListenTarget,
 ) {
-    let (send_next, recv_next) = oneshot::channel::<OpenResult<M>>();
+    let mtu = config.send_buffer_size;
     let sockets = entity
         .world()
-        .resource::<SteamworksClient<M>>()
+        .resource::<Steamworks<M>>()
         .networking_sockets();
+    let (send_next, recv_next) = oneshot::channel::<OpenResult<M>>();
     blocking::unblock(move || {
         let result = match target {
             ListenTarget::Addr(addr) => sockets.create_listen_socket_ip(addr, config.to_options()),
@@ -95,11 +120,40 @@ fn open<M: SteamManager>(
     entity.insert((
         SteamNetServer::<M> {
             _phantom: PhantomData,
+            mtu,
+            clients: HashMap::default(),
         },
         Opening {
             recv_next: SyncWrapper::new(recv_next),
         },
     ));
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionResponse {
+    Accepted,
+    Rejected { reason: String },
+}
+
+impl SessionResponse {
+    #[must_use]
+    pub fn rejected(reason: impl Into<String>) -> Self {
+        Self::Rejected {
+            reason: reason.into(),
+        }
+    }
+}
+
+#[derive(Clone, Event)]
+pub struct SessionRequest {
+    pub remote: NetworkingIdentity,
+    pub response: Option<SessionResponse>,
+}
+
+impl SessionRequest {
+    pub fn respond(&mut self, response: SessionResponse) {
+        self.response = Some(response);
+    }
 }
 
 #[derive(Debug, Display, Error)]
@@ -121,11 +175,6 @@ struct Opening<M> {
 #[derive(Component)]
 struct Opened<M> {
     socket: ListenSocket<M>,
-}
-
-#[derive(Component)]
-struct Connecting<M> {
-    request: ConnectionRequest<M>,
 }
 
 fn poll_opening<M: SteamManager>(
@@ -155,23 +204,158 @@ fn poll_opening<M: SteamManager>(
 
 fn poll_opened<M: SteamManager>(
     mut commands: Commands,
-    servers: Query<(Entity, &Opened<M>), With<SteamNetServer<M>>>,
+    mut servers: Query<(Entity, &Opened<M>, &mut SteamNetServer<M>)>,
 ) {
-    for (entity, server) in &servers {
+    for (entity, server, mut server_state) in &mut servers {
+        let span = debug_span!("poll_opened", %entity);
+        let _span = span.enter();
+
         while let Some(event) = server.socket.try_receive_event() {
             match event {
                 ListenSocketEvent::Connecting(request) => {
-                    commands.spawn((
-                        ChildOf { parent: entity },
-                        SteamNetServerClient::<M> {
-                            _phantom: PhantomData,
-                        },
-                        Connecting { request },
-                    ));
+                    let remote = request.remote();
+                    if let Err(err) =
+                        on_connecting(entity, &mut commands, &mut server_state, request)
+                    {
+                        debug!("Failed to accept client connection from {remote:?}: {err:?}");
+                    }
                 }
-                ListenSocketEvent::Connected(event) => {}
-                ListenSocketEvent::Disconnected(event) => {}
+                ListenSocketEvent::Connected(event) => {
+                    let remote = event.remote();
+                    if let Err(err) = on_connected(&mut commands, &server_state, event) {
+                        debug!("Failed to mark {remote:?} as connected: {err:?}");
+                    }
+                }
+                ListenSocketEvent::Disconnected(event) => {
+                    // TODO: I think this is already handled by session disconnect checks
+                    // let remote = event.remote();
+                    // on_disconnected(&mut commands);
+                }
             }
         }
     }
+}
+
+fn on_connecting<M: SteamManager>(
+    entity: Entity,
+    commands: &mut Commands,
+    server: &mut SteamNetServer<M>,
+    request: ConnectionRequest<M>,
+) -> Result<()> {
+    let steam_id = request
+        .remote()
+        .steam_id()
+        .context("remote has no steam ID")?;
+    let entry = match server.clients.entry(steam_id) {
+        Entry::Occupied(entry) => {
+            let client = entry.get();
+            bail!("steam ID {steam_id:?} is already mapped to client {client}");
+        }
+        Entry::Vacant(entry) => entry,
+    };
+
+    let client = commands
+        .spawn((
+            ChildOf { parent: entity },
+            SteamNetServerClient::<M> {
+                _phantom: PhantomData,
+                steam_id,
+            },
+        ))
+        .id();
+    entry.insert(client);
+
+    commands.queue(move |world: &mut World| {
+        let mut event = SessionRequest {
+            remote: request.remote(),
+            response: None,
+        };
+        world.trigger_targets_ref(&mut event, client);
+
+        let response = event.response.unwrap_or_else(|| {
+            warn!(
+                "Client session {client} created on server {entity} but no response was given,
+                will not allow this client to connect; you must `respond` to `{}`",
+                type_name::<SessionRequest>(),
+            );
+            SessionResponse::Rejected {
+                reason: "(no response)".into(),
+            }
+        });
+
+        match response {
+            SessionResponse::Accepted => {
+                _ = request.accept();
+            }
+            SessionResponse::Rejected { reason } => {
+                request.reject(NetConnectionEnd::AppGeneric, Some(&reason));
+                world.trigger_targets(Disconnected::by_user(reason), client);
+            }
+        }
+    });
+    Ok(())
+}
+
+fn on_connected<M: SteamManager>(
+    commands: &mut Commands,
+    server: &SteamNetServer<M>,
+    event: ConnectedEvent<M>,
+) -> Result<()> {
+    let steam_id = event
+        .remote()
+        .steam_id()
+        .context("remote has no steam ID")?;
+    let client = *server
+        .clients
+        .get(&steam_id)
+        .with_context(|| format!("steam ID {steam_id:?} is not tracked in the client map"))?;
+
+    let conn = event.take_connection();
+    let user_data = entity_to_user_data(client);
+    conn.set_connection_user_data(user_data)
+        .context("failed to set connection user data")?;
+
+    commands.entity(client).insert(SteamNetIo {
+        conn,
+        mtu: server.mtu,
+    });
+    Ok(())
+}
+
+// fn on_disconnected<M: SteamManager>(
+//     commands: &mut Commands,
+//     server: &SteamNetServer<M>,
+//     event: DisconnectedEvent,
+// ) -> Result<()> {
+//     let steam_id = event
+//         .remote()
+//         .steam_id()
+//         .context("remote has no steam ID")?;
+//     let client = server
+//         .clients
+//         .get(&steam_id)
+//         .with_context(|| format!("steam ID {steam_id:?} is not tracked in the client map"))?;
+
+//     let disconnected = match event.end_reason() {
+//         NetConnectionEnd::AppGeneric => Disconnected::by_peer("(unknown)"),
+//         err => Disconnected::by_error()
+//     }
+
+//     commands.trigger_targets(Disconnected::, targets);
+// }
+
+fn on_remove_client<M: SteamManager>(
+    trigger: Trigger<OnRemove, SteamNetServerClient<M>>,
+    clients: Query<(&SteamNetServerClient<M>, &ChildOf)>,
+    mut servers: Query<&mut SteamNetServer<M>>,
+) -> Result<(), BevyError> {
+    let entity = trigger.target();
+    let (client, &ChildOf { parent }) = clients
+        .get(entity)
+        .with_context(|| format!("client {entity} does not have correct components"))?;
+    let mut server = servers.get_mut(parent).with_context(|| {
+        format!("client {entity} is a child of an entity, but that entity is not a server")
+    })?;
+    server.clients.remove(&client.steam_id);
+    Ok(())
 }

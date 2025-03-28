@@ -1,26 +1,30 @@
-//! Example server using WebSocket which listens for clients sending strings
-//! and sends back a string reply.
-
-cfg_if::cfg_if! {
-    if #[cfg(target_family = "wasm")] {
-        fn main() {
-            eprintln!("this example is not available on WASM");
-        }
-    } else {
+//! Example server using Steam which listens for clients sending strings and
+//! sends back a string reply.
 
 use {
     aeronet_io::{
+        Session, SessionEndpoint,
         connection::{Disconnected, LocalAddr},
-        server::{Server, Closed},
-        SessionEndpoint, Session,
+        server::{Closed, Server},
     },
-    aeronet_websocket::server::{Identity, ServerConfig, WebSocketServer, WebSocketServerPlugin},
+    aeronet_steam::{
+        Steamworks,
+        config::SteamSessionConfig,
+        server::{ListenTarget, SteamNetServer, SteamNetServerPlugin},
+    },
     bevy::{log::LogPlugin, prelude::*},
 };
 
 fn main() -> AppExit {
+    let (steam, steam_single) =
+        steamworks::Client::init_app(480).expect("failed to initialize steam");
     App::new()
-        .add_plugins((MinimalPlugins, LogPlugin::default(), WebSocketServerPlugin))
+        .insert_resource(Steamworks(steam))
+        .insert_non_send_resource(steam_single)
+        .add_systems(PreUpdate, |steam: NonSend<steamworks::SingleClient>| {
+            steam.run_callbacks();
+        })
+        .add_plugins((MinimalPlugins, LogPlugin::default(), SteamNetServerPlugin))
         .add_systems(Startup, open_server)
         .add_systems(Update, reply)
         .add_observer(on_opened)
@@ -31,16 +35,11 @@ fn main() -> AppExit {
         .run()
 }
 
-fn server_config() -> ServerConfig {
-    let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"]).expect("all given SANs should be valid DNS names");
-    ServerConfig::builder()
-        .with_bind_default(25566)
-        .with_identity(identity)
-}
-
 fn open_server(mut commands: Commands) {
-    let config = server_config();
-    commands.spawn_empty().queue(WebSocketServer::open(config));
+    commands.spawn_empty().queue(SteamNetServer::open(
+        SteamSessionConfig::default(),
+        ListenTarget::Peer { virtual_port: 0 },
+    ));
 }
 
 fn on_closed(trigger: Trigger<Closed>) {
@@ -49,7 +48,9 @@ fn on_closed(trigger: Trigger<Closed>) {
 
 fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
     let server = trigger.target();
-    let local_addr = servers.get(server).expect("opened server should have a binding socket `LocalAddr`");
+    let local_addr = servers
+        .get(server)
+        .expect("opened server should have a binding socket `LocalAddr`");
     info!("{server} opened on {}", **local_addr);
 }
 
@@ -95,7 +96,8 @@ fn reply(mut clients: Query<(Entity, &mut Session), With<ChildOf>>) {
         // explicit deref so we can access disjoint fields
         let session = &mut *session;
         for packet in session.recv.drain(..) {
-            let msg = String::from_utf8(packet.payload.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+            let msg =
+                String::from_utf8(packet.payload.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             info!("{client} > {msg}");
 
             let reply = format!("You sent: {msg}");
@@ -104,5 +106,3 @@ fn reply(mut clients: Query<(Entity, &mut Session), With<ChildOf>>) {
         }
     }
 }
-
-}}

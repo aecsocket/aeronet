@@ -7,38 +7,32 @@ use {
         connection::{Disconnect, Disconnected},
     },
     aeronet_steam::{
-        SteamworksClient,
+        Steamworks,
         client::{SteamNetClient, SteamNetClientPlugin},
         config::SteamSessionConfig,
     },
     bevy::prelude::*,
     bevy_egui::{EguiContexts, EguiPlugin, egui},
     core::{mem, net::SocketAddr},
-    steamworks::{ClientManager, SteamId},
+    steamworks::SteamId,
 };
 
 fn main() -> AppExit {
     let (steam, steam_single) =
         steamworks::Client::init_app(480).expect("failed to initialize steam");
     App::new()
-        .insert_resource(SteamworksClient(steam))
+        .insert_resource(Steamworks(steam))
         .insert_non_send_resource(steam_single)
-        .add_systems(PreUpdate, run_steam_callbacks)
-        .add_plugins((
-            DefaultPlugins,
-            EguiPlugin,
-            SteamNetClientPlugin::<ClientManager>::default(),
-        ))
+        .add_systems(PreUpdate, |steam: NonSend<steamworks::SingleClient>| {
+            steam.run_callbacks();
+        })
+        .add_plugins((DefaultPlugins, EguiPlugin, SteamNetClientPlugin))
         .init_resource::<Log>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
         .add_observer(on_connecting)
         .add_observer(on_connected)
         .add_observer(on_disconnected)
         .run()
-}
-
-fn run_steam_callbacks(steam: NonSend<steamworks::SingleClient>) {
-    steam.run_callbacks();
 }
 
 #[derive(Debug, Default, Deref, DerefMut, Resource)]
@@ -133,7 +127,7 @@ fn global_ui(
                     let name = format!("{}. {target}", *session_id);
                     commands
                         .spawn((Name::new(name), SessionUi::default()))
-                        .queue(SteamNetClient::<ClientManager>::connect(
+                        .queue(SteamNetClient::connect(
                             SteamSessionConfig::default(),
                             target,
                         ));
@@ -154,7 +148,7 @@ fn global_ui(
                     let name = format!("{}. {target:?}", *session_id);
                     commands
                         .spawn((Name::new(name), SessionUi::default()))
-                        .queue(SteamNetClient::<ClientManager>::connect(
+                        .queue(SteamNetClient::connect(
                             SteamSessionConfig::default(),
                             target,
                         ));

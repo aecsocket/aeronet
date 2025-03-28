@@ -312,7 +312,7 @@ fn poll_opened(
         }
 
         while let Ok(Some(connecting)) = server.recv_connecting.try_next() {
-            let session = commands
+            let client = commands
                 .spawn((
                     ChildOf { parent: entity },
                     WebTransportServerClient(()),
@@ -322,7 +322,7 @@ fn poll_opened(
                     },
                 ))
                 .id();
-            _ = connecting.send_session_entity.send(session);
+            _ = connecting.send_session_entity.send(client);
 
             commands.queue(move |world: &mut World| {
                 let mut request = SessionRequest {
@@ -333,12 +333,12 @@ fn poll_opened(
                     headers: connecting.headers,
                     response: None,
                 };
-                world.trigger_targets_ref(&mut request, session);
+                world.trigger_targets_ref(&mut request, client);
 
                 let response = request.response.unwrap_or_else(|| {
                     warn!(
-                        "Session {session} created on server {entity} but no response was given, \
-                         will not allow this client to connect; you must `respond` to `{}`",
+                        "Client session {client} created on server {entity} but no response was \
+                         given, will not allow this client to connect; you must `respond` to `{}`",
                         type_name::<SessionRequest>()
                     );
                     SessionResponse::NotFound

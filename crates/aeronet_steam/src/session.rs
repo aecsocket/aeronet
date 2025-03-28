@@ -1,15 +1,18 @@
 use {
-    crate::{SteamManager, SteamworksClient},
+    crate::{SteamManager, Steamworks},
     aeronet_io::{IoSet, Session, connection::Disconnected, packet::RecvPacket},
     bevy_app::prelude::*,
-    bevy_ecs::prelude::*,
+    bevy_ecs::{identifier::error::IdentifierError, prelude::*},
     bevy_platform_support::time::Instant,
     bytes::Bytes,
     core::{marker::PhantomData, num::Saturating},
     derive_more::{Deref, DerefMut, Display, Error},
     steamworks::{
-        networking_sockets::{NetConnection, NetPollGroup, NetworkingSockets},
-        networking_types::{NetConnectionStatusChanged, NetworkingConnectionState, SendFlags},
+        ClientManager,
+        networking_sockets::{NetConnection, NetPollGroup},
+        networking_types::{
+            NetConnectionEnd, NetConnectionStatusChanged, NetworkingConnectionState, SendFlags,
+        },
     },
     tracing::{trace, trace_span, warn},
 };
@@ -28,7 +31,7 @@ impl<M: SteamManager> Default for SteamNetSessionPlugin<M> {
 
 impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
     fn build(&self, app: &mut App) {
-        let steam = app.world().resource::<SteamworksClient<M>>();
+        let steam = app.world().resource::<Steamworks<M>>();
 
         let (send_net_event, recv_net_event) = flume::unbounded();
         steam.register_callback(move |event: NetConnectionStatusChanged| {
@@ -43,7 +46,7 @@ impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
                 (
                     poll_messages::<M>,
                     poll_net_events::<M>,
-                    disconnect_if_invalid::<M>,
+                    poll_disconnect::<M>,
                 )
                     .in_set(IoSet::Poll),
             )
@@ -52,8 +55,7 @@ impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
 }
 
 #[derive(Component)]
-pub struct SteamNetIo<M> {
-    pub(crate) sockets: NetworkingSockets<M>,
+pub struct SteamNetIo<M: SteamManager = ClientManager> {
     pub(crate) conn: NetConnection<M>,
     pub(crate) mtu: usize,
 }
@@ -64,6 +66,8 @@ pub enum SessionError {
     InvalidConnection,
     #[display("problem detected locally")]
     ProblemDetectedLocally,
+    #[display("connection ended: {_0:?}")]
+    Ended(#[error(ignore)] NetConnectionEnd),
 }
 
 #[derive(Debug)]
@@ -125,27 +129,28 @@ fn poll_messages<M: SteamManager>(
 ) {
     const POLL_BATCH_SIZE: usize = 128;
 
+    let span = trace_span!("poll_messages");
+    let _span = span.enter();
+
+    let mut num_packets = Saturating(0);
+    let mut num_bytes = Saturating(0);
     loop {
-        let messages = poll_group.receive_messages(POLL_BATCH_SIZE);
-        if messages.is_empty() {
+        let packets = poll_group.receive_messages(POLL_BATCH_SIZE);
+        if packets.is_empty() {
             break;
         }
 
-        for message in messages {
-            let user_data = message.connection_user_data();
-            #[expect(
-                clippy::cast_sign_loss,
-                reason = "we treat this as an opaque identifier"
-            )]
-            let user_data_u64 = user_data as u64;
-            let entity = match Entity::try_from_bits(user_data_u64) {
+        for packet in packets {
+            num_packets += 1;
+            num_bytes += packet.data().len();
+
+            let user_data = packet.connection_user_data();
+            let entity = match user_data_to_entity(user_data) {
                 Ok(entity) => entity,
                 Err(err) => {
                     #[rustfmt::skip]
                     warn!(
-                        "Received message on connection which does not map to a valid entity: {err:?}\n\
-                        - connection user data (i64): {user_data}\n\
-                        - connection user data (u64): {user_data_u64}"
+                        "Received message on connection with user data {user_data}, which does not map to a valid entity: {err:?}"
                     );
                     continue;
                 }
@@ -161,13 +166,15 @@ fn poll_messages<M: SteamManager>(
                 }
             };
 
-            let payload = Bytes::from(message.data().to_vec());
+            let payload = Bytes::from(packet.data().to_vec());
             session.recv.push(RecvPacket {
                 recv_at: Instant::now(),
                 payload,
             });
         }
     }
+
+    trace!(%num_packets, %num_bytes, "Received packets");
 }
 
 fn poll_net_events<M: SteamManager>(
@@ -208,16 +215,21 @@ fn poll_net_events<M: SteamManager>(
     }
 }
 
-fn disconnect_if_invalid<M: SteamManager>(
+fn poll_disconnect<M: SteamManager>(
     mut commands: Commands,
     sessions: Query<(Entity, &SteamNetIo<M>)>,
+    steam: Res<Steamworks<M>>,
 ) {
     for (entity, session) in &sessions {
-        if session.sockets.get_connection_info(&session.conn).is_err() {
-            commands.trigger_targets(
-                Disconnected::by_error(SessionError::InvalidConnection),
-                entity,
-            );
+        let end_reason = steam
+            .networking_sockets()
+            .get_connection_info(&session.conn)
+            .ok()
+            .map_or(Some(SessionError::InvalidConnection), |info| {
+                info.end_reason().map(SessionError::Ended)
+            });
+        if let Some(end_reason) = end_reason {
+            commands.trigger_targets(Disconnected::by_error(end_reason), entity);
         }
     }
 }
@@ -245,4 +257,20 @@ fn flush<M: SteamManager>(mut sessions: Query<(Entity, &mut Session, &SteamNetIo
 
         trace!(%num_packets, %num_bytes, "Flushed packets");
     }
+}
+
+#[expect(
+    clippy::cast_possible_wrap,
+    reason = "we treat the entity as an opaque identifier"
+)]
+pub(crate) const fn entity_to_user_data(entity: Entity) -> i64 {
+    entity.to_bits() as i64
+}
+
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "we treat this as an opaque identifier"
+)]
+pub(crate) const fn user_data_to_entity(user_data: i64) -> Result<Entity, IdentifierError> {
+    Entity::try_from_bits(user_data as u64)
 }

@@ -15,9 +15,9 @@ pub mod server;
 pub mod session;
 
 #[derive(Deref, DerefMut, Resource)]
-pub struct SteamworksClient<M: SteamManager>(pub steamworks::Client<M>);
+pub struct Steamworks<M: SteamManager>(pub steamworks::Client<M>);
 
-impl<M: SteamManager> Clone for SteamworksClient<M> {
+impl<M: SteamManager> Clone for Steamworks<M> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }

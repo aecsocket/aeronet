@@ -154,6 +154,7 @@ name = "aeronet_steam"
 version = "0.12.0"
 dependencies = [
  "aeronet_io",
+ "anyhow",
  "bevy",
  "bevy_app",
  "bevy_ecs",

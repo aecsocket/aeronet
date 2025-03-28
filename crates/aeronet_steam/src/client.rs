@@ -1,8 +1,8 @@
 use {
     crate::{
-        SteamManager, SteamworksClient,
+        SteamManager, Steamworks,
         config::SteamSessionConfig,
-        session::{SteamNetIo, SteamNetSessionPlugin},
+        session::{SteamNetIo, SteamNetSessionPlugin, entity_to_user_data},
     },
     aeronet_io::{IoSet, SessionEndpoint, connection::Disconnected},
     bevy_app::prelude::*,
@@ -10,37 +10,31 @@ use {
     core::{marker::PhantomData, net::SocketAddr},
     derive_more::{Display, Error},
     steamworks::{
-        SteamId, networking_sockets::NetConnection, networking_types::NetworkingIdentity,
+        ClientManager, SteamId, networking_sockets::NetConnection,
+        networking_types::NetworkingIdentity,
     },
     sync_wrapper::SyncWrapper,
 };
 
 /// Allows using [`SteamNetClient`].
-pub struct SteamNetClientPlugin<M: SteamManager> {
-    _phantom: PhantomData<M>,
-}
+pub struct SteamNetClientPlugin;
 
-impl<M: SteamManager> Default for SteamNetClientPlugin<M> {
-    fn default() -> Self {
-        Self {
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<M: SteamManager> Plugin for SteamNetClientPlugin<M> {
+impl Plugin for SteamNetClientPlugin {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<SteamNetSessionPlugin<M>>() {
-            app.add_plugins(SteamNetSessionPlugin::<M>::default());
+        if !app.is_plugin_added::<SteamNetSessionPlugin<ClientManager>>() {
+            app.add_plugins(SteamNetSessionPlugin::<ClientManager>::default());
         }
 
-        app.add_systems(PreUpdate, poll_connecting::<M>.in_set(IoSet::Poll));
+        app.add_systems(
+            PreUpdate,
+            poll_connecting::<ClientManager>.in_set(IoSet::Poll),
+        );
     }
 }
 
 #[derive(Debug, Component)]
 #[require(SessionEndpoint)]
-pub struct SteamNetClient<M: SteamManager> {
+pub struct SteamNetClient<M: SteamManager = ClientManager> {
     _phantom: PhantomData<M>,
 }
 
@@ -68,14 +62,14 @@ impl From<SteamId> for ConnectTarget {
     }
 }
 
-impl<M: SteamManager> SteamNetClient<M> {
+impl SteamNetClient<ClientManager> {
     #[must_use]
     pub fn connect(
         config: SteamSessionConfig,
         target: impl Into<ConnectTarget>,
     ) -> impl EntityCommand {
         let target = target.into();
-        move |entity: EntityWorldMut| connect::<M>(entity, config, target)
+        move |entity: EntityWorldMut| connect::<ClientManager>(entity, config, target)
     }
 }
 
@@ -87,7 +81,7 @@ fn connect<M: SteamManager>(
     let mtu = config.send_buffer_size;
     let sockets = entity
         .world()
-        .resource::<SteamworksClient<M>>()
+        .resource::<Steamworks<M>>()
         .networking_sockets();
     let (send_next, recv_next) = oneshot::channel::<ConnectResult<M>>();
     blocking::unblock(move || {
@@ -153,11 +147,7 @@ fn poll_connecting<M: SteamManager>(
             }
         };
 
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "we treat the entity as an opaque identifier"
-        )]
-        let user_data = entity.to_bits() as i64;
+        let user_data = entity_to_user_data(entity);
         if conn.set_connection_user_data(user_data).is_err() {
             commands.trigger_targets(Disconnected::by_error(ClientError::Steam), entity);
             continue;
