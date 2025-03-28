@@ -90,13 +90,10 @@ fn add_connection_to_poll_group<M: SteamManager>(
 fn poll_io<M: SteamManager>(
     mut commands: Commands,
     sessions: Query<(Entity, &SteamNetIo<M>)>,
-    is_connected: Query<(), With<Session>>,
     steam: Res<Steamworks<M>>,
 ) {
     let sockets = steam.networking_sockets();
     for (entity, io) in &sessions {
-        let connected = is_connected.get(entity).is_ok();
-
         let Ok(info) = sockets.get_connection_info(&io.conn) else {
             commands.trigger_targets(
                 Disconnected::by_error(SessionError::InvalidConnection),

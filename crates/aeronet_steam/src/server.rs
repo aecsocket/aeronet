@@ -22,8 +22,8 @@ use {
         ClientManager, SteamId,
         networking_sockets::ListenSocket,
         networking_types::{
-            ConnectedEvent, ConnectionRequest, DisconnectedEvent, ListenSocketEvent,
-            NetConnectionEnd, NetworkingIdentity,
+            ConnectedEvent, ConnectionRequest, ListenSocketEvent, NetConnectionEnd,
+            NetworkingIdentity,
         },
     },
     sync_wrapper::SyncWrapper,
@@ -237,11 +237,8 @@ fn poll_opened<M: SteamManager>(
                         }
                     }
                 }
-                ListenSocketEvent::Disconnected(event) => {
-                    // TODO: I think this is already handled by session
-                    // disconnect checks let remote =
-                    // event.remote(); on_disconnected(&mut
-                    // commands);
+                ListenSocketEvent::Disconnected(_) => {
+                    // already handled by session logic
                 }
             }
         }
@@ -325,12 +322,6 @@ fn on_connected<M: SteamManager>(
     conn.set_connection_user_data(user_data)
         .context("failed to set connection user data")?;
 
-    conn.send_message(
-        b"hello world",
-        steamworks::networking_types::SendFlags::RELIABLE_NO_NAGLE,
-    )
-    .unwrap();
-
     commands.entity(client).insert((
         SteamNetIo {
             conn,
@@ -340,29 +331,6 @@ fn on_connected<M: SteamManager>(
     ));
     Ok(())
 }
-
-// fn on_disconnected<M: SteamManager>(
-//     commands: &mut Commands,
-//     server: &SteamNetServer<M>,
-//     event: DisconnectedEvent,
-// ) -> Result<()> {
-//     let steam_id = event
-//         .remote()
-//         .steam_id()
-//         .context("remote has no steam ID")?;
-//     let client = server
-//         .clients
-//         .get(&steam_id)
-//         .with_context(|| format!("steam ID {steam_id:?} is not tracked in the
-// client map"))?;
-
-//     let disconnected = match event.end_reason() {
-//         NetConnectionEnd::AppGeneric => Disconnected::by_peer("(unknown)"),
-//         err => Disconnected::by_error()
-//     }
-
-//     commands.trigger_targets(Disconnected::, targets);
-// }
 
 fn on_remove_client<M: SteamManager>(
     trigger: Trigger<OnRemove, SteamNetServerClient<M>>,
