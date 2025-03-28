@@ -98,10 +98,7 @@ impl ChannelIo {
     /// # Examples
     ///
     /// ```
-    /// use {
-    ///     aeronet_channel::ChannelIo,
-    ///     bevy_ecs::prelude::*,
-    /// };
+    /// use {aeronet_channel::ChannelIo, bevy_ecs::prelude::*};
     ///
     /// # fn run(mut commands: Commands, world: &mut World) {
     /// let a = commands.spawn_empty().id();
