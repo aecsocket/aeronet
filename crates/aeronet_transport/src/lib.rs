@@ -22,8 +22,10 @@ pub mod seq_buf;
 pub mod visualizer;
 
 pub use aeronet_io as io;
+use aeronet_io::connection::Disconnected;
+use derive_more::{Display, Error};
 use {
-    aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
+    aeronet_io::{IoSet, Session, packet::MtuTooSmall},
     alloc::{boxed::Box, vec::Vec},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
@@ -372,16 +374,33 @@ impl FlushedPacket {
     }
 }
 
+/// Error in [`Disconnected::ByError`] triggered on a [`Session`] when a
+/// [`Transport`] exceeds its memory usage limit.
+#[derive(Debug, Clone, Display, Error)]
+#[display("memory limit exceeded - {used} / {max} bytes")]
+pub struct MemoryLimitExceeded {
+    /// Number of bytes used.
+    pub used: usize,
+    /// Maximum number of bytes the transport is allowed to use.
+    pub max: usize,
+}
+
 fn check_memory_limit(
     mut commands: Commands,
     sessions: Query<(Entity, &Transport, &TransportConfig)>,
 ) {
-    for (session, transport, config) in &sessions {
+    for (entity, transport, config) in &sessions {
         let mem_used = transport.memory_used();
         let mem_max = config.max_memory_usage;
         if mem_used > mem_max {
-            warn!("{session} exceeded memory limit, disconnecting - {mem_used} / {mem_max} bytes");
-            commands.trigger_targets(Disconnect::new("memory limit exceeded"), session);
+            warn!("{entity} exceeded memory limit, disconnecting");
+            commands.trigger_targets(
+                Disconnected::by_error(MemoryLimitExceeded {
+                    used: mem_used,
+                    max: mem_max,
+                }),
+                entity,
+            );
         }
     }
 }

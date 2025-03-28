@@ -119,6 +119,18 @@ Crates and items are thoroughly documented through rustdoc, and are the most lik
 
 Once you have a rough idea of the architecture, choose an IO layer implementation from the list at the top, add it and `aeronet` to your app, and start building!
 
+## Writing an IO layer
+
+If none of the first-party or third-party IO layer implementations don't suit your needs, you can write your own IO layer implementation for your needs. `aeronet_io` is designed to be as minimal as possible, to make writing your own IO layers simple, and allow them to integrate with higher levels of the stack seamlessly.
+
+You can use [`aeronet_channel`] as a simple reference implementation of an IO layer - it's [a single file](https://github.com/aecsocket/aeronet/blob/main/crates/aeronet_channel/src/lib.rs).
+
+If you are writing an IO layer which integrates with a crate which mainly uses async, we recommend using [`aeronet_websocket`] and [`aeronet_webtransport`] as reference implementations. They describe how to integrate async code into Bevy's sync event loop.
+
+If you are writing an IO layer which does not rely on async, we recommend using [`aeronet_steam`] as a reference implementation.
+
+<!--  TODO: a simple documented IO layer implementation example using TCP sockets -->
+
 # Testing
 
 ## For `aeronet`
@@ -161,11 +173,29 @@ Some example tools you may use are:
 
 `aeronet` does not provide support for conditioning within the networking crate itself, since conditioning testing is more effective (and representative of real-world results) when the conditioning is applied at the lowest level possible.
 
+# Contributing
+
+Thank you for supporting the development of this project! Before you start writing a contribution, here's some helpful information.
+
+## Development Environment
+
+This project defines a [dev container], allowing you to set up a Docker container as a development environment. This environment contains all of the tools you need to write and test your code, which you can then remote into via your IDE. If you are on one of the supported platforms, and already have dev container tooling set up (i.e. [VS Code Dev Containers] or [DevPod]), **we recommend using a dev container** to develop in.
+
+Currently, the dev container requires Linux on Wayland with a GPU, as this is required to run a Bevy app with a GUI. The container also installs Steam for testing `aeronet_steam`, but you will have to log into your own Steam account manually inside the container if you want to test. We also include a `devcontainer-alt.json` - a copy of `devcontainer.json`, but using a different `/home/dev` volume - so that you can have two identical containers, but with different Steam accounts running in each one. This can be used to test Steam peer-to-peer connections.
+
+[dev container]: https://containers.dev/
+[VS Code Dev Containers]: https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers
+[DevPod]: https://devpod.sh/
+
+## Testing
+
+When submitting a pull request, make sure that all continuous integration (CI) checks pass. CI is intentionally set to be as strict as reasonably possible, to keep the quality of code in `main` high.
+
 # Versions
 
 | `bevy` | `aeronet`           |
 |--------|---------------------|
-| `0.16` | `0.13.0`            |
+| `0.16` | `0.13.0` - `0.14.0` |
 | `0.15` | `0.11.0` - `0.12.0` |
 | `0.14` | `0.9.0` - `0.10.0`  |
 
