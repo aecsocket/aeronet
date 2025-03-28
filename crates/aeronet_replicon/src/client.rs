@@ -13,7 +13,7 @@ use {
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
     core::{num::Saturating, time::Duration},
-    tracing::warn,
+    log::warn,
 };
 
 /// Provides a [`bevy_replicon`] client backend using [`Session`]s for

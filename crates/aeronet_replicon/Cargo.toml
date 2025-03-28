@@ -41,4 +41,4 @@ bevy_platform_support = { workspace = true, features = ["alloc"] }
 bevy_reflect          = { workspace = true }
 bevy_replicon         = { workspace = true }
 document-features     = { workspace = true, optional = true }
-tracing               = { workspace = true }
+log                   = { workspace = true }

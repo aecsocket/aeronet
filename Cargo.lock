@@ -146,7 +146,7 @@ dependencies = [
  "bevy_reflect",
  "bevy_replicon",
  "document-features",
- "tracing",
+ "log",
 ]
 
 [[package]]

@@ -15,7 +15,7 @@ use {
     bevy_platform_support::time::Instant,
     bevy_reflect::Reflect,
     bevy_replicon::{prelude::*, server::ServerSet},
-    tracing::warn,
+    log::warn,
 };
 
 /// Provides a [`bevy_replicon`] server backend using [`Server`]s and
