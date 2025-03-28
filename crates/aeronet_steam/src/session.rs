@@ -9,6 +9,7 @@ use {
     bevy_ecs::{identifier::error::IdentifierError, prelude::*},
     bevy_platform_support::time::Instant,
     bytes::Bytes,
+    core::any::type_name,
     core::{marker::PhantomData, num::Saturating},
     derive_more::{Deref, DerefMut, Display, Error},
     steamworks::{
@@ -16,7 +17,7 @@ use {
         networking_sockets::{NetConnection, NetPollGroup},
         networking_types::{NetConnectionEnd, NetworkingConnectionState, SendFlags},
     },
-    tracing::{trace, trace_span, warn},
+    tracing::{debug, trace, trace_span, warn},
 };
 
 pub(crate) struct SteamNetSessionPlugin<M: SteamManager> {
@@ -118,9 +119,12 @@ fn poll_io<M: SteamManager>(
             Ok(NetworkingConnectionState::FindingRoute | NetworkingConnectionState::Connecting) => {
             }
             Ok(NetworkingConnectionState::Connected) => {
-                if !connected {
-                    entity.insert(Session::new(Instant::now(), io.mtu));
-                }
+                // make sure we don't replace any existing session
+                // since `Connected` could theoretically be called twice,
+                // and we may make a `Session` manually *before* receiving this event
+                entity
+                    .entry::<Session>()
+                    .or_insert_with(|| Session::new(Instant::now(), io.mtu));
             }
             Ok(NetworkingConnectionState::ClosedByPeer) => {
                 entity.trigger(Disconnected::by_peer(UNKNOWN_DISCONNECT_REASON));
@@ -136,8 +140,10 @@ fn poll_io<M: SteamManager>(
 }
 
 fn poll_messages<M: SteamManager>(
-    mut clients: Query<&mut Session, With<SteamNetIo<M>>>,
+    io: Query<&SteamNetIo<M>>,
+    mut clients: Query<&mut Session>,
     mut poll_group: ResMut<PollGroup<M>>,
+    mut commands: Commands,
 ) {
     const POLL_BATCH_SIZE: usize = 128;
 
@@ -167,48 +173,63 @@ fn poll_messages<M: SteamManager>(
                     continue;
                 }
             };
-            let mut session = match clients.get_mut(entity) {
-                Ok(entity) => entity,
+            let io = match io.get(entity) {
+                Ok(io) => io,
                 Err(err) => {
                     warn!(
-                        "Received message on connection for entity {entity}, but it is not a \
-                         connected client: {err:?}"
+                        "Received message on {entity}, which does not have `{}`: {err:?}",
+                        type_name::<SteamNetIo<M>>()
                     );
                     continue;
                 }
             };
 
-            // !!! TODO: THIS IS REALLY REALLY BAD !!!
-            //
-            // From `steamworks-rs`'s `packet.data()`:
-            //
-            //     pub fn data(&self) -> &[u8] {
-            //         unsafe {
-            //             std::slice::from_raw_parts(
-            //                 (*self.message).m_pData as _,
-            //                 (*self.message).m_cbSize as usize,
-            //             )
-            //         }
-            //     }
-            //
-            // This code is UNSOUND, because the message is of length 0,
-            // this panics due to debug assertions in `std`
-            // (and in release, will fail silently, causing memory unsafety!)
-            //
-            // `steamworks-rs` maintainer is unresponsive, and there hasn't been an update
-            // in a long time (as of 28 Mar 2025). We should make a `steam-sockets` crate
-            // which provides bindings for only the Steam socket functionality, and irons
-            // out all of the issues of `steamworks-rs`.
-            //
-            // This would also let us fix a bunch of other miscellaneous issues.
-            let payload = Bytes::from(packet.data().to_vec());
+            let update_session = |session: &mut Session| {
+                // !!! TODO: THIS IS REALLY REALLY BAD !!!
+                //
+                // From `steamworks-rs`'s `packet.data()`:
+                //
+                //     pub fn data(&self) -> &[u8] {
+                //         unsafe {
+                //             std::slice::from_raw_parts(
+                //                 (*self.message).m_pData as _,
+                //                 (*self.message).m_cbSize as usize,
+                //             )
+                //         }
+                //     }
+                //
+                // This code is UNSOUND, because the message is of length 0,
+                // this panics due to debug assertions in `std`
+                // (and in release, will fail silently, causing memory unsafety!)
+                //
+                // `steamworks-rs` maintainer is unresponsive, and there hasn't been an update
+                // in a long time (as of 28 Mar 2025). We should make a `steam-sockets` crate
+                // which provides bindings for only the Steam socket functionality, and irons
+                // out all of the issues of `steamworks-rs`.
+                //
+                // This would also let us fix a bunch of other miscellaneous issues.
+                let payload = Bytes::from(packet.data().to_vec());
 
-            session.stats.packets_recv += 1;
-            session.stats.bytes_recv += payload.len();
-            session.recv.push(RecvPacket {
-                recv_at: Instant::now(),
-                payload,
-            });
+                session.stats.packets_recv += 1;
+                session.stats.bytes_recv += payload.len();
+                session.recv.push(RecvPacket {
+                    recv_at: Instant::now(),
+                    payload,
+                });
+            };
+
+            if let Ok(mut session) = clients.get_mut(entity) {
+                update_session(&mut session);
+            } else {
+                debug!(
+                    "Received message on connection for {entity} before it has been marked as \
+                     connected; will manually mark it as connected"
+                );
+
+                let mut session = Session::new(Instant::now(), io.mtu);
+                update_session(&mut session);
+                commands.entity(entity).insert(session);
+            }
         }
     }
 

@@ -238,9 +238,10 @@ fn poll_opened<M: SteamManager>(
                     }
                 }
                 ListenSocketEvent::Disconnected(event) => {
-                    // TODO: I think this is already handled by session disconnect checks
-                    // let remote = event.remote();
-                    // on_disconnected(&mut commands);
+                    // TODO: I think this is already handled by session
+                    // disconnect checks let remote =
+                    // event.remote(); on_disconnected(&mut
+                    // commands);
                 }
             }
         }
@@ -286,7 +287,7 @@ fn on_connecting<M: SteamManager>(
         let response = event.response.unwrap_or_else(|| {
             warn!(
                 "Client session {client} created on server {entity} but no response was given, \
-                will not allow this client to connect; you must `respond` to `{}`",
+                 will not allow this client to connect; you must `respond` to `{}`",
                 type_name::<SessionRequest>(),
             );
             SessionResponse::rejected(UNKNOWN_DISCONNECT_REASON)
@@ -325,7 +326,7 @@ fn on_connected<M: SteamManager>(
         .context("failed to set connection user data")?;
 
     conn.send_message(
-        &[0x65],
+        b"hello world",
         steamworks::networking_types::SendFlags::RELIABLE_NO_NAGLE,
     )
     .unwrap();
@@ -352,7 +353,8 @@ fn on_connected<M: SteamManager>(
 //     let client = server
 //         .clients
 //         .get(&steam_id)
-//         .with_context(|| format!("steam ID {steam_id:?} is not tracked in the client map"))?;
+//         .with_context(|| format!("steam ID {steam_id:?} is not tracked in the
+// client map"))?;
 
 //     let disconnected = match event.end_reason() {
 //         NetConnectionEnd::AppGeneric => Disconnected::by_peer("(unknown)"),
