@@ -1,8 +1,10 @@
+//! See [`SteamNetServer`].
+
 use {
     crate::{
-        SteamManager, Steamworks,
-        config::SteamSessionConfig,
-        session::{SteamNetIo, SteamNetSessionPlugin, entity_to_user_data},
+        SteamManager, SteamworksClient,
+        config::SessionConfig,
+        session::{SessionError, SteamNetIo, SteamNetSessionPlugin, entity_to_user_data},
     },
     aeronet_io::{
         IoSet, Session, SessionEndpoint,
@@ -17,9 +19,8 @@ use {
         time::Instant,
     },
     core::{any::type_name, marker::PhantomData, net::SocketAddr},
-    derive_more::{Display, Error},
     steamworks::{
-        ClientManager, SteamId,
+        SteamId,
         networking_sockets::ListenSocket,
         networking_types::{
             ConnectedEvent, ConnectionRequest, ListenSocketEvent, NetConnectionEnd,
@@ -30,40 +31,62 @@ use {
     tracing::{debug, debug_span, warn},
 };
 
-pub struct SteamNetServerPlugin;
+/// Allows using [`SteamNetServer`].
+pub struct SteamNetServerPlugin<M: SteamManager> {
+    _phantom: PhantomData<M>,
+}
 
-impl Plugin for SteamNetServerPlugin {
+impl<M: SteamManager> Default for SteamNetServerPlugin<M> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<M: SteamManager> Plugin for SteamNetServerPlugin<M> {
     fn build(&self, app: &mut App) {
-        if !app.is_plugin_added::<SteamNetSessionPlugin<ClientManager>>() {
-            app.add_plugins(SteamNetSessionPlugin::<ClientManager>::default());
+        if !app.is_plugin_added::<SteamNetSessionPlugin<M>>() {
+            app.add_plugins(SteamNetSessionPlugin::<M>::default());
         }
 
         app.add_systems(
             PreUpdate,
-            (poll_opening::<ClientManager>, poll_opened::<ClientManager>).in_set(IoSet::Poll),
+            (poll_opening::<M>, poll_opened::<M>).in_set(IoSet::Poll),
         )
-        .add_observer(on_remove_client::<ClientManager>);
+        .add_observer(on_remove_client::<M>);
     }
 }
 
+/// Steam socket server which allows clients to connect to it via either a
+/// socket address or as a Steam peer.
+///
+/// Use [`SteamNetServer::open`] to start opening a server.
+///
+/// When a client attempts to connect, the server will trigger a
+/// [`SessionRequest`]. Your app **must** observe this, and use
+/// [`SessionRequest::respond`] to set how the server should respond to this
+/// connection attempt.
 #[derive(Component)]
 #[require(ServerEndpoint)]
-pub struct SteamNetServer<M: SteamManager = ClientManager> {
+pub struct SteamNetServer<M: SteamManager> {
     _phantom: PhantomData<M>,
     mtu: usize,
     clients: HashMap<SteamId, Entity>,
 }
 
 impl<M: SteamManager> SteamNetServer<M> {
+    /// Gets the [`Entity`] of a [`Session`] for a Steam user, if one exists.
     #[must_use]
     pub fn client_by_steam_id(&self, steam_id: SteamId) -> Option<Entity> {
         self.clients.get(&steam_id).copied()
     }
 }
 
+/// Marks a client connected to a [`SteamNetServer`].
 #[derive(Debug, Component)]
 #[require(SessionEndpoint)]
-pub struct SteamNetServerClient<M: SteamManager = ClientManager> {
+pub struct SteamNetServerClient<M: SteamManager> {
     _phantom: PhantomData<M>,
     steam_id: SteamId,
 }
@@ -75,10 +98,19 @@ impl<M: SteamManager> SteamNetServerClient<M> {
     }
 }
 
+/// Where a [`SteamNetServer`] will listen on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ListenTarget {
+    /// Listen on a socket address.
     Addr(SocketAddr),
-    Peer { virtual_port: i32 },
+    /// Listen on other Steam users in a peer-to-peer configuration.
+    Peer {
+        /// Steam-specific application port to listen on.
+        ///
+        /// This acts like [`SocketAddr::port`] but specialized for Steam's P2P
+        /// networking.
+        virtual_port: i32,
+    },
 }
 
 impl From<SocketAddr> for ListenTarget {
@@ -87,23 +119,47 @@ impl From<SocketAddr> for ListenTarget {
     }
 }
 
-impl SteamNetServer<ClientManager> {
+impl<M: SteamManager> SteamNetServer<M> {
+    /// Creates an [`EntityCommand`] to set up a server and have it start
+    /// listening for connections.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use {
+    ///     aeronet_steam::{SessionConfig, server::SteamNetServer},
+    ///     bevy_ecs::prelude::*,
+    ///     std::net::SocketAddr,
+    ///     steamworks::ServerManager,
+    /// };
+    ///
+    /// # fn run(mut commands: Commands, world: &mut World) {
+    /// let config = SessionConfig::default();
+    /// let target = "127.0.0.1:27015".parse::<SocketAddr>().unwrap();
+    ///
+    /// // using `Commands`
+    /// commands
+    ///     .spawn_empty()
+    ///     .queue(SteamNetServer::<ServerManager>::open(config, target));
+    ///
+    /// // using mutable `World` access
+    /// # let config = unimplemented!();
+    /// let server = world.spawn_empty().id();
+    /// SteamNetServer::<ServerManager>::open(config, target).apply(world.entity_mut(server));
+    /// # }
+    /// ```
     #[must_use]
-    pub fn open(config: SteamSessionConfig, target: impl Into<ListenTarget>) -> impl EntityCommand {
+    pub fn open(config: SessionConfig, target: impl Into<ListenTarget>) -> impl EntityCommand {
         let target = target.into();
-        move |entity: EntityWorldMut| open::<ClientManager>(entity, config, target)
+        move |entity: EntityWorldMut| open::<M>(entity, config, target)
     }
 }
 
-fn open<M: SteamManager>(
-    mut entity: EntityWorldMut,
-    config: SteamSessionConfig,
-    target: ListenTarget,
-) {
+fn open<M: SteamManager>(mut entity: EntityWorldMut, config: SessionConfig, target: ListenTarget) {
     let mtu = config.send_buffer_size;
     let sockets = entity
         .world()
-        .resource::<Steamworks<M>>()
+        .resource::<SteamworksClient<M>>()
         .networking_sockets();
     let (send_next, recv_next) = oneshot::channel::<OpenResult<M>>();
     blocking::unblock(move || {
@@ -113,7 +169,7 @@ fn open<M: SteamManager>(
                 sockets.create_listen_socket_p2p(virtual_port, config.to_options())
             }
         };
-        _ = send_next.send(result.map_err(|_| ServerError::CreateListenSocket));
+        _ = send_next.send(result.map_err(|_| SessionError::Steam));
     })
     .detach();
 
@@ -132,13 +188,23 @@ fn open<M: SteamManager>(
     }
 }
 
+/// How should a [`SteamNetServer`] respond to a client wishing to connect to
+/// the server?
+///
+/// See [`SessionRequest`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionResponse {
+    /// Allow the client to connect to the server.
     Accepted,
-    Rejected { reason: String },
+    /// Reject the client with the given reason.
+    Rejected {
+        /// Reason to pass to [`Disconnected::ByUser`].
+        reason: String,
+    },
 }
 
 impl SessionResponse {
+    /// Creates a [`SessionResponse::Rejected`] from the given reason.
     #[must_use]
     pub fn rejected(reason: impl Into<String>) -> Self {
         Self::Rejected {
@@ -147,28 +213,74 @@ impl SessionResponse {
     }
 }
 
+/// Triggered when a client requests to connect to a [`SteamNetServer`].
+///
+/// Use the fields in this event to decide whether to accept the client's
+/// connection or not, and respond accordingly by calling
+/// [`SessionRequest::respond`].
+///
+/// At least one of your observers must `respond` to this request, otherwise
+/// the server will default to [`SessionResponse::Rejected`].
+///
+/// # Examples
+///
+/// /// Accept all clients without any extra checks:
+///
+/// ```
+/// use {
+///     aeronet_steam::server::{SessionRequest, SessionResponse},
+///     bevy_ecs::prelude::*,
+/// };
+///
+/// fn on_session_request(mut trigger: Trigger<SessionRequest>) {
+///     let client = trigger.target();
+///     trigger.respond(SessionResponse::Accepted);
+/// }
+/// ```
+///
+/// Check if the client is in the user's friends list before accepting them:
+///
+/// ```
+/// use {
+///     aeronet_steam::{
+///         SteamworksClient,
+///         server::{SessionRequest, SessionResponse},
+///     },
+///     bevy_ecs::prelude::*,
+///     steamworks::FriendFlags,
+/// };
+///
+/// fn on_session_request(mut request: Trigger<SessionRequest>, steam: Res<SteamworksClient>) {
+///     let Some(steam_id) = request.identity.steam_id() else {
+///         request.respond(SessionResponse::rejected("no steam ID"));
+///         return;
+///     };
+///
+///     let friend = steam.friends().get_friend(steam_id);
+///     if !friend.has_friend(FriendFlags::IMMEDIATE) {
+///         request.respond(SessionResponse::rejected("not friend of the host"));
+///         return;
+///     }
+///
+///     request.respond(SessionResponse::Accepted);
+/// }
+/// ```
 #[derive(Clone, Event)]
 pub struct SessionRequest {
+    /// Identity of the client requesting to connect.
     pub identity: NetworkingIdentity,
+    /// How should the server respond to this request?
     pub response: Option<SessionResponse>,
 }
 
 impl SessionRequest {
+    /// Sets how the server should respond to this request.
     pub fn respond(&mut self, response: SessionResponse) {
         self.response = Some(response);
     }
 }
 
-#[derive(Debug, Display, Error)]
-#[non_exhaustive]
-pub enum ServerError {
-    #[display("backend closed")]
-    BackendClosed,
-    #[display("failed to create listen socket")]
-    CreateListenSocket,
-}
-
-type OpenResult<M> = Result<ListenSocket<M>, ServerError>;
+type OpenResult<M> = Result<ListenSocket<M>, SessionError>;
 
 #[derive(Component)]
 struct Opening<M> {
@@ -193,7 +305,7 @@ fn poll_opening<M: SteamManager>(
             }
             Err(oneshot::TryRecvError::Empty) => continue,
             Err(oneshot::TryRecvError::Disconnected) => {
-                commands.trigger_targets(Closed::by_error(ServerError::BackendClosed), entity);
+                commands.trigger_targets(Closed::by_error(SessionError::BackendClosed), entity);
                 continue;
             }
         };

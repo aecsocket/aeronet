@@ -1,6 +1,4 @@
-//! Implementation for WebSocket sessions.
-//!
-//! This logic is shared between clients and servers.
+//! Implementation for WebSocket sessions, shared between clients and servers.
 
 pub(crate) mod backend;
 

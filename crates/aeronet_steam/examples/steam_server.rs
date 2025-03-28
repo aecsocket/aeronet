@@ -8,12 +8,12 @@ use {
         server::{Closed, Server},
     },
     aeronet_steam::{
-        Steamworks,
-        config::SteamSessionConfig,
+        SessionConfig, SteamworksClient,
         server::{SessionRequest, SessionResponse, SteamNetServer, SteamNetServerPlugin},
     },
     bevy::{log::LogPlugin, prelude::*},
     core::net::{Ipv4Addr, SocketAddr},
+    steamworks::ClientManager,
 };
 
 fn main() -> AppExit {
@@ -21,12 +21,16 @@ fn main() -> AppExit {
         steamworks::Client::init_app(480).expect("failed to initialize steam");
 
     App::new()
-        .insert_resource(Steamworks(steam))
+        .insert_resource(SteamworksClient(steam))
         .insert_non_send_resource(steam_single)
         .add_systems(PreUpdate, |steam: NonSend<steamworks::SingleClient>| {
             steam.run_callbacks();
         })
-        .add_plugins((MinimalPlugins, LogPlugin::default(), SteamNetServerPlugin))
+        .add_plugins((
+            MinimalPlugins,
+            LogPlugin::default(),
+            SteamNetServerPlugin::<ClientManager>::default(),
+        ))
         .add_systems(Startup, open_server)
         .add_systems(Update, reply)
         .add_observer(on_opened)
@@ -39,10 +43,12 @@ fn main() -> AppExit {
 }
 
 fn open_server(mut commands: Commands) {
-    commands.spawn_empty().queue(SteamNetServer::open(
-        SteamSessionConfig::default(),
-        SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 25567),
-    ));
+    commands
+        .spawn_empty()
+        .queue(SteamNetServer::<ClientManager>::open(
+            SessionConfig::default(),
+            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 25567),
+        ));
 }
 
 fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {

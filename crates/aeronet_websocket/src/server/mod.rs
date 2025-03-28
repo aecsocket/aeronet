@@ -65,7 +65,7 @@ impl WebSocketServer {
     /// ```
     /// use {
     ///     aeronet_websocket::server::{Identity, ServerConfig, WebSocketServer},
-    ///     bevy_ecs::{prelude::*, system::EntityCommand},
+    ///     bevy_ecs::prelude::*,
     /// };
     ///
     /// # fn run(mut commands: Commands, world: &mut World) {

@@ -70,7 +70,10 @@ cargo run --example webtransport_client -F client --target wasm32-unknown-unknow
 
 - [`aeronet_steam`]: over Steam's networking sockets
   - Native
-  - 🛠️ WIP
+  - ⚠️ Working
+  - Note on examples:
+
+    You will need Steam running locally on your machine to be able to run the examples.
 
 ```sh
 cargo run --example steam_server -F server

@@ -1,6 +1,5 @@
-//! Implementation for WebTransport sessions.
-//!
-//! This logic is shared between clients and servers.
+//! Implementation for WebTransport sessions, shared between clients and
+//! servers.
 
 use {
     crate::runtime::WebTransportRuntime,

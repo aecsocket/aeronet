@@ -78,7 +78,7 @@ impl WebSocketClient {
     /// ```
     /// use {
     ///     aeronet_websocket::client::{ClientConfig, WebSocketClient},
-    ///     bevy_ecs::{prelude::*, system::EntityCommand},
+    ///     bevy_ecs::prelude::*,
     /// };
     ///
     /// # fn run(mut commands: Commands, world: &mut World) {
@@ -91,7 +91,7 @@ impl WebSocketClient {
     ///     .queue(WebSocketClient::connect(config, target));
     ///
     /// // using mutable `World` access
-    /// # let config = ClientConfig::default();
+    /// # let config: ClientConfig = unreachable!();
     /// let session = world.spawn_empty().id();
     /// WebSocketClient::connect(config, target).apply(world.entity_mut(session));
     /// # }

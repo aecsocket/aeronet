@@ -92,9 +92,9 @@ impl WebTransportClient {
     ///     .queue(WebTransportClient::connect(config, target));
     ///
     /// // using mutable `World` access
-    /// # let config = ClientConfig::default();
-    /// let session = world.spawn_empty().id();
-    /// WebTransportClient::connect(config, target).apply(session, world);
+    /// # let config: ClientConfig = unreachable!();
+    /// let client = world.spawn_empty().id();
+    /// WebTransportClient::connect(config, target).apply(world.entity_mut(client));
     /// # }
     /// ```
     #[must_use]

@@ -1,10 +1,16 @@
-use {
-    core::time::Duration,
-    steamworks::networking_types::{NetworkingConfigEntry, NetworkingConfigValue},
-};
+use {core::time::Duration, steamworks::networking_types::NetworkingConfigEntry};
 
+/// Configuration for establishing a Steam networking session.
+///
+/// Default values are obtained from [`steamnetworkingsockets.cpp`][sns].
+///
+/// [sns]: https://github.com/ValveSoftware/GameNetworkingSockets/blob/62b395172f157ca4f01eea3387d1131400f8d604/src/steamnetworkingsockets/clientlib/csteamnetworkingsockets.cpp#L43
 #[derive(Debug, Clone)]
-pub struct SteamSessionConfig {
+#[allow(
+    missing_docs,
+    reason = "the meaning of these fields is documented in Steamworks API"
+)]
+pub struct SessionConfig {
     pub fake_packet_loss_send: f32,
     pub fake_packet_loss_recv: f32,
     pub fake_packet_lag_send: Duration,
@@ -25,9 +31,8 @@ pub struct SteamSessionConfig {
     pub local_virtual_port: i32,
 }
 
-impl Default for SteamSessionConfig {
+impl Default for SessionConfig {
     fn default() -> Self {
-        // https://github.com/ValveSoftware/GameNetworkingSockets/blob/62b395172f157ca4f01eea3387d1131400f8d604/src/steamnetworkingsockets/clientlib/csteamnetworkingsockets.cpp#L43
         Self {
             fake_packet_loss_send: 0.0,
             fake_packet_loss_recv: 0.0,
@@ -51,21 +56,28 @@ impl Default for SteamSessionConfig {
     }
 }
 
-impl SteamSessionConfig {
+impl SessionConfig {
+    /// Converts this to a [`Vec<NetworkingConfigEntry>`] for use in creating a
+    /// session.
     #[must_use]
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "this will not be `const` in the future"
+    )]
     pub fn to_options(&self) -> Vec<NetworkingConfigEntry> {
+        Vec::new()
+
+        /*
+        // TODO
         use {NetworkingConfigEntry as Entry, NetworkingConfigValue as Key};
 
-        // TODO
-        return vec![];
-
-        // all float config values are commented out
+        // all float config values don't work
         // because of a bug in steamworks 0.11.0,
         // and there's no newer version (as of 28 Mar 2025):
         // <https://github.com/Noxime/steamworks-rs/pull/168>
         vec![
-            // Entry::new_float(Key::FakePacketLossSend, self.fake_packet_loss_send * 100.0),
-            // Entry::new_float(Key::FakePacketLossRecv, self.fake_packet_loss_recv * 100.0),
+            Entry::new_float(Key::FakePacketLossSend, self.fake_packet_loss_send * 100.0),
+            Entry::new_float(Key::FakePacketLossRecv, self.fake_packet_loss_recv * 100.0),
             Entry::new_int32(
                 Key::FakePacketLagSend,
                 duration_to_ms(self.fake_packet_lag_send),
@@ -74,20 +86,20 @@ impl SteamSessionConfig {
                 Key::FakePacketLagRecv,
                 duration_to_ms(self.fake_packet_lag_recv),
             ),
-            // Entry::new_float(
-            //     Key::FakePacketReorderSend,
-            //     self.fake_packet_reorder_send * 100.0,
-            // ),
-            // Entry::new_float(
-            //     Key::FakePacketReorderRecv,
-            //     self.fake_packet_reorder_recv * 100.0,
-            // ),
+            Entry::new_float(
+                Key::FakePacketReorderSend,
+                self.fake_packet_reorder_send * 100.0,
+            ),
+            Entry::new_float(
+                Key::FakePacketReorderRecv,
+                self.fake_packet_reorder_recv * 100.0,
+            ),
             Entry::new_int32(
                 Key::FakePacketReorderTime,
                 duration_to_ms(self.fake_packet_reorder_time),
             ),
-            // Entry::new_float(Key::FakePacketDupSend, self.fake_packet_dup_send * 100.0),
-            // Entry::new_float(Key::FakePacketDupRecv, self.fake_packet_dup_recv * 100.0),
+            Entry::new_float(Key::FakePacketDupSend, self.fake_packet_dup_send * 100.0),
+            Entry::new_float(Key::FakePacketDupRecv, self.fake_packet_dup_recv * 100.0),
             Entry::new_int32(
                 Key::FakePacketDupTimeMax,
                 duration_to_ms(self.fake_packet_dup_time_max),
@@ -104,13 +116,14 @@ impl SteamSessionConfig {
             Entry::new_int32(Key::SymmetricConnect, i32::from(self.symmetric_connect)),
             Entry::new_int32(Key::LocalVirtualPort, self.local_virtual_port),
         ]
+        */
     }
 }
 
-fn usize_to_i32(n: usize) -> i32 {
-    i32::try_from(n).unwrap_or(i32::MAX)
-}
+// fn usize_to_i32(n: usize) -> i32 {
+//     i32::try_from(n).unwrap_or(i32::MAX)
+// }
 
-fn duration_to_ms(duration: Duration) -> i32 {
-    i32::try_from(duration.as_millis()).unwrap_or(i32::MAX)
-}
+// fn duration_to_ms(duration: Duration) -> i32 {
+//     i32::try_from(duration.as_millis()).unwrap_or(i32::MAX)
+// }

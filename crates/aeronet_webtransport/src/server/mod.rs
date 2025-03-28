@@ -51,6 +51,11 @@ impl Plugin for WebTransportServerPlugin {
 /// and coordinates messaging between multiple clients.
 ///
 /// Use [`WebTransportServer::open`] to start opening a server.
+///
+/// When a client attempts to connect, the server will trigger a
+/// [`SessionRequest`]. Your app **must** observe this, and use
+/// [`SessionRequest::respond`] to set how the server should respond to this
+/// connection attempt.
 #[derive(Debug, Component)]
 #[require(ServerEndpoint)]
 pub struct WebTransportServer(());
@@ -92,7 +97,7 @@ impl WebTransportServer {
     /// // using mutable `World` access
     /// # let config: ServerConfig = unimplemented!();
     /// let server = world.spawn_empty().id();
-    /// WebTransportServer::open(config).apply(server, world);
+    /// WebTransportServer::open(config).apply(world.entity_mut(server));
     /// # }
     /// ```
     #[must_use]
@@ -158,7 +163,7 @@ pub enum SessionResponse {
 /// };
 ///
 /// fn on_session_request(mut trigger: Trigger<SessionRequest>) {
-///     let client = trigger.entity();
+///     let client = trigger.target();
 ///     trigger.respond(SessionResponse::Accepted);
 /// }
 /// ```
@@ -172,8 +177,6 @@ pub enum SessionResponse {
 /// };
 ///
 /// fn on_session_request(mut request: Trigger<SessionRequest>) {
-///     let client = request.entity();
-///
 ///     let mut response = SessionResponse::Forbidden;
 ///     if let Some(auth_token) = request.headers.get(":auth-token") {
 ///         if validate_auth_token(auth_token) {
@@ -208,7 +211,9 @@ impl SessionRequest {
     }
 }
 
-/// [`WebTransportServer`] error.
+/// [`WebTransportServer`]-specific error.
+///
+/// For generic WebTransport errors, see [`SessionError`].
 #[derive(Debug, Display, Error)]
 #[non_exhaustive]
 pub enum ServerError {

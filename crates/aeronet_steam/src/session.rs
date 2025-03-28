@@ -1,5 +1,8 @@
+//! Implementation for Steam networking sessions, shared between clients and
+//! servers.
+
 use {
-    crate::{SteamManager, Steamworks},
+    crate::{SteamManager, SteamworksClient},
     aeronet_io::{
         AeronetIoPlugin, IoSet, Session,
         connection::{Disconnected, UNKNOWN_DISCONNECT_REASON},
@@ -9,8 +12,7 @@ use {
     bevy_ecs::{identifier::error::IdentifierError, prelude::*},
     bevy_platform_support::time::Instant,
     bytes::Bytes,
-    core::any::type_name,
-    core::{marker::PhantomData, num::Saturating},
+    core::{any::type_name, marker::PhantomData, num::Saturating},
     derive_more::{Deref, DerefMut, Display, Error},
     steamworks::{
         ClientManager,
@@ -38,7 +40,7 @@ impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
             app.add_plugins(AeronetIoPlugin);
         }
 
-        let steam = app.world().resource::<Steamworks<M>>();
+        let steam = app.world().resource::<SteamworksClient<M>>();
         // https://github.com/cBournhonesque/lightyear/issues/243
         steam
             .networking_sockets()
@@ -56,18 +58,37 @@ impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
     }
 }
 
+/// Manages a Steam networking session's connection.
+///
+/// This may represent either an outgoing client connection (this session is
+/// connecting to a server), or an incoming client connection (this session is
+/// a child of a server that the user has spawned).
+///
+/// You should not add or remove this component directly - it is managed
+/// entirely by the client and server implementations.
 #[derive(Component)]
 pub struct SteamNetIo<M: SteamManager = ClientManager> {
     pub(crate) conn: NetConnection<M>,
     pub(crate) mtu: usize,
 }
 
+/// Error that occurs when polling a session using the [`SteamNetIo`] IO layer.
 #[derive(Debug, Display, Error)]
 pub enum SessionError {
+    /// Internal Steamworks SDK error occurred.
+    #[display("steam error")]
+    Steam,
+    /// Backend task was unexpectedly cancelled.
+    #[display("backend closed")]
+    BackendClosed,
+    /// Connection is no longer valid under the Steamworks API.
     #[display("invalid connection")]
     InvalidConnection,
+    /// Problem has been detected locally, i.e. a timeout, network connection
+    /// lost, etc.
     #[display("problem detected locally")]
     ProblemDetectedLocally,
+    /// Connection ended.
     #[display("connection ended: {_0:?}")]
     Ended(#[error(ignore)] NetConnectionEnd),
 }
@@ -90,7 +111,7 @@ fn add_connection_to_poll_group<M: SteamManager>(
 fn poll_io<M: SteamManager>(
     mut commands: Commands,
     sessions: Query<(Entity, &SteamNetIo<M>)>,
-    steam: Res<Steamworks<M>>,
+    steam: Res<SteamworksClient<M>>,
 ) {
     let sockets = steam.networking_sockets();
     for (entity, io) in &sessions {
