@@ -178,7 +178,7 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use {aeronet_io::Session, web_time::Instant};
+    /// use {aeronet_io::Session, bevy_platform_support::time::Instant};
     ///
     /// let now = Instant::now();
     /// let session = Session::new(now, 1000);
@@ -197,7 +197,7 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use {aeronet_io::Session, web_time::Instant};
+    /// use {aeronet_io::Session, bevy_platform_support::time::Instant};
     ///
     /// let session = Session::new(Instant::now(), 1000);
     /// assert_eq!(1000, session.min_mtu());
@@ -216,7 +216,7 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use {aeronet_io::Session, web_time::Instant};
+    /// use {aeronet_io::Session, bevy_platform_support::time::Instant};
     ///
     /// let mut session = Session::new(Instant::now(), 1000);
     /// assert_eq!(1000, session.mtu());
@@ -240,7 +240,7 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use {aeronet_io::Session, web_time::Instant};
+    /// use {aeronet_io::Session, bevy_platform_support::time::Instant};
     ///
     /// let mut session = Session::new(Instant::now(), 1000);
     /// session.set_mtu(1200).unwrap();
