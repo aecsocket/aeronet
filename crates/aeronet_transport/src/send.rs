@@ -138,7 +138,7 @@ impl TransportSend {
     /// ```
     /// use {
     ///     aeronet_transport::{Transport, lane::LaneIndex},
-    ///     web_time::Instant,
+    ///     bevy_platform_support::time::Instant,
     /// };
     ///
     /// const SEND_LANE: LaneIndex = LaneIndex::new(0);

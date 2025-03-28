@@ -213,8 +213,8 @@ impl Transport {
     ///     aeronet_io::Session,
     ///     aeronet_transport::{Transport, lane::LaneKind},
     ///     bevy_ecs::prelude::*,
-    ///     tracing::warn,
-    ///     web_time::Instant,
+    ///     bevy_platform_support::time::Instant,
+    ///     log::warn,
     /// };
     ///
     /// const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
@@ -224,7 +224,7 @@ impl Transport {
     ///     sessions: Query<&Session>,
     ///     mut commands: Commands,
     /// ) {
-    ///     let entity = trigger.entity();
+    ///     let entity = trigger.target();
     ///     let session = sessions
     ///         .get(entity)
     ///         .expect("we are adding this component to this entity");
