@@ -100,7 +100,7 @@ impl ChannelIo {
     /// ```
     /// use {
     ///     aeronet_channel::ChannelIo,
-    ///     bevy_ecs::{prelude::*, world::Command},
+    ///     bevy_ecs::prelude::*,
     /// };
     ///
     /// # fn run(mut commands: Commands, world: &mut World) {

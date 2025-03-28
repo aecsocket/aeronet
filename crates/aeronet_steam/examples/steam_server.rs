@@ -71,8 +71,8 @@ fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&Chil
     };
 
     info!(
-        "{client} connecting to {server} with identity {:?}",
-        request.identity
+        "{client} connecting to {server} with Steam ID {:?}",
+        request.steam_id
     );
     request.respond(SessionResponse::Accepted);
 }

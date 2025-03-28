@@ -24,7 +24,6 @@ use {
         networking_sockets::ListenSocket,
         networking_types::{
             ConnectedEvent, ConnectionRequest, ListenSocketEvent, NetConnectionEnd,
-            NetworkingIdentity,
         },
     },
     sync_wrapper::SyncWrapper,
@@ -92,6 +91,7 @@ pub struct SteamNetServerClient<M: SteamManager> {
 }
 
 impl<M: SteamManager> SteamNetServerClient<M> {
+    /// Gets the Steam ID of the connecting client.
     #[must_use]
     pub const fn steam_id(&self) -> SteamId {
         self.steam_id
@@ -251,12 +251,7 @@ impl SessionResponse {
 /// };
 ///
 /// fn on_session_request(mut request: Trigger<SessionRequest>, steam: Res<SteamworksClient>) {
-///     let Some(steam_id) = request.identity.steam_id() else {
-///         request.respond(SessionResponse::rejected("no steam ID"));
-///         return;
-///     };
-///
-///     let friend = steam.friends().get_friend(steam_id);
+///     let friend = steam.friends().get_friend(request.steam_id);
 ///     if !friend.has_friend(FriendFlags::IMMEDIATE) {
 ///         request.respond(SessionResponse::rejected("not friend of the host"));
 ///         return;
@@ -267,8 +262,8 @@ impl SessionResponse {
 /// ```
 #[derive(Clone, Event)]
 pub struct SessionRequest {
-    /// Identity of the client requesting to connect.
-    pub identity: NetworkingIdentity,
+    /// Steam ID of the client requesting to connect.
+    pub steam_id: SteamId,
     /// How should the server respond to this request?
     pub response: Option<SessionResponse>,
 }
@@ -388,7 +383,7 @@ fn on_connecting<M: SteamManager>(
 
     commands.queue(move |world: &mut World| {
         let mut event = SessionRequest {
-            identity: request.remote(),
+            steam_id,
             response: None,
         };
         world.trigger_targets_ref(&mut event, client);
