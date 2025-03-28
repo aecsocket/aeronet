@@ -6,18 +6,21 @@
   "runArgs": [
     "--device=/dev/dri",
     "--security-opt=seccomp=unconfined",
-    "--net=host"
+    "--net=host",
+    "--ipc=host"
   ],
   "containerEnv": {
     "XDG_RUNTIME_DIR": "/tmp/user/1000",
     "WAYLAND_DISPLAY": "${localEnv:XDG_RUNTIME_DIR}/wayland-0",
-    "DBUS_SESSION_BUS_ADDRESS": "unix:path=${localEnv:XDG_RUNTIME_DIR}/bus"
+    "DBUS_SESSION_BUS_ADDRESS": "unix:path=${localEnv:XDG_RUNTIME_DIR}/bus",
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "XAUTHORITY": "/tmp/.Xauthority"
   },
   "mounts": [
     {
       "type": "volume",
       "source": "aeronet-profile",
-      "target": "${localEnv:HOME}"
+      "target": "/home/dev"
     },
     {
       "type": "bind",
@@ -28,6 +31,21 @@
       "type": "bind",
       "source": "${env:XDG_RUNTIME_DIR}/bus",
       "target": "${localEnv:XDG_RUNTIME_DIR}/bus"
+    },
+    {
+      "type": "bind",
+      "source": "/run/dbus/system_bus_socket",
+      "target": "/run/dbus/system_bus_socket"
+    },
+    {
+      "type": "bind",
+      "source": "/tmp/.X11-unix",
+      "target": "/tmp/.X11-unix"
+    },
+    {
+      "type": "bind",
+      "source": "${env:XAUTHORITY}",
+      "target": "/tmp/.Xauthority"
     }
   ]
 }

@@ -1,6 +1,10 @@
 use {
     crate::{SteamManager, Steamworks},
-    aeronet_io::{IoSet, Session, connection::Disconnected, packet::RecvPacket},
+    aeronet_io::{
+        AeronetIoPlugin, IoSet, Session,
+        connection::{Disconnected, UNKNOWN_DISCONNECT_REASON},
+        packet::RecvPacket,
+    },
     bevy_app::prelude::*,
     bevy_ecs::{identifier::error::IdentifierError, prelude::*},
     bevy_platform_support::time::Instant,
@@ -10,9 +14,7 @@ use {
     steamworks::{
         ClientManager,
         networking_sockets::{NetConnection, NetPollGroup},
-        networking_types::{
-            NetConnectionEnd, NetConnectionStatusChanged, NetworkingConnectionState, SendFlags,
-        },
+        networking_types::{NetConnectionEnd, NetworkingConnectionState, SendFlags},
     },
     tracing::{trace, trace_span, warn},
 };
@@ -31,26 +33,25 @@ impl<M: SteamManager> Default for SteamNetSessionPlugin<M> {
 
 impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
     fn build(&self, app: &mut App) {
-        let steam = app.world().resource::<Steamworks<M>>();
+        if !app.is_plugin_added::<AeronetIoPlugin>() {
+            app.add_plugins(AeronetIoPlugin);
+        }
 
-        let (send_net_event, recv_net_event) = flume::unbounded();
-        steam.register_callback(move |event: NetConnectionStatusChanged| {
-            on_status_changed(&send_net_event, event);
-        });
+        let steam = app.world().resource::<Steamworks<M>>();
+        // https://github.com/cBournhonesque/lightyear/issues/243
+        steam
+            .networking_sockets()
+            .init_authentication()
+            .expect("failed to initialize steamworks authentication");
 
         let poll_group = steam.networking_sockets().create_poll_group();
         app.insert_resource(PollGroup(poll_group))
-            .insert_resource(RecvNetEvent(recv_net_event))
             .add_systems(
                 PreUpdate,
-                (
-                    poll_messages::<M>,
-                    poll_net_events::<M>,
-                    poll_disconnect::<M>,
-                )
-                    .in_set(IoSet::Poll),
+                (poll_io::<M>, poll_messages::<M>).in_set(IoSet::Poll),
             )
-            .add_systems(PostUpdate, flush::<M>.in_set(IoSet::Flush));
+            .add_systems(PostUpdate, flush::<M>.in_set(IoSet::Flush))
+            .add_observer(add_connection_to_poll_group::<M>);
     }
 }
 
@@ -70,56 +71,67 @@ pub enum SessionError {
     Ended(#[error(ignore)] NetConnectionEnd),
 }
 
-#[derive(Debug)]
-enum NetEvent {
-    Connected,
-    Disconnected { reason: Disconnected },
-}
-
 #[derive(Deref, DerefMut, Resource)]
 struct PollGroup<M>(NetPollGroup<M>);
 
-#[derive(Debug, Deref, DerefMut, Resource)]
-struct RecvNetEvent(flume::Receiver<(Entity, NetEvent)>);
-
-fn on_status_changed(
-    send_net_event: &flume::Sender<(Entity, NetEvent)>,
-    event: NetConnectionStatusChanged,
+fn add_connection_to_poll_group<M: SteamManager>(
+    trigger: Trigger<OnAdd, SteamNetIo<M>>,
+    io: Query<&SteamNetIo<M>>,
+    poll_group: Res<PollGroup<M>>,
 ) {
-    let user_data = event.connection_info.user_data();
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "we treat this as an opaque identifier"
-    )]
-    let user_data_u64 = user_data as u64;
-    let entity = match Entity::try_from_bits(user_data_u64) {
-        Ok(entity) => entity,
-        Err(err) => {
-            #[rustfmt::skip]
-            warn!(
-                "Received event for connection which does not map to a valid entity: {err:?}\n\
-                - connection user data (i64): {user_data}\n\
-                - connection user data (u64): {user_data_u64}"
-            );
-            return;
-        }
-    };
+    let entity = trigger.target();
+    let io = io
+        .get(entity)
+        .expect("we are adding this component to this entity");
+    io.conn.set_poll_group(&poll_group);
+}
 
-    let event = match event.connection_info.state() {
-        Ok(NetworkingConnectionState::Connecting | NetworkingConnectionState::FindingRoute) => None,
-        Ok(NetworkingConnectionState::Connected) => Some(NetEvent::Connected),
-        Ok(NetworkingConnectionState::ClosedByPeer) => Some(NetEvent::Disconnected {
-            reason: Disconnected::ByPeer("(unknown reason)".into()),
-        }),
-        Ok(NetworkingConnectionState::None) | Err(_) => Some(NetEvent::Disconnected {
-            reason: Disconnected::by_error(SessionError::InvalidConnection),
-        }),
-        Ok(NetworkingConnectionState::ProblemDetectedLocally) => Some(NetEvent::Disconnected {
-            reason: Disconnected::by_error(SessionError::ProblemDetectedLocally),
-        }),
-    };
-    if let Some(net_event) = event {
-        _ = send_net_event.send((entity, net_event));
+fn poll_io<M: SteamManager>(
+    mut commands: Commands,
+    sessions: Query<(Entity, &SteamNetIo<M>)>,
+    is_connected: Query<(), With<Session>>,
+    steam: Res<Steamworks<M>>,
+) {
+    let sockets = steam.networking_sockets();
+    for (entity, io) in &sessions {
+        let connected = is_connected.get(entity).is_ok();
+
+        let Ok(info) = sockets.get_connection_info(&io.conn) else {
+            commands.trigger_targets(
+                Disconnected::by_error(SessionError::InvalidConnection),
+                entity,
+            );
+            continue;
+        };
+
+        if let Some(end_reason) = info.end_reason() {
+            let disconnected = match end_reason {
+                NetConnectionEnd::AppGeneric => Disconnected::by_peer(UNKNOWN_DISCONNECT_REASON),
+                reason => Disconnected::by_error(SessionError::Ended(reason)),
+            };
+            commands.trigger_targets(disconnected, entity);
+            continue;
+        }
+
+        let mut entity = commands.entity(entity);
+        match info.state() {
+            Ok(NetworkingConnectionState::FindingRoute | NetworkingConnectionState::Connecting) => {
+            }
+            Ok(NetworkingConnectionState::Connected) => {
+                if !connected {
+                    entity.insert(Session::new(Instant::now(), io.mtu));
+                }
+            }
+            Ok(NetworkingConnectionState::ClosedByPeer) => {
+                entity.trigger(Disconnected::by_peer(UNKNOWN_DISCONNECT_REASON));
+            }
+            Ok(NetworkingConnectionState::None) | Err(_) => {
+                entity.trigger(Disconnected::by_error(SessionError::InvalidConnection));
+            }
+            Ok(NetworkingConnectionState::ProblemDetectedLocally) => {
+                entity.trigger(Disconnected::by_error(SessionError::ProblemDetectedLocally));
+            }
+        }
     }
 }
 
@@ -166,7 +178,33 @@ fn poll_messages<M: SteamManager>(
                 }
             };
 
+            // !!! TODO: THIS IS REALLY REALLY BAD !!!
+            //
+            // From `steamworks-rs`'s `packet.data()`:
+            //
+            //     pub fn data(&self) -> &[u8] {
+            //         unsafe {
+            //             std::slice::from_raw_parts(
+            //                 (*self.message).m_pData as _,
+            //                 (*self.message).m_cbSize as usize,
+            //             )
+            //         }
+            //     }
+            //
+            // This code is UNSOUND, because the message is of length 0,
+            // this panics due to debug assertions in `std`
+            // (and in release, will fail silently, causing memory unsafety!)
+            //
+            // `steamworks-rs` maintainer is unresponsive, and there hasn't been an update
+            // in a long time (as of 28 Mar 2025). We should make a `steam-sockets` crate
+            // which provides bindings for only the Steam socket functionality, and irons
+            // out all of the issues of `steamworks-rs`.
+            //
+            // This would also let us fix a bunch of other miscellaneous issues.
             let payload = Bytes::from(packet.data().to_vec());
+
+            session.stats.packets_recv += 1;
+            session.stats.bytes_recv += payload.len();
             session.recv.push(RecvPacket {
                 recv_at: Instant::now(),
                 payload,
@@ -174,63 +212,8 @@ fn poll_messages<M: SteamManager>(
         }
     }
 
-    trace!(%num_packets, %num_bytes, "Received packets");
-}
-
-fn poll_net_events<M: SteamManager>(
-    recv_net_event: Res<RecvNetEvent>,
-    mut commands: Commands,
-    io: Query<&SteamNetIo<M>>,
-    sessions: Query<(), With<Session>>,
-) {
-    for (entity, event) in recv_net_event.try_iter() {
-        let io = match io.get(entity) {
-            Ok(data) => data,
-            Err(err) => {
-                warn!(
-                    "Received connection event for entity {entity} which is not a valid session: \
-                     {err:?}"
-                );
-                continue;
-            }
-        };
-
-        match event {
-            NetEvent::Connected => {
-                if sessions.get(entity).is_ok() {
-                    warn!(
-                        "Received connected event for entity {entity} which is already connected"
-                    );
-                    continue;
-                }
-
-                commands
-                    .entity(entity)
-                    .insert(Session::new(Instant::now(), io.mtu));
-            }
-            NetEvent::Disconnected { reason } => {
-                commands.trigger_targets(reason, entity);
-            }
-        }
-    }
-}
-
-fn poll_disconnect<M: SteamManager>(
-    mut commands: Commands,
-    sessions: Query<(Entity, &SteamNetIo<M>)>,
-    steam: Res<Steamworks<M>>,
-) {
-    for (entity, session) in &sessions {
-        let end_reason = steam
-            .networking_sockets()
-            .get_connection_info(&session.conn)
-            .ok()
-            .map_or(Some(SessionError::InvalidConnection), |info| {
-                info.end_reason().map(SessionError::Ended)
-            });
-        if let Some(end_reason) = end_reason {
-            commands.trigger_targets(Disconnected::by_error(end_reason), entity);
-        }
+    if num_packets.0 > 0 {
+        trace!(%num_packets, %num_bytes, "Received packets");
     }
 }
 
@@ -244,6 +227,15 @@ fn flush<M: SteamManager>(mut sessions: Query<(Entity, &mut Session, &SteamNetIo
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
         for packet in session.send.drain(..) {
+            if packet.is_empty() {
+                // See the big scary safety comment in `poll_messages`
+                // for why we don't allow sending empty messages.
+                //
+                // Note: a malicious client can still screw up our code
+                // by manually sending an empty message!
+                continue;
+            }
+
             num_packets += 1;
             session.stats.packets_sent += 1;
 
@@ -255,7 +247,9 @@ fn flush<M: SteamManager>(mut sessions: Query<(Entity, &mut Session, &SteamNetIo
                 .send_message(&packet, SendFlags::UNRELIABLE | SendFlags::NO_NAGLE);
         }
 
-        trace!(%num_packets, %num_bytes, "Flushed packets");
+        if num_packets.0 > 0 {
+            trace!(%num_packets, %num_bytes, "Flushed packets");
+        }
     }
 }
 

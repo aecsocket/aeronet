@@ -5,8 +5,8 @@ use {
         session::{SteamNetIo, SteamNetSessionPlugin, entity_to_user_data},
     },
     aeronet_io::{
-        IoSet, SessionEndpoint,
-        connection::Disconnected,
+        IoSet, Session, SessionEndpoint,
+        connection::{Disconnected, LocalAddr, UNKNOWN_DISCONNECT_REASON},
         server::{Closed, Server, ServerEndpoint},
     },
     anyhow::{Context, Result, bail},
@@ -113,11 +113,11 @@ fn open<M: SteamManager>(
                 sockets.create_listen_socket_p2p(virtual_port, config.to_options())
             }
         };
-        _ = send_next.send(result.map_err(|_| ServerError::Steam));
+        _ = send_next.send(result.map_err(|_| ServerError::CreateListenSocket));
     })
     .detach();
 
-    entity.insert((
+    let entity = entity.insert((
         SteamNetServer::<M> {
             _phantom: PhantomData,
             mtu,
@@ -127,6 +127,9 @@ fn open<M: SteamManager>(
             recv_next: SyncWrapper::new(recv_next),
         },
     ));
+    if let ListenTarget::Addr(local_addr) = target {
+        entity.insert(LocalAddr(local_addr));
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,7 +149,7 @@ impl SessionResponse {
 
 #[derive(Clone, Event)]
 pub struct SessionRequest {
-    pub remote: NetworkingIdentity,
+    pub identity: NetworkingIdentity,
     pub response: Option<SessionResponse>,
 }
 
@@ -161,8 +164,8 @@ impl SessionRequest {
 pub enum ServerError {
     #[display("backend closed")]
     BackendClosed,
-    #[display("steam error")]
-    Steam,
+    #[display("failed to create listen socket")]
+    CreateListenSocket,
 }
 
 type OpenResult<M> = Result<ListenSocket<M>, ServerError>;
@@ -214,16 +217,24 @@ fn poll_opened<M: SteamManager>(
             match event {
                 ListenSocketEvent::Connecting(request) => {
                     let remote = request.remote();
-                    if let Err(err) =
-                        on_connecting(entity, &mut commands, &mut server_state, request)
-                    {
-                        debug!("Failed to accept client connection from {remote:?}: {err:?}");
+                    match on_connecting(entity, &mut commands, &mut server_state, request) {
+                        Ok(()) => {
+                            debug!("Accepted client connection from {remote:?}");
+                        }
+                        Err(err) => {
+                            debug!("Failed to accept client connection from {remote:?}: {err:?}");
+                        }
                     }
                 }
                 ListenSocketEvent::Connected(event) => {
                     let remote = event.remote();
-                    if let Err(err) = on_connected(&mut commands, &server_state, event) {
-                        debug!("Failed to mark {remote:?} as connected: {err:?}");
+                    match on_connected(&mut commands, &server_state, event) {
+                        Ok(()) => {
+                            debug!("Marked {remote:?} as connected");
+                        }
+                        Err(err) => {
+                            debug!("Failed to mark {remote:?} as connected: {err:?}");
+                        }
                     }
                 }
                 ListenSocketEvent::Disconnected(event) => {
@@ -267,20 +278,18 @@ fn on_connecting<M: SteamManager>(
 
     commands.queue(move |world: &mut World| {
         let mut event = SessionRequest {
-            remote: request.remote(),
+            identity: request.remote(),
             response: None,
         };
         world.trigger_targets_ref(&mut event, client);
 
         let response = event.response.unwrap_or_else(|| {
             warn!(
-                "Client session {client} created on server {entity} but no response was given,
+                "Client session {client} created on server {entity} but no response was given, \
                 will not allow this client to connect; you must `respond` to `{}`",
                 type_name::<SessionRequest>(),
             );
-            SessionResponse::Rejected {
-                reason: "(no response)".into(),
-            }
+            SessionResponse::rejected(UNKNOWN_DISCONNECT_REASON)
         });
 
         match response {
@@ -315,10 +324,19 @@ fn on_connected<M: SteamManager>(
     conn.set_connection_user_data(user_data)
         .context("failed to set connection user data")?;
 
-    commands.entity(client).insert(SteamNetIo {
-        conn,
-        mtu: server.mtu,
-    });
+    conn.send_message(
+        &[0x65],
+        steamworks::networking_types::SendFlags::RELIABLE_NO_NAGLE,
+    )
+    .unwrap();
+
+    commands.entity(client).insert((
+        SteamNetIo {
+            conn,
+            mtu: server.mtu,
+        },
+        Session::new(Instant::now(), server.mtu),
+    ));
     Ok(())
 }
 

@@ -149,6 +149,10 @@ impl<E: Into<anyhow::Error>> From<E> for Disconnected {
 /// [`Disconnect`].
 pub const DROP_DISCONNECT_REASON: &str = "(dropped)";
 
+/// Disconnect reason to use when an IO layer component is disconnected for an
+/// unknown reason.
+pub const UNKNOWN_DISCONNECT_REASON: &str = "(unknown)";
+
 /// Local socket address that this entity uses for connections.
 ///
 /// Sessions or servers which use a network will use an OS socket for

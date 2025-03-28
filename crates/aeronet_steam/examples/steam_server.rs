@@ -10,14 +10,16 @@ use {
     aeronet_steam::{
         Steamworks,
         config::SteamSessionConfig,
-        server::{ListenTarget, SteamNetServer, SteamNetServerPlugin},
+        server::{SessionRequest, SessionResponse, SteamNetServer, SteamNetServerPlugin},
     },
     bevy::{log::LogPlugin, prelude::*},
+    core::net::{Ipv4Addr, SocketAddr},
 };
 
 fn main() -> AppExit {
     let (steam, steam_single) =
         steamworks::Client::init_app(480).expect("failed to initialize steam");
+
     App::new()
         .insert_resource(Steamworks(steam))
         .insert_non_send_resource(steam_single)
@@ -29,6 +31,7 @@ fn main() -> AppExit {
         .add_systems(Update, reply)
         .add_observer(on_opened)
         .add_observer(on_closed)
+        .add_observer(on_session_request)
         .add_observer(on_connecting)
         .add_observer(on_connected)
         .add_observer(on_disconnected)
@@ -38,20 +41,34 @@ fn main() -> AppExit {
 fn open_server(mut commands: Commands) {
     commands.spawn_empty().queue(SteamNetServer::open(
         SteamSessionConfig::default(),
-        ListenTarget::Peer { virtual_port: 0 },
+        SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 25567),
     ));
+}
+
+fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
+    let server = trigger.target();
+    if let Ok(local_addr) = servers.get(server) {
+        info!("{server} opened on {:?}", **local_addr);
+    } else {
+        info!("{server} opened for peer connections");
+    }
 }
 
 fn on_closed(trigger: Trigger<Closed>) {
     panic!("server closed: {:?}", trigger.event());
 }
 
-fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
-    let server = trigger.target();
-    let local_addr = servers
-        .get(server)
-        .expect("opened server should have a binding socket `LocalAddr`");
-    info!("{server} opened on {}", **local_addr);
+fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&ChildOf>) {
+    let client = request.target();
+    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+        return;
+    };
+
+    info!(
+        "{client} connecting to {server} with identity {:?}",
+        request.identity
+    );
+    request.respond(SessionResponse::Accepted);
 }
 
 fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>, clients: Query<&ChildOf>) {

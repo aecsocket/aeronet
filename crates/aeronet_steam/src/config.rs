@@ -56,9 +56,16 @@ impl SteamSessionConfig {
     pub fn to_options(&self) -> Vec<NetworkingConfigEntry> {
         use {NetworkingConfigEntry as Entry, NetworkingConfigValue as Key};
 
+        // TODO
+        return vec![];
+
+        // all float config values are commented out
+        // because of a bug in steamworks 0.11.0,
+        // and there's no newer version (as of 28 Mar 2025):
+        // <https://github.com/Noxime/steamworks-rs/pull/168>
         vec![
-            Entry::new_float(Key::FakePacketLossSend, self.fake_packet_loss_send * 100.0),
-            Entry::new_float(Key::FakePacketLossRecv, self.fake_packet_loss_recv * 100.0),
+            // Entry::new_float(Key::FakePacketLossSend, self.fake_packet_loss_send * 100.0),
+            // Entry::new_float(Key::FakePacketLossRecv, self.fake_packet_loss_recv * 100.0),
             Entry::new_int32(
                 Key::FakePacketLagSend,
                 duration_to_ms(self.fake_packet_lag_send),
@@ -67,20 +74,20 @@ impl SteamSessionConfig {
                 Key::FakePacketLagRecv,
                 duration_to_ms(self.fake_packet_lag_recv),
             ),
-            Entry::new_float(
-                Key::FakePacketReorderSend,
-                self.fake_packet_reorder_send * 100.0,
-            ),
-            Entry::new_float(
-                Key::FakePacketReorderRecv,
-                self.fake_packet_reorder_recv * 100.0,
-            ),
+            // Entry::new_float(
+            //     Key::FakePacketReorderSend,
+            //     self.fake_packet_reorder_send * 100.0,
+            // ),
+            // Entry::new_float(
+            //     Key::FakePacketReorderRecv,
+            //     self.fake_packet_reorder_recv * 100.0,
+            // ),
             Entry::new_int32(
                 Key::FakePacketReorderTime,
                 duration_to_ms(self.fake_packet_reorder_time),
             ),
-            Entry::new_float(Key::FakePacketDupSend, self.fake_packet_dup_send * 100.0),
-            Entry::new_float(Key::FakePacketDupRecv, self.fake_packet_dup_recv * 100.0),
+            // Entry::new_float(Key::FakePacketDupSend, self.fake_packet_dup_send * 100.0),
+            // Entry::new_float(Key::FakePacketDupRecv, self.fake_packet_dup_recv * 100.0),
             Entry::new_int32(
                 Key::FakePacketDupTimeMax,
                 duration_to_ms(self.fake_packet_dup_time_max),
