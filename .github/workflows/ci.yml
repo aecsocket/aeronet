@@ -98,7 +98,7 @@ jobs:
         with:
           targets: thumbv6m-none-eabi
       - uses: ./.github/actions/install-bevy-deps
-      - run: cargo check --target thumbv6m-none-eabi --package '${{ matrix.package }}' --no-default-features --features extra-platforms,bevy_ecs/critical-section
+      - run: cargo check --target thumbv6m-none-eabi --package '${{ matrix.package }}' --no-default-features --features bevy_ecs/critical-section
 
   test:
     runs-on: ubuntu-latest

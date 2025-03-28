@@ -9,12 +9,12 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bytes::Bytes,
     core::num::Saturating,
     derive_more::{Display, Error},
     sync_wrapper::SyncWrapper,
     tracing::{trace, trace_span},
-    web_time::Instant,
 };
 
 /// Allows using [`ChannelIo`].
@@ -162,9 +162,9 @@ fn poll(mut commands: Commands, mut sessions: Query<(Entity, &mut Session, &mut 
         let _span = span.enter();
 
         let disconnected = match io.recv_dc.get_mut().try_recv() {
-            Ok(reason) => Some(Disconnected::ByPeer(reason)),
+            Ok(reason) => Some(Disconnected::by_peer(reason)),
             Err(oneshot::TryRecvError::Disconnected) => {
-                Some(Disconnected::ByError(ChannelDisconnected.into()))
+                Some(Disconnected::by_error(ChannelDisconnected))
             }
             Err(oneshot::TryRecvError::Empty) => None,
         };

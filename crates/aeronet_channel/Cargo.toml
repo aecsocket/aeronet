@@ -17,16 +17,16 @@ workspace = true
 all-features = true
 
 [dependencies]
-aeronet_io   = { workspace = true }
-bevy_app     = { workspace = true }
-bevy_ecs     = { workspace = true }
-bytes        = { workspace = true }
-derive_more  = { workspace = true, features = ["display", "error"] }
-flume        = { workspace = true }
-oneshot      = { workspace = true }
-sync_wrapper = { workspace = true }
-tracing      = { workspace = true }
-web-time     = { workspace = true }
+aeronet_io            = { workspace = true }
+bevy_app              = { workspace = true }
+bevy_ecs              = { workspace = true }
+bevy_platform_support = { workspace = true }
+bytes                 = { workspace = true }
+derive_more           = { workspace = true, features = ["display", "error"] }
+flume                 = { workspace = true }
+oneshot               = { workspace = true }
+sync_wrapper          = { workspace = true }
+tracing               = { workspace = true }
 
 [dev-dependencies]
 bevy      = { workspace = true }

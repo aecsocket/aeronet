@@ -191,7 +191,7 @@ fn on_connected(trigger: Trigger<OnAdd, Session>) {
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
     let target = trigger.target();
-    commands.trigger_targets(Disconnected::ByUser(trigger.reason.clone()), target);
+    commands.trigger_targets(Disconnected::by_user(&trigger.reason), target);
 }
 
 fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {

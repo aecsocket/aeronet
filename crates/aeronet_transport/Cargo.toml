@@ -73,7 +73,6 @@ document-features = [
 
 [dependencies]
 aeronet_io            = { workspace = true }
-anyhow                = { workspace = true }
 arbitrary             = { workspace = true, optional = true }
 bevy_app              = { workspace = true }
 bevy_ecs              = { workspace = true }

@@ -16,13 +16,13 @@ use {
         server::{Closed, Server, ServerEndpoint},
     },
     bevy_app::prelude::*,
-    bevy_ecs::{prelude::*, system::EntityCommand},
+    bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     core::{mem, net::SocketAddr},
     derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
     std::io,
     tracing::{Instrument, debug, debug_span},
-    web_time::Instant,
 };
 
 /// Allows using [`WebSocketServer`].

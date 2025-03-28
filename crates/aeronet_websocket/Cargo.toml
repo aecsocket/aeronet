@@ -36,17 +36,15 @@ self-signed = ["dep:rcgen"]
 document-features = ["dep:document-features"]
 
 [dependencies]
-aeronet_io        = { workspace = true }
-anyhow            = { workspace = true }
-bevy_app          = { workspace = true }
-bevy_ecs          = { workspace = true }
-bytes             = { workspace = true }
-cfg-if            = { workspace = true }
-document-features = { workspace = true, optional = true }
-futures           = { workspace = true }
-replace_with      = { workspace = true }
-tracing           = { workspace = true }
-web-time          = { workspace = true }
+aeronet_io            = { workspace = true }
+bevy_app              = { workspace = true }
+bevy_ecs              = { workspace = true }
+bevy_platform_support = { workspace = true }
+bytes                 = { workspace = true }
+cfg-if                = { workspace = true }
+document-features     = { workspace = true, optional = true }
+futures               = { workspace = true }
+tracing               = { workspace = true }
 
 derive_more = { workspace = true, features = [
   "display",

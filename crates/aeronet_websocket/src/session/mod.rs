@@ -11,13 +11,13 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bytes::Bytes,
     core::num::Saturating,
     derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
     std::io,
     tracing::{trace, trace_span},
-    web_time::Instant,
 };
 
 cfg_if::cfg_if! {

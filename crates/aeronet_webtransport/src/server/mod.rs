@@ -17,13 +17,13 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
+    bevy_platform_support::time::Instant,
     bevy_reflect::prelude::*,
     bytes::Bytes,
     core::{any::type_name, mem, net::SocketAddr, time::Duration},
     derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
     tracing::{Instrument, debug, debug_span, warn},
-    web_time::Instant,
     wtransport::error::ConnectionError,
 };
 

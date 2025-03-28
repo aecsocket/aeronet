@@ -11,6 +11,7 @@ use {
     alloc::sync::Arc,
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bytes::Bytes,
     core::{num::Saturating, time::Duration},
     derive_more::{Display, Error},
@@ -21,7 +22,6 @@ use {
     },
     std::io,
     tracing::{trace, trace_span},
-    web_time::Instant,
     xwt_core::prelude::*,
 };
 
@@ -283,7 +283,7 @@ impl SessionBackend {
             reason = recv_user_dc => {
                 if let Ok(reason) = reason {
                     disconnect(conn, &reason).await;
-                    Disconnected::ByUser(reason)
+                    Disconnected::by_user(reason)
                 } else {
                     Disconnected::by_error(SessionError::FrontendClosed)
                 }
@@ -416,13 +416,6 @@ async fn send_loop(
     }
 }
 
-#[cfg_attr(
-    target_family = "wasm",
-    expect(
-        clippy::missing_const_for_fn,
-        reason = "the current implementation is temporary"
-    )
-)]
 fn get_disconnect_reason(err: SessionError) -> Disconnected {
     #[cfg(target_family = "wasm")]
     {
@@ -440,8 +433,7 @@ fn get_disconnect_reason(err: SessionError) -> Disconnected {
 
         match err {
             SessionError::Connection(ConnectionError::ApplicationClosed(err)) => {
-                let reason = String::from_utf8_lossy(err.reason()).into_owned();
-                Disconnected::ByPeer(reason)
+                Disconnected::by_peer(String::from_utf8_lossy(err.reason()))
             }
             err => Disconnected::by_error(err),
         }

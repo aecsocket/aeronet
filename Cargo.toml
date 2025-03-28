@@ -69,7 +69,6 @@ log                   = { version = "0.4.26" }
 octs                  = { version = "1.0.0", default-features = false }
 oneshot               = { version = "0.1.11" }
 rcgen                 = { version = "0.13.1" }
-replace_with          = { version = "0.1.7" }
 ringbuf               = { version = "0.4.8", default-features = false }
 rustls                = { version = "0.23.23" }
 rustls-native-certs   = { version = "0.8.0" }
@@ -87,7 +86,6 @@ typesize              = { version = "0.1.13", default-features = false }
 wasm-bindgen          = { version = "0.2.99" }
 wasm-bindgen-futures  = { version = "0.4.43" }
 web-sys               = { version = "0.3.70" }
-web-time              = { version = "1.1.0" }
 wtransport            = { version = "0.6.1" }
 x509-cert             = { version = "0.2.5" }
 xwt-core              = { version = "0.6.0" }

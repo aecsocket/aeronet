@@ -32,7 +32,6 @@ bevy_ecs              = { workspace = true }
 bevy_platform_support = { workspace = true }
 blocking              = { workspace = true }
 bytes                 = { workspace = true }
-flume                 = { workspace = true }
 oneshot               = { workspace = true }
 sync_wrapper          = { workspace = true }
 tracing               = { workspace = true }

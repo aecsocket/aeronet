@@ -111,13 +111,13 @@ dependencies = [
  "bevy_app",
  "bevy_ecs",
  "bevy_egui",
+ "bevy_platform_support",
  "bytes",
  "derive_more 2.0.1",
  "flume",
  "oneshot",
  "sync_wrapper",
  "tracing",
- "web-time",
 ]
 
 [[package]]
@@ -163,7 +163,6 @@ dependencies = [
  "blocking",
  "bytes",
  "derive_more 2.0.1",
- "flume",
  "oneshot",
  "steamworks",
  "sync_wrapper",
@@ -175,7 +174,6 @@ name = "aeronet_transport"
 version = "0.12.0"
 dependencies = [
  "aeronet_io",
- "anyhow",
  "arbitrary",
  "bevy_app",
  "bevy_ecs",
@@ -204,11 +202,11 @@ name = "aeronet_websocket"
 version = "0.12.0"
 dependencies = [
  "aeronet_io",
- "anyhow",
  "bevy",
  "bevy_app",
  "bevy_ecs",
  "bevy_egui",
+ "bevy_platform_support",
  "bytes",
  "cfg-if",
  "derive_more 2.0.1",
@@ -216,7 +214,6 @@ dependencies = [
  "futures",
  "js-sys",
  "rcgen",
- "replace_with",
  "rustls",
  "rustls-native-certs",
  "tokio",
@@ -226,7 +223,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "web-time",
 ]
 
 [[package]]
@@ -240,6 +236,7 @@ dependencies = [
  "bevy_app",
  "bevy_ecs",
  "bevy_egui",
+ "bevy_platform_support",
  "bevy_reflect",
  "bytes",
  "cfg-if",
@@ -248,13 +245,11 @@ dependencies = [
  "futures",
  "gloo-timers",
  "js-sys",
- "replace_with",
  "spki",
  "tokio",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "web-time",
  "wtransport",
  "x509-cert",
  "xwt-core",
@@ -5295,12 +5290,6 @@ name = "renderdoc-sys"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
-
-[[package]]
-name = "replace_with"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3a8614ee435691de62bcffcf4a66d91b3594bf1428a5722e79103249a095690"
 
 [[package]]
 name = "rgb"
