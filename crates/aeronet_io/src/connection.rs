@@ -50,7 +50,7 @@ impl Plugin for ConnectionPlugin {
 pub struct Disconnect {
     /// User-provided disconnection reason.
     ///
-    /// Will be used as the reason in [`Disconnected::User`].
+    /// Will be used as the reason in [`Disconnected::ByUser`].
     pub reason: String,
 }
 
@@ -80,13 +80,13 @@ pub enum Disconnected {
     /// Session was disconnected by the user on our side, with a provided
     /// reason.
     ///
-    /// On the peer, this will be interpreted as a [`Disconnected::Peer`]
+    /// On the peer, this will be interpreted as a [`Disconnected::ByPeer`]
     /// with the same reason.
     ByUser(String),
     /// Session was disconnected by the peer on the other side, with a provided
     /// reason.
     ///
-    /// On the peer, this will be interpreted as a [`Disconnected::User`]
+    /// On the peer, this will be interpreted as a [`Disconnected::ByUser`]
     /// with the same reason.
     ByPeer(String),
     /// Session encountered a fatal connection error, and communication between
@@ -124,8 +124,8 @@ impl Disconnected {
         Self::ByError(reason.into())
     }
 
-    /// If this value is a [`Disconnected::Error`], creates a new
-    /// [`Disconnected::Error`] using the mapping function.
+    /// If this value is a [`Disconnected::ByError`], creates a new
+    /// [`Disconnected::ByError`] using the mapping function.
     #[must_use]
     pub fn map_err(self, f: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
         match self {

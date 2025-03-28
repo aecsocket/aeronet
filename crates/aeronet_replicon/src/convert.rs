@@ -10,11 +10,11 @@ use {
 
 // ChannelKind -> LaneKind
 
-/// Converts a [`ChannelKind`] into a [`LaneKind`].
+/// Converts a [`Channel`] into a [`LaneKind`].
 ///
 /// This is a lossless conversion, since [`LaneKind`] has more variants than
-/// [`ChannelKind`]. However, converting a [`LaneKind`] into a [`ChannelKind`]
-/// may be lossy, so is not defined.
+/// [`Channel`]. However, converting a [`LaneKind`] into a [`Channel`] may be
+/// lossy, so is not defined.
 #[must_use]
 pub const fn to_lane_kind(channel: Channel) -> LaneKind {
     match channel {

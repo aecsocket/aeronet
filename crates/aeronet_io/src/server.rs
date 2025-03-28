@@ -114,7 +114,7 @@ impl Server {
 pub struct Close {
     /// User-provided closing reason.
     ///
-    /// Will be used as the reason in [`Closed::User`], and as the disconnection
+    /// Will be used as the reason in [`Closed::ByUser`], and as the disconnection
     /// reason when disconnecting sessions connected to this server.
     pub reason: String,
 }
@@ -172,7 +172,7 @@ impl Closed {
         Self::ByError(reason.into())
     }
 
-    /// If this value is a [`Closed::Error`], creates a new [`Closed::Error`]
+    /// If this value is a [`Closed::ByError`], creates a new [`Closed::ByError`]
     /// using the mapping function.
     #[must_use]
     pub fn map_err(self, f: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
