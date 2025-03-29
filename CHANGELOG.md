@@ -1,11 +1,16 @@
-# 0.13.0
+# 0.14.0
 
+- Bevy 0.16 support
+- Support for `no_std` + no native atomic CAS targets
+  - for `aeronet_io`, `aeronet_transport`, `aeronet_replicon`
+- `aeronet_steam` IO layer
+- Dev container files for easily getting a reproducible dev env running
 - Merged `DisconnectReason` and `Disconnected` into one
   - `Disconnected::reason` has been flattened into `enum Disconnected` itself
 - Merged `CloseReason` and `Closed` into one
   - `Closed::reason` has been flattened into `enum CloseReason` itself
 
-## `aeronet_replicon`
+# 0.13.0
 
 - Updated `bevy_replicon` to `0.31.0`
 

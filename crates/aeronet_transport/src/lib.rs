@@ -22,17 +22,15 @@ pub mod seq_buf;
 pub mod visualizer;
 
 pub use aeronet_io as io;
-use aeronet_io::connection::Disconnected;
-use derive_more::{Display, Error};
 use {
-    aeronet_io::{IoSet, Session, packet::MtuTooSmall},
+    aeronet_io::{IoSet, Session, connection::Disconnected, packet::MtuTooSmall},
     alloc::{boxed::Box, vec::Vec},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
     bevy_platform_support::time::Instant,
     bevy_reflect::Reflect,
     core::num::Saturating,
-    derive_more::{Add, AddAssign, Sub, SubAssign},
+    derive_more::{Add, AddAssign, Display, Error, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
     log::warn,
     min_size::MinSize,
