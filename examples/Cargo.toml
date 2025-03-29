@@ -20,9 +20,9 @@ aeronet_websocket = { workspace = true, features = ["client", "server"] }
 bevy              = { workspace = true }
 bevy_egui         = { workspace = true }
 bevy_replicon     = { workspace = true }
+cfg-if            = { workspace = true }
 clap              = { workspace = true, features = ["derive"] }
 serde             = { workspace = true, features = ["derive"] }
-cfg-if = { workspace = true }
 
 aeronet_webtransport = { workspace = true, features = [
   "client",
