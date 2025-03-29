@@ -13,7 +13,6 @@ pub use {aeronet_io as io, aeronet_transport as transport};
 ///
 /// - [`io::AeronetIoPlugin`]
 /// - [`transport::AeronetTransportPlugin`]
-#[derive(Debug)]
 pub struct AeronetPlugins;
 
 impl PluginGroup for AeronetPlugins {

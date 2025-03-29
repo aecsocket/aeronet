@@ -1,0 +1,31 @@
+[package]
+name    = "examples"
+publish = false
+
+authors.workspace      = true
+categories.workspace   = true
+edition.workspace      = true
+keywords.workspace     = true
+license.workspace      = true
+repository.workspace   = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aeronet           = { workspace = true, features = ["visualizer"] }
+aeronet_replicon  = { workspace = true, features = ["client", "server"] }
+aeronet_websocket = { workspace = true, features = ["client", "server"] }
+bevy              = { workspace = true }
+bevy_egui         = { workspace = true }
+bevy_replicon     = { workspace = true }
+cfg-if            = { workspace = true }
+clap              = { workspace = true, features = ["derive"] }
+serde             = { workspace = true, features = ["derive"] }
+
+aeronet_webtransport = { workspace = true, features = [
+  "client",
+  "server",
+  "dangerous-configuration",
+] }

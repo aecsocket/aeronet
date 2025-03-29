@@ -4,7 +4,7 @@
 use {
     aeronet_io::{
         Session, SessionEndpoint,
-        connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
+        connection::{Disconnect, Disconnected, LocalAddr, PeerAddr},
         packet::PacketRtt,
     },
     aeronet_webtransport::{
@@ -14,12 +14,13 @@ use {
     bevy::prelude::*,
     bevy_egui::{EguiContexts, EguiPlugin, egui},
     core::mem,
+    derive_more::{Deref, DerefMut},
 };
 
 fn main() -> AppExit {
     App::new()
         .add_plugins((DefaultPlugins, EguiPlugin, WebTransportClientPlugin))
-        .init_resource::<GlobalUi>()
+        .init_resource::<Log>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
         .add_observer(on_connecting)
         .add_observer(on_connected)
@@ -27,13 +28,8 @@ fn main() -> AppExit {
         .run()
 }
 
-#[derive(Debug, Default, Resource)]
-struct GlobalUi {
-    target: String,
-    cert_hash: String,
-    session_id: usize,
-    log: Vec<String>,
-}
+#[derive(Debug, Default, Deref, DerefMut, Resource)]
+struct Log(Vec<String>);
 
 #[derive(Debug, Default, Component)]
 struct SessionUi {
@@ -44,51 +40,50 @@ struct SessionUi {
 fn on_connecting(
     trigger: Trigger<OnAdd, SessionEndpoint>,
     names: Query<&Name>,
-    mut ui_state: ResMut<GlobalUi>,
+    mut log: ResMut<Log>,
 ) {
-    let entity = trigger.entity();
+    let target = trigger.target();
     let name = names
-        .get(entity)
+        .get(target)
         .expect("our session entity should have a name");
-    ui_state.log.push(format!("{name} connecting"));
+    log.push(format!("{name} connecting"));
 }
 
-fn on_connected(
-    trigger: Trigger<OnAdd, Session>,
-    names: Query<&Name>,
-    mut ui_state: ResMut<GlobalUi>,
-) {
-    let entity = trigger.entity();
+fn on_connected(trigger: Trigger<OnAdd, Session>, names: Query<&Name>, mut log: ResMut<Log>) {
+    let target = trigger.target();
     let name = names
-        .get(entity)
+        .get(target)
         .expect("our session entity should have a name");
-    ui_state.log.push(format!("{name} connected"));
+    log.push(format!("{name} connected"));
 }
 
-fn on_disconnected(
-    trigger: Trigger<Disconnected>,
-    names: Query<&Name>,
-    mut ui_state: ResMut<GlobalUi>,
-) {
-    let entity = trigger.entity();
+fn on_disconnected(trigger: Trigger<Disconnected>, names: Query<&Name>, mut log: ResMut<Log>) {
+    let target = trigger.target();
     let name = names
-        .get(entity)
+        .get(target)
         .expect("our session entity should have a name");
-    ui_state.log.push(match &trigger.reason {
-        DisconnectReason::User(reason) => {
+    log.push(match &*trigger {
+        Disconnected::ByUser(reason) => {
             format!("{name} disconnected by user: {reason}")
         }
-        DisconnectReason::Peer(reason) => {
+        Disconnected::ByPeer(reason) => {
             format!("{name} disconnected by peer: {reason}")
         }
-        DisconnectReason::Error(err) => {
+        Disconnected::ByError(err) => {
             format!("{name} disconnected due to error: {err:?}")
         }
     });
 }
 
-fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMut<GlobalUi>) {
-    const DEFAULT_TARGET: &str = "https://[::1]:25565";
+fn global_ui(
+    mut egui: EguiContexts,
+    mut commands: Commands,
+    mut log: ResMut<Log>,
+    mut target: Local<String>,
+    mut cert_hash: Local<String>,
+    mut session_id: Local<usize>,
+) {
+    const DEFAULT_TARGET: &str = "https://127.0.0.1:25571";
 
     egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -96,7 +91,7 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
         let mut connect = false;
         ui.horizontal(|ui| {
             let connect_resp = ui.add(
-                egui::TextEdit::singleline(&mut ui_state.target)
+                egui::TextEdit::singleline(&mut *target)
                     .hint_text(format!("{DEFAULT_TARGET} | [enter] to connect")),
             );
             connect |= connect_resp.lost_focus() && enter_pressed;
@@ -104,38 +99,35 @@ fn global_ui(mut egui: EguiContexts, mut commands: Commands, mut ui_state: ResMu
         });
 
         let cert_hash_resp = ui.add(
-            egui::TextEdit::singleline(&mut ui_state.cert_hash)
-                .hint_text("(optional) certificate hash"),
+            egui::TextEdit::singleline(&mut *cert_hash).hint_text("(optional) certificate hash"),
         );
         connect |= cert_hash_resp.lost_focus() && enter_pressed;
 
         (|| {
             if connect {
-                let mut target = ui_state.target.clone();
+                let mut target = target.clone();
                 if target.is_empty() {
                     DEFAULT_TARGET.clone_into(&mut target);
                 }
 
-                let cert_hash = ui_state.cert_hash.clone();
+                let cert_hash = cert_hash.clone();
                 let config = match client_config(cert_hash) {
                     Ok(config) => config,
                     Err(err) => {
-                        ui_state
-                            .log
-                            .push(format!("Failed to create client config: {err:?}"));
+                        log.push(format!("Failed to create client config: {err:?}"));
                         return;
                     }
                 };
 
-                ui_state.session_id += 1;
-                let name = format!("{}. {target}", ui_state.session_id);
+                *session_id += 1;
+                let name = format!("{}. {target}", *session_id);
                 commands
                     .spawn((Name::new(name), SessionUi::default()))
                     .queue(WebTransportClient::connect(config, target));
             }
         })();
 
-        for msg in &ui_state.log {
+        for msg in log.iter() {
             ui.label(msg);
         }
     });
@@ -251,7 +243,7 @@ fn session_ui(
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.trigger_targets(Disconnect::new("disconnected by user"), entity);
+                commands.trigger_targets(Disconnect::new("pressed disconnect button"), entity);
             }
 
             let stats = session.as_ref().map(|s| s.stats).unwrap_or_default();

@@ -1,14 +1,14 @@
 [package]
 description = "Transport layer implementation for `aeronet`"
-name = "aeronet_transport"
-version = "0.12.0"
+name        = "aeronet_transport"
+version     = "0.14.0-rc.1"
 
-authors.workspace = true
-categories.workspace = true
-edition.workspace = true
-keywords.workspace = true
-license.workspace = true
-repository.workspace = true
+authors.workspace      = true
+categories.workspace   = true
+edition.workspace      = true
+keywords.workspace     = true
+license.workspace      = true
+repository.workspace   = true
 rust-version.workspace = true
 
 [lints]
@@ -23,6 +23,16 @@ ignored = [
 ]
 
 [features]
+default = ["std"]
+
+## Enables standard library support.
+std = ["aeronet_io/std"]
+
+## Allows generating arbitrary values of some types with [`arbitrary`], useful for fuzz testing.
+##
+## [`arbitrary`]: https://docs.rs/arbitrary
+arbitrary = ["std", "dep:arbitrary"]
+
 ## Allows serializing and deserializing some types with [`serde`].
 ##
 ## [`serde`]: https://docs.rs/serde
@@ -34,6 +44,7 @@ serde = ["dep:serde"]
 ## [`bevy_egui`]: https://docs.rs/bevy_egui
 ## [`egui_plot`]: https://docs.rs/egui_plot
 visualizer = [
+  "std",
   "dep:bevy_egui",
   "dep:egui_plot",
   "dep:itertools",
@@ -61,38 +72,38 @@ document-features = [
 ]
 
 [dependencies]
-aeronet_io = { workspace = true }
+aeronet_io            = { workspace = true }
+arbitrary             = { workspace = true, optional = true }
+bevy_app              = { workspace = true }
+bevy_ecs              = { workspace = true }
+bevy_egui             = { workspace = true, optional = true }
+bevy_platform_support = { workspace = true, features = ["alloc"] }
+bevy_reflect          = { workspace = true }
+bevy_time             = { workspace = true }
+bevy_winit            = { workspace = true, optional = true }
+bit-vec               = { workspace = true }
+document-features     = { workspace = true, optional = true }
+egui_plot             = { workspace = true, optional = true }
+either                = { workspace = true }
+itertools             = { workspace = true, optional = true }
+log                   = { workspace = true }
+octs                  = { workspace = true }
+ringbuf               = { workspace = true, features = ["alloc", "portable-atomic"] }
+serde                 = { workspace = true, optional = true }
+size_format           = { workspace = true, optional = true }
+thousands             = { workspace = true, optional = true }
 
-ahash = { workspace = true }
-anyhow = { workspace = true }
-arbitrary = { workspace = true }
-bitvec = { workspace = true }
-derive_more = { workspace = true, features = ["display", "error", "from"] }
-either = { workspace = true }
-octs = { workspace = true }
-ringbuf = { workspace = true }
-tracing = { workspace = true }
+derive_more = { workspace = true, features = [
+  "display",
+  "error",
+  "add",
+  "add_assign",
+  "from",
+  "deref",
+  "deref_mut",
+] }
 typesize = { workspace = true, features = [
-  "bitvec",
-  "web-time",
+  # "bitvec",
+  "hashbrown_15",
   "saturating_impls",
 ] }
-web-time = { workspace = true }
-
-bevy_app = { workspace = true }
-bevy_core = { workspace = true }
-bevy_derive = { workspace = true }
-bevy_ecs = { workspace = true }
-bevy_reflect = { workspace = true }
-bevy_time = { workspace = true }
-
-serde = { workspace = true, optional = true }
-
-bevy_egui = { workspace = true, optional = true }
-egui_plot = { workspace = true, optional = true }
-itertools = { workspace = true, optional = true }
-size_format = { workspace = true, optional = true }
-thousands = { workspace = true, optional = true }
-
-bevy_winit = { workspace = true, optional = true }
-document-features = { workspace = true, optional = true }

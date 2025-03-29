@@ -7,10 +7,10 @@ use {
         packet::{PacketRtt, PacketStats},
     },
     bevy_app::prelude::*,
-    bevy_derive::{Deref, DerefMut},
     bevy_ecs::prelude::*,
     bevy_time::{Real, Time, Timer, TimerMode},
     core::time::Duration,
+    derive_more::{Deref, DerefMut},
     ringbuf::{
         HeapRb,
         traits::{Consumer, Observer, RingBuffer},
@@ -204,10 +204,10 @@ fn add_session_stats(
     mut commands: Commands,
     sampling: Res<SessionStatsSampling>,
 ) {
-    let entity = trigger.entity();
+    let target = trigger.target();
 
     commands
-        .entity(entity)
+        .entity(target)
         .insert(SessionStats::with_capacity(sampling.history_cap));
 }
 
@@ -292,7 +292,7 @@ fn compute_loss(
         reason = "all floats involved should be positive"
     )]
     #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
-    let lost_thresh_index = (lost_thresh * sampling_rate).ceil() as usize;
+    let lost_thresh_index = (lost_thresh * sampling_rate) as usize;
 
     // Find the most recent sample that falls within the loss threshold
     let lost_thresh_sample = stats

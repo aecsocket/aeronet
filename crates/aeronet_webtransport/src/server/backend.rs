@@ -4,7 +4,7 @@ use {
         WebTransportRuntime,
         session::{SessionBackend, SessionError, SessionMeta},
     },
-    aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
+    aeronet_io::{connection::Disconnected, packet::RecvPacket, server::Closed},
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
@@ -23,7 +23,7 @@ use {
 pub async fn start(
     config: ServerConfig,
     send_next: oneshot::Sender<ToOpen>,
-) -> Result<Never, ServerError> {
+) -> Result<Never, Closed> {
     debug!("Spawning backend task to open server");
 
     let endpoint = Endpoint::server(config).map_err(SessionError::CreateEndpoint)?;
@@ -43,6 +43,7 @@ pub async fn start(
     debug!("Starting server loop");
     loop {
         let session = endpoint.accept().await;
+        debug!("Accepting new session");
 
         WebTransportRuntime::spawn({
             let send_connecting = send_connecting.clone();
@@ -58,12 +59,12 @@ pub async fn start(
 async fn accept_session(
     session: IncomingSession,
     mut send_connecting: mpsc::Sender<ToConnecting>,
-) -> Result<(), ServerError> {
+) -> Result<(), Closed> {
     let request = session.await.map_err(ServerError::AwaitSessionRequest)?;
 
     let (send_session_entity, recv_session_entity) = oneshot::channel::<Entity>();
     let (send_session_response, recv_session_response) = oneshot::channel::<SessionResponse>();
-    let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ServerError>>();
+    let (send_dc, recv_dc) = oneshot::channel::<Disconnected>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     send_connecting
         .send(ToConnecting {
@@ -94,7 +95,7 @@ async fn handle_session(
     request: SessionRequest,
     recv_session_response: oneshot::Receiver<SessionResponse>,
     send_connected: oneshot::Sender<ToConnected>,
-) -> Result<Never, DisconnectReason<ServerError>> {
+) -> Result<Never, Disconnected> {
     debug!(
         "New session request from {}{}",
         request.authority(),
@@ -103,8 +104,7 @@ async fn handle_session(
 
     let session_response = recv_session_response
         .await
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ServerError::Session)?;
+        .map_err(|_| SessionError::FrontendClosed)?;
     debug!("Frontend responded to this session request with {session_response:?}");
 
     let conn = match session_response {
@@ -132,8 +132,7 @@ async fn handle_session(
         initial_rtt: conn.0.rtt(),
         initial_mtu: conn
             .max_datagram_size()
-            .ok_or(SessionError::DatagramsNotSupported)
-            .map_err(ServerError::Session)?,
+            .ok_or(SessionError::DatagramsNotSupported)?,
         recv_meta,
         recv_packet_b2f,
         send_packet_f2b,
@@ -148,9 +147,8 @@ async fn handle_session(
     };
     send_connected
         .send(next)
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ServerError::Session)?;
+        .map_err(|_| SessionError::FrontendClosed)?;
 
     debug!("Starting session loop");
-    Err(backend.start().await.map_err(ServerError::Session))
+    Err(backend.start().await)
 }

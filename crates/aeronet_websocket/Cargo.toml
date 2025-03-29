@@ -1,14 +1,14 @@
 [package]
 description = "WebSocket IO layer implementation for `aeronet`"
-name = "aeronet_websocket"
-version = "0.12.0"
+name        = "aeronet_websocket"
+version     = "0.14.0-rc.1"
 
-authors.workspace = true
-categories.workspace = true
-edition.workspace = true
-keywords.workspace = true
-license.workspace = true
-repository.workspace = true
+authors.workspace      = true
+categories.workspace   = true
+edition.workspace      = true
+keywords.workspace     = true
+license.workspace      = true
+repository.workspace   = true
 rust-version.workspace = true
 
 [lints]
@@ -16,7 +16,7 @@ workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
-targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+targets      = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [features]
 default = ["self-signed"]
@@ -36,27 +36,28 @@ self-signed = ["dep:rcgen"]
 document-features = ["dep:document-features"]
 
 [dependencies]
-aeronet_io = { workspace = true }
+aeronet_io            = { workspace = true }
+bevy_app              = { workspace = true }
+bevy_ecs              = { workspace = true }
+bevy_platform_support = { workspace = true }
+bytes                 = { workspace = true }
+cfg-if                = { workspace = true }
+document-features     = { workspace = true, optional = true }
+futures               = { workspace = true }
+tracing               = { workspace = true }
 
-anyhow = { workspace = true }
-bytes = { workspace = true }
-cfg-if = { workspace = true }
-derive_more = { workspace = true, features = ["display", "error", "from"] }
-futures = { workspace = true }
-replace_with = { workspace = true }
-tracing = { workspace = true }
-web-time = { workspace = true }
-
-bevy_app = { workspace = true }
-bevy_ecs = { workspace = true }
-bevy_hierarchy = { workspace = true }
-
-document-features = { workspace = true, optional = true }
+derive_more = { workspace = true, features = [
+  "display",
+  "error",
+  "deref",
+  "deref_mut",
+] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-js-sys = { workspace = true }
-wasm-bindgen = { workspace = true }
+js-sys               = { workspace = true }
+wasm-bindgen         = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
+
 web-sys = { workspace = true, features = [
   "WebSocket",
   "BinaryType",
@@ -66,24 +67,23 @@ web-sys = { workspace = true, features = [
 ] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-rustls = { workspace = true }
+rcgen               = { workspace = true, optional = true }
+rustls              = { workspace = true }
 rustls-native-certs = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread"] }
-tokio-tungstenite = { workspace = true, features = ["rustls-tls-native-roots"] }
-
-rcgen = { workspace = true, optional = true }
-tokio-rustls = { workspace = true, optional = true }
+tokio               = { workspace = true, features = ["rt-multi-thread"] }
+tokio-rustls        = { workspace = true, optional = true }
+tokio-tungstenite   = { workspace = true, features = ["rustls-tls-native-roots"] }
 
 [dev-dependencies]
-bevy = { workspace = true }
+bevy      = { workspace = true }
 bevy_egui = { workspace = true }
 
 [[example]]
-name = "websocket_client"
-path = "examples/websocket_client.rs"
+name              = "websocket_client"
+path              = "examples/websocket_client.rs"
 required-features = ["client"]
 
 [[example]]
-name = "websocket_echo_server"
-path = "examples/websocket_echo_server.rs"
+name              = "websocket_server"
+path              = "examples/websocket_server.rs"
 required-features = ["server"]

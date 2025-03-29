@@ -13,8 +13,9 @@ use {
         min_size::MinSize,
         packet::{FragmentPosition, MessageSeq},
     },
-    ahash::HashMap,
-    bitvec::vec::BitVec,
+    alloc::vec::Vec,
+    bevy_platform_support::collections::HashMap,
+    bit_vec::BitVec,
     core::{fmt, iter::FusedIterator},
     derive_more::{Display, Error},
     octs::{Bytes, chunks::ByteChunksExt},
@@ -165,6 +166,7 @@ struct MessageBuf {
     last_frag_index: Option<usize>,
     max_frag_index: usize,
     num_frags_recv: usize,
+    #[typesize(skip)] // TODO
     frag_indices_recv: BitVec,
     payload: Vec<u8>,
 }
@@ -246,7 +248,7 @@ impl FragmentReceiver {
         let frag_index = usize::from(position.index());
 
         // check if this fragment has been received yet
-        if buf.frag_indices_recv.get(frag_index).as_deref() == Some(&true) {
+        if buf.frag_indices_recv.get(frag_index) == Some(true) {
             return Err(ReassembleError::AlreadyReceivedFrag { index: frag_index });
         }
 
@@ -276,8 +278,8 @@ impl FragmentReceiver {
         let new_payload_len = buf.payload.len().max(end);
         buf.payload.resize(new_payload_len, 0);
 
-        let new_indices_len = buf.frag_indices_recv.len().max(frag_index + 1);
-        buf.frag_indices_recv.resize(new_indices_len, false);
+        let grow_len = (frag_index + 1).saturating_sub(buf.frag_indices_recv.len());
+        buf.frag_indices_recv.grow(grow_len, false);
 
         // update some meta stuff depending on if this is the last frag or not
         if position.is_last() {
@@ -330,7 +332,9 @@ impl FragmentReceiver {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    extern crate std;
+
+    use {super::*, std::println};
 
     // TODO
 

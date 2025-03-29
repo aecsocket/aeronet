@@ -1,17 +1,17 @@
-//! Implementation for WebTransport sessions.
-//!
-//! This logic is shared between clients and servers.
+//! Implementation for WebTransport sessions, shared between clients and
+//! servers.
 
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
         AeronetIoPlugin, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, PeerAddr},
+        connection::{DROP_DISCONNECT_REASON, Disconnect, Disconnected, PeerAddr},
         packet::{IP_MTU, MtuTooSmall, PacketRtt, RecvPacket},
     },
     alloc::sync::Arc,
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bytes::Bytes,
     core::{num::Saturating, time::Duration},
     derive_more::{Display, Error},
@@ -22,7 +22,6 @@ use {
     },
     std::io,
     tracing::{trace, trace_span},
-    web_time::Instant,
     xwt_core::prelude::*,
 };
 
@@ -36,7 +35,6 @@ cfg_if::cfg_if! {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct WebTransportSessionPlugin;
 
 impl Plugin for WebTransportSessionPlugin {
@@ -73,7 +71,7 @@ impl Plugin for WebTransportSessionPlugin {
 /// You should not add or remove this component directly - it is managed
 /// entirely by the client and server implementations.
 #[derive(Debug, Component)]
-#[require(Session(new_session))]
+#[require(Session::new(Instant::now(), MIN_MTU))]
 pub struct WebTransportIo {
     pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,
     pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
@@ -81,9 +79,8 @@ pub struct WebTransportIo {
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
 }
 
-fn new_session() -> Session {
-    Session::new(Instant::now(), IP_MTU)
-}
+/// Minimum packet MTU that a [`WebTransportIo`] must support.
+pub const MIN_MTU: usize = IP_MTU;
 
 /// Error that occurs when polling a session using the [`WebTransportIo`]
 /// IO layer.
@@ -116,9 +113,6 @@ pub enum SessionError {
     Connection(ConnectionError),
 }
 
-/// Minimum packet MTU that a [`WebTransportIo`] must support.
-pub const MIN_MTU: usize = IP_MTU;
-
 impl Drop for WebTransportIo {
     fn drop(&mut self) {
         if let Some(send_dc) = self.send_user_dc.take() {
@@ -137,8 +131,8 @@ pub(crate) struct SessionMeta {
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTransportIo>) {
-    let session = trigger.entity();
-    let Ok(mut io) = sessions.get_mut(session) else {
+    let target = trigger.target();
+    let Ok(mut io) = sessions.get_mut(target) else {
         return;
     };
 
@@ -197,11 +191,9 @@ pub(crate) fn poll(
             session.recv.push(packet);
         }
 
-        trace!(
-            num_packets = num_packets.0,
-            num_bytes = num_bytes.0,
-            "Received packets",
-        );
+        if num_packets.0 > 0 {
+            trace!(%num_packets, %num_bytes, "Received packets");
+        }
     }
 }
 
@@ -225,11 +217,9 @@ fn flush(mut sessions: Query<(Entity, &mut Session, &WebTransportIo)>) {
             _ = io.send_packet_f2b.unbounded_send(packet);
         }
 
-        trace!(
-            num_packets = num_packets.0,
-            num_bytes = num_bytes.0,
-            "Flushed packets",
-        );
+        if num_packets.0 > 0 {
+            trace!(%num_packets, %num_bytes, "Flushed packets");
+        }
     }
 }
 
@@ -243,7 +233,7 @@ pub(crate) struct SessionBackend {
 }
 
 impl SessionBackend {
-    pub async fn start(self) -> DisconnectReason<SessionError> {
+    pub async fn start(self) -> Disconnected {
         let Self {
             conn,
             send_meta,
@@ -293,9 +283,9 @@ impl SessionBackend {
             reason = recv_user_dc => {
                 if let Ok(reason) = reason {
                     disconnect(conn, &reason).await;
-                    DisconnectReason::User(reason)
+                    Disconnected::by_user(reason)
                 } else {
-                    DisconnectReason::Error(SessionError::FrontendClosed)
+                    Disconnected::by_error(SessionError::FrontendClosed)
                 }
             }
         }
@@ -426,14 +416,7 @@ async fn send_loop(
     }
 }
 
-#[cfg_attr(
-    target_family = "wasm",
-    expect(
-        clippy::missing_const_for_fn,
-        reason = "the current implementation is temporary"
-    )
-)]
-fn get_disconnect_reason(err: SessionError) -> DisconnectReason<SessionError> {
+fn get_disconnect_reason(err: SessionError) -> Disconnected {
     #[cfg(target_family = "wasm")]
     {
         // TODO: I don't know how the app-initiated disconnect message looks
@@ -441,7 +424,7 @@ fn get_disconnect_reason(err: SessionError) -> DisconnectReason<SessionError> {
         // https://github.com/BiagioFesta/wtransport/issues/182
         //
         // Tested: when the server disconnects us, all we get is "Connection lost."
-        DisconnectReason::Error(err)
+        Disconnected::by_error(err)
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -450,10 +433,9 @@ fn get_disconnect_reason(err: SessionError) -> DisconnectReason<SessionError> {
 
         match err {
             SessionError::Connection(ConnectionError::ApplicationClosed(err)) => {
-                let reason = String::from_utf8_lossy(err.reason()).into_owned();
-                DisconnectReason::Peer(reason)
+                Disconnected::by_peer(String::from_utf8_lossy(err.reason()))
             }
-            err => DisconnectReason::Error(err),
+            err => Disconnected::by_error(err),
         }
     }
 }

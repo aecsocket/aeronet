@@ -11,15 +11,18 @@ use {
         seq_buf::SeqBuf,
     },
     aeronet_io::Session,
-    ahash::{HashMap, HashSet},
+    alloc::{boxed::Box, vec::Vec},
     bevy_ecs::prelude::*,
+    bevy_platform_support::{
+        collections::{HashMap, HashSet},
+        time::Instant,
+    },
     core::{iter, num::Saturating},
     derive_more::{Display, Error},
     either::Either,
+    log::{trace, warn},
     octs::{Buf, Read},
-    tracing::{trace, trace_span, warn},
     typesize::{TypeSize, derive::TypeSize},
-    web_time::Instant,
 };
 
 /// Access to the receiving half of a [`Transport`].
@@ -177,12 +180,9 @@ pub fn clear_buffers(mut sessions: Query<(Entity, &mut Transport)>) {
 
 pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut Transport, &TransportConfig)>) {
     for (entity, mut session, mut transport, config) in &mut sessions {
-        let span = trace_span!("poll", %entity);
-        let _span = span.enter();
-
         for packet in session.recv.drain(..) {
             if let Err(err) = recv_on(&mut transport, config, packet.recv_at, &packet.payload) {
-                trace!("Received invalid packet: {err:?}");
+                trace!("{entity} received invalid packet: {err:?}");
             }
         }
     }
@@ -221,16 +221,13 @@ fn recv_on(
     recv_at: Instant,
     mut packet: &[u8],
 ) -> Result<(), RecvError> {
-    trace!(len = packet.len(), "Receiving packet");
+    trace!("Receiving packet of length {}", packet.len());
 
     let header = packet
         .read::<PacketHeader>()
         .map_err(|_| RecvError::ReadHeader)?;
 
-    let span = trace_span!("recv", packet = header.seq.0.0);
-    let _span = span.enter();
-
-    trace!("Received packet header");
+    trace!("Received packet header with sequence {}", header.seq.0.0);
 
     transport.peer_acks.ack(header.seq);
     transport.recv.acks.0.extend(packet_acks_to_msg_keys(
@@ -246,21 +243,18 @@ fn recv_on(
     let mut frag_index = Saturating(0);
     let mut frags_recv = Saturating(0);
     while packet.has_remaining() {
-        let span = trace_span!("frag", index = frag_index.0);
-        let _span = span.enter();
-
         match recv_frag(transport, config, recv_at, &mut packet) {
             Ok(()) => {
                 frags_recv += 1;
             }
             Err(err) => {
-                trace!("Failed to receive fragment: {err:?}");
+                trace!("Failed to receive fragment {}: {err:?}", frag_index.0);
             }
         }
         frag_index += 1;
     }
 
-    trace!(frags_recv = frags_recv.0, "Finished receiving packet");
+    trace!("Finished receiving packet with {} fragments", frags_recv.0);
 
     Ok(())
 }
@@ -283,14 +277,11 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
                 .map(|packet| (acked_seq, packet))
         })
         .flat_map(move |(acked_seq, packet)| {
-            let span = trace_span!("ack", packet = acked_seq.0 .0);
-            let _span = span.enter();
-
             let packet_rtt = recv_at.saturating_duration_since(packet.flushed_at);
             rtt.update(packet_rtt);
 
             let rtt_now = rtt.get();
-            trace!(acked_seq = acked_seq.0.0, ?packet_rtt, ?rtt_now, "Got peer ack");
+            trace!("Got peer ack for packet {} - packet RTT: {packet_rtt:?} / RTT now: {rtt_now:?}", acked_seq.0.0);
 
             *packet_acks_recv += 1;
             Box::into_iter(packet.frags)
@@ -353,10 +344,8 @@ fn recv_frag(
         .map_err(RecvError::Reassemble)?;
 
     trace!(
-        lane_index = lane_index.0.0,
-        msg_seq = frag.header.seq.0.0,
-        pos = ?frag.header.position,
-        "Received fragment"
+        "Received fragment on lane {} - message seq {} position {:?}",
+        lane_index.0.0, frag.header.seq.0.0, frag.header.position,
     );
 
     if let Some(msg) = msg {

@@ -88,7 +88,7 @@ fn session_ui(
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.trigger_targets(Disconnect::new("disconnected by user"), entity);
+                commands.trigger_targets(Disconnect::new("pressed disconnect button"), entity);
             }
 
             egui::ScrollArea::vertical().show(ui, |ui| {

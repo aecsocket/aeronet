@@ -13,20 +13,19 @@ use {
         },
         rtt::RttEstimator,
     },
-    aeronet_io::{
-        Session,
-        connection::{DisconnectReason, Disconnected},
-    },
-    ahash::HashMap,
+    aeronet_io::{Session, connection::Disconnected},
+    alloc::{boxed::Box, vec::Vec},
     bevy_ecs::prelude::*,
+    bevy_platform_support::{
+        collections::{HashMap, hash_map::Entry},
+        time::Instant,
+    },
     bevy_time::{Real, Time},
     core::iter,
     derive_more::{Display, Error, From},
+    log::trace,
     octs::{Bytes, EncodeLen, Write},
-    std::collections::hash_map::Entry,
-    tracing::{trace, trace_span},
     typesize::derive::TypeSize,
-    web_time::Instant,
 };
 
 /// Allows buffering up messages to be sent on a [`Transport`].
@@ -57,7 +56,9 @@ pub(crate) struct SentFragment {
     position: FragmentPosition,
     #[typesize(with = Bytes::len)]
     payload: Bytes,
+    #[typesize(skip)]
     sent_at: Instant,
+    #[typesize(skip)]
     next_flush_at: Instant,
 }
 
@@ -137,7 +138,7 @@ impl TransportSend {
     /// ```
     /// use {
     ///     aeronet_transport::{Transport, lane::LaneIndex},
-    ///     web_time::Instant,
+    ///     bevy_platform_support::time::Instant,
     /// };
     ///
     /// const SEND_LANE: LaneIndex = LaneIndex::new(0);
@@ -243,9 +244,7 @@ pub(crate) fn update_send_bytes_config(
 pub(crate) fn disconnect_errored(mut sessions: Query<&mut Transport>, mut commands: Commands) {
     for mut transport in &mut sessions {
         if let Some(err) = transport.send.error.take() {
-            commands.trigger(Disconnected {
-                reason: DisconnectReason::Error(anyhow::Error::new(err)),
-            });
+            commands.trigger(Disconnected::by_error(err));
         }
     }
 }
@@ -324,9 +323,6 @@ fn flush_on(
             .write(&header)
             .expect("should grow the buffer when writing over capacity");
 
-        let span = trace_span!("flush", packet = packet_seq.0.0);
-        let _span = span.enter();
-
         // collect the paths of the frags we want to put into this packet
         // so that we can track which ones have been acked later
         let mut packet_frags = Vec::new();
@@ -359,7 +355,11 @@ fn flush_on(
             return None;
         }
 
-        trace!(num_frags = packet_frags.len(), "Flushed packet");
+        trace!(
+            "Flushed packet {} with {} fragments",
+            packet_seq.0.0,
+            packet_frags.len()
+        );
         transport.flushed_packets.insert(
             packet_seq.0.0,
             FlushedPacket {

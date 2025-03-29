@@ -1,142 +1,102 @@
 [workspace]
-members = ["crates/*", "examples/*"]
-resolver = "2"
+members  = ["crates/*", "examples"]
+resolver = "3"
 
 [workspace.package]
-authors = ["aecsocket <aecsocket@tutanota.com>"]
-categories = ["game-development", "network-programming"]
-edition = "2021"
-keywords = ["gamedev", "network", "bevy"]
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/aecsocket/aeronet"
-rust-version = "1.82.0"
+authors      = ["aecsocket <aecsocket@tutanota.com>"]
+categories   = ["game-development", "network-programming"]
+edition      = "2024"
+keywords     = ["gamedev", "network", "bevy"]
+license      = "MIT OR Apache-2.0"
+repository   = "https://github.com/aecsocket/aeronet"
+rust-version = "1.85.0"
 
 [workspace.lints.rust]
-missing_docs = "warn"
+missing_docs    = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
 
 [workspace.lints.clippy]
-all = { level = "warn", priority = -1 }
-nursery = { level = "warn", priority = -1 }
+all      = { level = "warn", priority = -1 }
+nursery  = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 
 alloc_instead_of_core = "warn"
-std_instead_of_alloc = "warn"
-std_instead_of_core = "warn"
-unwrap_used = "warn"
+std_instead_of_alloc  = "warn"
+std_instead_of_core   = "warn"
+unwrap_used           = "warn"
 
 module_name_repetitions = "allow"
-needless_pass_by_value = "allow"
-similar_names = "allow"
-too_many_arguments = "allow"
-type_complexity = "allow"
+needless_pass_by_value  = "allow"
+similar_names           = "allow"
+too_many_arguments      = "allow"
+type_complexity         = "allow"
 
 [workspace.dependencies]
-# aeronet
-# core
-aeronet = { version = "0.12.0", path = "crates/aeronet" }
-aeronet_io = { version = "0.12.0", path = "crates/aeronet_io" }
-aeronet_transport = { version = "0.12.0", path = "crates/aeronet_transport" }
+aeronet              = { version = "0.14.0-rc.1", path = "crates/aeronet", default-features = false }
+aeronet_io           = { version = "0.14.0-rc.1", path = "crates/aeronet_io", default-features = false }
+aeronet_replicon     = { version = "0.14.0-rc.1", path = "crates/aeronet_replicon", default-features = false }
+aeronet_transport    = { version = "0.14.0-rc.1", path = "crates/aeronet_transport", default-features = false }
+aeronet_websocket    = { version = "0.14.0-rc.1", path = "crates/aeronet_websocket" }
+aeronet_webtransport = { version = "0.14.0-rc.1", path = "crates/aeronet_webtransport" }
 
-# io
-aeronet_websocket = { version = "0.12.0", path = "crates/aeronet_websocket" }
-aeronet_webtransport = { version = "0.12.0", path = "crates/aeronet_webtransport" }
-
-# integration
-aeronet_replicon = { version = "0.13.0", path = "crates/aeronet_replicon" }
-
-# generic
-
-ahash = "0.8.11"
-anyhow = { version = "1.0.97", default-features = false }
-arbitrary = { version = "1.3.2", features = ["derive"] }
-base64 = "0.22.1"
-bitvec = "1.0.1"
-bytes = { version = "1.6.1", default-features = false }
-cfg-if = "1.0.0"
-clap = { version = "4.5.32", features = ["derive"] }
-derive_more = { version = "2.0.1", default-features = false }
-document-features = "0.2.11"
-egui_plot = "0.29.0"
-either = "1.15.0"
-futures = "0.3.30"
-itertools = "0.14.0"
-octs = "1.0.0"
-oneshot = "0.1.11"
-replace_with = "0.1.7"
-ringbuf = "0.4.1"
-serde = { version = "1.0.219", features = ["derive"] }
-size_format = "1.0.2"
-sync_wrapper = "1.0.1"
-thousands = "0.2.0"
-tracing = { version = "0.1.40", default-features = false }
-typesize = "0.1.13"
-web-time = "1.1.0"
-
-# native
-
-tokio = "1.39.2"
-
-# wasm
-
-gloo-timers = "0.3.0"
-js-sys = "0.3.70"
-wasm-bindgen = "0.2.99"
-wasm-bindgen-futures = "0.4.43"
-web-sys = "0.3.70"
-
-# bevy
-
-bevy = { version = "0.15.3" }
-bevy_app = { version = "0.15.3", default-features = false }
-bevy_core = { version = "0.15.3", default-features = false }
-bevy_derive = { version = "0.15.3", default-features = false }
-bevy_ecs = { version = "0.15.3", default-features = false }
-bevy_hierarchy = { version = "0.15.3", default-features = false }
-bevy_reflect = { version = "0.15.3", default-features = false }
-bevy_time = { version = "0.15.3", default-features = false }
-bevy_winit = { version = "0.15.3", default-features = false }
-
-bevy_egui = "0.31.1"
-
-# tls
-
-rustls = "0.23.23"
-rustls-native-certs = "0.8.0"
-tokio-rustls = "0.26.2"
-
-# aeronet_channel
-
-flume = "0.11.0"
-
-# aeronet_steam
-
-# bevy-steamworks = "0.12.0"
-# steamworks = "0.11.0"
-
-# aeronet_websocket
-
-rcgen = "0.13.1"
-tokio-tungstenite = "0.26.2"
-
-# aeronet_webtransport
-# core
-xwt-core = "0.6.0"
-
-# native
-spki = "0.7.3"
-wtransport = "0.6.0"
-x509-cert = "0.2.5"
-xwt-wtransport = "0.13.2"
-
-# wasm
-xwt-web = "0.15.0"
-
-# aeronet_replicon
-
-bevy_replicon = { version = "0.31.0", default-features = false }
+anyhow                = { version = "1.0.97", default-features = false }
+arbitrary             = { version = "1.3.2", features = ["derive"] }
+base64                = { version = "0.22.1" }
+bevy                  = { version = "0.16.0-rc.2" }
+bevy_app              = { version = "0.16.0-rc.2", default-features = false }
+bevy_ecs              = { version = "0.16.0-rc.2", default-features = false }
+bevy_egui             = { version = "0.33.0" }
+bevy_platform_support = { version = "0.16.0-rc.2", default-features = false }
+bevy_reflect          = { version = "0.16.0-rc.2", default-features = false }
+bevy_replicon         = { version = "0.33.0-rc.2", default-features = false }
+bevy_time             = { version = "0.16.0-rc.2", default-features = false }
+bevy_winit            = { version = "0.16.0-rc.2", default-features = false }
+bit-vec               = { version = "0.8.0", default-features = false }
+blocking              = { version = "1.6.1" }
+bytes                 = { version = "1.6.1", default-features = false }
+cfg-if                = { version = "1.0.0" }
+clap                  = { version = "4.5.32", features = ["derive"] }
+derive_more           = { version = "2.0.1", default-features = false }
+document-features     = { version = "0.2.11" }
+egui_plot             = { version = "0.31.0" }
+either                = { version = "1.15.0", default-features = false }
+flume                 = { version = "0.11.0" }
+futures               = { version = "0.3.30" }
+gloo-timers           = { version = "0.3.0" }
+itertools             = { version = "0.14.0" }
+js-sys                = { version = "0.3.70" }
+log                   = { version = "0.4.26" }
+octs                  = { version = "1.0.0", default-features = false }
+oneshot               = { version = "0.1.11" }
+rcgen                 = { version = "0.13.1" }
+ringbuf               = { version = "0.4.8", default-features = false }
+rustls                = { version = "0.23.23" }
+rustls-native-certs   = { version = "0.8.0" }
+serde                 = { version = "1.0.219", features = ["derive"] }
+size_format           = { version = "1.0.2" }
+spki                  = { version = "0.7.3" }
+steamworks            = { version = "0.11.0" }
+sync_wrapper          = { version = "1.0.1" }
+thousands             = { version = "0.2.0" }
+tokio                 = { version = "1.39.2" }
+tokio-rustls          = { version = "0.26.2" }
+tokio-tungstenite     = { version = "0.26.2" }
+tracing               = { version = "0.1.40", default-features = false }
+typesize              = { version = "0.1.13", default-features = false }
+wasm-bindgen          = { version = "0.2.99" }
+wasm-bindgen-futures  = { version = "0.4.43" }
+web-sys               = { version = "0.3.70" }
+wtransport            = { version = "0.6.1" }
+x509-cert             = { version = "0.2.5" }
+xwt-core              = { version = "0.6.0" }
+xwt-web               = { version = "0.15.0" }
+xwt-wtransport        = { version = "0.13.2" }
 
 [workspace.metadata.cargo-shear]
 ignored = [
   "bevy_winit", # see `aeronet_transport` feature `document-features`
 ]
+
+[patch.crates-io]
+bevy_egui = { git = "https://github.com/Friz64/bevy_egui", branch = "bevy-0.16" }
+typesize  = { git = "https://github.com/GnomedDev/typesize", rev = "358951ce95b10473387b2a54a8d6e3218d696ca6" }

@@ -1,24 +1,27 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![no_std]
+
+extern crate alloc;
 
 pub mod connection;
 pub mod packet;
 pub mod server;
 
-pub use {anyhow, bytes, web_time};
 use {
+    alloc::vec::Vec,
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bevy_reflect::prelude::*,
     bytes::Bytes,
     packet::{MtuTooSmall, PacketStats, RecvPacket},
-    web_time::Instant,
 };
+pub use {anyhow, bytes};
 
 /// Sets up the IO layer functionality.
 ///
 /// See [`Session`].
-#[derive(Debug)]
 pub struct AeronetIoPlugin;
 
 impl Plugin for AeronetIoPlugin {
@@ -175,7 +178,7 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use {aeronet_io::Session, web_time::Instant};
+    /// use {aeronet_io::Session, bevy_platform_support::time::Instant};
     ///
     /// let now = Instant::now();
     /// let session = Session::new(now, 1000);
@@ -194,7 +197,7 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use {aeronet_io::Session, web_time::Instant};
+    /// use {aeronet_io::Session, bevy_platform_support::time::Instant};
     ///
     /// let session = Session::new(Instant::now(), 1000);
     /// assert_eq!(1000, session.min_mtu());
@@ -213,7 +216,7 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use {aeronet_io::Session, web_time::Instant};
+    /// use {aeronet_io::Session, bevy_platform_support::time::Instant};
     ///
     /// let mut session = Session::new(Instant::now(), 1000);
     /// assert_eq!(1000, session.mtu());
@@ -237,7 +240,7 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// use {aeronet_io::Session, web_time::Instant};
+    /// use {aeronet_io::Session, bevy_platform_support::time::Instant};
     ///
     /// let mut session = Session::new(Instant::now(), 1000);
     /// session.set_mtu(1200).unwrap();

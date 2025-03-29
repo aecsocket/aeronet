@@ -3,10 +3,11 @@
 use {
     aeronet_transport::{
         Transport,
-        io::{Session, bytes::Bytes, web_time::Instant},
+        io::{Session, bytes::Bytes},
         lane::{LaneIndex, LaneKind},
     },
     libfuzzer_sys::fuzz_target,
+    std::time::Instant,
 };
 
 fuzz_target!(|input: (LaneKind, &[u8])| {

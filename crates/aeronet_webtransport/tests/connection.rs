@@ -82,7 +82,7 @@ fn ping_pong(
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
-            assert_eq!(trigger.entity(), expected_server.0);
+            assert_eq!(trigger.target(), expected_server.0);
             seq.event(ServerEvent::NewServerEndpoint).expect_first();
         }
 
@@ -91,22 +91,21 @@ fn ping_pong(
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
-            assert_eq!(trigger.entity(), expected_server.0);
+            assert_eq!(trigger.target(), expected_server.0);
             seq.event(ServerEvent::NewServer)
                 .expect_after(ServerEvent::NewServerEndpoint);
         }
 
         fn on_add_session_endpoint(
             trigger: Trigger<OnAdd, SessionEndpoint>,
-            parents: Query<&Parent>,
+            parents: Query<&ChildOf>,
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
             mut commands: Commands,
         ) {
-            let client = trigger.entity();
-            let parent = parents
+            let client = trigger.target();
+            let &ChildOf { parent } = parents
                 .get(client)
-                .map(Parent::get)
                 .expect("parent server of client session should exist");
             assert_eq!(expected_server.0, parent);
             seq.event(ServerEvent::NewClientEndpoint)
@@ -123,17 +122,18 @@ fn ping_pong(
             expected_client: Res<ClientEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
-            assert_eq!(expected_client.0, trigger.entity());
+            assert_eq!(expected_client.0, trigger.target());
             seq.event(ServerEvent::NewClient)
                 .expect_after(ServerEvent::NewClientEndpoint);
         }
 
         fn recv_on_session(
             mut sessions: Query<&mut Session>,
-            client: Res<ClientEntity>,
+            client: Option<Res<ClientEntity>>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
             mut exit: EventWriter<AppExit>,
         ) {
+            let Some(client) = client else { return };
             let Ok(mut session) = sessions.get_mut(client.0) else {
                 return;
             };
@@ -147,7 +147,7 @@ fn ping_pong(
                     seq.event(ServerEvent::RecvPing)
                         .expect_after(ServerEvent::NewClient);
                     session.send.push(PONG);
-                    exit.send(AppExit::Success);
+                    exit.write(AppExit::Success);
                 }
             }
         }
@@ -160,12 +160,12 @@ fn ping_pong(
             .add_observer(on_add_session_endpoint)
             .add_observer(on_session_request)
             .add_observer(on_add_session)
-            .add_systems(Update, recv_on_session.never_param_warn());
+            .add_systems(Update, recv_on_session);
 
         let world = app.world_mut();
         let server = world.spawn_empty().id();
         world.insert_resource(ServerEntity(server));
-        WebTransportServer::open(server_config).apply(server, world);
+        WebTransportServer::open(server_config).apply(world.entity_mut(server));
 
         app
     };
@@ -179,7 +179,7 @@ fn ping_pong(
             mut seq: ResMut<SequenceTester<ClientEvent>>,
             mut commands: Commands,
         ) {
-            let client = trigger.entity();
+            let client = trigger.target();
             seq.event(ClientEvent::NewSessionEndpoint).expect_first();
             commands.insert_resource(ClientEntity(client));
         }
@@ -190,7 +190,7 @@ fn ping_pong(
             mut seq: ResMut<SequenceTester<ClientEvent>>,
             mut sessions: Query<&mut Session>,
         ) {
-            let client = trigger.entity();
+            let client = trigger.target();
             assert_eq!(expected_client.0, client);
             seq.event(ClientEvent::NewSession)
                 .expect_after(ClientEvent::NewSessionEndpoint);
@@ -203,10 +203,11 @@ fn ping_pong(
 
         fn recv_on_session(
             mut sessions: Query<&mut Session>,
-            client: Res<ClientEntity>,
+            client: Option<Res<ClientEntity>>,
             mut seq: ResMut<SequenceTester<ClientEvent>>,
             mut exit: EventWriter<AppExit>,
         ) {
+            let Some(client) = client else { return };
             let Ok(mut session) = sessions.get_mut(client.0) else {
                 return;
             };
@@ -218,7 +219,7 @@ fn ping_pong(
                 if payload == PONG {
                     seq.event(ClientEvent::RecvPong)
                         .expect_after(ClientEvent::NewSession);
-                    exit.send(AppExit::Success);
+                    exit.write(AppExit::Success);
                 }
             }
         }
@@ -232,7 +233,8 @@ fn ping_pong(
 
         let world = app.world_mut();
         let client = world.spawn_empty().id();
-        WebTransportClient::connect(client_config, client_target.into()).apply(client, world);
+        WebTransportClient::connect(client_config, client_target.into())
+            .apply(world.entity_mut(client));
 
         app
     };

@@ -5,7 +5,6 @@ use {
     aeronet_io::{
         Session,
         server::{Server, ServerEndpoint},
-        web_time::Instant,
     },
     aeronet_transport::{
         AeronetTransportPlugin, Transport, TransportSet,
@@ -13,10 +12,10 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
-    bevy_hierarchy::Parent,
+    bevy_platform_support::time::Instant,
     bevy_reflect::Reflect,
-    bevy_replicon::{core::connected_client::ClientId, prelude::*, server::ServerSet},
-    tracing::warn,
+    bevy_replicon::{prelude::*, server::ServerSet},
+    log::warn,
 };
 
 /// Provides a [`bevy_replicon`] server backend using [`Server`]s and
@@ -24,7 +23,6 @@ use {
 ///
 /// To make a [`Server`] be used by [`bevy_replicon`], add the
 /// [`AeronetRepliconServer`] component.
-#[derive(Debug)]
 pub struct AeronetRepliconServerPlugin;
 
 impl Plugin for AeronetRepliconServerPlugin {
@@ -138,17 +136,17 @@ fn update_state(
 fn on_connected(
     trigger: Trigger<OnAdd, Session>,
     sessions: Query<&Session>,
-    parents: Query<&Parent>,
+    child_of: Query<&ChildOf>,
     open_servers: Query<(), OpenedServer>,
     channels: Res<RepliconChannels>,
     mut commands: Commands,
 ) {
-    let client = trigger.entity();
+    let client = trigger.target();
     let session = sessions
         .get(client)
         .expect("we are adding this component to this entity");
 
-    let Ok(server) = parents.get(client).map(Parent::get) else {
+    let Ok(&ChildOf { parent: server }) = child_of.get(client) else {
         return;
     };
     if open_servers.get(server).is_err() {
@@ -158,11 +156,11 @@ fn on_connected(
     let recv_lanes = channels
         .client_channels()
         .iter()
-        .map(|channel| convert::to_lane_kind(channel.kind));
+        .map(|channel| convert::to_lane_kind(*channel));
     let send_lanes = channels
         .server_channels()
         .iter()
-        .map(|channel| convert::to_lane_kind(channel.kind));
+        .map(|channel| convert::to_lane_kind(*channel));
     let transport = match Transport::new(session, recv_lanes, send_lanes, Instant::now()) {
         Ok(transport) => transport,
         Err(err) => {
@@ -172,28 +170,25 @@ fn on_connected(
     };
 
     commands.entity(client).insert((
-        // TODO: `ClientId` here does not uphold the persistent identifier guarantees
-        // But these will be relaxed in upstream soon anyway
-        ConnectedClient::new(ClientId::new(client.to_bits()), session.mtu()),
+        ConnectedClient {
+            max_size: session.mtu(),
+        },
         transport,
     ));
 }
 
 fn poll(
     mut replicon_server: ResMut<RepliconServer>,
-    mut clients: Query<(Entity, &mut Transport, &Parent)>,
+    mut clients: Query<(Entity, &mut Transport, &ChildOf)>,
     open_servers: Query<(), OpenedServer>,
 ) {
-    for (client, mut transport, server) in &mut clients {
-        if open_servers.get(server.get()).is_err() {
+    for (client, mut transport, &ChildOf { parent: server }) in &mut clients {
+        if open_servers.get(server).is_err() {
             continue;
         }
 
         for msg in transport.recv.msgs.drain() {
-            let Some(channel_id) = convert::to_channel_id(msg.lane) else {
-                warn!("Lane {:?} is too large to convert to a channel", msg.lane);
-                continue;
-            };
+            let channel_id = convert::to_channel_id(msg.lane);
             replicon_server.insert_received(client, channel_id, msg.payload);
         }
 
@@ -232,7 +227,10 @@ fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Tr
             warn!("Sending to non-existent client {client}");
             continue;
         };
-        let lane_index = convert::to_lane_index(channel_id);
+        let Some(lane_index) = convert::to_lane_index(channel_id) else {
+            warn!("Channel {channel_id} is too large to convert to a lane index");
+            continue;
+        };
 
         _ = transport.send.push(lane_index, msg, now);
     }

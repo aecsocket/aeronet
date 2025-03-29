@@ -1,98 +1,111 @@
 on:
-    pull_request:
-    push:
-        branches:
-            - main
+  pull_request:
+  push:
+    branches:
+      - main
 
 env:
-    CARGO_TERM_COLOR: always
+  CARGO_TERM_COLOR: always
 
 jobs:
-    fmt:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: dtolnay/rust-toolchain@nightly
-              with:
-                  components: rustfmt
-            - run: cargo +nightly fmt --check
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - run: cargo +nightly fmt --check
 
-    taplo:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: uncenter/setup-taplo@v1
-              with:
-                  version: "0.8.1"
-            - run: taplo fmt --check
+  taplo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: uncenter/setup-taplo@v1
+        with:
+          version: "0.8.1"
+      - run: taplo fmt --check
 
-    typos:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: crate-ci/typos@master
+  typos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@master
 
-    shear:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: dtolnay/rust-toolchain@stable
-            - uses: cargo-bins/cargo-binstall@main
-            - run: cargo binstall --no-confirm cargo-shear
-            - run: cargo shear
+  shear:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall --no-confirm cargo-shear
+      - run: cargo shear
 
-    clippy:
-        runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
-        steps:
-            - uses: actions/checkout@v4
-            - uses: dtolnay/rust-toolchain@stable
-              with:
-                  components: clippy
-            - uses: ./.github/actions/install-bevy-deps
-            - run: cargo clippy --target '${{ matrix.target }}' --workspace --all-features -- -Dwarnings
+  clippy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: ./.github/actions/install-bevy-deps
+      - run: cargo clippy --target '${{ matrix.target }}' --workspace --all-features -- -Dwarnings
 
-    doc:
-        runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
-        env:
-            RUSTDOCFLAGS: "-Dwarnings --cfg=web_sys_unstable_apis"
-        steps:
-            - uses: actions/checkout@v4
-            - uses: dtolnay/rust-toolchain@stable
-            - uses: ./.github/actions/install-bevy-deps
-            - run: cargo doc --target '${{ matrix.target }}' --workspace --all-features
+  doc:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+    env:
+      RUSTDOCFLAGS: "-Dwarnings --cfg=web_sys_unstable_apis"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/install-bevy-deps
+      - run: cargo doc --target '${{ matrix.target }}' --workspace --all-features
 
-    build:
-        runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
-        steps:
-            - uses: actions/checkout@v4
-            - uses: dtolnay/rust-toolchain@stable
-            - uses: ./.github/actions/install-bevy-deps
-            - run: cargo build --target '${{ matrix.target }}' --workspace --all-features
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/install-bevy-deps
+      - run: cargo check --target '${{ matrix.target }}' --workspace --all-features
 
-    build-fuzz:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: dtolnay/rust-toolchain@nightly
-            - uses: ./.github/actions/install-bevy-deps
-            - run: cargo install cargo-fuzz
-            - run: cd crates/aeronet_transport && cargo +nightly fuzz build
+  check-fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: ./.github/actions/install-bevy-deps
+      - run: cargo install cargo-fuzz
+      - run: cd crates/aeronet_transport && cargo +nightly fuzz check
 
-    test:
-        runs-on: ubuntu-latest
-        env:
-            RUST_BACKTRACE: 1
-        steps:
-            - uses: actions/checkout@v4
-            - uses: dtolnay/rust-toolchain@stable
-            - uses: ./.github/actions/install-bevy-deps
-            - run: cargo test --workspace --all-features
+  check-minimal:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: ["aeronet_io", "aeronet_transport", "aeronet_replicon"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv6m-none-eabi
+      - uses: ./.github/actions/install-bevy-deps
+      - run: cargo check --target thumbv6m-none-eabi --package '${{ matrix.package }}' --no-default-features --features bevy_ecs/critical-section
+
+  test:
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/install-bevy-deps
+      - run: cargo test --workspace --all-features

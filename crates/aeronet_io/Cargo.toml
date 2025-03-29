@@ -1,14 +1,14 @@
 [package]
 description = "IO abstraction primitives for `aeronet`"
-name = "aeronet_io"
-version = "0.12.0"
+name        = "aeronet_io"
+version     = "0.14.0-rc.1"
 
-authors.workspace = true
-categories.workspace = true
-edition.workspace = true
-keywords.workspace = true
-license.workspace = true
-repository.workspace = true
+authors.workspace      = true
+categories.workspace   = true
+edition.workspace      = true
+keywords.workspace     = true
+license.workspace      = true
+repository.workspace   = true
 rust-version.workspace = true
 
 [lints]
@@ -16,24 +16,30 @@ workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
-targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+targets      = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+
+[features]
+default = ["std"]
+
+## Enables standard library support.
+std = ["anyhow/std", "bytes/std", "log/std", "bevy_platform_support/std"]
 
 [dependencies]
-anyhow = { workspace = true, default-features = false }
-bytes = { workspace = true, default-features = false }
-derive_more = { workspace = true, default-features = false, features = [
+anyhow                = { workspace = true }
+bevy_app              = { workspace = true, features = ["bevy_reflect"] }
+bevy_ecs              = { workspace = true, features = ["bevy_reflect"] }
+bevy_platform_support = { workspace = true, features = ["alloc"] }
+bevy_reflect          = { workspace = true }
+bytes                 = { workspace = true }
+log                   = { workspace = true }
+
+derive_more = { workspace = true, features = [
   "display",
   "error",
   "add",
   "add_assign",
+  "deref",
 ] }
-tracing = { workspace = true, default-features = false }
-web-time = { workspace = true }
 
-bevy_app = { workspace = true, features = ["bevy_reflect"] }
-bevy_derive = { workspace = true }
-bevy_ecs = { workspace = true, features = ["bevy_reflect"] }
-bevy_hierarchy = { workspace = true, features = [
-  "reflect", # TODO: https://github.com/bevyengine/bevy/pull/16428
-] }
-bevy_reflect = { workspace = true }
+[target.'cfg(not(all(target_has_atomic = "8", target_has_atomic = "16", target_has_atomic = "32", target_has_atomic = "64", target_has_atomic = "ptr")))'.dependencies]
+bytes = { workspace = true, features = ["extra-platforms"] }

@@ -40,17 +40,15 @@
 use {
     crate::{IoSet, Session},
     bevy_app::prelude::*,
-    bevy_derive::Deref,
     bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bevy_reflect::prelude::*,
     bytes::Bytes,
     core::{num::Saturating, time::Duration},
-    derive_more::{Add, AddAssign, Display, Error, Sub, SubAssign},
-    tracing::warn,
-    web_time::Instant,
+    derive_more::{Add, AddAssign, Deref, Display, Error, Sub, SubAssign},
+    log::warn,
 };
 
-#[derive(Debug)]
 pub(crate) struct PacketPlugin;
 
 impl Plugin for PacketPlugin {

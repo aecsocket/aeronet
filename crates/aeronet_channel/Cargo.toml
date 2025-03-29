@@ -1,13 +1,13 @@
 [package]
 description = "In-memory MPSC channel IO layer implementation for `aeronet`"
-name = "aeronet_channel"
-version = "0.12.0"
+name        = "aeronet_channel"
+version     = "0.14.0-rc.1"
 
-authors.workspace = true
+authors.workspace    = true
 categories.workspace = true
-edition.workspace = true
-keywords.workspace = true
-license.workspace = true
+edition.workspace    = true
+keywords.workspace   = true
+license.workspace    = true
 repository.workspace = true
 
 [lints]
@@ -17,19 +17,17 @@ workspace = true
 all-features = true
 
 [dependencies]
-aeronet_io = { workspace = true }
-
-bytes = { workspace = true }
-derive_more = { workspace = true, features = ["display", "error"] }
-flume = { workspace = true }
-oneshot = { workspace = true }
-sync_wrapper = { workspace = true }
-tracing = { workspace = true }
-web-time = { workspace = true }
-
-bevy_app = { workspace = true }
-bevy_ecs = { workspace = true }
+aeronet_io            = { workspace = true }
+bevy_app              = { workspace = true }
+bevy_ecs              = { workspace = true }
+bevy_platform_support = { workspace = true }
+bytes                 = { workspace = true }
+derive_more           = { workspace = true, features = ["display", "error"] }
+flume                 = { workspace = true }
+oneshot               = { workspace = true }
+sync_wrapper          = { workspace = true }
+tracing               = { workspace = true }
 
 [dev-dependencies]
-bevy = { workspace = true }
+bevy      = { workspace = true }
 bevy_egui = { workspace = true }

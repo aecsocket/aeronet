@@ -1,7 +1,7 @@
 use {
     super::{ServerConfig, ServerError, ToConnected, ToOpen},
     crate::{server::ToConnecting, session::SessionError},
-    aeronet_io::connection::DisconnectReason,
+    aeronet_io::{connection::Disconnected, server::Closed},
     bevy_ecs::prelude::*,
     core::{
         net::SocketAddr,
@@ -25,7 +25,7 @@ use {
 pub async fn start(
     config: ServerConfig,
     send_next: oneshot::Sender<ToOpen>,
-) -> Result<Never, ServerError> {
+) -> Result<Never, Closed> {
     let tls_acceptor = config.tls.map(TlsAcceptor::from);
     let listener = TcpListener::bind(config.bind_address)
         .await
@@ -75,9 +75,9 @@ async fn accept_session(
     socket_config: WebSocketConfig,
     tls_acceptor: Option<TlsAcceptor>,
     mut send_connecting: mpsc::Sender<ToConnecting>,
-) -> Result<(), DisconnectReason<ServerError>> {
+) -> Result<(), Disconnected> {
     let (send_session_entity, recv_session_entity) = oneshot::channel::<Entity>();
-    let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ServerError>>();
+    let (send_dc, recv_dc) = oneshot::channel::<Disconnected>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     send_connecting
         .send(ToConnecting {
@@ -87,12 +87,10 @@ async fn accept_session(
             recv_next,
         })
         .await
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ServerError::Session)?;
+        .map_err(|_| SessionError::FrontendClosed)?;
     let session = recv_session_entity
         .await
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ServerError::Session)?;
+        .map_err(|_| SessionError::FrontendClosed)?;
 
     let Err(dc_reason) = handle_session(stream, peer_addr, socket_config, tls_acceptor, send_next)
         .instrument(debug_span!("session", %session))
@@ -107,7 +105,7 @@ async fn handle_session(
     socket_config: WebSocketConfig,
     tls_acceptor: Option<TlsAcceptor>,
     send_next: oneshot::Sender<ToConnected>,
-) -> Result<Never, DisconnectReason<ServerError>> {
+) -> Result<Never, Disconnected> {
     debug!("Accepting session");
 
     let stream = if let Some(tls_acceptor) = tls_acceptor {
@@ -133,14 +131,10 @@ async fn handle_session(
 
     send_next
         .send(connected)
-        .map_err(|_| SessionError::FrontendClosed)
-        .map_err(ServerError::Session)?;
+        .map_err(|_| SessionError::FrontendClosed)?;
 
     debug!("Starting session loop");
-    backend
-        .start()
-        .await
-        .map_err(|reason| reason.map_err(ServerError::Session))
+    backend.start().await
 }
 
 #[derive(Debug)]
@@ -157,7 +151,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for MaybeTlsStream<S> {
         buf: &mut ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
-            Self::Plain(ref mut s) => Pin::new(s).poll_read(cx, buf),
+            Self::Plain(s) => Pin::new(s).poll_read(cx, buf),
             Self::Rustls(s) => Pin::new(s).poll_read(cx, buf),
         }
     }
@@ -170,14 +164,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<S> {
         buf: &[u8],
     ) -> Poll<Result<usize, std::io::Error>> {
         match self.get_mut() {
-            Self::Plain(ref mut s) => Pin::new(s).poll_write(cx, buf),
+            Self::Plain(s) => Pin::new(s).poll_write(cx, buf),
             Self::Rustls(s) => Pin::new(s).poll_write(cx, buf),
         }
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
         match self.get_mut() {
-            Self::Plain(ref mut s) => Pin::new(s).poll_flush(cx),
+            Self::Plain(s) => Pin::new(s).poll_flush(cx),
             Self::Rustls(s) => Pin::new(s).poll_flush(cx),
         }
     }
@@ -187,7 +181,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<S> {
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
         match self.get_mut() {
-            Self::Plain(ref mut s) => Pin::new(s).poll_shutdown(cx),
+            Self::Plain(s) => Pin::new(s).poll_shutdown(cx),
             Self::Rustls(s) => Pin::new(s).poll_shutdown(cx),
         }
     }

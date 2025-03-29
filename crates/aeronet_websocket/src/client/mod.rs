@@ -7,16 +7,14 @@ use {
         WebSocketRuntime,
         session::{self, MTU, SessionError, SessionFrontend, WebSocketIo, WebSocketSessionPlugin},
     },
-    aeronet_io::{
-        IoSet, Session, SessionEndpoint,
-        connection::{DisconnectReason, Disconnected},
-    },
+    aeronet_io::{IoSet, Session, SessionEndpoint, connection::Disconnected},
     bevy_app::prelude::*,
-    bevy_ecs::{prelude::*, system::EntityCommand},
-    derive_more::{Display, Error, From},
+    bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
+    core::mem,
+    derive_more::{Display, Error},
     futures::{channel::oneshot, never::Never},
-    tracing::{Instrument, debug_span},
-    web_time::Instant,
+    tracing::{Instrument, debug, debug_span},
 };
 
 cfg_if::cfg_if! {
@@ -46,7 +44,6 @@ cfg_if::cfg_if! {
 }
 
 /// Allows using [`WebSocketClient`].
-#[derive(Debug)]
 pub struct WebSocketClientPlugin;
 
 impl Plugin for WebSocketClientPlugin {
@@ -57,7 +54,9 @@ impl Plugin for WebSocketClientPlugin {
 
         app.add_systems(
             PreUpdate,
-            poll_clients.in_set(IoSet::Poll).before(session::poll),
+            (poll_connecting, poll_connected)
+                .in_set(IoSet::Poll)
+                .before(session::poll),
         );
     }
 }
@@ -68,7 +67,7 @@ impl Plugin for WebSocketClientPlugin {
 /// Use [`WebSocketClient::connect`] to start a connection.
 #[derive(Debug, Component)]
 #[require(SessionEndpoint)]
-pub struct WebSocketClient(ClientFrontend);
+pub struct WebSocketClient(());
 
 impl WebSocketClient {
     /// Creates an [`EntityCommand`] to set up a session and connect it to the
@@ -79,7 +78,7 @@ impl WebSocketClient {
     /// ```
     /// use {
     ///     aeronet_websocket::client::{ClientConfig, WebSocketClient},
-    ///     bevy_ecs::{prelude::*, system::EntityCommand},
+    ///     bevy_ecs::prelude::*,
     /// };
     ///
     /// # fn run(mut commands: Commands, world: &mut World) {
@@ -92,9 +91,9 @@ impl WebSocketClient {
     ///     .queue(WebSocketClient::connect(config, target));
     ///
     /// // using mutable `World` access
-    /// # let config = ClientConfig::default();
+    /// # let config: ClientConfig = unreachable!();
     /// let session = world.spawn_empty().id();
-    /// WebSocketClient::connect(config, target).apply(session, world);
+    /// WebSocketClient::connect(config, target).apply(world.entity_mut(session));
     /// # }
     /// ```
     #[must_use]
@@ -115,33 +114,31 @@ impl WebSocketClient {
                 target.into_client_request()
             }
         };
-        move |session: Entity, world: &mut World| connect(session, world, config, target)
+        move |entity: EntityWorldMut| connect(entity, config, target)
     }
 }
 
-fn connect(session: Entity, world: &mut World, config: ClientConfig, target: ConnectTarget) {
-    let runtime = world.resource::<WebSocketRuntime>().clone();
+fn connect(mut entity: EntityWorldMut, config: ClientConfig, target: ConnectTarget) {
+    let runtime = entity.world().resource::<WebSocketRuntime>().clone();
 
-    let (send_dc, recv_dc) = oneshot::channel::<DisconnectReason<ClientError>>();
+    let (send_dc, recv_dc) = oneshot::channel::<Disconnected>();
     let (send_next, recv_next) = oneshot::channel::<ToConnected>();
     runtime.spawn_on_self(
         async move {
-            let Err(reason) = backend::start(config, target, send_next).await;
-            _ = send_dc.send(reason);
+            let Err(disconnected) = backend::start(config, target, send_next).await;
+            debug!("Client disconnected: {disconnected:?}");
+            _ = send_dc.send(disconnected);
         }
-        .instrument(debug_span!("client", %session)),
+        .instrument(debug_span!("client", entity = %entity.id())),
     );
 
-    world
-        .entity_mut(session)
-        .insert(WebSocketClient(ClientFrontend::Connecting {
-            recv_dc,
-            recv_next,
-        }));
+    entity.insert((WebSocketClient(()), Connecting { recv_dc, recv_next }));
 }
 
-/// [`WebSocketClient`] error.
-#[derive(Debug, Display, Error, From)]
+/// [`WebSocketClient`]-specific error.
+///
+/// For generic WebSocket errors, see [`SessionError`].
+#[derive(Debug, Display, Error)]
 #[non_exhaustive]
 pub enum ClientError {
     /// Failed to convert the `target` passed into [`WebSocketClient::connect`]
@@ -154,21 +151,17 @@ pub enum ClientError {
     /// Failed to connect to the target.
     #[display("failed to connect")]
     Connect(ConnectError),
-    /// Generic session error.
-    #[from]
-    Session(SessionError),
 }
 
-#[derive(Debug)]
-enum ClientFrontend {
-    Connecting {
-        recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
-        recv_next: oneshot::Receiver<ToConnected>,
-    },
-    Connected {
-        recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
-    },
-    Disconnected,
+#[derive(Debug, Component)]
+struct Connecting {
+    recv_dc: oneshot::Receiver<Disconnected>,
+    recv_next: oneshot::Receiver<ToConnected>,
+}
+
+#[derive(Debug, Component)]
+struct Connected {
+    recv_dc: oneshot::Receiver<Disconnected>,
 }
 
 #[derive(Debug)]
@@ -180,70 +173,58 @@ struct ToConnected {
     frontend: SessionFrontend,
 }
 
-fn poll_clients(mut commands: Commands, mut frontends: Query<(Entity, &mut WebSocketClient)>) {
-    for (session, mut frontend) in &mut frontends {
-        replace_with::replace_with_or_abort(&mut frontend.0, |state| match state {
-            ClientFrontend::Connecting { recv_dc, recv_next } => {
-                poll_connecting(&mut commands, session, recv_dc, recv_next)
-            }
-            ClientFrontend::Connected { mut recv_dc } => {
-                if should_disconnect(&mut commands, session, &mut recv_dc) {
-                    ClientFrontend::Disconnected
-                } else {
-                    ClientFrontend::Connected { recv_dc }
-                }
-            }
-            ClientFrontend::Disconnected => state,
-        });
-    }
-}
-
 fn poll_connecting(
-    commands: &mut Commands,
-    session: Entity,
-    mut recv_dc: oneshot::Receiver<DisconnectReason<ClientError>>,
-    mut recv_next: oneshot::Receiver<ToConnected>,
-) -> ClientFrontend {
-    if should_disconnect(commands, session, &mut recv_dc) {
-        return ClientFrontend::Disconnected;
+    mut commands: Commands,
+    mut clients: Query<(Entity, &mut Connecting), With<WebSocketClient>>,
+) {
+    for (entity, mut client) in &mut clients {
+        if try_disconnect(&mut commands, entity, &mut client.recv_dc) {
+            continue;
+        }
+
+        let Ok(Some(next)) = client.recv_next.try_recv() else {
+            continue;
+        };
+
+        let (_, dummy) = oneshot::channel();
+        let recv_dc = mem::replace(&mut client.recv_dc, dummy);
+        commands.entity(entity).remove::<Connecting>().insert((
+            WebSocketIo {
+                recv_packet_b2f: next.frontend.recv_packet_b2f,
+                send_packet_f2b: next.frontend.send_packet_f2b,
+                send_user_dc: Some(next.frontend.send_user_dc),
+            },
+            Connected { recv_dc },
+            Session::new(Instant::now(), MTU),
+            #[cfg(not(target_family = "wasm"))]
+            aeronet_io::connection::LocalAddr(next.local_addr),
+            #[cfg(not(target_family = "wasm"))]
+            aeronet_io::connection::PeerAddr(next.peer_addr),
+        ));
     }
-
-    let Ok(Some(next)) = recv_next.try_recv() else {
-        return ClientFrontend::Connecting { recv_dc, recv_next };
-    };
-
-    commands.entity(session).insert((
-        WebSocketIo {
-            recv_packet_b2f: next.frontend.recv_packet_b2f,
-            send_packet_f2b: next.frontend.send_packet_f2b,
-            send_user_dc: Some(next.frontend.send_user_dc),
-        },
-        Session::new(Instant::now(), MTU),
-        #[cfg(not(target_family = "wasm"))]
-        aeronet_io::connection::LocalAddr(next.local_addr),
-        #[cfg(not(target_family = "wasm"))]
-        aeronet_io::connection::PeerAddr(next.peer_addr),
-    ));
-    ClientFrontend::Connected { recv_dc }
 }
 
-fn should_disconnect(
+fn poll_connected(
+    mut commands: Commands,
+    mut clients: Query<(Entity, &mut Connected), With<WebSocketClient>>,
+) {
+    for (entity, mut client) in &mut clients {
+        try_disconnect(&mut commands, entity, &mut client.recv_dc);
+    }
+}
+
+fn try_disconnect(
     commands: &mut Commands,
-    session: Entity,
-    recv_dc: &mut oneshot::Receiver<DisconnectReason<ClientError>>,
+    entity: Entity,
+    recv_dc: &mut oneshot::Receiver<Disconnected>,
 ) -> bool {
-    let dc_reason = match recv_dc.try_recv() {
+    let disconnected = match recv_dc.try_recv() {
         Ok(None) => None,
-        Ok(Some(dc_reason)) => Some(dc_reason),
-        Err(_) => Some(ClientError::Session(SessionError::BackendClosed).into()),
+        Ok(Some(disconnected)) => Some(disconnected),
+        Err(_) => Some(SessionError::BackendClosed.into()),
     };
-    dc_reason.is_some_and(|reason| {
-        commands.trigger_targets(
-            Disconnected {
-                reason: reason.map_err(anyhow::Error::new),
-            },
-            session,
-        );
+    disconnected.is_some_and(|disconnected| {
+        commands.trigger_targets(disconnected, entity);
         true
     })
 }

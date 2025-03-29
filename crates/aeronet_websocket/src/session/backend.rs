@@ -5,7 +5,8 @@ pub mod wasm {
             JsError,
             session::{SessionError, SessionFrontend},
         },
-        aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
+        aeronet_io::{connection::Disconnected, packet::RecvPacket},
+        bevy_platform_support::time::Instant,
         bytes::Bytes,
         futures::{
             SinkExt, StreamExt,
@@ -15,14 +16,13 @@ pub mod wasm {
         js_sys::Uint8Array,
         wasm_bindgen::{JsCast, prelude::Closure},
         web_sys::{BinaryType, CloseEvent, ErrorEvent, MessageEvent, WebSocket},
-        web_time::Instant,
     };
 
     #[derive(Debug)]
     pub struct SessionBackend {
         socket: WebSocket,
         recv_user_dc: oneshot::Receiver<String>,
-        recv_dc_reason: mpsc::Receiver<DisconnectReason<SessionError>>,
+        recv_dc_reason: mpsc::Receiver<Disconnected>,
     }
 
     // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
@@ -35,8 +35,7 @@ pub mod wasm {
         let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
         let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
 
-        let (mut send_dc_reason, recv_dc_reason) =
-            mpsc::channel::<DisconnectReason<SessionError>>(1);
+        let (mut send_dc_reason, recv_dc_reason) = mpsc::channel::<Disconnected>(1);
 
         let (_send_dropped, recv_dropped) = oneshot::channel::<()>();
         let on_open = Closure::<dyn FnOnce()>::once({
@@ -73,11 +72,11 @@ pub mod wasm {
             let mut send_dc_reason = send_dc_reason.clone();
             Closure::<dyn FnMut(_)>::new(move |event: CloseEvent| {
                 let dc_reason = if event.code() == NORMAL_CLOSE_CODE {
-                    DisconnectReason::Peer(event.reason())
+                    Disconnected::by_peer(event.reason())
                 } else {
                     // TODO friendly error messages
                     // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
-                    DisconnectReason::Error(SessionError::Closed(event.code()))
+                    Disconnected::by_error(SessionError::Closed(event.code()))
                 };
                 _ = send_dc_reason.try_send(dc_reason);
             })
@@ -85,7 +84,7 @@ pub mod wasm {
 
         let on_error = Closure::<dyn FnMut(_)>::new(move |event: ErrorEvent| {
             let err = SessionError::Connection(JsError(event.message()));
-            _ = send_dc_reason.try_send(DisconnectReason::Error(err));
+            _ = send_dc_reason.try_send(Disconnected::by_error(err));
         });
 
         socket.set_onopen(Some(on_open.as_ref().unchecked_ref()));
@@ -134,7 +133,7 @@ pub mod wasm {
     }
 
     impl SessionBackend {
-        pub async fn start(self) -> Result<Never, DisconnectReason<SessionError>> {
+        pub async fn start(self) -> Result<Never, Disconnected> {
             let Self {
                 socket,
                 mut recv_user_dc,
@@ -149,7 +148,7 @@ pub mod wasm {
                 reason = recv_user_dc => {
                     let reason = reason.map_err(|_| SessionError::FrontendClosed)?;
                     _ = socket.close_with_code_and_reason(NORMAL_CLOSE_CODE, &reason);
-                    Err(DisconnectReason::User(reason))
+                    Err(Disconnected::by_user(reason))
                 }
             }
         }
@@ -160,7 +159,8 @@ pub mod wasm {
 pub mod native {
     use {
         crate::session::{SessionError, SessionFrontend},
-        aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
+        aeronet_io::{connection::Disconnected, packet::RecvPacket},
+        bevy_platform_support::time::Instant,
         bytes::Bytes,
         futures::{
             SinkExt, StreamExt,
@@ -175,7 +175,6 @@ pub mod native {
                 protocol::{CloseFrame, frame::coding::CloseCode},
             },
         },
-        web_time::Instant,
     };
 
     #[derive(Debug)]
@@ -209,7 +208,7 @@ pub mod native {
     }
 
     impl<S: Send + AsyncRead + AsyncWrite + Unpin> SessionBackend<S> {
-        pub async fn start(self) -> Result<Never, DisconnectReason<SessionError>> {
+        pub async fn start(self) -> Result<Never, Disconnected> {
             let Self {
                 mut stream,
                 send_packet_b2f,
@@ -232,7 +231,7 @@ pub mod native {
                     reason = recv_user_dc => {
                         let reason = reason.map_err(|_| SessionError::FrontendClosed)?;
                         Self::close(&mut stream, reason.clone()).await?;
-                        return Err(DisconnectReason::User(reason));
+                        return Err(Disconnected::by_user(reason));
                     }
                 }
             }
@@ -241,13 +240,13 @@ pub mod native {
         fn recv(
             send_packet_b2f: &mpsc::UnboundedSender<RecvPacket>,
             msg: Message,
-        ) -> Result<(), DisconnectReason<SessionError>> {
+        ) -> Result<(), Disconnected> {
             let packet = match msg {
                 Message::Close(None) => {
                     return Err(SessionError::DisconnectedWithoutReason.into());
                 }
                 Message::Close(Some(frame)) => {
-                    return Err(DisconnectReason::Peer(frame.reason.to_string()));
+                    return Err(Disconnected::by_peer(frame.reason.to_string()));
                 }
                 msg => msg.into_data(),
             };
@@ -262,10 +261,7 @@ pub mod native {
             Ok(())
         }
 
-        async fn send(
-            stream: &mut WebSocketStream<S>,
-            packet: Bytes,
-        ) -> Result<(), DisconnectReason<SessionError>> {
+        async fn send(stream: &mut WebSocketStream<S>, packet: Bytes) -> Result<(), Disconnected> {
             let msg = Message::binary(packet);
             stream.send(msg).await.map_err(SessionError::Connection)?;
             Ok(())
@@ -274,7 +270,7 @@ pub mod native {
         async fn close(
             stream: &mut WebSocketStream<S>,
             reason: String,
-        ) -> Result<(), DisconnectReason<SessionError>> {
+        ) -> Result<(), Disconnected> {
             let close_frame = CloseFrame {
                 code: CloseCode::Normal,
                 reason: Utf8Bytes::from(reason),

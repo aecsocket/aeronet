@@ -1,14 +1,14 @@
 [package]
 description = "WebTransport IO layer implementation for `aeronet`"
-name = "aeronet_webtransport"
-version = "0.12.0"
+name        = "aeronet_webtransport"
+version     = "0.14.0-rc.1"
 
-authors.workspace = true
-categories.workspace = true
-edition.workspace = true
-keywords.workspace = true
-license.workspace = true
-repository.workspace = true
+authors.workspace      = true
+categories.workspace   = true
+edition.workspace      = true
+keywords.workspace     = true
+license.workspace      = true
+repository.workspace   = true
 rust-version.workspace = true
 
 [lints]
@@ -16,8 +16,8 @@ workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
-rustflags = ["--cfg=web_sys_unstable_apis"]
-targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+rustflags    = ["--cfg=web_sys_unstable_apis"]
+targets      = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [features]
 default = ["self-signed"]
@@ -46,50 +46,51 @@ dangerous-configuration = ["wtransport/dangerous-configuration"]
 document-features = ["dep:document-features"]
 
 [dependencies]
-aeronet_io = { workspace = true }
+aeronet_io            = { workspace = true }
+anyhow                = { workspace = true }
+base64                = { workspace = true }
+bevy_app              = { workspace = true }
+bevy_ecs              = { workspace = true }
+bevy_platform_support = { workspace = true }
+bevy_reflect          = { workspace = true }
+bytes                 = { workspace = true }
+cfg-if                = { workspace = true }
+document-features     = { workspace = true, optional = true }
+futures               = { workspace = true }
+tracing               = { workspace = true }
+xwt-core              = { workspace = true }
 
-anyhow = { workspace = true }
-base64 = { workspace = true }
-bytes = { workspace = true }
-cfg-if = { workspace = true }
-derive_more = { workspace = true, features = ["display", "error", "from"] }
-futures = { workspace = true }
-replace_with = { workspace = true }
-tracing = { workspace = true }
-web-time = { workspace = true }
-xwt-core = { workspace = true }
-
-bevy_app = { workspace = true }
-bevy_ecs = { workspace = true }
-bevy_hierarchy = { workspace = true }
-bevy_reflect = { workspace = true }
-
-document-features = { workspace = true, optional = true }
+derive_more = { workspace = true, features = [
+  "display",
+  "error",
+  "deref",
+  "deref_mut",
+] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-gloo-timers = { workspace = true, features = ["futures"] }
-js-sys = { workspace = true }
-wasm-bindgen = { workspace = true }
+gloo-timers          = { workspace = true, features = ["futures"] }
+js-sys               = { workspace = true }
+wasm-bindgen         = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
-xwt-web = { workspace = true }
+xwt-web              = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-spki = { workspace = true, features = ["fingerprint"] }
-tokio = { workspace = true, features = ["rt-multi-thread"] }
-wtransport = { workspace = true }
-x509-cert = { workspace = true }
+spki           = { workspace = true, features = ["fingerprint"] }
+tokio          = { workspace = true, features = ["rt-multi-thread"] }
+wtransport     = { workspace = true }
+x509-cert      = { workspace = true }
 xwt-wtransport = { workspace = true }
 
 [dev-dependencies]
-bevy = { workspace = true }
+bevy      = { workspace = true }
 bevy_egui = { workspace = true }
 
 [[example]]
-name = "webtransport_client"
-path = "examples/webtransport_client.rs"
+name              = "webtransport_client"
+path              = "examples/webtransport_client.rs"
 required-features = ["client"]
 
 [[example]]
-name = "webtransport_echo_server"
-path = "examples/webtransport_echo_server.rs"
+name              = "webtransport_server"
+path              = "examples/webtransport_server.rs"
 required-features = ["server", "self-signed"]

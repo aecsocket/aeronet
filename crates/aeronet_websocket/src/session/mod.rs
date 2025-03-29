@@ -1,6 +1,4 @@
-//! Implementation for WebSocket sessions.
-//!
-//! This logic is shared between clients and servers.
+//! Implementation for WebSocket sessions, shared between clients and servers.
 
 pub(crate) mod backend;
 
@@ -13,13 +11,13 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bytes::Bytes,
     core::num::Saturating,
     derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},
     std::io,
     tracing::{trace, trace_span},
-    web_time::Instant,
 };
 
 cfg_if::cfg_if! {
@@ -34,7 +32,6 @@ cfg_if::cfg_if! {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct WebSocketSessionPlugin;
 
 impl Plugin for WebSocketSessionPlugin {
@@ -73,16 +70,25 @@ impl Plugin for WebSocketSessionPlugin {
 /// You should not add or remove this component directly - it is managed
 /// entirely by the client and server implementations.
 #[derive(Debug, Component)]
-#[require(Session(new_session))]
+#[require(Session::new(Instant::now(), MTU))]
 pub struct WebSocketIo {
     pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
     pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
     pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
 }
 
-fn new_session() -> Session {
-    Session::new(Instant::now(), IP_MTU)
-}
+/// Packet MTU of [`WebSocketIo`] sessions.
+///
+/// This is made up of the [`IP_MTU`] minus:
+/// - maximum TCP header size
+///   - <https://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_segment_structure>
+/// - IPv6 header size without extensions
+///   - <https://en.wikipedia.org/wiki/IPv6_packet#Fixed_header>
+/// - WebSocket frame header size without extensions
+///   - <https://en.wikipedia.org/wiki/WebSocket#Frame_structure>
+///
+/// For a WebSocket, the minimum MTU is always the same as the current MTU.
+pub const MTU: usize = IP_MTU - 60 - 40 - 14;
 
 /// Error that occurs when polling a session using the [`WebSocketIo`] IO
 /// layer.
@@ -128,17 +134,6 @@ impl Drop for WebSocketIo {
     }
 }
 
-/// Packet MTU of [`WebSocketIo`] sessions.
-///
-/// This is made up of the [`IP_MTU`] minus:
-/// - maximum TCP header size
-///   - <https://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_segment_structure>
-/// - IPv6 header size without extensions
-///   - <https://en.wikipedia.org/wiki/IPv6_packet#Fixed_header>
-/// - WebSocket frame header size without extensions
-///   - <https://en.wikipedia.org/wiki/WebSocket#Frame_structure>
-pub const MTU: usize = IP_MTU - 60 - 40 - 14;
-
 #[derive(Debug)]
 pub(crate) struct SessionFrontend {
     pub recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
@@ -147,8 +142,8 @@ pub(crate) struct SessionFrontend {
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebSocketIo>) {
-    let session = trigger.entity();
-    let Ok(mut io) = sessions.get_mut(session) else {
+    let target = trigger.target();
+    let Ok(mut io) = sessions.get_mut(target) else {
         return;
     };
 
@@ -174,11 +169,9 @@ pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut WebSocketIo)>
             session.recv.push(packet);
         }
 
-        trace!(
-            num_packets = num_packets.0,
-            num_bytes = num_bytes.0,
-            "Received packets",
-        );
+        if num_packets.0 > 0 {
+            trace!(%num_packets, %num_bytes, "Received packets");
+        }
     }
 }
 
@@ -202,10 +195,8 @@ fn flush(mut sessions: Query<(Entity, &mut Session, &WebSocketIo)>) {
             _ = io.send_packet_f2b.unbounded_send(packet);
         }
 
-        trace!(
-            num_packets = num_packets.0,
-            num_bytes = num_bytes.0,
-            "Flushed packets",
-        );
+        if num_packets.0 > 0 {
+            trace!(%num_packets, %num_bytes, "Flushed packets");
+        }
     }
 }

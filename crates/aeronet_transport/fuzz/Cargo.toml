@@ -12,39 +12,39 @@ version = "0.0.0"
 cargo-fuzz = true
 
 [dependencies]
-arbitrary = "1.4"
+arbitrary     = "1.4"
 libfuzzer-sys = "0.4"
 
-aeronet_transport = { path = ".." }
+aeronet_transport = { path = "..", features = ["arbitrary"] }
 
 [[bin]]
 name = "frag_recv"
 path = "fuzz_targets/frag_recv.rs"
 
 bench = false
-doc = false
-test = false
+doc   = false
+test  = false
 
 [[bin]]
 name = "round_trip"
 path = "fuzz_targets/round_trip.rs"
 
 bench = false
-doc = false
-test = false
+doc   = false
+test  = false
 
 [[bin]]
 name = "seq_buf"
 path = "fuzz_targets/seq_buf.rs"
 
 bench = false
-doc = false
-test = false
+doc   = false
+test  = false
 
 [[bin]]
 name = "transport_recv"
 path = "fuzz_targets/transport_recv.rs"
 
 bench = false
-doc = false
-test = false
+doc   = false
+test  = false

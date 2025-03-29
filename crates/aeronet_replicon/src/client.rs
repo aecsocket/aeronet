@@ -2,17 +2,18 @@
 
 use {
     crate::convert,
-    aeronet_io::{Session, SessionEndpoint, connection::Disconnect, web_time::Instant},
+    aeronet_io::{Session, SessionEndpoint, connection::Disconnect},
     aeronet_transport::{
         AeronetTransportPlugin, Transport, TransportSet,
         sampling::{SessionSamplingPlugin, SessionStats, SessionStatsSampling},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
     core::{num::Saturating, time::Duration},
-    tracing::warn,
+    log::warn,
 };
 
 /// Provides a [`bevy_replicon`] client backend using [`Session`]s for
@@ -20,7 +21,6 @@ use {
 ///
 /// To make a [`Session`] be used by [`bevy_replicon`], add the
 /// [`AeronetRepliconClient`] component.
-#[derive(Debug)]
 pub struct AeronetRepliconClientPlugin;
 
 impl Plugin for AeronetRepliconClientPlugin {
@@ -122,31 +122,31 @@ fn on_client_connected(
     clients: Query<&Session, With<AeronetRepliconClient>>,
     channels: Res<RepliconChannels>,
 ) {
-    let client = trigger.entity();
-    let Ok(session) = clients.get(client) else {
+    let target = trigger.target();
+    let Ok(session) = clients.get(target) else {
         return;
     };
 
     let recv_lanes = channels
         .server_channels()
         .iter()
-        .map(|channel| convert::to_lane_kind(channel.kind));
+        .map(|channel| convert::to_lane_kind(*channel));
     let send_lanes = channels
         .client_channels()
         .iter()
-        .map(|channel| convert::to_lane_kind(channel.kind));
+        .map(|channel| convert::to_lane_kind(*channel));
     let now = Instant::now();
 
     let transport = match Transport::new(session, recv_lanes, send_lanes, now) {
         Ok(transport) => transport,
         Err(err) => {
-            warn!("Failed to create transport for {client}: {err:?}");
-            commands.trigger_targets(Disconnect::new("failed to create transport"), client);
+            warn!("Failed to create transport for {target}: {err:?}");
+            commands.trigger_targets(Disconnect::new("failed to create transport"), target);
             return;
         }
     };
 
-    commands.entity(client).insert(transport);
+    commands.entity(target).insert(transport);
 }
 
 fn update_state(
@@ -229,10 +229,7 @@ fn poll(
 ) {
     for mut transport in &mut clients {
         for msg in transport.recv.msgs.drain() {
-            let Some(channel_id) = convert::to_channel_id(msg.lane) else {
-                warn!("Lane {:?} is too large to convert to a channel", msg.lane);
-                continue;
-            };
+            let channel_id = convert::to_channel_id(msg.lane);
             replicon_client.insert_received(channel_id, msg.payload);
         }
 
@@ -248,7 +245,10 @@ fn flush(
 ) {
     let now = Instant::now();
     for (channel_id, msg) in replicon_client.drain_sent() {
-        let lane_index = convert::to_lane_index(channel_id);
+        let Some(lane_index) = convert::to_lane_index(channel_id) else {
+            warn!("Channel {channel_id} is too large to convert to a lane index");
+            continue;
+        };
         for mut transport in &mut clients {
             _ = transport.send.push(lane_index, msg.clone(), now);
         }

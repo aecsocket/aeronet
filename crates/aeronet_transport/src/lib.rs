@@ -3,6 +3,7 @@
 //!
 //! ## Feature flags
 #![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
@@ -22,14 +23,16 @@ pub mod visualizer;
 
 pub use aeronet_io as io;
 use {
-    aeronet_io::{IoSet, Session, connection::Disconnect, packet::MtuTooSmall},
-    arbitrary::Arbitrary,
+    aeronet_io::{IoSet, Session, connection::Disconnected, packet::MtuTooSmall},
+    alloc::{boxed::Box, vec::Vec},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
+    bevy_platform_support::time::Instant,
     bevy_reflect::Reflect,
     core::num::Saturating,
-    derive_more::{Add, AddAssign, Sub, SubAssign},
+    derive_more::{Add, AddAssign, Display, Error, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
+    log::warn,
     min_size::MinSize,
     octs::FixedEncodeLenHint,
     packet::{Acknowledge, FragmentHeader, MessageSeq, PacketHeader},
@@ -37,15 +40,12 @@ use {
     rtt::RttEstimator,
     send::TransportSend,
     seq_buf::SeqBuf,
-    tracing::warn,
     typesize::{TypeSize, derive::TypeSize},
-    web_time::Instant,
 };
 
 /// Sets up the transport layer functionality.
 ///
 /// See [`Transport`].
-#[derive(Debug)]
 pub struct AeronetTransportPlugin;
 
 impl Plugin for AeronetTransportPlugin {
@@ -183,6 +183,7 @@ pub struct RecvMessage {
     /// Lane index on which this message was received.
     pub lane: LaneIndex,
     /// Instant at which the final fragment of this message was received.
+    #[typesize(skip)]
     pub recv_at: Instant,
     /// Raw byte data of this message.
     pub payload: Vec<u8>,
@@ -212,8 +213,8 @@ impl Transport {
     ///     aeronet_io::Session,
     ///     aeronet_transport::{Transport, lane::LaneKind},
     ///     bevy_ecs::prelude::*,
-    ///     tracing::warn,
-    ///     web_time::Instant,
+    ///     bevy_platform_support::time::Instant,
+    ///     log::warn,
     /// };
     ///
     /// const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
@@ -223,7 +224,7 @@ impl Transport {
     ///     sessions: Query<&Session>,
     ///     mut commands: Commands,
     /// ) {
-    ///     let entity = trigger.entity();
+    ///     let entity = trigger.target();
     ///     let session = sessions
     ///         .get(entity)
     ///         .expect("we are adding this component to this entity");
@@ -324,7 +325,8 @@ pub enum TransportSet {
 /// key - it's very likely to have the same key as another message later.
 ///
 /// [`Seq`]: packet::Seq
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Arbitrary, TypeSize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct MessageKey {
     /// Lane index on which the message was sent.
     pub lane: LaneIndex,
@@ -356,6 +358,7 @@ struct FragmentPath {
 
 #[derive(Debug, Clone, TypeSize)]
 struct FlushedPacket {
+    #[typesize(skip)]
     flushed_at: Instant,
     frags: Box<[FragmentPath]>,
 }
@@ -369,16 +372,33 @@ impl FlushedPacket {
     }
 }
 
+/// Error in [`Disconnected::ByError`] triggered on a [`Session`] when a
+/// [`Transport`] exceeds its memory usage limit.
+#[derive(Debug, Clone, Display, Error)]
+#[display("memory limit exceeded - {used} / {max} bytes")]
+pub struct MemoryLimitExceeded {
+    /// Number of bytes used.
+    pub used: usize,
+    /// Maximum number of bytes the transport is allowed to use.
+    pub max: usize,
+}
+
 fn check_memory_limit(
     mut commands: Commands,
     sessions: Query<(Entity, &Transport, &TransportConfig)>,
 ) {
-    for (session, transport, config) in &sessions {
+    for (entity, transport, config) in &sessions {
         let mem_used = transport.memory_used();
         let mem_max = config.max_memory_usage;
         if mem_used > mem_max {
-            warn!("{session} exceeded memory limit, disconnecting - {mem_used} / {mem_max} bytes");
-            commands.trigger_targets(Disconnect::new("memory limit exceeded"), session);
+            warn!("{entity} exceeded memory limit, disconnecting");
+            commands.trigger_targets(
+                Disconnected::by_error(MemoryLimitExceeded {
+                    used: mem_used,
+                    max: mem_max,
+                }),
+                entity,
+            );
         }
     }
 }

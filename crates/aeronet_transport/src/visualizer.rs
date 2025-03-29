@@ -11,19 +11,23 @@ use {
         send::SendLane,
     },
     aeronet_io::{Session, packet::PacketRtt},
+    alloc::{
+        format,
+        string::{String, ToString},
+        vec,
+    },
     bevy_app::prelude::*,
-    bevy_core::Name,
     bevy_ecs::prelude::*,
     bevy_egui::{
         EguiContexts,
         egui::{self, epaint::Hsva},
     },
+    bevy_platform_support::time::Instant,
     core::{hash::Hash, ops::RangeInclusive, time::Duration},
     itertools::Itertools,
     ringbuf::traits::Consumer,
     size_format::{BinaryPrefixes, PointSeparated, SizeFormatter},
     thousands::Separable,
-    web_time::Instant,
 };
 
 /// Uses [`egui`] to draw [`egui_plot`]s of [`Session`] statistics.
@@ -35,7 +39,6 @@ use {
 /// Without this plugin, you can still use [`SessionVisualizer`] manually.
 ///
 /// This automatically adds [`SessionSamplingPlugin`].
-#[derive(Debug)]
 pub struct SessionVisualizerPlugin;
 
 impl Plugin for SessionVisualizerPlugin {
@@ -138,7 +141,7 @@ impl SessionVisualizer {
                 let msg_rtt = sample.msg_rtt.as_secs_f64() * MS_PER_SEC;
                 ([x, packet_rtt], [x, msg_rtt])
             })
-            .multiunzip::<(Vec<_>, Vec<_>)>();
+            .multiunzip::<(vec::Vec<_>, vec::Vec<_>)>();
 
         let color = ui.visuals().text_color();
         let weak_color = ui.visuals().weak_text_color();
@@ -177,7 +180,7 @@ impl SessionVisualizer {
                 );
                 ([x, rx], [x, tx])
             })
-            .multiunzip::<(Vec<_>, Vec<_>)>();
+            .multiunzip::<(vec::Vec<_>, vec::Vec<_>)>();
 
         let history_sec = sampling.history_sec();
         plot(history_sec, "rx_tx")
@@ -208,7 +211,7 @@ impl SessionVisualizer {
                 let mem_used = sample.mem_used * 100.0;
                 ([x, loss], [x, mem_used])
             })
-            .multiunzip::<(Vec<_>, Vec<_>)>();
+            .multiunzip::<(vec::Vec<_>, vec::Vec<_>)>();
 
         let color = ui.visuals().text_color();
         let weak_color = ui.visuals().weak_text_color();

@@ -1,29 +1,58 @@
 {
-    "name": "aeronet",
-    "build": {
-        "dockerfile": "Dockerfile"
+  "name": "aeronet",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": [
+    // let Bevy/Steam access the GPU
+    "--device=/dev/dri",
+    "--security-opt=seccomp=unconfined",
+    // let Steam allocate big GPU buffers for WebViews/steamwebhelper
+    "--shm-size=2gb"
+  ],
+  "forwardPorts": [
+    25570, // aeronet_websocket
+    25571, // aeronet_webtransport
+    25572, // aeronet_steam
+    1334 // wasm-server-runner
+  ],
+  "containerEnv": {
+    "XDG_RUNTIME_DIR": "/tmp/user/1000",
+    "WAYLAND_DISPLAY": "${localEnv:XDG_RUNTIME_DIR}/wayland-0",
+    "DBUS_SESSION_BUS_ADDRESS": "unix:path=${localEnv:XDG_RUNTIME_DIR}/bus",
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "XAUTHORITY": "/tmp/.Xauthority"
+  },
+  "mounts": [
+    {
+      "type": "volume",
+      "source": "aeronet-profile",
+      "target": "/home/dev"
     },
-    "runArgs": ["--device=/dev/dri"],
-    "containerEnv": {
-        "XDG_RUNTIME_DIR": "/tmp/user/1000",
-        "WAYLAND_DISPLAY": "${localEnv:XDG_RUNTIME_DIR}/wayland-0",
-        "DBUS_SESSION_BUS_ADDRESS": "unix:path=${localEnv:XDG_RUNTIME_DIR}/bus"
+    {
+      "type": "bind",
+      "source": "${env:XDG_RUNTIME_DIR}/${env:WAYLAND_DISPLAY}",
+      "target": "${localEnv:XDG_RUNTIME_DIR}/wayland-0"
     },
-    "mounts": [
-        {
-            "type": "volume",
-            "source": "aeronet-profile",
-            "target": "/home/dev"
-        },
-        {
-            "type": "bind",
-            "source": "${env:XDG_RUNTIME_DIR}/${env:WAYLAND_DISPLAY}",
-            "target": "${localEnv:XDG_RUNTIME_DIR}/wayland-0"
-        },
-        {
-            "type": "bind",
-            "source": "${env:XDG_RUNTIME_DIR}/bus",
-            "target": "${localEnv:XDG_RUNTIME_DIR}/bus"
-        }
-    ]
+    {
+      "type": "bind",
+      "source": "${env:XDG_RUNTIME_DIR}/bus",
+      "target": "${localEnv:XDG_RUNTIME_DIR}/bus"
+    },
+    {
+      "type": "bind",
+      "source": "/run/dbus/system_bus_socket",
+      "target": "/run/dbus/system_bus_socket"
+    },
+    {
+      "type": "bind",
+      "source": "/tmp/.X11-unix",
+      "target": "/tmp/.X11-unix"
+    },
+    {
+      "type": "bind",
+      "source": "${localEnv:XAUTHORITY}",
+      "target": "/tmp/.Xauthority"
+    }
+  ]
 }

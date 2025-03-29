@@ -4,21 +4,20 @@
 use {
     aeronet_io::{
         AeronetIoPlugin, IoSet, Session, SessionEndpoint,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected},
+        connection::{DROP_DISCONNECT_REASON, Disconnect, Disconnected},
         packet::RecvPacket,
     },
     bevy_app::prelude::*,
-    bevy_ecs::{prelude::*, world::Command},
+    bevy_ecs::prelude::*,
+    bevy_platform_support::time::Instant,
     bytes::Bytes,
     core::num::Saturating,
     derive_more::{Display, Error},
     sync_wrapper::SyncWrapper,
     tracing::{trace, trace_span},
-    web_time::Instant,
 };
 
 /// Allows using [`ChannelIo`].
-#[derive(Debug)]
 pub struct ChannelIoPlugin;
 
 impl Plugin for ChannelIoPlugin {
@@ -99,10 +98,7 @@ impl ChannelIo {
     /// # Examples
     ///
     /// ```
-    /// use {
-    ///     aeronet_channel::ChannelIo,
-    ///     bevy_ecs::{prelude::*, world::Command},
-    /// };
+    /// use {aeronet_channel::ChannelIo, bevy_ecs::prelude::*};
     ///
     /// # fn run(mut commands: Commands, world: &mut World) {
     /// let a = commands.spawn_empty().id();
@@ -141,14 +137,14 @@ pub struct ChannelDisconnected;
 const MTU: usize = usize::MAX;
 
 fn on_io_added(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
-    let entity = trigger.entity();
+    let target = trigger.target();
     let session = Session::new(Instant::now(), MTU);
-    commands.entity(entity).insert((SessionEndpoint, session));
+    commands.entity(target).insert((SessionEndpoint, session));
 }
 
 fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelIo>) {
-    let entity = trigger.entity();
-    let Ok(mut io) = sessions.get_mut(entity) else {
+    let target = trigger.target();
+    let Ok(mut io) = sessions.get_mut(target) else {
         return;
     };
 
@@ -162,15 +158,15 @@ fn poll(mut commands: Commands, mut sessions: Query<(Entity, &mut Session, &mut 
         let span = trace_span!("poll", %entity);
         let _span = span.enter();
 
-        let dc_reason = match io.recv_dc.get_mut().try_recv() {
-            Ok(reason) => Some(DisconnectReason::Peer(reason)),
+        let disconnected = match io.recv_dc.get_mut().try_recv() {
+            Ok(reason) => Some(Disconnected::by_peer(reason)),
             Err(oneshot::TryRecvError::Disconnected) => {
-                Some(DisconnectReason::Error(ChannelDisconnected.into()))
+                Some(Disconnected::by_error(ChannelDisconnected))
             }
             Err(oneshot::TryRecvError::Empty) => None,
         };
-        if let Some(reason) = dc_reason {
-            commands.trigger_targets(Disconnected { reason }, entity);
+        if let Some(disconnected) = disconnected {
+            commands.trigger_targets(disconnected, entity);
             continue;
         }
 
