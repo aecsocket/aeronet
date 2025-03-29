@@ -2602,25 +2602,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
-name = "echo_client"
-version = "0.0.0"
-dependencies = [
- "aeronet",
- "aeronet_websocket",
- "bevy",
- "bevy_egui",
-]
-
-[[package]]
-name = "echo_server"
-version = "0.0.0"
-dependencies = [
- "aeronet",
- "aeronet_websocket",
- "bevy",
-]
-
-[[package]]
 name = "ecolor"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2785,6 +2766,21 @@ checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
 dependencies = [
  "event-listener",
  "pin-project-lite",
+]
+
+[[package]]
+name = "examples"
+version = "0.0.0"
+dependencies = [
+ "aeronet",
+ "aeronet_replicon",
+ "aeronet_websocket",
+ "aeronet_webtransport",
+ "bevy",
+ "bevy_egui",
+ "bevy_replicon",
+ "clap",
+ "serde",
 ]
 
 [[package]]
@@ -3985,43 +3981,6 @@ dependencies = [
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "move_box"
-version = "0.0.0"
-dependencies = [
- "bevy",
- "bevy_replicon",
- "serde",
-]
-
-[[package]]
-name = "move_box_client"
-version = "0.0.0"
-dependencies = [
- "aeronet",
- "aeronet_replicon",
- "aeronet_websocket",
- "aeronet_webtransport",
- "bevy",
- "bevy_egui",
- "bevy_replicon",
- "move_box",
-]
-
-[[package]]
-name = "move_box_server"
-version = "0.0.0"
-dependencies = [
- "aeronet",
- "aeronet_replicon",
- "aeronet_websocket",
- "aeronet_webtransport",
- "bevy",
- "bevy_replicon",
- "clap",
- "move_box",
 ]
 
 [[package]]

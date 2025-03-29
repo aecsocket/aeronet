@@ -208,7 +208,7 @@ When submitting a pull request, make sure that all continuous integration (CI) c
 [`bevy_replicon`]: https://docs.rs/bevy_replicon
 [`aeronet_transport`]: https://docs.rs/aeronet_transport
 [`Session`]: io::Session
-[`echo_client`]: ./examples/echo_client
-[`echo_server`]: ./examples/echo_server
+[`echo_client`]: ./examples/src/bin/echo_client.rs
+[`echo_server`]: ./examples/src/bin/echo_server.rs
 [`egui_plot`]: https://docs.rs/egui_plot
 [`cargo-fuzz`]: https://github.com/rust-fuzz/cargo-fuzz

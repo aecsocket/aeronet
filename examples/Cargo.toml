@@ -1,7 +1,6 @@
 [package]
-description = "move_box demo client"
-name        = "move_box_client"
-publish     = false
+name    = "examples"
+publish = false
 
 authors.workspace      = true
 categories.workspace   = true
@@ -15,16 +14,17 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-move_box = { path = "../move_box" }
-
 aeronet           = { workspace = true, features = ["visualizer"] }
-aeronet_replicon  = { workspace = true, features = ["client"] }
-aeronet_websocket = { workspace = true, features = ["client"] }
+aeronet_replicon  = { workspace = true, features = ["client", "server"] }
+aeronet_websocket = { workspace = true, features = ["client", "server"] }
 bevy              = { workspace = true }
 bevy_egui         = { workspace = true }
 bevy_replicon     = { workspace = true }
+clap              = { workspace = true, features = ["derive"] }
+serde             = { workspace = true, features = ["derive"] }
 
 aeronet_webtransport = { workspace = true, features = [
   "client",
+  "server",
   "dangerous-configuration",
 ] }

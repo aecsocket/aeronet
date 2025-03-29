@@ -10,6 +10,12 @@
     // let Steam allocate big GPU buffers for WebViews/steamwebhelper
     "--shm-size=2gb"
   ],
+  "forwardPorts": [
+    25570, // aeronet_websocket
+    25571, // aeronet_webtransport
+    25572, // aeronet_steam
+    1334 // wasm-server-runner
+  ],
   "containerEnv": {
     "XDG_RUNTIME_DIR": "/tmp/user/1000",
     "WAYLAND_DISPLAY": "${localEnv:XDG_RUNTIME_DIR}/wayland-0",

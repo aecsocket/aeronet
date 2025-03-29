@@ -48,7 +48,7 @@ fn main() -> AppExit {
 
 fn open_server(mut commands: Commands) {
     let target = match env::args().nth(1).as_deref() {
-        Some("addr") => ListenTarget::Addr(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 25567)),
+        Some("addr") => ListenTarget::Addr(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 25572)),
         Some("peer") => ListenTarget::Peer { virtual_port: 0 },
         _ => panic!("must specify either `addr` or `peer` argument on command line"),
     };

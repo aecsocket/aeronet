@@ -73,7 +73,7 @@ struct UiState {
 // so we use a secure WebSocket connection to connect to it.
 // You should always use encryption, unless you're testing something, in which
 // case you can use `ws`.
-const DEFAULT_TARGET: &str = "wss://[::1]:25566";
+const DEFAULT_TARGET: &str = "wss://[::1]:25570";
 
 // Define what `aeronet_transport` lanes will be used on this connection.
 // When using the transport layer, you must define in advance what lanes will be

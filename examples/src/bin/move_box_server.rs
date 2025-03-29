@@ -1,3 +1,5 @@
+//! See `src/move_box.rs`.
+
 use {
     aeronet::io::{
         Session,
@@ -14,13 +16,12 @@ use {
     bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*, state::app::StatesPlugin},
     bevy_replicon::prelude::*,
     core::time::Duration,
-    move_box::{MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition, TICK_RATE},
+    examples::move_box::{
+        MoveBoxPlugin, Player, PlayerColor, PlayerInput, PlayerPosition, TICK_RATE,
+        WEB_SOCKET_PORT, WEB_TRANSPORT_PORT,
+    },
     std::time::SystemTime,
 };
-
-const WEB_TRANSPORT_PORT: u16 = 25565;
-
-const WEB_SOCKET_PORT: u16 = 25566;
 
 /// `move_box` demo server
 #[derive(Debug, Resource, clap::Parser)]
@@ -39,7 +40,7 @@ impl FromWorld for Args {
     }
 }
 
-pub fn main() -> AppExit {
+fn main() -> AppExit {
     App::new()
         .init_resource::<Args>()
         .add_plugins((

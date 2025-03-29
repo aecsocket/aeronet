@@ -34,3 +34,6 @@ RUN yay -Syu --noconfirm alsa-lib libxkbcommon vulkan-tools mesa vulkan-radeon
 # install Steam libraries
 RUN echo -e "[multilib]\nInclude = /etc/pacman.d/mirrorlist" | sudo tee -a /etc/pacman.conf && \
     yay -Syu --noconfirm steam
+
+# install WASM tools
+RUN cargo binstall wasm-server-runner

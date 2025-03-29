@@ -77,7 +77,7 @@ fn global_ui(
     mut target: Local<String>,
     mut session_id: Local<usize>,
 ) {
-    const DEFAULT_TARGET: &str = "wss://[::1]:25566";
+    const DEFAULT_TARGET: &str = "wss://127.0.0.1:25570";
 
     egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));

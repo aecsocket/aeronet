@@ -1,4 +1,4 @@
-#![doc = include_str!("../README.md")]
+//! See `src/move_box.rs`.
 
 use {
     aeronet::{
@@ -20,7 +20,10 @@ use {
     bevy::{ecs::query::QuerySingleError, prelude::*},
     bevy_egui::{EguiContexts, EguiPlugin, egui},
     bevy_replicon::prelude::*,
-    move_box::{GameState, MoveBoxPlugin, PlayerColor, PlayerInput, PlayerPosition},
+    examples::move_box::{
+        GameState, MoveBoxPlugin, PlayerColor, PlayerInput, PlayerPosition, WEB_SOCKET_PORT,
+        WEB_TRANSPORT_PORT,
+    },
 };
 
 fn main() -> AppExit {
@@ -205,7 +208,7 @@ fn web_transport_ui(
     mut ui_state: ResMut<WebTransportUi>,
     sessions: Query<(), With<Session>>,
 ) {
-    const DEFAULT_TARGET: &str = "https://[::1]:25565";
+    let default_target = format!("https://127.0.0.1:{WEB_TRANSPORT_PORT}");
 
     egui::Window::new("WebTransport").show(egui.ctx_mut(), |ui| {
         if sessions.iter().next().is_some() {
@@ -218,7 +221,7 @@ fn web_transport_ui(
         ui.horizontal(|ui| {
             let connect_resp = ui.add(
                 egui::TextEdit::singleline(&mut ui_state.target)
-                    .hint_text(format!("{DEFAULT_TARGET} | [enter] to connect")),
+                    .hint_text(format!("{default_target} | [enter] to connect")),
             );
             connect |= connect_resp.lost_focus() && enter_pressed;
             connect |= ui.button("Connect").clicked();
@@ -233,7 +236,7 @@ fn web_transport_ui(
         if connect {
             let mut target = ui_state.target.clone();
             if target.is_empty() {
-                DEFAULT_TARGET.clone_into(&mut target);
+                target = default_target;
             }
 
             let cert_hash = ui_state.cert_hash.clone();
@@ -308,7 +311,7 @@ fn web_socket_ui(
     mut ui_state: ResMut<WebSocketUi>,
     sessions: Query<(), With<Session>>,
 ) {
-    const DEFAULT_TARGET: &str = "ws://[::1]:25566";
+    let default_target = format!("ws://127.0.0.1:{WEB_SOCKET_PORT}");
 
     egui::Window::new("WebSocket").show(egui.ctx_mut(), |ui| {
         if sessions.iter().next().is_some() {
@@ -321,7 +324,7 @@ fn web_socket_ui(
         ui.horizontal(|ui| {
             let connect_resp = ui.add(
                 egui::TextEdit::singleline(&mut ui_state.target)
-                    .hint_text(format!("{DEFAULT_TARGET} | [enter] to connect")),
+                    .hint_text(format!("{default_target} | [enter] to connect")),
             );
             connect |= connect_resp.lost_focus() && enter_pressed;
             connect |= ui.button("Connect").clicked();
@@ -330,7 +333,7 @@ fn web_socket_ui(
         if connect {
             let mut target = ui_state.target.clone();
             if target.is_empty() {
-                DEFAULT_TARGET.clone_into(&mut target);
+                target = default_target;
             }
 
             let config = web_socket_config();

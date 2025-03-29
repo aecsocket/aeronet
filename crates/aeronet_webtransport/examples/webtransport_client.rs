@@ -83,7 +83,7 @@ fn global_ui(
     mut cert_hash: Local<String>,
     mut session_id: Local<usize>,
 ) {
-    const DEFAULT_TARGET: &str = "https://[::1]:25565";
+    const DEFAULT_TARGET: &str = "https://127.0.0.1:25571";
 
     egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));

@@ -28,7 +28,7 @@ fn server_config() -> ServerConfig {
     let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"])
         .expect("all given SANs should be valid DNS names");
     ServerConfig::builder()
-        .with_bind_default(25566)
+        .with_bind_default(25570)
         .with_identity(identity)
 }
 

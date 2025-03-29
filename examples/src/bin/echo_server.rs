@@ -1,3 +1,17 @@
+//! Server which listens for client connections, and echoes back the UTF-8
+//! strings that they send.
+//!
+//! This example shows you how to create a server, accept client connections,
+//! and handle incoming messages. This example uses:
+//! - `aeronet_websocket` as the IO layer, using WebSockets under the hood. This
+//!   is what actually receives and sends packets of `[u8]`s across the network.
+//! - `aeronet_transport` as the transport layer, the default implementation.
+//!   This manages reliability, ordering, and fragmentation of packets - meaning
+//!   that all you have to worry about is the actual data payloads that you want
+//!   to receive and send.
+//!
+//! This example is designed to work with the `echo_client` example.
+
 use {
     aeronet::{
         io::{
@@ -14,7 +28,7 @@ use {
 
 // Let's set up the app.
 
-pub fn main() -> AppExit {
+fn main() -> AppExit {
     App::new()
         .add_plugins((
             // Core Bevy plugins.
@@ -42,7 +56,7 @@ pub fn main() -> AppExit {
 
 // Use a fixed listen port for this example, mapping to the URL that the
 // `echo_client` connects to.
-const LISTEN_PORT: u16 = 25566;
+const LISTEN_PORT: u16 = 25570;
 
 // Define what `aeronet_transport` lanes will be used on client connections.
 // When using the transport layer, you must define in advance what lanes will be
