@@ -88,7 +88,7 @@ cargo run --example steam_client -F client
 - [`aeronet_replicon`]: high-level replication via [`bevy_replicon`]
 
 ```sh
-cargo run --bin move_box_server
+cargo run --bin move_box_server -F native
 cargo run --bin move_box_client
 ```
 
