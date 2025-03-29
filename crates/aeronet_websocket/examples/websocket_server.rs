@@ -1,18 +1,11 @@
 //! Example server using WebSocket which listens for clients sending strings
 //! and sends back a string reply.
 
-cfg_if::cfg_if! {
-    if #[cfg(target_family = "wasm")] {
-        fn main() {
-            eprintln!("this example is not available on WASM");
-        }
-    } else {
-
 use {
     aeronet_io::{
+        Session, SessionEndpoint,
         connection::{Disconnected, LocalAddr},
-        server::{Server, Closed},
-        SessionEndpoint, Session,
+        server::{Closed, Server},
     },
     aeronet_websocket::server::{Identity, ServerConfig, WebSocketServer, WebSocketServerPlugin},
     bevy::{log::LogPlugin, prelude::*},
@@ -32,7 +25,8 @@ fn main() -> AppExit {
 }
 
 fn server_config() -> ServerConfig {
-    let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"]).expect("all given SANs should be valid DNS names");
+    let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"])
+        .expect("all given SANs should be valid DNS names");
     ServerConfig::builder()
         .with_bind_default(25566)
         .with_identity(identity)
@@ -49,7 +43,9 @@ fn on_closed(trigger: Trigger<Closed>) {
 
 fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
     let server = trigger.target();
-    let local_addr = servers.get(server).expect("opened server should have a binding socket `LocalAddr`");
+    let local_addr = servers
+        .get(server)
+        .expect("opened server should have a binding socket `LocalAddr`");
     info!("{server} opened on {}", **local_addr);
 }
 
@@ -95,7 +91,8 @@ fn reply(mut clients: Query<(Entity, &mut Session), With<ChildOf>>) {
         // explicit deref so we can access disjoint fields
         let session = &mut *session;
         for packet in session.recv.drain(..) {
-            let msg = String::from_utf8(packet.payload.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+            let msg =
+                String::from_utf8(packet.payload.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             info!("{client} > {msg}");
 
             let reply = format!("You sent: {msg}");
@@ -104,5 +101,3 @@ fn reply(mut clients: Query<(Entity, &mut Session), With<ChildOf>>) {
         }
     }
 }
-
-}}

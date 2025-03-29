@@ -4,6 +4,7 @@
 - Support for `no_std` + no native atomic CAS targets
   - for `aeronet_io`, `aeronet_transport`, `aeronet_replicon`
 - `aeronet_steam` IO layer
+- `bevy_replicon` 0.33.0 support
 - Dev container files for easily getting a reproducible dev env running
 - Merged `DisconnectReason` and `Disconnected` into one
   - `Disconnected::reason` has been flattened into `enum Disconnected` itself

@@ -94,7 +94,7 @@ checksum = "512761e0bb2578dd7380c6baaa0f4ce03e84f95e960231d1dec8bf4d7d6e2627"
 
 [[package]]
 name = "aeronet"
-version = "0.12.0"
+version = "0.14.0-rc.1"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
@@ -104,7 +104,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_channel"
-version = "0.12.0"
+version = "0.14.0-rc.1"
 dependencies = [
  "aeronet_io",
  "bevy",
@@ -122,7 +122,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_io"
-version = "0.12.0"
+version = "0.14.0-rc.1"
 dependencies = [
  "anyhow",
  "bevy_app",
@@ -136,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_replicon"
-version = "0.13.0"
+version = "0.14.0-rc.1"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
@@ -151,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_steam"
-version = "0.12.0"
+version = "0.14.0-rc.1"
 dependencies = [
  "aeronet_io",
  "anyhow",
@@ -171,7 +171,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_transport"
-version = "0.12.0"
+version = "0.14.0-rc.1"
 dependencies = [
  "aeronet_io",
  "arbitrary",
@@ -199,7 +199,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_websocket"
-version = "0.12.0"
+version = "0.14.0-rc.1"
 dependencies = [
  "aeronet_io",
  "bevy",
@@ -227,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_webtransport"
-version = "0.12.0"
+version = "0.14.0-rc.1"
 dependencies = [
  "aeronet_io",
  "anyhow",
@@ -1478,9 +1478,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_replicon"
-version = "0.32.0-rc.2"
+version = "0.33.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06ea08632872435c48f83df881e0cb55b5923ae8d5b97af45036fa67b41040da"
+checksum = "559b4e5f3201768ee782b0669a506c9c9b8b6fcb3ab9f3623e28c7fa5fe2e507"
 dependencies = [
  "bevy",
  "bitflags 2.9.0",
@@ -1929,9 +1929,9 @@ dependencies = [
 
 [[package]]
 name = "bytemuck_derive"
-version = "1.9.2"
+version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ff22c2722516255d1823ce3cc4bc0b154dbc9364be5c905d6baa6eccbbc8774"
+checksum = "7ecc273b49b3205b83d648f0690daa588925572cc5063745bfe547fe7ec8e1a1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2779,9 +2779,9 @@ dependencies = [
 
 [[package]]
 name = "event-listener-strategy"
-version = "0.5.3"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c3e4e0dd3673c1139bf041f3008816d9cf2946bbfac2945c09e523b8d7b05b2"
+checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
 dependencies = [
  "event-listener",
  "pin-project-lite",
@@ -2865,9 +2865,9 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "font-types"
-version = "0.8.3"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d868ec188a98bb014c606072edd47e52e7ab7297db943b0b28503121e1d037bd"
+checksum = "1fa6a5e5a77b5f3f7f9e32879f484aa5b3632ddfbe568a16266c904a6f32cdaf"
 dependencies = [
  "bytemuck",
 ]
@@ -4625,9 +4625,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.21.1"
+version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d75b0bedcc4fe52caa0e03d9f1151a323e4aa5e2d78ba3580400cd3c9e2bc4bc"
+checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
 name = "oneshot"

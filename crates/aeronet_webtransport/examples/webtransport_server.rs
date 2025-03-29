@@ -1,18 +1,11 @@
 //! Example server using WebTransport which listens for clients sending strings
 //! and sends back a string reply.
 
-cfg_if::cfg_if! {
-    if #[cfg(target_family = "wasm")] {
-        fn main() {
-            eprintln!("this example is not available on WASM");
-        }
-    } else {
-
 use {
     aeronet_io::{
-        connection::{Disconnected, LocalAddr},
-        server::{Server, Closed},
         Session,
+        connection::{Disconnected, LocalAddr},
+        server::{Closed, Server},
     },
     aeronet_webtransport::{
         cert,
@@ -43,7 +36,8 @@ fn main() -> AppExit {
 }
 
 fn open_server(mut commands: Commands) {
-    let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"]).expect("all given SANs should be valid DNS names");
+    let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"])
+        .expect("all given SANs should be valid DNS names");
     let cert = &identity.certificate_chain().as_slice()[0];
     let spki_fingerprint = cert::spki_fingerprint_b64(cert).expect("should be a valid certificate");
     let cert_hash = cert::hash_to_b64(cert.hash());
@@ -55,7 +49,9 @@ fn open_server(mut commands: Commands) {
     info!("************************");
 
     let config = server_config(identity);
-    commands.spawn_empty().queue(WebTransportServer::open(config));
+    commands
+        .spawn_empty()
+        .queue(WebTransportServer::open(config));
 }
 
 fn server_config(identity: wtransport::Identity) -> ServerConfig {
@@ -70,7 +66,8 @@ fn server_config(identity: wtransport::Identity) -> ServerConfig {
 
 fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
     let server = trigger.target();
-    let local_addr = servers.get(server)
+    let local_addr = servers
+        .get(server)
         .expect("spawned session entity should have a name");
     info!("{server} opened on {}", **local_addr);
 }
@@ -79,10 +76,7 @@ fn on_closed(trigger: Trigger<Closed>) {
     panic!("server closed: {:?}", trigger.event());
 }
 
-fn on_session_request(
-    mut request: Trigger<SessionRequest>,
-    clients: Query<&ChildOf>,
-) {
+fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&ChildOf>) {
     let client = request.target();
     let Ok(&ChildOf { parent: server }) = clients.get(client) else {
         return;
@@ -129,7 +123,8 @@ fn reply(mut clients: Query<(Entity, &mut Session), With<ChildOf>>) {
         // explicit deref so we can access disjoint fields
         let session = &mut *session;
         for packet in session.recv.drain(..) {
-            let msg = String::from_utf8(packet.payload.into()).unwrap_or_else(|_| "(not UTF-8)".into());
+            let msg =
+                String::from_utf8(packet.payload.into()).unwrap_or_else(|_| "(not UTF-8)".into());
             info!("{client} > {msg}");
 
             let reply = format!("You sent: {msg}");
@@ -138,5 +133,3 @@ fn reply(mut clients: Query<(Entity, &mut Session), With<ChildOf>>) {
         }
     }
 }
-
-}}
