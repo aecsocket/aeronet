@@ -4,10 +4,11 @@
     "dockerfile": "Dockerfile"
   },
   "runArgs": [
+    // let Bevy/Steam access the GPU
     "--device=/dev/dri",
     "--security-opt=seccomp=unconfined",
-    "--net=host",
-    "--ipc=host"
+    // let Steam allocate big GPU buffers for WebViews/steamwebhelper
+    "--shm-size=2gb"
   ],
   "containerEnv": {
     "XDG_RUNTIME_DIR": "/tmp/user/1000",

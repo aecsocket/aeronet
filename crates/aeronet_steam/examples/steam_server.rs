@@ -9,16 +9,20 @@ use {
     },
     aeronet_steam::{
         SessionConfig, SteamworksClient,
-        server::{SessionRequest, SessionResponse, SteamNetServer, SteamNetServerPlugin},
+        server::{
+            ListenTarget, SessionRequest, SessionResponse, SteamNetServer, SteamNetServerPlugin,
+        },
     },
     bevy::{log::LogPlugin, prelude::*},
     core::net::{Ipv4Addr, SocketAddr},
+    std::env,
     steamworks::ClientManager,
 };
 
 fn main() -> AppExit {
     let (steam, steam_single) =
         steamworks::Client::init_app(480).expect("failed to initialize steam");
+    steam.networking_utils().init_relay_network_access();
 
     App::new()
         .insert_resource(SteamworksClient(steam))
@@ -43,11 +47,17 @@ fn main() -> AppExit {
 }
 
 fn open_server(mut commands: Commands) {
+    let target = match env::args().nth(1).as_deref() {
+        Some("addr") => ListenTarget::Addr(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 25567)),
+        Some("peer") => ListenTarget::Peer { virtual_port: 0 },
+        _ => panic!("must specify either `addr` or `peer` argument on command line"),
+    };
+
     commands
         .spawn_empty()
         .queue(SteamNetServer::<ClientManager>::open(
             SessionConfig::default(),
-            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 25567),
+            target,
         ));
 }
 

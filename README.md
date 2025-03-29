@@ -76,7 +76,10 @@ cargo run --example webtransport_client -F client --target wasm32-unknown-unknow
     You will need Steam running locally on your machine to be able to run the examples.
 
 ```sh
-cargo run --example steam_server -F server
+# run a server which listens on a socket address
+cargo run --example steam_server -F server -- addr
+# run a server which listens for Steam peers
+cargo run --example steam_server -F server -- peer
 cargo run --example steam_client -F client
 ```
 

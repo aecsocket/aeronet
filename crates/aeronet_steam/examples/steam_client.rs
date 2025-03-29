@@ -19,6 +19,8 @@ use {
 fn main() -> AppExit {
     let (steam, steam_single) =
         steamworks::Client::init_app(480).expect("failed to initialize steam");
+    steam.networking_utils().init_relay_network_access();
+
     App::new()
         .insert_resource(SteamworksClient(steam))
         .insert_non_send_resource(steam_single)
