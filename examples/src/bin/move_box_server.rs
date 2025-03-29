@@ -1,5 +1,12 @@
 //! See `src/move_box.rs`.
 
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+        fn main() {
+            panic!("not supported on WASM");
+        }
+    } else {
+
 use {
     aeronet::io::{
         Session,
@@ -204,3 +211,5 @@ fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
         }
     }
 }
+
+}}

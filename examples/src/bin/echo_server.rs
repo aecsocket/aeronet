@@ -12,6 +12,15 @@
 //!
 //! This example is designed to work with the `echo_client` example.
 
+// This is unfortunately required because of <https://github.com/rust-lang/cargo/issues/9208>
+// You won't need this in your own code
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+        fn main() {
+            panic!("not supported on WASM");
+        }
+    } else {
+
 use {
     aeronet::{
         io::{
@@ -190,3 +199,5 @@ fn echo_messages(
         }
     }
 }
+
+}}

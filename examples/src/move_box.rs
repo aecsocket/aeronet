@@ -15,7 +15,7 @@
 //! ## Server
 //!
 //! ```sh
-//! cargo run --bin move_box_server -F native
+//! cargo run --bin move_box_server
 //! ```
 //!
 //! ## Client

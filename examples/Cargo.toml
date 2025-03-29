@@ -13,9 +13,6 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
-[features]
-native = []
-
 [dependencies]
 aeronet           = { workspace = true, features = ["visualizer"] }
 aeronet_replicon  = { workspace = true, features = ["client", "server"] }
@@ -25,19 +22,10 @@ bevy_egui         = { workspace = true }
 bevy_replicon     = { workspace = true }
 clap              = { workspace = true, features = ["derive"] }
 serde             = { workspace = true, features = ["derive"] }
+cfg-if = { workspace = true }
 
 aeronet_webtransport = { workspace = true, features = [
   "client",
   "server",
   "dangerous-configuration",
 ] }
-
-[[bin]]
-name              = "echo_server"
-path              = "src/bin/echo_server.rs"
-required-features = ["native"]
-
-[[bin]]
-name              = "move_box_server"
-path              = "src/bin/move_box_server.rs"
-required-features = ["native"]
