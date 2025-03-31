@@ -97,7 +97,15 @@ fn open_web_transport_server(mut commands: Commands, args: Res<Args>) {
 
     let config = web_transport_config(identity, &args);
     let server = commands
-        .spawn((Name::new("WebTransport Server"), AeronetRepliconServer))
+        .spawn((
+            Name::new("WebTransport Server"),
+            //
+            // IMPORTANT
+            // make sure to insert this component into your server entity,
+            // so that `aeronet_replicon` knows you want to use this for `bevy_replicon`!
+            //
+            AeronetRepliconServer,
+        ))
         .queue(WebTransportServer::open(config))
         .id();
     info!("Opening WebTransport server {server}");
