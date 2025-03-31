@@ -84,12 +84,24 @@ fn on_connecting(
     trigger: Trigger<OnAdd, SessionEndpoint>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
+    mut commands: Commands,
 ) {
     let entity = trigger.target();
     let name = names
         .get(entity)
         .expect("our session entity should have a name");
     ui_state.log.push(format!("{name} connecting"));
+
+    // IMPORTANT
+    //
+    // Make sure to insert this component into your client entity,
+    // so that `aeronet_replicon` knows you want to use this for `bevy_replicon`!
+    //
+    // You can also do this when `spawn`ing the entity instead, which is a bit more
+    // efficient. We just do it on `OnAdd, SessionEndpoint`, since we have
+    // multiple `spawn` calls, and it's nicer to centralize inserting this
+    // component in a single place.
+    commands.entity(entity).insert(AeronetRepliconClient);
 }
 
 fn on_connected(
@@ -245,7 +257,7 @@ fn web_transport_ui(
             global_ui.session_id += 1;
             let name = format!("{}. {target}", global_ui.session_id);
             commands
-                .spawn((Name::new(name), AeronetRepliconClient))
+                .spawn(Name::new(name))
                 .queue(WebTransportClient::connect(config, target));
         }
     });
@@ -341,7 +353,7 @@ fn web_socket_ui(
             global_ui.session_id += 1;
             let name = format!("{}. {target}", global_ui.session_id);
             commands
-                .spawn((Name::new(name), AeronetRepliconClient))
+                .spawn(Name::new(name))
                 .queue(WebSocketClient::connect(config, target));
         }
     });
