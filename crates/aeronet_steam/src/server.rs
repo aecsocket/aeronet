@@ -224,7 +224,7 @@ impl SessionResponse {
 ///
 /// # Examples
 ///
-/// /// Accept all clients without any extra checks:
+/// Accept all clients without any extra checks:
 ///
 /// ```
 /// use {

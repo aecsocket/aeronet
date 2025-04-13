@@ -24,7 +24,7 @@ default = ["std"]
 std = ["aeronet_transport/std"]
 
 ## Enables `aeronet_transport/visualizer`.
-visualizer = ["aeronet_transport/visualizer"]
+visualizer = ["std", "aeronet_transport/visualizer"]
 
 ## Enable this when generating docs.
 document-features = [
