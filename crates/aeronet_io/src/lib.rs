@@ -248,7 +248,7 @@ impl Session {
     ///
     /// session.set_mtu(800).unwrap_err();
     /// ```
-    pub fn set_mtu(&mut self, mtu: usize) -> Result<(), MtuTooSmall> {
+    pub const fn set_mtu(&mut self, mtu: usize) -> Result<(), MtuTooSmall> {
         if mtu >= self.min_mtu {
             self.mtu = mtu;
             Ok(())
