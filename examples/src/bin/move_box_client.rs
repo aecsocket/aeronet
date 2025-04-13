@@ -168,7 +168,7 @@ fn global_ui(
             ui.label(match replicon_client.status() {
                 RepliconClientStatus::Disconnected => "Disconnected",
                 RepliconClientStatus::Connecting => "Connecting",
-                RepliconClientStatus::Connected { .. } => "Connected",
+                RepliconClientStatus::Connected => "Connected",
             });
             ui.separator();
 
