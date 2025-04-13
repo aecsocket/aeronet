@@ -1,6 +1,6 @@
 use {
     super::{Fragment, FragmentHeader, FragmentPosition, MessageSeq, PayloadTooLarge},
-    crate::{lane::LaneIndex, min_size::MinSize},
+    crate::{lane::LaneIndex, size::MinSize},
     core::{convert::Infallible, fmt},
     octs::{
         BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarIntTooLarge, Write,

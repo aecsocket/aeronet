@@ -38,7 +38,9 @@ fn main() -> AppExit {
         .add_plugins((
             DefaultPlugins,
             // We'll use `bevy_egui` for displaying the UI.
-            EguiPlugin,
+            EguiPlugin {
+                enable_multipass_for_primary_context: false,
+            },
             // We're using WebSockets, so we add this plugin.
             // This will automatically add `AeronetIoPlugin` as well, which sets
             // up the IO layer. However, it does *not* set up the transport

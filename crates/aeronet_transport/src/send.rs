@@ -6,12 +6,12 @@ use {
         frag::{self, MessageTooBig},
         lane::{LaneIndex, LaneKind, LaneReliability},
         limit::{Limit, TokenBucket},
-        min_size::MinSize,
         packet::{
             Fragment, FragmentHeader, FragmentPayload, FragmentPosition, MessageSeq, PacketHeader,
             PacketSeq,
         },
         rtt::RttEstimator,
+        size::MinSize,
     },
     aeronet_io::{Session, connection::Disconnected},
     alloc::{boxed::Box, vec::Vec},
@@ -42,6 +42,7 @@ pub struct TransportSend {
 #[derive(Debug, Clone, TypeSize)]
 pub struct SendLane {
     kind: LaneKind,
+    #[typesize(with = crate::size::of_map)]
     pub(crate) sent_msgs: HashMap<MessageSeq, SentMessage>,
     next_msg_seq: MessageSeq,
 }
@@ -56,9 +57,9 @@ pub(crate) struct SentFragment {
     position: FragmentPosition,
     #[typesize(with = Bytes::len)]
     payload: Bytes,
-    #[typesize(skip)]
+    #[typesize(with = crate::size::of_instant)]
     sent_at: Instant,
-    #[typesize(skip)]
+    #[typesize(with = crate::size::of_instant)]
     next_flush_at: Instant,
 }
 

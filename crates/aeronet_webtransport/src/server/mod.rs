@@ -206,7 +206,7 @@ pub struct SessionRequest {
 
 impl SessionRequest {
     /// Sets how the server should respond to this request.
-    pub fn respond(&mut self, response: SessionResponse) {
+    pub const fn respond(&mut self, response: SessionResponse) {
         self.response = Some(response);
     }
 }
@@ -319,7 +319,7 @@ fn poll_opened(
         while let Ok(Some(connecting)) = server.recv_connecting.try_next() {
             let client = commands
                 .spawn((
-                    ChildOf { parent: entity },
+                    ChildOf(entity),
                     WebTransportServerClient(()),
                     Connecting {
                         recv_dc: connecting.recv_dc,

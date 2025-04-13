@@ -51,7 +51,7 @@ fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
 
 fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>, clients: Query<&ChildOf>) {
     let client = trigger.target();
-    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+    let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 
@@ -60,7 +60,7 @@ fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>, clients: Query<&Child
 
 fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&ChildOf>) {
     let client = trigger.target();
-    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+    let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 
@@ -69,7 +69,7 @@ fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&ChildOf>) {
 
 fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
     let client = trigger.target();
-    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+    let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 

@@ -115,7 +115,7 @@ fn on_connected(
         .get(client)
         .expect("we are adding this component to this entity");
     // A `Connected` `Session` which is a `ChildOf` is a client of a server.
-    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+    let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
     info!("{client} connected to {server}");
@@ -136,7 +136,7 @@ fn on_connected(
 
 fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
     let client = trigger.target();
-    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+    let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 

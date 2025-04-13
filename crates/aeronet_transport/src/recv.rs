@@ -91,10 +91,12 @@ enum LaneState {
     },
     ReliableUnordered {
         pending: MessageSeq,
+        #[typesize(with = crate::size::of_set)]
         recv_buf: HashSet<MessageSeq>,
     },
     ReliableOrdered {
         pending: MessageSeq,
+        #[typesize(with = crate::size::of_map)]
         recv_buf: HashMap<MessageSeq, Vec<u8>>,
     },
 }

@@ -30,7 +30,7 @@
 //! just ignore them for certain IO layers.
 
 use {
-    crate::min_size::MinSize,
+    crate::size::MinSize,
     bevy_reflect::prelude::*,
     octs::{BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, Write},
     typesize::derive::TypeSize,

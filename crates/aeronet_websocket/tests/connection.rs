@@ -110,7 +110,7 @@ fn ping_pong(
             mut commands: Commands,
         ) {
             let client = trigger.target();
-            let &ChildOf { parent } = parents
+            let &ChildOf(parent) = parents
                 .get(client)
                 .expect("parent server of client session should exist");
             assert_eq!(expected_server.0, parent);
@@ -276,7 +276,7 @@ impl<E> Default for SequenceTester<E> {
 }
 
 impl<E: Debug + PartialEq> SequenceTester<E> {
-    pub fn event(&mut self, event: E) -> NextSequence<'_, E> {
+    pub const fn event(&mut self, event: E) -> NextSequence<'_, E> {
         NextSequence {
             tester: self,
             next: event,

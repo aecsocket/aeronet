@@ -92,6 +92,7 @@ ringbuf               = { workspace = true, features = ["alloc", "portable-atomi
 serde                 = { workspace = true, optional = true }
 size_format           = { workspace = true, optional = true }
 thousands             = { workspace = true, optional = true }
+typesize              = { workspace = true, features = ["saturating_impls"] }
 
 derive_more = { workspace = true, features = [
   "display",
@@ -101,9 +102,4 @@ derive_more = { workspace = true, features = [
   "from",
   "deref",
   "deref_mut",
-] }
-typesize = { workspace = true, features = [
-  # "bitvec",
-  "hashbrown_15",
-  "saturating_impls",
 ] }

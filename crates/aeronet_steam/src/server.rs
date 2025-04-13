@@ -372,7 +372,7 @@ fn on_connecting<M: SteamManager>(
 
     let client = commands
         .spawn((
-            ChildOf { parent: entity },
+            ChildOf(entity),
             SteamNetServerClient::<M> {
                 _phantom: PhantomData,
                 steam_id,
@@ -445,7 +445,7 @@ fn on_remove_client<M: SteamManager>(
     mut servers: Query<&mut SteamNetServer<M>>,
 ) -> Result<(), BevyError> {
     let entity = trigger.target();
-    let (client, &ChildOf { parent }) = clients
+    let (client, &ChildOf(parent)) = clients
         .get(entity)
         .with_context(|| format!("client {entity} does not have correct components"))?;
     let mut server = servers.get_mut(parent).with_context(|| {

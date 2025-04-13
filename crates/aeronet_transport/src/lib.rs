@@ -10,13 +10,13 @@ extern crate alloc;
 pub mod frag;
 pub mod lane;
 pub mod limit;
-pub mod min_size;
 pub mod packet;
 pub mod recv;
 pub mod rtt;
 pub mod sampling;
 pub mod send;
 pub mod seq_buf;
+pub mod size;
 
 #[cfg(feature = "visualizer")]
 pub mod visualizer;
@@ -33,13 +33,13 @@ use {
     derive_more::{Add, AddAssign, Display, Error, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
     log::warn,
-    min_size::MinSize,
     octs::FixedEncodeLenHint,
     packet::{Acknowledge, FragmentHeader, MessageSeq, PacketHeader},
     recv::TransportRecv,
     rtt::RttEstimator,
     send::TransportSend,
     seq_buf::SeqBuf,
+    size::MinSize,
     typesize::{TypeSize, derive::TypeSize},
 };
 
@@ -183,7 +183,7 @@ pub struct RecvMessage {
     /// Lane index on which this message was received.
     pub lane: LaneIndex,
     /// Instant at which the final fragment of this message was received.
-    #[typesize(skip)]
+    #[typesize(with = crate::size::of_instant)]
     pub recv_at: Instant,
     /// Raw byte data of this message.
     pub payload: Vec<u8>,
@@ -358,7 +358,7 @@ struct FragmentPath {
 
 #[derive(Debug, Clone, TypeSize)]
 struct FlushedPacket {
-    #[typesize(skip)]
+    #[typesize(with = crate::size::of_instant)]
     flushed_at: Instant,
     frags: Box<[FragmentPath]>,
 }

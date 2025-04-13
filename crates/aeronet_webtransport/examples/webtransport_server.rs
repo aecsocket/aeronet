@@ -78,7 +78,7 @@ fn on_closed(trigger: Trigger<Closed>) {
 
 fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&ChildOf>) {
     let client = request.target();
-    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+    let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 
@@ -92,7 +92,7 @@ fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&Chil
 
 fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&ChildOf>) {
     let client = trigger.target();
-    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+    let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 
@@ -101,7 +101,7 @@ fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&ChildOf>) {
 
 fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
     let client = trigger.target();
-    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+    let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 

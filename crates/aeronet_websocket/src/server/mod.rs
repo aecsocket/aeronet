@@ -216,7 +216,7 @@ fn poll_opened(
         while let Ok(Some(connecting)) = server.recv_connecting.try_next() {
             let session = commands
                 .spawn((
-                    ChildOf { parent: entity },
+                    ChildOf(entity),
                     WebSocketServerClient(()),
                     Connecting {
                         recv_dc: connecting.recv_dc,
