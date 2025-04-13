@@ -237,7 +237,7 @@ impl TokenBucket {
     /// assert_eq!(0, counts.used());
     /// ```
     #[inline]
-    pub fn refill(&mut self) {
+    pub const fn refill(&mut self) {
         self.rem = self.cap;
     }
 

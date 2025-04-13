@@ -50,7 +50,7 @@ pub async fn start(
             async move {
                 if let Err(err) = accept_session(session, send_connecting).await {
                     debug!("Failed to accept session: {err:?}");
-                };
+                }
             }
         });
     }

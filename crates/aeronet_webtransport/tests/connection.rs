@@ -275,7 +275,7 @@ impl<E> Default for SequenceTester<E> {
 }
 
 impl<E: Debug + PartialEq> SequenceTester<E> {
-    pub fn event(&mut self, event: E) -> NextSequence<'_, E> {
+    pub const fn event(&mut self, event: E) -> NextSequence<'_, E> {
         NextSequence {
             tester: self,
             next: event,

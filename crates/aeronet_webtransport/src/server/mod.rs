@@ -206,7 +206,7 @@ pub struct SessionRequest {
 
 impl SessionRequest {
     /// Sets how the server should respond to this request.
-    pub fn respond(&mut self, response: SessionResponse) {
+    pub const fn respond(&mut self, response: SessionResponse) {
         self.response = Some(response);
     }
 }
