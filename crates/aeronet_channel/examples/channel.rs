@@ -18,7 +18,9 @@ fn main() -> AppExit {
                 level: tracing::Level::DEBUG,
                 ..default()
             }),
-            EguiPlugin,
+            EguiPlugin {
+                enable_multipass_for_primary_context: false,
+            },
             // Add the IO plugin for the IO layer implementation you want to use.
             // This will automatically add the `AeronetIoPlugin`.
             ChannelIoPlugin,

@@ -3,7 +3,7 @@
 use {
     aeronet_transport::{
         lane::{LaneIndex, LaneKind},
-        min_size::MinSize,
+        size::MinSize,
     },
     bevy_replicon::prelude::*,
 };

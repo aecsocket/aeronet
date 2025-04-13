@@ -1,6 +1,6 @@
 use {
     super::FragmentPayload,
-    crate::min_size::MinSize,
+    crate::size::MinSize,
     derive_more::{Display, Error},
     octs::{BufError, BufTooShortOr, Decode, Encode, EncodeLen, Read, VarIntTooLarge, Write},
 };

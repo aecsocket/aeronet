@@ -14,7 +14,13 @@ use {
 
 fn main() -> AppExit {
     App::new()
-        .add_plugins((DefaultPlugins, EguiPlugin, WebSocketClientPlugin))
+        .add_plugins((
+            DefaultPlugins,
+            EguiPlugin {
+                enable_multipass_for_primary_context: false,
+            },
+            WebSocketClientPlugin,
+        ))
         .init_resource::<Log>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
         .add_observer(on_connecting)

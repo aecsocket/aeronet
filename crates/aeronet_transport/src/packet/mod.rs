@@ -38,7 +38,7 @@ mod seq;
 
 pub use payload::*;
 use {
-    crate::{lane::LaneIndex, min_size::MinSize},
+    crate::{lane::LaneIndex, size::MinSize},
     bevy_reflect::Reflect,
     derive_more::{Add, AddAssign, Deref, DerefMut, Sub, SubAssign},
     octs::Bytes,

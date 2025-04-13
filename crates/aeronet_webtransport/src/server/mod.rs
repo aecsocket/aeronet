@@ -319,7 +319,7 @@ fn poll_opened(
         while let Ok(Some(connecting)) = server.recv_connecting.try_next() {
             let client = commands
                 .spawn((
-                    ChildOf { parent: entity },
+                    ChildOf(entity),
                     WebTransportServerClient(()),
                     Connecting {
                         recv_dc: connecting.recv_dc,

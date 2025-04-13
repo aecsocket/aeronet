@@ -10,8 +10,8 @@
 
 use {
     crate::{
-        min_size::MinSize,
         packet::{FragmentPosition, MessageSeq},
+        size::MinSize,
     },
     alloc::vec::Vec,
     bevy_platform_support::collections::HashMap,
@@ -106,6 +106,7 @@ pub struct MessageTooBig {
 /// messages.
 #[derive(Default, Clone, TypeSize)]
 pub struct FragmentReceiver {
+    #[typesize(with = crate::size::of_map)]
     msgs: HashMap<MessageSeq, MessageBuf>,
 }
 
@@ -166,7 +167,7 @@ struct MessageBuf {
     last_frag_index: Option<usize>,
     max_frag_index: usize,
     num_frags_recv: usize,
-    #[typesize(skip)] // TODO
+    #[typesize(with = crate::size::of_bitvec)]
     frag_indices_recv: BitVec,
     payload: Vec<u8>,
 }

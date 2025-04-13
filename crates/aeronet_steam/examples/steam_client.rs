@@ -29,7 +29,9 @@ fn main() -> AppExit {
         })
         .add_plugins((
             DefaultPlugins,
-            EguiPlugin,
+            EguiPlugin {
+                enable_multipass_for_primary_context: false,
+            },
             SteamNetClientPlugin::<ClientManager>::default(),
         ))
         .init_resource::<Log>()

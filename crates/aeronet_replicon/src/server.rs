@@ -146,7 +146,7 @@ fn on_connected(
         .get(client)
         .expect("we are adding this component to this entity");
 
-    let Ok(&ChildOf { parent: server }) = child_of.get(client) else {
+    let Ok(&ChildOf(server)) = child_of.get(client) else {
         return;
     };
     if open_servers.get(server).is_err() {
@@ -182,7 +182,7 @@ fn poll(
     mut clients: Query<(Entity, &mut Transport, &ChildOf)>,
     open_servers: Query<(), OpenedServer>,
 ) {
-    for (client, mut transport, &ChildOf { parent: server }) in &mut clients {
+    for (client, mut transport, &ChildOf(server)) in &mut clients {
         if open_servers.get(server).is_err() {
             continue;
         }

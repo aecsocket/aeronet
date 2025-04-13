@@ -99,11 +99,10 @@ fn open_web_transport_server(mut commands: Commands, args: Res<Args>) {
     let server = commands
         .spawn((
             Name::new("WebTransport Server"),
-            //
             // IMPORTANT
-            // make sure to insert this component into your server entity,
-            // so that `aeronet_replicon` knows you want to use this for `bevy_replicon`!
             //
+            // Make sure to insert this component into your server entity,
+            // so that `aeronet_replicon` knows you want to use this for `bevy_replicon`!
             AeronetRepliconServer,
         ))
         .queue(WebTransportServer::open(config))
@@ -125,7 +124,7 @@ fn web_transport_config(identity: wtransport::Identity, args: &Args) -> WebTrans
 
 fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&ChildOf>) {
     let client = request.target();
-    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+    let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 
@@ -176,7 +175,7 @@ fn on_connected(
     mut commands: Commands,
 ) {
     let client = trigger.target();
-    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+    let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
     info!("{client} connected to {server}");
@@ -203,7 +202,7 @@ fn on_connected(
 
 fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
     let client = trigger.target();
-    let Ok(&ChildOf { parent: server }) = clients.get(client) else {
+    let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 

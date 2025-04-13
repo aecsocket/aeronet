@@ -31,7 +31,9 @@ fn main() -> AppExit {
         .add_plugins((
             // core
             DefaultPlugins,
-            EguiPlugin,
+            EguiPlugin {
+                enable_multipass_for_primary_context: false,
+            },
             // transport
             WebTransportClientPlugin,
             WebSocketClientPlugin,

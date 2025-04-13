@@ -42,7 +42,7 @@ aeronet_webtransport = { version = "0.14.0-rc.1", path = "crates/aeronet_webtran
 anyhow                = { version = "1.0.97", default-features = false }
 arbitrary             = { version = "1.3.2", features = ["derive"] }
 base64                = { version = "0.22.1" }
-bevy                  = { version = "0.16.0-rc.4", default-features = false }
+bevy                  = { version = "0.16.0-rc.4" }
 bevy_app              = { version = "0.16.0-rc.4", default-features = false }
 bevy_ecs              = { version = "0.16.0-rc.4", default-features = false }
 bevy_egui             = { version = "0.33.0" }

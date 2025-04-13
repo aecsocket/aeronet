@@ -1,10 +1,15 @@
 //! See [`MinSize`].
 
 use {
+    bevy_platform_support::{
+        collections::{HashMap, HashSet},
+        time::Instant,
+    },
     bevy_reflect::Reflect,
+    bit_vec::BitVec,
     core::num::TryFromIntError,
     octs::{BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt, Write},
-    typesize::derive::TypeSize,
+    typesize::{TypeSize, derive::TypeSize},
 };
 
 #[cfg(target_pointer_width = "16")]
@@ -89,4 +94,29 @@ impl Decode for MinSize {
     fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
         Ok(Self(src.read::<VarInt<u32>>()?.0))
     }
+}
+
+pub(crate) const fn of_instant(_v: &Instant) -> usize {
+    0
+}
+
+pub(crate) fn of_bitvec(v: &BitVec) -> usize {
+    v.capacity() / 8
+}
+
+pub(crate) fn of_set<T: TypeSize>(v: &HashSet<T>) -> usize {
+    // copied from
+    // <https://github.com/GnomedDev/typesize/blob/2be34b451154dbcd257e36fe661e8a93e73b3fa6/src/vec.rs#L5>
+    v.iter().map(TypeSize::get_size).sum::<usize>() + (v.capacity() - v.len()) * size_of::<T>()
+}
+
+pub(crate) fn of_map<K: TypeSize, V: TypeSize>(v: &HashMap<K, V>) -> usize {
+    // copied from
+    // <https://github.com/GnomedDev/typesize/blob/2be34b451154dbcd257e36fe661e8a93e73b3fa6/src/map.rs#L15>
+    let element_size = v
+        .iter()
+        .map(|(k, v)| k.get_size() + v.get_size())
+        .sum::<usize>();
+    let free_size = (v.capacity() - v.len()) * (size_of::<K>() + size_of::<V>());
+    element_size + free_size
 }

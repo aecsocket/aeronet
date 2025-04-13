@@ -104,10 +104,10 @@ fn ping_pong(
             mut commands: Commands,
         ) {
             let client = trigger.target();
-            let &ChildOf { parent } = parents
+            let &ChildOf(server) = parents
                 .get(client)
                 .expect("parent server of client session should exist");
-            assert_eq!(expected_server.0, parent);
+            assert_eq!(expected_server.0, server);
             seq.event(ServerEvent::NewClientEndpoint)
                 .expect_after(ServerEvent::NewServer);
             commands.insert_resource(ClientEntity(client));
