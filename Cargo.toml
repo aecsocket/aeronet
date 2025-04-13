@@ -9,7 +9,7 @@ edition      = "2024"
 keywords     = ["gamedev", "network", "bevy"]
 license      = "MIT OR Apache-2.0"
 repository   = "https://github.com/aecsocket/aeronet"
-rust-version = "1.85.0"
+rust-version = "1.86.0"
 
 [workspace.lints.rust]
 missing_docs    = "warn"
