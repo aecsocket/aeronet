@@ -256,7 +256,10 @@ fn recv_on(
         frag_index += 1;
     }
 
-    trace!("Finished receiving packet with {} fragments", frags_recv.0);
+    trace!(
+        "Finished receiving packet; successfully received {} of {} fragments",
+        frags_recv.0, frag_index.0
+    );
 
     Ok(())
 }
