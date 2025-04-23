@@ -33,12 +33,12 @@ server = ["bevy_replicon/server"]
 document-features = ["dep:document-features"]
 
 [dependencies]
-aeronet_io            = { workspace = true }
-aeronet_transport     = { workspace = true }
-bevy_app              = { workspace = true }
-bevy_ecs              = { workspace = true }
-bevy_platform_support = { workspace = true, features = ["alloc"] }
-bevy_reflect          = { workspace = true }
-bevy_replicon         = { workspace = true }
-document-features     = { workspace = true, optional = true }
-log                   = { workspace = true }
+aeronet_io        = { workspace = true }
+aeronet_transport = { workspace = true }
+bevy_app          = { workspace = true }
+bevy_ecs          = { workspace = true }
+bevy_platform     = { workspace = true, features = ["alloc"] }
+bevy_reflect      = { workspace = true }
+bevy_replicon     = { workspace = true }
+document-features = { workspace = true, optional = true }
+log               = { workspace = true }

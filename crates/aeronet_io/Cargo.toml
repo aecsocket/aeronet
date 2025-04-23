@@ -22,16 +22,16 @@ targets      = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 default = ["std"]
 
 ## Enables standard library support.
-std = ["anyhow/std", "bytes/std", "log/std", "bevy_platform_support/std"]
+std = ["anyhow/std", "bytes/std", "log/std", "bevy_platform/std"]
 
 [dependencies]
-anyhow                = { workspace = true }
-bevy_app              = { workspace = true, features = ["bevy_reflect"] }
-bevy_ecs              = { workspace = true, features = ["bevy_reflect"] }
-bevy_platform_support = { workspace = true, features = ["alloc"] }
-bevy_reflect          = { workspace = true }
-bytes                 = { workspace = true }
-log                   = { workspace = true }
+anyhow        = { workspace = true }
+bevy_app      = { workspace = true, features = ["bevy_reflect"] }
+bevy_ecs      = { workspace = true, features = ["bevy_reflect"] }
+bevy_platform = { workspace = true, features = ["alloc"] }
+bevy_reflect  = { workspace = true }
+bytes         = { workspace = true }
+log           = { workspace = true }
 
 derive_more = { workspace = true, features = [
   "display",

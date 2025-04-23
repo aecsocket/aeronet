@@ -41,7 +41,7 @@ use {
     crate::{IoSet, Session},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
-    bevy_platform_support::time::Instant,
+    bevy_platform::time::Instant,
     bevy_reflect::prelude::*,
     bytes::Bytes,
     core::{num::Saturating, time::Duration},

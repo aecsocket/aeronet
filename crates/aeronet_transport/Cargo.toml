@@ -72,27 +72,27 @@ document-features = [
 ]
 
 [dependencies]
-aeronet_io            = { workspace = true }
-arbitrary             = { workspace = true, optional = true }
-bevy_app              = { workspace = true }
-bevy_ecs              = { workspace = true }
-bevy_egui             = { workspace = true, optional = true }
-bevy_platform_support = { workspace = true, features = ["alloc"] }
-bevy_reflect          = { workspace = true }
-bevy_time             = { workspace = true }
-bevy_winit            = { workspace = true, optional = true }
-bit-vec               = { workspace = true }
-document-features     = { workspace = true, optional = true }
-egui_plot             = { workspace = true, optional = true }
-either                = { workspace = true }
-itertools             = { workspace = true, optional = true }
-log                   = { workspace = true }
-octs                  = { workspace = true }
-ringbuf               = { workspace = true, features = ["alloc", "portable-atomic"] }
-serde                 = { workspace = true, optional = true }
-size_format           = { workspace = true, optional = true }
-thousands             = { workspace = true, optional = true }
-typesize              = { workspace = true, features = ["saturating_impls"] }
+aeronet_io        = { workspace = true }
+arbitrary         = { workspace = true, optional = true }
+bevy_app          = { workspace = true }
+bevy_ecs          = { workspace = true }
+bevy_egui         = { workspace = true, optional = true }
+bevy_platform     = { workspace = true, features = ["alloc"] }
+bevy_reflect      = { workspace = true }
+bevy_time         = { workspace = true }
+bevy_winit        = { workspace = true, optional = true }
+bit-vec           = { workspace = true }
+document-features = { workspace = true, optional = true }
+egui_plot         = { workspace = true, optional = true }
+either            = { workspace = true }
+itertools         = { workspace = true, optional = true }
+log               = { workspace = true }
+octs              = { workspace = true }
+ringbuf           = { workspace = true, features = ["alloc", "portable-atomic"] }
+serde             = { workspace = true, optional = true }
+size_format       = { workspace = true, optional = true }
+thousands         = { workspace = true, optional = true }
+typesize          = { workspace = true, features = ["saturating_impls"] }
 
 derive_more = { workspace = true, features = [
   "display",

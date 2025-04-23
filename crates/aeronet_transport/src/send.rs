@@ -16,7 +16,7 @@ use {
     aeronet_io::{Session, connection::Disconnected},
     alloc::{boxed::Box, vec::Vec},
     bevy_ecs::prelude::*,
-    bevy_platform_support::{
+    bevy_platform::{
         collections::{HashMap, hash_map::Entry},
         time::Instant,
     },
@@ -139,7 +139,7 @@ impl TransportSend {
     /// ```
     /// use {
     ///     aeronet_transport::{Transport, lane::LaneIndex},
-    ///     bevy_platform_support::time::Instant,
+    ///     bevy_platform::time::Instant,
     /// };
     ///
     /// const SEND_LANE: LaneIndex = LaneIndex::new(0);

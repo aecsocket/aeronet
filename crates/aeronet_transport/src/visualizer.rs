@@ -22,7 +22,7 @@ use {
         EguiContexts,
         egui::{self, epaint::Hsva},
     },
-    bevy_platform_support::time::Instant,
+    bevy_platform::time::Instant,
     core::{hash::Hash, ops::RangeInclusive, time::Duration},
     itertools::Itertools,
     ringbuf::traits::Consumer,

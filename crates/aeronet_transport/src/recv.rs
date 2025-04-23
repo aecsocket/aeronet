@@ -13,7 +13,7 @@ use {
     aeronet_io::Session,
     alloc::{boxed::Box, vec::Vec},
     bevy_ecs::prelude::*,
-    bevy_platform_support::{
+    bevy_platform::{
         collections::{HashMap, HashSet},
         time::Instant,
     },
@@ -229,7 +229,11 @@ fn recv_on(
         .read::<PacketHeader>()
         .map_err(|_| RecvError::ReadHeader)?;
 
-    trace!("Received packet header with sequence {}", header.seq.0.0);
+    trace!(
+        "Received packet header with sequence {} ({} bytes left)",
+        header.seq.0.0,
+        packet.len()
+    );
 
     transport.peer_acks.ack(header.seq);
     transport.recv.acks.0.extend(packet_acks_to_msg_keys(
@@ -248,6 +252,11 @@ fn recv_on(
         match recv_frag(transport, config, recv_at, &mut packet) {
             Ok(()) => {
                 frags_recv += 1;
+                trace!(
+                    "Successfully received fragment {} ({} bytes left)",
+                    frag_index.0,
+                    packet.len()
+                );
             }
             Err(err) => {
                 trace!("Failed to receive fragment {}: {err:?}", frag_index.0);
@@ -256,7 +265,10 @@ fn recv_on(
         frag_index += 1;
     }
 
-    trace!("Finished receiving packet with {} fragments", frags_recv.0);
+    trace!(
+        "Finished receiving packet; successfully received {} of {} fragments",
+        frags_recv.0, frag_index.0
+    );
 
     Ok(())
 }

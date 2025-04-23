@@ -6,7 +6,7 @@ pub mod wasm {
             session::{SessionError, SessionFrontend},
         },
         aeronet_io::{connection::Disconnected, packet::RecvPacket},
-        bevy_platform_support::time::Instant,
+        bevy_platform::time::Instant,
         bytes::Bytes,
         futures::{
             SinkExt, StreamExt,
@@ -160,7 +160,7 @@ pub mod native {
     use {
         crate::session::{SessionError, SessionFrontend},
         aeronet_io::{connection::Disconnected, packet::RecvPacket},
-        bevy_platform_support::time::Instant,
+        bevy_platform::time::Instant,
         bytes::Bytes,
         futures::{
             SinkExt, StreamExt,
