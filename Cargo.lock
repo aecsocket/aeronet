@@ -20,12 +20,6 @@ checksum = "c71b1793ee61086797f5c80b6efa2b8ffa6d5dd703f118545808a7f2e27f7046"
 
 [[package]]
 name = "accesskit"
-version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3d3b8f9bae46a948369bc4a03e815d4ed6d616bd00de4051133a5019dc31c5a"
-
-[[package]]
-name = "accesskit"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "becf0eb5215b6ecb0a739c31c21bd83c4f326524c9b46b7e882d77559b60a529"
@@ -36,7 +30,7 @@ version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0bf66a7bf0b7ea4fd7742d50b64782a88f99217cf246b3f93b4162528dde520"
 dependencies = [
- "accesskit 0.18.0",
+ "accesskit",
  "hashbrown",
  "immutable-chunkmap",
 ]
@@ -47,7 +41,7 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09e230718177753b4e4ad9e1d9f6cfc2f4921212d4c1c480b253f526babb258d"
 dependencies = [
- "accesskit 0.18.0",
+ "accesskit",
  "accesskit_consumer",
  "hashbrown",
  "objc2 0.5.2",
@@ -61,7 +55,7 @@ version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65178f3df98a51e4238e584fcb255cb1a4f9111820848eeddd37663be40a625f"
 dependencies = [
- "accesskit 0.18.0",
+ "accesskit",
  "accesskit_consumer",
  "hashbrown",
  "paste",
@@ -76,7 +70,7 @@ version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34d941bb8c414caba6e206de669c7dc0dbeb305640ea890772ee422a40e6b89f"
 dependencies = [
- "accesskit 0.18.0",
+ "accesskit",
  "accesskit_macos",
  "accesskit_windows",
  "raw-window-handle",
@@ -100,7 +94,7 @@ checksum = "512761e0bb2578dd7380c6baaa0f4ce03e84f95e960231d1dec8bf4d7d6e2627"
 
 [[package]]
 name = "aeronet"
-version = "0.14.0-rc.1"
+version = "0.14.0-rc.2"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
@@ -110,7 +104,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_channel"
-version = "0.14.0-rc.1"
+version = "0.14.0-rc.2"
 dependencies = [
  "aeronet_io",
  "bevy",
@@ -128,7 +122,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_io"
-version = "0.14.0-rc.1"
+version = "0.14.0-rc.2"
 dependencies = [
  "anyhow",
  "bevy_app",
@@ -142,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_replicon"
-version = "0.14.0-rc.1"
+version = "0.14.0-rc.2"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
@@ -157,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_steam"
-version = "0.14.0-rc.1"
+version = "0.14.0-rc.2"
 dependencies = [
  "aeronet_io",
  "anyhow",
@@ -177,7 +171,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_transport"
-version = "0.14.0-rc.1"
+version = "0.14.0-rc.2"
 dependencies = [
  "aeronet_io",
  "arbitrary",
@@ -205,7 +199,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_websocket"
-version = "0.14.0-rc.1"
+version = "0.14.0-rc.2"
 dependencies = [
  "aeronet_io",
  "bevy",
@@ -233,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_webtransport"
-version = "0.14.0-rc.1"
+version = "0.14.0-rc.2"
 dependencies = [
  "aeronet_io",
  "anyhow",
@@ -724,7 +718,7 @@ version = "0.16.0-rc.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a9b8069d9f42d0ac9f2933f978c35cfb021cae0b2bf00e1b93777eb60a2bdd5"
 dependencies = [
- "accesskit 0.18.0",
+ "accesskit",
  "bevy_app",
  "bevy_derive",
  "bevy_ecs",
@@ -975,8 +969,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_egui"
-version = "0.33.0"
-source = "git+https://github.com/Friz64/bevy_egui?branch=bevy-0.16#8958f9c3f33c8931051191fd9bc6c1dff7bec0e2"
+version = "0.34.0-rc.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3175e2e7ee1626541d29e3042ef5658dde0a4e2fddfe23934a34ecfe2e83a8c"
 dependencies = [
  "arboard",
  "bevy_app",
@@ -988,7 +983,7 @@ dependencies = [
  "bevy_log",
  "bevy_math",
  "bevy_picking",
- "bevy_platform_support",
+ "bevy_platform",
  "bevy_reflect",
  "bevy_render",
  "bevy_time",
@@ -1375,22 +1370,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_platform_support"
-version = "0.16.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e07dae2ae4e79ae57147d7fe90362af18fbace134f66c537a45a8315f4855d53"
-dependencies = [
- "cfg-if",
- "critical-section",
- "foldhash",
- "hashbrown",
- "portable-atomic",
- "portable-atomic-util",
- "serde",
- "spin",
-]
-
-[[package]]
 name = "bevy_ptr"
 version = "0.16.0-rc.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1686,7 +1665,7 @@ version = "0.16.0-rc.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f988c5aa641e754474c14b54afbd150383d150321e23d18d90c6aec708b5e2c"
 dependencies = [
- "accesskit 0.18.0",
+ "accesskit",
  "bevy_a11y",
  "bevy_app",
  "bevy_asset",
@@ -1751,7 +1730,7 @@ version = "0.16.0-rc.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4908c2f74e113863fe892fe86dae98b2a2616efbf311b6e9bfc0586a4904882e"
 dependencies = [
- "accesskit 0.18.0",
+ "accesskit",
  "accesskit_winit",
  "approx",
  "bevy_a11y",
@@ -2651,7 +2630,6 @@ version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25dd34cec49ab55d85ebf70139cb1ccd29c977ef6b6ba4fe85489d6877ee9ef3"
 dependencies = [
- "accesskit 0.17.1",
  "ahash",
  "bitflags 2.9.0",
  "emath",
