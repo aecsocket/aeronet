@@ -10,7 +10,7 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::{identifier::error::IdentifierError, prelude::*},
-    bevy_platform_support::time::Instant,
+    bevy_platform::time::Instant,
     bytes::Bytes,
     core::{any::type_name, marker::PhantomData, num::Saturating},
     derive_more::{Deref, DerefMut, Display, Error},

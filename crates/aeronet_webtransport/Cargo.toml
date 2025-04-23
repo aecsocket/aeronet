@@ -46,19 +46,19 @@ dangerous-configuration = ["wtransport/dangerous-configuration"]
 document-features = ["dep:document-features"]
 
 [dependencies]
-aeronet_io            = { workspace = true }
-anyhow                = { workspace = true }
-base64                = { workspace = true }
-bevy_app              = { workspace = true }
-bevy_ecs              = { workspace = true }
-bevy_platform_support = { workspace = true }
-bevy_reflect          = { workspace = true }
-bytes                 = { workspace = true }
-cfg-if                = { workspace = true }
-document-features     = { workspace = true, optional = true }
-futures               = { workspace = true }
-tracing               = { workspace = true }
-xwt-core              = { workspace = true }
+aeronet_io        = { workspace = true }
+anyhow            = { workspace = true }
+base64            = { workspace = true }
+bevy_app          = { workspace = true }
+bevy_ecs          = { workspace = true }
+bevy_platform     = { workspace = true }
+bevy_reflect      = { workspace = true }
+bytes             = { workspace = true }
+cfg-if            = { workspace = true }
+document-features = { workspace = true, optional = true }
+futures           = { workspace = true }
+tracing           = { workspace = true }
+xwt-core          = { workspace = true }
 
 derive_more = { workspace = true, features = [
   "display",

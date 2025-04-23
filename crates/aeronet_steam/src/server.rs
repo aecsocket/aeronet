@@ -14,7 +14,7 @@ use {
     anyhow::{Context, Result, bail},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
-    bevy_platform_support::{
+    bevy_platform::{
         collections::{HashMap, hash_map::Entry},
         time::Instant,
     },

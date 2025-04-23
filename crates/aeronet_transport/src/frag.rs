@@ -14,7 +14,7 @@ use {
         size::MinSize,
     },
     alloc::vec::Vec,
-    bevy_platform_support::collections::HashMap,
+    bevy_platform::collections::HashMap,
     bit_vec::BitVec,
     core::{fmt, iter::FusedIterator},
     derive_more::{Display, Error},

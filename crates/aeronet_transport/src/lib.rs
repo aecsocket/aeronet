@@ -27,7 +27,7 @@ use {
     alloc::{boxed::Box, vec::Vec},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
-    bevy_platform_support::time::Instant,
+    bevy_platform::time::Instant,
     bevy_reflect::Reflect,
     core::num::Saturating,
     derive_more::{Add, AddAssign, Display, Error, Sub, SubAssign},
@@ -213,7 +213,7 @@ impl Transport {
     ///     aeronet_io::Session,
     ///     aeronet_transport::{Transport, lane::LaneKind},
     ///     bevy_ecs::prelude::*,
-    ///     bevy_platform_support::time::Instant,
+    ///     bevy_platform::time::Instant,
     ///     log::warn,
     /// };
     ///

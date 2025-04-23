@@ -17,7 +17,7 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
-    bevy_platform_support::time::Instant,
+    bevy_platform::time::Instant,
     bevy_reflect::prelude::*,
     bytes::Bytes,
     core::{any::type_name, mem, net::SocketAddr, time::Duration},

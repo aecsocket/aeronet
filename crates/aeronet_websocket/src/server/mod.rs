@@ -17,7 +17,7 @@ use {
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
-    bevy_platform_support::time::Instant,
+    bevy_platform::time::Instant,
     core::{mem, net::SocketAddr},
     derive_more::{Display, Error},
     futures::channel::{mpsc, oneshot},

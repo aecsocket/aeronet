@@ -12,7 +12,7 @@ use {
     aeronet_io::{IoSet, Session, SessionEndpoint, connection::Disconnected, packet::RecvPacket},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
-    bevy_platform_support::time::Instant,
+    bevy_platform::time::Instant,
     bytes::Bytes,
     core::mem,
     derive_more::{Display, Error},

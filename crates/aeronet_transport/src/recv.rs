@@ -13,7 +13,7 @@ use {
     aeronet_io::Session,
     alloc::{boxed::Box, vec::Vec},
     bevy_ecs::prelude::*,
-    bevy_platform_support::{
+    bevy_platform::{
         collections::{HashMap, HashSet},
         time::Instant,
     },

@@ -127,8 +127,8 @@ fn on_connected(
         LANES,
         LANES,
         // Don't use `std::time::Instant::now`!
-        // Instead, use `bevy::platform_support::time::Instant`.
-        bevy::platform_support::time::Instant::now(),
+        // Instead, use `bevy::platform::time::Instant`.
+        bevy::platform::time::Instant::now(),
     )
     .expect("packet MTU should be large enough to support transport");
     commands.entity(client).insert(transport);
@@ -188,7 +188,7 @@ fn echo_messages(
             _ = transport.send.push(
                 msg.lane,
                 Bytes::from(reply),
-                bevy::platform_support::time::Instant::now(),
+                bevy::platform::time::Instant::now(),
             );
         }
 

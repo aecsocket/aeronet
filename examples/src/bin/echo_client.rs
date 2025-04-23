@@ -161,8 +161,8 @@ fn on_connected(
         LANES,
         LANES,
         // Don't use `std::time::Instant::now`!
-        // Instead, use `bevy::platform_support::time::Instant`.
-        bevy::platform_support::time::Instant::now(),
+        // Instead, use `bevy::platform::time::Instant`.
+        bevy::platform::time::Instant::now(),
     )
     .expect("packet MTU should be large enough to support transport");
     commands.entity(entity).insert(transport);
@@ -228,11 +228,9 @@ fn ui(
 
                 let msg = Bytes::from(msg);
                 // We ignore the resulting `MessageKey`, since we don't need it.
-                _ = transport.send.push(
-                    SEND_LANE,
-                    msg,
-                    bevy::platform_support::time::Instant::now(),
-                );
+                _ = transport
+                    .send
+                    .push(SEND_LANE, msg, bevy::platform::time::Instant::now());
             }
 
             if ui.button("Disconnect").clicked() {

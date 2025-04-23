@@ -10,7 +10,7 @@ use {
     aeronet_io::{IoSet, Session, SessionEndpoint, connection::Disconnected},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
-    bevy_platform_support::time::Instant,
+    bevy_platform::time::Instant,
     core::mem,
     derive_more::{Display, Error},
     futures::{channel::oneshot, never::Never},

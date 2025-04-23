@@ -1,7 +1,7 @@
 //! See [`MinSize`].
 
 use {
-    bevy_platform_support::{
+    bevy_platform::{
         collections::{HashMap, HashSet},
         time::Instant,
     },

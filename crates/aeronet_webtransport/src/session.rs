@@ -11,7 +11,7 @@ use {
     alloc::sync::Arc,
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
-    bevy_platform_support::time::Instant,
+    bevy_platform::time::Instant,
     bytes::Bytes,
     core::{num::Saturating, time::Duration},
     derive_more::{Display, Error},
