@@ -23,9 +23,13 @@ Set of [Bevy]-native networking crates, focused on providing robust and rock-sol
 
 High-level networking features such as replication, rollback, and prediction are explicit **non-goals** for this crate. Instead, this crate aims to provide a solid foundation for implementing these features.
 
+**Further reading: [`docs`](https://github.com/aecsocket/aeronet/tree/main/docs)**
+
 # Crates
 
 ## IO layer implementations
+
+Before writing networking code, you must choose an *IO layer implementation*. This is the crate that forwards bytes between your application and the underlying network link (i.e. socket or channel).
 
 - [`aeronet_channel`]: over MPSC channels
   - Native + WASM
@@ -70,7 +74,7 @@ cargo install wasm-server-runner
 cargo run --example webtransport_client -F client --target wasm32-unknown-unknown
 ```
 
-- [`aeronet_steam`]: over Steam's networking sockets
+- [`aeronet_steam`]: over Steam's [networking sockets](https://partner.steamgames.com/doc/api/ISteamnetworkingSockets)
   - Native
   - ✅ Complete
   - Note on examples:
@@ -96,6 +100,15 @@ cargo run --bin move_box_client
 
 # Overview
 
+## Quickstart
+
+- Add `aeronet` to your `Cargo.toml`
+- Add your chosen IO layer to your `Cargo.toml`
+- Skim the [`echo_client.rs`] and [`echo_server.rs`] examples to understand how to build a simple client and server
+- Use `docs.rs` to understand the usage of specific types
+  - We guarantee 100% coverage using the `missing_docs` lint
+  - See [`Session`] for a good place to get started
+
 ## Layers
 
 `aeronet` is fundamentally split into multiple layers:
@@ -115,14 +128,6 @@ cargo run --bin move_box_client
   - Technically user-swappable, but most code above this layer relies on [`aeronet_transport`] specifically
 - Component replication, rollback, etc.
   - This is not provided as part of `aeronet`, but you can use a crate which integrates `aeronet` with one of these e.g. [`aeronet_replicon`]
-
-## Getting started
-
-To learn about how to use this crate, it is recommended that you learn the architecture by skimming the examples and reading the documentation of important types such as [`Session`]. If you're not sure where to start, take a look at the [`echo_client`] and [`echo_server`] crates. The examples are designed to be self-contained and self-documenting, giving you an easy jumping-off point for learning.
-
-Crates and items are thoroughly documented through rustdoc, and are the most likely to be up to date, so you should use that as the definitive reference for information on specific items.
-
-Once you have a rough idea of the architecture, choose an IO layer implementation from the list at the top, add it and `aeronet` to your app, and start building!
 
 ## Writing an IO layer
 
@@ -210,7 +215,7 @@ When submitting a pull request, make sure that all continuous integration (CI) c
 [`bevy_replicon`]: https://docs.rs/bevy_replicon
 [`aeronet_transport`]: https://docs.rs/aeronet_transport
 [`Session`]: io::Session
-[`echo_client`]: ./examples/src/bin/echo_client.rs
-[`echo_server`]: ./examples/src/bin/echo_server.rs
+[`echo_client.rs`]: ./examples/src/bin/echo_client.rs
+[`echo_server.rs`]: ./examples/src/bin/echo_server.rs
 [`egui_plot`]: https://docs.rs/egui_plot
 [`cargo-fuzz`]: https://github.com/rust-fuzz/cargo-fuzz
