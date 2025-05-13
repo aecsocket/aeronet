@@ -22,3 +22,11 @@ impl PluginGroup for AeronetPlugins {
             .add(transport::AeronetTransportPlugin)
     }
 }
+
+/// Long-form documentation.
+pub mod _docs {
+    #[doc = include_str!("../../../docs/design.md")]
+    pub mod design {}
+    #[doc = include_str!("../../../docs/changelog.md")]
+    pub mod changelog {}
+}

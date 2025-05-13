@@ -1,3 +1,8 @@
+# Unreleased
+
+- Add documentation to `aeronet::_doc` module, accessible in `docs.rs`
+- Move changelog to `aeronet::_doc`
+
 # 0.14.0
 
 - Bevy 0.16 support
