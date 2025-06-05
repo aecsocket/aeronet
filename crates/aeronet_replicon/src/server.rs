@@ -61,7 +61,7 @@ impl Plugin for AeronetRepliconServerPlugin {
         )
         .add_systems(
             PostUpdate,
-            flush
+            (flush, handle_disconnect_requests)
                 .in_set(ServerTransportSet::Flush)
                 .run_if(resource_exists::<RepliconServer>),
         )
@@ -233,5 +233,21 @@ fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Tr
         };
 
         _ = transport.send.push(lane_index, msg, now);
+    }
+}
+
+fn handle_disconnect_requests(
+    mut commands: Commands,
+    mut requests: EventReader<DisconnectRequest>,
+    clients: Query<(), (With<Transport>, With<ChildOf>)>,
+) {
+    for request in requests.read() {
+        let client = request.client_entity;
+        if let Err(err) = clients.get(client) {
+            warn!("Requested to disconnect {client} which does not match query: {err:?}");
+            continue;
+        }
+
+        commands.entity(client).despawn();
     }
 }
