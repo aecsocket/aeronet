@@ -136,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_replicon"
-version = "0.15.0-rc.1"
+version = "0.15.0"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
@@ -1487,9 +1487,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_replicon"
-version = "0.34.0-rc.1"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64ddc2816b9fe3a6af354f54087a7e761d3d873bc680f49f638b3e2d545f7932"
+checksum = "8b1d53de6f4764e310b6a19635d63915b7af0124f889d7e2454aaaacd14ef514"
 dependencies = [
  "bevy",
  "bitflags 2.9.0",
