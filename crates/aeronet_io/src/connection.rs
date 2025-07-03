@@ -208,7 +208,7 @@ fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
         }
     }
 
-    commands.entity(target).despawn();
+    commands.entity(target).try_despawn();
 }
 
 #[cfg(test)]
