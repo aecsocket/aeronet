@@ -221,7 +221,7 @@ fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands:
         }
     }
 
-    commands.entity(target).despawn();
+    commands.entity(target).try_despawn();
 }
 
 #[cfg(test)]
