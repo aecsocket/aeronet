@@ -76,11 +76,7 @@ impl RttEstimator {
         self.latest = rtt;
         self.min = self.min.min(rtt);
 
-        let var_sample = if self.smoothed > rtt {
-            self.smoothed - rtt
-        } else {
-            rtt - self.smoothed
-        };
+        let var_sample = self.smoothed.abs_diff(rtt);
         self.var = (3 * self.var + var_sample) / 4;
         self.smoothed = (7 * self.smoothed + rtt) / 8;
     }
