@@ -98,6 +98,8 @@ cargo run --bin move_box_server
 cargo run --bin move_box_client
 ```
 
+- [`lightyear`]: high-level server-authoritative networking library, using `aeronet` as the underlying IO library
+
 # Overview
 
 ## Quickstart
@@ -127,11 +129,11 @@ cargo run --bin move_box_client
   - Allows receiving acknowledgement of sent message acknowledgements
   - Technically user-swappable, but most code above this layer relies on [`aeronet_transport`] specifically
 - Component replication, rollback, etc.
-  - This is not provided as part of `aeronet`, but you can use a crate which integrates `aeronet` with one of these e.g. [`aeronet_replicon`]
+  - This is not provided as part of `aeronet`, but you can use a crate which integrates `aeronet` with one of these e.g. [`aeronet_replicon`], [`lightyear`]
 
 ## Writing an IO layer
 
-If none of the first-party or third-party IO layer implementations don't suit your needs, you can write your own IO layer implementation for your needs. `aeronet_io` is designed to be as minimal as possible, to make writing your own IO layers simple, and allow them to integrate with higher levels of the stack seamlessly.
+If none of the first-party or third-party IO layer implementations suit your needs, you can write your own IO layer implementation for your needs. `aeronet_io` is designed to be as minimal as possible, to make writing your own IO layers simple, and allow them to integrate with higher levels of the stack seamlessly.
 
 You can use [`aeronet_channel`] as a simple reference implementation of an IO layer - it's [a single file](https://github.com/aecsocket/aeronet/blob/main/crates/aeronet_channel/src/lib.rs). It demonstrates how to poll a channel synchronously from the Bevy event loop, which is useful if your underlying IO layer is not async.
 
@@ -177,7 +179,7 @@ Some example tools you may use are:
 - Windows
   - [`clumsy`](https://github.com/jagt/clumsy)
 
-`aeronet` does not provide support for conditioning within the networking crate itself, since conditioning testing is more effective (and representative of real-world results) when the conditioning is applied at the lowest level possible.
+`aeronet` does not provide support for conditioning within the networking crate itself, since conditioning testing is more effective (and representative of real-world results) when the conditioning is applied at the lowest level possible (the OS layer).
 
 # Contributing
 
@@ -213,6 +215,7 @@ When submitting a pull request, make sure that all continuous integration (CI) c
 [`aeronet_steam`]: https://docs.rs/aeronet_steam
 [`aeronet_replicon`]: https://docs.rs/aeronet_replicon
 [`bevy_replicon`]: https://docs.rs/bevy_replicon
+[`lightyear`]: https://docs.rs/lightyear
 [`aeronet_transport`]: https://docs.rs/aeronet_transport
 [`Session`]: io::Session
 [`echo_client.rs`]: ./examples/src/bin/echo_client.rs

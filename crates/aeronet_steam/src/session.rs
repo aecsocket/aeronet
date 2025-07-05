@@ -40,21 +40,21 @@ impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
             app.add_plugins(AeronetIoPlugin);
         }
 
-        let steam = app.world().resource::<SteamworksClient<M>>();
-        // https://github.com/cBournhonesque/lightyear/issues/243
-        steam
-            .networking_sockets()
-            .init_authentication()
-            .expect("failed to initialize steamworks authentication");
+        // We don't do Steam init like `init_authentication` or poll groups here
+        // because this plugin just adds the *capability* of using Steam IO,
+        // but we don't know for sure at runtime if we'll be using Steam here.
+        // We leave that up to the user: if they decide to spawn an entity with
+        // a `SteamNetIo`, only *then* do we do Steam init (and thus assume that
+        // a Steam client is running on the user's machine).
 
-        let poll_group = steam.networking_sockets().create_poll_group();
-        app.insert_resource(PollGroup(poll_group))
-            .add_systems(
-                PreUpdate,
-                (poll_io::<M>, poll_messages::<M>).in_set(IoSet::Poll),
-            )
-            .add_systems(PostUpdate, flush::<M>.in_set(IoSet::Flush))
-            .add_observer(add_connection_to_poll_group::<M>);
+        app.add_systems(
+            PreUpdate,
+            (poll_io::<M>, poll_messages::<M>)
+                .in_set(IoSet::Poll)
+                .run_if(resource_exists::<PollGroup<M>>),
+        )
+        .add_systems(PostUpdate, flush::<M>.in_set(IoSet::Flush))
+        .add_observer(init_io::<M>);
     }
 }
 
@@ -96,16 +96,45 @@ pub enum SessionError {
 #[derive(Deref, DerefMut, Resource)]
 struct PollGroup<M>(NetPollGroup<M>);
 
-fn add_connection_to_poll_group<M: SteamManager>(
+fn init_io<M: SteamManager>(
     trigger: Trigger<OnAdd, SteamNetIo<M>>,
+    steam: Option<Res<SteamworksClient<M>>>,
     io: Query<&SteamNetIo<M>>,
-    poll_group: Res<PollGroup<M>>,
+    poll_group: Option<Res<PollGroup<M>>>,
+    mut commands: Commands,
 ) {
+    let steam = steam.unwrap_or_else(|| {
+        panic!(
+            "`{}` must be present before creating a Steam IO layer",
+            type_name::<Res<SteamworksClient<M>>>()
+        )
+    });
+
     let entity = trigger.target();
     let io = io
         .get(entity)
         .expect("we are adding this component to this entity");
-    io.conn.set_poll_group(&poll_group);
+
+    if let Some(poll_group) = poll_group {
+        io.conn.set_poll_group(&poll_group);
+    } else {
+        // we combine 2 steps into one "global steam init" step:
+        // - init authentication
+        // - create poll group
+        //
+        // this means that if the poll group is removed, we re-init authentication
+        // but this should be fine, I think
+
+        // https://github.com/cBournhonesque/lightyear/issues/243
+        steam
+            .networking_sockets()
+            .init_authentication()
+            .expect("failed to initialize steamworks authentication");
+
+        let poll_group = steam.networking_sockets().create_poll_group();
+        io.conn.set_poll_group(&poll_group);
+        commands.insert_resource(PollGroup(poll_group));
+    }
 }
 
 fn poll_io<M: SteamManager>(

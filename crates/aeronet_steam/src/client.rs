@@ -17,6 +17,11 @@ use {
 };
 
 /// Allows using [`SteamNetClient`].
+///
+/// This does not perform Steam initialization when the plugin is built;
+/// instead, it defers initialization to when a [`SteamNetClient`] is added
+/// to the world. This allows you to always add this plugin, but choose at
+/// runtime whether you want to use Steam or not.
 pub struct SteamNetClientPlugin<M: SteamManager> {
     _phantom: PhantomData<M>,
 }
@@ -85,6 +90,9 @@ impl From<SteamId> for ConnectTarget {
 impl<M: SteamManager> SteamNetClient<M> {
     /// Creates an [`EntityCommand`] to set up a session and connect it to the
     /// `target`.
+    ///
+    /// [`SteamworksClient`] must be present in the world before this command is
+    /// applied.
     ///
     /// # Examples
     ///

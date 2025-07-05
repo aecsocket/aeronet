@@ -1,7 +1,7 @@
 # 0.15
 
-- Add documentation to `aeronet::_doc` module, accessible in `docs.rs`
-- Move changelog to `aeronet::_doc`
+- Add documentation to `aeronet::_docs` module, accessible in `docs.rs`
+- Move changelog to `aeronet::_docs`
 - Update to `bevy_replicon 0.34.0`
 
 # 0.14.0
