@@ -28,6 +28,10 @@ impl ServerConfig {
     pub const fn builder() -> ServerConfigBuilder<WantsBindAddress> {
         ServerConfigBuilder(WantsBindAddress(()))
     }
+
+    pub fn bind_address(&self) -> SocketAddr {
+        self.bind_address
+    }
 }
 
 /// Builds a [`ServerConfig`].
