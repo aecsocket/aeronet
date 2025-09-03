@@ -37,6 +37,7 @@ sync_wrapper  = { workspace = true }
 tracing       = { workspace = true }
 
 derive_more = { workspace = true, features = [
+  "debug",
   "display",
   "error",
   "deref",

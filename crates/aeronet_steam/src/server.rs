@@ -8,7 +8,7 @@ use {
     },
     aeronet_io::{
         IoSet, Session, SessionEndpoint,
-        connection::{Disconnected, LocalAddr, UNKNOWN_DISCONNECT_REASON},
+        connection::LocalAddr,
         server::{Closed, Server, ServerEndpoint},
     },
     anyhow::{Context, Result, bail},
@@ -18,16 +18,17 @@ use {
         collections::{HashMap, hash_map::Entry},
         time::Instant,
     },
-    core::{any::type_name, marker::PhantomData, net::SocketAddr},
+    core::{marker::PhantomData, net::SocketAddr},
+    derive_more::Debug,
     steamworks::{
-        SteamId,
+        ClientManager, SteamId,
         networking_sockets::ListenSocket,
         networking_types::{
             ConnectedEvent, ConnectionRequest, ListenSocketEvent, NetConnectionEnd,
         },
     },
     sync_wrapper::SyncWrapper,
-    tracing::{debug, debug_span, warn},
+    tracing::{debug, debug_span},
 };
 
 /// Allows using [`SteamNetServer`].
@@ -68,7 +69,7 @@ impl<M: SteamManager> Plugin for SteamNetServerPlugin<M> {
 /// Use [`SteamNetServer::open`] to start opening a server.
 ///
 /// When a client attempts to connect, the server will trigger a
-/// [`SessionRequest`]. Your app **must** observe this, and use
+/// [`SessionRequest`]. Your app **must** observe this, and eventually use
 /// [`SessionRequest::respond`] to set how the server should respond to this
 /// connection attempt.
 #[derive(Component)]
@@ -228,7 +229,10 @@ impl SessionResponse {
 /// [`SessionRequest::respond`].
 ///
 /// At least one of your observers must `respond` to this request, otherwise
-/// the server will default to [`SessionResponse::Rejected`].
+/// this request will panic when dropped.
+///
+/// You can choose to keep this around for multiple frames until you are ready
+/// to send a response, if you need to for example query an external server.
 ///
 /// # Examples
 ///
@@ -268,18 +272,45 @@ impl SessionResponse {
 ///     request.respond(SessionResponse::Accepted);
 /// }
 /// ```
-#[derive(Clone, Event)]
-pub struct SessionRequest {
+#[derive(Debug, Event)]
+pub struct SessionRequest<M: 'static = ClientManager> {
     /// Steam ID of the client requesting to connect.
     pub steam_id: SteamId,
-    /// How should the server respond to this request?
-    pub response: Option<SessionResponse>,
+    #[debug(skip)]
+    request: Option<ConnectionRequest<M>>,
 }
 
-impl SessionRequest {
-    /// Sets how the server should respond to this request.
+impl<M> SessionRequest<M> {
+    /// Determines how the server should respond to this request.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called more than once.
     pub fn respond(&mut self, response: SessionResponse) {
-        self.response = Some(response);
+        let request = self
+            .request
+            .take()
+            .expect("already responded to this request");
+        match response {
+            SessionResponse::Accepted => {
+                _ = request.accept();
+            }
+            SessionResponse::Rejected { reason } => {
+                request.reject(NetConnectionEnd::AppGeneric, Some(&reason));
+            }
+        }
+    }
+}
+
+impl<M> Drop for SessionRequest<M> {
+    fn drop(&mut self) {
+        assert!(
+            self.request.is_none(),
+            "dropped a `SessionRequest` without sending a response; \
+            you must respond to this request using `SessionRequest::respond` \n\
+            \n\
+            request info: {self:#?}"
+        );
     }
 }
 
@@ -389,32 +420,12 @@ fn on_connecting<M: SteamManager>(
         .id();
     entry.insert(client);
 
-    commands.queue(move |world: &mut World| {
-        let mut event = SessionRequest {
-            steam_id,
-            response: None,
-        };
-        world.trigger_targets_ref(&mut event, client);
+    let request = SessionRequest {
+        steam_id,
+        request: Some(request),
+    };
+    commands.trigger_targets(request, client);
 
-        let response = event.response.unwrap_or_else(|| {
-            warn!(
-                "Client session {client} created on server {entity} but no response was given, \
-                 will not allow this client to connect; you must `respond` to `{}`",
-                type_name::<SessionRequest>(),
-            );
-            SessionResponse::rejected(UNKNOWN_DISCONNECT_REASON)
-        });
-
-        match response {
-            SessionResponse::Accepted => {
-                _ = request.accept();
-            }
-            SessionResponse::Rejected { reason } => {
-                request.reject(NetConnectionEnd::AppGeneric, Some(&reason));
-                world.trigger_targets(Disconnected::by_user(reason), client);
-            }
-        }
-    });
     Ok(())
 }
 

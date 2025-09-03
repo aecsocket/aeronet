@@ -61,6 +61,7 @@ tracing           = { workspace = true }
 xwt-core          = { workspace = true }
 
 derive_more = { workspace = true, features = [
+  "debug",
   "display",
   "error",
   "deref",
