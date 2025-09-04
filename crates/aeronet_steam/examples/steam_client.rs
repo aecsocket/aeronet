@@ -13,18 +13,16 @@ use {
     bevy::prelude::*,
     bevy_egui::{EguiContexts, EguiPlugin, egui},
     core::{mem, net::SocketAddr},
-    steamworks::{ClientManager, SteamId},
+    steamworks::SteamId,
 };
 
 fn main() -> AppExit {
-    let (steam, steam_single) =
-        steamworks::Client::init_app(480).expect("failed to initialize steam");
+    let steam = steamworks::Client::init_app(480).expect("failed to initialize steam");
     steam.networking_utils().init_relay_network_access();
 
     App::new()
         .insert_resource(SteamworksClient(steam))
-        .insert_non_send_resource(steam_single)
-        .add_systems(PreUpdate, |steam: NonSend<steamworks::SingleClient>| {
+        .add_systems(PreUpdate, |steam: NonSend<SteamworksClient>| {
             steam.run_callbacks();
         })
         .add_plugins((
@@ -32,7 +30,7 @@ fn main() -> AppExit {
             EguiPlugin {
                 enable_multipass_for_primary_context: false,
             },
-            SteamNetClientPlugin::<ClientManager>::default(),
+            SteamNetClientPlugin,
         ))
         .init_resource::<Log>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
@@ -134,10 +132,7 @@ fn global_ui(
                     let name = format!("{}. {target}", *session_id);
                     commands
                         .spawn((Name::new(name), SessionUi::default()))
-                        .queue(SteamNetClient::<ClientManager>::connect(
-                            SessionConfig::default(),
-                            target,
-                        ));
+                        .queue(SteamNetClient::connect(SessionConfig::default(), target));
                 }
                 Err(err) => {
                     log.push(format!("Invalid address `{target}`: {err:?}"));
@@ -155,10 +150,7 @@ fn global_ui(
                     let name = format!("{}. {target:?}", *session_id);
                     commands
                         .spawn((Name::new(name), SessionUi::default()))
-                        .queue(SteamNetClient::<ClientManager>::connect(
-                            SessionConfig::default(),
-                            target,
-                        ));
+                        .queue(SteamNetClient::connect(SessionConfig::default(), target));
                 }
                 Err(err) => {
                     log.push(format!("Invalid Steam ID `{target}`: {err:?}"));
