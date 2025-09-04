@@ -52,7 +52,7 @@ base64            = { workspace = true }
 bevy_app          = { workspace = true }
 bevy_ecs          = { workspace = true }
 bevy_platform     = { workspace = true }
-bevy_reflect      = { workspace = true }
+bevy_reflect      = { workspace = true, features = ["std"] }
 bytes             = { workspace = true }
 cfg-if            = { workspace = true }
 document-features = { workspace = true, optional = true }

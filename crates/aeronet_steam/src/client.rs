@@ -89,7 +89,6 @@ impl SteamNetClient {
     ///     aeronet_steam::{SessionConfig, client::SteamNetClient},
     ///     bevy_ecs::prelude::*,
     ///     std::net::SocketAddr,
-    ///     steamworks::ClientManager,
     /// };
     ///
     /// # fn run(mut commands: Commands, world: &mut World) {

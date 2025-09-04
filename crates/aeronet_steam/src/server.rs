@@ -125,7 +125,6 @@ impl SteamNetServer {
     ///     aeronet_steam::{SessionConfig, server::SteamNetServer},
     ///     bevy_ecs::prelude::*,
     ///     std::net::SocketAddr,
-    ///     steamworks::ServerManager,
     /// };
     ///
     /// # fn run(mut commands: Commands, world: &mut World) {
@@ -135,7 +134,7 @@ impl SteamNetServer {
     /// // using `Commands`
     /// commands
     ///     .spawn_empty()
-    ///     .queue(SteamNetServer::<ServerManager>::open(config, target));
+    ///     .queue(SteamNetServer::open(config, target));
     ///
     /// // using mutable `World` access
     /// # let config = unimplemented!();
