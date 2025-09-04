@@ -228,10 +228,8 @@ impl Drop for SessionRequest {
     fn drop(&mut self) {
         assert!(
             self.send_session_response.is_none(),
-            "dropped a `SessionRequest` without sending a response; \
-            you must respond to this request using `SessionRequest::respond` \n\
-            \n\
-            request info: {self:#?}"
+            "dropped a `SessionRequest` without sending a response; you must respond to this \
+             request using `SessionRequest::respond` \n\nrequest info: {self:#?}"
         );
     }
 }

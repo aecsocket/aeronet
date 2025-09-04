@@ -208,6 +208,8 @@ pub enum SessionResponse {
     /// Reject the client with the given reason.
     Rejected {
         /// Reason to pass to [`Disconnected::ByUser`].
+        ///
+        /// [`Disconnected::ByUser`]: aeronet_io::connection::Disconnected::ByUser
         reason: String,
     },
 }
@@ -306,10 +308,8 @@ impl<M> Drop for SessionRequest<M> {
     fn drop(&mut self) {
         assert!(
             self.request.is_none(),
-            "dropped a `SessionRequest` without sending a response; \
-            you must respond to this request using `SessionRequest::respond` \n\
-            \n\
-            request info: {self:#?}"
+            "dropped a `SessionRequest` without sending a response; you must respond to this \
+             request using `SessionRequest::respond` \n\nrequest info: {self:#?}"
         );
     }
 }
