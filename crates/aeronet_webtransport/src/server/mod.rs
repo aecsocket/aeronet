@@ -20,10 +20,10 @@ use {
     bevy_platform::time::Instant,
     bevy_reflect::prelude::*,
     bytes::Bytes,
-    core::{any::type_name, mem, net::SocketAddr, time::Duration},
-    derive_more::{Display, Error},
+    core::{mem, net::SocketAddr, time::Duration},
+    derive_more::{Debug, Display, Error},
     futures::channel::{mpsc, oneshot},
-    tracing::{Instrument, debug, debug_span, warn},
+    tracing::{Instrument, debug, debug_span},
     wtransport::error::ConnectionError,
 };
 
@@ -53,7 +53,7 @@ impl Plugin for WebTransportServerPlugin {
 /// Use [`WebTransportServer::open`] to start opening a server.
 ///
 /// When a client attempts to connect, the server will trigger a
-/// [`SessionRequest`]. Your app **must** observe this, and use
+/// [`SessionRequest`]. Your app **must** observe this, and eventually use
 /// [`SessionRequest::respond`] to set how the server should respond to this
 /// connection attempt.
 #[derive(Debug, Component)]
@@ -150,7 +150,10 @@ pub enum SessionResponse {
 /// [`SessionRequest::respond`].
 ///
 /// At least one of your observers must `respond` to this request, otherwise
-/// the server will default to [`SessionResponse::NotFound`].
+/// this request will panic when dropped.
+///
+/// You can choose to keep this around for multiple frames until you are ready
+/// to send a response, if you need to for example query an external server.
 ///
 /// # Examples
 ///
@@ -188,7 +191,8 @@ pub enum SessionResponse {
 /// }
 /// # fn validate_auth_token(_: &str) -> bool { unimplemented!() }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Event, Reflect)]
+#[derive(Debug, Event, Reflect)]
+#[reflect(from_reflect = false)]
 pub struct SessionRequest {
     /// `:authority` header.
     pub authority: String,
@@ -200,14 +204,33 @@ pub struct SessionRequest {
     pub user_agent: Option<String>,
     /// Full map of request headers.
     pub headers: std::collections::HashMap<String, String>,
-    /// How should the server respond to this request?
-    pub response: Option<SessionResponse>,
+    #[reflect(ignore)]
+    #[debug(skip)]
+    send_session_response: Option<oneshot::Sender<SessionResponse>>,
 }
 
 impl SessionRequest {
-    /// Sets how the server should respond to this request.
-    pub const fn respond(&mut self, response: SessionResponse) {
-        self.response = Some(response);
+    /// Determines how the server should respond to this request.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called more than once.
+    pub fn respond(&mut self, response: SessionResponse) {
+        let send_session_response = self
+            .send_session_response
+            .take()
+            .expect("already responded to this request");
+        _ = send_session_response.send(response);
+    }
+}
+
+impl Drop for SessionRequest {
+    fn drop(&mut self) {
+        assert!(
+            self.send_session_response.is_none(),
+            "dropped a `SessionRequest` without sending a response; you must respond to this \
+             request using `SessionRequest::respond` \n\nrequest info: {self:#?}"
+        );
     }
 }
 
@@ -329,27 +352,15 @@ fn poll_opened(
                 .id();
             _ = connecting.send_session_entity.send(client);
 
-            commands.queue(move |world: &mut World| {
-                let mut request = SessionRequest {
-                    authority: connecting.authority,
-                    path: connecting.path,
-                    origin: connecting.origin,
-                    user_agent: connecting.user_agent,
-                    headers: connecting.headers,
-                    response: None,
-                };
-                world.trigger_targets_ref(&mut request, client);
-
-                let response = request.response.unwrap_or_else(|| {
-                    warn!(
-                        "Client session {client} created on server {entity} but no response was \
-                         given, will not allow this client to connect; you must `respond` to `{}`",
-                        type_name::<SessionRequest>()
-                    );
-                    SessionResponse::NotFound
-                });
-                _ = connecting.send_session_response.send(response);
-            });
+            let request = SessionRequest {
+                authority: connecting.authority,
+                path: connecting.path,
+                origin: connecting.origin,
+                user_agent: connecting.user_agent,
+                headers: connecting.headers,
+                send_session_response: Some(connecting.send_session_response),
+            };
+            commands.trigger_targets(request, client);
         }
     }
 }

@@ -29,7 +29,7 @@ impl ServerConfig {
         ServerConfigBuilder(WantsBindAddress(()))
     }
 
-    /// The [`SocketAddr`] that the server listens on.
+    /// [`SocketAddr`] that the server listens on.
     #[must_use]
     pub const fn bind_address(&self) -> SocketAddr {
         self.bind_address
