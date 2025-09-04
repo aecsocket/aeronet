@@ -1,15 +1,12 @@
-# Unreleased
-
-- Defer Steam initialization to when an IO layer component is added
-- Expose getter for WebSocket `ServerConfig` bind_address
-- Allow responding to `SessionRequests` asynchronously
-- Update to `steamworks 0.12.2`
-
 # 0.15
 
 - Add documentation to `aeronet::_docs` module, accessible in `docs.rs`
 - Move changelog to `aeronet::_docs`
 - Update to `bevy_replicon 0.34.0`
+- Defer Steam initialization to when an IO layer component is added
+- Expose getter for WebSocket `ServerConfig` bind_address
+- Allow responding to `SessionRequests` asynchronously
+- Update to `steamworks 0.12.2`
 
 # 0.14.0
 
@@ -20,9 +17,9 @@
 - `bevy_replicon` 0.33.0 support
 - Dev container files for easily getting a reproducible dev env running
 - Merged `DisconnectReason` and `Disconnected` into one
-  - `Disconnected::reason` has been flattened into `enum Disconnected` itself
+  - `Disconnected::reason` has been flattened into `enum Disconnected`
 - Merged `CloseReason` and `Closed` into one
-  - `Closed::reason` has been flattened into `enum CloseReason` itself
+  - `Closed::reason` has been flattened into `enum CloseReason`
 
 # 0.13.0
 
