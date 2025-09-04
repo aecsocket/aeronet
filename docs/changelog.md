@@ -4,7 +4,7 @@
 - Move changelog to `aeronet::_docs`
 - Update to `bevy_replicon 0.34.0`
 - Defer Steam initialization to when an IO layer component is added
-- Expose getter for WebSocket `ServerConfig` bind_address
+- Expose getter for WebSocket `ServerConfig::bind_address`
 - Allow responding to `SessionRequests` asynchronously
 - Update to `steamworks 0.12.2`
 
