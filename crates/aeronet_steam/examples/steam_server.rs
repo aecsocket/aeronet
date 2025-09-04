@@ -16,25 +16,18 @@ use {
     bevy::{log::LogPlugin, prelude::*},
     core::net::{Ipv4Addr, SocketAddr},
     std::env,
-    steamworks::ClientManager,
 };
 
 fn main() -> AppExit {
-    let (steam, steam_single) =
-        steamworks::Client::init_app(480).expect("failed to initialize steam");
+    let steam = steamworks::Client::init_app(480).expect("failed to initialize steam");
     steam.networking_utils().init_relay_network_access();
 
     App::new()
         .insert_resource(SteamworksClient(steam))
-        .insert_non_send_resource(steam_single)
-        .add_systems(PreUpdate, |steam: NonSend<steamworks::SingleClient>| {
+        .add_systems(PreUpdate, |steam: Res<SteamworksClient>| {
             steam.run_callbacks();
         })
-        .add_plugins((
-            MinimalPlugins,
-            LogPlugin::default(),
-            SteamNetServerPlugin::<ClientManager>::default(),
-        ))
+        .add_plugins((MinimalPlugins, LogPlugin::default(), SteamNetServerPlugin))
         .add_systems(Startup, open_server)
         .add_systems(Update, reply)
         .add_observer(on_opened)
@@ -55,10 +48,7 @@ fn open_server(mut commands: Commands) {
 
     commands
         .spawn_empty()
-        .queue(SteamNetServer::<ClientManager>::open(
-            SessionConfig::default(),
-            target,
-        ));
+        .queue(SteamNetServer::open(SessionConfig::default(), target));
 }
 
 fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {

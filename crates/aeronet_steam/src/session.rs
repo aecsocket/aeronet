@@ -2,7 +2,7 @@
 //! servers.
 
 use {
-    crate::{SteamManager, SteamworksClient},
+    crate::SteamworksClient,
     aeronet_io::{
         AeronetIoPlugin, IoSet, Session,
         connection::{Disconnected, UNKNOWN_DISCONNECT_REASON},
@@ -12,29 +12,18 @@ use {
     bevy_ecs::{identifier::error::IdentifierError, prelude::*},
     bevy_platform::time::Instant,
     bytes::Bytes,
-    core::{any::type_name, marker::PhantomData, num::Saturating},
+    core::{any::type_name, num::Saturating},
     derive_more::{Deref, DerefMut, Display, Error},
     steamworks::{
-        ClientManager,
         networking_sockets::{NetConnection, NetPollGroup},
         networking_types::{NetConnectionEnd, NetworkingConnectionState, SendFlags},
     },
     tracing::{debug, trace, trace_span, warn},
 };
 
-pub(crate) struct SteamNetSessionPlugin<M: SteamManager> {
-    _phantom: PhantomData<M>,
-}
+pub(crate) struct SteamNetSessionPlugin;
 
-impl<M: SteamManager> Default for SteamNetSessionPlugin<M> {
-    fn default() -> Self {
-        Self {
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
+impl Plugin for SteamNetSessionPlugin {
     fn build(&self, app: &mut App) {
         if !app.is_plugin_added::<AeronetIoPlugin>() {
             app.add_plugins(AeronetIoPlugin);
@@ -49,12 +38,12 @@ impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
 
         app.add_systems(
             PreUpdate,
-            (poll_io::<M>, poll_messages::<M>)
+            (poll_io, poll_messages)
                 .in_set(IoSet::Poll)
-                .run_if(resource_exists::<PollGroup<M>>),
+                .run_if(resource_exists::<PollGroup>),
         )
-        .add_systems(PostUpdate, flush::<M>.in_set(IoSet::Flush))
-        .add_observer(init_io::<M>);
+        .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
+        .add_observer(init_io);
     }
 }
 
@@ -67,8 +56,8 @@ impl<M: SteamManager> Plugin for SteamNetSessionPlugin<M> {
 /// You should not add or remove this component directly - it is managed
 /// entirely by the client and server implementations.
 #[derive(Component)]
-pub struct SteamNetIo<M: SteamManager = ClientManager> {
-    pub(crate) conn: NetConnection<M>,
+pub struct SteamNetIo {
+    pub(crate) conn: NetConnection,
     pub(crate) mtu: usize,
 }
 
@@ -94,19 +83,19 @@ pub enum SessionError {
 }
 
 #[derive(Deref, DerefMut, Resource)]
-struct PollGroup<M>(NetPollGroup<M>);
+struct PollGroup(NetPollGroup);
 
-fn init_io<M: SteamManager>(
-    trigger: Trigger<OnAdd, SteamNetIo<M>>,
-    steam: Option<Res<SteamworksClient<M>>>,
-    io: Query<&SteamNetIo<M>>,
-    poll_group: Option<Res<PollGroup<M>>>,
+fn init_io(
+    trigger: Trigger<OnAdd, SteamNetIo>,
+    steam: Option<Res<SteamworksClient>>,
+    io: Query<&SteamNetIo>,
+    poll_group: Option<Res<PollGroup>>,
     mut commands: Commands,
 ) {
     let steam = steam.unwrap_or_else(|| {
         panic!(
             "`{}` must be present before creating a Steam IO layer",
-            type_name::<Res<SteamworksClient<M>>>()
+            type_name::<Res<SteamworksClient>>()
         )
     });
 
@@ -137,10 +126,10 @@ fn init_io<M: SteamManager>(
     }
 }
 
-fn poll_io<M: SteamManager>(
+fn poll_io(
     mut commands: Commands,
-    sessions: Query<(Entity, &SteamNetIo<M>)>,
-    steam: Res<SteamworksClient<M>>,
+    sessions: Query<(Entity, &SteamNetIo)>,
+    steam: Res<SteamworksClient>,
 ) {
     let sockets = steam.networking_sockets();
     for (entity, io) in &sessions {
@@ -154,7 +143,7 @@ fn poll_io<M: SteamManager>(
 
         if let Some(end_reason) = info.end_reason() {
             let disconnected = match end_reason {
-                NetConnectionEnd::AppGeneric => Disconnected::by_peer(UNKNOWN_DISCONNECT_REASON),
+                NetConnectionEnd::App(_) => Disconnected::by_peer(UNKNOWN_DISCONNECT_REASON),
                 reason => Disconnected::by_error(SessionError::Ended(reason)),
             };
             commands.trigger_targets(disconnected, entity);
@@ -186,10 +175,10 @@ fn poll_io<M: SteamManager>(
     }
 }
 
-fn poll_messages<M: SteamManager>(
-    io: Query<&SteamNetIo<M>>,
+fn poll_messages(
+    io: Query<&SteamNetIo>,
     mut clients: Query<&mut Session>,
-    mut poll_group: ResMut<PollGroup<M>>,
+    mut poll_group: ResMut<PollGroup>,
     mut commands: Commands,
 ) {
     const POLL_BATCH_SIZE: usize = 128;
@@ -225,7 +214,7 @@ fn poll_messages<M: SteamManager>(
                 Err(err) => {
                     warn!(
                         "Received message on {entity}, which does not have `{}`: {err:?}",
-                        type_name::<SteamNetIo<M>>()
+                        type_name::<SteamNetIo>()
                     );
                     continue;
                 }
@@ -285,7 +274,7 @@ fn poll_messages<M: SteamManager>(
     }
 }
 
-fn flush<M: SteamManager>(mut sessions: Query<(Entity, &mut Session, &SteamNetIo<M>)>) {
+fn flush(mut sessions: Query<(Entity, &mut Session, &SteamNetIo)>) {
     for (entity, mut session, io) in &mut sessions {
         let span = trace_span!("flush", %entity);
         let _span = span.enter();

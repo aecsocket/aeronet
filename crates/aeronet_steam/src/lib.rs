@@ -6,7 +6,6 @@ pub use steamworks;
 use {
     bevy_ecs::prelude::*,
     derive_more::{Deref, DerefMut},
-    steamworks::ClientManager,
 };
 
 #[cfg(feature = "client")]
@@ -22,16 +21,5 @@ pub use config::SessionConfig;
 ///
 /// You must initialize a [`steamworks::Client`] yourself, then insert this
 /// resource into the app manually.
-#[derive(Deref, DerefMut, Resource)]
-pub struct SteamworksClient<M: SteamManager = ClientManager>(pub steamworks::Client<M>);
-
-impl<M: SteamManager> Clone for SteamworksClient<M> {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-}
-
-/// [`steamworks::Manager`] with extra trait bounds for Bevy compatibility.
-pub trait SteamManager: steamworks::Manager + Send + Sync + 'static {}
-
-impl<T: steamworks::Manager + Send + Sync + 'static> SteamManager for T {}
+#[derive(Deref, Clone, DerefMut, Resource)]
+pub struct SteamworksClient(pub steamworks::Client);
