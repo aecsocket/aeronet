@@ -1,4 +1,4 @@
-# 0.15
+# 0.15.0, 0.16.0
 
 - Add documentation to `aeronet::_docs` module, accessible in `docs.rs`
 - Move changelog to `aeronet::_docs`
@@ -6,7 +6,8 @@
 - Defer Steam initialization to when an IO layer component is added
 - Expose getter for WebSocket `ServerConfig::bind_address`
 - Allow responding to `SessionRequests` asynchronously
-- Update to `steamworks 0.12.2`
+- `aeronet_steam`: update to `steamworks 0.12.2`
+- [#59](https://github.com/aecsocket/aeronet/pull/59): Fix WASM build for WebSocket with `wasm-bindgen 0.2.101`
 
 # 0.14.0
 

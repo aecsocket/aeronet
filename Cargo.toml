@@ -32,12 +32,12 @@ too_many_arguments      = "allow"
 type_complexity         = "allow"
 
 [workspace.dependencies]
-aeronet              = { version = "0.14.0", path = "crates/aeronet", default-features = false }
-aeronet_io           = { version = "0.14.0", path = "crates/aeronet_io", default-features = false }
-aeronet_replicon     = { version = "0.15.0", path = "crates/aeronet_replicon", default-features = false }
-aeronet_transport    = { version = "0.14.0", path = "crates/aeronet_transport", default-features = false }
-aeronet_websocket    = { version = "0.14.0", path = "crates/aeronet_websocket" }
-aeronet_webtransport = { version = "0.14.0", path = "crates/aeronet_webtransport" }
+aeronet              = { version = "0.16.0", path = "crates/aeronet", default-features = false }
+aeronet_io           = { version = "0.16.0", path = "crates/aeronet_io", default-features = false }
+aeronet_replicon     = { version = "0.16.0", path = "crates/aeronet_replicon", default-features = false }
+aeronet_transport    = { version = "0.16.0", path = "crates/aeronet_transport", default-features = false }
+aeronet_websocket    = { version = "0.16.0", path = "crates/aeronet_websocket" }
+aeronet_webtransport = { version = "0.16.0", path = "crates/aeronet_webtransport" }
 
 bevy_app      = { version = "0.16.0", default-features = false }
 bevy_ecs      = { version = "0.16.0", default-features = false }
@@ -84,8 +84,8 @@ tokio-rustls         = { version = "0.26.2" }
 tokio-tungstenite    = { version = "0.26.2" }
 tracing              = { version = "0.1.40", default-features = false }
 typesize             = { version = "0.1.14", default-features = false }
-wasm-bindgen         = { version = "0.2.99" }
-wasm-bindgen-futures = { version = "0.4.43" }
+wasm-bindgen         = { version = "0.2.101" }
+wasm-bindgen-futures = { version = "0.4.51" }
 web-sys              = { version = "0.3.70" }
 wtransport           = { version = "0.6.1" }
 x509-cert            = { version = "0.2.5" }
