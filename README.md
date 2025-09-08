@@ -23,7 +23,10 @@ Set of [Bevy]-native networking crates, focused on providing robust and rock-sol
 
 High-level networking features such as replication, rollback, and prediction are explicit **non-goals** for this crate. Instead, this crate aims to provide a solid foundation for implementing these features.
 
-### [Further reading](https://github.com/aecsocket/aeronet/tree/main/docs)
+### [📚 Further reading](https://github.com/aecsocket/aeronet/tree/main/docs)
+
+- [Changelog](https://github.com/aecsocket/aeronet/blob/main/docs/changelog.md)
+- [Design](https://github.com/aecsocket/aeronet/blob/main/docs/design.md)
 
 # Crates
 
@@ -31,20 +34,25 @@ High-level networking features such as replication, rollback, and prediction are
 
 Before writing networking code, you must choose an *IO layer implementation*. This is the crate that forwards bytes between your application and the underlying network link (i.e. socket or channel).
 
-- [`aeronet_channel`]: over MPSC channels
-  - Native + WASM
-  - ✅ Complete
+### [`aeronet_channel`]
+
+| ✅ Complete | 🖥️ Native | 🌐 WASM |
+|------------|-----------|--------|
+
+Uses in-memory MPSC channels for single-process communication.
 
 ```sh
 cargo run --example channel
 ```
 
-- [`aeronet_websocket`]: over WebSockets (using TCP)
-  - Native + WASM
-  - ✅ Complete
-  - Note on examples:
+### [`aeronet_websocket`]
 
-    This example shows how to set up an encrypted server and client with self-signed certificates. WASM will not work with self-signed certificates - you will need a real certificate signed by an authority that your browser trusts.
+| ✅ Complete | 🖥️ Native | 🌐 WASM |
+|------------|-----------|--------|
+
+Uses WebSockets over TCP in a networked environment.
+
+This example shows how to set up an encrypted server and client with self-signed certificates. WASM will not work with self-signed certificates - you will need a real certificate signed by an authority that your browser trusts.
 
 ```sh
 cargo run --example websocket_server -F server
@@ -55,15 +63,17 @@ cargo install wasm-server-runner
 cargo run --example websocket_client -F client --target wasm32-unknown-unknown
 ```
 
-- [`aeronet_webtransport`]: over WebTransport (using QUIC)
-  - Native + WASM
-  - ✅ Complete
-  - Note on examples:
+### [`aeronet_webtransport`]
 
-    On WASM, when running the client, you will not be able to paste into the text box using Ctrl+V. To work around this:
-    1. click into the text box you want to paste into
-    2. click outside of the Bevy app (in the white area)
-    3. press Ctrl+V
+| ✅ Complete | 🖥️ Native | 🌐 WASM |
+|------------|-----------|--------|
+
+Uses WebTransport over QUIC in a networked environment.
+
+On WASM, when running the client, you will not be able to paste into the text box using Ctrl+V. To work around this:
+1. click into the text box you want to paste into
+2. click outside of the Bevy app (in the white area)
+3. press Ctrl+V
 
 ```sh
 cargo run --example webtransport_server -F server
@@ -74,12 +84,14 @@ cargo install wasm-server-runner
 cargo run --example webtransport_client -F client --target wasm32-unknown-unknown
 ```
 
-- [`aeronet_steam`]: over Steam's [networking sockets](https://partner.steamgames.com/doc/api/ISteamnetworkingSockets)
-  - Native
-  - ✅ Complete
-  - Note on examples:
+### [`aeronet_steam`]
 
-    You will need Steam running locally on your machine to be able to run the examples. If you want to test out peer-to-peer connections (not socket address connections), you will need to run two separate Steam clients using two separate Steam accounts  - see *Development Environment* for an easy way to achieve this.
+| ✅ Complete | 🖥️ Native |
+|------------|-----------|
+
+Uses Steam's [networking sockets](https://partner.steamgames.com/doc/api/ISteamnetworkingSockets)
+
+You will need Steam running locally on your machine to be able to run the examples. If you want to test out peer-to-peer connections (not socket address connections), you will need to run two separate Steam clients using two separate Steam accounts  - see *Development Environment* for an easy way to achieve this.
 
 ```sh
 # run a server which listens on a socket address
@@ -91,14 +103,18 @@ cargo run --example steam_client -F client
 
 ## Integrations
 
-- [`aeronet_replicon`]: high-level replication via [`bevy_replicon`]
+### [`aeronet_replicon`]
+
+High-level ECS replication via [`bevy_replicon`].
 
 ```sh
 cargo run --bin move_box_server
 cargo run --bin move_box_client
 ```
 
-- [`lightyear`]: high-level server-authoritative networking library, using `aeronet` as the underlying IO library
+### [`lightyear`]
+
+High-level server-authoritative networking library, using `aeronet` as the underlying IO library.
 
 # Overview
 
@@ -203,7 +219,7 @@ When submitting a pull request, make sure that all continuous integration (CI) c
 
 | `bevy` | `aeronet`           |
 |--------|---------------------|
-| `0.16` | `0.13.0` - `0.14.0` |
+| `0.16` | `0.13.0` - `0.16.0` |
 | `0.15` | `0.11.0` - `0.12.0` |
 | `0.14` | `0.9.0` - `0.10.0`  |
 
