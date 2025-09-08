@@ -23,10 +23,10 @@ Set of [Bevy]-native networking crates, focused on providing robust and rock-sol
 
 High-level networking features such as replication, rollback, and prediction are explicit **non-goals** for this crate. Instead, this crate aims to provide a solid foundation for implementing these features.
 
-### [📚 Further reading](https://github.com/aecsocket/aeronet/tree/main/docs)
+### [📚 Further reading](https://github.com/aecsocket/aeronet/tree/main/crates/aeronet/docs)
 
-- [Changelog](https://github.com/aecsocket/aeronet/blob/main/docs/changelog.md)
-- [Design](https://github.com/aecsocket/aeronet/blob/main/docs/design.md)
+- [Changelog](https://github.com/aecsocket/aeronet/blob/main/crates/aeronet/docs/changelog.md)
+- [Design](https://github.com/aecsocket/aeronet/blob/main/crates/aeronet/docs/design.md)
 
 # Crates
 
