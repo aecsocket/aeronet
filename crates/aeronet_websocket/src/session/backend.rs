@@ -38,7 +38,7 @@ pub mod wasm {
         let (mut send_dc_reason, recv_dc_reason) = mpsc::channel::<Disconnected>(1);
 
         let (_send_dropped, recv_dropped) = oneshot::channel::<()>();
-        let on_open = Closure::<dyn FnOnce()>::once({
+        let on_open = Closure::once({
             let socket = socket.clone();
             let mut send_dc_reason = send_dc_reason.clone();
             || {
