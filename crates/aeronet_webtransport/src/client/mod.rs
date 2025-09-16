@@ -9,7 +9,9 @@ use {
             self, MIN_MTU, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
         },
     },
-    aeronet_io::{IoSet, Session, SessionEndpoint, connection::Disconnected, packet::RecvPacket},
+    aeronet_io::{
+        IoSystems, Session, SessionEndpoint, connection::Disconnected, packet::RecvPacket,
+    },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     bevy_platform::time::Instant,
@@ -56,7 +58,7 @@ impl Plugin for WebTransportClientPlugin {
         app.add_systems(
             PreUpdate,
             (poll_connecting, poll_connected)
-                .in_set(IoSet::Poll)
+                .in_set(IoSystems::Poll)
                 .before(session::poll),
         );
     }

@@ -99,7 +99,7 @@ impl Server {
 ///
 /// # fn run(mut commands: Commands, server: Entity, server1: Entity, server2: Entity) {
 /// // close a single server
-/// commands.trigger_targets(Close::new("show's over, go home"), server);
+/// commands.trigger(Close::new(server, "show's over, go home"));
 ///
 /// // disconnect multiple sessions at once
 /// commands.trigger_targets(
@@ -110,8 +110,10 @@ impl Server {
 /// ```
 ///
 /// [`Disconnect`]: crate::connection::Disconnect
-#[derive(Debug, Clone, PartialEq, Eq, Event)]
+#[derive(Debug, Clone, PartialEq, Eq, EntityEvent)]
 pub struct Close {
+    /// [`Server`] entity to be closed.
+    pub entity: Entity,
     /// User-provided closing reason.
     ///
     /// Will be used as the reason in [`Closed::ByUser`], and as the
@@ -123,8 +125,9 @@ pub struct Close {
 impl Close {
     /// Creates a new [`Close`] with the given reason.
     #[must_use]
-    pub fn new(reason: impl Into<String>) -> Self {
+    pub fn new(entity: Entity, reason: impl Into<String>) -> Self {
         Self {
+            entity,
             reason: reason.into(),
         }
     }
@@ -140,8 +143,17 @@ impl Close {
 /// This must be triggered by the IO layer when it detects a fatal server error.
 /// If the error only concerns a single client, that client must be disconnected
 /// instead of closing the entire server.
-#[derive(Debug, Event)]
-pub enum Closed {
+#[derive(Debug, EntityEvent)]
+pub struct Closed {
+    /// [`Server`] entity which was closed.
+    pub entity: Entity,
+    /// Why the server was closed.
+    pub reason: CloseReason,
+}
+
+/// Why a [`Closed`] was triggered.
+#[derive(Debug)]
+pub enum CloseReason {
     /// Server was closed by the user on our side, with a provided reason.
     ///
     /// Connected clients will be disconnected with the same reason.
@@ -160,21 +172,21 @@ pub enum Closed {
     ByError(anyhow::Error),
 }
 
-impl Closed {
-    /// Creates a [`Closed::ByUser`] from the given reason.
+impl CloseReason {
+    /// Creates a [`CloseReason::ByUser`] from the given reason.
     #[must_use]
     pub fn by_user(reason: impl Into<String>) -> Self {
         Self::ByUser(reason.into())
     }
 
-    /// Creates a [`Closed::ByError`] from the given reason.
+    /// Creates a [`CloseReason::ByError`] from the given reason.
     #[must_use]
     pub fn by_error(reason: impl Into<anyhow::Error>) -> Self {
         Self::ByError(reason.into())
     }
 
-    /// If this value is a [`Closed::ByError`], creates a new
-    /// [`Closed::ByError`] using the mapping function.
+    /// If this value is a [`CloseReason::ByError`], creates a new
+    /// [`CloseReason::ByError`] using the mapping function.
     #[must_use]
     pub fn map_err(self, f: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
         match self {
@@ -184,39 +196,46 @@ impl Closed {
     }
 }
 
-impl<E: Into<anyhow::Error>> From<E> for Closed {
+impl<E: Into<anyhow::Error>> From<E> for CloseReason {
     fn from(value: E) -> Self {
         Self::by_error(value)
     }
 }
 
-fn on_opening(trigger: Trigger<OnAdd, ServerEndpoint>) {
-    let target = trigger.target();
+fn on_opening(trigger: On<Add, ServerEndpoint>) {
+    let target = trigger.event_target();
     debug!("{target} opening");
 }
 
-fn on_opened(trigger: Trigger<OnAdd, Server>) {
-    let target = trigger.target();
+fn on_opened(trigger: On<Add, Server>) {
+    let target = trigger.event_target();
     debug!("{target} opened");
 }
 
-fn on_close(trigger: Trigger<Close>, mut commands: Commands) {
-    let target = trigger.target();
-    commands.trigger_targets(Closed::by_user(&trigger.reason), target);
+fn on_close(trigger: On<Close>, mut commands: Commands) {
+    let entity = trigger.event_target();
+    commands.trigger(Closed {
+        entity,
+        reason: CloseReason::by_user(&trigger.reason),
+    });
 }
 
-fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands: Commands) {
-    let target = trigger.target();
+fn on_closed(trigger: On<Closed>, children: Query<&Children>, mut commands: Commands) {
+    let target = trigger.event_target();
     let children = children
         .get(target)
         .map(|children| children.iter().collect::<Vec<_>>())
         .unwrap_or_default();
-    match &*trigger {
-        Closed::ByUser(reason) => {
+    match &trigger.reason {
+        CloseReason::ByUser(reason) => {
             debug!("{target} closed by user: {reason}");
-            commands.trigger_targets(Disconnect::new(reason), children);
+
+            // TODO is there a faster way?
+            for child in children {
+                commands.trigger(Disconnect::new(child, reason));
+            }
         }
-        Closed::ByError(err) => {
+        CloseReason::ByError(err) => {
             debug!("{target} closed due to error: {err:?}");
         }
     }
@@ -228,7 +247,10 @@ fn on_closed(trigger: Trigger<Closed>, children: Query<&Children>, mut commands:
 mod tests {
     use {
         super::*,
-        crate::{AeronetIoPlugin, connection::Disconnected},
+        crate::{
+            AeronetIoPlugin,
+            connection::{DisconnectReason, Disconnected},
+        },
     };
 
     #[test]
@@ -248,10 +270,10 @@ mod tests {
 
         let client = app.world_mut().spawn_empty().id();
         app.world_mut().entity_mut(client).observe(
-            |trigger: Trigger<Disconnected>, mut has_disconnected: ResMut<HasDisconnected>| {
+            |trigger: On<Disconnected>, mut has_disconnected: ResMut<HasDisconnected>| {
                 assert!(matches!(
-                    &*trigger,
-                    Disconnected::ByUser(reason) if reason == REASON
+                    &trigger.reason,
+                    DisconnectReason::ByUser(reason) if reason == REASON
                 ));
 
                 has_disconnected.0 = true;
@@ -262,18 +284,16 @@ mod tests {
         app.world_mut()
             .entity_mut(server)
             .add_child(client)
-            .observe(
-                |trigger: Trigger<Closed>, mut has_closed: ResMut<HasClosed>| {
-                    assert!(matches!(
-                        &*trigger,
-                        Closed::ByUser(reason) if reason == REASON
-                    ));
+            .observe(|trigger: On<Closed>, mut has_closed: ResMut<HasClosed>| {
+                assert!(matches!(
+                    &trigger.reason,
+                    CloseReason::ByUser(reason) if reason == REASON
+                ));
 
-                    has_closed.0 = true;
-                },
-            );
+                has_closed.0 = true;
+            });
 
-        app.world_mut().trigger_targets(Close::new(REASON), server);
+        app.world_mut().trigger(Close::new(server, REASON));
         app.update();
 
         assert!(app.world().get_entity(client).is_err());

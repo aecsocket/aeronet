@@ -242,6 +242,8 @@ pub(crate) fn update_send_bytes_config(
     }
 }
 
+// TODO: This code was actually always broken, since it's not `trigger_targets`!
+// Oh shit, I need to add a test!
 pub(crate) fn disconnect_errored(mut sessions: Query<&mut Transport>, mut commands: Commands) {
     for mut transport in &mut sessions {
         if let Some(err) = transport.send.error.take() {

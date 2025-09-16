@@ -4,12 +4,12 @@
 use {
     crate::SteamworksClient,
     aeronet_io::{
-        AeronetIoPlugin, IoSet, Session,
-        connection::{Disconnected, UNKNOWN_DISCONNECT_REASON},
+        AeronetIoPlugin, IoSystems, Session,
+        connection::{DisconnectReason, Disconnected, UNKNOWN_DISCONNECT_REASON},
         packet::RecvPacket,
     },
     bevy_app::prelude::*,
-    bevy_ecs::{identifier::error::IdentifierError, prelude::*},
+    bevy_ecs::prelude::*,
     bevy_platform::time::Instant,
     bytes::Bytes,
     core::{any::type_name, num::Saturating},
@@ -39,10 +39,10 @@ impl Plugin for SteamNetSessionPlugin {
         app.add_systems(
             PreUpdate,
             (poll_io, poll_messages)
-                .in_set(IoSet::Poll)
+                .in_set(IoSystems::Poll)
                 .run_if(resource_exists::<PollGroup>),
         )
-        .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
+        .add_systems(PostUpdate, flush.in_set(IoSystems::Flush))
         .add_observer(init_io);
     }
 }
@@ -86,7 +86,7 @@ pub enum SessionError {
 struct PollGroup(NetPollGroup);
 
 fn init_io(
-    trigger: Trigger<OnAdd, SteamNetIo>,
+    trigger: On<Add, SteamNetIo>,
     steam: Option<Res<SteamworksClient>>,
     io: Query<&SteamNetIo>,
     poll_group: Option<Res<PollGroup>>,
@@ -99,7 +99,7 @@ fn init_io(
         )
     });
 
-    let entity = trigger.target();
+    let entity = trigger.event_target();
     let io = io
         .get(entity)
         .expect("we are adding this component to this entity");
@@ -134,19 +134,19 @@ fn poll_io(
     let sockets = steam.networking_sockets();
     for (entity, io) in &sessions {
         let Ok(info) = sockets.get_connection_info(&io.conn) else {
-            commands.trigger_targets(
-                Disconnected::by_error(SessionError::InvalidConnection),
+            commands.trigger(Disconnected {
                 entity,
-            );
+                reason: DisconnectReason::by_error(SessionError::InvalidConnection),
+            });
             continue;
         };
 
         if let Some(end_reason) = info.end_reason() {
-            let disconnected = match end_reason {
-                NetConnectionEnd::App(_) => Disconnected::by_peer(UNKNOWN_DISCONNECT_REASON),
-                reason => Disconnected::by_error(SessionError::Ended(reason)),
+            let reason = match end_reason {
+                NetConnectionEnd::App(_) => DisconnectReason::by_peer(UNKNOWN_DISCONNECT_REASON),
+                reason => DisconnectReason::by_error(SessionError::Ended(reason)),
             };
-            commands.trigger_targets(disconnected, entity);
+            commands.trigger(Disconnected { entity, reason });
             continue;
         }
 
@@ -200,11 +200,11 @@ fn poll_messages(
 
             let user_data = packet.connection_user_data();
             let entity = match user_data_to_entity(user_data) {
-                Ok(entity) => entity,
-                Err(err) => {
-                    #[rustfmt::skip]
+                Some(entity) => entity,
+                None => {
                     warn!(
-                        "Received message on connection with user data {user_data}, which does not map to a valid entity: {err:?}"
+                        "Received message on connection with user data {user_data}, which does \
+                         not map to a valid entity"
                     );
                     continue;
                 }
@@ -322,6 +322,6 @@ pub(crate) const fn entity_to_user_data(entity: Entity) -> i64 {
     clippy::cast_sign_loss,
     reason = "we treat this as an opaque identifier"
 )]
-pub(crate) const fn user_data_to_entity(user_data: i64) -> Result<Entity, IdentifierError> {
+pub(crate) const fn user_data_to_entity(user_data: i64) -> Option<Entity> {
     Entity::try_from_bits(user_data as u64)
 }

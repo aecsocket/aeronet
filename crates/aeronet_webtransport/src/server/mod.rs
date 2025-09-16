@@ -10,7 +10,7 @@ use {
         },
     },
     aeronet_io::{
-        IoSet, Session, SessionEndpoint,
+        IoSystems, Session, SessionEndpoint,
         connection::{Disconnected, LocalAddr, PeerAddr},
         packet::{PacketRtt, RecvPacket},
         server::{Closed, Server, ServerEndpoint},
@@ -41,7 +41,7 @@ impl Plugin for WebTransportServerPlugin {
             .add_systems(
                 PreUpdate,
                 (poll_opening, poll_opened, poll_connecting, poll_connected)
-                    .in_set(IoSet::Poll)
+                    .in_set(IoSystems::Poll)
                     .before(session::poll),
             );
     }

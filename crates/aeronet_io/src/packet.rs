@@ -38,7 +38,7 @@
 //! minus protocol overhead.
 
 use {
-    crate::{IoSet, Session},
+    crate::{IoSystems, Session},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_platform::time::Instant,
@@ -55,8 +55,8 @@ impl Plugin for PacketPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<PacketRtt>()
             .register_type::<PacketStats>()
-            .add_systems(PreUpdate, clear_recv_buffers.before(IoSet::Poll))
-            .add_systems(PostUpdate, clear_send_buffers.after(IoSet::Flush));
+            .add_systems(PreUpdate, clear_recv_buffers.before(IoSystems::Poll))
+            .add_systems(PostUpdate, clear_send_buffers.after(IoSystems::Flush));
     }
 }
 

@@ -3,6 +3,7 @@
 mod backend;
 mod config;
 
+use aeronet_io::server::CloseReason;
 pub use config::*;
 use {
     crate::{
@@ -11,7 +12,7 @@ use {
         tungstenite,
     },
     aeronet_io::{
-        IoSet, SessionEndpoint,
+        IoSystems, SessionEndpoint,
         connection::{Disconnected, LocalAddr, PeerAddr},
         server::{Closed, Server, ServerEndpoint},
     },
@@ -37,7 +38,7 @@ impl Plugin for WebSocketServerPlugin {
         app.add_systems(
             PreUpdate,
             (poll_opening, poll_opened, poll_connecting, poll_connected)
-                .in_set(IoSet::Poll)
+                .in_set(IoSystems::Poll)
                 .before(session::poll),
         );
     }
@@ -233,7 +234,7 @@ fn poll_opened(
 fn try_close(
     commands: &mut Commands,
     entity: Entity,
-    recv_closed: &mut oneshot::Receiver<Closed>,
+    recv_closed: &mut oneshot::Receiver<CloseReason>,
 ) -> bool {
     let closed = match recv_closed.try_recv() {
         Ok(None) => None,
@@ -241,7 +242,7 @@ fn try_close(
         Err(_) => Some(SessionError::BackendClosed.into()),
     };
     closed.is_some_and(|closed| {
-        commands.trigger_targets(closed, entity);
+        commands.trigger(closed, entity);
         true
     })
 }

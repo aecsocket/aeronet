@@ -6,7 +6,10 @@ use {
         config::SessionConfig,
         session::{SessionError, SteamNetIo, SteamNetSessionPlugin, entity_to_user_data},
     },
-    aeronet_io::{IoSet, SessionEndpoint, connection::Disconnected},
+    aeronet_io::{
+        IoSystems, SessionEndpoint,
+        connection::{DisconnectReason, Disconnected},
+    },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
     core::net::SocketAddr,
@@ -30,7 +33,7 @@ impl Plugin for SteamNetClientPlugin {
             app.add_plugins(SteamNetSessionPlugin);
         }
 
-        app.add_systems(PreUpdate, poll_connecting.in_set(IoSet::Poll));
+        app.add_systems(PreUpdate, poll_connecting.in_set(IoSystems::Poll));
     }
 }
 
@@ -161,20 +164,28 @@ fn poll_connecting(
         let conn = match client.recv_next.get_mut().try_recv() {
             Ok(Ok(conn)) => conn,
             Ok(Err(err)) => {
-                commands.trigger_targets(Disconnected::by_error(err), entity);
+                commands.trigger(Disconnected {
+                    entity,
+                    reason: DisconnectReason::by_error(err),
+                });
                 continue;
             }
             Err(oneshot::TryRecvError::Empty) => continue,
             Err(oneshot::TryRecvError::Disconnected) => {
-                commands
-                    .trigger_targets(Disconnected::by_error(SessionError::BackendClosed), entity);
+                commands.trigger(Disconnected {
+                    entity,
+                    reason: DisconnectReason::by_error(SessionError::BackendClosed),
+                });
                 continue;
             }
         };
 
         let user_data = entity_to_user_data(entity);
         if conn.set_connection_user_data(user_data).is_err() {
-            commands.trigger_targets(Disconnected::by_error(SessionError::Steam), entity);
+            commands.trigger(Disconnected {
+                entity,
+                reason: DisconnectReason::by_error(SessionError::Steam),
+            });
             continue;
         }
 

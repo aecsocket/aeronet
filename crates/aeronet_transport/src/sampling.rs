@@ -200,14 +200,13 @@ pub struct SessionStatsSample {
 }
 
 fn add_session_stats(
-    trigger: Trigger<OnAdd, Transport>,
+    trigger: On<Add, Transport>,
     mut commands: Commands,
     sampling: Res<SessionStatsSampling>,
 ) {
-    let target = trigger.target();
-
+    let entity = trigger.event_target();
     commands
-        .entity(target)
+        .entity(entity)
         .insert(SessionStats::with_capacity(sampling.history_cap));
 }
 

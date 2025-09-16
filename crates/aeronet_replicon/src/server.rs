@@ -7,7 +7,7 @@ use {
         server::{Server, ServerEndpoint},
     },
     aeronet_transport::{
-        AeronetTransportPlugin, Transport, TransportSet,
+        AeronetTransportPlugin, Transport, TransportSystems,
         sampling::{SessionSamplingPlugin, SessionStats, SessionStatsSampling},
     },
     bevy_app::prelude::*,
@@ -37,7 +37,7 @@ impl Plugin for AeronetRepliconServerPlugin {
         app.configure_sets(
             PreUpdate,
             (
-                TransportSet::Poll,
+                TransportSystems::Poll,
                 ServerTransportSet::Poll,
                 ServerSet::ReceivePackets,
             )
@@ -48,7 +48,7 @@ impl Plugin for AeronetRepliconServerPlugin {
             (
                 ServerSet::SendPackets,
                 ServerTransportSet::Flush,
-                TransportSet::Flush,
+                TransportSystems::Flush,
             )
                 .chain(),
         )

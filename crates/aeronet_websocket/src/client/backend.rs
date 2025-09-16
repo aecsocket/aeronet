@@ -1,7 +1,7 @@
 use {
     super::{ClientConfig, ClientError, ConnectTarget},
     crate::{client::ToConnected, session::SessionError},
-    aeronet_io::connection::Disconnected,
+    aeronet_io::connection::DisconnectReason,
     futures::{channel::oneshot, never::Never},
     tracing::debug,
 };
@@ -10,7 +10,7 @@ pub async fn start(
     config: ClientConfig,
     target: ConnectTarget,
     send_connected: oneshot::Sender<ToConnected>,
-) -> Result<Never, Disconnected> {
+) -> Result<Never, DisconnectReason> {
     let (connected, backend) = {
         #[cfg(target_family = "wasm")]
         {

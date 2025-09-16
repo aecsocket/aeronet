@@ -5,7 +5,7 @@ pub(crate) mod backend;
 use {
     crate::WebSocketRuntime,
     aeronet_io::{
-        AeronetIoPlugin, IoSet, Session,
+        AeronetIoPlugin, IoSystems, Session,
         connection::{DROP_DISCONNECT_REASON, Disconnect},
         packet::{IP_MTU, RecvPacket},
     },
@@ -55,8 +55,8 @@ impl Plugin for WebSocketSessionPlugin {
         }
 
         app.init_resource::<WebSocketRuntime>()
-            .add_systems(PreUpdate, poll.in_set(IoSet::Poll))
-            .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
+            .add_systems(PreUpdate, poll.in_set(IoSystems::Poll))
+            .add_systems(PostUpdate, flush.in_set(IoSystems::Flush))
             .add_observer(on_disconnect);
     }
 }
@@ -141,9 +141,9 @@ pub(crate) struct SessionFrontend {
     pub send_user_dc: oneshot::Sender<String>,
 }
 
-fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebSocketIo>) {
-    let target = trigger.target();
-    let Ok(mut io) = sessions.get_mut(target) else {
+fn on_disconnect(trigger: On<Disconnect>, mut sessions: Query<&mut WebSocketIo>) {
+    let entity = trigger.event_target();
+    let Ok(mut io) = sessions.get_mut(entity) else {
         return;
     };
 

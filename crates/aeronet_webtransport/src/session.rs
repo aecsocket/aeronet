@@ -4,7 +4,7 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        AeronetIoPlugin, IoSet, Session,
+        AeronetIoPlugin, IoSystems, Session,
         connection::{DROP_DISCONNECT_REASON, Disconnect, Disconnected, PeerAddr},
         packet::{IP_MTU, MtuTooSmall, PacketRtt, RecvPacket},
     },
@@ -56,8 +56,8 @@ impl Plugin for WebTransportSessionPlugin {
         }
 
         app.init_resource::<WebTransportRuntime>()
-            .add_systems(PreUpdate, poll.in_set(IoSet::Poll))
-            .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
+            .add_systems(PreUpdate, poll.in_set(IoSystems::Poll))
+            .add_systems(PostUpdate, flush.in_set(IoSystems::Flush))
             .add_observer(on_disconnect);
     }
 }
