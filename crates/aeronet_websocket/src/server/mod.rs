@@ -3,7 +3,7 @@
 mod backend;
 mod config;
 
-use aeronet_io::server::CloseReason;
+use aeronet_io::{connection::DisconnectReason, server::CloseReason};
 pub use config::*;
 use {
     crate::{
@@ -96,13 +96,13 @@ impl WebSocketServer {
 fn open(mut entity: EntityWorldMut, config: ServerConfig) {
     let runtime = entity.world().resource::<WebSocketRuntime>().clone();
 
-    let (send_closed, recv_closed) = oneshot::channel::<Closed>();
-    let (send_next, recv_next) = oneshot::channel::<ToOpen>();
+    let (tx_close_reason, rx_close_reason) = oneshot::channel::<CloseReason>();
+    let (tx_next, rx_next) = oneshot::channel::<ToOpen>();
     runtime.spawn_on_self(
         async move {
-            let Err(closed) = backend::start(config, send_next).await;
-            debug!("Server closed: {closed:?}");
-            _ = send_closed.send(closed);
+            let Err(reason) = backend::start(config, tx_next).await;
+            debug!("Server closed: {reason:?}");
+            _ = tx_close_reason.send(reason);
         }
         .instrument(debug_span!("server", entity = %entity.id())),
     );
@@ -110,8 +110,8 @@ fn open(mut entity: EntityWorldMut, config: ServerConfig) {
     entity.insert((
         WebSocketServer(()),
         Opening {
-            recv_closed,
-            recv_next,
+            rx_close_reason,
+            rx_next,
         },
     ));
 }
@@ -138,39 +138,39 @@ pub enum ServerError {
 
 #[derive(Debug, Component)]
 struct Opening {
-    recv_closed: oneshot::Receiver<Closed>,
-    recv_next: oneshot::Receiver<ToOpen>,
+    rx_close_reason: oneshot::Receiver<CloseReason>,
+    rx_next: oneshot::Receiver<ToOpen>,
 }
 
 #[derive(Debug, Component)]
 struct Opened {
-    recv_closed: oneshot::Receiver<Closed>,
-    recv_connecting: mpsc::Receiver<ToConnecting>,
+    rx_close_reason: oneshot::Receiver<CloseReason>,
+    rx_connecting: mpsc::Receiver<ToConnecting>,
 }
 
 #[derive(Debug, Component)]
 struct Connecting {
-    recv_dc: oneshot::Receiver<Disconnected>,
-    recv_next: oneshot::Receiver<ToConnected>,
+    rx_dc_reason: oneshot::Receiver<DisconnectReason>,
+    rx_next: oneshot::Receiver<ToConnected>,
 }
 
 #[derive(Debug, Component)]
 struct Connected {
-    recv_dc: oneshot::Receiver<Disconnected>,
+    rx_dc_reason: oneshot::Receiver<DisconnectReason>,
 }
 
 #[derive(Debug)]
 struct ToOpen {
     local_addr: SocketAddr,
-    recv_connecting: mpsc::Receiver<ToConnecting>,
+    rx_connecting: mpsc::Receiver<ToConnecting>,
 }
 
 #[derive(Debug)]
 struct ToConnecting {
     peer_addr: SocketAddr,
-    send_session_entity: oneshot::Sender<Entity>,
-    recv_dc: oneshot::Receiver<Disconnected>,
-    recv_next: oneshot::Receiver<ToConnected>,
+    tx_session_entity: oneshot::Sender<Entity>,
+    rx_dc_reason: oneshot::Receiver<DisconnectReason>,
+    rx_next: oneshot::Receiver<ToConnected>,
 }
 
 #[derive(Debug)]
@@ -184,20 +184,20 @@ fn poll_opening(
     mut servers: Query<(Entity, &mut Opening), With<WebSocketServer>>,
 ) {
     for (entity, mut server) in &mut servers {
-        if try_close(&mut commands, entity, &mut server.recv_closed) {
+        if try_close(&mut commands, entity, &mut server.rx_close_reason) {
             continue;
         }
 
-        let Ok(Some(next)) = server.recv_next.try_recv() else {
+        let Ok(Some(next)) = server.rx_next.try_recv() else {
             continue;
         };
 
         let (_, dummy) = oneshot::channel();
-        let recv_closed = mem::replace(&mut server.recv_closed, dummy);
+        let rx_close_reason = mem::replace(&mut server.rx_close_reason, dummy);
         commands.entity(entity).remove::<Opening>().insert((
             Opened {
-                recv_closed,
-                recv_connecting: next.recv_connecting,
+                rx_close_reason,
+                rx_connecting: next.rx_connecting,
             },
             Server::new(Instant::now()),
             LocalAddr(next.local_addr),
@@ -210,23 +210,23 @@ fn poll_opened(
     mut servers: Query<(Entity, &mut Opened), With<WebSocketServer>>,
 ) {
     for (entity, mut server) in &mut servers {
-        if try_close(&mut commands, entity, &mut server.recv_closed) {
+        if try_close(&mut commands, entity, &mut server.rx_close_reason) {
             continue;
         }
 
-        while let Ok(Some(connecting)) = server.recv_connecting.try_next() {
+        while let Ok(Some(connecting)) = server.rx_connecting.try_next() {
             let session = commands
                 .spawn((
                     ChildOf(entity),
                     WebSocketServerClient(()),
                     Connecting {
-                        recv_dc: connecting.recv_dc,
-                        recv_next: connecting.recv_next,
+                        rx_dc_reason: connecting.rx_dc_reason,
+                        rx_next: connecting.rx_next,
                     },
                     PeerAddr(connecting.peer_addr),
                 ))
                 .id();
-            _ = connecting.send_session_entity.send(session);
+            _ = connecting.tx_session_entity.send(session);
         }
     }
 }
@@ -234,15 +234,15 @@ fn poll_opened(
 fn try_close(
     commands: &mut Commands,
     entity: Entity,
-    recv_closed: &mut oneshot::Receiver<CloseReason>,
+    rx_close_reason: &mut oneshot::Receiver<CloseReason>,
 ) -> bool {
-    let closed = match recv_closed.try_recv() {
+    let close_reason = match rx_close_reason.try_recv() {
         Ok(None) => None,
         Ok(Some(closed)) => Some(closed),
         Err(_) => Some(SessionError::BackendClosed.into()),
     };
-    closed.is_some_and(|closed| {
-        commands.trigger(closed, entity);
+    close_reason.is_some_and(|reason| {
+        commands.trigger(Closed { entity, reason });
         true
     })
 }
@@ -251,24 +251,24 @@ fn poll_connecting(
     mut commands: Commands,
     mut clients: Query<(Entity, &mut Connecting), With<WebSocketServerClient>>,
 ) {
-    for (entity, mut client) in &mut clients {
-        if try_disconnect(&mut commands, entity, &mut client.recv_dc) {
+    for (client, mut client_io) in &mut clients {
+        if try_disconnect(&mut commands, client, &mut client_io.rx_dc_reason) {
             continue;
         }
 
-        let Ok(Some(next)) = client.recv_next.try_recv() else {
+        let Ok(Some(next)) = client_io.rx_next.try_recv() else {
             continue;
         };
 
         let (_, dummy) = oneshot::channel();
-        let recv_dc = mem::replace(&mut client.recv_dc, dummy);
-        commands.entity(entity).remove::<Connecting>().insert((
+        let rx_dc_reason = mem::replace(&mut client_io.rx_dc_reason, dummy);
+        commands.entity(client).remove::<Connecting>().insert((
             WebSocketIo {
-                recv_packet_b2f: next.frontend.recv_packet_b2f,
-                send_packet_f2b: next.frontend.send_packet_f2b,
-                send_user_dc: Some(next.frontend.send_user_dc),
+                rx_packet_b2f: next.frontend.rx_packet_b2f,
+                tx_packet_f2b: next.frontend.tx_packet_f2b,
+                tx_user_dc: Some(next.frontend.tx_user_dc),
             },
-            Connected { recv_dc },
+            Connected { rx_dc_reason },
             PeerAddr(next.peer_addr),
         ));
     }
@@ -279,22 +279,22 @@ fn poll_connected(
     mut clients: Query<(Entity, &mut Connected), With<WebSocketServerClient>>,
 ) {
     for (entity, mut client) in &mut clients {
-        try_disconnect(&mut commands, entity, &mut client.recv_dc);
+        try_disconnect(&mut commands, entity, &mut client.rx_dc_reason);
     }
 }
 
 fn try_disconnect(
     commands: &mut Commands,
     entity: Entity,
-    recv_dc: &mut oneshot::Receiver<Disconnected>,
+    rx_dc_reason: &mut oneshot::Receiver<DisconnectReason>,
 ) -> bool {
-    let disconnected = match recv_dc.try_recv() {
+    let dc_reason = match rx_dc_reason.try_recv() {
         Ok(None) => None,
         Ok(Some(disconnected)) => Some(disconnected),
         Err(_) => Some(SessionError::BackendClosed.into()),
     };
-    disconnected.is_some_and(|disconnected| {
-        commands.trigger_targets(disconnected, entity);
+    dc_reason.is_some_and(|reason| {
+        commands.trigger(Disconnected { entity, reason });
         true
     })
 }

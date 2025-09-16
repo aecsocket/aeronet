@@ -122,7 +122,7 @@ fn connect(mut entity: EntityWorldMut, config: SessionConfig, target: ConnectTar
         .world()
         .resource::<SteamworksClient>()
         .networking_sockets();
-    let (send_next, recv_next) = oneshot::channel::<ConnectResult>();
+    let (tx_next, rx_next) = oneshot::channel::<ConnectResult>();
     blocking::unblock(move || {
         let result = match target {
             ConnectTarget::Addr(addr) => sockets.connect_by_ip_address(addr, config.to_options()),
@@ -135,14 +135,14 @@ fn connect(mut entity: EntityWorldMut, config: SessionConfig, target: ConnectTar
                 config.to_options(),
             ),
         };
-        _ = send_next.send(result.map_err(|_| SessionError::Steam));
+        _ = tx_next.send(result.map_err(|_| SessionError::Steam));
     })
     .detach();
 
     entity.insert((
         SteamNetClient(()),
         Connecting {
-            recv_next: SyncWrapper::new(recv_next),
+            rx_next: SyncWrapper::new(rx_next),
             mtu,
         },
     ));
@@ -152,7 +152,7 @@ type ConnectResult = Result<NetConnection, SessionError>;
 
 #[derive(Component)]
 struct Connecting {
-    recv_next: SyncWrapper<oneshot::Receiver<ConnectResult>>,
+    rx_next: SyncWrapper<oneshot::Receiver<ConnectResult>>,
     mtu: usize,
 }
 
@@ -160,12 +160,12 @@ fn poll_connecting(
     mut commands: Commands,
     mut clients: Query<(Entity, &mut Connecting), With<SteamNetClient>>,
 ) {
-    for (entity, mut client) in &mut clients {
-        let conn = match client.recv_next.get_mut().try_recv() {
+    for (client, mut client_io) in &mut clients {
+        let conn = match client_io.rx_next.get_mut().try_recv() {
             Ok(Ok(conn)) => conn,
             Ok(Err(err)) => {
                 commands.trigger(Disconnected {
-                    entity,
+                    entity: client,
                     reason: DisconnectReason::by_error(err),
                 });
                 continue;
@@ -173,28 +173,28 @@ fn poll_connecting(
             Err(oneshot::TryRecvError::Empty) => continue,
             Err(oneshot::TryRecvError::Disconnected) => {
                 commands.trigger(Disconnected {
-                    entity,
+                    entity: client,
                     reason: DisconnectReason::by_error(SessionError::BackendClosed),
                 });
                 continue;
             }
         };
 
-        let user_data = entity_to_user_data(entity);
+        let user_data = entity_to_user_data(client);
         if conn.set_connection_user_data(user_data).is_err() {
             commands.trigger(Disconnected {
-                entity,
+                entity: client,
                 reason: DisconnectReason::by_error(SessionError::Steam),
             });
             continue;
         }
 
         commands
-            .entity(entity)
+            .entity(client)
             .remove::<Connecting>()
             .insert(SteamNetIo {
                 conn,
-                mtu: client.mtu,
+                mtu: client_io.mtu,
             });
     }
 }

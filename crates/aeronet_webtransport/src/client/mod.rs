@@ -10,7 +10,9 @@ use {
         },
     },
     aeronet_io::{
-        IoSystems, Session, SessionEndpoint, connection::Disconnected, packet::RecvPacket,
+        IoSystems, Session, SessionEndpoint,
+        connection::{DisconnectReason, Disconnected},
+        packet::RecvPacket,
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -123,18 +125,24 @@ impl WebTransportClient {
 
 fn connect(mut entity: EntityWorldMut, config: ClientConfig, target: ConnectTarget) {
     let runtime = entity.world().resource::<WebTransportRuntime>().clone();
-    let (send_dc, recv_dc) = oneshot::channel::<Disconnected>();
-    let (send_next, recv_next) = oneshot::channel::<ToConnected>();
+    let (tx_dc_reason, rx_dc_reason) = oneshot::channel::<DisconnectReason>();
+    let (tx_next, rx_next) = oneshot::channel::<ToConnected>();
     runtime.spawn_on_self(
         async move {
-            let Err(disconnected) = backend::start(config, target, send_next).await;
-            debug!("Client disconnected: {disconnected:?}");
-            _ = send_dc.send(disconnected);
+            let Err(reason) = backend::start(config, target, tx_next).await;
+            debug!("Client disconnected: {reason:?}");
+            _ = tx_dc_reason.send(reason);
         }
         .instrument(debug_span!("client", entity = %entity.id())),
     );
 
-    entity.insert((WebTransportClient(()), Connecting { recv_dc, recv_next }));
+    entity.insert((
+        WebTransportClient(()),
+        Connecting {
+            rx_dc_reason,
+            rx_next,
+        },
+    ));
 }
 
 /// [`WebTransportClient`]-specific error.
@@ -153,13 +161,13 @@ pub enum ClientError {
 
 #[derive(Debug, Component)]
 struct Connecting {
-    recv_dc: oneshot::Receiver<Disconnected>,
-    recv_next: oneshot::Receiver<ToConnected>,
+    rx_dc_reason: oneshot::Receiver<DisconnectReason>,
+    rx_next: oneshot::Receiver<ToConnected>,
 }
 
 #[derive(Debug, Component)]
 struct Connected {
-    recv_dc: oneshot::Receiver<Disconnected>,
+    rx_dc_reason: oneshot::Receiver<DisconnectReason>,
 }
 
 #[derive(Debug)]
@@ -171,10 +179,10 @@ struct ToConnected {
     #[cfg(not(target_family = "wasm"))]
     initial_rtt: core::time::Duration,
     initial_mtu: usize,
-    recv_meta: mpsc::Receiver<SessionMeta>,
-    recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
-    send_packet_f2b: mpsc::UnboundedSender<Bytes>,
-    send_user_dc: oneshot::Sender<String>,
+    rx_meta: mpsc::Receiver<SessionMeta>,
+    rx_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
+    tx_packet_f2b: mpsc::UnboundedSender<Bytes>,
+    tx_user_dc: oneshot::Sender<String>,
 }
 
 fn poll_connecting(
@@ -182,33 +190,33 @@ fn poll_connecting(
     mut clients: Query<(Entity, &mut Connecting), With<WebTransportClient>>,
 ) {
     for (entity, mut client) in &mut clients {
-        if try_disconnect(&mut commands, entity, &mut client.recv_dc) {
+        if try_disconnect(&mut commands, entity, &mut client.rx_dc_reason) {
             continue;
         }
 
-        let Ok(Some(next)) = client.recv_next.try_recv() else {
+        let Ok(Some(next)) = client.rx_next.try_recv() else {
             continue;
         };
 
         let mut session = Session::new(Instant::now(), MIN_MTU);
         if let Err(err) = session.set_mtu(next.initial_mtu) {
-            commands.trigger_targets(
-                Disconnected::by_error(SessionError::MtuTooSmall(err)),
+            commands.trigger(Disconnected {
                 entity,
-            );
+                reason: DisconnectReason::by_error(SessionError::MtuTooSmall(err)),
+            });
             continue;
         }
 
         let (_, dummy) = oneshot::channel();
-        let recv_dc = mem::replace(&mut client.recv_dc, dummy);
+        let rx_dc_reason = mem::replace(&mut client.rx_dc_reason, dummy);
         commands.entity(entity).remove::<Connecting>().insert((
             WebTransportIo {
-                recv_meta: next.recv_meta,
-                recv_packet_b2f: next.recv_packet_b2f,
-                send_packet_f2b: next.send_packet_f2b,
-                send_user_dc: Some(next.send_user_dc),
+                rx_meta: next.rx_meta,
+                rx_packet_b2f: next.rx_packet_b2f,
+                tx_packet_f2b: next.tx_packet_f2b,
+                tx_user_dc: Some(next.tx_user_dc),
             },
-            Connected { recv_dc },
+            Connected { rx_dc_reason },
             session,
             #[cfg(not(target_family = "wasm"))]
             aeronet_io::connection::LocalAddr(next.local_addr),
@@ -225,22 +233,22 @@ fn poll_connected(
     mut clients: Query<(Entity, &mut Connected), With<WebTransportClient>>,
 ) {
     for (entity, mut client) in &mut clients {
-        try_disconnect(&mut commands, entity, &mut client.recv_dc);
+        try_disconnect(&mut commands, entity, &mut client.rx_dc_reason);
     }
 }
 
 fn try_disconnect(
     commands: &mut Commands,
     entity: Entity,
-    recv_dc: &mut oneshot::Receiver<Disconnected>,
+    recv_dc: &mut oneshot::Receiver<DisconnectReason>,
 ) -> bool {
-    let disconnected = match recv_dc.try_recv() {
+    let dc_reason = match recv_dc.try_recv() {
         Ok(None) => None,
         Ok(Some(disconnected)) => Some(disconnected),
         Err(_) => Some(SessionError::BackendClosed.into()),
     };
-    disconnected.is_some_and(|disconnected| {
-        commands.trigger_targets(disconnected, entity);
+    dc_reason.is_some_and(|reason| {
+        commands.trigger(Disconnected { entity, reason });
         true
     })
 }

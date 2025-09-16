@@ -72,9 +72,9 @@ impl Plugin for WebSocketSessionPlugin {
 #[derive(Debug, Component)]
 #[require(Session::new(Instant::now(), MTU))]
 pub struct WebSocketIo {
-    pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
-    pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
-    pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
+    pub(crate) rx_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
+    pub(crate) tx_packet_f2b: mpsc::UnboundedSender<Bytes>,
+    pub(crate) tx_user_dc: Option<oneshot::Sender<String>>,
 }
 
 /// Packet MTU of [`WebSocketIo`] sessions.
@@ -128,7 +128,7 @@ pub enum SessionError {
 
 impl Drop for WebSocketIo {
     fn drop(&mut self) {
-        if let Some(send_dc) = self.send_user_dc.take() {
+        if let Some(send_dc) = self.tx_user_dc.take() {
             _ = send_dc.send(DROP_DISCONNECT_REASON.to_owned());
         }
     }
@@ -136,9 +136,9 @@ impl Drop for WebSocketIo {
 
 #[derive(Debug)]
 pub(crate) struct SessionFrontend {
-    pub recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
-    pub send_packet_f2b: mpsc::UnboundedSender<Bytes>,
-    pub send_user_dc: oneshot::Sender<String>,
+    pub rx_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
+    pub tx_packet_f2b: mpsc::UnboundedSender<Bytes>,
+    pub tx_user_dc: oneshot::Sender<String>,
 }
 
 fn on_disconnect(trigger: On<Disconnect>, mut sessions: Query<&mut WebSocketIo>) {
@@ -147,7 +147,7 @@ fn on_disconnect(trigger: On<Disconnect>, mut sessions: Query<&mut WebSocketIo>)
         return;
     };
 
-    if let Some(send_dc) = io.send_user_dc.take() {
+    if let Some(send_dc) = io.tx_user_dc.take() {
         _ = send_dc.send(trigger.reason.clone());
     }
 }
@@ -159,7 +159,7 @@ pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut WebSocketIo)>
 
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        while let Ok(Some(packet)) = io.recv_packet_b2f.try_next() {
+        while let Ok(Some(packet)) = io.rx_packet_b2f.try_next() {
             num_packets += 1;
             session.stats.packets_recv += 1;
 
@@ -192,7 +192,7 @@ fn flush(mut sessions: Query<(Entity, &mut Session, &WebSocketIo)>) {
             session.stats.bytes_sent += packet.len();
 
             // handle connection errors in `poll`
-            _ = io.send_packet_f2b.unbounded_send(packet);
+            _ = io.tx_packet_f2b.unbounded_send(packet);
         }
 
         if num_packets.0 > 0 {

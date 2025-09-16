@@ -21,8 +21,8 @@ pub mod wasm {
     #[derive(Debug)]
     pub struct SessionBackend {
         socket: WebSocket,
-        recv_user_dc: oneshot::Receiver<String>,
-        recv_dc_reason: mpsc::Receiver<DisconnectReason>,
+        rx_user_dc: oneshot::Receiver<String>,
+        rx_dc_reason: mpsc::Receiver<DisconnectReason>,
     }
 
     // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
@@ -33,7 +33,7 @@ pub mod wasm {
 
         let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
         let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
-        let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
+        let (tx_user_dc, rx_user_dc) = oneshot::channel::<String>();
 
         let (mut send_dc_reason, recv_dc_reason) = mpsc::channel::<DisconnectReason>(1);
 
@@ -107,7 +107,7 @@ pub mod wasm {
             },
             SessionBackend {
                 socket,
-                recv_user_dc,
+                rx_user_dc,
                 recv_dc_reason,
             },
         )
@@ -115,8 +115,8 @@ pub mod wasm {
 
     async fn send_loop(
         socket: WebSocket,
-        mut recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
-        mut recv_dropped: oneshot::Receiver<()>,
+        mut rx_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
+        mut rx_dropped: oneshot::Receiver<()>,
     ) -> Result<Never, SessionError> {
         loop {
             let packet = futures::select! {
@@ -136,7 +136,7 @@ pub mod wasm {
         pub async fn start(self) -> Result<Never, DisconnectReason> {
             let Self {
                 socket,
-                mut recv_user_dc,
+                mut rx_user_dc,
                 mut recv_dc_reason,
             } = self;
 
@@ -145,7 +145,7 @@ pub mod wasm {
                     let dc_reason = dc_reason.ok_or(SessionError::BackendClosed)?;
                     Err(dc_reason)
                 }
-                reason = recv_user_dc => {
+                reason = rx_user_dc => {
                     let reason = reason.map_err(|_| SessionError::FrontendClosed)?;
                     _ = socket.close_with_code_and_reason(NORMAL_CLOSE_CODE, &reason);
                     Err(DisconnectReason::by_user(reason))
@@ -180,29 +180,29 @@ pub mod native {
     #[derive(Debug)]
     pub struct SessionBackend<S> {
         stream: WebSocketStream<S>,
-        send_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
-        recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
-        recv_user_dc: oneshot::Receiver<String>,
+        tx_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
+        rx_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
+        rx_user_dc: oneshot::Receiver<String>,
     }
 
     pub fn split<S: AsyncRead + AsyncWrite + Unpin>(
         stream: WebSocketStream<S>,
     ) -> (SessionFrontend, SessionBackend<S>) {
-        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
-        let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
-        let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
+        let (tx_packet_b2f, rx_packet_b2f) = mpsc::unbounded::<RecvPacket>();
+        let (tx_packet_f2b, rx_packet_f2b) = mpsc::unbounded::<Bytes>();
+        let (tx_user_dc, rx_user_dc) = oneshot::channel::<String>();
 
         (
             SessionFrontend {
-                recv_packet_b2f,
-                send_packet_f2b,
-                send_user_dc,
+                rx_packet_b2f,
+                tx_packet_f2b,
+                tx_user_dc,
             },
             SessionBackend {
                 stream,
-                send_packet_b2f,
-                recv_packet_f2b,
-                recv_user_dc,
+                tx_packet_b2f,
+                rx_packet_f2b,
+                rx_user_dc,
             },
         )
     }
@@ -211,9 +211,9 @@ pub mod native {
         pub async fn start(self) -> Result<Never, DisconnectReason> {
             let Self {
                 mut stream,
-                send_packet_b2f,
-                mut recv_packet_f2b,
-                mut recv_user_dc,
+                tx_packet_b2f,
+                mut rx_packet_f2b,
+                mut rx_user_dc,
             } = self;
 
             loop {
@@ -222,13 +222,13 @@ pub mod native {
                         let msg = msg
                             .ok_or(SessionError::RecvStreamClosed)?
                             .map_err(SessionError::Connection)?;
-                        Self::recv(&send_packet_b2f, msg)?;
+                        Self::recv(&tx_packet_b2f, msg)?;
                     }
-                    packet = recv_packet_f2b.next() => {
+                    packet = rx_packet_f2b.next() => {
                         let packet = packet.ok_or(SessionError::FrontendClosed)?;
                         Self::send(&mut stream, packet).await?;
                     }
-                    reason = recv_user_dc => {
+                    reason = rx_user_dc => {
                         let reason = reason.map_err(|_| SessionError::FrontendClosed)?;
                         Self::close(&mut stream, reason.clone()).await?;
                         return Err(DisconnectReason::by_user(reason));
@@ -238,7 +238,7 @@ pub mod native {
         }
 
         fn recv(
-            send_packet_b2f: &mpsc::UnboundedSender<RecvPacket>,
+            tx_packet_b2f: &mpsc::UnboundedSender<RecvPacket>,
             msg: Message,
         ) -> Result<(), DisconnectReason> {
             let packet = match msg {
@@ -252,7 +252,7 @@ pub mod native {
             };
             let now = Instant::now();
 
-            send_packet_b2f
+            tx_packet_b2f
                 .unbounded_send(RecvPacket {
                     recv_at: now,
                     payload: packet,

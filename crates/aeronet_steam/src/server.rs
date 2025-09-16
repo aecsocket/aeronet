@@ -158,7 +158,7 @@ fn open(mut entity: EntityWorldMut, config: SessionConfig, target: ListenTarget)
         .world()
         .resource::<SteamworksClient>()
         .networking_sockets();
-    let (send_next, recv_next) = oneshot::channel::<OpenResult>();
+    let (tx_next, rx_next) = oneshot::channel::<OpenResult>();
     blocking::unblock(move || {
         let result = match target {
             ListenTarget::Addr(addr) => sockets.create_listen_socket_ip(addr, config.to_options()),
@@ -166,7 +166,7 @@ fn open(mut entity: EntityWorldMut, config: SessionConfig, target: ListenTarget)
                 sockets.create_listen_socket_p2p(virtual_port, config.to_options())
             }
         };
-        _ = send_next.send(result.map_err(|_| SessionError::Steam));
+        _ = tx_next.send(result.map_err(|_| SessionError::Steam));
     })
     .detach();
 
@@ -176,7 +176,7 @@ fn open(mut entity: EntityWorldMut, config: SessionConfig, target: ListenTarget)
             clients: HashMap::default(),
         },
         Opening {
-            recv_next: SyncWrapper::new(recv_next),
+            rx_next: SyncWrapper::new(rx_next),
         },
     ));
     if let ListenTarget::Addr(local_addr) = target {
@@ -298,10 +298,13 @@ impl SessionRequest {
 
 impl Drop for SessionRequest {
     fn drop(&mut self) {
+        #[rustfmt::skip]
         assert!(
             self.request.is_none(),
             "dropped a `SessionRequest` without sending a response; you must respond to this \
-             request using `SessionRequest::respond` \n\nrequest info: {self:#?}"
+             request using `SessionRequest::respond`\n
+             \n
+             request info: {self:#?}"
         );
     }
 }
@@ -310,7 +313,7 @@ type OpenResult = Result<ListenSocket, SessionError>;
 
 #[derive(Component)]
 struct Opening {
-    recv_next: SyncWrapper<oneshot::Receiver<OpenResult>>,
+    rx_next: SyncWrapper<oneshot::Receiver<OpenResult>>,
 }
 
 #[derive(Component)]
@@ -322,8 +325,8 @@ fn poll_opening(
     mut commands: Commands,
     mut servers: Query<(Entity, &mut Opening), With<SteamNetServer>>,
 ) {
-    for (server, mut steam_server) in &mut servers {
-        let socket = match steam_server.recv_next.get_mut().try_recv() {
+    for (server, mut server_io) in &mut servers {
+        let socket = match server_io.rx_next.get_mut().try_recv() {
             Ok(Ok(socket)) => socket,
             Ok(Err(err)) => {
                 commands.trigger(Closed {
@@ -355,11 +358,11 @@ fn poll_opened(
     mut commands: Commands,
     mut servers: Query<(Entity, &mut Opened, &mut SteamNetServer)>,
 ) {
-    for (server, mut steam_server, mut server_state) in &mut servers {
+    for (server, mut server_io, mut server_state) in &mut servers {
         let span = debug_span!("poll_opened", %server);
         let _span = span.enter();
 
-        while let Some(event) = steam_server.socket.get_mut().try_receive_event() {
+        while let Some(event) = server_io.socket.get_mut().try_receive_event() {
             match event {
                 ListenSocketEvent::Connecting(request) => {
                     let remote = request.remote();
@@ -394,14 +397,14 @@ fn poll_opened(
 fn on_connecting(
     server: Entity,
     commands: &mut Commands,
-    steam_server: &mut SteamNetServer,
+    server_io: &mut SteamNetServer,
     request: ConnectionRequest,
 ) -> Result<()> {
     let steam_id = request
         .remote()
         .steam_id()
         .context("remote has no steam ID")?;
-    let entry = match steam_server.clients.entry(steam_id) {
+    let entry = match server_io.clients.entry(steam_id) {
         Entry::Occupied(entry) => {
             let client = entry.get();
             bail!("steam ID {steam_id:?} is already mapped to client {client}");
@@ -425,14 +428,14 @@ fn on_connecting(
 
 fn on_connected(
     commands: &mut Commands,
-    steam_server: &SteamNetServer,
+    server_io: &SteamNetServer,
     event: ConnectedEvent,
 ) -> Result<()> {
     let steam_id = event
         .remote()
         .steam_id()
         .context("remote has no steam ID")?;
-    let client = *steam_server
+    let client = *server_io
         .clients
         .get(&steam_id)
         .with_context(|| format!("steam ID {steam_id:?} is not tracked in the client map"))?;
@@ -445,9 +448,9 @@ fn on_connected(
     commands.entity(client).insert((
         SteamNetIo {
             conn,
-            mtu: steam_server.mtu,
+            mtu: server_io.mtu,
         },
-        Session::new(Instant::now(), steam_server.mtu),
+        Session::new(Instant::now(), server_io.mtu),
     ));
     Ok(())
 }
@@ -458,12 +461,12 @@ fn on_remove_client(
     mut servers: Query<&mut SteamNetServer>,
 ) -> Result<(), BevyError> {
     let entity = trigger.event_target();
-    let (client, &ChildOf(server)) = clients
+    let (client_io, &ChildOf(server)) = clients
         .get(entity)
         .with_context(|| format!("client {entity} does not have correct components"))?;
-    let mut steam_server = servers.get_mut(server).with_context(|| {
+    let mut server_io = servers.get_mut(server).with_context(|| {
         format!("client {entity} is a child of an entity, but that entity is not a server")
     })?;
-    steam_server.clients.remove(&client.steam_id);
+    server_io.clients.remove(&client_io.steam_id);
     Ok(())
 }

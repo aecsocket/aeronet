@@ -11,9 +11,9 @@ use {
     },
     aeronet_io::{
         IoSystems, Session, SessionEndpoint,
-        connection::{Disconnected, LocalAddr, PeerAddr},
+        connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         packet::{PacketRtt, RecvPacket},
-        server::{Closed, Server, ServerEndpoint},
+        server::{CloseReason, Closed, Server, ServerEndpoint},
     },
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, system::EntityCommand},
@@ -109,13 +109,13 @@ impl WebTransportServer {
 
 fn open(mut entity: EntityWorldMut, config: ServerConfig) {
     let runtime = entity.world().resource::<WebTransportRuntime>().clone();
-    let (send_closed, recv_closed) = oneshot::channel::<Closed>();
-    let (send_next, recv_next) = oneshot::channel::<ToOpen>();
+    let (tx_close_reason, rx_close_reason) = oneshot::channel::<CloseReason>();
+    let (tx_next, rx_next) = oneshot::channel::<ToOpen>();
     runtime.spawn_on_self(
         async move {
-            let Err(closed) = backend::start(config, send_next).await;
-            debug!("Server closed: {closed:?}");
-            _ = send_closed.send(closed);
+            let Err(reason) = backend::start(config, tx_next).await;
+            debug!("Server closed: {reason:?}");
+            _ = tx_close_reason.send(reason);
         }
         .instrument(debug_span!("server", entity = %entity.id())),
     );
@@ -123,8 +123,8 @@ fn open(mut entity: EntityWorldMut, config: ServerConfig) {
     entity.insert((
         WebTransportServer(()),
         Opening {
-            recv_closed,
-            recv_next,
+            rx_close_reason,
+            rx_next,
         },
     ));
 }
@@ -191,9 +191,11 @@ pub enum SessionResponse {
 /// }
 /// # fn validate_auth_token(_: &str) -> bool { unimplemented!() }
 /// ```
-#[derive(Debug, Event, Reflect)]
+#[derive(Debug, EntityEvent, Reflect)]
 #[reflect(from_reflect = false)]
 pub struct SessionRequest {
+    /// [`Session`] client entity requesting to connect.
+    pub entity: Entity,
     /// `:authority` header.
     pub authority: String,
     /// `:path` header.
@@ -206,7 +208,7 @@ pub struct SessionRequest {
     pub headers: std::collections::HashMap<String, String>,
     #[reflect(ignore)]
     #[debug(skip)]
-    send_session_response: Option<oneshot::Sender<SessionResponse>>,
+    tx_session_response: Option<oneshot::Sender<SessionResponse>>,
 }
 
 impl SessionRequest {
@@ -217,7 +219,7 @@ impl SessionRequest {
     /// Panics if called more than once.
     pub fn respond(&mut self, response: SessionResponse) {
         let send_session_response = self
-            .send_session_response
+            .tx_session_response
             .take()
             .expect("already responded to this request");
         _ = send_session_response.send(response);
@@ -226,10 +228,13 @@ impl SessionRequest {
 
 impl Drop for SessionRequest {
     fn drop(&mut self) {
+        #[rustfmt::skip]
         assert!(
-            self.send_session_response.is_none(),
+            self.tx_session_response.is_none(),
             "dropped a `SessionRequest` without sending a response; you must respond to this \
-             request using `SessionRequest::respond` \n\nrequest info: {self:#?}"
+             request using `SessionRequest::respond`\n
+             \n
+             request info: {self:#?}"
         );
     }
 }
@@ -253,31 +258,31 @@ pub enum ServerError {
 
 #[derive(Debug, Component)]
 struct Opening {
-    recv_closed: oneshot::Receiver<Closed>,
-    recv_next: oneshot::Receiver<ToOpen>,
+    rx_close_reason: oneshot::Receiver<CloseReason>,
+    rx_next: oneshot::Receiver<ToOpen>,
 }
 
 #[derive(Debug, Component)]
 struct Opened {
-    recv_closed: oneshot::Receiver<Closed>,
-    recv_connecting: mpsc::Receiver<ToConnecting>,
+    rx_close_reason: oneshot::Receiver<CloseReason>,
+    rx_connecting: mpsc::Receiver<ToConnecting>,
 }
 
 #[derive(Debug, Component)]
 struct Connecting {
-    recv_dc: oneshot::Receiver<Disconnected>,
-    recv_next: oneshot::Receiver<ToConnected>,
+    rx_dc_reason: oneshot::Receiver<DisconnectReason>,
+    rx_next: oneshot::Receiver<ToConnected>,
 }
 
 #[derive(Debug, Component)]
 struct Connected {
-    recv_dc: oneshot::Receiver<Disconnected>,
+    rx_dc_reason: oneshot::Receiver<DisconnectReason>,
 }
 
 #[derive(Debug)]
 struct ToOpen {
     local_addr: SocketAddr,
-    recv_connecting: mpsc::Receiver<ToConnecting>,
+    rx_connecting: mpsc::Receiver<ToConnecting>,
 }
 
 #[derive(Debug)]
@@ -287,10 +292,10 @@ struct ToConnecting {
     origin: Option<String>,
     user_agent: Option<String>,
     headers: std::collections::HashMap<String, String>,
-    send_session_entity: oneshot::Sender<Entity>,
-    send_session_response: oneshot::Sender<SessionResponse>,
-    recv_dc: oneshot::Receiver<Disconnected>,
-    recv_next: oneshot::Receiver<ToConnected>,
+    tx_session_entity: oneshot::Sender<Entity>,
+    tx_session_response: oneshot::Sender<SessionResponse>,
+    rx_dc_reason: oneshot::Receiver<DisconnectReason>,
+    rx_next: oneshot::Receiver<ToConnected>,
 }
 
 #[derive(Debug)]
@@ -298,10 +303,10 @@ struct ToConnected {
     initial_peer_addr: SocketAddr,
     initial_rtt: Duration,
     initial_mtu: usize,
-    recv_meta: mpsc::Receiver<SessionMeta>,
-    recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
-    send_packet_f2b: mpsc::UnboundedSender<Bytes>,
-    send_user_dc: oneshot::Sender<String>,
+    rx_meta: mpsc::Receiver<SessionMeta>,
+    rx_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
+    tx_packet_f2b: mpsc::UnboundedSender<Bytes>,
+    tx_user_dc: oneshot::Sender<String>,
 }
 
 fn poll_opening(
@@ -309,21 +314,20 @@ fn poll_opening(
     mut servers: Query<(Entity, &mut Opening), With<WebTransportServer>>,
 ) {
     for (entity, mut server) in &mut servers {
-        if try_close(&mut commands, entity, &mut server.recv_closed) {
+        if try_close(&mut commands, entity, &mut server.rx_close_reason) {
             continue;
         }
 
-        let Ok(Some(next)) = server.recv_next.try_recv() else {
+        let Ok(Some(next)) = server.rx_next.try_recv() else {
             continue;
         };
-
         let (_, dummy) = oneshot::channel();
-        let recv_closed = mem::replace(&mut server.recv_closed, dummy);
+        let rx_close_reason = mem::replace(&mut server.rx_close_reason, dummy);
         commands.entity(entity).remove::<Opening>().insert((
             Server::new(Instant::now()),
             Opened {
-                recv_closed,
-                recv_connecting: next.recv_connecting,
+                rx_close_reason,
+                rx_connecting: next.rx_connecting,
             },
             LocalAddr(next.local_addr),
         ));
@@ -335,32 +339,32 @@ fn poll_opened(
     mut servers: Query<(Entity, &mut Opened), With<WebTransportServer>>,
 ) {
     for (entity, mut server) in &mut servers {
-        if try_close(&mut commands, entity, &mut server.recv_closed) {
+        if try_close(&mut commands, entity, &mut server.rx_close_reason) {
             continue;
         }
 
-        while let Ok(Some(connecting)) = server.recv_connecting.try_next() {
+        while let Ok(Some(connecting)) = server.rx_connecting.try_next() {
             let client = commands
                 .spawn((
                     ChildOf(entity),
                     WebTransportServerClient(()),
                     Connecting {
-                        recv_dc: connecting.recv_dc,
-                        recv_next: connecting.recv_next,
+                        rx_dc_reason: connecting.rx_dc_reason,
+                        rx_next: connecting.rx_next,
                     },
                 ))
                 .id();
-            _ = connecting.send_session_entity.send(client);
+            _ = connecting.tx_session_entity.send(client);
 
-            let request = SessionRequest {
+            commands.trigger(SessionRequest {
+                entity: client,
                 authority: connecting.authority,
                 path: connecting.path,
                 origin: connecting.origin,
                 user_agent: connecting.user_agent,
                 headers: connecting.headers,
-                send_session_response: Some(connecting.send_session_response),
-            };
-            commands.trigger_targets(request, client);
+                tx_session_response: Some(connecting.tx_session_response),
+            });
         }
     }
 }
@@ -368,15 +372,15 @@ fn poll_opened(
 fn try_close(
     commands: &mut Commands,
     entity: Entity,
-    recv_closed: &mut oneshot::Receiver<Closed>,
+    rx_close_reason: &mut oneshot::Receiver<CloseReason>,
 ) -> bool {
-    let closed = match recv_closed.try_recv() {
+    let close_reason = match rx_close_reason.try_recv() {
         Ok(None) => None,
         Ok(Some(closed)) => Some(closed),
         Err(_) => Some(SessionError::BackendClosed.into()),
     };
-    closed.is_some_and(|closed| {
-        commands.trigger_targets(closed, entity);
+    close_reason.is_some_and(|reason| {
+        commands.trigger(Closed { entity, reason });
         true
     })
 }
@@ -386,33 +390,35 @@ fn poll_connecting(
     mut clients: Query<(Entity, &mut Connecting), With<WebTransportServerClient>>,
 ) {
     for (entity, mut client) in &mut clients {
-        if try_disconnect(&mut commands, entity, &mut client.recv_dc) {
+        if try_disconnect(&mut commands, entity, &mut client.rx_dc_reason) {
             continue;
         }
 
-        let Ok(Some(next)) = client.recv_next.try_recv() else {
+        let Ok(Some(next)) = client.rx_next.try_recv() else {
             continue;
         };
 
         let mut session = Session::new(Instant::now(), MIN_MTU);
         if let Err(err) = session.set_mtu(next.initial_mtu) {
-            commands.trigger_targets(
-                Disconnected::by_error(SessionError::MtuTooSmall(err)),
+            commands.trigger(Disconnected {
                 entity,
-            );
+                reason: DisconnectReason::by_error(SessionError::MtuTooSmall(err)),
+            });
             continue;
         }
 
         let (_, dummy) = oneshot::channel();
-        let recv_dc = mem::replace(&mut client.recv_dc, dummy);
+        let rx_dc = mem::replace(&mut client.rx_dc_reason, dummy);
         commands.entity(entity).remove::<Connecting>().insert((
             WebTransportIo {
-                recv_meta: next.recv_meta,
-                recv_packet_b2f: next.recv_packet_b2f,
-                send_packet_f2b: next.send_packet_f2b,
-                send_user_dc: Some(next.send_user_dc),
+                rx_meta: next.rx_meta,
+                rx_packet_b2f: next.rx_packet_b2f,
+                tx_packet_f2b: next.tx_packet_f2b,
+                tx_user_dc: Some(next.tx_user_dc),
             },
-            Connected { recv_dc },
+            Connected {
+                rx_dc_reason: rx_dc,
+            },
             session,
             PeerAddr(next.initial_peer_addr),
             PacketRtt(next.initial_rtt),
@@ -425,22 +431,22 @@ fn poll_connected(
     mut clients: Query<(Entity, &mut Connected), With<WebTransportServerClient>>,
 ) {
     for (entity, mut client) in &mut clients {
-        try_disconnect(&mut commands, entity, &mut client.recv_dc);
+        try_disconnect(&mut commands, entity, &mut client.rx_dc_reason);
     }
 }
 
 fn try_disconnect(
     commands: &mut Commands,
     entity: Entity,
-    recv_dc: &mut oneshot::Receiver<Disconnected>,
+    rx_dc: &mut oneshot::Receiver<DisconnectReason>,
 ) -> bool {
-    let disconnected = match recv_dc.try_recv() {
+    let dc_reason = match rx_dc.try_recv() {
         Ok(None) => None,
         Ok(Some(disconnected)) => Some(disconnected),
         Err(_) => Some(SessionError::BackendClosed.into()),
     };
-    disconnected.is_some_and(|disconnected| {
-        commands.trigger_targets(disconnected, entity);
+    dc_reason.is_some_and(|reason| {
+        commands.trigger(Disconnected { entity, reason });
         true
     })
 }

@@ -150,7 +150,6 @@ fn poll_io(
             continue;
         }
 
-        let mut entity = commands.entity(entity);
         match info.state() {
             Ok(NetworkingConnectionState::FindingRoute | NetworkingConnectionState::Connecting) => {
             }
@@ -158,18 +157,29 @@ fn poll_io(
                 // make sure we don't replace any existing session
                 // since `Connected` could theoretically be called twice,
                 // and we may make a `Session` manually *before* receiving this event
-                entity
+                let mtu = io.mtu;
+                commands
+                    .entity(entity)
                     .entry::<Session>()
-                    .or_insert_with(|| Session::new(Instant::now(), io.mtu));
+                    .or_insert_with(move || Session::new(Instant::now(), mtu));
             }
             Ok(NetworkingConnectionState::ClosedByPeer) => {
-                entity.trigger(Disconnected::by_peer(UNKNOWN_DISCONNECT_REASON));
+                commands.trigger(Disconnected {
+                    entity,
+                    reason: DisconnectReason::by_peer(UNKNOWN_DISCONNECT_REASON),
+                });
             }
             Ok(NetworkingConnectionState::None) | Err(_) => {
-                entity.trigger(Disconnected::by_error(SessionError::InvalidConnection));
+                commands.trigger(Disconnected {
+                    entity,
+                    reason: DisconnectReason::by_error(SessionError::InvalidConnection),
+                });
             }
             Ok(NetworkingConnectionState::ProblemDetectedLocally) => {
-                entity.trigger(Disconnected::by_error(SessionError::ProblemDetectedLocally));
+                commands.trigger(Disconnected {
+                    entity,
+                    reason: DisconnectReason::by_error(SessionError::ProblemDetectedLocally),
+                });
             }
         }
     }
@@ -199,15 +209,12 @@ fn poll_messages(
             num_bytes += packet.data().len();
 
             let user_data = packet.connection_user_data();
-            let entity = match user_data_to_entity(user_data) {
-                Some(entity) => entity,
-                None => {
-                    warn!(
-                        "Received message on connection with user data {user_data}, which does \
+            let Some(entity) = user_data_to_entity(user_data) else {
+                warn!(
+                    "Received message on connection with user data {user_data}, which does \
                          not map to a valid entity"
-                    );
-                    continue;
-                }
+                );
+                continue;
             };
             let io = match io.get(entity) {
                 Ok(io) => io,

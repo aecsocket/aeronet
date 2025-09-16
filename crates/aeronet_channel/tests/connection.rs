@@ -87,7 +87,7 @@ fn events_disconnect() {
     const DC_REASON: &str = "the disconnect reason";
 
     #[derive(Default, Resource)]
-    struct WhoDisconnected(Vec<(Entity, Disconnected)>);
+    struct WhoDisconnected(Vec<(Entity, DisconnectReason)>);
 
     let (mut app, a, b) = setup();
     app.init_resource::<WhoDisconnected>().add_observer(
