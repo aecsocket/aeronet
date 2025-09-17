@@ -22,7 +22,7 @@ fn main() -> AppExit {
 
     App::new()
         .insert_resource(SteamworksClient(steam))
-        .add_systems(PreUpdate, |steam: NonSend<SteamworksClient>| {
+        .add_systems(PreUpdate, |steam: Res<SteamworksClient>| {
             steam.run_callbacks();
         })
         .add_plugins((
