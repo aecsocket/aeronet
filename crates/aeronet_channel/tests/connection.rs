@@ -4,7 +4,7 @@ use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
     aeronet_io::{
         Session,
-        connection::{Disconnect, Disconnected},
+        connection::{Disconnect, DisconnectReason, Disconnected},
     },
     bevy::{log::LogPlugin, prelude::*},
 };
@@ -38,8 +38,8 @@ fn events_connect() {
 
     let mut app = app();
     app.init_resource::<WhoConnected>().add_observer(
-        |trigger: Trigger<OnAdd, Session>, mut who: ResMut<WhoConnected>| {
-            who.0.push(trigger.target());
+        |trigger: On<Add, Session>, mut who: ResMut<WhoConnected>| {
+            who.0.push(trigger.event_target());
         },
     );
 
@@ -87,30 +87,29 @@ fn events_disconnect() {
     const DC_REASON: &str = "the disconnect reason";
 
     #[derive(Default, Resource)]
-    struct WhoDisconnected(Vec<(Entity, Disconnected)>);
+    struct WhoDisconnected(Vec<(Entity, DisconnectReason)>);
 
     let (mut app, a, b) = setup();
     app.init_resource::<WhoDisconnected>().add_observer(
-        |trigger: Trigger<Disconnected>, mut who: ResMut<WhoDisconnected>| {
-            let reason = match &*trigger {
-                Disconnected::ByUser(reason) => Disconnected::ByUser(reason.clone()),
-                Disconnected::ByPeer(reason) => Disconnected::ByPeer(reason.clone()),
-                Disconnected::ByError(_) => panic!("should not disconnect with an error"),
+        |trigger: On<Disconnected>, mut who: ResMut<WhoDisconnected>| {
+            let reason = match &trigger.reason {
+                DisconnectReason::ByUser(reason) => DisconnectReason::ByUser(reason.clone()),
+                DisconnectReason::ByPeer(reason) => DisconnectReason::ByPeer(reason.clone()),
+                DisconnectReason::ByError(_) => panic!("should not disconnect with an error"),
             };
-            who.0.push((trigger.target(), reason));
+            who.0.push((trigger.event_target(), reason));
         },
     );
 
-    app.world_mut()
-        .trigger_targets(Disconnect::new(DC_REASON), a);
+    app.world_mut().trigger(Disconnect::new(a, DC_REASON));
     app.update();
 
     let mut who_disconnected = app.world().resource::<WhoDisconnected>().0.iter();
     assert!(
-        matches!(who_disconnected.next().unwrap(), (entity, Disconnected::ByUser(reason)) if *entity == a && reason == DC_REASON)
+        matches!(who_disconnected.next().unwrap(), (entity, DisconnectReason::ByUser(reason)) if *entity == a && reason == DC_REASON)
     );
     assert!(
-        matches!(who_disconnected.next().unwrap(), (entity, Disconnected::ByPeer(reason)) if *entity == b && reason == DC_REASON)
+        matches!(who_disconnected.next().unwrap(), (entity, DisconnectReason::ByPeer(reason)) if *entity == b && reason == DC_REASON)
     );
     assert!(who_disconnected.next().is_none());
 }

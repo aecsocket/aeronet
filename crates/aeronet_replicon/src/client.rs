@@ -4,7 +4,7 @@ use {
     crate::convert,
     aeronet_io::{Session, SessionEndpoint, connection::Disconnect},
     aeronet_transport::{
-        AeronetTransportPlugin, Transport, TransportSet,
+        AeronetTransportPlugin, Transport, TransportSystems,
         sampling::{SessionSamplingPlugin, SessionStats, SessionStatsSampling},
     },
     bevy_app::prelude::*,
@@ -36,7 +36,7 @@ impl Plugin for AeronetRepliconClientPlugin {
             .configure_sets(
                 PreUpdate,
                 (
-                    TransportSet::Poll,
+                    TransportSystems::Poll,
                     ClientTransportSet::Poll,
                     ClientSet::ReceivePackets,
                 )
@@ -47,7 +47,7 @@ impl Plugin for AeronetRepliconClientPlugin {
                 (
                     ClientSet::SendPackets,
                     ClientTransportSet::Flush,
-                    TransportSet::Flush,
+                    TransportSystems::Flush,
                 )
                     .chain(),
             )

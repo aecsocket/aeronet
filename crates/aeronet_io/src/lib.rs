@@ -28,8 +28,8 @@ impl Plugin for AeronetIoPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<SessionEndpoint>()
             .register_type::<Session>()
-            .configure_sets(PreUpdate, IoSet::Poll)
-            .configure_sets(PostUpdate, IoSet::Flush)
+            .configure_sets(PreUpdate, IoSystems::Poll)
+            .configure_sets(PostUpdate, IoSystems::Flush)
             .add_plugins((
                 packet::PacketPlugin,
                 connection::ConnectionPlugin,
@@ -261,9 +261,9 @@ impl Session {
     }
 }
 
-/// Set for scheduling IO layer systems.
+/// System set for scheduling IO layer systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum IoSet {
+pub enum IoSystems {
     /// Progressing the connection, handling disconnects, and receiving packets.
     Poll,
     /// Sending buffered packets.

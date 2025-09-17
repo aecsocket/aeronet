@@ -78,32 +78,32 @@ fn ping_pong(
         struct ClientEntity(Entity);
 
         fn on_add_server_endpoint(
-            trigger: Trigger<OnAdd, ServerEndpoint>,
+            trigger: On<Add, ServerEndpoint>,
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
-            assert_eq!(trigger.target(), expected_server.0);
+            assert_eq!(trigger.event_target(), expected_server.0);
             seq.event(ServerEvent::NewServerEndpoint).expect_first();
         }
 
         fn on_add_server(
-            trigger: Trigger<OnAdd, Server>,
+            trigger: On<Add, Server>,
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
-            assert_eq!(trigger.target(), expected_server.0);
+            assert_eq!(trigger.event_target(), expected_server.0);
             seq.event(ServerEvent::NewServer)
                 .expect_after(ServerEvent::NewServerEndpoint);
         }
 
         fn on_add_session_endpoint(
-            trigger: Trigger<OnAdd, SessionEndpoint>,
+            trigger: On<Add, SessionEndpoint>,
             parents: Query<&ChildOf>,
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
             mut commands: Commands,
         ) {
-            let client = trigger.target();
+            let client = trigger.event_target();
             let &ChildOf(server) = parents
                 .get(client)
                 .expect("parent server of client session should exist");
@@ -113,16 +113,16 @@ fn ping_pong(
             commands.insert_resource(ClientEntity(client));
         }
 
-        fn on_session_request(mut trigger: Trigger<SessionRequest>) {
+        fn on_session_request(mut trigger: On<SessionRequest>) {
             trigger.respond(SessionResponse::Accepted);
         }
 
         fn on_add_session(
-            trigger: Trigger<OnAdd, Session>,
+            trigger: On<Add, Session>,
             expected_client: Res<ClientEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
-            assert_eq!(expected_client.0, trigger.target());
+            assert_eq!(expected_client.0, trigger.event_target());
             seq.event(ServerEvent::NewClient)
                 .expect_after(ServerEvent::NewClientEndpoint);
         }
@@ -131,7 +131,7 @@ fn ping_pong(
             mut sessions: Query<&mut Session>,
             client: Option<Res<ClientEntity>>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
-            mut exit: EventWriter<AppExit>,
+            mut exit: MessageWriter<AppExit>,
         ) {
             let Some(client) = client else { return };
             let Ok(mut session) = sessions.get_mut(client.0) else {
@@ -175,22 +175,22 @@ fn ping_pong(
         struct ClientEntity(Entity);
 
         fn on_add_session_endpoint(
-            trigger: Trigger<OnAdd, SessionEndpoint>,
+            trigger: On<Add, SessionEndpoint>,
             mut seq: ResMut<SequenceTester<ClientEvent>>,
             mut commands: Commands,
         ) {
-            let client = trigger.target();
+            let client = trigger.event_target();
             seq.event(ClientEvent::NewSessionEndpoint).expect_first();
             commands.insert_resource(ClientEntity(client));
         }
 
         fn on_add_session(
-            trigger: Trigger<OnAdd, Session>,
+            trigger: On<Add, Session>,
             expected_client: Res<ClientEntity>,
             mut seq: ResMut<SequenceTester<ClientEvent>>,
             mut sessions: Query<&mut Session>,
         ) {
-            let client = trigger.target();
+            let client = trigger.event_target();
             assert_eq!(expected_client.0, client);
             seq.event(ClientEvent::NewSession)
                 .expect_after(ClientEvent::NewSessionEndpoint);
@@ -205,7 +205,7 @@ fn ping_pong(
             mut sessions: Query<&mut Session>,
             client: Option<Res<ClientEntity>>,
             mut seq: ResMut<SequenceTester<ClientEvent>>,
-            mut exit: EventWriter<AppExit>,
+            mut exit: MessageWriter<AppExit>,
         ) {
             let Some(client) = client else { return };
             let Ok(mut session) = sessions.get_mut(client.0) else {
