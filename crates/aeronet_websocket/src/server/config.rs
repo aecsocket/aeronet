@@ -1,13 +1,113 @@
 // based on
 // https://github.com/BiagioFesta/wtransport/blob/bf3a5401c2b3671e6611bd093d7666f4660b2119/wtransport/src/tls.rs
 
+// Tungstenite's handshake `ErrorResponse` is slightly larger than the clippy
+// warning threshold, see [https://github.com/snapview/tungstenite-rs/blob/2d4abe8dba23b283c1a3d2f4f4937c2f9a8d91e7/src/lib.rs#L14-L16].
+//
+// Our the callback created by our `HandshakeHandler` must return it unboxed,
+// so we cannot avoid the large size by boxing it.
+#![allow(clippy::result_large_err)]
+
 use {
     alloc::sync::Arc,
     core::net::{Ipv6Addr, SocketAddr},
     derive_more::{Display, Error},
     rustls::pki_types::{CertificateDer, PrivateKeyDer},
-    tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
+    tokio_tungstenite::tungstenite::{
+        handshake::server::{ErrorResponse, Request, Response},
+        protocol::WebSocketConfig,
+    },
 };
+
+/// Allows inspecting the handshake [`Request`] and conditionally accepting or
+/// denying it based on something like the header.
+///
+/// Useful for implementing connection filtering before a WebSocket connection
+/// is created, for example if you want to make sure the request has a valid
+/// [netcode connect token](https://github.com/mas-bandwidth/netcode/blob/main/STANDARD.md#connect-token)
+/// before accepting it.
+#[derive(Clone)]
+pub struct HandshakeHandler(
+    Arc<dyn Fn(&Request, Response) -> Result<Response, ErrorResponse> + Send + Sync>,
+);
+
+impl HandshakeHandler {
+    /// Create a handshake validator to accept/reject incoming ws connections
+    /// during the upgrade handshake.
+    ///
+    /// - You can read and write Bevy state by passing shared-mutable-state
+    ///   primitives like `Arc<RwLock<..>>` or MPSC channels into the handler.
+    /// - The response can be modified before returning.
+    ///
+    /// Example spawning a `WebSocketServer` with handshake validation:
+    /// ```rust
+    /// use {
+    ///     aeronet_websocket::{
+    ///         server::{HandshakeHandler, ServerConfig, WebSocketServer},
+    ///         tungstenite::{
+    ///             handshake::server::{ErrorResponse, Request, Response},
+    ///             http::HeaderValue,
+    ///         },
+    ///     },
+    ///     bevy::prelude::*,
+    ///     bevy_platform::sync::{Arc, RwLock},
+    /// };
+    ///
+    /// #[derive(Resource, Default)]
+    /// struct Counter(Arc<RwLock<u32>>);
+    ///
+    /// fn start(mut commands: Commands, counter: Res<Counter>) {
+    ///     let counter = counter.0.clone();
+    ///
+    ///     // Define our predicate to check the handshake
+    ///     let predicate = move |req: &Request, mut resp: Response| {
+    ///         // Use outside state
+    ///         let mut counter = counter.write().unwrap();
+    ///         info!("Call {}", counter);
+    ///         *counter = counter.wrapping_add(1);
+    ///
+    ///         // Validate the Request however we want
+    ///         let auth_header = req.headers().get("Authorization").ok_or_else(|| {
+    ///             ErrorResponse::new(Some("missing authorization header".to_string()))
+    ///         })?;
+    ///         if auth_header != "123" {
+    ///             return Err(ErrorResponse::new(Some("unauthorized".to_string())));
+    ///         }
+    ///
+    ///         // Optionally modify the response before returning
+    ///         resp.headers_mut()
+    ///             .insert("X-Something", HeaderValue::from_static("Something"));
+    ///
+    ///         Ok(resp)
+    ///     };
+    ///     let handshake_handler = HandshakeHandler::new(predicate);
+    ///
+    ///     let config = ServerConfig::builder()
+    ///         .with_bind_default(3333)
+    ///         .with_no_encryption()
+    ///         .with_handshake_handler(handshake_handler);
+    ///
+    ///     commands.spawn_empty().queue(WebSocketServer::open(config));
+    /// }
+    /// ```
+    pub fn new(
+        pred: impl Fn(&Request, Response) -> Result<Response, ErrorResponse> + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(pred))
+    }
+
+    /// Like `Self::new` but uses an existing `Arc`.
+    pub fn from_arc(
+        pred: Arc<dyn Fn(&Request, Response) -> Result<Response, ErrorResponse> + Send + Sync>,
+    ) -> Self {
+        Self(pred)
+    }
+
+    /// Handle a request, returning a response.
+    pub(crate) fn handle(&self, req: &Request, resp: Response) -> Result<Response, ErrorResponse> {
+        self.0(req, resp)
+    }
+}
 
 /// Configuration for a [`WebSocketServer`].
 ///
@@ -21,6 +121,7 @@ pub struct ServerConfig {
     pub(crate) bind_address: SocketAddr,
     pub(crate) tls: Option<Arc<rustls::ServerConfig>>,
     pub(crate) socket: WebSocketConfig,
+    pub(crate) handshake_handler: Option<HandshakeHandler>,
 }
 
 impl ServerConfig {
@@ -111,14 +212,23 @@ impl ServerConfigBuilder<WantsTlsConfig> {
             bind_address: self.0.bind_address,
             tls,
             socket: WebSocketConfig::default(),
+            handshake_handler: None,
         }
     }
 }
 
 impl ServerConfig {
-    /// Configures this to use the given socket configuration.
+    /// Configures config to use the given socket configuration.
     pub fn with_socket_config(self, socket: WebSocketConfig) -> Self {
         Self { socket, ..self }
+    }
+
+    /// Configures config to use the given handshake callback.
+    pub fn with_handshake_handler(self, handshake_handler: HandshakeHandler) -> Self {
+        Self {
+            handshake_handler: Some(handshake_handler),
+            ..self
+        }
     }
 }
 
