@@ -37,7 +37,7 @@ impl Plugin for ConnectionPlugin {
 ///
 /// # fn run(mut commands: Commands, session: Entity, session1: Entity, session2: Entity) {
 /// // disconnect a single session
-/// commands.trigger_targets(Disconnect::new("show's over, go home"), session);
+/// commands.trigger(Disconnect::new(session, "show's over, go home"));
 ///
 /// // disconnect multiple sessions at once
 /// commands.trigger_targets(
@@ -46,8 +46,10 @@ impl Plugin for ConnectionPlugin {
 /// );
 /// # }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Event)]
+#[derive(Debug, Clone, PartialEq, Eq, EntityEvent)]
 pub struct Disconnect {
+    /// [`Session`] entity to be disconnected.
+    pub entity: Entity,
     /// User-provided disconnection reason.
     ///
     /// Will be used as the reason in [`Disconnected::ByUser`].
@@ -57,8 +59,9 @@ pub struct Disconnect {
 impl Disconnect {
     /// Creates a [`Disconnect`] with the given reason.
     #[must_use]
-    pub fn new(reason: impl Into<String>) -> Self {
+    pub fn new(entity: Entity, reason: impl Into<String>) -> Self {
         Self {
+            entity,
             reason: reason.into(),
         }
     }
@@ -75,8 +78,17 @@ impl Disconnect {
 ///
 /// This may also be used by code above the IO layer for e.g. signaling
 /// transport errors, however this is not guaranteed.
-#[derive(Debug, Event)]
-pub enum Disconnected {
+#[derive(Debug, EntityEvent)]
+pub struct Disconnected {
+    /// [`Session`] entity which was disconnected.
+    pub entity: Entity,
+    /// Why the session was disconnected.
+    pub reason: DisconnectReason,
+}
+
+/// Why a [`Disconnected`] was triggered.
+#[derive(Debug)]
+pub enum DisconnectReason {
     /// Session was disconnected by the user on our side, with a provided
     /// reason.
     ///
@@ -105,7 +117,7 @@ pub enum Disconnected {
     ByError(anyhow::Error),
 }
 
-impl Disconnected {
+impl DisconnectReason {
     /// Creates a [`Disconnected::ByUser`] from the given reason.
     #[must_use]
     pub fn by_user(reason: impl Into<String>) -> Self {
@@ -136,7 +148,7 @@ impl Disconnected {
     }
 }
 
-impl<E: Into<anyhow::Error>> From<E> for Disconnected {
+impl<E: Into<anyhow::Error>> From<E> for DisconnectReason {
     fn from(value: E) -> Self {
         Self::by_error(value)
     }
@@ -179,36 +191,39 @@ pub struct LocalAddr(pub SocketAddr);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, Component)]
 pub struct PeerAddr(pub SocketAddr);
 
-fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>) {
-    let target = trigger.target();
-    debug!("{target} connecting");
+fn on_connecting(trigger: On<Add, SessionEndpoint>) {
+    let entity = trigger.event_target();
+    debug!("{entity} connecting");
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Session>) {
-    let target = trigger.target();
-    debug!("{target} connected");
+fn on_connected(trigger: On<Add, Session>) {
+    let entity = trigger.event_target();
+    debug!("{entity} connected");
 }
 
-fn on_disconnect(trigger: Trigger<Disconnect>, mut commands: Commands) {
-    let target = trigger.target();
-    commands.trigger_targets(Disconnected::by_user(&trigger.reason), target);
+fn on_disconnect(trigger: On<Disconnect>, mut commands: Commands) {
+    let entity = trigger.event_target();
+    commands.trigger(Disconnected {
+        entity,
+        reason: DisconnectReason::by_user(&trigger.reason),
+    });
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>, mut commands: Commands) {
-    let target = trigger.target();
-    match &*trigger {
-        Disconnected::ByUser(reason) => {
-            debug!("{target} disconnected by user: {reason}");
+fn on_disconnected(trigger: On<Disconnected>, mut commands: Commands) {
+    let entity = trigger.event_target();
+    match &trigger.reason {
+        DisconnectReason::ByUser(reason) => {
+            debug!("{entity} disconnected by user: {reason}");
         }
-        Disconnected::ByPeer(reason) => {
-            debug!("{target} disconnected by peer: {reason}");
+        DisconnectReason::ByPeer(reason) => {
+            debug!("{entity} disconnected by peer: {reason}");
         }
-        Disconnected::ByError(err) => {
-            debug!("{target} disconnected due to error: {err:?}");
+        DisconnectReason::ByError(err) => {
+            debug!("{entity} disconnected due to error: {err:?}");
         }
     }
 
-    commands.entity(target).try_despawn();
+    commands.entity(entity).try_despawn();
 }
 
 #[cfg(test)]
@@ -228,18 +243,17 @@ mod tests {
 
         let entity = app.world_mut().spawn_empty().id();
         app.world_mut().entity_mut(entity).observe(
-            |trigger: Trigger<Disconnected>, mut has_disconnected: ResMut<HasDisconnected>| {
+            |trigger: On<Disconnected>, mut has_disconnected: ResMut<HasDisconnected>| {
                 assert!(matches!(
-                    &*trigger,
-                    Disconnected::ByUser(reason) if reason == REASON
+                    &trigger.reason,
+                    DisconnectReason::ByUser(reason) if reason == REASON
                 ));
 
                 has_disconnected.0 = true;
             },
         );
 
-        app.world_mut()
-            .trigger_targets(Disconnect::new(REASON), entity);
+        app.world_mut().trigger(Disconnect::new(entity, REASON));
         app.update();
 
         assert!(app.world().get_entity(entity).is_err());

@@ -13,7 +13,10 @@ use {
         rtt::RttEstimator,
         size::MinSize,
     },
-    aeronet_io::{Session, connection::Disconnected},
+    aeronet_io::{
+        Session,
+        connection::{DisconnectReason, Disconnected},
+    },
     alloc::{boxed::Box, vec::Vec},
     bevy_ecs::prelude::*,
     bevy_platform::{
@@ -235,17 +238,20 @@ pub(crate) fn update_send_bytes_config(
     >,
 ) {
     for (mut transport, config) in &mut sessions {
-        transport
-            .send
-            .bytes_bucket
-            .set_cap(config.send_bytes_per_sec);
+        transport.send.bytes_bucket.set_cap(config.tx_bytes_per_sec);
     }
 }
 
-pub(crate) fn disconnect_errored(mut sessions: Query<&mut Transport>, mut commands: Commands) {
-    for mut transport in &mut sessions {
+pub(crate) fn disconnect_errored(
+    mut sessions: Query<(Entity, &mut Transport)>,
+    mut commands: Commands,
+) {
+    for (entity, mut transport) in &mut sessions {
         if let Some(err) = transport.send.error.take() {
-            commands.trigger(Disconnected::by_error(err));
+            commands.trigger(Disconnected {
+                entity,
+                reason: DisconnectReason::by_error(err),
+            });
         }
     }
 }

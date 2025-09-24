@@ -7,7 +7,7 @@ use {
         server::{Server, ServerEndpoint},
     },
     aeronet_transport::{
-        AeronetTransportPlugin, Transport, TransportSet,
+        AeronetTransportPlugin, Transport, TransportSystems,
         sampling::{SessionSamplingPlugin, SessionStats, SessionStatsSampling},
     },
     bevy_app::prelude::*,
@@ -37,7 +37,7 @@ impl Plugin for AeronetRepliconServerPlugin {
         app.configure_sets(
             PreUpdate,
             (
-                TransportSet::Poll,
+                TransportSystems::Poll,
                 ServerTransportSet::Poll,
                 ServerSet::ReceivePackets,
             )
@@ -48,7 +48,7 @@ impl Plugin for AeronetRepliconServerPlugin {
             (
                 ServerSet::SendPackets,
                 ServerTransportSet::Flush,
-                TransportSet::Flush,
+                TransportSystems::Flush,
             )
                 .chain(),
         )
@@ -157,11 +157,11 @@ fn on_connected(
         .client_channels()
         .iter()
         .map(|channel| convert::to_lane_kind(*channel));
-    let send_lanes = channels
+    let tx_lanes = channels
         .server_channels()
         .iter()
         .map(|channel| convert::to_lane_kind(*channel));
-    let transport = match Transport::new(session, recv_lanes, send_lanes, Instant::now()) {
+    let transport = match Transport::new(session, rx_lanes, tx_lanes, Instant::now()) {
         Ok(transport) => transport,
         Err(err) => {
             warn!("Failed to create transport for {client} connecting to {server}: {err:?}");

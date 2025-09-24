@@ -275,7 +275,7 @@ fn recv_on(
 
 fn packet_acks_to_msg_keys<'s, const N: usize>(
     flushed_packets: &'s mut SeqBuf<FlushedPacket, N>,
-    send_lanes: &'s mut [SendLane],
+    tx_lanes: &'s mut [SendLane],
     rtt: &'s mut RttEstimator,
     packet_acks_recv: &'s mut Saturating<usize>,
     msgs_acks_recv: &'s mut Saturating<usize>,
@@ -303,7 +303,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
         .filter_map(|frag_path| {
             // for each of those fragments, we'll mark that fragment as acked
             let lane_index = usize::from(frag_path.lane_index.0);
-            let lane = send_lanes
+            let lane = tx_lanes
                 .get_mut(lane_index)
                 .expect("frag path should point into a valid lane index");
             // fallible instead of panicking, because these messages may have already been

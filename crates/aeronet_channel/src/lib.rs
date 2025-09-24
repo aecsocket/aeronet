@@ -3,8 +3,8 @@
 
 use {
     aeronet_io::{
-        AeronetIoPlugin, IoSet, Session, SessionEndpoint,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, Disconnected},
+        AeronetIoPlugin, IoSystems, Session, SessionEndpoint,
+        connection::{DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected},
         packet::RecvPacket,
     },
     bevy_app::prelude::*,
@@ -26,8 +26,8 @@ impl Plugin for ChannelIoPlugin {
             app.add_plugins(AeronetIoPlugin);
         }
 
-        app.add_systems(PreUpdate, poll.in_set(IoSet::Poll))
-            .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
+        app.add_systems(PreUpdate, poll.in_set(IoSystems::Poll))
+            .add_systems(PostUpdate, flush.in_set(IoSystems::Flush))
             .add_observer(on_io_added)
             .add_observer(on_disconnect);
     }
@@ -38,10 +38,10 @@ impl Plugin for ChannelIoPlugin {
 /// Use [`ChannelIo::open`] to open a connection between two entities.
 #[derive(Debug, Component)]
 pub struct ChannelIo {
-    send_packet: flume::Sender<Bytes>,
-    recv_packet: flume::Receiver<Bytes>,
-    send_dc: Option<SyncWrapper<oneshot::Sender<String>>>,
-    recv_dc: SyncWrapper<oneshot::Receiver<String>>,
+    tx_packet: flume::Sender<Bytes>,
+    rx_packet: flume::Receiver<Bytes>,
+    tx_dc: Option<SyncWrapper<oneshot::Sender<String>>>,
+    rx_dc: SyncWrapper<oneshot::Receiver<String>>,
 }
 
 impl ChannelIo {
@@ -66,23 +66,23 @@ impl ChannelIo {
     /// ```
     #[must_use]
     pub fn new() -> (Self, Self) {
-        let (send_packet_a, recv_packet_a) = flume::unbounded();
-        let (send_packet_b, recv_packet_b) = flume::unbounded();
-        let (send_dc_a, recv_dc_a) = oneshot::channel();
-        let (send_dc_b, recv_dc_b) = oneshot::channel();
+        let (tx_packet_a, rx_packet_a) = flume::unbounded();
+        let (tx_packet_b, rx_packet_b) = flume::unbounded();
+        let (tx_dc_a, rx_dc_a) = oneshot::channel();
+        let (tx_dc_b, rx_dc_b) = oneshot::channel();
 
         (
             Self {
-                send_packet: send_packet_a,
-                recv_packet: recv_packet_b,
-                send_dc: Some(SyncWrapper::new(send_dc_a)),
-                recv_dc: SyncWrapper::new(recv_dc_b),
+                tx_packet: tx_packet_a,
+                rx_packet: rx_packet_b,
+                tx_dc: Some(SyncWrapper::new(tx_dc_a)),
+                rx_dc: SyncWrapper::new(rx_dc_b),
             },
             Self {
-                send_packet: send_packet_b,
-                recv_packet: recv_packet_a,
-                send_dc: Some(SyncWrapper::new(send_dc_b)),
-                recv_dc: SyncWrapper::new(recv_dc_a),
+                tx_packet: tx_packet_b,
+                rx_packet: rx_packet_a,
+                tx_dc: Some(SyncWrapper::new(tx_dc_b)),
+                rx_dc: SyncWrapper::new(rx_dc_a),
             },
         )
     }
@@ -123,8 +123,8 @@ impl ChannelIo {
 
 impl Drop for ChannelIo {
     fn drop(&mut self) {
-        if let Some(send_dc) = self.send_dc.take() {
-            _ = send_dc.into_inner().send(DROP_DISCONNECT_REASON.to_owned());
+        if let Some(tx_dc) = self.tx_dc.take() {
+            _ = tx_dc.into_inner().send(DROP_DISCONNECT_REASON.to_owned());
         }
     }
 }
@@ -136,20 +136,20 @@ pub struct ChannelDisconnected;
 
 const MTU: usize = usize::MAX;
 
-fn on_io_added(trigger: Trigger<OnAdd, ChannelIo>, mut commands: Commands) {
-    let target = trigger.target();
+fn on_io_added(trigger: On<Add, ChannelIo>, mut commands: Commands) {
+    let entity = trigger.event_target();
     let session = Session::new(Instant::now(), MTU);
-    commands.entity(target).insert((SessionEndpoint, session));
+    commands.entity(entity).insert((SessionEndpoint, session));
 }
 
-fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut ChannelIo>) {
-    let target = trigger.target();
-    let Ok(mut io) = sessions.get_mut(target) else {
+fn on_disconnect(trigger: On<Disconnect>, mut sessions: Query<&mut ChannelIo>) {
+    let entity = trigger.event_target();
+    let Ok(mut io) = sessions.get_mut(entity) else {
         return;
     };
 
-    if let Some(send_dc) = io.send_dc.take() {
-        _ = send_dc.into_inner().send(trigger.reason.clone());
+    if let Some(tx_dc) = io.tx_dc.take() {
+        _ = tx_dc.into_inner().send(trigger.reason.clone());
     }
 }
 
@@ -158,21 +158,21 @@ fn poll(mut commands: Commands, mut sessions: Query<(Entity, &mut Session, &mut 
         let span = trace_span!("poll", %entity);
         let _span = span.enter();
 
-        let disconnected = match io.recv_dc.get_mut().try_recv() {
-            Ok(reason) => Some(Disconnected::by_peer(reason)),
+        let dc_reason = match io.rx_dc.get_mut().try_recv() {
+            Ok(reason) => Some(DisconnectReason::by_peer(reason)),
             Err(oneshot::TryRecvError::Disconnected) => {
-                Some(Disconnected::by_error(ChannelDisconnected))
+                Some(DisconnectReason::by_error(ChannelDisconnected))
             }
             Err(oneshot::TryRecvError::Empty) => None,
         };
-        if let Some(disconnected) = disconnected {
-            commands.trigger_targets(disconnected, entity);
+        if let Some(reason) = dc_reason {
+            commands.trigger(Disconnected { entity, reason });
             continue;
         }
 
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        for packet in io.recv_packet.try_iter() {
+        for packet in io.rx_packet.try_iter() {
             num_packets += 1;
             session.stats.packets_recv += 1;
 
@@ -210,7 +210,7 @@ fn flush(mut sessions: Query<(Entity, &mut Session, &ChannelIo)>) {
             session.stats.bytes_sent += packet.len();
 
             // handle connection errors in `poll`
-            _ = io.send_packet.try_send(packet);
+            _ = io.tx_packet.try_send(packet);
         }
 
         trace!(

@@ -4,7 +4,7 @@
 use {
     aeronet_io::{
         Session, SessionEndpoint,
-        connection::{Disconnect, Disconnected},
+        connection::{Disconnect, DisconnectReason, Disconnected},
     },
     aeronet_steam::{
         SessionConfig, SteamworksClient,
@@ -49,39 +49,35 @@ struct SessionUi {
     log: Vec<String>,
 }
 
-fn on_connecting(
-    trigger: Trigger<OnAdd, SessionEndpoint>,
-    names: Query<&Name>,
-    mut log: ResMut<Log>,
-) {
-    let session = trigger.target();
+fn on_connecting(trigger: On<Add, SessionEndpoint>, names: Query<&Name>, mut log: ResMut<Log>) {
+    let session = trigger.event_target();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
     log.push(format!("{name} connecting"));
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Session>, names: Query<&Name>, mut log: ResMut<Log>) {
-    let session = trigger.target();
+fn on_connected(trigger: On<Add, Session>, names: Query<&Name>, mut log: ResMut<Log>) {
+    let session = trigger.event_target();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
     log.push(format!("{name} connected"));
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>, names: Query<&Name>, mut log: ResMut<Log>) {
-    let session = trigger.target();
+fn on_disconnected(trigger: On<Disconnected>, names: Query<&Name>, mut log: ResMut<Log>) {
+    let session = trigger.event_target();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
-    log.push(match &*trigger {
-        Disconnected::ByUser(reason) => {
+    log.push(match &trigger.reason {
+        DisconnectReason::ByUser(reason) => {
             format!("{name} disconnected by user: {reason}")
         }
-        Disconnected::ByPeer(reason) => {
+        DisconnectReason::ByPeer(reason) => {
             format!("{name} disconnected by peer: {reason}")
         }
-        Disconnected::ByError(err) => {
+        DisconnectReason::ByError(err) => {
             format!("{name} disconnected due to error: {err:?}")
         }
     });
@@ -209,7 +205,7 @@ fn session_ui(
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.trigger_targets(Disconnect::new("pressed disconnect button"), entity);
+                commands.trigger(Disconnect::new(entity, "pressed disconnect button"));
             }
 
             let stats = session.as_ref().map(|s| s.stats).unwrap_or_default();

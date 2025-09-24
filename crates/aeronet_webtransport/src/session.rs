@@ -4,8 +4,10 @@
 use {
     crate::runtime::WebTransportRuntime,
     aeronet_io::{
-        AeronetIoPlugin, IoSet, Session,
-        connection::{DROP_DISCONNECT_REASON, Disconnect, Disconnected, PeerAddr},
+        AeronetIoPlugin, IoSystems, Session,
+        connection::{
+            DROP_DISCONNECT_REASON, Disconnect, DisconnectReason, Disconnected, PeerAddr,
+        },
         packet::{IP_MTU, MtuTooSmall, PacketRtt, RecvPacket},
     },
     alloc::sync::Arc,
@@ -56,8 +58,8 @@ impl Plugin for WebTransportSessionPlugin {
         }
 
         app.init_resource::<WebTransportRuntime>()
-            .add_systems(PreUpdate, poll.in_set(IoSet::Poll))
-            .add_systems(PostUpdate, flush.in_set(IoSet::Flush))
+            .add_systems(PreUpdate, poll.in_set(IoSystems::Poll))
+            .add_systems(PostUpdate, flush.in_set(IoSystems::Flush))
             .add_observer(on_disconnect);
     }
 }
@@ -73,10 +75,10 @@ impl Plugin for WebTransportSessionPlugin {
 #[derive(Debug, Component)]
 #[require(Session::new(Instant::now(), MIN_MTU))]
 pub struct WebTransportIo {
-    pub(crate) recv_meta: mpsc::Receiver<SessionMeta>,
-    pub(crate) recv_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
-    pub(crate) send_packet_f2b: mpsc::UnboundedSender<Bytes>,
-    pub(crate) send_user_dc: Option<oneshot::Sender<String>>,
+    pub(crate) rx_meta: mpsc::Receiver<SessionMeta>,
+    pub(crate) rx_packet_b2f: mpsc::UnboundedReceiver<RecvPacket>,
+    pub(crate) tx_packet_f2b: mpsc::UnboundedSender<Bytes>,
+    pub(crate) tx_user_dc: Option<oneshot::Sender<String>>,
 }
 
 /// Minimum packet MTU that a [`WebTransportIo`] must support.
@@ -115,8 +117,8 @@ pub enum SessionError {
 
 impl Drop for WebTransportIo {
     fn drop(&mut self) {
-        if let Some(send_dc) = self.send_user_dc.take() {
-            _ = send_dc.send(DROP_DISCONNECT_REASON.to_owned());
+        if let Some(tx_dc) = self.tx_user_dc.take() {
+            _ = tx_dc.send(DROP_DISCONNECT_REASON.to_owned());
         }
     }
 }
@@ -130,14 +132,14 @@ pub(crate) struct SessionMeta {
     mtu: usize,
 }
 
-fn on_disconnect(trigger: Trigger<Disconnect>, mut sessions: Query<&mut WebTransportIo>) {
-    let target = trigger.target();
+fn on_disconnect(trigger: On<Disconnect>, mut sessions: Query<&mut WebTransportIo>) {
+    let target = trigger.event_target();
     let Ok(mut io) = sessions.get_mut(target) else {
         return;
     };
 
-    if let Some(send_dc) = io.send_user_dc.take() {
-        _ = send_dc.send(trigger.reason.clone());
+    if let Some(tx_dc) = io.tx_user_dc.take() {
+        _ = tx_dc.send(trigger.reason.clone());
     }
 }
 
@@ -161,9 +163,12 @@ pub(crate) fn poll(
         let span = trace_span!("poll", %entity);
         let _span = span.enter();
 
-        while let Ok(Some(meta)) = io.recv_meta.try_next() {
+        while let Ok(Some(meta)) = io.rx_meta.try_next() {
             if let Err(err) = session.set_mtu(meta.mtu) {
-                commands.trigger_targets(Disconnect::new(err.to_string()), entity);
+                commands.trigger(Disconnected {
+                    entity,
+                    reason: SessionError::MtuTooSmall(err).into(),
+                });
                 continue 'sessions;
             }
 
@@ -181,7 +186,7 @@ pub(crate) fn poll(
 
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        while let Ok(Some(packet)) = io.recv_packet_b2f.try_next() {
+        while let Ok(Some(packet)) = io.rx_packet_b2f.try_next() {
             num_packets += 1;
             session.stats.packets_recv += 1;
 
@@ -214,7 +219,7 @@ fn flush(mut sessions: Query<(Entity, &mut Session, &WebTransportIo)>) {
             session.stats.bytes_sent += packet.len();
 
             // handle connection errors in `poll`
-            _ = io.send_packet_f2b.unbounded_send(packet);
+            _ = io.tx_packet_f2b.unbounded_send(packet);
         }
 
         if num_packets.0 > 0 {
@@ -226,66 +231,66 @@ fn flush(mut sessions: Query<(Entity, &mut Session, &WebTransportIo)>) {
 #[derive(Debug)]
 pub(crate) struct SessionBackend {
     pub conn: Connection,
-    pub send_meta: mpsc::Sender<SessionMeta>,
-    pub send_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
-    pub recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
-    pub recv_user_dc: oneshot::Receiver<String>,
+    pub tx_meta: mpsc::Sender<SessionMeta>,
+    pub tx_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
+    pub rx_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
+    pub rx_user_dc: oneshot::Receiver<String>,
 }
 
 impl SessionBackend {
-    pub async fn start(self) -> Disconnected {
+    pub async fn start(self) -> DisconnectReason {
         let Self {
             conn,
-            send_meta,
-            send_packet_b2f,
-            recv_packet_f2b,
-            mut recv_user_dc,
+            tx_meta,
+            tx_packet_b2f,
+            rx_packet_f2b,
+            mut rx_user_dc,
         } = self;
 
         let conn = Arc::new(conn);
-        let (send_err, mut recv_err) = mpsc::channel::<SessionError>(1);
+        let (tx_err, mut rx_err) = mpsc::channel::<SessionError>(1);
 
-        let (_send_meta_closed, recv_meta_closed) = oneshot::channel();
+        let (_tx_meta_closed, rx_meta_closed) = oneshot::channel();
         WebTransportRuntime::spawn({
             let conn = conn.clone();
-            let mut send_err = send_err.clone();
+            let mut tx_err = tx_err.clone();
             async move {
-                let Err(err) = meta_loop(conn, recv_meta_closed, send_meta).await;
-                _ = send_err.try_send(err);
+                let Err(err) = meta_loop(conn, rx_meta_closed, tx_meta).await;
+                _ = tx_err.try_send(err);
             }
         });
 
-        let (_send_receiving_closed, recv_receiving_closed) = oneshot::channel();
+        let (_tx_receiving_closed, rx_receiving_closed) = oneshot::channel();
         WebTransportRuntime::spawn({
             let conn = conn.clone();
-            let mut send_err = send_err.clone();
+            let mut tx_err = tx_err.clone();
             async move {
-                let Err(err) = recv_loop(conn, recv_receiving_closed, send_packet_b2f).await;
-                _ = send_err.try_send(err);
+                let Err(err) = recv_loop(conn, rx_receiving_closed, tx_packet_b2f).await;
+                _ = tx_err.try_send(err);
             }
         });
 
-        let (_send_sending_closed, recv_sending_closed) = oneshot::channel();
+        let (_tx_sending_closed, rx_sending_closed) = oneshot::channel();
         WebTransportRuntime::spawn({
             let conn = conn.clone();
-            let mut send_err = send_err.clone();
+            let mut tx_err = tx_err.clone();
             async move {
-                let Err(err) = send_loop(conn, recv_sending_closed, recv_packet_f2b).await;
-                _ = send_err.try_send(err);
+                let Err(err) = send_loop(conn, rx_sending_closed, rx_packet_f2b).await;
+                _ = tx_err.try_send(err);
             }
         });
 
         futures::select! {
-            err = recv_err.next() => {
+            err = rx_err.next() => {
                 let err = err.unwrap_or(SessionError::BackendClosed);
                 get_disconnect_reason(err)
             }
-            reason = recv_user_dc => {
+            reason = rx_user_dc => {
                 if let Ok(reason) = reason {
                     disconnect(conn, &reason).await;
-                    Disconnected::by_user(reason)
+                    DisconnectReason::by_user(reason)
                 } else {
-                    Disconnected::by_error(SessionError::FrontendClosed)
+                    DisconnectReason::by_error(SessionError::FrontendClosed)
                 }
             }
         }
@@ -294,15 +299,15 @@ impl SessionBackend {
 
 async fn meta_loop(
     conn: Arc<Connection>,
-    mut recv_closed: oneshot::Receiver<()>,
-    mut send_meta: mpsc::Sender<SessionMeta>,
+    mut rx_closed: oneshot::Receiver<()>,
+    mut tx_meta: mpsc::Sender<SessionMeta>,
 ) -> Result<Never, SessionError> {
     const META_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
 
     loop {
         futures::select! {
             () = WebTransportRuntime::sleep(META_UPDATE_INTERVAL).fuse() => {},
-            _ = recv_closed => return Err(SessionError::FrontendClosed),
+            _ = rx_closed => return Err(SessionError::FrontendClosed),
         };
 
         let meta = SessionMeta {
@@ -314,7 +319,7 @@ async fn meta_loop(
                 .max_datagram_size()
                 .ok_or(SessionError::DatagramsNotSupported)?,
         };
-        match send_meta.try_send(meta) {
+        match tx_meta.try_send(meta) {
             Ok(()) => {}
             Err(err) if err.is_full() => {}
             Err(_) => {
@@ -327,7 +332,7 @@ async fn meta_loop(
 async fn recv_loop(
     conn: Arc<Connection>,
     mut recv_closed: oneshot::Receiver<()>,
-    mut send_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
+    mut tx_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
 ) -> Result<Never, SessionError> {
     loop {
         #[cfg_attr(
@@ -353,7 +358,7 @@ async fn recv_loop(
         };
         let now = Instant::now();
 
-        send_packet_b2f
+        tx_packet_b2f
             .send(RecvPacket {
                 recv_at: now,
                 payload: packet,
@@ -365,13 +370,13 @@ async fn recv_loop(
 
 async fn send_loop(
     conn: Arc<Connection>,
-    mut recv_closed: oneshot::Receiver<()>,
-    mut recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
+    mut rx_closed: oneshot::Receiver<()>,
+    mut rx_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
 ) -> Result<Never, SessionError> {
     loop {
         let packet = futures::select! {
-            x = recv_packet_f2b.next() => x,
-            _ = recv_closed => return Err(SessionError::FrontendClosed),
+            x = rx_packet_f2b.next() => x,
+            _ = rx_closed => return Err(SessionError::FrontendClosed),
         }
         .ok_or(SessionError::FrontendClosed)?;
 
@@ -416,7 +421,7 @@ async fn send_loop(
     }
 }
 
-fn get_disconnect_reason(err: SessionError) -> Disconnected {
+fn get_disconnect_reason(err: SessionError) -> DisconnectReason {
     #[cfg(target_family = "wasm")]
     {
         // TODO: I don't know how the app-initiated disconnect message looks
@@ -424,7 +429,7 @@ fn get_disconnect_reason(err: SessionError) -> Disconnected {
         // https://github.com/BiagioFesta/wtransport/issues/182
         //
         // Tested: when the server disconnects us, all we get is "Connection lost."
-        Disconnected::by_error(err)
+        DisconnectReason::by_error(err)
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -433,9 +438,9 @@ fn get_disconnect_reason(err: SessionError) -> Disconnected {
 
         match err {
             SessionError::Connection(ConnectionError::ApplicationClosed(err)) => {
-                Disconnected::by_peer(String::from_utf8_lossy(err.reason()))
+                DisconnectReason::by_peer(String::from_utf8_lossy(err.reason()))
             }
-            err => Disconnected::by_error(err),
+            err => DisconnectReason::by_error(err),
         }
     }
 }
