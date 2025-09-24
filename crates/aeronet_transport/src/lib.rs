@@ -150,7 +150,7 @@ pub struct TransportConfig {
     /// This can be used to limit the outgoing bandwidth of this transport.
     ///
     /// By default, this is [`usize::MAX`].
-    pub send_bytes_per_sec: usize,
+    pub tx_bytes_per_sec: usize,
     /// Multiplier for how long it takes for an unacknowledged packet to be
     /// marked as lost on our side.
     ///
@@ -177,7 +177,7 @@ impl Default for TransportConfig {
     fn default() -> Self {
         Self {
             max_memory_usage: 4 * 1024 * 1024,
-            send_bytes_per_sec: usize::MAX,
+            tx_bytes_per_sec: usize::MAX,
             packet_lost_threshold_factor: 1.5,
         }
     }

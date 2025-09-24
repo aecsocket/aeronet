@@ -128,8 +128,8 @@ pub enum SessionError {
 
 impl Drop for WebSocketIo {
     fn drop(&mut self) {
-        if let Some(send_dc) = self.tx_user_dc.take() {
-            _ = send_dc.send(DROP_DISCONNECT_REASON.to_owned());
+        if let Some(tx_dc) = self.tx_user_dc.take() {
+            _ = tx_dc.send(DROP_DISCONNECT_REASON.to_owned());
         }
     }
 }
@@ -147,8 +147,8 @@ fn on_disconnect(trigger: On<Disconnect>, mut sessions: Query<&mut WebSocketIo>)
         return;
     };
 
-    if let Some(send_dc) = io.tx_user_dc.take() {
-        _ = send_dc.send(trigger.reason.clone());
+    if let Some(tx_dc) = io.tx_user_dc.take() {
+        _ = tx_dc.send(trigger.reason.clone());
     }
 }
 

@@ -31,20 +31,20 @@ pub mod wasm {
     pub fn split(socket: WebSocket) -> (SessionFrontend, SessionBackend) {
         socket.set_binary_type(BinaryType::Arraybuffer);
 
-        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
-        let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
+        let (tx_packet_b2f, rx_packet_b2f) = mpsc::unbounded::<RecvPacket>();
+        let (tx_packet_f2b, rx_packet_f2b) = mpsc::unbounded::<Bytes>();
         let (tx_user_dc, rx_user_dc) = oneshot::channel::<String>();
 
-        let (mut send_dc_reason, recv_dc_reason) = mpsc::channel::<DisconnectReason>(1);
+        let (mut tx_dc_reason, rx_dc_reason) = mpsc::channel::<DisconnectReason>(1);
 
         let (_send_dropped, recv_dropped) = oneshot::channel::<()>();
         let on_open = Closure::once({
             let socket = socket.clone();
-            let mut send_dc_reason = send_dc_reason.clone();
+            let mut tx_dc_reason = tx_dc_reason.clone();
             || {
                 wasm_bindgen_futures::spawn_local(async move {
-                    let Err(err) = send_loop(socket, recv_packet_f2b, recv_dropped).await;
-                    _ = send_dc_reason.send(err.into());
+                    let Err(err) = send_loop(socket, rx_packet_f2b, rx_dropped).await;
+                    _ = tx_dc_reason.send(err.into());
                 });
             }
         });
@@ -57,9 +57,9 @@ pub mod wasm {
             let packet = Bytes::from(packet);
             let now = Instant::now();
 
-            let mut send_packet_b2f = send_packet_b2f.clone();
+            let mut tx_packet_b2f = tx_packet_b2f.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                _ = send_packet_b2f
+                _ = tx_packet_b2f
                     .send(RecvPacket {
                         recv_at: now,
                         payload: packet,
@@ -69,7 +69,7 @@ pub mod wasm {
         });
 
         let on_close = {
-            let mut send_dc_reason = send_dc_reason.clone();
+            let mut tx_dc_reason = tx_dc_reason.clone();
             Closure::<dyn FnMut(_)>::new(move |event: CloseEvent| {
                 let dc_reason = if event.code() == NORMAL_CLOSE_CODE {
                     DisconnectReason::by_peer(event.reason())
@@ -78,13 +78,13 @@ pub mod wasm {
                     // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
                     DisconnectReason::by_error(SessionError::Closed(event.code()))
                 };
-                _ = send_dc_reason.try_send(dc_reason);
+                _ = tx_dc_reason.try_send(dc_reason);
             })
         };
 
         let on_error = Closure::<dyn FnMut(_)>::new(move |event: ErrorEvent| {
             let err = SessionError::Connection(JsError(event.message()));
-            _ = send_dc_reason.try_send(DisconnectReason::by_error(err));
+            _ = tx_dc_reason.try_send(DisconnectReason::by_error(err));
         });
 
         socket.set_onopen(Some(on_open.as_ref().unchecked_ref()));
@@ -101,14 +101,14 @@ pub mod wasm {
 
         (
             SessionFrontend {
-                recv_packet_b2f,
-                send_packet_f2b,
-                send_user_dc,
+                rx_packet_b2f,
+                tx_packet_f2b,
+                tx_user_dc,
             },
             SessionBackend {
                 socket,
                 rx_user_dc,
-                recv_dc_reason,
+                rx_dc_reason,
             },
         )
     }
@@ -137,11 +137,11 @@ pub mod wasm {
             let Self {
                 socket,
                 mut rx_user_dc,
-                mut recv_dc_reason,
+                mut rx_dc_reason,
             } = self;
 
             futures::select! {
-                dc_reason = recv_dc_reason.next() => {
+                dc_reason = rx_dc_reason.next() => {
                     let dc_reason = dc_reason.ok_or(SessionError::BackendClosed)?;
                     Err(dc_reason)
                 }

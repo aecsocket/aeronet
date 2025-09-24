@@ -117,8 +117,8 @@ pub enum SessionError {
 
 impl Drop for WebTransportIo {
     fn drop(&mut self) {
-        if let Some(send_dc) = self.tx_user_dc.take() {
-            _ = send_dc.send(DROP_DISCONNECT_REASON.to_owned());
+        if let Some(tx_dc) = self.tx_user_dc.take() {
+            _ = tx_dc.send(DROP_DISCONNECT_REASON.to_owned());
         }
     }
 }
@@ -138,8 +138,8 @@ fn on_disconnect(trigger: On<Disconnect>, mut sessions: Query<&mut WebTransportI
         return;
     };
 
-    if let Some(send_dc) = io.tx_user_dc.take() {
-        _ = send_dc.send(trigger.reason.clone());
+    if let Some(tx_dc) = io.tx_user_dc.take() {
+        _ = tx_dc.send(trigger.reason.clone());
     }
 }
 
@@ -248,40 +248,40 @@ impl SessionBackend {
         } = self;
 
         let conn = Arc::new(conn);
-        let (send_err, mut recv_err) = mpsc::channel::<SessionError>(1);
+        let (tx_err, mut rx_err) = mpsc::channel::<SessionError>(1);
 
         let (_tx_meta_closed, rx_meta_closed) = oneshot::channel();
         WebTransportRuntime::spawn({
             let conn = conn.clone();
-            let mut send_err = send_err.clone();
+            let mut tx_err = tx_err.clone();
             async move {
                 let Err(err) = meta_loop(conn, rx_meta_closed, tx_meta).await;
-                _ = send_err.try_send(err);
+                _ = tx_err.try_send(err);
             }
         });
 
         let (_tx_receiving_closed, rx_receiving_closed) = oneshot::channel();
         WebTransportRuntime::spawn({
             let conn = conn.clone();
-            let mut send_err = send_err.clone();
+            let mut tx_err = tx_err.clone();
             async move {
                 let Err(err) = recv_loop(conn, rx_receiving_closed, tx_packet_b2f).await;
-                _ = send_err.try_send(err);
+                _ = tx_err.try_send(err);
             }
         });
 
         let (_tx_sending_closed, rx_sending_closed) = oneshot::channel();
         WebTransportRuntime::spawn({
             let conn = conn.clone();
-            let mut send_err = send_err.clone();
+            let mut tx_err = tx_err.clone();
             async move {
                 let Err(err) = send_loop(conn, rx_sending_closed, rx_packet_f2b).await;
-                _ = send_err.try_send(err);
+                _ = tx_err.try_send(err);
             }
         });
 
         futures::select! {
-            err = recv_err.next() => {
+            err = rx_err.next() => {
                 let err = err.unwrap_or(SessionError::BackendClosed);
                 get_disconnect_reason(err)
             }

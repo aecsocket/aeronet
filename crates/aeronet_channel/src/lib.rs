@@ -148,8 +148,8 @@ fn on_disconnect(trigger: On<Disconnect>, mut sessions: Query<&mut ChannelIo>) {
         return;
     };
 
-    if let Some(send_dc) = io.tx_dc.take() {
-        _ = send_dc.into_inner().send(trigger.reason.clone());
+    if let Some(tx_dc) = io.tx_dc.take() {
+        _ = tx_dc.into_inner().send(trigger.reason.clone());
     }
 }
 

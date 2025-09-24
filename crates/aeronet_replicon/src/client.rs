@@ -117,31 +117,31 @@ pub enum ClientTransportSet {
 pub struct AeronetRepliconClient;
 
 fn on_client_connected(
-    trigger: Trigger<OnAdd, Session>,
+    trigger: On<Add, Session>,
     mut commands: Commands,
     clients: Query<&Session, With<AeronetRepliconClient>>,
     channels: Res<RepliconChannels>,
 ) {
-    let target = trigger.target();
+    let target = trigger.event_target();
     let Ok(session) = clients.get(target) else {
         return;
     };
 
-    let recv_lanes = channels
+    let rx_lanes = channels
         .server_channels()
         .iter()
         .map(|channel| convert::to_lane_kind(*channel));
-    let send_lanes = channels
+    let tx_lanes = channels
         .client_channels()
         .iter()
         .map(|channel| convert::to_lane_kind(*channel));
     let now = Instant::now();
 
-    let transport = match Transport::new(session, recv_lanes, send_lanes, now) {
+    let transport = match Transport::new(session, rx_lanes, tx_lanes, now) {
         Ok(transport) => transport,
         Err(err) => {
             warn!("Failed to create transport for {target}: {err:?}");
-            commands.trigger_targets(Disconnect::new("failed to create transport"), target);
+            commands.trigger(Disconnect::new(target, "failed to create transport"));
             return;
         }
     };
