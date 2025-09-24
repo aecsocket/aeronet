@@ -15,7 +15,7 @@ pub mod wasm {
         },
         js_sys::Uint8Array,
         wasm_bindgen::{JsCast, prelude::Closure},
-        web_sys::{BinaryType, CloseEvent, ErrorEvent, MessageEvent, WebSocket},
+        web_sys::{BinaryType, CloseEvent, Event, MessageEvent, WebSocket},
     };
 
     #[derive(Debug)]
@@ -82,8 +82,8 @@ pub mod wasm {
             })
         };
 
-        let on_error = Closure::<dyn FnMut(_)>::new(move |event: ErrorEvent| {
-            let err = SessionError::Connection(JsError(event.message()));
+        let on_error = Closure::<dyn FnMut(_)>::new(move |event: Event| {
+            let err = SessionError::Connection(JsError(event.to_string().into()));
             _ = send_dc_reason.try_send(Disconnected::by_error(err));
         });
 
