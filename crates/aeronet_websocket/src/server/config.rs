@@ -1,13 +1,6 @@
 // based on
 // https://github.com/BiagioFesta/wtransport/blob/bf3a5401c2b3671e6611bd093d7666f4660b2119/wtransport/src/tls.rs
 
-// Tungstenite's handshake `ErrorResponse` is slightly larger than the clippy
-// warning threshold, see [https://github.com/snapview/tungstenite-rs/blob/2d4abe8dba23b283c1a3d2f4f4937c2f9a8d91e7/src/lib.rs#L14-L16].
-//
-// Our the callback created by our `HandshakeHandler` must return it unboxed,
-// so we cannot avoid the large size by boxing it.
-#![allow(clippy::result_large_err)]
-
 use {
     alloc::sync::Arc,
     core::net::{Ipv6Addr, SocketAddr},
@@ -104,6 +97,11 @@ impl HandshakeHandler {
     }
 
     /// Handle a request, returning a response.
+    #[expect(
+        clippy::result_large_err,
+        reason = "`tokio_tungstenite` requires that we return the error unboxed,
+        so we cannot box it here"
+    )]
     pub(crate) fn handle(&self, req: &Request, resp: Response) -> Result<Response, ErrorResponse> {
         self.0(req, resp)
     }
