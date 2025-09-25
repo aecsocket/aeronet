@@ -1,6 +1,9 @@
 use {
     super::{ServerConfig, ServerError, ToConnected, ToOpen},
-    crate::{server::ToConnecting, session::SessionError},
+    crate::{
+        server::{HandshakeHandler, ToConnecting},
+        session::SessionError,
+    },
     aeronet_io::{connection::Disconnected, server::Closed},
     bevy_ecs::prelude::*,
     core::{
@@ -18,7 +21,10 @@ use {
         net::{TcpListener, TcpStream},
     },
     tokio_rustls::TlsAcceptor,
-    tokio_tungstenite::tungstenite::protocol::WebSocketConfig,
+    tokio_tungstenite::tungstenite::{
+        handshake::server::{Request, Response},
+        protocol::WebSocketConfig,
+    },
     tracing::{Instrument, debug, debug_span},
 };
 
@@ -52,6 +58,7 @@ pub async fn start(
         tokio::spawn({
             let send_connecting = send_connecting.clone();
             let tls_acceptor = tls_acceptor.clone();
+            let handshake_handler = config.handshake_handler.clone();
             async move {
                 if let Err(err) = accept_session(
                     stream,
@@ -59,6 +66,7 @@ pub async fn start(
                     config.socket,
                     tls_acceptor,
                     send_connecting,
+                    handshake_handler,
                 )
                 .await
                 {
@@ -75,6 +83,7 @@ async fn accept_session(
     socket_config: WebSocketConfig,
     tls_acceptor: Option<TlsAcceptor>,
     mut send_connecting: mpsc::Sender<ToConnecting>,
+    handshake_handler: Option<HandshakeHandler>,
 ) -> Result<(), Disconnected> {
     let (send_session_entity, recv_session_entity) = oneshot::channel::<Entity>();
     let (send_dc, recv_dc) = oneshot::channel::<Disconnected>();
@@ -92,9 +101,16 @@ async fn accept_session(
         .await
         .map_err(|_| SessionError::FrontendClosed)?;
 
-    let Err(dc_reason) = handle_session(stream, peer_addr, socket_config, tls_acceptor, send_next)
-        .instrument(debug_span!("session", %session))
-        .await;
+    let Err(dc_reason) = handle_session(
+        stream,
+        peer_addr,
+        socket_config,
+        tls_acceptor,
+        send_next,
+        handshake_handler,
+    )
+    .instrument(debug_span!("session", %session))
+    .await;
     _ = send_dc.send(dc_reason);
     Ok(())
 }
@@ -105,8 +121,9 @@ async fn handle_session(
     socket_config: WebSocketConfig,
     tls_acceptor: Option<TlsAcceptor>,
     send_next: oneshot::Sender<ToConnected>,
+    handshake_handler: Option<HandshakeHandler>,
 ) -> Result<Never, Disconnected> {
-    debug!("Accepting session");
+    debug!("Performing Session handshake");
 
     let stream = if let Some(tls_acceptor) = tls_acceptor {
         tls_acceptor
@@ -117,10 +134,16 @@ async fn handle_session(
     } else {
         MaybeTlsStream::Plain(stream)
     };
-    // TODO accept hdr: find some way to pass control of headers over to user
-    let stream = tokio_tungstenite::accept_async_with_config(stream, Some(socket_config))
-        .await
-        .map_err(ServerError::AcceptClient)?;
+    let stream = tokio_tungstenite::accept_hdr_async_with_config(
+        stream,
+        |req: &Request, resp: Response| match &handshake_handler {
+            Some(h) => h.handle(req, resp),
+            None => Ok(resp),
+        },
+        Some(socket_config),
+    )
+    .await
+    .map_err(ServerError::AcceptClient)?;
 
     let (frontend, backend) = crate::session::backend::native::split(stream);
     let connected = ToConnected {
