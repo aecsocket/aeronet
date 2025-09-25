@@ -32,12 +32,12 @@ too_many_arguments      = "allow"
 type_complexity         = "allow"
 
 [workspace.dependencies]
-aeronet              = { version = "0.16.0", path = "crates/aeronet", default-features = false }
-aeronet_io           = { version = "0.16.0", path = "crates/aeronet_io", default-features = false }
-aeronet_replicon     = { version = "0.16.0", path = "crates/aeronet_replicon", default-features = false }
-aeronet_transport    = { version = "0.16.0", path = "crates/aeronet_transport", default-features = false }
-aeronet_websocket    = { version = "0.16.0", path = "crates/aeronet_websocket" }
-aeronet_webtransport = { version = "0.16.0", path = "crates/aeronet_webtransport" }
+aeronet              = { version = "0.16.1", path = "crates/aeronet", default-features = false }
+aeronet_io           = { version = "0.16.1", path = "crates/aeronet_io", default-features = false }
+aeronet_replicon     = { version = "0.16.1", path = "crates/aeronet_replicon", default-features = false }
+aeronet_transport    = { version = "0.16.1", path = "crates/aeronet_transport", default-features = false }
+aeronet_websocket    = { version = "0.16.1", path = "crates/aeronet_websocket" }
+aeronet_webtransport = { version = "0.16.1", path = "crates/aeronet_webtransport" }
 
 bevy_app      = { version = "0.16.0", default-features = false }
 bevy_ecs      = { version = "0.16.0", default-features = false }
