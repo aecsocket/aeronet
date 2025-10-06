@@ -25,13 +25,7 @@ fn main() -> AppExit {
         .add_systems(PreUpdate, |steam: Res<SteamworksClient>| {
             steam.run_callbacks();
         })
-        .add_plugins((
-            DefaultPlugins,
-            EguiPlugin {
-                enable_multipass_for_primary_context: false,
-            },
-            SteamNetClientPlugin,
-        ))
+        .add_plugins((DefaultPlugins, EguiPlugin::default(), SteamNetClientPlugin))
         .init_resource::<Log>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
         .add_observer(on_connecting)
@@ -90,10 +84,10 @@ fn global_ui(
     mut target_addr: Local<String>,
     mut target_peer: Local<String>,
     mut session_id: Local<usize>,
-) {
+) -> Result<(), BevyError> {
     const DEFAULT_TARGET: &str = "127.0.0.1:25572";
 
-    egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
+    egui::Window::new("Connect").show(egui.ctx_mut()?, |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
         let mut connect_addr = false;
@@ -158,6 +152,8 @@ fn global_ui(
             ui.label(msg);
         }
     });
+
+    Ok(())
 }
 
 fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut Session)>) {
@@ -174,9 +170,9 @@ fn session_ui(
     mut egui: EguiContexts,
     mut commands: Commands,
     mut sessions: Query<(Entity, &Name, &mut SessionUi, Option<&mut Session>)>,
-) {
+) -> Result<(), BevyError> {
     for (entity, name, mut ui_state, mut session) in &mut sessions {
-        egui::Window::new(name.to_string()).show(egui.ctx_mut(), |ui| {
+        egui::Window::new(name.to_string()).show(egui.ctx_mut()?, |ui| {
             let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
             let mut send_msg = false;
@@ -231,4 +227,6 @@ fn session_ui(
             });
         });
     }
+
+    Ok(())
 }

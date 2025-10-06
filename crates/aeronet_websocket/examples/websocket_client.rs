@@ -4,7 +4,7 @@
 use {
     aeronet_io::{
         Session, SessionEndpoint,
-        connection::{Disconnect, Disconnected, LocalAddr, PeerAddr},
+        connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
@@ -14,13 +14,7 @@ use {
 
 fn main() -> AppExit {
     App::new()
-        .add_plugins((
-            DefaultPlugins,
-            EguiPlugin {
-                enable_multipass_for_primary_context: false,
-            },
-            WebSocketClientPlugin,
-        ))
+        .add_plugins((DefaultPlugins, EguiPlugin::default(), WebSocketClientPlugin))
         .init_resource::<Log>()
         .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
         .add_observer(on_connecting)
@@ -38,39 +32,35 @@ struct SessionUi {
     log: Vec<String>,
 }
 
-fn on_connecting(
-    trigger: Trigger<OnAdd, SessionEndpoint>,
-    names: Query<&Name>,
-    mut log: ResMut<Log>,
-) {
-    let target = trigger.target();
+fn on_connecting(trigger: On<Add, SessionEndpoint>, names: Query<&Name>, mut log: ResMut<Log>) {
+    let target = trigger.event_target();
     let name = names
         .get(target)
         .expect("our session entity should have a name");
     log.push(format!("{name} connected"));
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Session>, names: Query<&Name>, mut log: ResMut<Log>) {
-    let target = trigger.target();
+fn on_connected(trigger: On<Add, Session>, names: Query<&Name>, mut log: ResMut<Log>) {
+    let target = trigger.event_target();
     let name = names
         .get(target)
         .expect("our session entity should have a name");
     log.push(format!("{name} connected"));
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>, names: Query<&Name>, mut log: ResMut<Log>) {
-    let target = trigger.target();
+fn on_disconnected(trigger: On<Disconnected>, names: Query<&Name>, mut log: ResMut<Log>) {
+    let target = trigger.event_target();
     let name = names
         .get(target)
         .expect("our session entity should have a name");
-    log.push(match &*trigger {
-        Disconnected::ByUser(reason) => {
+    log.push(match &trigger.reason {
+        DisconnectReason::ByUser(reason) => {
             format!("{name} disconnected by user: {reason}")
         }
-        Disconnected::ByPeer(reason) => {
+        DisconnectReason::ByPeer(reason) => {
             format!("{name} disconnected by peer: {reason}")
         }
-        Disconnected::ByError(err) => {
+        DisconnectReason::ByError(err) => {
             format!("{name} disconnected due to error: {err:?}")
         }
     });
@@ -82,10 +72,10 @@ fn global_ui(
     log: Res<Log>,
     mut target: Local<String>,
     mut session_id: Local<usize>,
-) {
+) -> Result<(), BevyError> {
     const DEFAULT_TARGET: &str = "wss://127.0.0.1:25570";
 
-    egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
+    egui::Window::new("Connect").show(egui.ctx_mut()?, |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
         let mut connect = false;
@@ -117,6 +107,8 @@ fn global_ui(
             ui.label(msg);
         }
     });
+
+    Ok(())
 }
 
 #[cfg(target_family = "wasm")]
@@ -154,9 +146,9 @@ fn session_ui(
         Option<&LocalAddr>,
         Option<&PeerAddr>,
     )>,
-) {
+) -> Result<(), BevyError> {
     for (entity, name, mut ui_state, mut session, local_addr, peer_addr) in &mut sessions {
-        egui::Window::new(name.to_string()).show(egui.ctx_mut(), |ui| {
+        egui::Window::new(name.to_string()).show(egui.ctx_mut()?, |ui| {
             let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
             let mut send_msg = false;
@@ -185,7 +177,7 @@ fn session_ui(
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.trigger_targets(Disconnect::new("pressed disconnect button"), entity);
+                commands.trigger(Disconnect::new(entity, "pressed disconnect button"));
             }
 
             let stats = session.as_ref().map(|s| s.stats).unwrap_or_default();
@@ -227,4 +219,6 @@ fn session_ui(
             });
         });
     }
+
+    Ok(())
 }

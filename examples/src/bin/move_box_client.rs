@@ -4,7 +4,7 @@ use {
     aeronet::{
         io::{
             Session, SessionEndpoint,
-            connection::{Disconnect, Disconnected},
+            connection::{Disconnect, DisconnectReason, Disconnected},
         },
         transport::{
             TransportConfig,
@@ -31,9 +31,7 @@ fn main() -> AppExit {
         .add_plugins((
             // core
             DefaultPlugins,
-            EguiPlugin {
-                enable_multipass_for_primary_context: false,
-            },
+            EguiPlugin::default(),
             // transport
             WebTransportClientPlugin,
             WebSocketClientPlugin,
@@ -83,7 +81,7 @@ fn setup_level(mut commands: Commands) {
 }
 
 fn on_connecting(
-    trigger: Trigger<OnAdd, SessionEndpoint>,
+    trigger: On<Add, SessionEndpoint>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
     mut commands: Commands,
@@ -107,13 +105,13 @@ fn on_connecting(
 }
 
 fn on_connected(
-    trigger: Trigger<OnAdd, Session>,
+    trigger: On<Add, Session>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
     mut game_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
 ) {
-    let entity = trigger.target();
+    let entity = trigger.event_target();
     let name = names
         .get(entity)
         .expect("our session entity should have a name");
@@ -124,30 +122,30 @@ fn on_connected(
         SessionVisualizer::default(),
         TransportConfig {
             max_memory_usage: 64 * 1024,
-            send_bytes_per_sec: 4 * 1024,
+            tx_bytes_per_sec: 4 * 1024,
             ..default()
         },
     ));
 }
 
 fn on_disconnected(
-    trigger: Trigger<Disconnected>,
+    trigger: On<Disconnected>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
-    let session = trigger.target();
+    let session = trigger.event_target();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
-    ui_state.log.push(match &*trigger {
-        Disconnected::ByUser(reason) => {
+    ui_state.log.push(match &trigger.reason {
+        DisconnectReason::ByUser(reason) => {
             format!("{name} disconnected by user: {reason}")
         }
-        Disconnected::ByPeer(reason) => {
+        DisconnectReason::ByPeer(reason) => {
             format!("{name} disconnected by peer: {reason}")
         }
-        Disconnected::ByError(err) => {
+        DisconnectReason::ByError(err) => {
             format!("{name} disconnected due to error: {err:?}")
         }
     });
@@ -159,29 +157,29 @@ fn global_ui(
     mut egui: EguiContexts,
     global_ui: Res<GlobalUi>,
     sessions: Query<(Entity, &Name, Option<&Session>), With<SessionEndpoint>>,
-    replicon_client: Res<RepliconClient>,
-) {
-    let stats = replicon_client.stats();
-    egui::Window::new("Session Log").show(egui.ctx_mut(), |ui| {
+    client_state: Res<State<ClientState>>,
+    client_stats: Res<ClientStats>,
+) -> Result<(), BevyError> {
+    egui::Window::new("Session Log").show(egui.ctx_mut()?, |ui| {
         ui.label("Replicon reports:");
         ui.horizontal(|ui| {
-            ui.label(match replicon_client.status() {
-                RepliconClientStatus::Disconnected => "Disconnected",
-                RepliconClientStatus::Connecting => "Connecting",
-                RepliconClientStatus::Connected => "Connected",
+            ui.label(match client_state.get() {
+                ClientState::Disconnected => "Disconnected",
+                ClientState::Connecting => "Connecting",
+                ClientState::Connected => "Connected",
             });
             ui.separator();
 
-            ui.label(format!("RTT {:.0}ms", stats.rtt * 1000.0));
+            ui.label(format!("RTT {:.0}ms", client_stats.rtt * 1000.0));
             ui.separator();
 
-            ui.label(format!("Pkt Loss {:.1}%", stats.packet_loss * 100.0));
+            ui.label(format!("Pkt Loss {:.1}%", client_stats.packet_loss * 100.0));
             ui.separator();
 
-            ui.label(format!("Rx {:.0}bps", stats.received_bps));
+            ui.label(format!("Rx {:.0}bps", client_stats.received_bps));
             ui.separator();
 
-            ui.label(format!("Tx {:.0}bps", stats.sent_bps));
+            ui.label(format!("Tx {:.0}bps", client_stats.sent_bps));
         });
         match sessions.single() {
             Ok((session, name, connected)) => {
@@ -192,7 +190,7 @@ fn global_ui(
                 }
 
                 if ui.button("Disconnect").clicked() {
-                    commands.trigger_targets(Disconnect::new("pressed disconnect button"), session);
+                    commands.trigger(Disconnect::new(session, "pressed disconnect button"));
                 }
             }
             Err(QuerySingleError::NoEntities(_)) => {
@@ -209,6 +207,8 @@ fn global_ui(
             ui.label(msg);
         }
     });
+
+    Ok(())
 }
 
 //
@@ -221,10 +221,10 @@ fn web_transport_ui(
     mut global_ui: ResMut<GlobalUi>,
     mut ui_state: ResMut<WebTransportUi>,
     sessions: Query<(), With<Session>>,
-) {
+) -> Result<(), BevyError> {
     let default_target = format!("https://127.0.0.1:{WEB_TRANSPORT_PORT}");
 
-    egui::Window::new("WebTransport").show(egui.ctx_mut(), |ui| {
+    egui::Window::new("WebTransport").show(egui.ctx_mut()?, |ui| {
         if sessions.iter().next().is_some() {
             ui.disable();
         }
@@ -263,6 +263,8 @@ fn web_transport_ui(
                 .queue(WebTransportClient::connect(config, target));
         }
     });
+
+    Ok(())
 }
 
 type WebTransportClientConfig = aeronet_webtransport::client::ClientConfig;
@@ -324,10 +326,10 @@ fn web_socket_ui(
     mut global_ui: ResMut<GlobalUi>,
     mut ui_state: ResMut<WebSocketUi>,
     sessions: Query<(), With<Session>>,
-) {
+) -> Result<(), BevyError> {
     let default_target = format!("ws://127.0.0.1:{WEB_SOCKET_PORT}");
 
-    egui::Window::new("WebSocket").show(egui.ctx_mut(), |ui| {
+    egui::Window::new("WebSocket").show(egui.ctx_mut()?, |ui| {
         if sessions.iter().next().is_some() {
             ui.disable();
         }
@@ -359,6 +361,8 @@ fn web_socket_ui(
                 .queue(WebSocketClient::connect(config, target));
         }
     });
+
+    Ok(())
 }
 
 type WebSocketClientConfig = aeronet_websocket::client::ClientConfig;
@@ -377,7 +381,7 @@ fn web_socket_config() -> WebSocketClientConfig {
 // game logic
 //
 
-fn handle_inputs(mut inputs: EventWriter<PlayerInput>, input: Res<ButtonInput<KeyCode>>) {
+fn handle_inputs(mut inputs: MessageWriter<PlayerInput>, input: Res<ButtonInput<KeyCode>>) {
     let mut movement = Vec2::ZERO;
     if input.pressed(KeyCode::ArrowRight) {
         movement.x += 1.0;

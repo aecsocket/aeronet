@@ -18,7 +18,7 @@ use {
         io::{
             Session, SessionEndpoint,
             bytes::Bytes,
-            connection::{Disconnect, Disconnected},
+            connection::{Disconnect, DisconnectReason, Disconnected},
         },
         transport::{
             AeronetTransportPlugin, Transport, TransportConfig,
@@ -38,9 +38,7 @@ fn main() -> AppExit {
         .add_plugins((
             DefaultPlugins,
             // We'll use `bevy_egui` for displaying the UI.
-            EguiPlugin {
-                enable_multipass_for_primary_context: false,
-            },
+            EguiPlugin::default(),
             // We're using WebSockets, so we add this plugin.
             // This will automatically add `AeronetIoPlugin` as well, which sets
             // up the IO layer. However, it does *not* set up the transport
@@ -135,8 +133,8 @@ fn setup(mut commands: Commands) {
 }
 
 // Observe state change events using `Trigger`s.
-fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>, mut sessions: Query<&mut UiState>) {
-    let entity = trigger.target();
+fn on_connecting(trigger: On<Add, SessionEndpoint>, mut sessions: Query<&mut UiState>) {
+    let entity = trigger.event_target();
     let mut ui_state = sessions
         .get_mut(entity)
         .expect("our sessions should have these components");
@@ -144,11 +142,11 @@ fn on_connecting(trigger: Trigger<OnAdd, SessionEndpoint>, mut sessions: Query<&
 }
 
 fn on_connected(
-    trigger: Trigger<OnAdd, Session>,
+    trigger: On<Add, Session>,
     mut sessions: Query<(&Session, &mut UiState)>,
     mut commands: Commands,
 ) {
-    let entity = trigger.target();
+    let entity = trigger.event_target();
     let (session, mut ui_state) = sessions
         .get_mut(entity)
         .expect("our sessions should have these components");
@@ -168,12 +166,12 @@ fn on_connected(
     commands.entity(entity).insert(transport);
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>) {
-    let entity = trigger.target();
-    match &*trigger {
-        Disconnected::ByUser(reason) => info!("{entity} disconnected by user: {reason}"),
-        Disconnected::ByPeer(reason) => info!("{entity} disconnected by peer: {reason}"),
-        Disconnected::ByError(err) => warn!("{entity} disconnected due to error: {err:?}"),
+fn on_disconnected(trigger: On<Disconnected>) {
+    let entity = trigger.event_target();
+    match &trigger.reason {
+        DisconnectReason::ByUser(reason) => info!("{entity} disconnected by user: {reason}"),
+        DisconnectReason::ByPeer(reason) => info!("{entity} disconnected by peer: {reason}"),
+        DisconnectReason::ByError(err) => warn!("{entity} disconnected due to error: {err:?}"),
     }
 }
 
@@ -216,9 +214,9 @@ fn ui(
     // Technically, this query can run for multiple sessions, so we can have
     // multiple `egui` windows. But there will only ever be 1 session active.
     mut sessions: Query<(Entity, &mut Transport, &mut UiState), Without<ChildOf>>,
-) {
+) -> Result<(), BevyError> {
     for (entity, mut transport, mut ui_state) in &mut sessions {
-        egui::Window::new("Log").show(egui.ctx_mut(), |ui| {
+        egui::Window::new("Log").show(egui.ctx_mut()?, |ui| {
             ui.text_edit_singleline(&mut ui_state.msg);
 
             if ui.button("Send").clicked() {
@@ -236,7 +234,7 @@ fn ui(
             if ui.button("Disconnect").clicked() {
                 // Here's how you disconnect the session with a given reason.
                 // Don't just remove components or despawn entities - use `Disconnect` instead!
-                commands.trigger_targets(Disconnect::new("pressed disconnect button"), entity);
+                commands.trigger(Disconnect::new(entity, "pressed disconnect button"));
             }
 
             for line in &ui_state.log {
@@ -244,4 +242,6 @@ fn ui(
             }
         });
     }
+
+    Ok(())
 }

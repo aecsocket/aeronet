@@ -14,7 +14,8 @@ use {
     bevy_ecs::prelude::*,
     bevy_platform::time::Instant,
     bevy_reflect::Reflect,
-    bevy_replicon::{prelude::*, server::ServerSet},
+    bevy_replicon::{prelude::*, server::ServerSystems},
+    bevy_state::state::NextState,
     log::warn,
 };
 
@@ -39,14 +40,14 @@ impl Plugin for AeronetRepliconServerPlugin {
             (
                 TransportSystems::Poll,
                 ServerTransportSet::Poll,
-                ServerSet::ReceivePackets,
+                ServerSystems::ReceivePackets,
             )
                 .chain(),
         )
         .configure_sets(
             PostUpdate,
             (
-                ServerSet::SendPackets,
+                ServerSystems::SendPackets,
                 ServerTransportSet::Flush,
                 TransportSystems::Flush,
             )
@@ -57,13 +58,13 @@ impl Plugin for AeronetRepliconServerPlugin {
             (poll, update_state, update_client_data)
                 .chain()
                 .in_set(ServerTransportSet::Poll)
-                .run_if(resource_exists::<RepliconServer>),
+                .run_if(resource_exists::<ServerMessages>),
         )
         .add_systems(
             PostUpdate,
             (flush, handle_disconnect_requests)
                 .in_set(ServerTransportSet::Flush)
-                .run_if(resource_exists::<RepliconServer>),
+                .run_if(resource_exists::<ServerMessages>),
         )
         .add_observer(on_connected);
     }
@@ -123,25 +124,27 @@ type OpenedServer = (
 );
 
 fn update_state(
-    mut replicon_server: ResMut<RepliconServer>,
+    mut next_server_state: ResMut<NextState<ServerState>>,
     open_servers: Query<(), OpenedServer>,
 ) {
     let running = open_servers.iter().next().is_some();
-
-    if replicon_server.is_running() != running {
-        replicon_server.set_running(running);
-    }
+    let next_status = if running {
+        ServerState::Running
+    } else {
+        ServerState::Stopped
+    };
+    next_server_state.set(next_status);
 }
 
 fn on_connected(
-    trigger: Trigger<OnAdd, Session>,
+    trigger: On<Add, Session>,
     sessions: Query<&Session>,
     child_of: Query<&ChildOf>,
     open_servers: Query<(), OpenedServer>,
     channels: Res<RepliconChannels>,
     mut commands: Commands,
 ) {
-    let client = trigger.target();
+    let client = trigger.event_target();
     let session = sessions
         .get(client)
         .expect("we are adding this component to this entity");
@@ -153,7 +156,7 @@ fn on_connected(
         return;
     }
 
-    let recv_lanes = channels
+    let rx_lanes = channels
         .client_channels()
         .iter()
         .map(|channel| convert::to_lane_kind(*channel));
@@ -178,7 +181,7 @@ fn on_connected(
 }
 
 fn poll(
-    mut replicon_server: ResMut<RepliconServer>,
+    mut server_msgs: ResMut<ServerMessages>,
     mut clients: Query<(Entity, &mut Transport, &ChildOf)>,
     open_servers: Query<(), OpenedServer>,
 ) {
@@ -189,7 +192,7 @@ fn poll(
 
         for msg in transport.recv.msgs.drain() {
             let channel_id = convert::to_channel_id(msg.lane);
-            replicon_server.insert_received(client, channel_id, msg.payload);
+            server_msgs.insert_received(client, channel_id, msg.payload);
         }
 
         for _ in transport.recv.acks.drain() {
@@ -203,26 +206,26 @@ fn update_client_data(
         &Session,
         &SessionStats,
         &mut ConnectedClient,
-        &mut NetworkStats,
+        &mut ClientStats,
     )>,
     sampling: Res<SessionStatsSampling>,
 ) {
-    for (session, session_stats, mut connected_client, mut network_stats) in &mut clients {
+    for (session, session_stats, mut connected_client, mut client_stats) in &mut clients {
         let stats = session_stats.last().copied().unwrap_or_default();
         connected_client.max_size = session.mtu();
-        network_stats.rtt = stats.msg_rtt.as_secs_f64();
-        network_stats.packet_loss = stats.loss;
+        client_stats.rtt = stats.msg_rtt.as_secs_f64();
+        client_stats.packet_loss = stats.loss;
         #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
         {
-            network_stats.received_bps = stats.packets_delta.bytes_recv.0 as f64 * sampling.rate();
-            network_stats.sent_bps = stats.packets_delta.bytes_sent.0 as f64 * sampling.rate();
+            client_stats.received_bps = stats.packets_delta.bytes_recv.0 as f64 * sampling.rate();
+            client_stats.sent_bps = stats.packets_delta.bytes_sent.0 as f64 * sampling.rate();
         }
     }
 }
 
-fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Transport>) {
+fn flush(mut server_msgs: ResMut<ServerMessages>, mut clients: Query<&mut Transport>) {
     let now = Instant::now();
-    for (client, channel_id, msg) in replicon_server.drain_sent() {
+    for (client, channel_id, msg) in server_msgs.drain_sent() {
         let Ok(mut transport) = clients.get_mut(client) else {
             warn!("Sending to non-existent client {client}");
             continue;
@@ -238,11 +241,11 @@ fn flush(mut replicon_server: ResMut<RepliconServer>, mut clients: Query<&mut Tr
 
 fn handle_disconnect_requests(
     mut commands: Commands,
-    mut requests: EventReader<DisconnectRequest>,
+    mut requests: MessageReader<DisconnectRequest>,
     clients: Query<(), (With<Transport>, With<ChildOf>)>,
 ) {
     for request in requests.read() {
-        let client = request.client_entity;
+        let client = request.client;
         if let Err(err) = clients.get(client) {
             warn!("Requested to disconnect {client} which does not match query: {err:?}");
             continue;

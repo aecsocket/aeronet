@@ -4,7 +4,7 @@
 use {
     aeronet_io::{
         Session,
-        connection::{Disconnected, LocalAddr},
+        connection::{DisconnectReason, Disconnected, LocalAddr},
         server::{Closed, Server},
     },
     aeronet_webtransport::{
@@ -64,20 +64,20 @@ fn server_config(identity: wtransport::Identity) -> ServerConfig {
         .build()
 }
 
-fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
-    let server = trigger.target();
+fn on_opened(trigger: On<Add, Server>, servers: Query<&LocalAddr>) {
+    let server = trigger.event_target();
     let local_addr = servers
         .get(server)
         .expect("spawned session entity should have a name");
     info!("{server} opened on {}", **local_addr);
 }
 
-fn on_closed(trigger: Trigger<Closed>) {
+fn on_closed(trigger: On<Closed>) {
     panic!("server closed: {:?}", trigger.event());
 }
 
-fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&ChildOf>) {
-    let client = request.target();
+fn on_session_request(mut request: On<SessionRequest>, clients: Query<&ChildOf>) {
+    let client = request.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
@@ -90,8 +90,8 @@ fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&Chil
     request.respond(SessionResponse::Accepted);
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&ChildOf>) {
-    let client = trigger.target();
+fn on_connected(trigger: On<Add, Session>, clients: Query<&ChildOf>) {
+    let client = trigger.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
@@ -99,20 +99,20 @@ fn on_connected(trigger: Trigger<OnAdd, Session>, clients: Query<&ChildOf>) {
     info!("{client} connected to {server}");
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
-    let client = trigger.target();
+fn on_disconnected(trigger: On<Disconnected>, clients: Query<&ChildOf>) {
+    let client = trigger.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 
-    match &*trigger {
-        Disconnected::ByUser(reason) => {
+    match &trigger.reason {
+        DisconnectReason::ByUser(reason) => {
             info!("{client} disconnected from {server} by user: {reason}");
         }
-        Disconnected::ByPeer(reason) => {
+        DisconnectReason::ByPeer(reason) => {
             info!("{client} disconnected from {server} by peer: {reason}");
         }
-        Disconnected::ByError(err) => {
+        DisconnectReason::ByError(err) => {
             warn!("{client} disconnected from {server} due to error: {err:?}");
         }
     }

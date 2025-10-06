@@ -18,8 +18,8 @@ pub mod send;
 pub mod seq_buf;
 pub mod size;
 
-// #[cfg(feature = "visualizer")]
-// pub mod visualizer;
+#[cfg(feature = "visualizer")]
+pub mod visualizer;
 
 pub use aeronet_io as io;
 use {

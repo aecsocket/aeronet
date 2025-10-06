@@ -1,6 +1,9 @@
 use {
     super::{ServerConfig, ServerError, ToConnected, ToOpen},
-    crate::{server::ToConnecting, session::SessionError},
+    crate::{
+        server::{HandshakeHandler, ToConnecting},
+        session::SessionError,
+    },
     aeronet_io::{connection::DisconnectReason, server::CloseReason},
     bevy_ecs::prelude::*,
     core::{
@@ -81,7 +84,7 @@ async fn accept_session(
     tls_acceptor: Option<TlsAcceptor>,
     mut tx_connecting: mpsc::Sender<ToConnecting>,
     handshake_handler: Option<HandshakeHandler>,
-) -> Result<(), Disconnected> {
+) -> Result<(), DisconnectReason> {
     let (tx_session_entity, rx_session_entity) = oneshot::channel::<Entity>();
     let (tx_dc_reason, rx_dc_reason) = oneshot::channel::<DisconnectReason>();
     let (tx_next, rx_next) = oneshot::channel::<ToConnected>();
@@ -119,8 +122,8 @@ async fn handle_session(
     tls_acceptor: Option<TlsAcceptor>,
     tx_next: oneshot::Sender<ToConnected>,
     handshake_handler: Option<HandshakeHandler>,
-) -> Result<Never, Disconnected> {
-    debug!("Performing Session handshake");
+) -> Result<Never, DisconnectReason> {
+    debug!("Performing session handshake");
 
     let stream = if let Some(tls_acceptor) = tls_acceptor {
         tls_acceptor

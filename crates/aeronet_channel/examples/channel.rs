@@ -18,9 +18,7 @@ fn main() -> AppExit {
                 level: tracing::Level::DEBUG,
                 ..default()
             }),
-            EguiPlugin {
-                enable_multipass_for_primary_context: false,
-            },
+            EguiPlugin::default(),
             // Add the IO plugin for the IO layer implementation you want to use.
             // This will automatically add the `AeronetIoPlugin`.
             ChannelIoPlugin,
@@ -65,9 +63,9 @@ fn session_ui(
     mut egui: EguiContexts,
     mut commands: Commands,
     mut sessions: Query<(Entity, &Name, &mut SessionUi, &mut Session)>,
-) {
+) -> Result<(), BevyError> {
     for (entity, name, mut ui_state, mut session) in &mut sessions {
-        egui::Window::new(format!("Session {name}")).show(egui.ctx_mut(), |ui| {
+        egui::Window::new(format!("Session {name}")).show(egui.ctx_mut()?, |ui| {
             let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
             let mut send_msg = false;
@@ -90,7 +88,7 @@ fn session_ui(
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.trigger_targets(Disconnect::new("pressed disconnect button"), entity);
+                commands.trigger(Disconnect::new(entity, "pressed disconnect button"));
             }
 
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -100,4 +98,6 @@ fn session_ui(
             });
         });
     }
+
+    Ok(())
 }

@@ -12,6 +12,7 @@ use {
     bevy_platform::time::Instant,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
+    bevy_state::state::NextState,
     core::{num::Saturating, time::Duration},
     log::warn,
 };
@@ -38,14 +39,14 @@ impl Plugin for AeronetRepliconClientPlugin {
                 (
                     TransportSystems::Poll,
                     ClientTransportSet::Poll,
-                    ClientSet::ReceivePackets,
+                    ClientSystems::ReceivePackets,
                 )
                     .chain(),
             )
             .configure_sets(
                 PostUpdate,
                 (
-                    ClientSet::SendPackets,
+                    ClientSystems::SendPackets,
                     ClientTransportSet::Flush,
                     TransportSystems::Flush,
                 )
@@ -56,13 +57,13 @@ impl Plugin for AeronetRepliconClientPlugin {
                 (update_state, poll)
                     .chain()
                     .in_set(ClientTransportSet::Poll)
-                    .run_if(resource_exists::<RepliconClient>),
+                    .run_if(resource_exists::<ClientMessages>),
             )
             .add_systems(
                 PostUpdate,
                 flush
                     .in_set(ClientTransportSet::Flush)
-                    .run_if(resource_exists::<RepliconClient>),
+                    .run_if(resource_exists::<ClientMessages>),
             )
             .add_observer(on_client_connected);
     }
@@ -150,7 +151,8 @@ fn on_client_connected(
 }
 
 fn update_state(
-    mut replicon_client: ResMut<RepliconClient>,
+    mut client_stats: ResMut<ClientStats>,
+    mut next_client_state: ResMut<NextState<ClientState>>,
     clients: Query<
         (Option<&Session>, Option<&Transport>, Option<&SessionStats>),
         (With<SessionEndpoint>, With<AeronetRepliconClient>),
@@ -188,7 +190,7 @@ fn update_state(
         sum_bytes_sent += stats.packets_delta.bytes_sent;
     }
 
-    let (status, rtt, packet_loss, received_bps, sent_bps) = if num_connected.0 > 0 {
+    let (next_status, rtt, packet_loss, received_bps, sent_bps) = if num_connected.0 > 0 {
         #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
         let num_connected = num_connected.0 as f64;
         #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
@@ -198,7 +200,7 @@ fn update_state(
         );
 
         (
-            RepliconClientStatus::Connected,
+            ClientState::Connected,
             sum_rtt.as_secs_f64() / num_connected,
             sum_packet_loss / num_connected,
             received_bps,
@@ -206,31 +208,28 @@ fn update_state(
         )
     } else {
         let status = if endpoint_exists {
-            RepliconClientStatus::Connecting
+            ClientState::Connecting
         } else {
-            RepliconClientStatus::Disconnected
+            ClientState::Disconnected
         };
         (status, 0.0, 0.0, 0.0, 0.0)
     };
 
-    if replicon_client.status() != status {
-        replicon_client.set_status(status);
-    }
-    let stats = replicon_client.stats_mut();
-    stats.rtt = rtt;
-    stats.packet_loss = packet_loss;
-    stats.received_bps = received_bps;
-    stats.sent_bps = sent_bps;
+    next_client_state.set(next_status);
+    client_stats.rtt = rtt;
+    client_stats.packet_loss = packet_loss;
+    client_stats.received_bps = received_bps;
+    client_stats.sent_bps = sent_bps;
 }
 
 fn poll(
-    mut replicon_client: ResMut<RepliconClient>,
+    mut client_msgs: ResMut<ClientMessages>,
     mut clients: Query<&mut Transport, With<AeronetRepliconClient>>,
 ) {
     for mut transport in &mut clients {
         for msg in transport.recv.msgs.drain() {
             let channel_id = convert::to_channel_id(msg.lane);
-            replicon_client.insert_received(channel_id, msg.payload);
+            client_msgs.insert_received(channel_id, msg.payload);
         }
 
         for _ in transport.recv.acks.drain() {
@@ -240,11 +239,11 @@ fn poll(
 }
 
 fn flush(
-    mut replicon_client: ResMut<RepliconClient>,
+    mut client_msgs: ResMut<ClientMessages>,
     mut clients: Query<&mut Transport, With<AeronetRepliconClient>>,
 ) {
     let now = Instant::now();
-    for (channel_id, msg) in replicon_client.drain_sent() {
+    for (channel_id, msg) in client_msgs.drain_sent() {
         let Some(lane_index) = convert::to_lane_index(channel_id) else {
             warn!("Channel {channel_id} is too large to convert to a lane index");
             continue;
