@@ -104,7 +104,7 @@ impl TransportSend {
     /// Attempts to enqueue a message on this transport for sending.
     ///
     /// This will not send out a message immediately - that happens during
-    /// [`TransportSet::Flush`].
+    /// [`TransportSystems::Flush`].
     ///
     /// If the message was enqueued successfully, returns a [`MessageKey`]
     /// uniquely[^1] identifying this message. When draining
@@ -112,6 +112,8 @@ impl TransportSend {
     /// message you are pushing right now was the one that was acknowledged.
     ///
     /// [^1]: See [`MessageKey`] for uniqueness guarantees.
+    ///
+    /// [`TransportSystems::Flush`]: crate::TransportSystems::Flush
     ///
     /// # Errors
     ///
@@ -134,8 +136,6 @@ impl TransportSend {
     ///
     /// Since you are responsible for creating the [`Transport`], you are also
     /// responsible for knowing how many lanes you have.
-    ///
-    /// [`TransportSet::Flush`]: crate::TransportSet::Flush
     ///
     /// # Examples
     ///

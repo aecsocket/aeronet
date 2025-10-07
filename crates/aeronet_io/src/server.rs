@@ -110,7 +110,7 @@ pub struct Close {
     pub entity: Entity,
     /// User-provided closing reason.
     ///
-    /// Will be used as the reason in [`Closed::ByUser`], and as the
+    /// Will be used as the reason in [`CloseReason::ByUser`], and as the
     /// disconnection reason when disconnecting sessions connected to this
     /// server.
     pub reason: String,

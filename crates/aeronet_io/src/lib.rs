@@ -103,8 +103,8 @@ pub struct SessionEndpoint;
 /// [`Session::recv`] and [`Session::send`] respectively. These buffers are
 /// [`Vec`]s with unbounded capacity, but are cleared automatically on every
 /// update:
-/// - [`packet::clear_recv_buffers`] before [`IoSet::Poll`]
-/// - [`packet::clear_send_buffers`] before [`IoSet::Flush`]
+/// - [`packet::clear_recv_buffers`] before [`IoSystems::Poll`]
+/// - [`packet::clear_send_buffers`] before [`IoSystems::Flush`]
 ///
 /// If there are any unconsumed packets in a buffer when it is cleared, a
 /// warning is emitted - all packets should be consumed on every update.

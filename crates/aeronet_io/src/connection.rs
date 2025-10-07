@@ -46,7 +46,7 @@ pub struct Disconnect {
     pub entity: Entity,
     /// User-provided disconnection reason.
     ///
-    /// Will be used as the reason in [`Disconnected::ByUser`].
+    /// Will be used as the reason in [`DisconnectReason::ByUser`].
     pub reason: String,
 }
 
@@ -86,13 +86,13 @@ pub enum DisconnectReason {
     /// Session was disconnected by the user on our side, with a provided
     /// reason.
     ///
-    /// On the peer, this will be interpreted as a [`Disconnected::ByPeer`]
+    /// On the peer, this will be interpreted as a [`DisconnectReason::ByPeer`]
     /// with the same reason.
     ByUser(String),
     /// Session was disconnected by the peer on the other side, with a provided
     /// reason.
     ///
-    /// On the peer, this will be interpreted as a [`Disconnected::ByUser`]
+    /// On the peer, this will be interpreted as a [`DisconnectReason::ByUser`]
     /// with the same reason.
     ByPeer(String),
     /// Session encountered a fatal connection error, and communication between
@@ -112,26 +112,26 @@ pub enum DisconnectReason {
 }
 
 impl DisconnectReason {
-    /// Creates a [`Disconnected::ByUser`] from the given reason.
+    /// Creates a [`DisconnectReason::ByUser`] from the given reason.
     #[must_use]
     pub fn by_user(reason: impl Into<String>) -> Self {
         Self::ByUser(reason.into())
     }
 
-    /// Creates a [`Disconnected::ByPeer`] from the given reason.
+    /// Creates a [`DisconnectReason::ByPeer`] from the given reason.
     #[must_use]
     pub fn by_peer(reason: impl Into<String>) -> Self {
         Self::ByPeer(reason.into())
     }
 
-    /// Creates a [`Disconnected::ByError`] from the given reason.
+    /// Creates a [`DisconnectReason::ByError`] from the given reason.
     #[must_use]
     pub fn by_error(reason: impl Into<anyhow::Error>) -> Self {
         Self::ByError(reason.into())
     }
 
-    /// If this value is a [`Disconnected::ByError`], creates a new
-    /// [`Disconnected::ByError`] using the mapping function.
+    /// If this value is a [`DisconnectReason::ByError`], creates a new
+    /// [`DisconnectReason::ByError`] using the mapping function.
     #[must_use]
     pub fn map_err(self, f: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
         match self {

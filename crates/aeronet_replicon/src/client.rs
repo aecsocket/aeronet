@@ -38,7 +38,7 @@ impl Plugin for AeronetRepliconClientPlugin {
                 PreUpdate,
                 (
                     TransportSystems::Poll,
-                    ClientTransportSet::Poll,
+                    ClientTransportSystems::Poll,
                     ClientSystems::ReceivePackets,
                 )
                     .chain(),
@@ -47,7 +47,7 @@ impl Plugin for AeronetRepliconClientPlugin {
                 PostUpdate,
                 (
                     ClientSystems::SendPackets,
-                    ClientTransportSet::Flush,
+                    ClientTransportSystems::Flush,
                     TransportSystems::Flush,
                 )
                     .chain(),
@@ -56,13 +56,13 @@ impl Plugin for AeronetRepliconClientPlugin {
                 PreUpdate,
                 (update_state, poll)
                     .chain()
-                    .in_set(ClientTransportSet::Poll)
+                    .in_set(ClientTransportSystems::Poll)
                     .run_if(resource_exists::<ClientMessages>),
             )
             .add_systems(
                 PostUpdate,
                 flush
-                    .in_set(ClientTransportSet::Flush)
+                    .in_set(ClientTransportSystems::Flush)
                     .run_if(resource_exists::<ClientMessages>),
             )
             .add_observer(on_client_connected);
@@ -72,44 +72,44 @@ impl Plugin for AeronetRepliconClientPlugin {
 /// Sets for systems which provide communication between [`bevy_replicon`] and
 /// [`Session`]s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum ClientTransportSet {
+pub enum ClientTransportSystems {
     /// Passing incoming messages into [`bevy_replicon`].
     ///
     /// # Ordering
     ///
-    /// - [`TransportSet::Poll`]
-    /// - **[`ClientTransportSet::Poll`]**
-    /// - [`ClientSet::ReceivePackets`]
+    /// - [`TransportSystems::Poll`]
+    /// - **[`ClientTransportSystems::Poll`]**
+    /// - [`ClientSystems::ReceivePackets`]
     Poll,
     /// Passing outgoing [`bevy_replicon`] packets to the transport layer.
     ///
     /// # Ordering
     ///
-    /// - [`ClientSet::SendPackets`]
-    /// - **[`ClientTransportSet::Flush`]**
-    /// - [`TransportSet::Flush`]
+    /// - [`ClientSystems::SendPackets`]
+    /// - **[`ClientTransportSystems::Flush`]**
+    /// - [`TransportSystems::Flush`]
     Flush,
 }
 
 /// Marker component for a [`Session`] which is used as the messaging backend
-/// for a [`RepliconClient`].
+/// for a Replicon client.
 ///
 /// Sessions with this component automatically get [`Transport`].
 ///
 /// Any session entity with this component will be used for:
 /// - receiving messages
-///   - on the `replicon` side, you can't differentiate which session received
+///   - on the Replicon side, you can't differentiate which session received
 ///     which message
 /// - sending messages
-///   - all outgoing `replicon` messages are cloned and sent to all sessions
+///   - all outgoing Replicon messages are cloned and sent to all sessions
 /// - determining connected status
 ///   - if at least 1 session has both [`SessionEndpoint`] and [`Session`],
-///     [`RepliconClient`] is [`RepliconClientStatus::Connected`]
-///   - if at least 1 session has [`SessionEndpoint`], [`RepliconClient`] is
-///     [`RepliconClientStatus::Connecting`]
-///   - else, [`RepliconClientStatus::Disconnected`]
+///     [`ClientState`] is [`ClientState::Connected`]
+///   - if at least 1 session has [`SessionEndpoint`], [`ClientState`] is
+///     [`ClientState::Connecting`]
+///   - else, [`ClientState::Disconnected`]
 ///
-/// Since [`RepliconClient`] is a resource, there can only be up to one at a
+/// Since [`ClientState`] is a state, there can only be up to one client at a
 /// time in the app, and you can only connect to one "logical" server at a time
 /// (that is, the server which holds the actual app state). Therefore, your app
 /// should only have one [`AeronetRepliconClient`].

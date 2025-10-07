@@ -379,7 +379,7 @@ impl FlushedPacket {
     }
 }
 
-/// Error in [`Disconnected::ByError`] triggered on a [`Session`] when a
+/// Error in [`DisconnectReason::ByError`] triggered on a [`Session`] when a
 /// [`Transport`] exceeds its memory usage limit.
 #[derive(Debug, Clone, Display, Error)]
 #[display("memory limit exceeded - {used} / {max} bytes")]

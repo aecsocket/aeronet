@@ -39,7 +39,7 @@ impl Plugin for AeronetRepliconServerPlugin {
             PreUpdate,
             (
                 TransportSystems::Poll,
-                ServerTransportSet::Poll,
+                ServerTransportSystems::Poll,
                 ServerSystems::ReceivePackets,
             )
                 .chain(),
@@ -48,7 +48,7 @@ impl Plugin for AeronetRepliconServerPlugin {
             PostUpdate,
             (
                 ServerSystems::SendPackets,
-                ServerTransportSet::Flush,
+                ServerTransportSystems::Flush,
                 TransportSystems::Flush,
             )
                 .chain(),
@@ -57,13 +57,13 @@ impl Plugin for AeronetRepliconServerPlugin {
             PreUpdate,
             (poll, update_state, update_client_data)
                 .chain()
-                .in_set(ServerTransportSet::Poll)
+                .in_set(ServerTransportSystems::Poll)
                 .run_if(resource_exists::<ServerMessages>),
         )
         .add_systems(
             PostUpdate,
             (flush, handle_disconnect_requests)
-                .in_set(ServerTransportSet::Flush)
+                .in_set(ServerTransportSystems::Flush)
                 .run_if(resource_exists::<ServerMessages>),
         )
         .add_observer(on_connected);
@@ -73,27 +73,27 @@ impl Plugin for AeronetRepliconServerPlugin {
 /// Sets for systems which provide communication between [`bevy_replicon`] and
 /// [`Server`]s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum ServerTransportSet {
+pub enum ServerTransportSystems {
     /// Passing incoming messages into [`bevy_replicon`].
     ///
     /// # Ordering
     ///
-    /// - [`TransportSet::Poll`]
-    /// - **[`ServerTransportSet::Poll`]**
-    /// - [`ServerSet::ReceivePackets`]
+    /// - [`TransportSystems::Poll`]
+    /// - **[`ServerTransportSystems::Poll`]**
+    /// - [`ServerSystems::ReceivePackets`]
     Poll,
     /// Passing outgoing [`bevy_replicon`] packets to the transport layer.
     ///
     /// # Ordering
     ///
-    /// - [`ServerSet::SendPackets`]
-    /// - **[`ServerTransportSet::Flush`]**
-    /// - [`TransportSet::Flush`]
+    /// - [`ServerSystems::SendPackets`]
+    /// - **[`ServerTransportSystems::Flush`]**
+    /// - [`TransportSystems::Flush`]
     Flush,
 }
 
 /// Marker component for a [`Server`] which is used as the messaging backend
-/// for a [`RepliconServer`].
+/// for a Replicon server.
 ///
 /// Any server entity with this component will be used for:
 /// - receiving and sending messages
@@ -101,18 +101,18 @@ pub enum ServerTransportSet {
 ///     for the client which sent/receives the message (see [`convert`])
 /// - determining server [running] status
 ///   - if at least 1 entity has both [`ServerEndpoint`] and [`Server`],
-///     [`RepliconServer`] is [running]
+///     [`ServerState`] is [running]
 ///
-/// Although you can only have one [`RepliconServer`] at a time, it actually
+/// Although you can only have one Replicon server at a time, it actually
 /// makes sense to have multiple [`AeronetRepliconServer`] entities (unlike
 /// with clients). This is so you can support clients from multiple different
 /// types of connections - for example, if you open one server over a WebSocket
 /// IO layer, and another server over a Steam networking socket IO layer,
 /// clients can connect to either server, and they will both be treated as
-/// connected to the [`RepliconServer`].
+/// connected to the Replicon server.
 ///
 /// [`convert`]: crate::convert
-/// [running]: RepliconServer::is_running
+/// [running]: ServerState::Running
 #[derive(Debug, Clone, Copy, Default, Component, Reflect)]
 #[reflect(Component)]
 pub struct AeronetRepliconServer;

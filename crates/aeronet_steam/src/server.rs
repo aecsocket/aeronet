@@ -194,9 +194,9 @@ pub enum SessionResponse {
     Accepted,
     /// Reject the client with the given reason.
     Rejected {
-        /// Reason to pass to [`Disconnected::ByUser`].
+        /// Reason to pass to [`DisconnectReason::ByUser`].
         ///
-        /// [`Disconnected::ByUser`]: aeronet_io::connection::Disconnected::ByUser
+        /// [`DisconnectReason::ByUser`]: aeronet_io::connection::DisconnectReason::ByUser
         reason: String,
     },
 }
