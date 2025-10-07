@@ -126,7 +126,7 @@ impl Plugin for MoveBoxPlugin {
             .replicate::<Player>()
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
-            .add_client_event::<PlayerInput>(Channel::Unreliable)
+            .add_client_message::<PlayerInput>(Channel::Unreliable)
             .add_systems(
                 FixedUpdate,
                 (recv_input, apply_movement)

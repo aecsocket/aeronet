@@ -86,7 +86,7 @@ fn on_connecting(
     mut ui_state: ResMut<GlobalUi>,
     mut commands: Commands,
 ) {
-    let entity = trigger.target();
+    let entity = trigger.event_target();
     let name = names
         .get(entity)
         .expect("our session entity should have a name");
