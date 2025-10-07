@@ -211,8 +211,8 @@ fn poll_messages(
             let user_data = packet.connection_user_data();
             let Some(entity) = user_data_to_entity(user_data) else {
                 warn!(
-                    "Received message on connection with user data {user_data}, which does \
-                         not map to a valid entity"
+                    "Received message on connection with user data {user_data}, which does not \
+                     map to a valid entity"
                 );
                 continue;
             };

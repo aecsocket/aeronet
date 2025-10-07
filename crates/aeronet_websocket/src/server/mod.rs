@@ -3,7 +3,6 @@
 mod backend;
 mod config;
 
-use aeronet_io::{connection::DisconnectReason, server::CloseReason};
 pub use config::*;
 use {
     crate::{
@@ -13,8 +12,8 @@ use {
     },
     aeronet_io::{
         IoSystems, SessionEndpoint,
-        connection::{Disconnected, LocalAddr, PeerAddr},
-        server::{Closed, Server, ServerEndpoint},
+        connection::{DisconnectReason, Disconnected, LocalAddr, PeerAddr},
+        server::{CloseReason, Closed, Server, ServerEndpoint},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,

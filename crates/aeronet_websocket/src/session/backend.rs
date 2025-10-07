@@ -37,7 +37,7 @@ pub mod wasm {
 
         let (mut tx_dc_reason, rx_dc_reason) = mpsc::channel::<DisconnectReason>(1);
 
-        let (_send_dropped, recv_dropped) = oneshot::channel::<()>();
+        let (_tx_dropped, rx_dropped) = oneshot::channel::<()>();
         let on_open = Closure::once({
             let socket = socket.clone();
             let mut tx_dc_reason = tx_dc_reason.clone();
@@ -84,7 +84,7 @@ pub mod wasm {
 
         let on_error = Closure::<dyn FnMut(_)>::new(move |event: Event| {
             let err = SessionError::Connection(JsError(event.to_string().into()));
-            _ = send_dc_reason.try_send(Disconnected::by_error(err));
+            _ = tx_dc_reason.try_send(DisconnectReason::by_error(err));
         });
 
         socket.set_onopen(Some(on_open.as_ref().unchecked_ref()));
@@ -120,8 +120,8 @@ pub mod wasm {
     ) -> Result<Never, SessionError> {
         loop {
             let packet = futures::select! {
-                x = recv_packet_f2b.next() => x,
-                _ = recv_dropped => None,
+                x = rx_packet_f2b.next() => x,
+                _ = rx_dropped => None,
             }
             .ok_or(SessionError::FrontendClosed)?;
 

@@ -6,6 +6,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
   fmt:
@@ -102,10 +103,19 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    env:
-      RUST_BACKTRACE: 1
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
-      - run: cargo test --workspace --all-features
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall --no-confirm cargo-nextest
+      - run: cargo nextest run --workspace --all-features
+
+  # `cargo nextest` currently doesn't support doctests: <https://nexte.st/#quick-start>
+  test-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/install-bevy-deps
+      - run: cargo test --doc --workspace --all-features

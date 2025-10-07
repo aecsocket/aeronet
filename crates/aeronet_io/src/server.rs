@@ -100,12 +100,6 @@ impl Server {
 /// # fn run(mut commands: Commands, server: Entity, server1: Entity, server2: Entity) {
 /// // close a single server
 /// commands.trigger(Close::new(server, "show's over, go home"));
-///
-/// // disconnect multiple sessions at once
-/// commands.trigger_targets(
-///     Close::new("show's over everyone, go home"),
-///     [server1, server2],
-/// );
 /// # }
 /// ```
 ///

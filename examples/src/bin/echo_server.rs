@@ -12,8 +12,6 @@
 //!
 //! This example is designed to work with the `echo_client` example.
 
-use aeronet::io::connection::DisconnectReason;
-
 // This is unfortunately required because of <https://github.com/rust-lang/cargo/issues/9208>
 // You won't need this in your own code
 cfg_if::cfg_if! {
@@ -28,7 +26,7 @@ use {
         io::{
             Session,
             bytes::Bytes,
-            connection::{Disconnected, LocalAddr},
+            connection::{Disconnected, DisconnectReason, LocalAddr},
             server::Server,
         },
         transport::{AeronetTransportPlugin, Transport, lane::LaneKind},

@@ -36,14 +36,8 @@ impl Plugin for ConnectionPlugin {
 /// use {aeronet_io::connection::Disconnect, bevy_ecs::prelude::*};
 ///
 /// # fn run(mut commands: Commands, session: Entity, session1: Entity, session2: Entity) {
-/// // disconnect a single session
+/// // disconnect a session
 /// commands.trigger(Disconnect::new(session, "show's over, go home"));
-///
-/// // disconnect multiple sessions at once
-/// commands.trigger_targets(
-///     Disconnect::new("show's over everyone, go home"),
-///     [session1, session2],
-/// );
 /// # }
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, EntityEvent)]
