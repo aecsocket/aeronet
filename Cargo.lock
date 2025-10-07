@@ -92,7 +92,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "aeronet"
-version = "0.17.0-rc.1"
+version = "0.17.0"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
@@ -102,7 +102,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_channel"
-version = "0.17.0-rc.1"
+version = "0.17.0"
 dependencies = [
  "aeronet_io",
  "bevy",
@@ -120,7 +120,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_io"
-version = "0.17.0-rc.1"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "bevy_app",
@@ -134,7 +134,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_replicon"
-version = "0.17.0-rc.1"
+version = "0.17.0"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
@@ -150,7 +150,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_steam"
-version = "0.17.0-rc.1"
+version = "0.17.0"
 dependencies = [
  "aeronet_io",
  "anyhow",
@@ -170,7 +170,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_transport"
-version = "0.17.0-rc.1"
+version = "0.17.0"
 dependencies = [
  "aeronet_io",
  "arbitrary",
@@ -198,7 +198,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_websocket"
-version = "0.17.0-rc.1"
+version = "0.17.0"
 dependencies = [
  "aeronet_io",
  "bevy",
@@ -226,7 +226,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_webtransport"
-version = "0.17.0-rc.1"
+version = "0.17.0"
 dependencies = [
  "aeronet_io",
  "anyhow",
