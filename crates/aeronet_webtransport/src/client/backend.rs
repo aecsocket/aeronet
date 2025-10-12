@@ -1,7 +1,7 @@
 use {
     super::{ClientConfig, ClientError, ConnectTarget, ToConnected},
     crate::session::{SessionBackend, SessionError, SessionMeta},
-    aeronet_io::{connection::Disconnected, packet::RecvPacket},
+    aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
     bytes::Bytes,
     futures::{
         channel::{mpsc, oneshot},
@@ -14,8 +14,8 @@ use {
 pub async fn start(
     config: ClientConfig,
     target: ConnectTarget,
-    send_next: oneshot::Sender<ToConnected>,
-) -> Result<Never, Disconnected> {
+    tx_next: oneshot::Sender<ToConnected>,
+) -> Result<Never, DisconnectReason> {
     let endpoint = {
         #[cfg(target_family = "wasm")]
         {
@@ -59,10 +59,10 @@ pub async fn start(
     };
     debug!("Connected");
 
-    let (send_meta, recv_meta) = mpsc::channel::<SessionMeta>(1);
-    let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
-    let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
-    let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
+    let (tx_meta, rx_meta) = mpsc::channel::<SessionMeta>(1);
+    let (tx_packet_b2f, rx_packet_b2f) = mpsc::unbounded::<RecvPacket>();
+    let (tx_packet_f2b, rx_packet_f2b) = mpsc::unbounded::<Bytes>();
+    let (tx_user_dc, rx_user_dc) = oneshot::channel::<String>();
     let next = ToConnected {
         #[cfg(not(target_family = "wasm"))]
         local_addr: endpoint.local_addr().map_err(SessionError::GetLocalAddr)?,
@@ -73,19 +73,19 @@ pub async fn start(
         initial_mtu: conn
             .max_datagram_size()
             .ok_or(SessionError::DatagramsNotSupported)?,
-        recv_meta,
-        recv_packet_b2f,
-        send_packet_f2b,
-        send_user_dc,
+        rx_meta,
+        rx_packet_b2f,
+        tx_packet_f2b,
+        tx_user_dc,
     };
     let backend = SessionBackend {
         conn,
-        send_meta,
-        send_packet_b2f,
-        recv_packet_f2b,
-        recv_user_dc,
+        tx_meta,
+        tx_packet_b2f,
+        rx_packet_f2b,
+        rx_user_dc,
     };
-    send_next
+    tx_next
         .send(next)
         .map_err(|_| SessionError::FrontendClosed)?;
 

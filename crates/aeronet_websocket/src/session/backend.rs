@@ -5,7 +5,7 @@ pub mod wasm {
             JsError,
             session::{SessionError, SessionFrontend},
         },
-        aeronet_io::{connection::Disconnected, packet::RecvPacket},
+        aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
         bevy_platform::time::Instant,
         bytes::Bytes,
         futures::{
@@ -21,8 +21,8 @@ pub mod wasm {
     #[derive(Debug)]
     pub struct SessionBackend {
         socket: WebSocket,
-        recv_user_dc: oneshot::Receiver<String>,
-        recv_dc_reason: mpsc::Receiver<Disconnected>,
+        rx_user_dc: oneshot::Receiver<String>,
+        rx_dc_reason: mpsc::Receiver<DisconnectReason>,
     }
 
     // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
@@ -31,20 +31,20 @@ pub mod wasm {
     pub fn split(socket: WebSocket) -> (SessionFrontend, SessionBackend) {
         socket.set_binary_type(BinaryType::Arraybuffer);
 
-        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
-        let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
-        let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
+        let (tx_packet_b2f, rx_packet_b2f) = mpsc::unbounded::<RecvPacket>();
+        let (tx_packet_f2b, rx_packet_f2b) = mpsc::unbounded::<Bytes>();
+        let (tx_user_dc, rx_user_dc) = oneshot::channel::<String>();
 
-        let (mut send_dc_reason, recv_dc_reason) = mpsc::channel::<Disconnected>(1);
+        let (mut tx_dc_reason, rx_dc_reason) = mpsc::channel::<DisconnectReason>(1);
 
-        let (_send_dropped, recv_dropped) = oneshot::channel::<()>();
+        let (_tx_dropped, rx_dropped) = oneshot::channel::<()>();
         let on_open = Closure::once({
             let socket = socket.clone();
-            let mut send_dc_reason = send_dc_reason.clone();
+            let mut tx_dc_reason = tx_dc_reason.clone();
             || {
                 wasm_bindgen_futures::spawn_local(async move {
-                    let Err(err) = send_loop(socket, recv_packet_f2b, recv_dropped).await;
-                    _ = send_dc_reason.send(err.into());
+                    let Err(err) = send_loop(socket, rx_packet_f2b, rx_dropped).await;
+                    _ = tx_dc_reason.send(err.into());
                 });
             }
         });
@@ -57,9 +57,9 @@ pub mod wasm {
             let packet = Bytes::from(packet);
             let now = Instant::now();
 
-            let mut send_packet_b2f = send_packet_b2f.clone();
+            let mut tx_packet_b2f = tx_packet_b2f.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                _ = send_packet_b2f
+                _ = tx_packet_b2f
                     .send(RecvPacket {
                         recv_at: now,
                         payload: packet,
@@ -69,22 +69,22 @@ pub mod wasm {
         });
 
         let on_close = {
-            let mut send_dc_reason = send_dc_reason.clone();
+            let mut tx_dc_reason = tx_dc_reason.clone();
             Closure::<dyn FnMut(_)>::new(move |event: CloseEvent| {
                 let dc_reason = if event.code() == NORMAL_CLOSE_CODE {
-                    Disconnected::by_peer(event.reason())
+                    DisconnectReason::by_peer(event.reason())
                 } else {
                     // TODO friendly error messages
                     // https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
-                    Disconnected::by_error(SessionError::Closed(event.code()))
+                    DisconnectReason::by_error(SessionError::Closed(event.code()))
                 };
-                _ = send_dc_reason.try_send(dc_reason);
+                _ = tx_dc_reason.try_send(dc_reason);
             })
         };
 
         let on_error = Closure::<dyn FnMut(_)>::new(move |event: Event| {
             let err = SessionError::Connection(JsError(event.to_string().into()));
-            _ = send_dc_reason.try_send(Disconnected::by_error(err));
+            _ = tx_dc_reason.try_send(DisconnectReason::by_error(err));
         });
 
         socket.set_onopen(Some(on_open.as_ref().unchecked_ref()));
@@ -101,27 +101,27 @@ pub mod wasm {
 
         (
             SessionFrontend {
-                recv_packet_b2f,
-                send_packet_f2b,
-                send_user_dc,
+                rx_packet_b2f,
+                tx_packet_f2b,
+                tx_user_dc,
             },
             SessionBackend {
                 socket,
-                recv_user_dc,
-                recv_dc_reason,
+                rx_user_dc,
+                rx_dc_reason,
             },
         )
     }
 
     async fn send_loop(
         socket: WebSocket,
-        mut recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
-        mut recv_dropped: oneshot::Receiver<()>,
+        mut rx_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
+        mut rx_dropped: oneshot::Receiver<()>,
     ) -> Result<Never, SessionError> {
         loop {
             let packet = futures::select! {
-                x = recv_packet_f2b.next() => x,
-                _ = recv_dropped => None,
+                x = rx_packet_f2b.next() => x,
+                _ = rx_dropped => None,
             }
             .ok_or(SessionError::FrontendClosed)?;
 
@@ -133,22 +133,22 @@ pub mod wasm {
     }
 
     impl SessionBackend {
-        pub async fn start(self) -> Result<Never, Disconnected> {
+        pub async fn start(self) -> Result<Never, DisconnectReason> {
             let Self {
                 socket,
-                mut recv_user_dc,
-                mut recv_dc_reason,
+                mut rx_user_dc,
+                mut rx_dc_reason,
             } = self;
 
             futures::select! {
-                dc_reason = recv_dc_reason.next() => {
+                dc_reason = rx_dc_reason.next() => {
                     let dc_reason = dc_reason.ok_or(SessionError::BackendClosed)?;
                     Err(dc_reason)
                 }
-                reason = recv_user_dc => {
+                reason = rx_user_dc => {
                     let reason = reason.map_err(|_| SessionError::FrontendClosed)?;
                     _ = socket.close_with_code_and_reason(NORMAL_CLOSE_CODE, &reason);
-                    Err(Disconnected::by_user(reason))
+                    Err(DisconnectReason::by_user(reason))
                 }
             }
         }
@@ -159,7 +159,7 @@ pub mod wasm {
 pub mod native {
     use {
         crate::session::{SessionError, SessionFrontend},
-        aeronet_io::{connection::Disconnected, packet::RecvPacket},
+        aeronet_io::{connection::DisconnectReason, packet::RecvPacket},
         bevy_platform::time::Instant,
         bytes::Bytes,
         futures::{
@@ -180,40 +180,40 @@ pub mod native {
     #[derive(Debug)]
     pub struct SessionBackend<S> {
         stream: WebSocketStream<S>,
-        send_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
-        recv_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
-        recv_user_dc: oneshot::Receiver<String>,
+        tx_packet_b2f: mpsc::UnboundedSender<RecvPacket>,
+        rx_packet_f2b: mpsc::UnboundedReceiver<Bytes>,
+        rx_user_dc: oneshot::Receiver<String>,
     }
 
     pub fn split<S: AsyncRead + AsyncWrite + Unpin>(
         stream: WebSocketStream<S>,
     ) -> (SessionFrontend, SessionBackend<S>) {
-        let (send_packet_b2f, recv_packet_b2f) = mpsc::unbounded::<RecvPacket>();
-        let (send_packet_f2b, recv_packet_f2b) = mpsc::unbounded::<Bytes>();
-        let (send_user_dc, recv_user_dc) = oneshot::channel::<String>();
+        let (tx_packet_b2f, rx_packet_b2f) = mpsc::unbounded::<RecvPacket>();
+        let (tx_packet_f2b, rx_packet_f2b) = mpsc::unbounded::<Bytes>();
+        let (tx_user_dc, rx_user_dc) = oneshot::channel::<String>();
 
         (
             SessionFrontend {
-                recv_packet_b2f,
-                send_packet_f2b,
-                send_user_dc,
+                rx_packet_b2f,
+                tx_packet_f2b,
+                tx_user_dc,
             },
             SessionBackend {
                 stream,
-                send_packet_b2f,
-                recv_packet_f2b,
-                recv_user_dc,
+                tx_packet_b2f,
+                rx_packet_f2b,
+                rx_user_dc,
             },
         )
     }
 
     impl<S: Send + AsyncRead + AsyncWrite + Unpin> SessionBackend<S> {
-        pub async fn start(self) -> Result<Never, Disconnected> {
+        pub async fn start(self) -> Result<Never, DisconnectReason> {
             let Self {
                 mut stream,
-                send_packet_b2f,
-                mut recv_packet_f2b,
-                mut recv_user_dc,
+                tx_packet_b2f,
+                mut rx_packet_f2b,
+                mut rx_user_dc,
             } = self;
 
             loop {
@@ -222,37 +222,37 @@ pub mod native {
                         let msg = msg
                             .ok_or(SessionError::RecvStreamClosed)?
                             .map_err(SessionError::Connection)?;
-                        Self::recv(&send_packet_b2f, msg)?;
+                        Self::recv(&tx_packet_b2f, msg)?;
                     }
-                    packet = recv_packet_f2b.next() => {
+                    packet = rx_packet_f2b.next() => {
                         let packet = packet.ok_or(SessionError::FrontendClosed)?;
                         Self::send(&mut stream, packet).await?;
                     }
-                    reason = recv_user_dc => {
+                    reason = rx_user_dc => {
                         let reason = reason.map_err(|_| SessionError::FrontendClosed)?;
                         Self::close(&mut stream, reason.clone()).await?;
-                        return Err(Disconnected::by_user(reason));
+                        return Err(DisconnectReason::by_user(reason));
                     }
                 }
             }
         }
 
         fn recv(
-            send_packet_b2f: &mpsc::UnboundedSender<RecvPacket>,
+            tx_packet_b2f: &mpsc::UnboundedSender<RecvPacket>,
             msg: Message,
-        ) -> Result<(), Disconnected> {
+        ) -> Result<(), DisconnectReason> {
             let packet = match msg {
                 Message::Close(None) => {
                     return Err(SessionError::DisconnectedWithoutReason.into());
                 }
                 Message::Close(Some(frame)) => {
-                    return Err(Disconnected::by_peer(frame.reason.to_string()));
+                    return Err(DisconnectReason::by_peer(frame.reason.to_string()));
                 }
                 msg => msg.into_data(),
             };
             let now = Instant::now();
 
-            send_packet_b2f
+            tx_packet_b2f
                 .unbounded_send(RecvPacket {
                     recv_at: now,
                     payload: packet,
@@ -261,7 +261,10 @@ pub mod native {
             Ok(())
         }
 
-        async fn send(stream: &mut WebSocketStream<S>, packet: Bytes) -> Result<(), Disconnected> {
+        async fn send(
+            stream: &mut WebSocketStream<S>,
+            packet: Bytes,
+        ) -> Result<(), DisconnectReason> {
             let msg = Message::binary(packet);
             stream.send(msg).await.map_err(SessionError::Connection)?;
             Ok(())
@@ -270,7 +273,7 @@ pub mod native {
         async fn close(
             stream: &mut WebSocketStream<S>,
             reason: String,
-        ) -> Result<(), Disconnected> {
+        ) -> Result<(), DisconnectReason> {
             let close_frame = CloseFrame {
                 code: CloseCode::Normal,
                 reason: Utf8Bytes::from(reason),

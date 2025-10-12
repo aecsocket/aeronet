@@ -5,7 +5,7 @@ use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
     aeronet_io::{Session, connection::Disconnect},
     bevy::{log::LogPlugin, prelude::*},
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui},
     core::mem,
 };
 
@@ -18,15 +18,14 @@ fn main() -> AppExit {
                 level: tracing::Level::DEBUG,
                 ..default()
             }),
-            EguiPlugin {
-                enable_multipass_for_primary_context: false,
-            },
+            EguiPlugin::default(),
             // Add the IO plugin for the IO layer implementation you want to use.
             // This will automatically add the `AeronetIoPlugin`.
             ChannelIoPlugin,
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, (add_msgs_to_ui, session_ui))
+        .add_systems(Update, add_msgs_to_ui)
+        .add_systems(EguiPrimaryContextPass, session_ui)
         .run()
 }
 
@@ -65,9 +64,9 @@ fn session_ui(
     mut egui: EguiContexts,
     mut commands: Commands,
     mut sessions: Query<(Entity, &Name, &mut SessionUi, &mut Session)>,
-) {
+) -> Result<(), BevyError> {
     for (entity, name, mut ui_state, mut session) in &mut sessions {
-        egui::Window::new(format!("Session {name}")).show(egui.ctx_mut(), |ui| {
+        egui::Window::new(format!("Session {name}")).show(egui.ctx_mut()?, |ui| {
             let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
             let mut send_msg = false;
@@ -90,7 +89,7 @@ fn session_ui(
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.trigger_targets(Disconnect::new("pressed disconnect button"), entity);
+                commands.trigger(Disconnect::new(entity, "pressed disconnect button"));
             }
 
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -100,4 +99,6 @@ fn session_ui(
             });
         });
     }
+
+    Ok(())
 }

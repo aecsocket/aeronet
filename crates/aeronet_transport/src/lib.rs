@@ -23,7 +23,11 @@ pub mod visualizer;
 
 pub use aeronet_io as io;
 use {
-    aeronet_io::{IoSet, Session, connection::Disconnected, packet::MtuTooSmall},
+    aeronet_io::{
+        IoSystems, Session,
+        connection::{DisconnectReason, Disconnected},
+        packet::MtuTooSmall,
+    },
     alloc::{boxed::Box, vec::Vec},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
@@ -50,12 +54,15 @@ pub struct AeronetTransportPlugin;
 
 impl Plugin for AeronetTransportPlugin {
     fn build(&self, app: &mut App) {
-        app.configure_sets(PreUpdate, (IoSet::Poll, TransportSet::Poll).chain())
-            .configure_sets(PostUpdate, (TransportSet::Flush, IoSet::Flush).chain())
+        app.configure_sets(PreUpdate, (IoSystems::Poll, TransportSystems::Poll).chain())
+            .configure_sets(
+                PostUpdate,
+                (TransportSystems::Flush, IoSystems::Flush).chain(),
+            )
             .add_systems(
                 PreUpdate,
                 (
-                    recv::clear_buffers.before(TransportSet::Poll),
+                    recv::clear_buffers.before(TransportSystems::Poll),
                     (
                         recv::poll,
                         send::disconnect_errored,
@@ -64,10 +71,10 @@ impl Plugin for AeronetTransportPlugin {
                         check_memory_limit,
                     )
                         .chain()
-                        .in_set(TransportSet::Poll),
+                        .in_set(TransportSystems::Poll),
                 ),
             )
-            .add_systems(PostUpdate, send::flush.in_set(TransportSet::Flush));
+            .add_systems(PostUpdate, send::flush.in_set(TransportSystems::Flush));
     }
 }
 
@@ -143,7 +150,7 @@ pub struct TransportConfig {
     /// This can be used to limit the outgoing bandwidth of this transport.
     ///
     /// By default, this is [`usize::MAX`].
-    pub send_bytes_per_sec: usize,
+    pub tx_bytes_per_sec: usize,
     /// Multiplier for how long it takes for an unacknowledged packet to be
     /// marked as lost on our side.
     ///
@@ -170,7 +177,7 @@ impl Default for TransportConfig {
     fn default() -> Self {
         Self {
             max_memory_usage: 4 * 1024 * 1024,
-            send_bytes_per_sec: usize::MAX,
+            tx_bytes_per_sec: usize::MAX,
             packet_lost_threshold_factor: 1.5,
         }
     }
@@ -286,23 +293,23 @@ impl Transport {
     }
 }
 
-/// Set for scheduling transport layer systems.
+/// System set for scheduling transport layer systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum TransportSet {
+pub enum TransportSystems {
     /// Draining packets from the IO layer and reading out messages; updating
     /// the internal transport state.
     ///
     /// # Ordering
     ///
-    /// - [`IoSet::Poll`]
-    /// - **[`TransportSet::Poll`]**
+    /// - [`IoSystems::Poll`]
+    /// - **[`TransportSystems::Poll`]**
     Poll,
     /// Draining messages and turning them into packets for the IO layer.
     ///
     /// # Ordering
     ///
-    /// - **[`TransportSet::Flush`]**
-    /// - [`IoSet::Flush`]
+    /// - **[`TransportSystems::Flush`]**
+    /// - [`IoSystems::Flush`]
     Flush,
 }
 
@@ -372,7 +379,7 @@ impl FlushedPacket {
     }
 }
 
-/// Error in [`Disconnected::ByError`] triggered on a [`Session`] when a
+/// Error in [`DisconnectReason::ByError`] triggered on a [`Session`] when a
 /// [`Transport`] exceeds its memory usage limit.
 #[derive(Debug, Clone, Display, Error)]
 #[display("memory limit exceeded - {used} / {max} bytes")]
@@ -392,13 +399,13 @@ fn check_memory_limit(
         let mem_max = config.max_memory_usage;
         if mem_used > mem_max {
             warn!("{entity} exceeded memory limit, disconnecting");
-            commands.trigger_targets(
-                Disconnected::by_error(MemoryLimitExceeded {
+            commands.trigger(Disconnected {
+                entity,
+                reason: DisconnectReason::by_error(MemoryLimitExceeded {
                     used: mem_used,
                     max: mem_max,
                 }),
-                entity,
-            );
+            });
         }
     }
 }

@@ -1,31 +1,28 @@
 [package]
-name    = "examples"
+name = "examples"
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
 publish = false
 
-authors.workspace      = true
-categories.workspace   = true
-edition.workspace      = true
-keywords.workspace     = true
-license.workspace      = true
-repository.workspace   = true
-rust-version.workspace = true
+[dependencies]
+aeronet = { workspace = true, features = ["visualizer"] }
+aeronet_replicon = { workspace = true, features = ["client", "server"] }
+aeronet_websocket = { workspace = true, features = ["client", "server"] }
+aeronet_webtransport = { workspace = true, features = [
+  "client",
+  "dangerous-configuration",
+  "server",
+] }
+bevy = { workspace = true }
+bevy_egui = { workspace = true }
+bevy_replicon = { workspace = true }
+cfg-if = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
 
 [lints]
 workspace = true
-
-[dependencies]
-aeronet           = { workspace = true, features = ["visualizer"] }
-aeronet_replicon  = { workspace = true, features = ["client", "server"] }
-aeronet_websocket = { workspace = true, features = ["client", "server"] }
-bevy              = { workspace = true }
-bevy_egui         = { workspace = true }
-bevy_replicon     = { workspace = true }
-cfg-if            = { workspace = true }
-clap              = { workspace = true, features = ["derive"] }
-serde             = { workspace = true, features = ["derive"] }
-
-aeronet_webtransport = { workspace = true, features = [
-  "client",
-  "server",
-  "dangerous-configuration",
-] }

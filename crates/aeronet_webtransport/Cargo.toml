@@ -1,97 +1,89 @@
 [package]
-description = "WebTransport IO layer implementation for `aeronet`"
-name        = "aeronet_webtransport"
-version     = "0.16.1"
-
-authors.workspace      = true
-categories.workspace   = true
-edition.workspace      = true
-keywords.workspace     = true
-license.workspace      = true
-repository.workspace   = true
+name = "aeronet_webtransport"
+version = "0.17.0"
+edition.workspace = true
 rust-version.workspace = true
-
-[lints]
-workspace = true
+description = "WebTransport IO layer implementation for `aeronet`"
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
-rustflags    = ["--cfg=web_sys_unstable_apis"]
-targets      = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
-
-[features]
-default = ["self-signed"]
-
-## Enables the `client` module.
-client = []
-
-## Enables the `server` module.
-server = []
-
-## Enables `wtransport/self-signed`, allowing you to generate self-signed certificates easily for
-## use in a server.
-##
-## Note that, without explicitly allowing your server's self-signed certificate (or using
-## `dangerous-configuration` and disabling certificate validation), clients will not be able to
-## connect to a server with self-signed certificates.
-self-signed = ["wtransport/self-signed"]
-
-## Enables `wtransport/dangerous-configuration`, allowing you to use potentially dangerous
-## certificate validation configurations.
-##
-## You should not use dangerous configurations in production builds of your app.
-dangerous-configuration = ["wtransport/dangerous-configuration"]
-
-## Enable this when generating docs.
-document-features = ["dep:document-features"]
-
-[dependencies]
-aeronet_io        = { workspace = true }
-anyhow            = { workspace = true }
-base64            = { workspace = true }
-bevy_app          = { workspace = true }
-bevy_ecs          = { workspace = true }
-bevy_platform     = { workspace = true }
-bevy_reflect      = { workspace = true, features = ["std"] }
-bytes             = { workspace = true }
-cfg-if            = { workspace = true }
-document-features = { workspace = true, optional = true }
-futures           = { workspace = true }
-tracing           = { workspace = true }
-xwt-core          = { workspace = true }
-
-derive_more = { workspace = true, features = [
-  "debug",
-  "display",
-  "error",
-  "deref",
-  "deref_mut",
-] }
-
-[target.'cfg(target_family = "wasm")'.dependencies]
-gloo-timers          = { workspace = true, features = ["futures"] }
-js-sys               = { workspace = true }
-wasm-bindgen         = { workspace = true }
-wasm-bindgen-futures = { workspace = true }
-xwt-web              = { workspace = true }
-
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-spki           = { workspace = true, features = ["fingerprint"] }
-tokio          = { workspace = true, features = ["rt-multi-thread"] }
-wtransport     = { workspace = true }
-x509-cert      = { workspace = true }
-xwt-wtransport = { workspace = true }
-
-[dev-dependencies]
-bevy      = { workspace = true }
-bevy_egui = { workspace = true }
+rustflags = ["--cfg=web_sys_unstable_apis"]
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [[example]]
-name              = "webtransport_client"
-path              = "examples/webtransport_client.rs"
+name = "webtransport_client"
+path = "examples/webtransport_client.rs"
 required-features = ["client"]
 
 [[example]]
-name              = "webtransport_server"
-path              = "examples/webtransport_server.rs"
+name = "webtransport_server"
+path = "examples/webtransport_server.rs"
 required-features = ["server", "self-signed"]
+
+[dependencies]
+aeronet_io = { workspace = true }
+anyhow = { workspace = true }
+base64 = { workspace = true }
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_platform = { workspace = true }
+bevy_reflect = { workspace = true, features = ["std"] }
+bytes = { workspace = true }
+cfg-if = { workspace = true }
+derive_more = { workspace = true, features = [
+  "debug",
+  "deref",
+  "deref_mut",
+  "display",
+  "error",
+] }
+document-features = { workspace = true, optional = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+xwt-core = { workspace = true }
+
+[dev-dependencies]
+bevy = { workspace = true }
+bevy_egui = { workspace = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+spki = { workspace = true, features = ["fingerprint"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+wtransport = { workspace = true }
+x509-cert = { workspace = true }
+xwt-wtransport = { workspace = true }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+gloo-timers = { workspace = true, features = ["futures"] }
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+xwt-web = { workspace = true }
+
+[features]
+default = ["self-signed"]
+## Enables the `client` module.
+client = []
+## Enables `wtransport/dangerous-configuration`, allowing you to use potentially dangerous
+##  certificate validation configurations.
+## 
+##  You should not use dangerous configurations in production builds of your app.
+dangerous-configuration = ["wtransport/dangerous-configuration"]
+## Enable this when generating docs.
+document-features = ["dep:document-features"]
+## Enables `wtransport/self-signed`, allowing you to generate self-signed certificates easily for
+##  use in a server.
+## 
+##  Note that, without explicitly allowing your server's self-signed certificate (or using
+##  `dangerous-configuration` and disabling certificate validation), clients will not be able to
+##  connect to a server with self-signed certificates.
+self-signed = ["wtransport/self-signed"]
+## Enables the `server` module.
+server = []
+
+[lints]
+workspace = true

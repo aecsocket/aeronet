@@ -150,12 +150,8 @@ impl SessionVisualizer {
             .y_grid_spacer(egui_plot::uniform_grid_spacer(|_| [500.0, 200.0, 50.0]))
             .custom_y_axes(vec![axis_hints("ms")])
             .show(ui, |ui| {
-                ui.line(egui_plot::Line::new(msg_rtt).name("Msg RTT").color(color));
-                ui.line(
-                    egui_plot::Line::new(packet_rtt)
-                        .name("Pkt RTT")
-                        .color(weak_color),
-                );
+                ui.line(egui_plot::Line::new("Msg RTT", msg_rtt).color(color));
+                ui.line(egui_plot::Line::new("Pkt RTT", packet_rtt).color(weak_color));
             })
     }
 
@@ -188,8 +184,8 @@ impl SessionVisualizer {
             .custom_y_axes(vec![axis_hints("bytes/sec")])
             .y_axis_formatter(fmt_bytes_y_axis)
             .show(ui, |ui| {
-                ui.line(egui_plot::Line::new(rx).name("Rx").color(self.rx_color));
-                ui.line(egui_plot::Line::new(tx).name("Tx").color(self.tx_color));
+                ui.line(egui_plot::Line::new("Rx", rx).color(self.rx_color));
+                ui.line(egui_plot::Line::new("Tx", tx).color(self.tx_color));
             })
     }
 
@@ -221,12 +217,8 @@ impl SessionVisualizer {
             .y_grid_spacer(egui_plot::uniform_grid_spacer(|_| [100.0, 25.0, 10.0]))
             .custom_y_axes(vec![axis_hints("%")])
             .show(ui, |ui| {
-                ui.line(egui_plot::Line::new(loss).name("Pkt Loss").color(color));
-                ui.line(
-                    egui_plot::Line::new(mem_used)
-                        .name("Mem Used")
-                        .color(weak_color),
-                );
+                ui.line(egui_plot::Line::new("Pkt Loss", loss).color(color));
+                ui.line(egui_plot::Line::new("Mem Used", mem_used).color(weak_color));
             })
     }
 
@@ -590,14 +582,14 @@ fn draw(
         &TransportConfig,
     )>,
     sampling: Res<SessionStatsSampling>,
-) {
+) -> Result<(), BevyError> {
     for (entity, name, stats, mut visualizer, session, packet_rtt, transport, transport_config) in
         &mut sessions
     {
         let display_name =
             name.map_or_else(|| entity.to_string(), |name| format!("{name} ({entity})"));
 
-        egui::Window::new(format!("Session: {display_name}")).show(egui.ctx_mut(), |ui| {
+        egui::Window::new(format!("Session: {display_name}")).show(egui.ctx_mut()?, |ui| {
             visualizer.show_plots(ui, *sampling, stats.iter().rev().copied());
             visualizer.show_status_bar(
                 ui,
@@ -609,4 +601,6 @@ fn draw(
             );
         });
     }
+
+    Ok(())
 }

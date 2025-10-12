@@ -1,62 +1,58 @@
 [package]
-description = "Steam networking IO layer implementation for `aeronet`"
-name        = "aeronet_steam"
-version     = "0.16.1"
-
-authors.workspace      = true
-categories.workspace   = true
-edition.workspace      = true
-keywords.workspace     = true
-license.workspace      = true
-repository.workspace   = true
+name = "aeronet_steam"
+version = "0.17.0"
+edition.workspace = true
 rust-version.workspace = true
-
-[lints]
-workspace = true
+description = "Steam networking IO layer implementation for `aeronet`"
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
 
-[features]
-## Enables the `client` module.
-client = []
+[[example]]
+name = "steam_client"
+path = "examples/steam_client.rs"
+required-features = ["client"]
 
-## Enables the `server` module.
-server = []
+[[example]]
+name = "steam_server"
+path = "examples/steam_server.rs"
+required-features = ["server"]
 
 [dependencies]
-aeronet_io    = { workspace = true }
-anyhow        = { workspace = true }
-bevy_app      = { workspace = true }
-bevy_ecs      = { workspace = true }
+aeronet_io = { workspace = true }
+anyhow = { workspace = true }
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
 bevy_platform = { workspace = true }
-blocking      = { workspace = true }
-bytes         = { workspace = true }
-oneshot       = { workspace = true }
-sync_wrapper  = { workspace = true }
-tracing       = { workspace = true }
-
+blocking = { workspace = true }
+bytes = { workspace = true }
 derive_more = { workspace = true, features = [
   "debug",
-  "display",
-  "error",
   "deref",
   "deref_mut",
+  "display",
+  "error",
 ] }
+oneshot = { workspace = true }
+sync_wrapper = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+bevy = { workspace = true }
+bevy_egui = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 steamworks = { workspace = true }
 
-[dev-dependencies]
-bevy      = { workspace = true }
-bevy_egui = { workspace = true }
+[features]
+# #Enables the `client` module.
+client = []
+# #Enables the `server` module.
+server = []
 
-[[example]]
-name              = "steam_client"
-path              = "examples/steam_client.rs"
-required-features = ["client"]
-
-[[example]]
-name              = "steam_server"
-path              = "examples/steam_server.rs"
-required-features = ["server"]
+[lints]
+workspace = true

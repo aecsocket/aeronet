@@ -1,89 +1,81 @@
 [package]
-description = "WebSocket IO layer implementation for `aeronet`"
-name        = "aeronet_websocket"
-version     = "0.16.1"
-
-authors.workspace      = true
-categories.workspace   = true
-edition.workspace      = true
-keywords.workspace     = true
-license.workspace      = true
-repository.workspace   = true
+name = "aeronet_websocket"
+version = "0.17.0"
+edition.workspace = true
 rust-version.workspace = true
-
-[lints]
-workspace = true
+description = "WebSocket IO layer implementation for `aeronet`"
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
-targets      = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
-
-[features]
-default = ["self-signed"]
-
-## Enables the `client` module.
-client = []
-
-## Enables the `server` module.
-server = ["dep:tokio-rustls"]
-
-## Allows generating self-signed server certificates using [`rcgen`].
-##
-## [`rcgen`]: https://docs.rs/rcgen
-self-signed = ["dep:rcgen"]
-
-## Enable this when generating docs.
-document-features = ["dep:document-features"]
-
-[dependencies]
-aeronet_io        = { workspace = true }
-bevy_app          = { workspace = true }
-bevy_ecs          = { workspace = true }
-bevy_platform     = { workspace = true }
-bytes             = { workspace = true }
-cfg-if            = { workspace = true }
-document-features = { workspace = true, optional = true }
-futures           = { workspace = true }
-tracing           = { workspace = true }
-
-derive_more = { workspace = true, features = [
-  "display",
-  "error",
-  "deref",
-  "deref_mut",
-] }
-
-[target.'cfg(target_family = "wasm")'.dependencies]
-js-sys               = { workspace = true }
-wasm-bindgen         = { workspace = true }
-wasm-bindgen-futures = { workspace = true }
-
-web-sys = { workspace = true, features = [
-  "WebSocket",
-  "BinaryType",
-  "MessageEvent",
-  "CloseEvent",
-  "ErrorEvent",
-] }
-
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-rcgen               = { workspace = true, optional = true }
-rustls              = { workspace = true }
-rustls-native-certs = { workspace = true }
-tokio               = { workspace = true, features = ["rt-multi-thread"] }
-tokio-rustls        = { workspace = true, optional = true }
-tokio-tungstenite   = { workspace = true, features = ["rustls-tls-native-roots"] }
-
-[dev-dependencies]
-bevy      = { workspace = true }
-bevy_egui = { workspace = true }
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [[example]]
-name              = "websocket_client"
-path              = "examples/websocket_client.rs"
+name = "websocket_client"
+path = "examples/websocket_client.rs"
 required-features = ["client"]
 
 [[example]]
-name              = "websocket_server"
-path              = "examples/websocket_server.rs"
+name = "websocket_server"
+path = "examples/websocket_server.rs"
 required-features = ["server"]
+
+[dependencies]
+aeronet_io = { workspace = true }
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_platform = { workspace = true }
+bytes = { workspace = true }
+cfg-if = { workspace = true }
+derive_more = { workspace = true, features = [
+  "deref",
+  "deref_mut",
+  "display",
+  "error",
+] }
+document-features = { workspace = true, optional = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+bevy = { workspace = true }
+bevy_egui = { workspace = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+rcgen = { workspace = true, optional = true }
+rustls = { workspace = true }
+rustls-native-certs = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio-rustls = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, features = ["rustls-tls-native-roots"] }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+web-sys = { workspace = true, features = [
+  "BinaryType",
+  "CloseEvent",
+  "ErrorEvent",
+  "MessageEvent",
+  "WebSocket",
+] }
+
+[features]
+default = ["self-signed"]
+## Enables the `client` module.
+client = []
+## Enable this when generating docs.
+document-features = ["dep:document-features"]
+## Allows generating self-signed server certificates using [`rcgen`].
+## 
+##  [`rcgen`]: https://docs.rs/rcgen
+self-signed = ["dep:rcgen"]
+## Enables the `server` module.
+server = ["dep:tokio-rustls"]
+
+[lints]
+workspace = true

@@ -28,8 +28,8 @@ impl Plugin for AeronetIoPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<SessionEndpoint>()
             .register_type::<Session>()
-            .configure_sets(PreUpdate, IoSet::Poll)
-            .configure_sets(PostUpdate, IoSet::Flush)
+            .configure_sets(PreUpdate, IoSystems::Poll)
+            .configure_sets(PostUpdate, IoSystems::Flush)
             .add_plugins((
                 packet::PacketPlugin,
                 connection::ConnectionPlugin,
@@ -103,8 +103,8 @@ pub struct SessionEndpoint;
 /// [`Session::recv`] and [`Session::send`] respectively. These buffers are
 /// [`Vec`]s with unbounded capacity, but are cleared automatically on every
 /// update:
-/// - [`packet::clear_recv_buffers`] before [`IoSet::Poll`]
-/// - [`packet::clear_send_buffers`] before [`IoSet::Flush`]
+/// - [`packet::clear_recv_buffers`] before [`IoSystems::Poll`]
+/// - [`packet::clear_send_buffers`] before [`IoSystems::Flush`]
 ///
 /// If there are any unconsumed packets in a buffer when it is cleared, a
 /// warning is emitted - all packets should be consumed on every update.
@@ -261,9 +261,9 @@ impl Session {
     }
 }
 
-/// Set for scheduling IO layer systems.
+/// System set for scheduling IO layer systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum IoSet {
+pub enum IoSystems {
     /// Progressing the connection, handling disconnects, and receiving packets.
     Poll,
     /// Sending buffered packets.

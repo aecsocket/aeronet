@@ -6,6 +6,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
   fmt:
@@ -16,21 +17,6 @@ jobs:
         with:
           components: rustfmt
       - run: cargo +nightly fmt --check
-
-  taplo:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: uncenter/setup-taplo@v1
-        with:
-          version: "0.8.1"
-      - run: taplo fmt --check
-
-  typos:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: crate-ci/typos@master
 
   shear:
     runs-on: ubuntu-latest
@@ -59,8 +45,11 @@ jobs:
     strategy:
       matrix:
         target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+        include:
+          - target: "wasm32-unknown-unknown"
+            docflags: '--cfg=getrandom_backend="wasm_js"'
     env:
-      RUSTDOCFLAGS: "-Dwarnings --cfg=web_sys_unstable_apis"
+      RUSTDOCFLAGS: "-Dwarnings --cfg=web_sys_unstable_apis ${{ matrix.docflags }}"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -102,10 +91,19 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    env:
-      RUST_BACKTRACE: 1
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
-      - run: cargo test --workspace --all-features
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall --no-confirm cargo-nextest
+      - run: cargo nextest run --workspace --all-features
+
+  # `cargo nextest` currently doesn't support doctests: <https://nexte.st/#quick-start>
+  test-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/install-bevy-deps
+      - run: cargo test --doc --workspace --all-features

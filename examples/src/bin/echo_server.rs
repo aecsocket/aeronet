@@ -26,7 +26,7 @@ use {
         io::{
             Session,
             bytes::Bytes,
-            connection::{Disconnected, LocalAddr},
+            connection::{Disconnected, DisconnectReason, LocalAddr},
             server::Server,
         },
         transport::{AeronetTransportPlugin, Transport, lane::LaneKind},
@@ -96,8 +96,8 @@ fn setup(mut commands: Commands) {
 }
 
 // Observe state change events using `Trigger`s
-fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
-    let server = trigger.target();
+fn on_opened(trigger: On<Add, Server>, servers: Query<&LocalAddr>) {
+    let server = trigger.event_target();
     let local_addr = servers
         .get(server)
         .expect("opened server should have a binding socket `LocalAddr`");
@@ -105,12 +105,12 @@ fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
 }
 
 fn on_connected(
-    trigger: Trigger<OnAdd, Session>,
+    trigger: On<Add, Session>,
     sessions: Query<&Session>,
     clients: Query<&ChildOf>,
     mut commands: Commands,
 ) {
-    let client = trigger.target();
+    let client = trigger.event_target();
     let session = sessions
         .get(client)
         .expect("we are adding this component to this entity");
@@ -134,20 +134,20 @@ fn on_connected(
     commands.entity(client).insert(transport);
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
-    let client = trigger.target();
+fn on_disconnected(trigger: On<Disconnected>, clients: Query<&ChildOf>) {
+    let client = trigger.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 
-    match &*trigger {
-        Disconnected::ByUser(reason) => {
+    match &trigger.reason {
+        DisconnectReason::ByUser(reason) => {
             info!("{client} disconnected from {server} by user: {reason}");
         }
-        Disconnected::ByPeer(reason) => {
+        DisconnectReason::ByPeer(reason) => {
             info!("{client} disconnected from {server} by peer: {reason}");
         }
-        Disconnected::ByError(err) => {
+        DisconnectReason::ByError(err) => {
             warn!("{client} disconnected from {server} due to error: {err:?}");
         }
     }

@@ -123,23 +123,22 @@ pub enum GameState {
 impl Plugin for MoveBoxPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<GameState>()
-            .enable_state_scoped_entities::<GameState>()
             .replicate::<Player>()
             .replicate::<PlayerPosition>()
             .replicate::<PlayerColor>()
-            .add_client_event::<PlayerInput>(Channel::Unreliable)
+            .add_client_message::<PlayerInput>(Channel::Unreliable)
             .add_systems(
                 FixedUpdate,
                 (recv_input, apply_movement)
                     .chain()
-                    .run_if(server_or_singleplayer),
+                    .run_if(in_state(ClientState::Disconnected)),
             );
     }
 }
 
 /// Marker component for a player in the game.
 #[derive(Debug, Clone, Component, Serialize, Deserialize)]
-#[require(StateScoped::<GameState>(GameState::Playing))]
+#[require(DespawnOnExit::<GameState>(GameState::Playing))]
 pub struct Player;
 
 /// Player's box position.
@@ -151,7 +150,7 @@ pub struct PlayerPosition(pub Vec2);
 pub struct PlayerColor(pub Color);
 
 /// Player's inputs that they send to control their box.
-#[derive(Debug, Clone, Default, Component, Event, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Component, Message, Serialize, Deserialize)]
 pub struct PlayerInput {
     /// Lateral movement vector.
     ///
@@ -162,14 +161,18 @@ pub struct PlayerInput {
 }
 
 fn recv_input(
-    mut inputs: EventReader<FromClient<PlayerInput>>,
+    mut inputs: MessageReader<FromClient<PlayerInput>>,
     mut players: Query<&mut PlayerInput>,
 ) {
     for &FromClient {
-        client_entity,
-        event: ref new_input,
+        client_id,
+        message: ref new_input,
     } in inputs.read()
     {
+        let ClientId::Client(client_entity) = client_id else {
+            continue;
+        };
+
         let Ok(mut input) = players.get_mut(client_entity) else {
             continue;
         };

@@ -4,7 +4,7 @@ use {
         server::{HandshakeHandler, ToConnecting},
         session::SessionError,
     },
-    aeronet_io::{connection::Disconnected, server::Closed},
+    aeronet_io::{connection::DisconnectReason, server::CloseReason},
     bevy_ecs::prelude::*,
     core::{
         net::SocketAddr,
@@ -30,22 +30,22 @@ use {
 
 pub async fn start(
     config: ServerConfig,
-    send_next: oneshot::Sender<ToOpen>,
-) -> Result<Never, Closed> {
+    tx_next: oneshot::Sender<ToOpen>,
+) -> Result<Never, CloseReason> {
     let tls_acceptor = config.tls.map(TlsAcceptor::from);
     let listener = TcpListener::bind(config.bind_address)
         .await
         .map_err(ServerError::BindSocket)?;
     debug!("Listening on {}", config.bind_address);
 
-    let (send_connecting, recv_connecting) = mpsc::channel::<ToConnecting>(1);
+    let (tx_connecting, rx_connecting) = mpsc::channel::<ToConnecting>(1);
 
     let local_addr = listener.local_addr().map_err(SessionError::GetLocalAddr)?;
     let next = ToOpen {
         local_addr,
-        recv_connecting,
+        rx_connecting,
     };
-    send_next
+    tx_next
         .send(next)
         .map_err(|_| SessionError::FrontendClosed)?;
 
@@ -56,7 +56,7 @@ pub async fn start(
             .await
             .map_err(ServerError::AcceptConnection)?;
         tokio::spawn({
-            let send_connecting = send_connecting.clone();
+            let tx_connecting = tx_connecting.clone();
             let tls_acceptor = tls_acceptor.clone();
             let handshake_handler = config.handshake_handler.clone();
             async move {
@@ -65,7 +65,7 @@ pub async fn start(
                     peer_addr,
                     config.socket,
                     tls_acceptor,
-                    send_connecting,
+                    tx_connecting,
                     handshake_handler,
                 )
                 .await
@@ -82,22 +82,22 @@ async fn accept_session(
     peer_addr: SocketAddr,
     socket_config: WebSocketConfig,
     tls_acceptor: Option<TlsAcceptor>,
-    mut send_connecting: mpsc::Sender<ToConnecting>,
+    mut tx_connecting: mpsc::Sender<ToConnecting>,
     handshake_handler: Option<HandshakeHandler>,
-) -> Result<(), Disconnected> {
-    let (send_session_entity, recv_session_entity) = oneshot::channel::<Entity>();
-    let (send_dc, recv_dc) = oneshot::channel::<Disconnected>();
-    let (send_next, recv_next) = oneshot::channel::<ToConnected>();
-    send_connecting
+) -> Result<(), DisconnectReason> {
+    let (tx_session_entity, rx_session_entity) = oneshot::channel::<Entity>();
+    let (tx_dc_reason, rx_dc_reason) = oneshot::channel::<DisconnectReason>();
+    let (tx_next, rx_next) = oneshot::channel::<ToConnected>();
+    tx_connecting
         .send(ToConnecting {
             peer_addr,
-            send_session_entity,
-            recv_dc,
-            recv_next,
+            tx_session_entity,
+            rx_dc_reason,
+            rx_next,
         })
         .await
         .map_err(|_| SessionError::FrontendClosed)?;
-    let session = recv_session_entity
+    let session = rx_session_entity
         .await
         .map_err(|_| SessionError::FrontendClosed)?;
 
@@ -106,12 +106,12 @@ async fn accept_session(
         peer_addr,
         socket_config,
         tls_acceptor,
-        send_next,
+        tx_next,
         handshake_handler,
     )
     .instrument(debug_span!("session", %session))
     .await;
-    _ = send_dc.send(dc_reason);
+    _ = tx_dc_reason.send(dc_reason);
     Ok(())
 }
 
@@ -120,10 +120,10 @@ async fn handle_session(
     peer_addr: SocketAddr,
     socket_config: WebSocketConfig,
     tls_acceptor: Option<TlsAcceptor>,
-    send_next: oneshot::Sender<ToConnected>,
+    tx_next: oneshot::Sender<ToConnected>,
     handshake_handler: Option<HandshakeHandler>,
-) -> Result<Never, Disconnected> {
-    debug!("Performing Session handshake");
+) -> Result<Never, DisconnectReason> {
+    debug!("Performing session handshake");
 
     let stream = if let Some(tls_acceptor) = tls_acceptor {
         tls_acceptor
@@ -152,7 +152,7 @@ async fn handle_session(
     };
     debug!("Connected");
 
-    send_next
+    tx_next
         .send(connected)
         .map_err(|_| SessionError::FrontendClosed)?;
 

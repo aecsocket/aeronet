@@ -13,7 +13,10 @@ use {
         rtt::RttEstimator,
         size::MinSize,
     },
-    aeronet_io::{Session, connection::Disconnected},
+    aeronet_io::{
+        Session,
+        connection::{DisconnectReason, Disconnected},
+    },
     alloc::{boxed::Box, vec::Vec},
     bevy_ecs::prelude::*,
     bevy_platform::{
@@ -101,7 +104,7 @@ impl TransportSend {
     /// Attempts to enqueue a message on this transport for sending.
     ///
     /// This will not send out a message immediately - that happens during
-    /// [`TransportSet::Flush`].
+    /// [`TransportSystems::Flush`].
     ///
     /// If the message was enqueued successfully, returns a [`MessageKey`]
     /// uniquely[^1] identifying this message. When draining
@@ -109,6 +112,8 @@ impl TransportSend {
     /// message you are pushing right now was the one that was acknowledged.
     ///
     /// [^1]: See [`MessageKey`] for uniqueness guarantees.
+    ///
+    /// [`TransportSystems::Flush`]: crate::TransportSystems::Flush
     ///
     /// # Errors
     ///
@@ -131,8 +136,6 @@ impl TransportSend {
     ///
     /// Since you are responsible for creating the [`Transport`], you are also
     /// responsible for knowing how many lanes you have.
-    ///
-    /// [`TransportSet::Flush`]: crate::TransportSet::Flush
     ///
     /// # Examples
     ///
@@ -235,17 +238,20 @@ pub(crate) fn update_send_bytes_config(
     >,
 ) {
     for (mut transport, config) in &mut sessions {
-        transport
-            .send
-            .bytes_bucket
-            .set_cap(config.send_bytes_per_sec);
+        transport.send.bytes_bucket.set_cap(config.tx_bytes_per_sec);
     }
 }
 
-pub(crate) fn disconnect_errored(mut sessions: Query<&mut Transport>, mut commands: Commands) {
-    for mut transport in &mut sessions {
+pub(crate) fn disconnect_errored(
+    mut sessions: Query<(Entity, &mut Transport)>,
+    mut commands: Commands,
+) {
+    for (entity, mut transport) in &mut sessions {
         if let Some(err) = transport.send.error.take() {
-            commands.trigger(Disconnected::by_error(err));
+            commands.trigger(Disconnected {
+                entity,
+                reason: DisconnectReason::by_error(err),
+            });
         }
     }
 }

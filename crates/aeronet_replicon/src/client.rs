@@ -4,7 +4,7 @@ use {
     crate::convert,
     aeronet_io::{Session, SessionEndpoint, connection::Disconnect},
     aeronet_transport::{
-        AeronetTransportPlugin, Transport, TransportSet,
+        AeronetTransportPlugin, Transport, TransportSystems,
         sampling::{SessionSamplingPlugin, SessionStats, SessionStatsSampling},
     },
     bevy_app::prelude::*,
@@ -12,6 +12,7 @@ use {
     bevy_platform::time::Instant,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
+    bevy_state::state::NextState,
     core::{num::Saturating, time::Duration},
     log::warn,
 };
@@ -36,18 +37,18 @@ impl Plugin for AeronetRepliconClientPlugin {
             .configure_sets(
                 PreUpdate,
                 (
-                    TransportSet::Poll,
-                    ClientTransportSet::Poll,
-                    ClientSet::ReceivePackets,
+                    TransportSystems::Poll,
+                    ClientTransportSystems::Poll,
+                    ClientSystems::ReceivePackets,
                 )
                     .chain(),
             )
             .configure_sets(
                 PostUpdate,
                 (
-                    ClientSet::SendPackets,
-                    ClientTransportSet::Flush,
-                    TransportSet::Flush,
+                    ClientSystems::SendPackets,
+                    ClientTransportSystems::Flush,
+                    TransportSystems::Flush,
                 )
                     .chain(),
             )
@@ -55,14 +56,14 @@ impl Plugin for AeronetRepliconClientPlugin {
                 PreUpdate,
                 (update_state, poll)
                     .chain()
-                    .in_set(ClientTransportSet::Poll)
-                    .run_if(resource_exists::<RepliconClient>),
+                    .in_set(ClientTransportSystems::Poll)
+                    .run_if(resource_exists::<ClientMessages>),
             )
             .add_systems(
                 PostUpdate,
                 flush
-                    .in_set(ClientTransportSet::Flush)
-                    .run_if(resource_exists::<RepliconClient>),
+                    .in_set(ClientTransportSystems::Flush)
+                    .run_if(resource_exists::<ClientMessages>),
             )
             .add_observer(on_client_connected);
     }
@@ -71,44 +72,44 @@ impl Plugin for AeronetRepliconClientPlugin {
 /// Sets for systems which provide communication between [`bevy_replicon`] and
 /// [`Session`]s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub enum ClientTransportSet {
+pub enum ClientTransportSystems {
     /// Passing incoming messages into [`bevy_replicon`].
     ///
     /// # Ordering
     ///
-    /// - [`TransportSet::Poll`]
-    /// - **[`ClientTransportSet::Poll`]**
-    /// - [`ClientSet::ReceivePackets`]
+    /// - [`TransportSystems::Poll`]
+    /// - **[`ClientTransportSystems::Poll`]**
+    /// - [`ClientSystems::ReceivePackets`]
     Poll,
     /// Passing outgoing [`bevy_replicon`] packets to the transport layer.
     ///
     /// # Ordering
     ///
-    /// - [`ClientSet::SendPackets`]
-    /// - **[`ClientTransportSet::Flush`]**
-    /// - [`TransportSet::Flush`]
+    /// - [`ClientSystems::SendPackets`]
+    /// - **[`ClientTransportSystems::Flush`]**
+    /// - [`TransportSystems::Flush`]
     Flush,
 }
 
 /// Marker component for a [`Session`] which is used as the messaging backend
-/// for a [`RepliconClient`].
+/// for a Replicon client.
 ///
 /// Sessions with this component automatically get [`Transport`].
 ///
 /// Any session entity with this component will be used for:
 /// - receiving messages
-///   - on the `replicon` side, you can't differentiate which session received
+///   - on the Replicon side, you can't differentiate which session received
 ///     which message
 /// - sending messages
-///   - all outgoing `replicon` messages are cloned and sent to all sessions
+///   - all outgoing Replicon messages are cloned and sent to all sessions
 /// - determining connected status
 ///   - if at least 1 session has both [`SessionEndpoint`] and [`Session`],
-///     [`RepliconClient`] is [`RepliconClientStatus::Connected`]
-///   - if at least 1 session has [`SessionEndpoint`], [`RepliconClient`] is
-///     [`RepliconClientStatus::Connecting`]
-///   - else, [`RepliconClientStatus::Disconnected`]
+///     [`ClientState`] is [`ClientState::Connected`]
+///   - if at least 1 session has [`SessionEndpoint`], [`ClientState`] is
+///     [`ClientState::Connecting`]
+///   - else, [`ClientState::Disconnected`]
 ///
-/// Since [`RepliconClient`] is a resource, there can only be up to one at a
+/// Since [`ClientState`] is a state, there can only be up to one client at a
 /// time in the app, and you can only connect to one "logical" server at a time
 /// (that is, the server which holds the actual app state). Therefore, your app
 /// should only have one [`AeronetRepliconClient`].
@@ -117,31 +118,31 @@ pub enum ClientTransportSet {
 pub struct AeronetRepliconClient;
 
 fn on_client_connected(
-    trigger: Trigger<OnAdd, Session>,
+    trigger: On<Add, Session>,
     mut commands: Commands,
     clients: Query<&Session, With<AeronetRepliconClient>>,
     channels: Res<RepliconChannels>,
 ) {
-    let target = trigger.target();
+    let target = trigger.event_target();
     let Ok(session) = clients.get(target) else {
         return;
     };
 
-    let recv_lanes = channels
+    let rx_lanes = channels
         .server_channels()
         .iter()
         .map(|channel| convert::to_lane_kind(*channel));
-    let send_lanes = channels
+    let tx_lanes = channels
         .client_channels()
         .iter()
         .map(|channel| convert::to_lane_kind(*channel));
     let now = Instant::now();
 
-    let transport = match Transport::new(session, recv_lanes, send_lanes, now) {
+    let transport = match Transport::new(session, rx_lanes, tx_lanes, now) {
         Ok(transport) => transport,
         Err(err) => {
             warn!("Failed to create transport for {target}: {err:?}");
-            commands.trigger_targets(Disconnect::new("failed to create transport"), target);
+            commands.trigger(Disconnect::new(target, "failed to create transport"));
             return;
         }
     };
@@ -150,7 +151,8 @@ fn on_client_connected(
 }
 
 fn update_state(
-    mut replicon_client: ResMut<RepliconClient>,
+    mut client_stats: ResMut<ClientStats>,
+    mut next_client_state: ResMut<NextState<ClientState>>,
     clients: Query<
         (Option<&Session>, Option<&Transport>, Option<&SessionStats>),
         (With<SessionEndpoint>, With<AeronetRepliconClient>),
@@ -188,7 +190,7 @@ fn update_state(
         sum_bytes_sent += stats.packets_delta.bytes_sent;
     }
 
-    let (status, rtt, packet_loss, received_bps, sent_bps) = if num_connected.0 > 0 {
+    let (next_status, rtt, packet_loss, received_bps, sent_bps) = if num_connected.0 > 0 {
         #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
         let num_connected = num_connected.0 as f64;
         #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
@@ -198,7 +200,7 @@ fn update_state(
         );
 
         (
-            RepliconClientStatus::Connected,
+            ClientState::Connected,
             sum_rtt.as_secs_f64() / num_connected,
             sum_packet_loss / num_connected,
             received_bps,
@@ -206,31 +208,28 @@ fn update_state(
         )
     } else {
         let status = if endpoint_exists {
-            RepliconClientStatus::Connecting
+            ClientState::Connecting
         } else {
-            RepliconClientStatus::Disconnected
+            ClientState::Disconnected
         };
         (status, 0.0, 0.0, 0.0, 0.0)
     };
 
-    if replicon_client.status() != status {
-        replicon_client.set_status(status);
-    }
-    let stats = replicon_client.stats_mut();
-    stats.rtt = rtt;
-    stats.packet_loss = packet_loss;
-    stats.received_bps = received_bps;
-    stats.sent_bps = sent_bps;
+    next_client_state.set(next_status);
+    client_stats.rtt = rtt;
+    client_stats.packet_loss = packet_loss;
+    client_stats.received_bps = received_bps;
+    client_stats.sent_bps = sent_bps;
 }
 
 fn poll(
-    mut replicon_client: ResMut<RepliconClient>,
+    mut client_msgs: ResMut<ClientMessages>,
     mut clients: Query<&mut Transport, With<AeronetRepliconClient>>,
 ) {
     for mut transport in &mut clients {
         for msg in transport.recv.msgs.drain() {
             let channel_id = convert::to_channel_id(msg.lane);
-            replicon_client.insert_received(channel_id, msg.payload);
+            client_msgs.insert_received(channel_id, msg.payload);
         }
 
         for _ in transport.recv.acks.drain() {
@@ -240,11 +239,11 @@ fn poll(
 }
 
 fn flush(
-    mut replicon_client: ResMut<RepliconClient>,
+    mut client_msgs: ResMut<ClientMessages>,
     mut clients: Query<&mut Transport, With<AeronetRepliconClient>>,
 ) {
     let now = Instant::now();
-    for (channel_id, msg) in replicon_client.drain_sent() {
+    for (channel_id, msg) in client_msgs.drain_sent() {
         let Some(lane_index) = convert::to_lane_index(channel_id) else {
             warn!("Channel {channel_id} is too large to convert to a lane index");
             continue;

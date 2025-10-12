@@ -10,7 +10,7 @@ cfg_if::cfg_if! {
 use {
     aeronet::io::{
         Session,
-        connection::{Disconnected, LocalAddr},
+        connection::{Disconnected, DisconnectReason, LocalAddr},
         server::Server,
     },
     aeronet_replicon::server::{AeronetRepliconServer, AeronetRepliconServerPlugin},
@@ -20,7 +20,7 @@ use {
         server::{SessionRequest, SessionResponse, WebTransportServer, WebTransportServerPlugin},
         wtransport,
     },
-    bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*, state::app::StatesPlugin},
+    bevy::{ecs::schedule::ScheduleLabel, app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*, state::app::StatesPlugin},
     bevy_replicon::prelude::*,
     core::time::Duration,
     examples::move_box::{
@@ -63,7 +63,7 @@ fn main() -> AppExit {
             // replication
             RepliconPlugins.set(ServerPlugin {
                 // 1 frame lasts `1.0 / TICK_RATE` anyway
-                tick_policy: TickPolicy::EveryFrame,
+                tick_schedule: PostUpdate.intern(),
                 ..Default::default()
             }),
             AeronetRepliconServerPlugin,
@@ -122,8 +122,8 @@ fn web_transport_config(identity: wtransport::Identity, args: &Args) -> WebTrans
         .build()
 }
 
-fn on_session_request(mut request: Trigger<SessionRequest>, clients: Query<&ChildOf>) {
-    let client = request.target();
+fn on_session_request(mut request: On<SessionRequest>, clients: Query<&ChildOf>) {
+    let client = request.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
@@ -161,8 +161,8 @@ fn web_socket_config(args: &Args) -> WebSocketServerConfig {
 // server logic
 //
 
-fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
-    let server = trigger.target();
+fn on_opened(trigger: On<Add, Server>, servers: Query<&LocalAddr>) {
+    let server = trigger.event_target();
     let local_addr = servers
         .get(server)
         .expect("opened server should have a binding socket `LocalAddr`");
@@ -170,11 +170,11 @@ fn on_opened(trigger: Trigger<OnAdd, Server>, servers: Query<&LocalAddr>) {
 }
 
 fn on_connected(
-    trigger: Trigger<OnAdd, Session>,
+    trigger: On<Add, Session>,
     clients: Query<&ChildOf>,
     mut commands: Commands,
 ) {
-    let client = trigger.target();
+    let client = trigger.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
@@ -200,20 +200,20 @@ fn on_connected(
     ));
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>, clients: Query<&ChildOf>) {
-    let client = trigger.target();
+fn on_disconnected(trigger: On<Disconnected>, clients: Query<&ChildOf>) {
+    let client = trigger.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
     };
 
-    match &*trigger {
-        Disconnected::ByUser(reason) => {
+    match &trigger.reason {
+        DisconnectReason::ByUser(reason) => {
             info!("{client} disconnected from {server} by user: {reason}");
         }
-        Disconnected::ByPeer(reason) => {
+        DisconnectReason::ByPeer(reason) => {
             info!("{client} disconnected from {server} by peer: {reason}");
         }
-        Disconnected::ByError(err) => {
+        DisconnectReason::ByError(err) => {
             warn!("{client} disconnected from {server} due to error: {err:?}");
         }
     }

@@ -60,21 +60,11 @@ impl SessionConfig {
     /// Converts this to a [`Vec<NetworkingConfigEntry>`] for use in creating a
     /// session.
     #[must_use]
-    #[expect(
-        clippy::missing_const_for_fn,
-        reason = "this will not be `const` in the future"
-    )]
     pub fn to_options(&self) -> Vec<NetworkingConfigEntry> {
-        Vec::new()
+        use steamworks::networking_types::{
+            NetworkingConfigEntry as Entry, NetworkingConfigValue as Key,
+        };
 
-        /*
-        // TODO
-        use {NetworkingConfigEntry as Entry, NetworkingConfigValue as Key};
-
-        // all float config values don't work
-        // because of a bug in steamworks 0.11.0,
-        // and there's no newer version (as of 28 Mar 2025):
-        // <https://github.com/Noxime/steamworks-rs/pull/168>
         vec![
             Entry::new_float(Key::FakePacketLossSend, self.fake_packet_loss_send * 100.0),
             Entry::new_float(Key::FakePacketLossRecv, self.fake_packet_loss_recv * 100.0),
@@ -116,14 +106,13 @@ impl SessionConfig {
             Entry::new_int32(Key::SymmetricConnect, i32::from(self.symmetric_connect)),
             Entry::new_int32(Key::LocalVirtualPort, self.local_virtual_port),
         ]
-        */
     }
 }
 
-// fn usize_to_i32(n: usize) -> i32 {
-//     i32::try_from(n).unwrap_or(i32::MAX)
-// }
+fn usize_to_i32(n: usize) -> i32 {
+    i32::try_from(n).unwrap_or(i32::MAX)
+}
 
-// fn duration_to_ms(duration: Duration) -> i32 {
-//     i32::try_from(duration.as_millis()).unwrap_or(i32::MAX)
-// }
+fn duration_to_ms(duration: Duration) -> i32 {
+    i32::try_from(duration.as_millis()).unwrap_or(i32::MAX)
+}

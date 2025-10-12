@@ -1,45 +1,41 @@
 [package]
-description = "IO abstraction primitives for `aeronet`"
-name        = "aeronet_io"
-version     = "0.16.1"
-
-authors.workspace      = true
-categories.workspace   = true
-edition.workspace      = true
-keywords.workspace     = true
-license.workspace      = true
-repository.workspace   = true
+name = "aeronet_io"
+version = "0.17.0"
+edition.workspace = true
 rust-version.workspace = true
-
-[lints]
-workspace = true
+description = "IO abstraction primitives for `aeronet`"
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
-targets      = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
-
-[features]
-default = ["std"]
-
-## Enables standard library support.
-std = ["anyhow/std", "bytes/std", "log/std", "bevy_platform/std"]
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
-anyhow        = { workspace = true }
-bevy_app      = { workspace = true, features = ["bevy_reflect"] }
-bevy_ecs      = { workspace = true, features = ["bevy_reflect"] }
+anyhow = { workspace = true }
+bevy_app = { workspace = true, features = ["bevy_reflect"] }
+bevy_ecs = { workspace = true, features = ["bevy_reflect"] }
 bevy_platform = { workspace = true, features = ["alloc"] }
-bevy_reflect  = { workspace = true }
-bytes         = { workspace = true }
-log           = { workspace = true }
-
+bevy_reflect = { workspace = true }
+bytes = { workspace = true }
 derive_more = { workspace = true, features = [
-  "display",
-  "error",
   "add",
   "add_assign",
   "deref",
+  "display",
+  "error",
 ] }
+log = { workspace = true }
 
 [target.'cfg(not(all(target_has_atomic = "8", target_has_atomic = "16", target_has_atomic = "32", target_has_atomic = "64", target_has_atomic = "ptr")))'.dependencies]
 bytes = { workspace = true, features = ["extra-platforms"] }
+
+[features]
+default = ["std"]
+## Enables standard library support.
+std = ["anyhow/std", "bevy_platform/std", "bytes/std", "log/std"]
+
+[lints]
+workspace = true

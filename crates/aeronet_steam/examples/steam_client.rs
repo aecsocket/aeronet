@@ -4,14 +4,14 @@
 use {
     aeronet_io::{
         Session, SessionEndpoint,
-        connection::{Disconnect, Disconnected},
+        connection::{Disconnect, DisconnectReason, Disconnected},
     },
     aeronet_steam::{
         SessionConfig, SteamworksClient,
         client::{SteamNetClient, SteamNetClientPlugin},
     },
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui},
     core::{mem, net::SocketAddr},
     steamworks::SteamId,
 };
@@ -25,15 +25,10 @@ fn main() -> AppExit {
         .add_systems(PreUpdate, |steam: Res<SteamworksClient>| {
             steam.run_callbacks();
         })
-        .add_plugins((
-            DefaultPlugins,
-            EguiPlugin {
-                enable_multipass_for_primary_context: false,
-            },
-            SteamNetClientPlugin,
-        ))
+        .add_plugins((DefaultPlugins, EguiPlugin::default(), SteamNetClientPlugin))
         .init_resource::<Log>()
-        .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
+        .add_systems(Update, add_msgs_to_ui)
+        .add_systems(EguiPrimaryContextPass, (global_ui, session_ui).chain())
         .add_observer(on_connecting)
         .add_observer(on_connected)
         .add_observer(on_disconnected)
@@ -49,39 +44,35 @@ struct SessionUi {
     log: Vec<String>,
 }
 
-fn on_connecting(
-    trigger: Trigger<OnAdd, SessionEndpoint>,
-    names: Query<&Name>,
-    mut log: ResMut<Log>,
-) {
-    let session = trigger.target();
+fn on_connecting(trigger: On<Add, SessionEndpoint>, names: Query<&Name>, mut log: ResMut<Log>) {
+    let session = trigger.event_target();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
     log.push(format!("{name} connecting"));
 }
 
-fn on_connected(trigger: Trigger<OnAdd, Session>, names: Query<&Name>, mut log: ResMut<Log>) {
-    let session = trigger.target();
+fn on_connected(trigger: On<Add, Session>, names: Query<&Name>, mut log: ResMut<Log>) {
+    let session = trigger.event_target();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
     log.push(format!("{name} connected"));
 }
 
-fn on_disconnected(trigger: Trigger<Disconnected>, names: Query<&Name>, mut log: ResMut<Log>) {
-    let session = trigger.target();
+fn on_disconnected(trigger: On<Disconnected>, names: Query<&Name>, mut log: ResMut<Log>) {
+    let session = trigger.event_target();
     let name = names
         .get(session)
         .expect("our session entity should have a name");
-    log.push(match &*trigger {
-        Disconnected::ByUser(reason) => {
+    log.push(match &trigger.reason {
+        DisconnectReason::ByUser(reason) => {
             format!("{name} disconnected by user: {reason}")
         }
-        Disconnected::ByPeer(reason) => {
+        DisconnectReason::ByPeer(reason) => {
             format!("{name} disconnected by peer: {reason}")
         }
-        Disconnected::ByError(err) => {
+        DisconnectReason::ByError(err) => {
             format!("{name} disconnected due to error: {err:?}")
         }
     });
@@ -94,10 +85,10 @@ fn global_ui(
     mut target_addr: Local<String>,
     mut target_peer: Local<String>,
     mut session_id: Local<usize>,
-) {
+) -> Result<(), BevyError> {
     const DEFAULT_TARGET: &str = "127.0.0.1:25572";
 
-    egui::Window::new("Connect").show(egui.ctx_mut(), |ui| {
+    egui::Window::new("Connect").show(egui.ctx_mut()?, |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
         let mut connect_addr = false;
@@ -162,6 +153,8 @@ fn global_ui(
             ui.label(msg);
         }
     });
+
+    Ok(())
 }
 
 fn add_msgs_to_ui(mut sessions: Query<(&mut SessionUi, &mut Session)>) {
@@ -178,9 +171,9 @@ fn session_ui(
     mut egui: EguiContexts,
     mut commands: Commands,
     mut sessions: Query<(Entity, &Name, &mut SessionUi, Option<&mut Session>)>,
-) {
+) -> Result<(), BevyError> {
     for (entity, name, mut ui_state, mut session) in &mut sessions {
-        egui::Window::new(name.to_string()).show(egui.ctx_mut(), |ui| {
+        egui::Window::new(name.to_string()).show(egui.ctx_mut()?, |ui| {
             let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
 
             let mut send_msg = false;
@@ -209,7 +202,7 @@ fn session_ui(
             }
 
             if ui.button("Disconnect").clicked() {
-                commands.trigger_targets(Disconnect::new("pressed disconnect button"), entity);
+                commands.trigger(Disconnect::new(entity, "pressed disconnect button"));
             }
 
             let stats = session.as_ref().map(|s| s.stats).unwrap_or_default();
@@ -235,4 +228,6 @@ fn session_ui(
             });
         });
     }
+
+    Ok(())
 }
