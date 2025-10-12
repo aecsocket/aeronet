@@ -1,5 +1,14 @@
 Version changelog.
 
+# 0.17.0
+
+- Update to Bevy 0.17
+- Rename `*Set` system set types to `*Systems`
+
+# 0.16.1
+
+- Add `HandshakeHandler` to `aeronet_websocket` ([#64](https://github.com/aecsocket/aeronet/pull/64))
+
 # 0.15.0, 0.16.0
 
 - Add documentation to `aeronet::_docs` module, accessible in `docs.rs`

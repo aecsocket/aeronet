@@ -219,6 +219,7 @@ When submitting a pull request, make sure that all continuous integration (CI) c
 
 | `bevy` | `aeronet`           |
 |--------|---------------------|
+| `0.17` | `0.17.0`            |
 | `0.16` | `0.13.0` - `0.16.0` |
 | `0.15` | `0.11.0` - `0.12.0` |
 | `0.14` | `0.9.0` - `0.10.0`  |
