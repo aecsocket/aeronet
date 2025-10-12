@@ -11,7 +11,7 @@ use {
         client::{SteamNetClient, SteamNetClientPlugin},
     },
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui},
     core::{mem, net::SocketAddr},
     steamworks::SteamId,
 };
@@ -27,7 +27,8 @@ fn main() -> AppExit {
         })
         .add_plugins((DefaultPlugins, EguiPlugin::default(), SteamNetClientPlugin))
         .init_resource::<Log>()
-        .add_systems(Update, (global_ui, add_msgs_to_ui, session_ui))
+        .add_systems(Update, add_msgs_to_ui)
+        .add_systems(EguiPrimaryContextPass, (global_ui, session_ui).chain())
         .add_observer(on_connecting)
         .add_observer(on_connected)
         .add_observer(on_disconnected)

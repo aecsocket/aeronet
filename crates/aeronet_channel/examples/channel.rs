@@ -5,7 +5,7 @@ use {
     aeronet_channel::{ChannelIo, ChannelIoPlugin},
     aeronet_io::{Session, connection::Disconnect},
     bevy::{log::LogPlugin, prelude::*},
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui},
     core::mem,
 };
 
@@ -24,7 +24,8 @@ fn main() -> AppExit {
             ChannelIoPlugin,
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, (add_msgs_to_ui, session_ui))
+        .add_systems(Update, add_msgs_to_ui)
+        .add_systems(EguiPrimaryContextPass, session_ui)
         .run()
 }
 

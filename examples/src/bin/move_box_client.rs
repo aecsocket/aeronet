@@ -18,7 +18,7 @@ use {
         client::{WebTransportClient, WebTransportClientPlugin},
     },
     bevy::{ecs::query::QuerySingleError, prelude::*},
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui},
     bevy_replicon::prelude::*,
     examples::move_box::{
         GameState, MoveBoxPlugin, PlayerColor, PlayerInput, PlayerPosition, WEB_SOCKET_PORT,
@@ -48,10 +48,11 @@ fn main() -> AppExit {
         .add_systems(Startup, setup_level)
         .add_systems(
             Update,
-            (
-                (web_transport_ui, web_socket_ui, global_ui).chain(),
-                (draw_boxes, handle_inputs).run_if(in_state(GameState::Playing)),
-            ),
+            (draw_boxes, handle_inputs).run_if(in_state(GameState::Playing)),
+        )
+        .add_systems(
+            EguiPrimaryContextPass,
+            (web_transport_ui, web_socket_ui, global_ui).chain(),
         )
         .add_observer(on_connecting)
         .add_observer(on_connected)

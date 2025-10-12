@@ -27,7 +27,7 @@ use {
     },
     aeronet_websocket::client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
     bevy::prelude::*,
-    bevy_egui::{EguiContexts, EguiPlugin, egui},
+    bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui},
     core::mem,
 };
 
@@ -51,10 +51,8 @@ fn main() -> AppExit {
         // Connect to the server on startup.
         .add_systems(Startup, setup)
         // Every frame, we..
-        .add_systems(Update, (
-            recv_messages, // ..receive messages and push them into the session's `UiState`
-            ui, // ..draw the UI for the session
-        ))
+        .add_systems(Update, recv_messages) // ..receive messages and push them into the session's `UiState`
+        .add_systems(EguiPrimaryContextPass, ui) // ..draw the UI for the session
         // Set up some observers to run when the session state changes
         .add_observer(on_connecting)
         .add_observer(on_connected)
