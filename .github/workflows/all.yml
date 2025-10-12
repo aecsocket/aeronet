@@ -1,0 +1,21 @@
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  typos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@master
+
+  # Disabled until <https://github.com/tombi-toml/tombi/issues/1125> is resolved
+  # tombi:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: tombi-toml/setup-tombi@v1
+  #     - run: tombi lint
+  #     - run: tombi fmt --check

@@ -18,21 +18,6 @@ jobs:
           components: rustfmt
       - run: cargo +nightly fmt --check
 
-  # Disabled until <https://github.com/tombi-toml/tombi/issues/1125> is resolved
-  # tombi:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: tombi-toml/setup-tombi@v1
-  #     - run: tombi lint
-  #     - run: tombi fmt --check
-
-  typos:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: crate-ci/typos@master
-
   shear:
     runs-on: ubuntu-latest
     steps:
@@ -60,8 +45,11 @@ jobs:
     strategy:
       matrix:
         target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+        include:
+          - target: "wasm32-unknown-unknown"
+            docflags: '--cfg=getrandom_backend="wasm_js"'
     env:
-      RUSTDOCFLAGS: '-Dwarnings --cfg=web_sys_unstable_apis --cfg=getrandom_backend="wasm_js"'
+      RUSTDOCFLAGS: "-Dwarnings --cfg=web_sys_unstable_apis ${{ matrix.docflags }}"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
