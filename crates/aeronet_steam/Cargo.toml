@@ -11,6 +11,7 @@ categories.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg=docsrs_aeronet"]
 
 [[example]]
 name = "steam_client"
