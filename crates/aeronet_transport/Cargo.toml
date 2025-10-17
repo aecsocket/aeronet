@@ -51,11 +51,11 @@ typesize = { workspace = true, features = ["saturating_impls"] }
 
 [features]
 default = ["std"]
-# #Allows generating arbitrary values of some types with [`arbitrary`], useful for fuzz testing.
-# #
-# #  [`arbitrary`]: https://docs.rs/arbitrary
+## Allows generating arbitrary values of some types with [`arbitrary`], useful for fuzz testing.
+##
+## [`arbitrary`]: https://docs.rs/arbitrary
 arbitrary = ["dep:arbitrary", "std"]
-# #Enable this when generating docs.
+## Enable this when generating docs.
 document-features = [
   # "Wait - why the hell does `document-features` enable `bevy_winit`!?!?"
   #
@@ -73,17 +73,17 @@ document-features = [
   "bevy_winit/x11",
   "dep:document-features",
 ]
-# #Allows serializing and deserializing some types with [`serde`].
-# #
-# #  [`serde`]: https://docs.rs/serde
+## Allows serializing and deserializing some types with [`serde`].
+##
+## [`serde`]: https://docs.rs/serde
 serde = ["dep:serde"]
-# #Enables standard library support.
+## Enables standard library support.
 std = ["aeronet_io/std"]
-# #Allows using the `visualizer` module, which draws session statistics using [`bevy_egui`] and
-# #  [`egui_plot`].
-# #
-# #  [`bevy_egui`]: https://docs.rs/bevy_egui
-# #  [`egui_plot`]: https://docs.rs/egui_plot
+## Allows using the `visualizer` module, which draws session statistics using [`bevy_egui`] and
+## [`egui_plot`].
+##
+## [`bevy_egui`]: https://docs.rs/bevy_egui
+## [`egui_plot`]: https://docs.rs/egui_plot
 visualizer = [
   "dep:bevy_egui",
   "dep:egui_plot",

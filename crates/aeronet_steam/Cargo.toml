@@ -49,9 +49,9 @@ bevy_egui = { workspace = true }
 steamworks = { workspace = true }
 
 [features]
-# #Enables the `client` module.
+## Enables the `client` module.
 client = []
-# #Enables the `server` module.
+## Enables the `server` module.
 server = []
 
 [lints]

@@ -11,12 +11,12 @@ keywords = ["bevy", "gamedev", "network"]
 categories = ["game-development", "network-programming"]
 
 [workspace.dependencies]
-aeronet = { path = "crates/aeronet", version = "0.17.0", default-features = false }
-aeronet_io = { path = "crates/aeronet_io", version = "0.17.0", default-features = false }
-aeronet_replicon = { path = "crates/aeronet_replicon", version = "0.17.0", default-features = false }
-aeronet_transport = { path = "crates/aeronet_transport", version = "0.17.0", default-features = false }
-aeronet_websocket = { path = "crates/aeronet_websocket", version = "0.17.0" }
-aeronet_webtransport = { path = "crates/aeronet_webtransport", version = "0.17.0" }
+aeronet = { path = "crates/aeronet", version = "0.17.1", default-features = false }
+aeronet_io = { path = "crates/aeronet_io", version = "0.17.1", default-features = false }
+aeronet_replicon = { path = "crates/aeronet_replicon", version = "0.17.1", default-features = false }
+aeronet_transport = { path = "crates/aeronet_transport", version = "0.17.1", default-features = false }
+aeronet_websocket = { path = "crates/aeronet_websocket", version = "0.17.1" }
+aeronet_webtransport = { path = "crates/aeronet_webtransport", version = "0.17.1" }
 anyhow = { version = "1.0.97", default-features = false }
 arbitrary = { version = "1.3.2", features = ["derive"] }
 base64 = { version = "0.22.1" }

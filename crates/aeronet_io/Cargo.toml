@@ -34,7 +34,7 @@ bytes = { workspace = true, features = ["extra-platforms"] }
 
 [features]
 default = ["std"]
-# #Enables standard library support.
+## Enables standard library support.
 std = ["anyhow/std", "bevy_platform/std", "bytes/std", "log/std"]
 
 [lints]

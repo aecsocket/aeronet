@@ -26,13 +26,13 @@ log = { workspace = true }
 
 [features]
 default = ["std"]
-# #Enables support for `bevy_replicon/client`.
+## Enables support for `bevy_replicon/client`.
 client = ["bevy_replicon/client"]
-# #Enable this when generating docs.
+## Enable this when generating docs.
 document-features = ["dep:document-features"]
-# #Enables support for `bevy_replicon/server`.
+## Enables support for `bevy_replicon/server`.
 server = ["bevy_replicon/server"]
-# #Enables standard library support.
+## Enables standard library support.
 std = ["aeronet_transport/std"]
 
 [lints]
