@@ -87,7 +87,10 @@ unwrap_used = "warn"
 
 [workspace.lints.rust]
 missing_docs = "warn"
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(fuzzing)"] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+  "cfg(fuzzing)",
+  "cfg(docsrs_aeronet)"
+] }
 
 [workspace.metadata.cargo-shear]
 ignored = [

@@ -11,7 +11,7 @@ categories.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
-rustflags = ["--cfg=web_sys_unstable_apis"]
+rustdoc-args = ["--cfg=web_sys_unstable_apis", "--cfg=docsrs_aeronet"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [[example]]

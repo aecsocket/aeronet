@@ -12,7 +12,7 @@ jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
@@ -21,7 +21,7 @@ jobs:
   shear:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: cargo-bins/cargo-binstall@main
       - run: cargo binstall --no-confirm cargo-shear
@@ -33,7 +33,7 @@ jobs:
       matrix:
         target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -49,9 +49,9 @@ jobs:
           - target: "wasm32-unknown-unknown"
             docflags: '--cfg=getrandom_backend="wasm_js"'
     env:
-      RUSTDOCFLAGS: "-Dwarnings --cfg=web_sys_unstable_apis ${{ matrix.docflags }}"
+      RUSTDOCFLAGS: "-Dwarnings --cfg=docsrs --cfg=web_sys_unstable_apis ${{ matrix.docflags }}"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
       - run: cargo doc --target '${{ matrix.target }}' --workspace --all-features
@@ -62,7 +62,7 @@ jobs:
       matrix:
         target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
       - run: cargo check --target '${{ matrix.target }}' --workspace --all-features --all-targets
@@ -70,7 +70,7 @@ jobs:
   check-fuzz:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
       - uses: ./.github/actions/install-bevy-deps
       - run: cargo install cargo-fuzz
@@ -82,7 +82,7 @@ jobs:
       matrix:
         package: ["aeronet_io", "aeronet_transport", "aeronet_replicon"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: thumbv6m-none-eabi
@@ -92,7 +92,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
       - uses: cargo-bins/cargo-binstall@main
@@ -103,7 +103,7 @@ jobs:
   test-doc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
       - run: cargo test --doc --workspace --all-features
