@@ -66,45 +66,45 @@ impl SessionConfig {
         };
 
         vec![
-            Entry::new_float(Key::FakePacketLossSend, self.fake_packet_loss_send * 100.0),
-            Entry::new_float(Key::FakePacketLossRecv, self.fake_packet_loss_recv * 100.0),
-            Entry::new_int32(
-                Key::FakePacketLagSend,
-                duration_to_ms(self.fake_packet_lag_send),
-            ),
-            Entry::new_int32(
-                Key::FakePacketLagRecv,
-                duration_to_ms(self.fake_packet_lag_recv),
-            ),
-            Entry::new_float(
-                Key::FakePacketReorderSend,
-                self.fake_packet_reorder_send * 100.0,
-            ),
-            Entry::new_float(
-                Key::FakePacketReorderRecv,
-                self.fake_packet_reorder_recv * 100.0,
-            ),
-            Entry::new_int32(
-                Key::FakePacketReorderTime,
-                duration_to_ms(self.fake_packet_reorder_time),
-            ),
-            Entry::new_float(Key::FakePacketDupSend, self.fake_packet_dup_send * 100.0),
-            Entry::new_float(Key::FakePacketDupRecv, self.fake_packet_dup_recv * 100.0),
-            Entry::new_int32(
-                Key::FakePacketDupTimeMax,
-                duration_to_ms(self.fake_packet_dup_time_max),
-            ),
-            Entry::new_int32(Key::TimeoutInitial, duration_to_ms(self.timeout_initial)),
-            Entry::new_int32(
-                Key::TimeoutConnected,
-                duration_to_ms(self.timeout_connected),
-            ),
-            Entry::new_int32(Key::SendBufferSize, usize_to_i32(self.send_buffer_size)),
-            Entry::new_int32(Key::SendRateMin, usize_to_i32(self.send_rate_min)),
-            Entry::new_int32(Key::SendRateMax, usize_to_i32(self.send_rate_max)),
-            Entry::new_int32(Key::MTUPacketSize, usize_to_i32(self.mtu_packet_size)),
-            Entry::new_int32(Key::SymmetricConnect, i32::from(self.symmetric_connect)),
-            Entry::new_int32(Key::LocalVirtualPort, self.local_virtual_port),
+            // Entry::new_float(Key::FakePacketLossSend, self.fake_packet_loss_send * 100.0),
+            // Entry::new_float(Key::FakePacketLossRecv, self.fake_packet_loss_recv * 100.0),
+            // Entry::new_int32(
+            //     Key::FakePacketLagSend,
+            //     duration_to_ms(self.fake_packet_lag_send),
+            // ),
+            // Entry::new_int32(
+            //     Key::FakePacketLagRecv,
+            //     duration_to_ms(self.fake_packet_lag_recv),
+            // ),
+            // Entry::new_float(
+            //     Key::FakePacketReorderSend,
+            //     self.fake_packet_reorder_send * 100.0,
+            // ),
+            // Entry::new_float(
+            //     Key::FakePacketReorderRecv,
+            //     self.fake_packet_reorder_recv * 100.0,
+            // ),
+            // Entry::new_int32(
+            //     Key::FakePacketReorderTime,
+            //     duration_to_ms(self.fake_packet_reorder_time),
+            // ),
+            // Entry::new_float(Key::FakePacketDupSend, self.fake_packet_dup_send * 100.0),
+            // Entry::new_float(Key::FakePacketDupRecv, self.fake_packet_dup_recv * 100.0),
+            // Entry::new_int32(
+            //     Key::FakePacketDupTimeMax,
+            //     duration_to_ms(self.fake_packet_dup_time_max),
+            // ),
+            // Entry::new_int32(Key::TimeoutInitial, duration_to_ms(self.timeout_initial)),
+            // Entry::new_int32(
+            //     Key::TimeoutConnected,
+            //     duration_to_ms(self.timeout_connected),
+            // ),
+            // Entry::new_int32(Key::SendBufferSize, usize_to_i32(self.send_buffer_size)),
+            // Entry::new_int32(Key::SendRateMin, usize_to_i32(self.send_rate_min)),
+            // Entry::new_int32(Key::SendRateMax, usize_to_i32(self.send_rate_max)),
+            // Entry::new_int32(Key::MTUPacketSize, usize_to_i32(self.mtu_packet_size)),
+            // Entry::new_int32(Key::SymmetricConnect, i32::from(self.symmetric_connect)),
+            // Entry::new_int32(Key::LocalVirtualPort, self.local_virtual_port),
         ]
     }
 }

@@ -14,7 +14,7 @@ use {
 fn main() -> AppExit {
     App::new()
         .add_plugins((MinimalPlugins, LogPlugin::default(), WebSocketServerPlugin))
-        .add_systems(Startup, open_server)
+        .add_systems(Startup, (setup_camera, open_server))
         .add_systems(Update, reply)
         .add_observer(on_opened)
         .add_observer(on_closed)
@@ -22,6 +22,10 @@ fn main() -> AppExit {
         .add_observer(on_connected)
         .add_observer(on_disconnected)
         .run()
+}
+
+fn setup_camera(mut commands: Commands) {
+    commands.spawn(Camera2d);
 }
 
 fn server_config() -> ServerConfig {

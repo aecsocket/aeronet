@@ -23,7 +23,7 @@ fn main() -> AppExit {
             // This will automatically add the `AeronetIoPlugin`.
             ChannelIoPlugin,
         ))
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup_camera, setup_io))
         .add_systems(Update, add_msgs_to_ui)
         .add_systems(EguiPrimaryContextPass, session_ui)
         .run()
@@ -35,7 +35,11 @@ struct SessionUi {
     log: Vec<String>,
 }
 
-fn setup(mut commands: Commands) {
+fn setup_camera(mut commands: Commands) {
+    commands.spawn(Camera2d);
+}
+
+fn setup_io(mut commands: Commands) {
     // Typically, you'll use commands to create a session.
     // With other implementations, you spawn an entity and push an
     // `EntityCommand` onto it to set up the session.

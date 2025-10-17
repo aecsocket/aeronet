@@ -27,6 +27,7 @@ fn main() -> AppExit {
         })
         .add_plugins((DefaultPlugins, EguiPlugin::default(), SteamNetClientPlugin))
         .init_resource::<Log>()
+        .add_systems(Startup, setup_camera)
         .add_systems(Update, add_msgs_to_ui)
         .add_systems(EguiPrimaryContextPass, (global_ui, session_ui).chain())
         .add_observer(on_connecting)
@@ -42,6 +43,10 @@ struct Log(Vec<String>);
 struct SessionUi {
     msg: String,
     log: Vec<String>,
+}
+
+fn setup_camera(mut commands: Commands) {
+    commands.spawn(Camera2d);
 }
 
 fn on_connecting(trigger: On<Add, SessionEndpoint>, names: Query<&Name>, mut log: ResMut<Log>) {
