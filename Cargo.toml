@@ -4,7 +4,7 @@ members = ["crates/*", "examples"]
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.86.0"
+rust-version = "1.88.0"
 repository = "https://github.com/aecsocket/aeronet"
 license = "MIT OR Apache-2.0"
 keywords = ["bevy", "gamedev", "network"]
