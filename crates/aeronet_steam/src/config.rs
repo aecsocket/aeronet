@@ -1,8 +1,15 @@
 use {core::time::Duration, steamworks::networking_types::NetworkingConfigEntry};
 
-/// Configuration for establishing a Steam networking session.
+/// **(CURRENTLY BROKEN)** Configuration for establishing a Steam networking session.
 ///
 /// Default values are obtained from [`steamnetworkingsockets.cpp`][sns].
+///
+/// # Currently Broken
+///
+/// Due to [steamworks-rs #169](https://github.com/Noxime/steamworks-rs/issues/169),
+/// these configuration options currently do nothing. If you attempt to
+/// re-enable the functionality and make a non-empty vector of config entries,
+/// you will always receive an invalid handle and run into a Steam error.
 ///
 /// [sns]: https://github.com/ValveSoftware/GameNetworkingSockets/blob/62b395172f157ca4f01eea3387d1131400f8d604/src/steamnetworkingsockets/clientlib/csteamnetworkingsockets.cpp#L43
 #[derive(Debug, Clone)]
@@ -65,47 +72,51 @@ impl SessionConfig {
             NetworkingConfigEntry as Entry, NetworkingConfigValue as Key,
         };
 
-        vec![
-            // Entry::new_float(Key::FakePacketLossSend, self.fake_packet_loss_send * 100.0),
-            // Entry::new_float(Key::FakePacketLossRecv, self.fake_packet_loss_recv * 100.0),
-            // Entry::new_int32(
-            //     Key::FakePacketLagSend,
-            //     duration_to_ms(self.fake_packet_lag_send),
-            // ),
-            // Entry::new_int32(
-            //     Key::FakePacketLagRecv,
-            //     duration_to_ms(self.fake_packet_lag_recv),
-            // ),
-            // Entry::new_float(
-            //     Key::FakePacketReorderSend,
-            //     self.fake_packet_reorder_send * 100.0,
-            // ),
-            // Entry::new_float(
-            //     Key::FakePacketReorderRecv,
-            //     self.fake_packet_reorder_recv * 100.0,
-            // ),
-            // Entry::new_int32(
-            //     Key::FakePacketReorderTime,
-            //     duration_to_ms(self.fake_packet_reorder_time),
-            // ),
-            // Entry::new_float(Key::FakePacketDupSend, self.fake_packet_dup_send * 100.0),
-            // Entry::new_float(Key::FakePacketDupRecv, self.fake_packet_dup_recv * 100.0),
-            // Entry::new_int32(
-            //     Key::FakePacketDupTimeMax,
-            //     duration_to_ms(self.fake_packet_dup_time_max),
-            // ),
-            // Entry::new_int32(Key::TimeoutInitial, duration_to_ms(self.timeout_initial)),
-            // Entry::new_int32(
-            //     Key::TimeoutConnected,
-            //     duration_to_ms(self.timeout_connected),
-            // ),
-            // Entry::new_int32(Key::SendBufferSize, usize_to_i32(self.send_buffer_size)),
-            // Entry::new_int32(Key::SendRateMin, usize_to_i32(self.send_rate_min)),
-            // Entry::new_int32(Key::SendRateMax, usize_to_i32(self.send_rate_max)),
-            // Entry::new_int32(Key::MTUPacketSize, usize_to_i32(self.mtu_packet_size)),
-            // Entry::new_int32(Key::SymmetricConnect, i32::from(self.symmetric_connect)),
-            // Entry::new_int32(Key::LocalVirtualPort, self.local_virtual_port),
-        ]
+        let entries = vec![
+            Entry::new_float(Key::FakePacketLossSend, self.fake_packet_loss_send * 100.0),
+            Entry::new_float(Key::FakePacketLossRecv, self.fake_packet_loss_recv * 100.0),
+            Entry::new_int32(
+                Key::FakePacketLagSend,
+                duration_to_ms(self.fake_packet_lag_send),
+            ),
+            Entry::new_int32(
+                Key::FakePacketLagRecv,
+                duration_to_ms(self.fake_packet_lag_recv),
+            ),
+            Entry::new_float(
+                Key::FakePacketReorderSend,
+                self.fake_packet_reorder_send * 100.0,
+            ),
+            Entry::new_float(
+                Key::FakePacketReorderRecv,
+                self.fake_packet_reorder_recv * 100.0,
+            ),
+            Entry::new_int32(
+                Key::FakePacketReorderTime,
+                duration_to_ms(self.fake_packet_reorder_time),
+            ),
+            Entry::new_float(Key::FakePacketDupSend, self.fake_packet_dup_send * 100.0),
+            Entry::new_float(Key::FakePacketDupRecv, self.fake_packet_dup_recv * 100.0),
+            Entry::new_int32(
+                Key::FakePacketDupTimeMax,
+                duration_to_ms(self.fake_packet_dup_time_max),
+            ),
+            Entry::new_int32(Key::TimeoutInitial, duration_to_ms(self.timeout_initial)),
+            Entry::new_int32(
+                Key::TimeoutConnected,
+                duration_to_ms(self.timeout_connected),
+            ),
+            Entry::new_int32(Key::SendBufferSize, usize_to_i32(self.send_buffer_size)),
+            Entry::new_int32(Key::SendRateMin, usize_to_i32(self.send_rate_min)),
+            Entry::new_int32(Key::SendRateMax, usize_to_i32(self.send_rate_max)),
+            Entry::new_int32(Key::MTUPacketSize, usize_to_i32(self.mtu_packet_size)),
+            Entry::new_int32(Key::SymmetricConnect, i32::from(self.symmetric_connect)),
+            Entry::new_int32(Key::LocalVirtualPort, self.local_virtual_port),
+        ];
+
+        // CURRENTLY BROKEN: return an empty vector instead
+        _ = entries;
+        Vec::new()
     }
 }
 
