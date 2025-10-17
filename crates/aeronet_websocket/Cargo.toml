@@ -66,15 +66,15 @@ web-sys = { workspace = true, features = [
 
 [features]
 default = ["self-signed"]
-## Enables the `client` module.
+# #Enables the `client` module.
 client = []
-## Enable this when generating docs.
+# #Enable this when generating docs.
 document-features = ["dep:document-features"]
-## Allows generating self-signed server certificates using [`rcgen`].
-## 
-##  [`rcgen`]: https://docs.rs/rcgen
+# #Allows generating self-signed server certificates using [`rcgen`].
+# #
+# #  [`rcgen`]: https://docs.rs/rcgen
 self-signed = ["dep:rcgen"]
-## Enables the `server` module.
+# #Enables the `server` module.
 server = ["dep:tokio-rustls"]
 
 [lints]
