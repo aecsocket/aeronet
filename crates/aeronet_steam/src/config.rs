@@ -1,6 +1,7 @@
 use {core::time::Duration, steamworks::networking_types::NetworkingConfigEntry};
 
-/// **(CURRENTLY BROKEN)** Configuration for establishing a Steam networking session.
+/// **(CURRENTLY BROKEN)** Configuration for establishing a Steam networking
+/// session.
 ///
 /// Default values are obtained from [`steamnetworkingsockets.cpp`][sns].
 ///
