@@ -52,9 +52,9 @@ jobs:
       RUSTDOCFLAGS: "-Dwarnings --cfg=docsrs --cfg=web_sys_unstable_apis ${{ matrix.docflags }}"
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: ./.github/actions/install-bevy-deps
-      - run: cargo doc --target '${{ matrix.target }}' --workspace --all-features
+      - run: cargo +nightly doc --target '${{ matrix.target }}' --workspace --all-features
 
   check:
     runs-on: ubuntu-latest
