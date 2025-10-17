@@ -53,6 +53,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: "wasm32-unknown-unknown"
       - uses: ./.github/actions/install-bevy-deps
       - run: cargo +nightly doc --target '${{ matrix.target }}' --workspace --all-features
 
