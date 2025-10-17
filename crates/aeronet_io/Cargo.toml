@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_io"
-version = "0.17.0"
+version = "0.17.1"
 edition.workspace = true
 rust-version.workspace = true
 description = "IO abstraction primitives for `aeronet`"
@@ -34,7 +34,7 @@ bytes = { workspace = true, features = ["extra-platforms"] }
 
 [features]
 default = ["std"]
-# #Enables standard library support.
+## Enables standard library support.
 std = ["anyhow/std", "bevy_platform/std", "bytes/std", "log/std"]
 
 [lints]

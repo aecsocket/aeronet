@@ -1,8 +1,16 @@
 use {core::time::Duration, steamworks::networking_types::NetworkingConfigEntry};
 
-/// Configuration for establishing a Steam networking session.
+/// **(CURRENTLY BROKEN)** Configuration for establishing a Steam networking
+/// session.
 ///
 /// Default values are obtained from [`steamnetworkingsockets.cpp`][sns].
+///
+/// # Currently Broken
+///
+/// Due to [steamworks-rs #169](https://github.com/Noxime/steamworks-rs/issues/169),
+/// these configuration options currently do nothing. If you attempt to
+/// re-enable the functionality and make a non-empty vector of config entries,
+/// you will always receive an invalid handle and run into a Steam error.
 ///
 /// [sns]: https://github.com/ValveSoftware/GameNetworkingSockets/blob/62b395172f157ca4f01eea3387d1131400f8d604/src/steamnetworkingsockets/clientlib/csteamnetworkingsockets.cpp#L43
 #[derive(Debug, Clone)]
@@ -65,7 +73,7 @@ impl SessionConfig {
             NetworkingConfigEntry as Entry, NetworkingConfigValue as Key,
         };
 
-        vec![
+        let entries = vec![
             Entry::new_float(Key::FakePacketLossSend, self.fake_packet_loss_send * 100.0),
             Entry::new_float(Key::FakePacketLossRecv, self.fake_packet_loss_recv * 100.0),
             Entry::new_int32(
@@ -105,7 +113,11 @@ impl SessionConfig {
             Entry::new_int32(Key::MTUPacketSize, usize_to_i32(self.mtu_packet_size)),
             Entry::new_int32(Key::SymmetricConnect, i32::from(self.symmetric_connect)),
             Entry::new_int32(Key::LocalVirtualPort, self.local_virtual_port),
-        ]
+        ];
+
+        // CURRENTLY BROKEN: return an empty vector instead
+        _ = entries;
+        Vec::new()
     }
 }
 

@@ -1,6 +1,13 @@
 //! Example showing a Steam sockets client which can send and receive UTF-8
 //! strings.
 
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+        fn main() {
+            panic!("not supported on WASM");
+        }
+    } else {
+
 use {
     aeronet_io::{
         Session, SessionEndpoint,
@@ -27,6 +34,7 @@ fn main() -> AppExit {
         })
         .add_plugins((DefaultPlugins, EguiPlugin::default(), SteamNetClientPlugin))
         .init_resource::<Log>()
+        .add_systems(Startup, setup_camera)
         .add_systems(Update, add_msgs_to_ui)
         .add_systems(EguiPrimaryContextPass, (global_ui, session_ui).chain())
         .add_observer(on_connecting)
@@ -42,6 +50,10 @@ struct Log(Vec<String>);
 struct SessionUi {
     msg: String,
     log: Vec<String>,
+}
+
+fn setup_camera(mut commands: Commands) {
+    commands.spawn(Camera2d);
 }
 
 fn on_connecting(trigger: On<Add, SessionEndpoint>, names: Query<&Name>, mut log: ResMut<Log>) {
@@ -192,13 +204,11 @@ fn session_ui(
                 })
                 .inner;
 
-            if send_msg {
-                if let Some(session) = &mut session {
-                    let msg = mem::take(&mut ui_state.msg);
-                    ui_state.log.push(format!("< {msg}"));
-                    session.send.push(msg.into());
-                    ui.memory_mut(|m| m.request_focus(msg_resp.id));
-                }
+            if send_msg && let Some(session) = &mut session {
+                let msg = mem::take(&mut ui_state.msg);
+                ui_state.log.push(format!("< {msg}"));
+                session.send.push(msg.into());
+                ui.memory_mut(|m| m.request_focus(msg_resp.id));
             }
 
             if ui.button("Disconnect").clicked() {
@@ -231,3 +241,5 @@ fn session_ui(
 
     Ok(())
 }
+
+}}

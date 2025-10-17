@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_websocket"
-version = "0.17.0"
+version = "0.17.1"
 edition.workspace = true
 rust-version.workspace = true
 description = "WebSocket IO layer implementation for `aeronet`"
@@ -43,6 +43,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 bevy = { workspace = true }
 bevy_egui = { workspace = true }
+cfg-if = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 rcgen = { workspace = true, optional = true }
@@ -66,15 +67,15 @@ web-sys = { workspace = true, features = [
 
 [features]
 default = ["self-signed"]
-# #Enables the `client` module.
+## Enables the `client` module.
 client = []
-# #Enable this when generating docs.
+## Enable this when generating docs.
 document-features = ["dep:document-features"]
-# #Allows generating self-signed server certificates using [`rcgen`].
-# #
-# #  [`rcgen`]: https://docs.rs/rcgen
+## Allows generating self-signed server certificates using [`rcgen`].
+##
+## [`rcgen`]: https://docs.rs/rcgen
 self-signed = ["dep:rcgen"]
-# #Enables the `server` module.
+## Enables the `server` module.
 server = ["dep:tokio-rustls"]
 
 [lints]
