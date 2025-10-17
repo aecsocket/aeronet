@@ -173,13 +173,11 @@ fn session_ui(
                 })
                 .inner;
 
-            if send_msg {
-                if let Some(session) = &mut session {
-                    let msg = mem::take(&mut ui_state.msg);
-                    ui_state.log.push(format!("< {msg}"));
-                    session.send.push(msg.into());
-                    ui.memory_mut(|m| m.request_focus(msg_resp.id));
-                }
+            if send_msg && let Some(session) = &mut session {
+                let msg = mem::take(&mut ui_state.msg);
+                ui_state.log.push(format!("< {msg}"));
+                session.send.push(msg.into());
+                ui.memory_mut(|m| m.request_focus(msg_resp.id));
             }
 
             if ui.button("Disconnect").clicked() {
