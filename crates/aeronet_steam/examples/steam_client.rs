@@ -1,6 +1,13 @@
 //! Example showing a Steam sockets client which can send and receive UTF-8
 //! strings.
 
+cfg_if::cfg_if! {
+    if #[cfg(target_family = "wasm")] {
+        fn main() {
+            panic!("not supported on WASM");
+        }
+    } else {
+
 use {
     aeronet_io::{
         Session, SessionEndpoint,
@@ -234,3 +241,5 @@ fn session_ui(
 
     Ok(())
 }
+
+}}

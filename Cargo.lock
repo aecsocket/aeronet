@@ -161,6 +161,7 @@ dependencies = [
  "bevy_platform",
  "blocking",
  "bytes",
+ "cfg-if",
  "derive_more",
  "oneshot",
  "steamworks",
