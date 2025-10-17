@@ -49,7 +49,7 @@ jobs:
           - target: "wasm32-unknown-unknown"
             docflags: '--cfg=getrandom_backend="wasm_js"'
     env:
-      RUSTDOCFLAGS: "-Dwarnings --cfg=docsrs --cfg=web_sys_unstable_apis ${{ matrix.docflags }}"
+      RUSTDOCFLAGS: "-Dwarnings --cfg=docsrs_aeronet --cfg=web_sys_unstable_apis ${{ matrix.docflags }}"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
