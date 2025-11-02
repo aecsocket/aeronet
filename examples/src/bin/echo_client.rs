@@ -49,7 +49,7 @@ fn main() -> AppExit {
             AeronetTransportPlugin,
         ))
         // Connect to the server on startup.
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup_ui, setup_connection))
         // Every frame, we..
         .add_systems(Update, recv_messages) // ..receive messages and push them into the session's `UiState`
         .add_systems(EguiPrimaryContextPass, ui) // ..draw the UI for the session
@@ -85,7 +85,13 @@ const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
 // Since we configured only 1 lane (index 0), we'll send on that lane.
 const SEND_LANE: LaneIndex = LaneIndex::new(0);
 
-fn setup(mut commands: Commands) {
+fn setup_ui(mut commands: Commands) {
+    // Required for `bevy_egui` to render content.
+    // Otherwise you'll just get a blank window.
+    commands.spawn(Camera2d);
+}
+
+fn setup_connection(mut commands: Commands) {
     // Let's start a connection to a WebSocket server.
 
     // First, make the configuration.

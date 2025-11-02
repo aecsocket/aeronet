@@ -45,7 +45,7 @@ fn main() -> AppExit {
         .init_resource::<GlobalUi>()
         .init_resource::<WebTransportUi>()
         .init_resource::<WebSocketUi>()
-        .add_systems(Startup, setup_level)
+        .add_systems(Startup, (setup_ui, setup_level))
         .add_systems(
             Update,
             (draw_boxes, handle_inputs).run_if(in_state(GameState::Playing)),
@@ -75,6 +75,10 @@ struct WebTransportUi {
 #[derive(Debug, Default, Resource)]
 struct WebSocketUi {
     target: String,
+}
+
+fn setup_ui(mut commands: Commands) {
+    commands.spawn(Camera2d);
 }
 
 fn setup_level(mut commands: Commands) {
