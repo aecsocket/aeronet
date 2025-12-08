@@ -175,7 +175,7 @@ fn on_disconnected(trigger: On<Disconnected>) {
     match &trigger.reason {
         DisconnectReason::ByUser(reason) => info!("{entity} disconnected by user: {reason}"),
         DisconnectReason::ByPeer(reason) => info!("{entity} disconnected by peer: {reason}"),
-        DisconnectReason::ByError(err) => warn!("{entity} disconnected due to error: {err:?}"),
+        DisconnectReason::ByError(err) => warn!("{entity} disconnected due to error: {err:#}"),
     }
 }
 

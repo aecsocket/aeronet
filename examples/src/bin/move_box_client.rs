@@ -45,7 +45,7 @@ fn main() -> AppExit {
         .init_resource::<GlobalUi>()
         .init_resource::<WebTransportUi>()
         .init_resource::<WebSocketUi>()
-        .add_systems(Startup, (setup_ui, setup_level))
+        .add_systems(Startup, setup_ui)
         .add_systems(
             Update,
             (draw_boxes, handle_inputs).run_if(in_state(GameState::Playing)),
@@ -78,10 +78,6 @@ struct WebSocketUi {
 }
 
 fn setup_ui(mut commands: Commands) {
-    commands.spawn(Camera2d);
-}
-
-fn setup_level(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
 
@@ -151,7 +147,7 @@ fn on_disconnected(
             format!("{name} disconnected by peer: {reason}")
         }
         DisconnectReason::ByError(err) => {
-            format!("{name} disconnected due to error: {err:?}")
+            format!("{name} disconnected due to error: {err:#}")
         }
     });
     game_state.set(GameState::None);

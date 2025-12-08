@@ -26,7 +26,6 @@ required-features = ["server", "self-signed"]
 
 [dependencies]
 aeronet_io = { workspace = true }
-anyhow = { workspace = true }
 base64 = { workspace = true }
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
@@ -47,6 +46,7 @@ tracing = { workspace = true }
 xwt-core = { workspace = true }
 
 [dev-dependencies]
+anyhow = { workspace = true }
 bevy = { workspace = true }
 bevy_egui = { workspace = true }
 

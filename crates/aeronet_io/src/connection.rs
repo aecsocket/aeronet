@@ -213,7 +213,7 @@ fn on_disconnected(trigger: On<Disconnected>, mut commands: Commands) {
             debug!("{entity} disconnected by peer: {reason}");
         }
         DisconnectReason::ByError(err) => {
-            debug!("{entity} disconnected due to error: {err:?}");
+            debug!("{entity} disconnected due to error: {err:#}");
         }
     }
 
