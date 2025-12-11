@@ -128,7 +128,6 @@ name = "aeronet_replicon"
 version = "0.17.2"
 dependencies = [
  "aeronet_io",
- "aeronet_replicon",
  "aeronet_transport",
  "bevy_app",
  "bevy_ecs",
@@ -136,11 +135,8 @@ dependencies = [
  "bevy_reflect",
  "bevy_replicon",
  "bevy_state",
- "bevy_time",
- "bevy_utils",
  "document-features",
  "log",
- "serde",
 ]
 
 [[package]]

@@ -29,7 +29,6 @@ bevy_reflect = { version = "0.17.2", default-features = false }
 bevy_replicon = { version = "0.37.0", default-features = false }
 bevy_state = { version = "0.17.2", default-features = false }
 bevy_time = { version = "0.17.2", default-features = false }
-bevy_utils = { version = "0.17.2", default-features = false }
 bevy_winit = { version = "0.17.2", default-features = false }
 bit-vec = { version = "0.8.0", default-features = false }
 blocking = { version = "1.6.1" }

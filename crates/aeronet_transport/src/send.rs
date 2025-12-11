@@ -206,7 +206,7 @@ impl TransportSend {
             // in summary, we must add a synthetic fragment specifically here.
             // this is checked by the test `send_no_data`.
             let frags = if frags.is_empty() {
-                vec![SentFragment {
+                alloc::vec![SentFragment {
                     position: FragmentPosition::ZERO_LAST,
                     payload: Bytes::new(),
                     sent_at: now,

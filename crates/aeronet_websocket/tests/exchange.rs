@@ -1,4 +1,5 @@
-#![expect(missing_docs, clippy::unwrap_used, reason = "testing")]
+#![expect(missing_docs, reason = "testing")]
+#![cfg(test)]
 #![cfg(not(target_family = "wasm"))]
 
 use {

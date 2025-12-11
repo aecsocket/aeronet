@@ -97,15 +97,19 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
-      - uses: cargo-bins/cargo-binstall@main
-      - run: cargo binstall --no-confirm cargo-nextest
-      - run: cargo nextest run --workspace --all-features
+      - run: cargo test --workspace --all-features
 
-  # `cargo nextest` currently doesn't support doctests: <https://nexte.st/#quick-start>
-  test-doc:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: ./.github/actions/install-bevy-deps
-      - run: cargo test --doc --workspace --all-features
+      # nextest always runs out of space: <https://github.com/aecsocket/aeronet/actions/runs/20119199477/job/57735517314>
+      # - uses: cargo-bins/cargo-binstall@main
+      # - run: cargo binstall --no-confirm cargo-nextest
+      # - run: cargo nextest run --workspace --all-features
+
+  # would prefer to use nextest, but see above
+  # # `cargo nextest` currently doesn't support doctests: <https://nexte.st/#quick-start>
+  # test-doc:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #     - uses: dtolnay/rust-toolchain@stable
+  #     - uses: ./.github/actions/install-bevy-deps
+  #     - run: cargo test --doc --workspace --all-features

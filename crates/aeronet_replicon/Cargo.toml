@@ -25,13 +25,6 @@ bevy_state = { workspace = true }
 document-features = { workspace = true, optional = true }
 log = { workspace = true }
 
-[dev-dependencies]
-aeronet_replicon = { path = ".", features = ["client", "server"] }
-bevy_time = { workspace = true }
-bevy_utils = { workspace = true, features = ["debug"] }
-# bevy = { workspace = true, features = ["debug"] }
-serde = { workspace = true, features = ["derive"] }
-
 [features]
 default = ["std"]
 ## Enables support for `bevy_replicon/client`.

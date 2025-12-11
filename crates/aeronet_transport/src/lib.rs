@@ -3,6 +3,9 @@
 //!
 //! ## Feature flags
 #![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
+// we can't use plain `#![no_std]` here,
+// because the `derive(arbitrary::Arbitrary)` macro breaks without `std`
+// so we just have to be more careful with using `std` prelude items
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
