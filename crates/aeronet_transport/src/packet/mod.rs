@@ -193,7 +193,7 @@ pub struct FragmentHeader {
 }
 
 /// Single fragment of a message.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fragment {
     /// Fragment metadata.
     pub header: FragmentHeader,

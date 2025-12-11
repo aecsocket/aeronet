@@ -55,8 +55,18 @@ impl Plugin for PacketPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<PacketRtt>()
             .register_type::<PacketStats>()
-            .add_systems(PreUpdate, clear_recv_buffers.before(IoSystems::Poll))
-            .add_systems(PostUpdate, clear_send_buffers.after(IoSystems::Flush));
+            .add_systems(
+                PreUpdate,
+                clear_recv_buffers
+                    .before(IoSystems::Poll)
+                    .run_if(not(resource_exists::<NoClearBuffers>)),
+            )
+            .add_systems(
+                PostUpdate,
+                clear_send_buffers
+                    .after(IoSystems::Flush)
+                    .run_if(not(resource_exists::<NoClearBuffers>)),
+            );
     }
 }
 
@@ -126,6 +136,16 @@ pub struct PacketStats {
 #[reflect(Component)]
 #[doc(alias = "ping", alias = "latency")]
 pub struct PacketRtt(pub Duration);
+
+/// Marker resource to indicate that the IO layer should not clear buffers.
+///
+/// Normally, [`clear_recv_buffers`] and [`clear_send_buffers`] are ran on every
+/// update to clear buffers of IO sessions, if they are not already empty. In
+/// some cases, like for testing purposes, this may be undesirable. If this
+/// resource is present in the world, these systems will not run.
+#[derive(Debug, Clone, Copy, Default, Resource, Reflect)]
+#[reflect(Resource)]
+pub struct NoClearBuffers;
 
 /// Clears all [`Session::recv`] buffers, emitting warnings if there were any
 /// packets left in the buffer.

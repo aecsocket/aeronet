@@ -14,7 +14,7 @@ use {
     bevy_replicon::prelude::*,
     bevy_state::state::NextState,
     core::{num::Saturating, time::Duration},
-    log::warn,
+    log::{trace, warn},
 };
 
 /// Provides a [`bevy_replicon`] client backend using [`Session`]s for
@@ -224,12 +224,22 @@ fn update_state(
 
 fn poll(
     mut client_msgs: ResMut<ClientMessages>,
-    mut clients: Query<&mut Transport, With<AeronetRepliconClient>>,
+    mut clients: Query<(Entity, &mut Transport), With<AeronetRepliconClient>>,
 ) {
-    for mut transport in &mut clients {
+    for (client, mut transport) in &mut clients {
+        let mut msgs_recv = Saturating(0usize);
+        let mut bytes_recv = Saturating(0usize);
         for msg in transport.recv.msgs.drain() {
+            msgs_recv += 1;
+            bytes_recv += msg.payload.len();
+
             let channel_id = convert::to_channel_id(msg.lane);
             client_msgs.insert_received(channel_id, msg.payload);
+        }
+        if msgs_recv.0 > 0 || bytes_recv.0 > 0 {
+            trace!(
+                "Client {client} received {msgs_recv} messages ({bytes_recv} bytes) from server"
+            );
         }
 
         for _ in transport.recv.acks.drain() {
@@ -248,6 +258,11 @@ fn flush(
             warn!("Channel {channel_id} is too large to convert to a lane index");
             continue;
         };
+
+        trace!(
+            "Sent 1 message ({} bytes) along all clients to all servers",
+            msg.len()
+        );
         for mut transport in &mut clients {
             _ = transport.send.push(lane_index, msg.clone(), now);
         }

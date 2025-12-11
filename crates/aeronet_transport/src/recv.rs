@@ -190,34 +190,41 @@ pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut Transport, &T
     }
 }
 
+/// Why a packet could not be received by a [`Transport`].
 #[derive(Debug, Display, Error)]
-enum RecvError {
+pub enum RecvError {
+    /// Packet was too short to contain a packet header.
     #[display("not enough bytes to read header")]
     ReadHeader,
+    /// Packet was too short to contain a fragment header.
     #[display("not enough bytes to read fragment")]
     ReadFragment,
+    /// Packet specified that it is a message on a lane that we don't have.
     #[display("invalid lane {lane:?}")]
-    InvalidLane { lane: LaneIndex },
+    InvalidLane {
+        /// Lane that the message claims it was sent on.
+        lane: LaneIndex,
+    },
+    /// Failed to reassemble the packet's fragments into a message.
     #[display("failed to reassemble fragment")]
     Reassemble(ReassembleError),
 }
 
-/// Exposes `recv_on` for fuzz tests.
-#[cfg(fuzzing)]
-pub fn fuzz_recv_on(
-    transport: &mut Transport,
-    packet: &[u8],
-) -> Result<(), Box<dyn core::error::Error>> {
-    recv_on(
-        transport,
-        &TransportConfig::default(),
-        Instant::now(),
-        packet,
-    )
-    .map_err(|err| Box::new(err) as Box<_>)
-}
-
-fn recv_on(
+/// Forces a [`Transport`] to receive a packet, attempting to decode it into a
+/// message and buffer it.
+///
+/// This function is advanced and has the potential to screw up the transport
+/// state - only use it if you know what you're doing!
+///
+/// Every update, for all [`Session`] with an associated [`Transport`], the
+/// session's buffered received packets are passed to this function along with
+/// the paired transport.
+///
+/// # Errors
+///
+/// Errors if the packet could not be received, decoded, and made available to
+/// the transport. Errors are non-fatal.
+pub fn recv_on(
     transport: &mut Transport,
     config: &TransportConfig,
     recv_at: Instant,
@@ -431,4 +438,93 @@ fn recv_on_lane(
         }
     }
     .into_iter()
+}
+
+#[cfg(test)]
+mod tests {
+    use {
+        crate::{
+            Transport, TransportConfig,
+            lane::{LaneIndex, LaneKind},
+            packet::{
+                Acknowledge, Fragment, FragmentHeader, FragmentPayload, FragmentPosition,
+                MessageSeq, PacketHeader, PacketSeq,
+            },
+        },
+        aeronet_io::Session,
+        bevy_platform::time::Instant,
+        octs::{Bytes, Write},
+    };
+
+    const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
+    const LANE: LaneIndex = LaneIndex::new(0);
+
+    #[test]
+    fn recv_one_frag() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
+
+        let mut packet = Vec::<u8>::new();
+        packet
+            .write(&PacketHeader {
+                seq: PacketSeq::new(0),
+                acks: Acknowledge::default(),
+            })
+            .unwrap();
+        packet
+            .write(&Fragment {
+                header: FragmentHeader {
+                    lane: LANE,
+                    seq: MessageSeq::new(0),
+                    position: FragmentPosition::last(0u16).unwrap(),
+                },
+                payload: FragmentPayload(Bytes::from_static(b"hello world")),
+            })
+            .unwrap();
+
+        super::recv_on(
+            &mut transport,
+            &TransportConfig::default(),
+            Instant::now(),
+            &packet,
+        )
+        .unwrap();
+
+        {
+            let mut msgs = transport.recv.msgs.drain();
+            assert!(msgs.next().is_some());
+            assert!(msgs.next().is_none());
+        }
+    }
+
+    #[test]
+    fn recv_no_frags() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
+
+        let mut packet = Vec::<u8>::new();
+        packet
+            .write(&PacketHeader {
+                seq: PacketSeq::new(0),
+                acks: Acknowledge::default(),
+            })
+            .unwrap();
+        // we don't write a fragment here
+        // so we must not receive a message
+
+        super::recv_on(
+            &mut transport,
+            &TransportConfig::default(),
+            Instant::now(),
+            &packet,
+        )
+        .unwrap();
+
+        {
+            let mut msgs = transport.recv.msgs.drain();
+            assert!(msgs.next().is_none());
+        }
+    }
 }

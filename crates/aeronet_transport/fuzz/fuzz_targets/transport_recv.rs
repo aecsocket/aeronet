@@ -18,5 +18,5 @@ fuzz_target!(|packet: &[u8]| {
     let now = Instant::now();
     let session = Session::new(now, MTU);
     let mut transport = Transport::new(&session, RECV_LANES, [], now).unwrap();
-    _ = aeronet_transport::recv::fuzz_recv_on(&mut transport, packet);
+    _ = aeronet_transport::recv::recv_on(&mut transport, packet);
 });
