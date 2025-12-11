@@ -1,7 +1,7 @@
 #![no_main]
 
 use {
-    aeronet_transport::{Transport, io::Session, lane::LaneKind},
+    aeronet_transport::{Transport, TransportConfig, io::Session, lane::LaneKind},
     libfuzzer_sys::fuzz_target,
     std::time::Instant,
 };
@@ -18,5 +18,5 @@ fuzz_target!(|packet: &[u8]| {
     let now = Instant::now();
     let session = Session::new(now, MTU);
     let mut transport = Transport::new(&session, RECV_LANES, [], now).unwrap();
-    _ = aeronet_transport::recv::recv_on(&mut transport, packet);
+    _ = aeronet_transport::recv::recv_on(&mut transport, &TransportConfig::default(), now, packet);
 });
