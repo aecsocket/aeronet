@@ -50,9 +50,10 @@ fn round_trip(msg: &'static [u8]) {
     // take the sent packet and re-insert it as a received packet
 
     // // the message will still be queued until the next time we update
-    // // since we've removed the fragment for sending *after* dropping messages with no fragments
-    // let transport = app.world().get::<Transport>(entity).unwrap();
-    // assert_eq!(0, transport.send.lanes().first().unwrap().num_queued_msgs());
+    // // since we've removed the fragment for sending *after* dropping messages
+    // with no fragments let transport =
+    // app.world().get::<Transport>(entity).unwrap(); assert_eq!(0,
+    // transport.send.lanes().first().unwrap().num_queued_msgs());
 
     let mut session = app.world_mut().get_mut::<Session>(entity).unwrap();
     assert_eq!(1, session.send.len());
