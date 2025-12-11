@@ -103,7 +103,7 @@ jobs:
           - "aeronet_io"
           - "aeronet_transport"
           - "aeronet_channel"
-          - "aeronet_steam"
+          # - "aeronet_steam" # has no tests
           - "aeronet_websocket"
           - "aeronet_webtransport"
     steps:
