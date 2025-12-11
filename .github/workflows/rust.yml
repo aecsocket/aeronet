@@ -97,9 +97,15 @@ jobs:
       matrix:
         # nextest always seems to run out of space when compiling:
         # <https://github.com/aecsocket/aeronet/actions/runs/20119199477/job/57735517314>
-        # so we'll run individual tests for different leaf crates
+        # so we'll run tests for individual crates
         # hopefully then we won't run out of space
-        package: ["aeronet_steam", "aeronet_websocket", "aeronet_webtransport"]
+        package:
+          - "aeronet_io"
+          - "aeronet_transport"
+          - "aeronet_channel"
+          - "aeronet_steam"
+          - "aeronet_websocket"
+          - "aeronet_webtransport"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
