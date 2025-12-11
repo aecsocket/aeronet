@@ -67,7 +67,7 @@ fn on_disconnected(trigger: On<Disconnected>, names: Query<&Name>, mut log: ResM
             format!("{name} disconnected by peer: {reason}")
         }
         DisconnectReason::ByError(err) => {
-            format!("{name} disconnected due to error: {err:?}")
+            format!("{name} disconnected due to error: {err:#}")
         }
     });
 }

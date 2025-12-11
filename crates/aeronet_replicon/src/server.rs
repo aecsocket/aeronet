@@ -16,7 +16,8 @@ use {
     bevy_reflect::Reflect,
     bevy_replicon::{prelude::*, server::ServerSystems},
     bevy_state::state::NextState,
-    log::warn,
+    core::num::Saturating,
+    log::{trace, warn},
 };
 
 /// Provides a [`bevy_replicon`] server backend using [`Server`]s and
@@ -190,9 +191,20 @@ fn poll(
             continue;
         }
 
+        let mut msgs_recv = Saturating(0usize);
+        let mut bytes_recv = Saturating(0usize);
         for msg in transport.recv.msgs.drain() {
+            msgs_recv += 1;
+            bytes_recv += msg.payload.len();
+
             let channel_id = convert::to_channel_id(msg.lane);
             server_msgs.insert_received(client, channel_id, msg.payload);
+        }
+        if msgs_recv.0 > 0 || bytes_recv.0 > 0 {
+            trace!(
+                "Server {server} received {msgs_recv} messages ({bytes_recv} bytes) from client \
+                 {client}"
+            );
         }
 
         for _ in transport.recv.acks.drain() {
@@ -235,6 +247,7 @@ fn flush(mut server_msgs: ResMut<ServerMessages>, mut clients: Query<&mut Transp
             continue;
         };
 
+        trace!("Sent 1 message ({} bytes) to client {client}", msg.len());
         _ = transport.send.push(lane_index, msg, now);
     }
 }

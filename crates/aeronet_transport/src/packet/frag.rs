@@ -10,6 +10,12 @@ use {
 // `FragmentPosition`
 
 impl FragmentPosition {
+    /// Position for the first fragment in a message, which is not the last.
+    pub const ZERO_NON_LAST: Self = Self(MinSize(0));
+
+    /// Position for the first fragment in a message, which is also the last.
+    pub const ZERO_LAST: Self = Self(MinSize(1));
+
     /// Creates a position for a fragment which is *not* the last one in the
     /// message.
     ///

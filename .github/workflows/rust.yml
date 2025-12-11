@@ -93,13 +93,26 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # nextest always seems to run out of space when compiling:
+        # <https://github.com/aecsocket/aeronet/actions/runs/20119199477/job/57735517314>
+        # so we'll run tests for individual crates
+        # hopefully then we won't run out of space
+        package:
+          - "aeronet_io"
+          - "aeronet_transport"
+          - "aeronet_channel"
+          # - "aeronet_steam" # has no tests
+          - "aeronet_websocket"
+          - "aeronet_webtransport"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/install-bevy-deps
       - uses: cargo-bins/cargo-binstall@main
       - run: cargo binstall --no-confirm cargo-nextest
-      - run: cargo nextest run --workspace --all-features
+      - run: cargo nextest run --package '${{ matrix.package }}' --all-features
 
   # `cargo nextest` currently doesn't support doctests: <https://nexte.st/#quick-start>
   test-doc:

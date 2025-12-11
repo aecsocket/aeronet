@@ -82,7 +82,7 @@ impl TransportSend {
                     next_msg_seq: MessageSeq::default(),
                 })
                 .collect(),
-            bytes_bucket: TokenBucket::new(0),
+            bytes_bucket: TokenBucket::new(usize::MAX),
             next_packet_seq: PacketSeq::default(),
             error: None,
         }
@@ -177,18 +177,47 @@ impl TransportSend {
                 return Err(TransportSendError::TooManyMessages);
             };
 
-            let frags = frag::split(self.max_frag_len, msg)?;
+            let frags = frag::split(self.max_frag_len, msg)?
+                .map(|(position, payload)| SentFragment {
+                    position,
+                    payload,
+                    sent_at: now,
+                    next_flush_at: now,
+                })
+                .collect::<Vec<_>>();
+
+            // if the message is empty, we will generate no fragments.
+            //
+            // this is unacceptable, because when we send this message out in a
+            // packet, it will have no fragment header, so will never be
+            // received and acked by the peer - consequently, we will never be
+            // told that the peer has acked this message.
+            // even if a message is empty, it's still an important object to
+            // track.
+            //
+            // we also can't just say in the sending logic, "if this message has
+            // no frags, just make one up on the spot when sending", because at
+            // that point we may also take out that fragment. and if a message
+            // has no fragments (`SentMessage::frags` are all `None`s), then it
+            // gets removed.
+            // therefore, if we add a message with all `None` frags, then it
+            // will immediately be dropped!
+            //
+            // in summary, we must add a synthetic fragment specifically here.
+            // this is checked by the test `send_no_data`.
+            let frags = if frags.is_empty() {
+                alloc::vec![SentFragment {
+                    position: FragmentPosition::ZERO_LAST,
+                    payload: Bytes::new(),
+                    sent_at: now,
+                    next_flush_at: now,
+                }]
+            } else {
+                frags
+            };
+
             entry.insert(SentMessage {
-                frags: frags
-                    .map(|(position, payload)| {
-                        Some(SentFragment {
-                            position,
-                            payload,
-                            sent_at: now,
-                            next_flush_at: now,
-                        })
-                    })
-                    .collect(),
+                frags: frags.into_iter().map(Some).collect(),
             });
 
             lane.next_msg_seq += MessageSeq::new(1);
@@ -271,19 +300,22 @@ pub(crate) fn flush(mut sessions: Query<(&mut Session, &mut Transport)>) {
         .par_iter_mut()
         .for_each(|(mut session, mut transport)| {
             let packet_mtu = session.mtu();
-            session
-                .send
-                .extend(flush_on(&mut transport, now, packet_mtu));
+            let packets = flush_on(&mut transport, now, packet_mtu);
+            session.send.extend(packets);
         });
 }
 
-/// Exposes `flush_on` for fuzz tests.
-#[cfg(fuzzing)]
-pub fn fuzz_flush_on(transport: &mut Transport, mtu: usize) -> impl Iterator<Item = Bytes> + '_ {
-    flush_on(transport, Instant::now(), mtu)
-}
-
-fn flush_on(
+/// Forces a [`Transport`] to flush out its pending messages, by building up
+/// packets from pending fragments.
+///
+/// This function is advanced and has the potential to screw up the transport
+/// state - only use it if you know what you're doing!
+///
+/// Every update, for all [`Session`]s with an associated [`Transport`], this
+/// function is used to build packets from the transport's fragments pending
+/// for sending, and those packets are pushed into the session's send buffer.
+#[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
+pub fn flush_on(
     transport: &mut Transport,
     now: Instant,
     mtu: usize,
@@ -475,4 +507,70 @@ fn write_frag_at_path(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use {
+        crate::{
+            Transport,
+            lane::{LaneIndex, LaneKind},
+            packet::{
+                Acknowledge, Fragment, FragmentHeader, FragmentPayload, FragmentPosition,
+                MessageSeq, PacketHeader, PacketSeq,
+            },
+        },
+        aeronet_io::Session,
+        bevy_platform::time::Instant,
+        octs::{Bytes, Read},
+    };
+
+    const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
+    const LANE: LaneIndex = LaneIndex::new(0);
+
+    #[test]
+    fn send_some_data() {
+        round_trip(b"hello world");
+    }
+
+    // if we're forming a packet, empty messages *must* also be included as
+    // fragments
+    #[test]
+    fn send_no_data() {
+        round_trip(b"");
+    }
+
+    fn round_trip(msg: &'static [u8]) {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
+        transport
+            .send
+            .push(LANE, Bytes::from_static(msg), now)
+            .unwrap();
+        assert_eq!(1, transport.send.lanes().first().unwrap().num_queued_msgs());
+
+        let mut packets = super::flush_on(&mut transport, now, 1024);
+        let mut packet = packets.next().unwrap();
+        assert!(packets.next().is_none());
+
+        assert_eq!(
+            packet.read::<PacketHeader>().unwrap(),
+            PacketHeader {
+                seq: PacketSeq::new(0),
+                acks: Acknowledge::default(),
+            },
+        );
+        assert_eq!(
+            packet.read::<Fragment>().unwrap(),
+            Fragment {
+                header: FragmentHeader {
+                    lane: LANE,
+                    position: FragmentPosition::last(0u16).unwrap(),
+                    seq: MessageSeq::new(0),
+                },
+                payload: FragmentPayload(Bytes::from_static(msg))
+            }
+        );
+    }
 }

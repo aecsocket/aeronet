@@ -230,7 +230,7 @@ fn on_closed(trigger: On<Closed>, children: Query<&Children>, mut commands: Comm
             }
         }
         CloseReason::ByError(err) => {
-            debug!("{target} closed due to error: {err:?}");
+            debug!("{target} closed due to error: {err:#}");
         }
     }
 
