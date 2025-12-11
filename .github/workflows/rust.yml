@@ -30,6 +30,7 @@ jobs:
   clippy:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
     steps:
@@ -43,6 +44,7 @@ jobs:
   doc:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
         include:
@@ -61,6 +63,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         target: ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
     steps:
@@ -81,6 +84,7 @@ jobs:
   check-minimal:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         package: ["aeronet_io", "aeronet_transport", "aeronet_replicon"]
     steps:
@@ -94,8 +98,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        # nextest always seems to run out of space when compiling:
+        # nextest always seems to run out of space when compiling with `--workspace`:
         # <https://github.com/aecsocket/aeronet/actions/runs/20119199477/job/57735517314>
         # so we'll run tests for individual crates
         # hopefully then we won't run out of space
