@@ -121,8 +121,12 @@ fn on_client_connected(
     trigger: On<Add, Session>,
     mut commands: Commands,
     clients: Query<&Session, With<AeronetRepliconClient>>,
-    channels: Res<RepliconChannels>,
+    channels: Option<Res<RepliconChannels>>,
 ) {
+    let Some(channels) = channels else {
+        return;
+    };
+
     let target = trigger.event_target();
     let Ok(session) = clients.get(target) else {
         return;
