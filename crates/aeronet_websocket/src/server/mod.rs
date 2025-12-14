@@ -162,6 +162,7 @@ struct Connected {
 struct ToOpen {
     local_addr: SocketAddr,
     rx_connecting: mpsc::Receiver<ToConnecting>,
+    _tx_dropped: mpsc::Sender<()>,
 }
 
 #[derive(Debug)]

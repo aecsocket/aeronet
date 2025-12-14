@@ -12,7 +12,7 @@ use {
         task::{Context, Poll},
     },
     futures::{
-        SinkExt,
+        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
     },
@@ -39,11 +39,13 @@ pub async fn start(
     debug!("Listening on {}", config.bind_address);
 
     let (tx_connecting, rx_connecting) = mpsc::channel::<ToConnecting>(1);
+    let (tx_dropped, mut rx_dropped) = mpsc::channel::<()>(0);
 
     let local_addr = listener.local_addr().map_err(SessionError::GetLocalAddr)?;
     let next = ToOpen {
         local_addr,
         rx_connecting,
+        _tx_dropped: tx_dropped,
     };
     tx_next
         .send(next)
@@ -51,10 +53,14 @@ pub async fn start(
 
     debug!("Starting server loop");
     loop {
-        let (stream, peer_addr) = listener
-            .accept()
-            .await
-            .map_err(ServerError::AcceptConnection)?;
+        let result = futures::select! {
+            x = listener.accept().fuse() => x,
+            _ = rx_dropped.next() => {
+                return Err(CloseReason::ByError(SessionError::FrontendClosed.into()));
+            }
+        };
+        let (stream, peer_addr) = result.map_err(ServerError::AcceptConnection)?;
+
         tokio::spawn({
             let tx_connecting = tx_connecting.clone();
             let tls_acceptor = tls_acceptor.clone();
