@@ -36,7 +36,7 @@ pub async fn start(
     let next = ToOpen {
         local_addr,
         rx_connecting,
-        _tx_dropped: tx_dropped,
+        tx_dropped,
     };
     tx_next
         .send(next)

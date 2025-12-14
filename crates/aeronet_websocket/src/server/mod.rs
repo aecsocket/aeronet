@@ -145,6 +145,7 @@ struct Opening {
 struct Opened {
     rx_close_reason: oneshot::Receiver<CloseReason>,
     rx_connecting: mpsc::Receiver<ToConnecting>,
+    _tx_dropped: mpsc::Sender<()>,
 }
 
 #[derive(Debug, Component)]
@@ -162,7 +163,7 @@ struct Connected {
 struct ToOpen {
     local_addr: SocketAddr,
     rx_connecting: mpsc::Receiver<ToConnecting>,
-    _tx_dropped: mpsc::Sender<()>,
+    tx_dropped: mpsc::Sender<()>,
 }
 
 #[derive(Debug)]
@@ -198,6 +199,7 @@ fn poll_opening(
             Opened {
                 rx_close_reason,
                 rx_connecting: next.rx_connecting,
+                _tx_dropped: next.tx_dropped,
             },
             Server::new(Instant::now()),
             LocalAddr(next.local_addr),
