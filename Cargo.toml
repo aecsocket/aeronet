@@ -15,7 +15,6 @@ aeronet = { path = "crates/aeronet", version = "0.18.0", default-features = fals
 aeronet_channel = { path = "crates/aeronet_channel", version = "0.18.0" }
 aeronet_io = { path = "crates/aeronet_io", version = "0.18.0", default-features = false }
 aeronet_replicon = { path = "crates/aeronet_replicon", version = "0.18.0", default-features = false }
-aeronet_steam = { path = "crates/aeronet_steam", version = "0.18.0" }
 aeronet_transport = { path = "crates/aeronet_transport", version = "0.18.0", default-features = false }
 aeronet_websocket = { path = "crates/aeronet_websocket", version = "0.18.0" }
 aeronet_webtransport = { path = "crates/aeronet_webtransport", version = "0.18.0" }
