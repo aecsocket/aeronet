@@ -9,7 +9,7 @@ use {
     aeronet_io::{
         Session, SessionEndpoint,
         packet::RecvPacket,
-        server::{Server, ServerEndpoint},
+        server::{CloseReason, Closed, Server, ServerEndpoint},
     },
     aeronet_webtransport::{
         client::{ClientConfig, WebTransportClient, WebTransportClientPlugin},
@@ -17,6 +17,7 @@ use {
             ServerConfig, SessionRequest, SessionResponse, WebTransportServer,
             WebTransportServerPlugin,
         },
+        session::SessionError,
     },
     bevy::prelude::*,
     bytes::Bytes,
@@ -47,7 +48,71 @@ fn connect() {
     );
 }
 
+#[test]
+fn open_twice() {
+    const PORT: u16 = 29002;
+
+    fn panic_if_closed_due_to_error(trigger: On<Closed>) {
+        if let CloseReason::ByError(err) = &trigger.reason
+            && matches!(
+                err.downcast_ref::<SessionError>(),
+                Some(SessionError::FrontendClosed)
+            )
+        {
+            return;
+        }
+        panic!("server closed: {:?}", trigger.reason);
+    }
+
+    _ = wtransport::tls::rustls::crypto::ring::default_provider().install_default();
+    let identity = Identity::self_signed(["127.0.0.1", "::1", "localhost"]).unwrap();
+
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, WebTransportServerPlugin));
+
+    {
+        let mut server = app.world_mut().spawn_empty();
+        server.observe(panic_if_closed_due_to_error);
+        let server_entity = server.id();
+        let server_config = ServerConfig::builder()
+            .with_bind_default(PORT)
+            .with_identity(identity.clone_identity())
+            .build();
+        WebTransportServer::open(server_config).apply(server);
+        run_app_until(&mut app, |world| {
+            world.get::<Server>(server_entity).is_some()
+        });
+
+        app.world_mut().try_despawn(server_entity).unwrap();
+    }
+
+    {
+        let mut server = app.world_mut().spawn_empty();
+        server.observe(panic_if_closed_due_to_error);
+        let server_entity = server.id();
+        let server_config = ServerConfig::builder()
+            .with_bind_default(PORT)
+            .with_identity(identity)
+            .build();
+        WebTransportServer::open(server_config).apply(server);
+        run_app_until(&mut app, |world| {
+            world.get::<Server>(server_entity).is_some()
+        });
+    }
+}
+
 // test harness
+
+fn run_app_until(app: &mut App, mut predicate: impl FnMut(&mut World) -> bool) {
+    for _ in 0..100_000 {
+        app.update();
+        if predicate(app.world_mut()) {
+            return;
+        }
+    }
+
+    panic!("Ran out of loops to return `Some` from `predicate`");
+}
 
 fn ping_pong(
     server_config: ServerConfig,

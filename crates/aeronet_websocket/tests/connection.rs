@@ -9,11 +9,12 @@ use {
     aeronet_io::{
         Session, SessionEndpoint,
         packet::RecvPacket,
-        server::{Server, ServerEndpoint},
+        server::{CloseReason, Closed, Server, ServerEndpoint},
     },
     aeronet_websocket::{
         client::{ClientConfig, WebSocketClient, WebSocketClientPlugin},
         server::{Identity, ServerConfig, WebSocketServer, WebSocketServerPlugin},
+        session::SessionError,
     },
     bevy::prelude::*,
     bytes::Bytes,
@@ -38,7 +39,7 @@ fn connect_unencrypted() {
 }
 
 #[test]
-#[ignore = "not working"]
+#[ignore = "TODO: not working"]
 fn connect_encrypted() {
     const PORT: u16 = 29001;
 
@@ -54,7 +55,66 @@ fn connect_encrypted() {
     );
 }
 
+#[test]
+fn open_twice() {
+    const PORT: u16 = 29002;
+
+    fn panic_if_closed_due_to_error(trigger: On<Closed>) {
+        if let CloseReason::ByError(err) = &trigger.reason
+            && matches!(
+                err.downcast_ref::<SessionError>(),
+                Some(SessionError::FrontendClosed)
+            )
+        {
+            return;
+        }
+        panic!("server closed: {:?}", trigger.reason);
+    }
+
+    _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let identity = Identity::self_signed(["127.0.0.1", "::1", "localhost"]).unwrap();
+    let server_config = ServerConfig::builder()
+        .with_bind_default(PORT)
+        .with_identity(identity);
+
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, WebSocketServerPlugin));
+
+    {
+        let mut server = app.world_mut().spawn_empty();
+        server.observe(panic_if_closed_due_to_error);
+        let server_entity = server.id();
+        WebSocketServer::open(server_config.clone()).apply(server);
+        run_app_until(&mut app, |world| {
+            world.get::<Server>(server_entity).is_some()
+        });
+
+        app.world_mut().try_despawn(server_entity).unwrap();
+    }
+
+    {
+        let mut server = app.world_mut().spawn_empty();
+        server.observe(panic_if_closed_due_to_error);
+        let server_entity = server.id();
+        WebSocketServer::open(server_config).apply(server);
+        run_app_until(&mut app, |world| {
+            world.get::<Server>(server_entity).is_some()
+        });
+    }
+}
+
 // test harness
+
+fn run_app_until(app: &mut App, mut predicate: impl FnMut(&mut World) -> bool) {
+    for _ in 0..100_000 {
+        app.update();
+        if predicate(app.world_mut()) {
+            return;
+        }
+    }
+
+    panic!("Ran out of loops to return `Some` from `predicate`");
+}
 
 fn ping_pong(
     server_config: ServerConfig,

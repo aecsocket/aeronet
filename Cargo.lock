@@ -127,8 +127,10 @@ dependencies = [
 name = "aeronet_replicon"
 version = "0.17.2"
 dependencies = [
+ "aeronet_channel",
  "aeronet_io",
  "aeronet_transport",
+ "bevy",
  "bevy_app",
  "bevy_ecs",
  "bevy_platform",

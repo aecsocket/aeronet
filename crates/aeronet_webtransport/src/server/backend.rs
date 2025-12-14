@@ -8,7 +8,7 @@ use {
     bevy_ecs::prelude::*,
     bytes::Bytes,
     futures::{
-        SinkExt,
+        FutureExt, SinkExt, StreamExt,
         channel::{mpsc, oneshot},
         never::Never,
     },
@@ -30,11 +30,13 @@ pub async fn start(
     debug!("Created endpoint");
 
     let (tx_connecting, rx_connecting) = mpsc::channel(1);
+    let (tx_dropped, mut rx_dropped) = mpsc::channel::<()>(0);
 
     let local_addr = endpoint.local_addr().map_err(SessionError::GetLocalAddr)?;
     let next = ToOpen {
         local_addr,
         rx_connecting,
+        tx_dropped,
     };
     tx_next
         .send(next)
@@ -42,8 +44,12 @@ pub async fn start(
 
     debug!("Starting server loop");
     loop {
-        let session = endpoint.accept().await;
-        debug!("Accepting new session");
+        let session = futures::select! {
+            x = endpoint.accept().fuse() => x,
+            _ = rx_dropped.next() => {
+                return Err(CloseReason::ByError(SessionError::FrontendClosed.into()));
+            }
+        };
 
         WebTransportRuntime::spawn({
             let tx_connecting = tx_connecting.clone();

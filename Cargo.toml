@@ -12,6 +12,7 @@ categories = ["game-development", "network-programming"]
 
 [workspace.dependencies]
 aeronet = { path = "crates/aeronet", version = "0.17.2", default-features = false }
+aeronet_channel = { path = "crates/aeronet_channel", version = "0.17.2" }
 aeronet_io = { path = "crates/aeronet_io", version = "0.17.2", default-features = false }
 aeronet_replicon = { path = "crates/aeronet_replicon", version = "0.17.2", default-features = false }
 aeronet_transport = { path = "crates/aeronet_transport", version = "0.17.2", default-features = false }
