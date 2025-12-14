@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_webtransport"
-version = "0.17.2"
+version = "0.18.0"
 edition.workspace = true
 rust-version.workspace = true
 description = "WebTransport IO layer implementation for `aeronet`"
@@ -22,7 +22,7 @@ required-features = ["client"]
 [[example]]
 name = "webtransport_server"
 path = "examples/webtransport_server.rs"
-required-features = ["server", "self-signed"]
+required-features = ["self-signed", "server"]
 
 [dependencies]
 aeronet_io = { workspace = true }

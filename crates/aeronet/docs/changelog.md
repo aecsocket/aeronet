@@ -1,5 +1,11 @@
 Version changelog.
 
+# 0.18.0
+
+- Update to Bevy 0.17.2
+- Update to Bevy Replicon 0.37.0
+- [#77](https://github.com/aecsocket/aeronet/pull/77): Fix closing WebSocket/WebTransport servers
+
 # 0.17.0
 
 - Update to Bevy 0.17
