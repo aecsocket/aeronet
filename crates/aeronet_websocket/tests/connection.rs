@@ -17,8 +17,9 @@ use {
         session::SessionError,
     },
     bevy::prelude::*,
+    bevy_platform::time::Instant,
     bytes::Bytes,
-    core::fmt::Debug,
+    core::{fmt::Debug, time::Duration},
 };
 
 const PING: Bytes = Bytes::from_static(b"ping");
@@ -106,14 +107,14 @@ fn open_twice() {
 // test harness
 
 fn run_app_until(app: &mut App, mut predicate: impl FnMut(&mut World) -> bool) {
-    for _ in 0..100_000 {
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(1) {
         app.update();
         if predicate(app.world_mut()) {
             return;
         }
     }
-
-    panic!("Ran out of loops to return `Some` from `predicate`");
+    panic!("ran out of time to fulfil predicate");
 }
 
 fn ping_pong(

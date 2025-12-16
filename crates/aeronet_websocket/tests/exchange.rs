@@ -14,12 +14,12 @@ use {
 
 #[test]
 fn exchange_string() {
-    test_exchange(29001, b"hello world");
+    test_exchange(29100, b"hello world");
 }
 
 #[test]
 fn exchange_empty() {
-    test_exchange(29002, b"");
+    test_exchange(29101, b"");
 }
 
 fn test_exchange(port: u16, msg: &'static [u8]) {
