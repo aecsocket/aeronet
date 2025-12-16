@@ -22,8 +22,7 @@ use {
     bevy::prelude::*,
     bevy_platform::time::Instant,
     bytes::Bytes,
-    core::fmt::Debug,
-    std::time::Duration,
+    core::{fmt::Debug, time::Duration},
     wtransport::Identity,
 };
 
