@@ -142,7 +142,7 @@ fn on_connected(
     sessions: Query<&Session>,
     child_of: Query<&ChildOf>,
     open_servers: Query<(), OpenedServer>,
-    channels: Res<RepliconChannels>,
+    channels: Option<Res<RepliconChannels>>,
     mut commands: Commands,
 ) {
     let client = trigger.event_target();
@@ -157,28 +157,33 @@ fn on_connected(
         return;
     }
 
-    let rx_lanes = channels
-        .client_channels()
-        .iter()
-        .map(|channel| convert::to_lane_kind(*channel));
-    let tx_lanes = channels
-        .server_channels()
-        .iter()
-        .map(|channel| convert::to_lane_kind(*channel));
-    let transport = match Transport::new(session, rx_lanes, tx_lanes, Instant::now()) {
-        Ok(transport) => transport,
-        Err(err) => {
-            warn!("Failed to create transport for {client} connecting to {server}: {err:?}");
-            return;
+    let transport = if let Some(channels) = channels {
+        let rx_lanes = channels
+            .client_channels()
+            .iter()
+            .map(|channel| convert::to_lane_kind(*channel));
+        let tx_lanes = channels
+            .server_channels()
+            .iter()
+            .map(|channel| convert::to_lane_kind(*channel));
+        match Transport::new(session, rx_lanes, tx_lanes, Instant::now()) {
+            Ok(transport) => Some(transport),
+            Err(err) => {
+                warn!("Failed to create transport for {client} connecting to {server}: {err:?}");
+                return;
+            }
         }
+    } else {
+        None
     };
 
-    commands.entity(client).insert((
-        ConnectedClient {
-            max_size: session.mtu(),
-        },
-        transport,
-    ));
+    let mut entity = commands.entity(client);
+    entity.insert(ConnectedClient {
+        max_size: session.mtu(),
+    });
+    if let Some(transport) = transport {
+        entity.insert(transport);
+    }
 }
 
 fn poll(
