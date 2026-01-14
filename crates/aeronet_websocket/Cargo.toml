@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_websocket"
-version = "0.18.0"
+version = "0.19.0"
 edition.workspace = true
 rust-version.workspace = true
 description = "WebSocket IO layer implementation for `aeronet`"
