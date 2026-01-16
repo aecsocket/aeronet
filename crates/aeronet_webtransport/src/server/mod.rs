@@ -165,8 +165,8 @@ pub enum SessionResponse {
 ///     bevy_ecs::prelude::*,
 /// };
 ///
-/// fn on_session_request(mut trigger: Trigger<SessionRequest>) {
-///     let client = trigger.target();
+/// fn on_session_request(mut trigger: On<SessionRequest>) {
+///     let client = trigger.event_target();
 ///     trigger.respond(SessionResponse::Accepted);
 /// }
 /// ```
@@ -179,7 +179,7 @@ pub enum SessionResponse {
 ///     bevy_ecs::prelude::*,
 /// };
 ///
-/// fn on_session_request(mut request: Trigger<SessionRequest>) {
+/// fn on_session_request(mut request: On<SessionRequest>) {
 ///     let mut response = SessionResponse::Forbidden;
 ///     if let Some(auth_token) = request.headers.get(":auth-token") {
 ///         if validate_auth_token(auth_token) {

@@ -229,12 +229,8 @@ impl Transport {
     ///
     /// const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
     ///
-    /// fn on_connected(
-    ///     trigger: Trigger<OnAdd, Session>,
-    ///     sessions: Query<&Session>,
-    ///     mut commands: Commands,
-    /// ) {
-    ///     let entity = trigger.target();
+    /// fn on_connected(trigger: On<Add, Session>, sessions: Query<&Session>, mut commands: Commands) {
+    ///     let entity = trigger.event_target();
     ///     let session = sessions
     ///         .get(entity)
     ///         .expect("we are adding this component to this entity");
