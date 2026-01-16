@@ -233,8 +233,8 @@ impl SessionResponse {
 ///     bevy_ecs::prelude::*,
 /// };
 ///
-/// fn on_session_request(mut trigger: Trigger<SessionRequest>) {
-///     let client = trigger.target();
+/// fn on_session_request(mut trigger: On<SessionRequest>) {
+///     let client = trigger.event_target();
 ///     trigger.respond(SessionResponse::Accepted);
 /// }
 /// ```
@@ -251,7 +251,7 @@ impl SessionResponse {
 ///     steamworks::FriendFlags,
 /// };
 ///
-/// fn on_session_request(mut request: Trigger<SessionRequest>, steam: Res<SteamworksClient>) {
+/// fn on_session_request(mut request: On<SessionRequest>, steam: Res<SteamworksClient>) {
 ///     let friend = steam.friends().get_friend(request.steam_id);
 ///     if !friend.has_friend(FriendFlags::IMMEDIATE) {
 ///         request.respond(SessionResponse::rejected("not friend of the host"));
