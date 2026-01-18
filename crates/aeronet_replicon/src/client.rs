@@ -12,7 +12,7 @@ use {
     bevy_platform::time::Instant,
     bevy_reflect::prelude::*,
     bevy_replicon::prelude::*,
-    bevy_state::state::NextState,
+    bevy_state::state::{NextState, State},
     core::{num::Saturating, time::Duration},
     log::{trace, warn},
 };
@@ -152,6 +152,7 @@ fn on_client_connected(
 
 fn update_state(
     mut client_stats: ResMut<ClientStats>,
+    client_state: Res<State<ClientState>>,
     mut next_client_state: ResMut<NextState<ClientState>>,
     clients: Query<
         (Option<&Session>, Option<&Transport>, Option<&SessionStats>),
@@ -190,7 +191,7 @@ fn update_state(
         sum_bytes_sent += stats.packets_delta.bytes_sent;
     }
 
-    let (next_status, rtt, packet_loss, received_bps, sent_bps) = if num_connected.0 > 0 {
+    let (next_state, rtt, packet_loss, received_bps, sent_bps) = if num_connected.0 > 0 {
         #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
         let num_connected = num_connected.0 as f64;
         #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
@@ -215,7 +216,10 @@ fn update_state(
         (status, 0.0, 0.0, 0.0, 0.0)
     };
 
-    next_client_state.set(next_status);
+    if *client_state.get() != next_state {
+        next_client_state.set(next_state);
+    }
+
     client_stats.rtt = rtt;
     client_stats.packet_loss = packet_loss;
     client_stats.received_bps = received_bps;
