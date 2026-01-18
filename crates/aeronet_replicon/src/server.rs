@@ -15,7 +15,7 @@ use {
     bevy_platform::time::Instant,
     bevy_reflect::Reflect,
     bevy_replicon::{prelude::*, server::ServerSystems},
-    bevy_state::state::NextState,
+    bevy_state::state::{NextState, State},
     core::num::Saturating,
     log::{trace, warn},
 };
@@ -125,16 +125,20 @@ type OpenedServer = (
 );
 
 fn update_state(
+    server_state: Res<State<ServerState>>,
     mut next_server_state: ResMut<NextState<ServerState>>,
     open_servers: Query<(), OpenedServer>,
 ) {
     let running = open_servers.iter().next().is_some();
-    let next_status = if running {
+    let next_state = if running {
         ServerState::Running
     } else {
         ServerState::Stopped
     };
-    next_server_state.set(next_status);
+
+    if *server_state.get() != next_state {
+        next_server_state.set(next_state);
+    }
 }
 
 fn on_connected(
@@ -172,6 +176,8 @@ fn on_connected(
             return;
         }
     };
+
+    log::info!("insert client");
 
     commands.entity(client).insert((
         ConnectedClient {
