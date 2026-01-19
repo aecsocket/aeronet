@@ -93,6 +93,9 @@ fn open_twice() {
         app.world_mut().try_despawn(server_entity).unwrap();
     }
 
+    // (hopefully) ensure that the OS has closed the socket
+    std::thread::sleep(Duration::from_millis(100));
+
     {
         let mut server = app.world_mut().spawn_empty();
         server.observe(panic_if_closed_due_to_error);
