@@ -1,8 +1,14 @@
 on:
   pull_request:
+    paths:
+      - "crates/**"
+      - "examples/**"
   push:
     branches:
       - main
+    paths:
+      - "crates/**"
+      - "examples/**"
 
 env:
   CARGO_TERM_COLOR: always
