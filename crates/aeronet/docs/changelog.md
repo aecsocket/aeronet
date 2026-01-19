@@ -1,5 +1,9 @@
 Version changelog.
 
+# 0.19.0
+
+- Update to Bevy 0.18.0
+
 # 0.18.0
 
 - Update to Bevy 0.17.2
