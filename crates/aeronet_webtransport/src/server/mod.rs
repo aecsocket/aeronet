@@ -206,6 +206,9 @@ pub struct SessionRequest {
     pub user_agent: Option<String>,
     /// Full map of request headers.
     pub headers: std::collections::HashMap<String, String>,
+
+    /// Socket address of the peer requesting to connect.
+    pub remote_addr: SocketAddr,
     #[reflect(ignore)]
     #[debug(skip)]
     tx_session_response: Option<oneshot::Sender<SessionResponse>>,
@@ -294,6 +297,7 @@ struct ToConnecting {
     origin: Option<String>,
     user_agent: Option<String>,
     headers: std::collections::HashMap<String, String>,
+    remote_addr: SocketAddr,
     tx_session_entity: oneshot::Sender<Entity>,
     tx_session_response: oneshot::Sender<SessionResponse>,
     rx_dc_reason: oneshot::Receiver<DisconnectReason>,
@@ -366,6 +370,7 @@ fn poll_opened(
                 origin: connecting.origin,
                 user_agent: connecting.user_agent,
                 headers: connecting.headers,
+                remote_addr: connecting.remote_addr,
                 tx_session_response: Some(connecting.tx_session_response),
             });
         }
