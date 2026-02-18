@@ -92,7 +92,7 @@ impl Plugin for AeronetTransportPlugin {
 /// # Lifecycle
 ///
 /// After [`Session`] is added to your entity, you should create and add a
-/// [`Transport`] component - use a [`Trigger<OnAdd, Session>`] for this. If
+/// [`Transport`] component - use a [`On<Add, Session>`] for this. If
 /// you are using a crate like `aeronet_replicon`, this step will already be
 /// handled for you. You can also add or mutate [`TransportConfig`] at any
 /// time during the session lifetime to change its configuration.

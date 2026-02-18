@@ -79,6 +79,7 @@ async fn accept_session(
             origin: request.origin().map(ToOwned::to_owned),
             user_agent: request.user_agent().map(ToOwned::to_owned),
             headers: request.headers().clone(),
+            remote_addr: request.remote_address(),
             tx_session_entity,
             tx_session_response,
             rx_dc_reason,

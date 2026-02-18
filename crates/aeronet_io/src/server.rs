@@ -57,7 +57,7 @@ pub struct ServerEndpoint;
 /// should be disconnected instead of the entire server being torn down.
 ///
 /// To listen for when a server is opened, add an observer listening for
-/// [`Trigger<OnAdd, Server>`].
+/// [`On<Add, Server>`].
 ///
 /// When a client connects, it is spawned as a [child] of the server entity.
 /// Therefore, to query for sessions spawned under a server, use

@@ -89,7 +89,7 @@ fn on_session_request(mut request: On<SessionRequest>, clients: Query<&ChildOf>)
         return;
     };
 
-    info!("{client} connecting to {server} with headers:");
+    info!("{client} connecting to {server} from {} with headers:", request.remote_addr);
     for (header_key, header_value) in &request.headers {
         info!("  {header_key}: {header_value}");
     }

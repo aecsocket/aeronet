@@ -183,6 +183,11 @@ fn ping_pong(
         }
 
         fn on_session_request(mut trigger: On<SessionRequest>) {
+            assert_ne!(
+                trigger.remote_addr.port(),
+                0,
+                "`remote_addr` should have a non-zero port"
+            );
             trigger.respond(SessionResponse::Accepted);
         }
 
