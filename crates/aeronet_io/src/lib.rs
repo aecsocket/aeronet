@@ -115,7 +115,7 @@ pub struct SessionEndpoint;
 /// [`packet`]). If the IO layer has a new value for known path MTU, it should
 /// use [`Session::set_mtu`] to update it.
 ///
-/// [trigger]: Trigger
+/// [trigger]: On
 /// [packets]: packet
 /// [`Disconnected`]: connection::Disconnected
 /// [`Disconnect`]: connection::Disconnect
