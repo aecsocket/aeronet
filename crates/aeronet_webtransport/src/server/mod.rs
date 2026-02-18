@@ -206,7 +206,6 @@ pub struct SessionRequest {
     pub user_agent: Option<String>,
     /// Full map of request headers.
     pub headers: std::collections::HashMap<String, String>,
-
     /// Socket address of the peer requesting to connect.
     pub remote_addr: SocketAddr,
     #[reflect(ignore)]
