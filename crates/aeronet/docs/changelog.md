@@ -1,5 +1,9 @@
 Version changelog.
 
+# 0.19.1
+
+- [#82](https://github.com/aecsocket/aeronet/pull/82): Add `remote_addr` field to `SessionRequest`
+
 # 0.19.0
 
 - Update to Bevy 0.18.0

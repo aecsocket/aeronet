@@ -219,11 +219,11 @@ When submitting a pull request, make sure that all continuous integration (CI) c
 
 | `bevy` | `aeronet`           |
 |--------|---------------------|
-| `0.18` | `0.19.0`            |
+| `0.18` | `0.19.0` - `0.19.1` |
 | `0.17` | `0.17.0` - `0.18.0` |
 | `0.16` | `0.13.0` - `0.16.0` |
 | `0.15` | `0.11.0` - `0.12.0` |
-| `0.14` | `0.9.0` - `0.10.0`  |
+| `0.14` | `0.9.0`  - `0.10.0` |
 
 [Bevy]: https://bevyengine.org
 [`aeronet_io`]: https://docs.rs/aeronet_io
