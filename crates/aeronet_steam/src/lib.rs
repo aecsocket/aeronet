@@ -12,6 +12,8 @@ use {
 pub mod client;
 #[cfg(feature = "server")]
 pub mod server;
+
+pub mod dedicated_server;
 pub mod session;
 
 mod config;
@@ -23,3 +25,10 @@ pub use config::SessionConfig;
 /// resource into the app manually.
 #[derive(Deref, Clone, DerefMut, Resource)]
 pub struct SteamworksClient(pub steamworks::Client);
+
+/// [`steamworks::Server`] used to drive Steam networking socket IO.
+///
+/// You must initialize a [`steamworks::Server`] yourself, then insert this
+/// resource into the app manually.
+#[derive(Deref, Clone, DerefMut, Resource)]
+pub struct SteamworksServer(pub steamworks::Server);
