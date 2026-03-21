@@ -2,7 +2,9 @@
 
 use {
     crate::{
-        SteamworksClient, SteamworksServer, config::SessionConfig, session::{SessionError, SteamNetIo, SteamNetSessionPlugin, entity_to_user_data}
+        SteamworksClient, SteamworksServer,
+        config::SessionConfig,
+        session::{SessionError, SteamNetIo, SteamNetSessionPlugin, entity_to_user_data},
     },
     aeronet_io::{
         IoSystems, Session, SessionEndpoint,
@@ -164,6 +166,11 @@ fn open(mut entity: EntityWorldMut, config: SessionConfig, target: ListenTarget)
                 sockets.create_listen_socket_p2p(virtual_port, config.to_options())
             }
         };
+
+        match result {
+            Ok(_) => println!("socket creation ok"),
+            Err(_) => println!("socket creaction error"),
+        }
         _ = tx_next.send(result.map_err(|_| SessionError::Steam));
     })
     .detach();

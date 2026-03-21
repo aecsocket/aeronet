@@ -1,7 +1,7 @@
 //! Example server using Steam which listens for clients sending strings and
 //! sends back a string reply.
 
-use aeronet_steam::SteamworksClient;
+use aeronet_steam::{SteamworksClient, SteamworksSockets};
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
@@ -54,14 +54,32 @@ fn main() -> AppExit {
 
         server.enable_heartbeats(true);
 
-    server_callbacks.networking_utils().init_relay_network_access();;
+    server_callbacks.networking_utils().init_relay_network_access();
+
+    let id = server.steam_id();
+    println!("steamid = : {:?}", id);
+
+    let steam_server = SteamworksServer(server.clone());
+    let socket_provider = SteamworksSockets::Server(steam_server);
 
     App::new()
         .insert_resource(SteamworksServer(server))
         .insert_resource(SteamworksClient(server_callbacks))
+        .insert_resource(socket_provider)
         .add_systems(PreUpdate, |steam: Res<SteamworksClient>| {
             steam.run_callbacks();
         })
+        //         .add_systems(PreUpdate, |steam: Res<SteamworksClient>| {
+        //     let utils = steam.networking_utils();
+        //             let status = utils.detailed_relay_network_status();
+        // println!(
+        //     "status: {:?}, network_config: {:?}, any_relay: {:?}, message: {}",
+        //     status.availability(),
+        //     status.network_config(),
+        //     status.any_relay(),
+        //     status.debugging_message()
+        // );
+        // })
         .add_plugins((MinimalPlugins, LogPlugin::default(), SteamNetDedicatedServerPlugin))
         .add_systems(Startup, open_server)
         .add_systems(Update, reply)
@@ -76,7 +94,7 @@ fn main() -> AppExit {
 
 fn open_server(mut commands: Commands) {
     let target = match env::args().nth(1).as_deref() {
-        Some("addr") => ListenTarget::Addr(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 25572)),
+        Some("addr") => ListenTarget::Addr(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 27015)),
         Some("peer") => ListenTarget::Peer { virtual_port: 0 },
         _ => panic!("must specify either `addr` or `peer` argument on command line"),
     };
