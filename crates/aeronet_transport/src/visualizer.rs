@@ -4,10 +4,7 @@ use {
     crate::{
         Transport, TransportConfig,
         recv::RecvLane,
-        sampling::{
-            SampleSessionStats, SessionSamplingPlugin, SessionStats, SessionStatsSample,
-            SessionStatsSampling,
-        },
+        sampling::{SessionSamplingPlugin, SessionStats, SessionStatsSample, SessionStatsSampling},
         send::SendLane,
     },
     aeronet_io::{Session, packet::PacketRtt},
@@ -19,7 +16,7 @@ use {
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
     bevy_egui::{
-        EguiContexts,
+        EguiContexts, EguiPrimaryContextPass,
         egui::{self, epaint::Hsva},
     },
     bevy_platform::time::Instant,
@@ -32,9 +29,8 @@ use {
 
 /// Uses [`egui`] to draw [`egui_plot`]s of [`Session`] statistics.
 ///
-/// In [`DrawSessionVisualizer`], any [`Session`] with a [`SessionVisualizer`]
-/// and [`SessionStats`] will display an [`egui::Window`] with its session
-/// statistics.
+/// Any [`Session`] with a [`SessionVisualizer`] and [`SessionStats`]
+/// will display an [`egui::Window`] with its session statistics.
 ///
 /// Without this plugin, you can still use [`SessionVisualizer`] manually.
 ///
@@ -47,16 +43,9 @@ impl Plugin for SessionVisualizerPlugin {
             app.add_plugins(SessionSamplingPlugin);
         }
 
-        app.configure_sets(Update, DrawSessionVisualizer.after(SampleSessionStats))
-            .add_systems(Update, draw.in_set(DrawSessionVisualizer));
+        app.add_systems(EguiPrimaryContextPass, draw);
     }
 }
-
-/// System set in which [`SessionVisualizer`]s are drawn via [`egui`].
-///
-/// This runs after [`SampleSessionStats`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
-pub struct DrawSessionVisualizer;
 
 /// State for drawing [`egui_plot`]s of [`SessionStats`].
 #[derive(Debug, Clone, Component)]
