@@ -1,5 +1,9 @@
 See `README.md` for an overview of this Rust crate.
 
+# Checking
+
+When checking code, use `cargo clippy --workspace --all-features --all-targets` instead of `cargo check`.
+
 # Updating
 
 When bumping the version number:
