@@ -220,17 +220,26 @@ fn poll(
 }
 
 fn update_client_data(
+    mut commands: Commands,
     mut clients: Query<(
+        Entity,
         &Session,
         &SessionStats,
-        &mut ConnectedClient,
-        &mut ClientStats,
+        &ConnectedClient,
+        &mut ConnectedClientStats,
     )>,
     sampling: Res<SessionStatsSampling>,
 ) {
-    for (session, session_stats, mut connected_client, mut client_stats) in &mut clients {
+    for (client, session, session_stats, connected_client, mut client_stats) in &mut clients {
         let stats = session_stats.last().copied().unwrap_or_default();
-        connected_client.max_size = session.mtu();
+        let mtu = session.mtu();
+        // ConnectedClient is immutable, so it needs to be re-inserted when `max_size`
+        // changes.
+        if connected_client.max_size != mtu {
+            commands
+                .entity(client)
+                .insert(ConnectedClient { max_size: mtu });
+        }
         client_stats.rtt = stats.msg_rtt.as_secs_f64();
         client_stats.packet_loss = stats.loss;
         #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
