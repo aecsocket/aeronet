@@ -1,5 +1,10 @@
 Version changelog.
 
+# 0.20.0
+
+- [#85](https://github.com/aecsocket/aeronet/pull/85): SessionVisualizerPlugin: draw in EguiPrimaryContextPass
+- [#86](https://github.com/aecsocket/aeronet/pull/86): Update to `bevy_replicon` 0.39
+
 # 0.19.1
 
 - [#82](https://github.com/aecsocket/aeronet/pull/82): Add `remote_addr` field to `SessionRequest`
