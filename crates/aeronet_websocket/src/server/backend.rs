@@ -142,6 +142,10 @@ async fn handle_session(
     };
     let stream = tokio_tungstenite::accept_hdr_async_with_config(
         stream,
+        #[expect(
+            clippy::result_large_err,
+            reason = "this `Result` is what `tokio_tungstenite` asks for"
+        )]
         |req: &Request, resp: Response| match &handshake_handler {
             Some(h) => h.handle(req, resp),
             None => Ok(resp),
