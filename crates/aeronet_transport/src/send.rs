@@ -34,7 +34,7 @@ use {
 /// Allows buffering up messages to be sent on a [`Transport`].
 #[derive(Debug, TypeSize)]
 pub struct TransportSend {
-    pub(crate) max_frag_len: usize,
+    pub(crate) max_frag_len: MinSize,
     pub(crate) lanes: Box<[SendLane]>,
     bytes_bucket: TokenBucket,
     next_packet_seq: PacketSeq,
@@ -58,8 +58,8 @@ pub(crate) struct SentMessage {
 #[derive(Debug, Clone, TypeSize)]
 pub(crate) struct SentFragment {
     position: FragmentPosition,
-    #[typesize(with = Bytes::len)]
-    payload: Bytes,
+    #[typesize(with = FragmentPayload::len_usize)]
+    payload: FragmentPayload,
     #[typesize(with = crate::size::of_instant)]
     sent_at: Instant,
     #[typesize(with = crate::size::of_instant)]
@@ -68,7 +68,7 @@ pub(crate) struct SentFragment {
 
 impl TransportSend {
     pub(crate) fn new(
-        max_frag_len: usize,
+        max_frag_len: MinSize,
         lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
     ) -> Self {
         Self {
@@ -192,8 +192,7 @@ impl TransportSend {
             // packet, it will have no fragment header, so will never be
             // received and acked by the peer - consequently, we will never be
             // told that the peer has acked this message.
-            // even if a message is empty, it's still an important object to
-            // track.
+            // even if a message is empty, its existence is important to track.
             //
             // we also can't just say in the sending logic, "if this message has
             // no frags, just make one up on the spot when sending", because at
@@ -208,7 +207,7 @@ impl TransportSend {
             let frags = if frags.is_empty() {
                 alloc::vec![SentFragment {
                     position: FragmentPosition::ZERO_LAST,
-                    payload: Bytes::new(),
+                    payload: FragmentPayload::empty(),
                     sent_at: now,
                     next_flush_at: now,
                 }]
@@ -484,7 +483,7 @@ fn write_frag_at_path(
             lane: path.lane_index,
             position: sent_frag.position,
         },
-        payload: FragmentPayload(sent_frag.payload.clone()),
+        payload: sent_frag.payload.clone(),
     };
     bytes_left.consume(frag.encode_len()).map_err(drop)?;
     packet
@@ -569,7 +568,7 @@ mod tests {
                     position: FragmentPosition::last(0u16).unwrap(),
                     seq: MessageSeq::new(0),
                 },
-                payload: FragmentPayload(Bytes::from_static(msg))
+                payload: FragmentPayload::new(Bytes::from_static(msg)).unwrap(),
             }
         );
     }

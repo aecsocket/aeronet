@@ -33,6 +33,8 @@
 //!
 //! This value may even be [`usize::MAX`] (if using e.g. MPSC channels). Code
 //! which uses the packet MTU must be resilient to being given any MTU value.
+//! In practice, this means that you should never pre-allocate a buffer of size
+//! `MTU`, since that `MTU` might be [`usize::MAX`].
 //!
 //! A networked transport may choose to use [`IP_MTU`] as a base MTU value,
 //! minus protocol overhead.

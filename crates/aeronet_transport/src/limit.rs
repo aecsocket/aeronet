@@ -159,7 +159,7 @@ impl Consume for ConsumeImpl<'_> {
 ///
 /// An item (transport, lane, etc.) may want to limit how many bytes it sends
 /// out in a given time frame, e.g. to enforce a bandwidth limit. One way of
-/// doing this is imposing a limit on bytes sent *per app update*, i.e.
+/// doing this is imposing a limit on bytes sent *per app update*, e.g.
 /// 60,000 bytes per update therefore 3,600,000 bytes per second if the app
 /// runs at 60 updates per second. However, it's a bad idea to tie the app's
 /// update rate to this, since updates may take a variable amount of time to

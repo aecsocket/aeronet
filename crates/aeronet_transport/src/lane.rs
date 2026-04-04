@@ -3,7 +3,7 @@
 //! Packets are not guaranteed to have any guarantees on delivery or ordering -
 //! that is, if you send out a packet, there is no guarantee that:
 //! - the packet will be received by the peer
-//! - the packet will be only be received once
+//! - the packet will only be received once
 //! - packets are received in the same order that they are sent
 //!
 //! (Note that receiving a packet is guaranteed to contain the exact same
@@ -15,8 +15,8 @@
 //! guarantees on:
 //! - reliability - the message is guaranteed to be received by the peer once,
 //!   and only once
-//! - ordering - messages sent on a specific are guaranteed to be received in
-//!   the same order that they are sent
+//! - ordering - messages sent on a specific lane are guaranteed to be received
+//!   in the same order that they are sent
 //!   - note that ordering *between* lanes is *never* guaranteed
 //!
 //! The name "lane" was chosen specifically to avoid ambiguity with:
@@ -27,7 +27,8 @@
 //! If you are using an IO layer which is already reliable-ordered, then even
 //! unreliable-unordered messages will be reliable-ordered. However, in this
 //! situation we still need lanes as they are a part of the protocol - we can't
-//! just ignore them for certain IO layers.
+//! just ignore them for certain IO layers. Lanes send messages, and messages
+//! include extra metadata like their sequence number, which we can't ignore.
 
 use {
     crate::size::MinSize,
@@ -54,9 +55,10 @@ pub enum LaneKind {
     /// require any sort of handshaking to ensure that messages have arrived
     /// from one side to the other.
     ///
-    /// For example, spawning particle effects could be sent as an unreliable
-    /// unordered message, as it is a low-priority message which we don't
-    /// really care much about.
+    /// For example, spawning particle effects in a game could be sent as an
+    /// unreliable unordered message, as we'll probably be OK with losing a few
+    /// of the messages, or if they arrive out of order. They can also be
+    /// discarded if they arrive too late.
     UnreliableUnordered,
     /// Messages are *unreliable* but only messages newer than the last
     /// message will be received.
@@ -71,7 +73,7 @@ pub enum LaneKind {
     /// An example of a message using this lane kind is a player positional
     /// update, sent to the server whenever a client moves in a game world.
     /// Since the game client will constantly be sending positional update
-    /// messages at a high rate, it is OK if a few are lost in transit, as the
+    /// messages at a high rate, it's OK if a few are lost in transit, as the
     /// server will hopefully catch the next messages. However, positional
     /// updates should not make the player go back in time - so any messages
     /// older than the most recent ones are dropped.

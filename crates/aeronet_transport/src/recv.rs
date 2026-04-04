@@ -479,7 +479,7 @@ mod tests {
                     seq: MessageSeq::new(0),
                     position: FragmentPosition::last(0u16).unwrap(),
                 },
-                payload: FragmentPayload(Bytes::from_static(b"hello world")),
+                payload: FragmentPayload::new(Bytes::from_static(b"hello world")).unwrap(),
             })
             .unwrap();
 

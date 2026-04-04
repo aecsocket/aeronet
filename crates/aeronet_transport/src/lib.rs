@@ -252,6 +252,7 @@ impl Transport {
             mtu: min_mtu,
             min: FRAG_OVERHEAD,
         })?;
+        let max_frag_len = MinSize::MAX.min_of(max_frag_len);
         Ok(Self {
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
             stats: MessageStats::default(),

@@ -1,39 +1,59 @@
 use {
     super::FragmentPayload,
     crate::size::MinSize,
-    derive_more::{Display, Error},
-    octs::{BufError, BufTooShortOr, Decode, Encode, EncodeLen, Read, VarIntTooLarge, Write},
+    core::convert::Infallible,
+    octs::{BufTooShortOr, Bytes, Decode, Encode, EncodeLen, Read, VarIntTooLarge, Write},
 };
 
-/// Attempted to [`Encode`] a [`FragmentPayload`] which was more than
-/// [`MinSize::MAX`] bytes long.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Display, Error)]
-#[display("payload too large - {len} / {} bytes", MinSize::MAX.0)]
-pub struct PayloadTooLarge {
-    /// Length of the [`FragmentPayload`].
-    pub len: usize,
-}
+impl FragmentPayload {
+    /// Creates a new empty [`FragmentPayload`] with no bytes.
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self(Bytes::new())
+    }
 
-impl BufError for PayloadTooLarge {}
+    /// Creates a new [`FragmentPayload`], validating that its length fits
+    /// within [`MinSize`].
+    ///
+    /// If `bytes.len()` does not fit in a [`MinSize`], returns [`None`].
+    pub fn new(bytes: Bytes) -> Option<Self> {
+        let len = bytes.len();
+        MinSize::try_from(len).map(|_| Self(bytes)).ok()
+    }
+
+    /// Returns the number of bytes contained in this `Bytes`.
+    ///
+    /// This is checked at construction time to fit into a [`MinSize`].
+    #[must_use]
+    pub const fn len(&self) -> MinSize {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "we check at construction time that `self.0.len()` fits into a `MinSize`"
+        )]
+        MinSize(self.0.len() as u32)
+    }
+
+    /// Returns the number of bytes contained in this `Bytes`, as a [`usize`].
+    ///
+    /// This is checked at construction time to fit into a [`MinSize`].
+    #[must_use]
+    pub const fn len_usize(&self) -> usize {
+        self.len().0 as usize
+    }
+}
 
 impl EncodeLen for FragmentPayload {
     fn encode_len(&self) -> usize {
-        let len_u = self.0.len();
-        let Ok(len) = MinSize::try_from(len_u) else {
-            return 0;
-        };
-        len.encode_len() + len_u
+        let len = self.len();
+        len.encode_len() + usize::from(len)
     }
 }
 
 impl Encode for FragmentPayload {
-    type Error = PayloadTooLarge;
+    type Error = Infallible;
 
     fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
-        let len = self.0.len();
-        let len = MinSize::try_from(len).map_err(|_| PayloadTooLarge { len })?;
-
-        dst.write(len)?;
+        dst.write(self.len())?;
         dst.write_from(self.0.clone())?;
         Ok(())
     }

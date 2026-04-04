@@ -35,6 +35,20 @@ pub struct MinSize(pub u32);
 impl MinSize {
     /// Largest value that can be represented by this type.
     pub const MAX: Self = Self(u32::MAX);
+
+    /// Returns the smaller of this value and `other`.
+    ///
+    /// Since `self` is a [`MinSize`], even if `other` does not fit in a
+    /// [`MinSize`], the result is guaranteed to fit within a [`MinSize`].
+    #[must_use]
+    pub fn min_of(self, other: usize) -> Self {
+        let min = usize::from(self).min(other);
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "`min(MinSize, n)` is guaranteed to fit within a `MinSize`"
+        )]
+        Self(min as u32)
+    }
 }
 
 impl From<u8> for MinSize {

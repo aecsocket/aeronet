@@ -177,8 +177,6 @@ fn on_connected(
         }
     };
 
-    log::info!("insert client");
-
     commands.entity(client).insert((
         ConnectedClient {
             max_size: session.mtu(),
