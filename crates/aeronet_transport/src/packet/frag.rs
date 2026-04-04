@@ -1,5 +1,5 @@
 use {
-    super::{Fragment, FragmentHeader, FragmentPosition, MessageSeq, PayloadTooLarge},
+    super::{Fragment, FragmentHeader, FragmentPosition, MessageSeq},
     crate::{lane::LaneIndex, size::MinSize},
     core::{convert::Infallible, fmt},
     octs::{
@@ -166,7 +166,7 @@ impl EncodeLen for Fragment {
 }
 
 impl Encode for Fragment {
-    type Error = PayloadTooLarge;
+    type Error = Infallible;
 
     fn encode(&self, mut dst: impl Write) -> Result<(), BufTooShortOr<Self::Error>> {
         dst.write(&self.header)?;

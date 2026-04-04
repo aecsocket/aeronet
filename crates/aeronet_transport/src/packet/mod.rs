@@ -22,7 +22,7 @@
 //! to store the fragments. Instead, the logic looks like:
 //!
 //! ```rust,ignore
-//! fn process_packet(packet: &[u8]) {
+//! fn process_packet(packet: &mut &[u8]) {
 //!     process_header(&mut packet);
 //!     while !packet.is_empty() {
 //!         process_fragment(&mut packet);
@@ -36,7 +36,6 @@ mod header;
 mod payload;
 mod seq;
 
-pub use payload::*;
 use {
     crate::{lane::LaneIndex, size::MinSize},
     bevy_reflect::Reflect,
@@ -170,10 +169,11 @@ pub struct FragmentPosition(MinSize);
 /// On the wire, this is encoded as a varint of how long the payload is, plus
 /// the actual payload.
 ///
-/// The length of the underlying byte buffer must not exceed
-/// [`MinSize::MAX`], or it cannot be encoded.
-#[derive(Debug, Clone, PartialEq, Eq, Deref, DerefMut)]
-pub struct FragmentPayload(pub Bytes);
+/// The length of the underlying byte buffer must be able to fit within a
+/// [`MinSize`] (it must not exceed [`MinSize::MAX`]), or it cannot be
+/// constructed.
+#[derive(Debug, Clone, PartialEq, Eq, Deref)]
+pub struct FragmentPayload(Bytes);
 
 /// Front-loaded [`Fragment`] metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]

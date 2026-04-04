@@ -10,7 +10,7 @@
 
 use {
     crate::{
-        packet::{FragmentPosition, MessageSeq},
+        packet::{FragmentPayload, FragmentPosition, MessageSeq},
         size::MinSize,
     },
     alloc::vec::Vec,
@@ -50,21 +50,20 @@ use {
 ///
 /// Panics if `max_frag_len == 0`.
 ///
-/// Panics if `msg` is too large, and is split into too many fragments for
-/// [`FragmentPosition`] to be able to encode the fragment index.
-///
 /// [last fragment]: FragmentPosition::is_last
 pub fn split(
-    max_frag_len: usize,
+    max_frag_len: MinSize,
     msg: Bytes,
 ) -> Result<
-    impl ExactSizeIterator<Item = (FragmentPosition, Bytes)> + DoubleEndedIterator + FusedIterator,
+    impl ExactSizeIterator<Item = (FragmentPosition, FragmentPayload)>
+    + DoubleEndedIterator
+    + FusedIterator,
     MessageTooBig,
 > {
-    assert!(max_frag_len > 0);
+    assert!(max_frag_len.0 > 0);
 
     let byte_len = msg.len();
-    let iter = msg.byte_chunks(max_frag_len);
+    let iter = msg.byte_chunks(usize::from(max_frag_len));
     let num_frags = iter.len();
 
     let last_index = num_frags.saturating_sub(1);
@@ -86,6 +85,11 @@ pub fn split(
                 .and_then(FragmentPosition::non_last)
         }
         .expect("we check above that there should not be more than `MinSize::MAX` fragments");
+
+        let payload = FragmentPayload::new(payload).expect(
+            "`payload` is a chunk of up to `max_frag_len` bytes, and `max_frag_len` is a \
+             `MinSize`, so `payload` should not be bigger than `MinSize`",
+        );
 
         (position, payload)
     }))
@@ -237,13 +241,13 @@ impl FragmentReceiver {
     /// [`TransportConfig::max_memory_usage`]: crate::TransportConfig::max_memory_usage
     pub fn reassemble(
         &mut self,
-        max_frag_len: usize,
+        max_frag_len: MinSize,
         mem_left: usize,
         msg_seq: MessageSeq,
         position: FragmentPosition,
         payload: &[u8],
     ) -> Result<Option<Vec<u8>>, ReassembleError> {
-        assert!(max_frag_len > 0);
+        assert!(max_frag_len.0 > 0);
 
         let buf = self.msgs.entry(msg_seq).or_default();
         let frag_index = usize::from(position.index());
@@ -254,7 +258,7 @@ impl FragmentReceiver {
         }
 
         // copy the payload data into the buffer
-        let start = frag_index * max_frag_len;
+        let start = frag_index * usize::from(max_frag_len);
         let end = start + payload.len();
 
         // try to resize buffers to make room for this fragment,
@@ -299,11 +303,11 @@ impl FragmentReceiver {
             }
 
             buf.last_frag_index = Some(frag_index);
-        } else if payload.len() != max_frag_len {
+        } else if payload.len() != usize::from(max_frag_len) {
             return Err(ReassembleError::InvalidPayloadLength {
                 index: frag_index,
                 len: payload.len(),
-                expected: max_frag_len,
+                expected: usize::from(max_frag_len),
             });
         }
         buf.payload[start..end].copy_from_slice(payload);
@@ -341,7 +345,7 @@ mod tests {
 
     #[test]
     fn round_trip() {
-        let max_frag_len = 8;
+        let max_frag_len = MinSize(8);
         let msg = Bytes::from_static(b"hello world! goodbye woorld!");
 
         let mut iter = split(max_frag_len, msg).unwrap();
