@@ -87,9 +87,8 @@ pub fn split(
         .expect("we check above that there should not be more than `MinSize::MAX` fragments");
 
         let payload = FragmentPayload::new(payload).expect(
-            "`payload` is a chunk of up to `max_frag_len` bytes, \
-                and `max_frag_len` is a `MinSize`, \
-                so `payload` should not be bigger than `MinSize`",
+            "`payload` is a chunk of up to `max_frag_len` bytes, and `max_frag_len` is a \
+             `MinSize`, so `payload` should not be bigger than `MinSize`",
         );
 
         (position, payload)
