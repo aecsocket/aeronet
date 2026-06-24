@@ -329,7 +329,7 @@ pub fn flush_on(
         .collect::<Vec<_>>();
 
     // sort by time sent, oldest to newest
-    frag_paths.sort_unstable_by(|(_, sent_at_a), (_, sent_at_b)| sent_at_a.cmp(sent_at_b));
+    frag_paths.sort_unstable_by_key(|(_, sent_at)| *sent_at);
 
     let mut frag_paths = frag_paths
         .into_iter()
