@@ -234,7 +234,8 @@ impl SessionResponse {
 /// };
 ///
 /// fn on_session_request(mut trigger: On<SessionRequest>) {
-///     let client = trigger.event_target();
+///     let server = trigger.event_target();
+///     let session = trigger.session_entity;
 ///     trigger.respond(SessionResponse::Accepted);
 /// }
 /// ```
@@ -263,8 +264,11 @@ impl SessionResponse {
 /// ```
 #[derive(Debug, EntityEvent)]
 pub struct SessionRequest {
+    #[event_target]
+    /// [`Server`] entity receiving the request to connect.
+    pub server_entity: Entity,
     /// [`Session`] client entity requesting to connect.
-    pub entity: Entity,
+    pub session_entity: Entity,
     /// Steam ID of the client requesting to connect.
     pub steam_id: SteamId,
     #[debug(skip)]
@@ -418,7 +422,8 @@ fn on_connecting(
     entry.insert(client);
 
     commands.trigger(SessionRequest {
-        entity: client,
+        server_entity: server,
+        session_entity: client,
         steam_id,
         request: Some(request),
     });
