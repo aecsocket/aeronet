@@ -182,7 +182,16 @@ fn ping_pong(
             commands.insert_resource(ClientEntity(client));
         }
 
-        fn on_session_request(mut trigger: On<SessionRequest>) {
+        fn on_session_request(
+            mut trigger: On<SessionRequest>,
+            expected_server: Res<ServerEntity>,
+            clients: Query<&ChildOf>,
+        ) {
+            assert_eq!(trigger.event_target(), expected_server.0);
+            let &ChildOf(server) = clients
+                .get(trigger.session_entity)
+                .expect("requesting client session should have a parent server");
+            assert_eq!(server, expected_server.0);
             assert_ne!(
                 trigger.remote_addr.port(),
                 0,
@@ -232,12 +241,12 @@ fn ping_pong(
             .add_observer(on_add_server_endpoint)
             .add_observer(on_add_server)
             .add_observer(on_add_session_endpoint)
-            .add_observer(on_session_request)
             .add_observer(on_add_session)
             .add_systems(Update, recv_on_session);
 
         let world = app.world_mut();
         let server = world.spawn_empty().id();
+        world.entity_mut(server).observe(on_session_request);
         world.insert_resource(ServerEntity(server));
         WebTransportServer::open(server_config).apply(world.entity_mut(server));
 

@@ -39,7 +39,6 @@ fn main() -> AppExit {
         .add_systems(Update, reply)
         .add_observer(on_opened)
         .add_observer(on_closed)
-        .add_observer(on_session_request)
         .add_observer(on_connecting)
         .add_observer(on_connected)
         .add_observer(on_disconnected)
@@ -58,24 +57,27 @@ fn open_server(mut commands: Commands) {
         .queue(SteamNetServer::open(SessionConfig::default(), target));
 }
 
-fn on_opened(trigger: On<Add, Server>, servers: Query<&LocalAddr>) {
+fn on_opened(
+    trigger: On<Add, Server>,
+    servers: Query<&LocalAddr>,
+    mut commands: Commands,
+) {
     let server = trigger.event_target();
     if let Ok(local_addr) = servers.get(server) {
         info!("{server} opened on {:?}", **local_addr);
     } else {
         info!("{server} opened for peer connections");
     }
+    commands.entity(server).observe(on_session_request);
 }
 
 fn on_closed(trigger: On<Closed>) {
     panic!("server closed: {:?}", trigger.event());
 }
 
-fn on_session_request(mut request: On<SessionRequest>, clients: Query<&ChildOf>) {
-    let client = request.event_target();
-    let Ok(&ChildOf(server)) = clients.get(client) else {
-        return;
-    };
+fn on_session_request(mut request: On<SessionRequest>) {
+    let server = request.event_target();
+    let client = request.session_entity;
 
     info!(
         "{client} connecting to {server} with Steam ID {:?}",
