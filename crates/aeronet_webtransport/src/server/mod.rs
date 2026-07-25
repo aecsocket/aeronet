@@ -196,7 +196,7 @@ pub enum SessionResponse {
 #[reflect(from_reflect = false)]
 pub struct SessionRequest {
     #[event_target]
-    /// [`Opened`] server entity receiving the request to connect.
+    /// [`Server`] entity receiving the request to connect.
     pub server_entity: Entity,
     /// [`Session`] client entity requesting to connect.
     pub session_entity: Entity,

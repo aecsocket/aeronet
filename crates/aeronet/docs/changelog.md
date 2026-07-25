@@ -1,5 +1,9 @@
 Version changelog.
 
+# 0.22.0
+
+- Changed `SessionRequest` to be an entity event triggered on the server when it receives a new session request, instead of a global event (requiring a global observer)
+
 # 0.21.0
 
 - Update to `bevy_replicon` 0.41.0
