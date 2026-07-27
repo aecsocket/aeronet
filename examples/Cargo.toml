@@ -11,7 +11,7 @@ publish = false
 [dependencies]
 aeronet = { workspace = true, features = ["visualizer"] }
 aeronet_replicon = { workspace = true, features = ["client", "server"] }
-aeronet_websocket = { workspace = true, features = ["client", "server"] }
+aeronet_websocket = { workspace = true, features = ["client", "self-signed", "server"] }
 aeronet_webtransport = { workspace = true, features = [
   "client",
   "dangerous-configuration",
@@ -23,6 +23,9 @@ bevy_replicon = { workspace = true }
 cfg-if = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+rustls = { workspace = true, features = ["ring"] }
 
 [lints]
 workspace = true

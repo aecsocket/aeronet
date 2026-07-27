@@ -3,6 +3,7 @@ Version changelog.
 # 0.22.0
 
 - Changed `SessionRequest` to be an entity event triggered on the server when it receives a new session request, instead of a global event (requiring a global observer)
+- Make `aeronet_websocket`'s rustls crypto provider selectable while keeping AWS-LC enabled by default
 
 # 0.21.0
 

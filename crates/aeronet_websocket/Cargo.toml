@@ -22,7 +22,7 @@ required-features = ["client"]
 [[example]]
 name = "websocket_server"
 path = "examples/websocket_server.rs"
-required-features = ["server"]
+required-features = ["self-signed", "server"]
 
 [dependencies]
 aeronet_io = { workspace = true }
@@ -49,10 +49,10 @@ cfg-if = { workspace = true }
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 rcgen = { workspace = true, optional = true }
 rustls = { workspace = true }
-rustls-native-certs = { workspace = true }
+rustls-native-certs = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-rustls = { workspace = true, optional = true }
-tokio-tungstenite = { workspace = true, features = ["rustls-tls-native-roots"] }
+tokio-tungstenite = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 js-sys = { workspace = true }
@@ -67,9 +67,17 @@ web-sys = { workspace = true, features = [
 ] }
 
 [features]
-default = ["self-signed"]
+default = ["aws-lc-rs", "self-signed"]
+## Enables the `aws-lc-rs` rustls crypto provider.
+##
+## Applications must install their selected provider before building a TLS configuration if another provider is also enabled.
+aws-lc-rs = ["rustls/aws-lc-rs", "rustls/prefer-post-quantum"]
 ## Enables the `client` module.
-client = []
+client = [
+  "dep:rustls-native-certs",
+  "tokio-tungstenite/connect",
+  "tokio-tungstenite/rustls-tls-native-roots",
+]
 ## Enable this when generating docs.
 document-features = ["dep:document-features"]
 ## Allows generating self-signed server certificates using [`rcgen`].
@@ -77,7 +85,7 @@ document-features = ["dep:document-features"]
 ## [`rcgen`]: https://docs.rs/rcgen
 self-signed = ["dep:rcgen"]
 ## Enables the `server` module.
-server = ["dep:tokio-rustls"]
+server = ["dep:tokio-rustls", "tokio/net", "tokio-tungstenite/handshake"]
 
 [lints]
 workspace = true

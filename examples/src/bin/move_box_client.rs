@@ -27,6 +27,10 @@ use {
 };
 
 fn main() -> AppExit {
+    #[cfg(not(target_family = "wasm"))]
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("ring should be the first rustls crypto provider installed");
     App::new()
         .add_plugins((
             // core

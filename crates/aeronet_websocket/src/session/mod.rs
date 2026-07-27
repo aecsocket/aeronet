@@ -40,20 +40,6 @@ impl Plugin for WebSocketSessionPlugin {
             app.add_plugins(AeronetIoPlugin);
         }
 
-        #[cfg(not(target_family = "wasm"))]
-        {
-            use tracing::debug;
-
-            if rustls::crypto::aws_lc_rs::default_provider()
-                .install_default()
-                .is_ok()
-            {
-                debug!("Installed default `aws-lc-rs` CryptoProvider");
-            } else {
-                debug!("CryptoProvider is already installed");
-            }
-        }
-
         app.init_resource::<WebSocketRuntime>()
             .add_systems(PreUpdate, poll.in_set(IoSystems::Poll))
             .add_systems(PostUpdate, flush.in_set(IoSystems::Flush))
