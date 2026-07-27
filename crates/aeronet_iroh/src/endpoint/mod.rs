@@ -49,7 +49,8 @@ impl Plugin for IrohEndpointPlugin {
 /// to set how the endpoint should respond to this connection attempt.
 ///
 /// Iroh endpoints have no fixed client or server role. The same endpoint can
-/// accept and initiate any number of sessions.
+/// accept and initiate any number of sessions. Every session entity is a child
+/// of the endpoint entity which owns it.
 #[derive(Debug, Component)]
 pub struct IrohEndpoint {
     entity: Entity,
@@ -95,6 +96,7 @@ impl IrohEndpoint {
     /// `target` may be an [`EndpointAddr`] containing direct and relay
     /// addresses, or an [`EndpointId`]. Connecting with only an endpoint ID
     /// requires the endpoint builder to have a suitable address lookup service.
+    /// The session entity becomes a child of this endpoint entity.
     ///
     /// # Examples
     ///
@@ -176,8 +178,8 @@ pub enum EndpointError {
 
 /// Triggered when an [`IrohEndpoint`] fails to open or closes unexpectedly.
 ///
-/// Immediately after this, the endpoint entity and all of its incoming session
-/// children are despawned.
+/// Immediately after this, the endpoint entity and all of its session children
+/// are despawned.
 #[derive(Debug, EntityEvent)]
 pub struct EndpointClosed {
     /// [`IrohEndpoint`] entity which closed.

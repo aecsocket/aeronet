@@ -60,11 +60,15 @@ fn connect_send_and_disconnect() {
     assert_eq!(outgoing_info.endpoint(), endpoint_a);
     assert_eq!(outgoing_info.peer_id(), endpoint_b_id);
     assert_eq!(outgoing_info.side(), SessionSide::Outgoing);
+    let &ChildOf(outgoing_parent) = app.world().get::<ChildOf>(outgoing).unwrap();
+    assert_eq!(outgoing_parent, endpoint_a);
 
     let incoming_info = app.world().get::<IrohSession>(incoming).unwrap();
     assert_eq!(incoming_info.endpoint(), endpoint_b);
     assert_eq!(incoming_info.peer_id(), endpoint_a_id);
     assert_eq!(incoming_info.side(), SessionSide::Incoming);
+    let &ChildOf(incoming_parent) = app.world().get::<ChildOf>(incoming).unwrap();
+    assert_eq!(incoming_parent, endpoint_b);
 
     app.world_mut()
         .get_mut::<Session>(outgoing)

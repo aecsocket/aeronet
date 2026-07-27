@@ -58,9 +58,9 @@ pub enum SessionSide {
 /// Iroh session connected to one authenticated peer.
 ///
 /// Use [`IrohEndpoint::connect`](crate::endpoint::IrohEndpoint::connect) to
-/// create an outgoing session. Incoming sessions are created as children of an
-/// [`IrohEndpoint`](crate::endpoint::IrohEndpoint) and announced through a
-/// [`SessionRequest`].
+/// create an outgoing session. Incoming sessions are announced through a
+/// [`SessionRequest`]. Both outgoing and incoming session entities are children
+/// of the [`IrohEndpoint`](crate::endpoint::IrohEndpoint) which owns them.
 ///
 /// This component is added while the session is still connecting. Wait for the
 /// [`Session`] component to be added before sending or receiving packets.
@@ -360,6 +360,7 @@ pub(crate) fn connect(
     );
 
     entity.insert((
+        ChildOf(endpoint_entity),
         IrohSession::new(endpoint_entity, peer_id, SessionSide::Outgoing),
         Connecting::new(rx_dc_reason, rx_next),
     ));
