@@ -84,6 +84,22 @@ cargo install wasm-server-runner
 cargo run --example webtransport_client -F client --target wasm32-unknown-unknown
 ```
 
+### [`aeronet_iroh`]
+
+| ✅ Complete | 🖥️ Native | 🌐 WASM |
+|------------|-----------|--------|
+
+Uses [Iroh] to establish authenticated peer-to-peer QUIC connections. Iroh
+attempts direct connections, including through NAT hole punching, and can fall
+back to an encrypted relay path when a direct path is unavailable. Each
+endpoint can both accept and initiate sessions; there is no dedicated server
+role.
+
+```sh
+cargo run --example iroh_peer
+cargo run --example iroh_peer -- --remote ENDPOINT
+```
+
 ### [`aeronet_steam`]
 
 | ✅ Complete | 🖥️ Native |
@@ -231,6 +247,7 @@ When submitting a pull request, make sure that all continuous integration (CI) c
 [`aeronet_channel`]: https://docs.rs/aeronet_channel
 [`aeronet_websocket`]: https://docs.rs/aeronet_websocket
 [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport
+[`aeronet_iroh`]: https://docs.rs/aeronet_iroh
 [`aeronet_steam`]: https://docs.rs/aeronet_steam
 [`aeronet_replicon`]: https://docs.rs/aeronet_replicon
 [`bevy_replicon`]: https://docs.rs/bevy_replicon
@@ -241,3 +258,4 @@ When submitting a pull request, make sure that all continuous integration (CI) c
 [`echo_server.rs`]: ./examples/src/bin/echo_server.rs
 [`egui_plot`]: https://docs.rs/egui_plot
 [`cargo-fuzz`]: https://github.com/rust-fuzz/cargo-fuzz
+[Iroh]: https://iroh.computer
