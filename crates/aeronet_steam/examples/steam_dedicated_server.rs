@@ -44,16 +44,16 @@ fn main() -> AppExit {
         server.set_max_players(17);
         server.set_server_name("PolymerServer");
         server.set_dedicated_server(true);
-        println!("pre logon");
+        debug!("pre logon");
         server.log_on_anonymous();
-        println!("post log on");
+        debug!("post log on");
 
         server.enable_heartbeats(true);
 
     server_callbacks.networking_utils().init_relay_network_access();
 
     let id = server.steam_id();
-    println!("steamid = : {:?}", id);
+    info!("steamid = : {:?}", id);
 
     let steam_server = SteamworksServer(server.clone());
     let socket_provider = SteamworksSockets::Server(steam_server);
@@ -68,7 +68,7 @@ fn main() -> AppExit {
         //         .add_systems(PreUpdate, |steam: Res<SteamworksClient>| {
         //     let utils = steam.networking_utils();
         //             let status = utils.detailed_relay_network_status();
-        // println!(
+        // info!(
         //     "status: {:?}, network_config: {:?}, any_relay: {:?}, message: {}",
         //     status.availability(),
         //     status.network_config(),
@@ -119,7 +119,7 @@ fn on_session_request(mut request: On<SessionRequest>, clients: Query<&ChildOf>)
         return;
     };
 
-    info!(
+    debug!(
         "{client} connecting to {server} with Steam ID {:?}",
         request.steam_id
     );
