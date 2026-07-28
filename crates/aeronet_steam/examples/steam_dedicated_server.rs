@@ -28,12 +28,9 @@ use {
 };
 
 fn main() -> AppExit {
-    //let steam = steamworks::Client::init_app(480).expect("failed to initialize steam");
-    //steam.networking_utils().init_relay_network_access();
         let (server, server_callbacks) = steamworks::Server::init(
-            // [99, 99, 28,138].into(),
             Ipv4Addr::LOCALHOST,
-            27015,
+            25572,
             27016,
             steamworks::ServerMode::AuthenticationAndSecure,
             "1.0.0.0",
@@ -48,7 +45,6 @@ fn main() -> AppExit {
         server.set_server_name("PolymerServer");
         server.set_dedicated_server(true);
         println!("pre logon");
-        //server.log_on("445DDEA499AAE956693733CF280629AE");
         server.log_on_anonymous();
         println!("post log on");
 

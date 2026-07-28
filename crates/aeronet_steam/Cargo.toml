@@ -26,7 +26,7 @@ required-features = ["server"]
 [[example]]
 name = "steam_dedicated_server"
 path = "examples/steam_dedicated_server.rs"
-required-features = []
+required-features = ["dedicated_server"]
 
 [dependencies]
 aeronet_io = { workspace = true }
@@ -63,6 +63,8 @@ steamworks = { workspace = true }
 client = []
 ## Enables the `server` module.
 server = []
+## Enables the `dedicated server` module.
+dedicated_server = []
 
 [lints]
 workspace = true

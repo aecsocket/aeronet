@@ -103,7 +103,7 @@ fn global_ui(
     mut target_peer: Local<String>,
     mut session_id: Local<usize>,
 ) -> Result<(), BevyError> {
-    const DEFAULT_TARGET: &str = "127.0.0.1:27015";
+    const DEFAULT_TARGET: &str = "127.0.0.1:25572";
 
     egui::Window::new("Connect").show(egui.ctx_mut()?, |ui| {
         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
