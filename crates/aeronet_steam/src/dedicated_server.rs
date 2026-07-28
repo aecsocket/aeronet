@@ -125,7 +125,7 @@ impl SteamNetDedicatedServer {
     ///
     /// ```
     /// use {
-    ///     aeronet_steam::{SessionConfig, server::SteamNetServer},
+    ///     aeronet_steam::{SessionConfig, dedicated_server::SteamNetDedicatedServer},
     ///     bevy_ecs::prelude::*,
     ///     std::net::SocketAddr,
     /// };
@@ -137,12 +137,12 @@ impl SteamNetDedicatedServer {
     /// // using `Commands`
     /// commands
     ///     .spawn_empty()
-    ///     .queue(SteamNetServer::open(config, target));
+    ///     .queue(SteamNetDedicatedServer::open(config, target));
     ///
     /// // using mutable `World` access
     /// # let config = unimplemented!();
     /// let server = world.spawn_empty().id();
-    /// SteamNetServer::open(config, target).apply(world.entity_mut(server));
+    /// SteamNetDedicatedServer::open(config, target).apply(world.entity_mut(server));
     /// # }
     /// ```
     #[must_use]
@@ -168,8 +168,8 @@ fn open(mut entity: EntityWorldMut, config: SessionConfig, target: ListenTarget)
         };
 
         match result {
-            Ok(_) => println!("socket creation ok"),
-            Err(_) => println!("socket creaction error"),
+            Ok(_) => info!("socket creation ok"),
+            Err(_) => info!("socket creaction error"),
         }
         _ = tx_next.send(result.map_err(|_| SessionError::Steam));
     })
