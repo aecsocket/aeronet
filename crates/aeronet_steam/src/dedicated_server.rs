@@ -29,7 +29,7 @@ use {
         },
     },
     sync_wrapper::SyncWrapper,
-    tracing::{debug, debug_span},
+    tracing::{debug, debug_span, info},
 };
 
 /// Allows using [`SteamNetServer`].
