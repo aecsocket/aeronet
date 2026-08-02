@@ -9,14 +9,14 @@ license.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
-[[example]]
-name = "iroh_peer"
-path = "examples/iroh_peer.rs"
-
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg=docsrs_aeronet"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+
+[[example]]
+name = "iroh_peer"
+path = "examples/iroh_peer.rs"
 
 [dependencies]
 aeronet_io = { workspace = true }

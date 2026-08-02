@@ -21,8 +21,8 @@ use {
 /// Use the [`Default`] impl to create and leak a new `tokio` runtime, and use
 /// that as the [`IrohRuntime`] handle.
 ///
-/// If you already have a runtime handle, you can use `IrohRuntime::from(handle)`
-/// to create a runtime from that handle.
+/// If you already have a runtime handle, you can use
+/// `IrohRuntime::from(handle)` to create a runtime from that handle.
 ///
 /// ## WASM
 ///

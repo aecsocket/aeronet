@@ -4,7 +4,6 @@
     target_family = "wasm",
     expect(
         clippy::future_not_send,
-        clippy::arc_with_non_send_sync,
         reason = "`Send` and `Sync` are not used on WASM"
     )
 )]
@@ -15,9 +14,8 @@ pub mod endpoint;
 pub mod session;
 
 mod runtime;
-pub use runtime::IrohRuntime;
-
 use bevy_app::prelude::*;
+pub use runtime::IrohRuntime;
 
 /// Allows using Iroh endpoints and sessions.
 pub struct IrohPlugin;

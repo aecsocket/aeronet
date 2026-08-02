@@ -45,8 +45,9 @@ impl Plugin for IrohEndpointPlugin {
 ///
 /// When a peer attempts to connect, the endpoint will trigger a
 /// [`SessionRequest`](session::SessionRequest). Your app **must** observe this,
-/// and eventually use [`SessionRequest::respond`](session::SessionRequest::respond)
-/// to set how the endpoint should respond to this connection attempt.
+/// and eventually use
+/// [`SessionRequest::respond`](session::SessionRequest::respond) to set how the
+/// endpoint should respond to this connection attempt.
 ///
 /// Iroh endpoints have no fixed client or server role. The same endpoint can
 /// accept and initiate any number of sessions. Every session entity is a child
@@ -62,8 +63,9 @@ impl IrohEndpoint {
     /// given Iroh `builder`.
     ///
     /// The builder's accepted ALPN protocols are replaced with Aeronet's
-    /// [`ALPN`]. The rest of the builder, including its identity, address lookup
-    /// services, direct transports, and relay configuration, is preserved.
+    /// [`ALPN`]. The rest of the builder, including its identity, address
+    /// lookup services, direct transports, and relay configuration, is
+    /// preserved.
     ///
     /// # Examples
     ///
@@ -101,19 +103,13 @@ impl IrohEndpoint {
     /// # Examples
     ///
     /// ```no_run
-    /// use {
-    ///     aeronet_iroh::endpoint::IrohEndpoint,
-    ///     bevy_ecs::prelude::*,
-    ///     iroh::EndpointAddr,
-    /// };
+    /// use {aeronet_iroh::endpoint::IrohEndpoint, bevy_ecs::prelude::*, iroh::EndpointAddr};
     ///
-    /// fn connect(
-    ///     mut commands: Commands,
-    ///     endpoints: Query<&IrohEndpoint>,
-    ///     target: Res<Target>,
-    /// ) {
+    /// fn connect(mut commands: Commands, endpoints: Query<&IrohEndpoint>, target: Res<Target>) {
     ///     let endpoint = endpoints.single().unwrap();
-    ///     commands.spawn_empty().queue(endpoint.connect(target.0.clone()));
+    ///     commands
+    ///         .spawn_empty()
+    ///         .queue(endpoint.connect(target.0.clone()));
     /// }
     ///
     /// #[derive(Resource)]

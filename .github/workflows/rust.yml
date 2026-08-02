@@ -64,7 +64,7 @@ jobs:
         with:
           targets: "wasm32-unknown-unknown"
       - uses: ./.github/actions/install-bevy-deps
-      - run: cargo +nightly doc --target '${{ matrix.target }}' --workspace --all-features
+      - run: cargo +nightly doc --target '${{ matrix.target }}' --workspace --all-features --no-deps
 
   check:
     runs-on: ubuntu-latest
@@ -114,6 +114,7 @@ jobs:
           - "aeronet_io"
           - "aeronet_transport"
           - "aeronet_channel"
+          - "aeronet_iroh"
           # - "aeronet_steam" # has no tests
           - "aeronet_websocket"
           - "aeronet_webtransport"
