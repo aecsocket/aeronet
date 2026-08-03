@@ -66,11 +66,11 @@ typesize = { version = "0.1.14", default-features = false }
 wasm-bindgen = { version = "0.2.101" }
 wasm-bindgen-futures = { version = "0.4.51" }
 web-sys = { version = "0.3.70" }
-wtransport = { version = "0.6.1" }
+wtransport = { version = "0.7.1" }
 x509-cert = { version = "0.2.5" }
-xwt-core = { version = "0.6.0" }
-xwt-web = { version = "0.15.0" }
-xwt-wtransport = { version = "0.13.2" }
+xwt-core = { version = "0.9.0" }
+xwt-web = { version = "0.20.0" }
+xwt-wtransport = { version = "0.19.0" }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

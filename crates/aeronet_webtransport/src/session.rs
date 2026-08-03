@@ -462,8 +462,8 @@ async fn disconnect(conn: Arc<Connection>, reason: &str) {
         //
         // Tested: the server times us out instead of actually
         // reading the disconnect
-        conn.transport.close_with_info(&close_info);
-        _ = conn.transport.closed().await;
+        conn.transport_ref().close_with_info(&close_info);
+        _ = conn.transport_ref().closed().await;
     }
 
     #[cfg(not(target_family = "wasm"))]
