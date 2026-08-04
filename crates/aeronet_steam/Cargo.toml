@@ -31,13 +31,16 @@ bevy_ecs = { workspace = true }
 bevy_platform = { workspace = true }
 blocking = { workspace = true }
 bytes = { workspace = true }
-derive_more = { workspace = true, features = [
-  "debug",
-  "deref",
-  "deref_mut",
-  "display",
-  "error",
-] }
+derive_more = {
+  workspace = true,
+  features = [
+    "debug",
+    "deref",
+    "deref_mut",
+    "display",
+    "error",
+  ]
+}
 oneshot = { workspace = true }
 sync_wrapper = { workspace = true }
 tracing = { workspace = true }

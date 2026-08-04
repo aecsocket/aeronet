@@ -28,15 +28,18 @@ bevy_reflect = { workspace = true }
 bevy_time = { workspace = true }
 bevy_winit = { workspace = true, optional = true }
 bit-vec = { workspace = true }
-derive_more = { workspace = true, features = [
-  "add",
-  "add_assign",
-  "deref",
-  "deref_mut",
-  "display",
-  "error",
-  "from",
-] }
+derive_more = {
+  workspace = true,
+  features = [
+    "add",
+    "add_assign",
+    "deref",
+    "deref_mut",
+    "display",
+    "error",
+    "from",
+  ]
+}
 document-features = { workspace = true, optional = true }
 egui_plot = { workspace = true, optional = true }
 either = { workspace = true }

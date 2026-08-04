@@ -31,12 +31,15 @@ bevy_ecs = { workspace = true }
 bevy_platform = { workspace = true }
 bytes = { workspace = true }
 cfg-if = { workspace = true }
-derive_more = { workspace = true, features = [
-  "deref",
-  "deref_mut",
-  "display",
-  "error",
-] }
+derive_more = {
+  workspace = true,
+  features = [
+    "deref",
+    "deref_mut",
+    "display",
+    "error",
+  ]
+}
 document-features = { workspace = true, optional = true }
 futures = { workspace = true }
 tracing = { workspace = true }
@@ -58,13 +61,16 @@ tokio-tungstenite = { workspace = true }
 js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
-web-sys = { workspace = true, features = [
-  "BinaryType",
-  "CloseEvent",
-  "ErrorEvent",
-  "MessageEvent",
-  "WebSocket",
-] }
+web-sys = {
+  workspace = true,
+  features = [
+    "BinaryType",
+    "CloseEvent",
+    "ErrorEvent",
+    "MessageEvent",
+    "WebSocket",
+  ]
+}
 
 [features]
 default = ["aws-lc-rs", "self-signed"]
@@ -85,7 +91,7 @@ document-features = ["dep:document-features"]
 ## [`rcgen`]: https://docs.rs/rcgen
 self-signed = ["dep:rcgen"]
 ## Enables the `server` module.
-server = ["dep:tokio-rustls", "tokio/net", "tokio-tungstenite/handshake"]
+server = ["dep:tokio-rustls", "tokio-tungstenite/handshake", "tokio/net"]
 
 [lints]
 workspace = true
