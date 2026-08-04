@@ -25,7 +25,7 @@ clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-rustls = { workspace = true, features = ["ring"] }
+rustls = { workspace = true, features = ["aws-lc-rs"] }
 
 [lints]
 workspace = true

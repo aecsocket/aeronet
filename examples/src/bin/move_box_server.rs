@@ -48,9 +48,9 @@ impl FromWorld for Args {
 }
 
 fn main() -> AppExit {
-    rustls::crypto::ring::default_provider()
+    rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
-        .expect("ring should be the first rustls crypto provider installed");
+        .expect("aws-lc-rs should be the first rustls crypto provider installed");
     App::new()
         .init_resource::<Args>()
         .add_plugins((
