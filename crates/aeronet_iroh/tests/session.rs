@@ -18,6 +18,7 @@ use {
 };
 
 const TIMEOUT: Duration = Duration::from_secs(10);
+const ALPN: &[u8] = b"aeronet-iroh/tests/0";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum RecordedDisconnect {
@@ -49,7 +50,7 @@ fn connect_send_and_disconnect() {
         .world()
         .get::<IrohEndpoint>(endpoint_a)
         .unwrap()
-        .connect(target);
+        .connect(target, ALPN);
     let outgoing = app.world_mut().spawn_empty().id();
     connect.apply(app.world_mut().entity_mut(outgoing));
 
@@ -113,7 +114,7 @@ fn reject_incoming_session() {
         .world()
         .get::<IrohEndpoint>(endpoint_a)
         .unwrap()
-        .connect(target);
+        .connect(target, ALPN);
     let outgoing = app.world_mut().spawn_empty().id();
     connect.apply(app.world_mut().entity_mut(outgoing));
 
@@ -154,8 +155,8 @@ fn test_app(response: SessionResponse) -> App {
 
 fn open_endpoint(app: &mut App) -> Entity {
     let entity = app.world_mut().spawn_empty().id();
-    IrohEndpoint::open(iroh::Endpoint::builder(presets::Minimal))
-        .apply(app.world_mut().entity_mut(entity));
+    let builder = iroh::Endpoint::builder(presets::Minimal).alpns(vec![ALPN.to_vec()]);
+    IrohEndpoint::open(builder).apply(app.world_mut().entity_mut(entity));
     entity
 }
 

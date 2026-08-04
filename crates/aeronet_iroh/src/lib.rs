@@ -26,10 +26,3 @@ impl Plugin for IrohPlugin {
         app.add_plugins((session::IrohSessionPlugin, endpoint::IrohEndpointPlugin));
     }
 }
-
-/// ALPN protocol identifier used by Aeronet Iroh sessions.
-///
-/// An [`iroh::Endpoint`] created through
-/// [`IrohEndpoint::open`](endpoint::IrohEndpoint::open) is configured to accept
-/// this protocol. Outgoing sessions use the same identifier.
-pub const ALPN: &[u8] = b"aeronet/iroh/0";

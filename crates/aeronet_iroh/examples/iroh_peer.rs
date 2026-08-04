@@ -16,6 +16,8 @@ use {
     iroh::EndpointId,
 };
 
+const ALPN: &[u8] = b"aeronet-iroh/example/0";
+
 fn main() -> AppExit {
     App::new()
         .add_plugins((MinimalPlugins, LogPlugin::default(), IrohPlugin))
@@ -40,7 +42,7 @@ struct Args {
 }
 
 fn open_endpoint(mut commands: Commands) {
-    let builder = iroh::Endpoint::builder(iroh::endpoint::presets::N0);
+    let builder = iroh::Endpoint::builder(iroh::endpoint::presets::N0).alpns(vec![ALPN.to_vec()]);
     commands.spawn_empty().queue(IrohEndpoint::open(builder));
 }
 
@@ -59,7 +61,7 @@ fn on_endpoint_opened(
 
     if let Some(remote) = args.remote {
         info!("Connecting to {remote}");
-        commands.spawn_empty().queue(endpoint.connect(remote));
+        commands.spawn_empty().queue(endpoint.connect(remote, ALPN));
     }
 }
 

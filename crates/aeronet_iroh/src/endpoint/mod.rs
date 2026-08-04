@@ -4,7 +4,7 @@ mod backend;
 
 use {
     crate::{
-        ALPN, IrohRuntime,
+        IrohRuntime,
         session::{self, IrohSessionPlugin, SessionSide},
     },
     aeronet_io::{IoSystems, connection::DisconnectReason},
@@ -62,10 +62,8 @@ impl IrohEndpoint {
     /// Creates an [`EntityCommand`] to set up and open an endpoint using the
     /// given Iroh `builder`.
     ///
-    /// The builder's accepted ALPN protocols are replaced with Aeronet's
-    /// [`ALPN`]. The rest of the builder, including its identity, address
-    /// lookup services, direct transports, and relay configuration, is
-    /// preserved.
+    /// Configure `builder` with the application protocols this endpoint should
+    /// accept using [`Builder::alpns`].
     ///
     /// # Examples
     ///
@@ -77,13 +75,14 @@ impl IrohEndpoint {
     /// };
     ///
     /// # fn run(mut commands: Commands, world: &mut World) {
-    /// let builder = iroh::Endpoint::builder(presets::N0);
+    /// const ALPN: &[u8] = b"my-game/0";
+    /// let builder = iroh::Endpoint::builder(presets::N0).alpns(vec![ALPN.to_vec()]);
     ///
     /// // using `Commands`
     /// commands.spawn_empty().queue(IrohEndpoint::open(builder));
     ///
     /// // using mutable `World` access
-    /// # let builder = iroh::Endpoint::builder(presets::N0);
+    /// # let builder = iroh::Endpoint::builder(presets::N0).alpns(vec![ALPN.to_vec()]);
     /// let endpoint = world.spawn_empty().id();
     /// IrohEndpoint::open(builder).apply(world.entity_mut(endpoint));
     /// # }
@@ -94,11 +93,13 @@ impl IrohEndpoint {
     }
 
     /// Creates an [`EntityCommand`] to connect a session entity to `target`.
+    /// using the application protocol `alpn`.
     ///
     /// `target` may be an [`EndpointAddr`] containing direct and relay
     /// addresses, or an [`EndpointId`]. Connecting with only an endpoint ID
     /// requires the endpoint builder to have a suitable address lookup service.
-    /// The session entity becomes a child of this endpoint entity.
+    /// The remote endpoint must accept `alpn`. The session entity becomes a
+    /// child of this endpoint entity.
     ///
     /// # Examples
     ///
@@ -106,25 +107,27 @@ impl IrohEndpoint {
     /// use {aeronet_iroh::endpoint::IrohEndpoint, bevy_ecs::prelude::*, iroh::EndpointAddr};
     ///
     /// fn connect(mut commands: Commands, endpoints: Query<&IrohEndpoint>, target: Res<Target>) {
+    ///     const ALPN: &[u8] = b"my-game/0";
     ///     let endpoint = endpoints.single().unwrap();
     ///     commands
     ///         .spawn_empty()
-    ///         .queue(endpoint.connect(target.0.clone()));
+    ///         .queue(endpoint.connect(target.0.clone(), ALPN));
     /// }
     ///
     /// #[derive(Resource)]
     /// struct Target(EndpointAddr);
     /// ```
     #[must_use]
-    pub fn connect<T>(&self, target: T) -> impl EntityCommand + use<T>
+    pub fn connect<T>(&self, target: T, alpn: &[u8]) -> impl EntityCommand + use<T>
     where
         T: Into<EndpointAddr>,
     {
         let endpoint_entity = self.entity;
         let endpoint = self.raw.clone();
         let target = target.into();
+        let alpn = alpn.to_vec();
         move |entity: EntityWorldMut| {
-            session::connect(entity, endpoint_entity, endpoint, target);
+            session::connect(entity, endpoint_entity, endpoint, target, alpn);
         }
     }
 
@@ -146,8 +149,8 @@ impl IrohEndpoint {
 
     /// Returns the underlying Iroh endpoint.
     ///
-    /// Aeronet owns the accept loop and accepted ALPN configuration. Do not
-    /// close the returned endpoint while the entity is in use.
+    /// Aeronet owns the accept loop. Do not accept connections from or close
+    /// the returned endpoint while the entity is in use.
     #[must_use]
     pub const fn raw(&self) -> &iroh::Endpoint {
         &self.raw
@@ -219,7 +222,7 @@ fn open(mut entity: EntityWorldMut, builder: Builder) {
     let (tx_next, rx_next) = oneshot::channel::<ToOpen>();
     runtime.spawn_on_self(
         async move {
-            let Err(err) = backend::start(builder.alpns(vec![ALPN.to_vec()]), tx_next).await;
+            let Err(err) = backend::start(builder, tx_next).await;
             debug!("Endpoint closed: {err:?}");
             _ = tx_error.send(err);
         }

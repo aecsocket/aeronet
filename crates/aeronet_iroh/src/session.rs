@@ -2,7 +2,7 @@
 //! connections.
 
 use {
-    crate::{ALPN, IrohRuntime},
+    crate::IrohRuntime,
     aeronet_io::{
         AeronetIoPlugin, IoSystems, Session, SessionEndpoint,
         connection::{
@@ -345,6 +345,7 @@ pub(crate) fn connect(
     endpoint_entity: Entity,
     endpoint: iroh::Endpoint,
     target: EndpointAddr,
+    alpn: Vec<u8>,
 ) {
     let peer_id = target.id;
     let runtime = entity.world().resource::<IrohRuntime>().clone();
@@ -352,7 +353,7 @@ pub(crate) fn connect(
     let (tx_next, rx_next) = oneshot::channel();
     runtime.spawn_on_self(
         async move {
-            let Err(reason) = start_outgoing(endpoint, target, tx_next).await;
+            let Err(reason) = start_outgoing(endpoint, target, alpn, tx_next).await;
             debug!("Session disconnected: {reason:?}");
             _ = tx_dc_reason.send(reason);
         }
@@ -523,11 +524,12 @@ fn flush(mut sessions: Query<(Entity, &mut Session, &IrohIo)>) {
 async fn start_outgoing(
     endpoint: iroh::Endpoint,
     target: EndpointAddr,
+    alpn: Vec<u8>,
     tx_connected: oneshot::Sender<ToConnected>,
 ) -> Result<Never, DisconnectReason> {
     debug!(peer_id = %target.id, "Connecting");
     let conn = endpoint
-        .connect(target, ALPN)
+        .connect(target, &alpn)
         .await
         .map_err(SessionError::Connect)?;
     debug!("Connected; waiting for admission response");

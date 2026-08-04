@@ -26,6 +26,8 @@ use {
     iroh::endpoint::presets,
 };
 
+const ALPN: &[u8] = b"my-game/0";
+
 fn main() {
     App::new()
         .add_plugins((MinimalPlugins, IrohPlugin))
@@ -34,10 +36,15 @@ fn main() {
 }
 
 fn open_endpoint(mut commands: Commands) {
-    let builder = iroh::Endpoint::builder(presets::N0);
+    let builder = iroh::Endpoint::builder(presets::N0).alpns(vec![ALPN.to_vec()]);
     commands.spawn_empty().queue(IrohEndpoint::open(builder));
 }
 ```
+
+The ALPN identifies your application protocol. Configure the endpoint with the
+ALPNs it accepts and pass the selected ALPN to
+[`IrohEndpoint::connect`](https://docs.rs/aeronet_iroh/latest/aeronet_iroh/endpoint/struct.IrohEndpoint.html#method.connect)
+when opening an outgoing session. Aeronet does not define an ALPN of its own.
 
 The `N0` preset uses Iroh's public address lookup and relay infrastructure.
 Pass an [`EndpointAddr`](https://docs.rs/iroh/latest/iroh/struct.EndpointAddr.html)
