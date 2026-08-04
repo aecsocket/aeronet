@@ -19,8 +19,7 @@ pub mod cert;
 pub mod client;
 pub mod session;
 
-mod runtime;
-pub use runtime::WebTransportRuntime;
+pub use aeronet_tokio_runtime::TokioRuntime as WebTransportRuntime;
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {

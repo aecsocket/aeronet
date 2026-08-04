@@ -10,8 +10,7 @@ extern crate alloc;
 pub mod client;
 pub mod session;
 
-mod runtime;
-pub use runtime::WebSocketRuntime;
+pub use aeronet_tokio_runtime::TokioRuntime as WebSocketRuntime;
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {

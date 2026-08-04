@@ -26,6 +26,7 @@ required-features = ["self-signed", "server"]
 
 [dependencies]
 aeronet_io = { workspace = true }
+aeronet_tokio_runtime = { workspace = true }
 base64 = { workspace = true }
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
@@ -52,16 +53,13 @@ bevy_egui = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 spki = { workspace = true, features = ["fingerprint"] }
-tokio = { workspace = true, features = ["rt-multi-thread"] }
 wtransport = { workspace = true }
 x509-cert = { workspace = true }
 xwt-wtransport = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-gloo-timers = { workspace = true, features = ["futures"] }
 js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
-wasm-bindgen-futures = { workspace = true }
 xwt-web = { workspace = true }
 
 [features]

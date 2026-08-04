@@ -2,7 +2,7 @@
 //! servers.
 
 use {
-    crate::runtime::WebTransportRuntime,
+    crate::WebTransportRuntime,
     aeronet_io::{
         AeronetIoPlugin, IoSystems, Session,
         connection::{

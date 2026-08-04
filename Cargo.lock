@@ -151,6 +151,7 @@ name = "aeronet_iroh"
 version = "0.21.0"
 dependencies = [
  "aeronet_io",
+ "aeronet_tokio_runtime",
  "bevy",
  "bevy_app",
  "bevy_ecs",
@@ -159,11 +160,8 @@ dependencies = [
  "clap",
  "derive_more",
  "futures",
- "gloo-timers",
  "iroh",
- "tokio",
  "tracing",
- "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -206,6 +204,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "aeronet_tokio_runtime"
+version = "0.21.0"
+dependencies = [
+ "bevy_ecs",
+ "gloo-timers",
+ "tokio",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
 name = "aeronet_transport"
 version = "0.21.0"
 dependencies = [
@@ -238,6 +246,7 @@ name = "aeronet_websocket"
 version = "0.21.0"
 dependencies = [
  "aeronet_io",
+ "aeronet_tokio_runtime",
  "bevy",
  "bevy_app",
  "bevy_ecs",
@@ -266,6 +275,7 @@ name = "aeronet_webtransport"
 version = "0.21.0"
 dependencies = [
  "aeronet_io",
+ "aeronet_tokio_runtime",
  "anyhow",
  "base64",
  "bevy",
@@ -279,13 +289,10 @@ dependencies = [
  "derive_more",
  "document-features",
  "futures",
- "gloo-timers",
  "js-sys",
  "spki 0.7.3",
- "tokio",
  "tracing",
  "wasm-bindgen",
- "wasm-bindgen-futures",
  "wtransport",
  "x509-cert",
  "xwt-core",

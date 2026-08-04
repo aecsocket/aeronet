@@ -20,6 +20,7 @@ path = "examples/iroh_peer.rs"
 
 [dependencies]
 aeronet_io = { workspace = true }
+aeronet_tokio_runtime = { workspace = true }
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_platform = { workspace = true }
@@ -32,13 +33,6 @@ tracing = { workspace = true }
 [dev-dependencies]
 bevy = { workspace = true }
 clap = { workspace = true }
-
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread"] }
-
-[target.'cfg(target_family = "wasm")'.dependencies]
-gloo-timers = { workspace = true, features = ["futures"] }
-wasm-bindgen-futures = { workspace = true }
 
 [lints]
 workspace = true

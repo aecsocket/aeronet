@@ -13,9 +13,10 @@ extern crate alloc;
 pub mod endpoint;
 pub mod session;
 
-mod runtime;
 use bevy_app::prelude::*;
-pub use runtime::IrohRuntime;
+
+pub use iroh;
+pub use aeronet_tokio_runtime::TokioRuntime as IrohRuntime;
 
 /// Allows using Iroh endpoints and sessions.
 pub struct IrohPlugin;
@@ -32,5 +33,3 @@ impl Plugin for IrohPlugin {
 /// [`IrohEndpoint::open`](endpoint::IrohEndpoint::open) is configured to accept
 /// this protocol. Outgoing sessions use the same identifier.
 pub const ALPN: &[u8] = b"aeronet/iroh/0";
-
-pub use iroh;
