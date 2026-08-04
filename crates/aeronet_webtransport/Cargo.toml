@@ -34,13 +34,16 @@ bevy_platform = { workspace = true }
 bevy_reflect = { workspace = true, features = ["std"] }
 bytes = { workspace = true }
 cfg-if = { workspace = true }
-derive_more = { workspace = true, features = [
-  "debug",
-  "deref",
-  "deref_mut",
-  "display",
-  "error",
-] }
+derive_more = {
+  workspace = true,
+  features = [
+    "debug",
+    "deref",
+    "deref_mut",
+    "display",
+    "error",
+  ]
+}
 document-features = { workspace = true, optional = true }
 futures = { workspace = true }
 tracing = { workspace = true }

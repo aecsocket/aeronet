@@ -20,6 +20,8 @@ cfg_if::cfg_if! {
         #[cfg(feature = "server")]
         pub mod server;
 
-        pub use {tokio_tungstenite, tokio_tungstenite::tungstenite, rustls, rustls_native_certs};
+        pub use {rustls, tokio_tungstenite, tokio_tungstenite::tungstenite};
+        #[cfg(feature = "client")]
+        pub use rustls_native_certs;
     }
 }
