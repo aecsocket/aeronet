@@ -38,6 +38,9 @@ use {
 // Let's set up the app.
 
 fn main() -> AppExit {
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("aws-lc-rs should be the first rustls crypto provider installed");
     App::new()
         .add_plugins((
             // Core Bevy plugins.

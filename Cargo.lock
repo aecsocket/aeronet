@@ -3146,6 +3146,7 @@ dependencies = [
  "bevy_replicon",
  "cfg-if",
  "clap",
+ "rustls",
  "serde",
 ]
 

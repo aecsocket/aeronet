@@ -21,13 +21,16 @@ bevy_ecs = { workspace = true, features = ["bevy_reflect"] }
 bevy_platform = { workspace = true, features = ["alloc"] }
 bevy_reflect = { workspace = true }
 bytes = { workspace = true }
-derive_more = { workspace = true, features = [
-  "add",
-  "add_assign",
-  "deref",
-  "display",
-  "error",
-] }
+derive_more = {
+  workspace = true,
+  features = [
+    "add",
+    "add_assign",
+    "deref",
+    "display",
+    "error",
+  ]
+}
 log = { workspace = true }
 
 [target.'cfg(not(all(target_has_atomic = "8", target_has_atomic = "16", target_has_atomic = "32", target_has_atomic = "64", target_has_atomic = "ptr")))'.dependencies]
