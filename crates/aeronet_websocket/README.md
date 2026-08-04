@@ -5,7 +5,10 @@
 
 This uses [`tokio-tungstenite`] on native targets, and [`web-sys`] on WASM targets, for WebSocket usage. The server implementation is only available on native targets.
 
+AWS-LC is the default [rustls] crypto provider. Applications must install their selected provider before building a TLS configuration if default features are disabled or another provider is also enabled.
+
 [`aeronet_io`]: https://docs.rs/aeronet_io
 [WebSockets]: https://web.dev/articles/websockets-basics
 [`tokio-tungstenite`]: https://docs.rs/tokio-tungstenite
 [`web-sys`]: https://docs.rs/web-sys
+[rustls]: https://docs.rs/rustls

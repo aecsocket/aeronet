@@ -4,7 +4,6 @@
 use {
     alloc::sync::Arc,
     core::net::{Ipv6Addr, SocketAddr},
-    derive_more::{Display, Error},
     rustls::pki_types::{CertificateDer, PrivateKeyDer},
     tokio_tungstenite::tungstenite::{
         handshake::server::{ErrorResponse, Request, Response},
@@ -313,6 +312,6 @@ impl Identity {
 
 /// Provided a subject alternative name which is not a valid DNS string.
 #[cfg(feature = "self-signed")]
-#[derive(Debug, Display, Error)]
+#[derive(Debug, derive_more::Display, derive_more::Error)]
 #[display("invalid SANs for self-signed certificate")]
 pub struct InvalidSan;

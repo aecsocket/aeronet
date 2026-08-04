@@ -76,9 +76,13 @@ impl ClientConfigBuilder<WantsConnector> {
     ///
     /// [`with_no_encryption`]: ClientConfigBuilder::with_no_encryption
     pub fn with_no_cert_validation(self) -> ClientConfig {
-        let config = rustls::ClientConfig::builder()
+        let builder = rustls::ClientConfig::builder();
+        let verifier = NoServerVerification {
+            supported_algorithms: builder.crypto_provider().signature_verification_algorithms,
+        };
+        let config = builder
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(NoServerVerification::default()))
+            .with_custom_certificate_verifier(Arc::new(verifier))
             .with_no_client_auth();
         self.with_tls_config(config)
     }
@@ -144,15 +148,6 @@ impl Default for ClientConfig {
 #[derive(Debug, Clone)]
 struct NoServerVerification {
     supported_algorithms: WebPkiSupportedAlgorithms,
-}
-
-impl Default for NoServerVerification {
-    fn default() -> Self {
-        Self {
-            supported_algorithms: rustls::crypto::aws_lc_rs::default_provider()
-                .signature_verification_algorithms,
-        }
-    }
 }
 
 impl ServerCertVerifier for NoServerVerification {

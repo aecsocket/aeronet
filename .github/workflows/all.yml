@@ -9,14 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: crate-ci/typos@master
+      - uses: crate-ci/typos@2a44449ff3410624a0fa2ea073c670e1c9236a40
 
   tombi:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: tombi-toml/setup-tombi@v1
+      - uses: tombi-toml/setup-tombi@9fdb1f12707aafdc140839c60421336d4ae157ea
         with:
-          version: 0.6.30
+          version: 1.2.6
       - run: tombi lint
       - run: tombi fmt --check
