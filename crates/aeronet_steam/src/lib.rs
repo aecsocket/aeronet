@@ -11,7 +11,6 @@ use {
 
 #[cfg(feature = "client")]
 pub mod client;
-#[cfg(feature = "dedicated_server")]
 pub mod dedicated_server;
 #[cfg(feature = "server")]
 pub mod server;
