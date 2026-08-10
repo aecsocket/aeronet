@@ -1764,9 +1764,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_replicon"
-version = "0.41.1"
+version = "0.42.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a25105650eb1b27c6ada888e06bb38ff7e326a94c7c5b4d75fb5aee50c5ae45e"
+checksum = "be0faf3fdbafd7d1d658c1b8f8c05c186764765264c1d8aece2807da7f540853"
 dependencies = [
  "bevy",
  "bitflags 2.10.0",
@@ -5457,7 +5457,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.1",
  "rustls",
- "socket2 0.5.10",
+ "socket2",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -5494,7 +5494,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -6222,16 +6222,6 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.5.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e22376abed350d73dd1cd119b57ffccad95b4e585a7cda43e286245ce23c0678"
-dependencies = [
- "libc",
- "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "socket2"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
@@ -6606,7 +6596,7 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
- "socket2 0.6.5",
+ "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",
 ]
@@ -8080,7 +8070,7 @@ dependencies = [
  "rustls-native-certs",
  "rustls-pki-types",
  "sha2 0.11.0",
- "socket2 0.6.5",
+ "socket2",
  "thiserror 2.0.17",
  "time",
  "tokio",
