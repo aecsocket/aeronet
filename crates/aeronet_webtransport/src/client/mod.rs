@@ -4,7 +4,7 @@ mod backend;
 
 use {
     crate::{
-        runtime::WebTransportRuntime,
+        WebTransportRuntime,
         session::{
             self, MIN_MTU, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
         },

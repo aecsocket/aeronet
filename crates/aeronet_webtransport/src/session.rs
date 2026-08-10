@@ -2,7 +2,7 @@
 //! servers.
 
 use {
-    crate::runtime::WebTransportRuntime,
+    crate::WebTransportRuntime,
     aeronet_io::{
         AeronetIoPlugin, IoSystems, Session,
         connection::{
@@ -163,7 +163,7 @@ pub(crate) fn poll(
         let span = trace_span!("poll", %entity);
         let _span = span.enter();
 
-        while let Ok(Some(meta)) = io.rx_meta.try_next() {
+        while let Ok(meta) = io.rx_meta.try_recv() {
             if let Err(err) = session.set_mtu(meta.mtu) {
                 commands.trigger(Disconnected {
                     entity,
@@ -186,7 +186,7 @@ pub(crate) fn poll(
 
         let mut num_packets = Saturating(0);
         let mut num_bytes = Saturating(0);
-        while let Ok(Some(packet)) = io.rx_packet_b2f.try_next() {
+        while let Ok(packet) = io.rx_packet_b2f.try_recv() {
             num_packets += 1;
             session.stats.packets_recv += 1;
 

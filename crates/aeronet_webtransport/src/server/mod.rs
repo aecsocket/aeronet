@@ -4,7 +4,7 @@ mod backend;
 
 use {
     crate::{
-        runtime::WebTransportRuntime,
+        WebTransportRuntime,
         session::{
             self, MIN_MTU, SessionError, SessionMeta, WebTransportIo, WebTransportSessionPlugin,
         },
@@ -353,7 +353,7 @@ fn poll_opened(
             continue;
         }
 
-        while let Ok(Some(connecting)) = server.rx_connecting.try_next() {
+        while let Ok(connecting) = server.rx_connecting.try_recv() {
             let client = commands
                 .spawn((
                     ChildOf(entity),

@@ -26,6 +26,7 @@ required-features = ["self-signed", "server"]
 
 [dependencies]
 aeronet_io = { workspace = true }
+aeronet_tokio_runtime = { workspace = true }
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_platform = { workspace = true }

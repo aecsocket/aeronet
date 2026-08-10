@@ -1,0 +1,28 @@
+[package]
+name = "aeronet_tokio_runtime"
+version = "0.21.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Platform-agnostic async runtime for `aeronet` IO layers"
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg=docsrs_aeronet"]
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+
+[dependencies]
+bevy_ecs = { workspace = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "time"] }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+gloo-timers = { workspace = true, features = ["futures"] }
+wasm-bindgen-futures = { workspace = true }
+
+[lints]
+workspace = true

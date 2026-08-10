@@ -27,6 +27,10 @@ aeronet_replicon = {
   version = "0.21.0",
   default-features = false
 }
+aeronet_tokio_runtime = {
+  path = "crates/aeronet_tokio_runtime",
+  version = "0.21.0"
+}
 aeronet_transport = {
   path = "crates/aeronet_transport",
   version = "0.21.0",
@@ -66,6 +70,7 @@ either = { version = "1.15.0", default-features = false }
 flume = { version = "0.11.0" }
 futures = { version = "0.3.30" }
 gloo-timers = { version = "0.3.0" }
+iroh = { version = "1.0.3" }
 itertools = { version = "0.14.0" }
 js-sys = { version = "0.3.70" }
 log = { version = "0.4.26" }
