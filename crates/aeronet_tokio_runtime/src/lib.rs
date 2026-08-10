@@ -1,10 +1,16 @@
 #![cfg_attr(docsrs_aeronet, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![cfg_attr(
+    target_family = "wasm",
+    expect(
+        clippy::future_not_send,
+        reason = "`Send`, `Sync` are not used on WASM"
+    )
+)]
 
 extern crate alloc;
 
 use {
-    alloc::sync::Arc,
     bevy_ecs::prelude::*,
     core::{future::Future, time::Duration},
 };
@@ -27,8 +33,8 @@ use {
 /// Use the [`FromWorld`] impl to create and leak a new `tokio` runtime, and use
 /// that as the [`TokioRuntime`] handle.
 ///
-/// If you already have a runtime handle, you can use `TokioRuntime::from(handle)`
-/// to create a runtime from that handle.
+/// If you already have a runtime handle, you can use
+/// `TokioRuntime::from(handle)` to create a runtime from that handle.
 ///
 /// ## WASM
 ///
@@ -56,7 +62,7 @@ enum RuntimeInner {
     /// to it.
     Handle(tokio::runtime::Handle),
     /// We own the runtime ourselves.
-    Runtime(Arc<tokio::runtime::Runtime>),
+    Runtime(alloc::sync::Arc<tokio::runtime::Runtime>),
 }
 
 #[cfg(target_family = "wasm")]
@@ -73,7 +79,8 @@ mod maybe {
 
 #[cfg(not(target_family = "wasm"))]
 mod maybe {
-    /// Marker trait which is implemented for all `Send` types on native targets.
+    /// Marker trait which is implemented for all `Send` types on native
+    /// targets.
     ///
     /// # Availability
     ///
@@ -119,8 +126,8 @@ impl From<tokio::runtime::Handle> for TokioRuntime {
 }
 
 #[cfg(not(target_family = "wasm"))]
-impl From<Arc<tokio::runtime::Runtime>> for TokioRuntime {
-    fn from(value: Arc<tokio::runtime::Runtime>) -> Self {
+impl From<alloc::sync::Arc<tokio::runtime::Runtime>> for TokioRuntime {
+    fn from(value: alloc::sync::Arc<tokio::runtime::Runtime>) -> Self {
         Self {
             inner: RuntimeInner::Runtime(value),
         }
@@ -131,7 +138,7 @@ impl From<Arc<tokio::runtime::Runtime>> for TokioRuntime {
 impl From<tokio::runtime::Runtime> for TokioRuntime {
     fn from(value: tokio::runtime::Runtime) -> Self {
         Self {
-            inner: RuntimeInner::Runtime(Arc::new(value)),
+            inner: RuntimeInner::Runtime(alloc::sync::Arc::new(value)),
         }
     }
 }

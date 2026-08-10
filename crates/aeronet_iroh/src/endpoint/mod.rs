@@ -118,14 +118,15 @@ impl IrohEndpoint {
     /// struct Target(EndpointAddr);
     /// ```
     #[must_use]
-    pub fn connect<T>(&self, target: T, alpn: &[u8]) -> impl EntityCommand + use<T>
+    pub fn connect<T, A>(&self, target: T, alpn: A) -> impl EntityCommand + use<T, A>
     where
         T: Into<EndpointAddr>,
+        A: Into<Vec<u8>>,
     {
         let endpoint_entity = self.entity;
         let endpoint = self.raw.clone();
         let target = target.into();
-        let alpn = alpn.to_vec();
+        let alpn = alpn.into();
         move |entity: EntityWorldMut| {
             session::connect(entity, endpoint_entity, endpoint, target, alpn);
         }
@@ -266,7 +267,7 @@ fn poll_opened(
             continue;
         }
 
-        while let Ok(Some(connecting)) = endpoint.rx_connecting.try_next() {
+        while let Ok(connecting) = endpoint.rx_connecting.try_recv() {
             let session = commands
                 .spawn((
                     ChildOf(entity),

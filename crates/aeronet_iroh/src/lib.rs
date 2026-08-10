@@ -14,9 +14,7 @@ pub mod endpoint;
 pub mod session;
 
 use bevy_app::prelude::*;
-
-pub use iroh;
-pub use aeronet_tokio_runtime::TokioRuntime as IrohRuntime;
+pub use {aeronet_tokio_runtime::TokioRuntime as IrohRuntime, iroh};
 
 /// Allows using Iroh endpoints and sessions.
 pub struct IrohPlugin;

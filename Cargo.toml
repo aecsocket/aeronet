@@ -22,11 +22,14 @@ aeronet_io = {
   version = "0.21.0",
   default-features = false
 }
-aeronet_tokio_runtime = { path = "crates/aeronet_tokio_runtime", version = "0.21.0" }
 aeronet_replicon = {
   path = "crates/aeronet_replicon",
   version = "0.21.0",
   default-features = false
+}
+aeronet_tokio_runtime = {
+  path = "crates/aeronet_tokio_runtime",
+  version = "0.21.0"
 }
 aeronet_transport = {
   path = "crates/aeronet_transport",

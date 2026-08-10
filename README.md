@@ -89,11 +89,7 @@ cargo run --example webtransport_client -F client --target wasm32-unknown-unknow
 | ✅ Complete | 🖥️ Native | 🌐 WASM |
 |------------|-----------|--------|
 
-Uses [Iroh] to establish authenticated peer-to-peer QUIC connections. Iroh
-attempts direct connections, including through NAT hole punching, and can fall
-back to an encrypted relay path when a direct path is unavailable. Each
-endpoint can both accept and initiate sessions; there is no dedicated server
-role.
+Uses [Iroh] to establish authenticated peer-to-peer QUIC connections. Iroh attempts direct connections, including through NAT hole punching, and can fall back to an encrypted relay path when a direct path is unavailable. Each endpoint can both accept and initiate sessions; there is no dedicated server role.
 
 ```sh
 cargo run --example iroh_peer

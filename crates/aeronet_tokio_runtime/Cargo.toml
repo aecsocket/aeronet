@@ -18,7 +18,7 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 bevy_ecs = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread", "time", "net"] }
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "time"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gloo-timers = { workspace = true, features = ["futures"] }
