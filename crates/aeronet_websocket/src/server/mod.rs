@@ -216,7 +216,7 @@ fn poll_opened(
             continue;
         }
 
-        while let Ok(Some(connecting)) = server.rx_connecting.try_next() {
+        while let Ok(connecting) = server.rx_connecting.try_recv() {
             let session = commands
                 .spawn((
                     ChildOf(entity),
