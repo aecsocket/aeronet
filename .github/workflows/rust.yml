@@ -127,6 +127,7 @@ jobs:
           - "aeronet_channel"
           - "aeronet_iroh"
           # - "aeronet_steam" # has no tests
+          - "aeronet_webrtc"
           - "aeronet_websocket"
           - "aeronet_webtransport"
     steps:
