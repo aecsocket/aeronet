@@ -56,10 +56,10 @@ steamworks = { workspace = true }
 [features]
 ## Enables the `client` module.
 client = []
-## Enables the `server` module.
-server = []
 ## Enables serde support for Steamworks types.
 serde = ["steamworks/serde"]
+## Enables the `server` module.
+server = []
 
 [lints]
 workspace = true
