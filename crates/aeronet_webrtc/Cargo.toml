@@ -1,0 +1,142 @@
+[package]
+name = "aeronet_webrtc"
+version = "0.21.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "WebRTC IO layer implementation for `aeronet`"
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg=docsrs_aeronet"]
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+
+[[example]]
+name = "browser_native_harness"
+path = "examples/browser_native_harness.rs"
+required-features = ["server"]
+
+[[example]]
+crate-type = ["cdylib"]
+name = "browser_wasm_harness"
+path = "examples/browser_wasm_harness.rs"
+required-features = ["client"]
+
+[[test]]
+name = "replicon"
+path = "tests/replicon.rs"
+required-features = ["client", "server"]
+
+[dependencies]
+aeronet_io = { workspace = true, optional = true }
+aeronet_tokio_runtime = { workspace = true, optional = true }
+bevy_app = { workspace = true, optional = true }
+bevy_ecs = { workspace = true }
+bevy_platform = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
+derive_more = { workspace = true, features = ["display", "error"] }
+document-features = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+serde = { workspace = true }
+tracing = { workspace = true, optional = true }
+
+[dev-dependencies]
+aeronet_replicon = { workspace = true, features = ["client", "server"] }
+aeronet_transport = { workspace = true }
+bevy_replicon = { workspace = true, features = ["client", "server"] }
+bevy_state = {
+  version = "0.19.0",
+  default-features = false,
+  features = ["bevy_app"]
+}
+bevy_time = { version = "0.19.0", default-features = false }
+serde_json = { workspace = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+async-trait = { workspace = true, optional = true }
+local-ip-address = { workspace = true, optional = true }
+tokio = {
+  workspace = true,
+  features = ["macros", "rt-multi-thread", "sync", "time"],
+  optional = true
+}
+webrtc = {
+  workspace = true,
+  default-features = false,
+  features = ["runtime-tokio"],
+  optional = true
+}
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+bevy_app = { workspace = true, features = ["web"], optional = true }
+js-sys = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+wasm-bindgen-futures = { workspace = true, optional = true }
+web-sys = {
+  workspace = true,
+  features = [
+    "BinaryType",
+    "Event",
+    "MessageEvent",
+    "RtcConfiguration",
+    "RtcDataChannel",
+    "RtcDataChannelInit",
+    "RtcDataChannelState",
+    "RtcDataChannelType",
+    "RtcIceCandidate",
+    "RtcIceCandidateInit",
+    "RtcIceServer",
+    "RtcIceTransportPolicy",
+    "RtcPeerConnection",
+    "RtcPeerConnectionIceEvent",
+    "RtcPeerConnectionState",
+    "RtcSdpType",
+    "RtcSessionDescription",
+    "RtcSessionDescriptionInit",
+    "RtcStatsReport",
+  ],
+  optional = true
+}
+
+[features]
+default = []
+## Enables the WebRTC client implementation on native and WASM targets.
+client = [
+  "dep:aeronet_io",
+  "dep:aeronet_tokio_runtime",
+  "dep:async-trait",
+  "dep:bevy_app",
+  "dep:bevy_platform",
+  "dep:bytes",
+  "dep:futures",
+  "dep:js-sys",
+  "dep:local-ip-address",
+  "dep:tokio",
+  "dep:tracing",
+  "dep:wasm-bindgen",
+  "dep:wasm-bindgen-futures",
+  "dep:web-sys",
+  "dep:webrtc",
+]
+## Enable this when generating docs.
+document-features = ["dep:document-features"]
+## Enables the native WebRTC server implementation.
+server = [
+  "dep:aeronet_io",
+  "dep:aeronet_tokio_runtime",
+  "dep:async-trait",
+  "dep:bevy_app",
+  "dep:bevy_platform",
+  "dep:bytes",
+  "dep:futures",
+  "dep:local-ip-address",
+  "dep:tokio",
+  "dep:tracing",
+  "dep:webrtc",
+]
+
+[lints]
+workspace = true

@@ -84,6 +84,25 @@ cargo install wasm-server-runner
 cargo run --example webtransport_client -F client --target wasm32-unknown-unknown
 ```
 
+### [`aeronet_webrtc`]
+
+| ✅ Complete | 🖥️ Native | 🌐 WASM |
+|------------|-----------|--------|
+| Yes | Yes | Client |
+
+Uses WebRTC `DataChannel`s with application-owned, signaling-provider-neutral
+offer/answer and ICE routing. Native clients and servers use `webrtc-rs`; browser
+clients use `web-sys`.
+
+The WebRTC IO layer uses one unordered, unreliable `DataChannel` for Aeronet
+packets. Applications route [`LocalSignal`] and [`RemoteSignal`] messages over
+their signaling service; the crate does not open a signaling connection.
+
+```sh
+cargo test -p aeronet_webrtc --all-features
+python3 crates/aeronet_webrtc/examples/browser_harness.py
+```
+
 ### [`aeronet_iroh`]
 
 | ✅ Complete | 🖥️ Native | 🌐 WASM |
@@ -243,6 +262,7 @@ When submitting a pull request, make sure that all continuous integration (CI) c
 [`aeronet_channel`]: https://docs.rs/aeronet_channel
 [`aeronet_websocket`]: https://docs.rs/aeronet_websocket
 [`aeronet_webtransport`]: https://docs.rs/aeronet_webtransport
+[`aeronet_webrtc`]: https://docs.rs/aeronet_webrtc
 [`aeronet_iroh`]: https://docs.rs/aeronet_iroh
 [`aeronet_steam`]: https://docs.rs/aeronet_steam
 [`aeronet_replicon`]: https://docs.rs/aeronet_replicon
@@ -250,6 +270,8 @@ When submitting a pull request, make sure that all continuous integration (CI) c
 [`lightyear`]: https://docs.rs/lightyear
 [`aeronet_transport`]: https://docs.rs/aeronet_transport
 [`Session`]: io::Session
+[`LocalSignal`]: https://docs.rs/aeronet_webrtc/latest/aeronet_webrtc/struct.LocalSignal.html
+[`RemoteSignal`]: https://docs.rs/aeronet_webrtc/latest/aeronet_webrtc/struct.RemoteSignal.html
 [`echo_client.rs`]: ./examples/src/bin/echo_client.rs
 [`echo_server.rs`]: ./examples/src/bin/echo_server.rs
 [`egui_plot`]: https://docs.rs/egui_plot

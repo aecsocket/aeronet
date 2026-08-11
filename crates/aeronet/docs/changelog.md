@@ -6,6 +6,7 @@ Version changelog.
 - Changed `SessionRequest` to be an entity event triggered on the server when it receives a new session request, instead of a global event (requiring a global observer)
 - Made `aeronet_websocket`'s rustls crypto provider selectable while keeping AWS-LC enabled by default
   - `aeronet_websocket` no longer installs a crypto provider when its plugins are added; applications must install their selected provider themselves when both `ring` and `aws-lc-rs` are enabled (or when the default `aws-lc-rs` feature is disabled), otherwise TLS configuration will panic
+- Added `aeronet_webrtc`, a signaling-provider-neutral WebRTC IO layer with native and browser clients, native server admission, bounded queues, and sanitized path diagnostics
 
 # 0.21.0
 
