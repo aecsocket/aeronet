@@ -7729,6 +7729,7 @@ checksum = "5ff29921f6a7e8c85b0c971ec3c42002b9f535e3b8f4358cb22911d43709739a"
 dependencies = [
  "bitflags 2.13.1",
  "paste",
+ "serde",
  "steamworks-sys",
  "thiserror 2.0.20",
 ]
