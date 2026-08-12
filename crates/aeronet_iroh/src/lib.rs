@@ -12,6 +12,8 @@ extern crate alloc;
 
 pub mod endpoint;
 pub mod session;
+#[cfg(feature = "test-utils")]
+pub mod test_utils;
 
 use bevy_app::prelude::*;
 pub use {aeronet_tokio_runtime::TokioRuntime as IrohRuntime, iroh};

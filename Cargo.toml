@@ -71,6 +71,7 @@ flume = { version = "0.11.0" }
 futures = { version = "0.3.30" }
 gloo-timers = { version = "0.3.0" }
 iroh = { version = "1.0.3" }
+iroh-relay = { version = "1.0.3" }
 itertools = { version = "0.14.0" }
 js-sys = { version = "0.3.70" }
 log = { version = "0.4.26" }
