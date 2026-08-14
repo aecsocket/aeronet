@@ -134,7 +134,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
       - uses: ./.github/actions/install-bevy-deps
       - uses: cargo-bins/cargo-binstall@f21464c976f072485f2ab0743b3337b66911d97f
-      - run: cargo binstall --no-confirm cargo-nextest
+      - run: cargo binstall --no-confirm --locked cargo-nextest
       - run: cargo nextest run --package '${{ matrix.package }}' --all-features
 
   # `cargo nextest` currently doesn't support doctests: <https://nexte.st/#quick-start>
