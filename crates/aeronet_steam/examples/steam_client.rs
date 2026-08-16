@@ -14,7 +14,7 @@ use {
         connection::{Disconnect, DisconnectReason, Disconnected},
     },
     aeronet_steam::{
-        SessionConfig, SteamworksClient,
+        SessionConfig, SteamworksSockets,
         client::{SteamNetClient, SteamNetClientPlugin},
     },
     bevy::prelude::*,
@@ -28,8 +28,8 @@ fn main() -> AppExit {
     steam.networking_utils().init_relay_network_access();
 
     App::new()
-        .insert_resource(SteamworksClient(steam))
-        .add_systems(PreUpdate, |steam: Res<SteamworksClient>| {
+        .insert_resource(SteamworksSockets::Client(steam))
+        .add_systems(PreUpdate, |steam: Res<SteamworksSockets>| {
             steam.run_callbacks();
         })
         .add_plugins((DefaultPlugins, EguiPlugin::default(), SteamNetClientPlugin))

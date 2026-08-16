@@ -23,6 +23,11 @@ name = "steam_server"
 path = "examples/steam_server.rs"
 required-features = ["server"]
 
+[[example]]
+name = "steam_dedicated_server"
+path = "examples/steam_dedicated_server.rs"
+required-features = ["server"]
+
 [dependencies]
 aeronet_io = { workspace = true }
 anyhow = { workspace = true }

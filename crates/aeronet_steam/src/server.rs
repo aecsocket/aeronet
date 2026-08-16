@@ -2,7 +2,7 @@
 
 use {
     crate::{
-        SteamworksClient,
+        SteamworksSockets,
         config::SessionConfig,
         session::{SessionError, SteamNetIo, SteamNetSessionPlugin, entity_to_user_data},
     },
@@ -118,8 +118,8 @@ impl SteamNetServer {
     /// Creates an [`EntityCommand`] to set up a server and have it start
     /// listening for connections.
     ///
-    /// [`SteamworksClient`] must be present in the world before this command is
-    /// applied.
+    /// [`SteamworksSockets`] must be present in the world before this command
+    /// is applied.
     ///
     /// # Examples
     ///
@@ -156,7 +156,7 @@ fn open(mut entity: EntityWorldMut, config: SessionConfig, target: ListenTarget)
     let mtu = config.send_buffer_size;
     let sockets = entity
         .world()
-        .resource::<SteamworksClient>()
+        .resource::<SteamworksSockets>()
         .networking_sockets();
     let (tx_next, rx_next) = oneshot::channel::<OpenResult>();
     blocking::unblock(move || {
@@ -245,14 +245,17 @@ impl SessionResponse {
 /// ```
 /// use {
 ///     aeronet_steam::{
-///         SteamworksClient,
+///         SteamworksSockets,
 ///         server::{SessionRequest, SessionResponse},
 ///     },
 ///     bevy_ecs::prelude::*,
 ///     steamworks::FriendFlags,
 /// };
 ///
-/// fn on_session_request(mut request: On<SessionRequest>, steam: Res<SteamworksClient>) {
+/// fn on_session_request(mut request: On<SessionRequest>, sockets: Res<SteamworksSockets>) {
+///     let SteamworksSockets::Client(steam) = sockets.as_ref() else {
+///         return;
+///     };
 ///     let friend = steam.friends().get_friend(request.steam_id);
 ///     if !friend.has_friend(FriendFlags::IMMEDIATE) {
 ///         request.respond(SessionResponse::rejected("not friend of the host"));

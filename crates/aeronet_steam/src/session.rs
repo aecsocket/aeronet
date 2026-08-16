@@ -2,7 +2,7 @@
 //! servers.
 
 use {
-    crate::SteamworksClient,
+    crate::SteamworksSockets,
     aeronet_io::{
         AeronetIoPlugin, IoSystems, Session,
         connection::{DisconnectReason, Disconnected, UNKNOWN_DISCONNECT_REASON},
@@ -87,7 +87,7 @@ struct PollGroup(NetPollGroup);
 
 fn init_io(
     trigger: On<Add, SteamNetIo>,
-    steam: Option<Res<SteamworksClient>>,
+    steam: Option<Res<SteamworksSockets>>,
     io: Query<&SteamNetIo>,
     poll_group: Option<Res<PollGroup>>,
     mut commands: Commands,
@@ -95,7 +95,7 @@ fn init_io(
     let steam = steam.unwrap_or_else(|| {
         panic!(
             "`{}` must be present before creating a Steam IO layer",
-            type_name::<Res<SteamworksClient>>()
+            type_name::<Res<SteamworksSockets>>()
         )
     });
 
@@ -129,7 +129,7 @@ fn init_io(
 fn poll_io(
     mut commands: Commands,
     sessions: Query<(Entity, &SteamNetIo)>,
-    steam: Res<SteamworksClient>,
+    steam: Res<SteamworksSockets>,
 ) {
     let sockets = steam.networking_sockets();
     for (entity, io) in &sessions {

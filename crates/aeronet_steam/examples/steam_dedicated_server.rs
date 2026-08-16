@@ -1,5 +1,18 @@
-//! Example server using Steam which listens for clients sending strings and
-//! sends back a string reply.
+//! Example dedicated server using Steam, which listens for clients sending
+//! strings and sends back a string reply.
+//!
+//! Unlike [`steam_server`], this example logs on to Steam as a dedicated game
+//! server, so it must be run with a Steam app ID that is configured for
+//! dedicated server hosting. The app ID is provided programmatically below by
+//! setting the `SteamAppId`/`SteamGameId` env vars (the same trick
+//! [`steamworks::Client::init_app`] uses) instead of relying on a
+//! `steam_appid.txt` file.
+//!
+//! The IO layer is identical to the regular server: the only difference is
+//! that the [`SteamworksSockets`] resource wraps a [`steamworks::Server`]
+//! instead of a [`steamworks::Client`].
+//!
+//! [`steam_server`]: ./steam_server.rs
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
@@ -26,11 +39,47 @@ use {
 };
 
 fn main() -> AppExit {
-    let steam = steamworks::Client::init_app(480).expect("failed to initialize steam");
-    steam.networking_utils().init_relay_network_access();
+    // `steamworks::Server::init` has no `init_app` helper, but it determines the
+    // app ID from the `SteamAppId`/`SteamGameId` env vars, falling back to a
+    // `steam_appid.txt` in the working dir only if both are unset. Set them here
+    // (Spacewar, 480) so the example works without any `steam_appid.txt` file.
+    // SAFETY: single-threaded before process startup; setting these env vars
+    // mirrors exactly what `steamworks::Client::init_app` does.
+    unsafe {
+        std::env::set_var("SteamAppId", "480");
+        std::env::set_var("SteamGameId", "480");
+    }
 
+    let (server, server_callbacks) = steamworks::Server::init(
+        Ipv4Addr::LOCALHOST,
+        25572,
+        27016,
+        steamworks::ServerMode::AuthenticationAndSecure,
+        "1.0.0.0",
+    )
+    .expect("failed to initialize dedicated server");
+
+    server.set_game_description("Description");
+    server.set_mod_dir("spacewar");
+    server.set_product("spacewar");
+    server.set_map_name("island");
+    server.set_max_players(16);
+    server.set_server_name("Aeronet server");
+    server.set_dedicated_server(true);
+    server.log_on_anonymous();
+    server.enable_heartbeats(true);
+
+    server_callbacks.networking_utils().init_relay_network_access();
+
+    let steam_id = server.steam_id();
+    info!("dedicated server steam ID: {steam_id:?}");
+
+    // Note: `Server::init` also returns a `steamworks::Client` that shares the
+    // same underlying handle, so running callbacks on the `Server` covers the
+    // same callback pump. We only need to insert the `SteamworksSockets`
+    // resource, which handles both the IO layer and running callbacks.
     App::new()
-        .insert_resource(SteamworksSockets::Client(steam))
+        .insert_resource(SteamworksSockets::Server(server))
         .add_systems(PreUpdate, |steam: Res<SteamworksSockets>| {
             steam.run_callbacks();
         })
@@ -39,6 +88,7 @@ fn main() -> AppExit {
         .add_systems(Update, reply)
         .add_observer(on_opened)
         .add_observer(on_closed)
+        .add_observer(on_session_request)
         .add_observer(on_connecting)
         .add_observer(on_connected)
         .add_observer(on_disconnected)
@@ -47,7 +97,7 @@ fn main() -> AppExit {
 
 fn open_server(mut commands: Commands) {
     let target = match env::args().nth(1).as_deref() {
-        Some("addr") => ListenTarget::Addr(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 25572)),
+        Some("addr") => ListenTarget::Addr(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 27015)),
         Some("peer") => ListenTarget::Peer { virtual_port: 0 },
         _ => panic!("must specify either `addr` or `peer` argument on command line"),
     };
@@ -57,27 +107,24 @@ fn open_server(mut commands: Commands) {
         .queue(SteamNetServer::open(SessionConfig::default(), target));
 }
 
-fn on_opened(
-    trigger: On<Add, Server>,
-    servers: Query<&LocalAddr>,
-    mut commands: Commands,
-) {
+fn on_opened(trigger: On<Add, Server>, servers: Query<&LocalAddr>) {
     let server = trigger.event_target();
     if let Ok(local_addr) = servers.get(server) {
         info!("{server} opened on {:?}", **local_addr);
     } else {
         info!("{server} opened for peer connections");
     }
-    commands.entity(server).observe(on_session_request);
 }
 
 fn on_closed(trigger: On<Closed>) {
     panic!("server closed: {:?}", trigger.event());
 }
 
-fn on_session_request(mut request: On<SessionRequest>) {
-    let server = request.event_target();
-    let client = request.session_entity;
+fn on_session_request(mut request: On<SessionRequest>, clients: Query<&ChildOf>) {
+    let client = request.event_target();
+    let Ok(&ChildOf(server)) = clients.get(client) else {
+        return;
+    };
 
     info!(
         "{client} connecting to {server} with Steam ID {:?}",

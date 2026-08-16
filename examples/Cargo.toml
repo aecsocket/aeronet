@@ -11,10 +11,7 @@ publish = false
 [dependencies]
 aeronet = { workspace = true, features = ["visualizer"] }
 aeronet_replicon = { workspace = true, features = ["client", "server"] }
-aeronet_websocket = {
-  workspace = true,
-  features = ["client", "self-signed", "server"]
-}
+aeronet_websocket = { workspace = true, features = ["client", "self-signed", "server"] }
 aeronet_webtransport = {
   workspace = true,
   features = [

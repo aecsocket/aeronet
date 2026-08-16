@@ -2,7 +2,7 @@ See `README.md` for an overview of this Rust crate.
 
 # Checking
 
-When checking code, use `cargo clippy --workspace --all-features --all-targets` instead of `cargo check`.
+Use `just prepare` to apply any automatic fixes like typos, formatting. Use `just check` to run the same checks as CI. Always use `cargo clippy` instead of `cargo check`.
 
 # Updating
 

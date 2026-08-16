@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: tombi-toml/setup-tombi@9fdb1f12707aafdc140839c60421336d4ae157ea
+      - uses: tombi-toml/setup-tombi@23af0f0e4fcad609f048a37fb312714cd6b07741
         with:
-          version: 1.2.6
+          version: 1.4.0
       - run: tombi lint
       - run: tombi fmt --check
