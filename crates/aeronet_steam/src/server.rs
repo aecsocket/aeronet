@@ -245,14 +245,15 @@ impl SessionResponse {
 /// ```
 /// use {
 ///     aeronet_steam::{
-///         SteamworksClient,
+///         SteamworksSockets,
 ///         server::{SessionRequest, SessionResponse},
 ///     },
 ///     bevy_ecs::prelude::*,
 ///     steamworks::FriendFlags,
 /// };
 ///
-/// fn on_session_request(mut request: On<SessionRequest>, steam: Res<SteamworksClient>) {
+/// fn on_session_request(mut request: On<SessionRequest>, sockets: Res<SteamworksSockets>) {
+///     let SteamworksSockets::Client(steam) = sockets.as_ref() else { return; };
 ///     let friend = steam.friends().get_friend(request.steam_id);
 ///     if !friend.has_friend(FriendFlags::IMMEDIATE) {
 ///         request.respond(SessionResponse::rejected("not friend of the host"));

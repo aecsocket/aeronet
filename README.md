@@ -103,7 +103,7 @@ cargo run --example iroh_peer -- --remote ENDPOINT
 
 Uses Steam's [networking sockets](https://partner.steamgames.com/doc/api/ISteamnetworkingSockets)
 
-You will need Steam running locally on your machine to be able to run the examples. If you want to test out peer-to-peer connections (not socket address connections), you will need to run two separate Steam clients using two separate Steam accounts  - see *Development Environment* for an easy way to achieve this.
+You will need Steam running locally on your machine to be able to run the examples. If you want to test out peer-to-peer connections (not socket address connections), you will need to run two separate Steam clients using two separate Steam accounts - see *Development Environment* for an easy way to achieve this.
 
 ```sh
 # run a server which listens on a socket address

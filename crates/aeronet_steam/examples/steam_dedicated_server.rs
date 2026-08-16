@@ -6,8 +6,8 @@
 //! dedicated server hosting (see `steam_appid.txt`).
 //!
 //! The IO layer is identical to the regular server: the only difference is
-//! that the [`SteamworksSockets`] resource wraps a [`SteamworksServer`]
-//! instead of a [`SteamworksClient`].
+//! that the [`SteamworksSockets`] resource wraps a [`steamworks::Server`]
+//! instead of a [`steamworks::Client`].
 //!
 //! [`steam_server`]: ./steam_server.rs
 
@@ -25,7 +25,7 @@ use {
         server::{Closed, Server},
     },
     aeronet_steam::{
-        SessionConfig, SteamworksClient, SteamworksServer, SteamworksSockets,
+        SessionConfig, SteamworksSockets,
         server::{
             ListenTarget, SessionRequest, SessionResponse, SteamNetServer, SteamNetServerPlugin,
         },
@@ -49,7 +49,7 @@ fn main() -> AppExit {
     server.set_mod_dir("spacewar");
     server.set_product("spacewar");
     server.set_map_name("island");
-    server.set_max_players(17);
+    server.set_max_players(16);
     server.set_server_name("Aeronet server");
     server.set_dedicated_server(true);
     server.log_on_anonymous();
@@ -60,14 +60,14 @@ fn main() -> AppExit {
     let steam_id = server.steam_id();
     info!("dedicated server steam ID: {steam_id:?}");
 
-    // The callbacks are run on the `steamworks::Client` returned by
-    // `Server::init`, so we insert that for the callback pump, and a
-    // `SteamworksSockets::Server` for the IO layer to read the sockets from.
+    // Note: `Server::init` also returns a `steamworks::Client` that shares the
+    // same underlying handle, so running callbacks on the `Server` covers the
+    // same callback pump. We only need to insert the `SteamworksSockets`
+    // resource, which handles both the IO layer and running callbacks.
     App::new()
-        .insert_resource(SteamworksClient(server_callbacks))
-        .insert_resource(SteamworksSockets::Server(SteamworksServer(server)))
-        .add_systems(PreUpdate, |callbacks: Res<SteamworksClient>| {
-            callbacks.run_callbacks();
+        .insert_resource(SteamworksSockets::Server(server))
+        .add_systems(PreUpdate, |steam: Res<SteamworksSockets>| {
+            steam.run_callbacks();
         })
         .add_plugins((MinimalPlugins, LogPlugin::default(), SteamNetServerPlugin))
         .add_systems(Startup, open_server)

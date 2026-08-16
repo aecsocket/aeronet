@@ -15,7 +15,7 @@ use {
         server::{Closed, Server},
     },
     aeronet_steam::{
-        SessionConfig, SteamworksClient, SteamworksSockets,
+        SessionConfig, SteamworksSockets,
         server::{
             ListenTarget, SessionRequest, SessionResponse, SteamNetServer, SteamNetServerPlugin,
         },
@@ -30,9 +30,8 @@ fn main() -> AppExit {
     steam.networking_utils().init_relay_network_access();
 
     App::new()
-        .insert_resource(SteamworksClient(steam.clone()))
-        .insert_resource(SteamworksSockets::Client(SteamworksClient(steam)))
-        .add_systems(PreUpdate, |steam: Res<SteamworksClient>| {
+        .insert_resource(SteamworksSockets::Client(steam))
+        .add_systems(PreUpdate, |steam: Res<SteamworksSockets>| {
             steam.run_callbacks();
         })
         .add_plugins((MinimalPlugins, LogPlugin::default(), SteamNetServerPlugin))
