@@ -3,7 +3,10 @@
 //!
 //! Unlike [`steam_server`], this example logs on to Steam as a dedicated game
 //! server, so it must be run with a Steam app ID that is configured for
-//! dedicated server hosting (see `steam_appid.txt`).
+//! dedicated server hosting. The app ID is provided programmatically below by
+//! setting the `SteamAppId`/`SteamGameId` env vars (the same trick
+//! [`steamworks::Client::init_app`] uses) instead of relying on a
+//! `steam_appid.txt` file.
 //!
 //! The IO layer is identical to the regular server: the only difference is
 //! that the [`SteamworksSockets`] resource wraps a [`steamworks::Server`]
@@ -36,6 +39,17 @@ use {
 };
 
 fn main() -> AppExit {
+    // `steamworks::Server::init` has no `init_app` helper, but it determines the
+    // app ID from the `SteamAppId`/`SteamGameId` env vars, falling back to a
+    // `steam_appid.txt` in the working dir only if both are unset. Set them here
+    // (Spacewar, 480) so the example works without any `steam_appid.txt` file.
+    // SAFETY: single-threaded before process startup; setting these env vars
+    // mirrors exactly what `steamworks::Client::init_app` does.
+    unsafe {
+        std::env::set_var("SteamAppId", "480");
+        std::env::set_var("SteamGameId", "480");
+    }
+
     let (server, server_callbacks) = steamworks::Server::init(
         Ipv4Addr::LOCALHOST,
         25572,
