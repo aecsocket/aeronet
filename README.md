@@ -227,11 +227,15 @@ Currently, the dev container requires Linux on Wayland with a GPU, as this is re
 
 When submitting a pull request, make sure that all continuous integration (CI) checks pass. CI is intentionally set to be as strict as reasonably possible, to keep the quality of code in `main` high.
 
+## AI usage
+
+We follow the same AI usage policy as Bevy - [see the AI usage policy here](https://bevy.org/learn/contribute/policies/ai/).
+
 # Versions
 
 | `bevy` | `aeronet`           |
 |--------|---------------------|
-| `0.19` | `0.21.0`            |
+| `0.19` | `0.21.0` - `0.22.0` |
 | `0.18` | `0.19.0`            |
 | `0.17` | `0.17.0` - `0.18.0` |
 | `0.16` | `0.13.0` - `0.16.0` |

@@ -242,6 +242,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "aeronet_webrtc"
+version = "0.0.1"
+
+[[package]]
 name = "aeronet_websocket"
 version = "0.21.0"
 dependencies = [
