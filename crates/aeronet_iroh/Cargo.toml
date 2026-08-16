@@ -18,6 +18,12 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 name = "iroh_peer"
 path = "examples/iroh_peer.rs"
 
+[features]
+default = []
+# Test helpers (`test_utils::run_test_relay`): spins up an in-process loopback
+# Iroh relay for integration tests.
+test-utils = ["dep:iroh-relay", "iroh-relay/server", "iroh-relay/test-utils"]
+
 [dependencies]
 aeronet_io = { workspace = true }
 aeronet_tokio_runtime = { workspace = true }
@@ -28,11 +34,14 @@ bytes = { workspace = true }
 derive_more = { workspace = true, features = ["display", "error"] }
 futures = { workspace = true }
 iroh = { workspace = true }
+iroh-relay = { workspace = true, optional = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
 bevy = { workspace = true }
 clap = { workspace = true }
+tokio = { workspace = true }
+aeronet_iroh = { path = ".", features = ["test-utils"] }
 
 [lints]
 workspace = true

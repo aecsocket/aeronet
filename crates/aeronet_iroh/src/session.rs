@@ -237,6 +237,58 @@ pub struct IrohIo {
 #[derive(Debug, Clone, PartialEq, Eq, Component)]
 pub struct SelectedPath(pub TransportAddr);
 
+/// Which kind of network path an [`IrohSession`]'s traffic is flowing over.
+///
+/// Iroh sessions typically start out on a relayed path and migrate to a
+/// direct path once NAT hole punching succeeds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PathKind {
+    /// A direct IP path to the peer (hole punching succeeded).
+    Direct,
+    /// Traffic is relayed through the given relay server.
+    Relayed {
+        /// The relay server currently forwarding this session's traffic.
+        relay: iroh::RelayUrl,
+    },
+}
+
+/// Session telemetry for the currently selected network path.
+///
+/// Updated by the IO layer roughly every 100 ms and whenever Iroh selects a
+/// new path. Inserted when the session connects.
+#[derive(Debug, Clone, Component)]
+pub struct PathReport {
+    /// Which kind of path traffic is currently flowing over.
+    pub kind: PathKind,
+    /// RTT estimate of the currently selected path.
+    pub rtt: Duration,
+    /// When this report was created (i.e. when the session connected).
+    pub connected_at: Instant,
+    /// When a direct path was first selected, if ever.
+    pub direct_since: Option<Instant>,
+}
+
+impl PathReport {
+    fn new(kind: PathKind, rtt: Duration) -> Self {
+        let direct_since = matches!(kind, PathKind::Direct).then(Instant::now);
+        Self {
+            kind,
+            rtt,
+            connected_at: Instant::now(),
+            direct_since,
+        }
+    }
+
+    /// Time from session connect until a direct path was first selected, if
+    /// that has happened yet — the relay-to-direct migration time, the key
+    /// NAT traversal health metric for a peered session.
+    #[must_use]
+    pub fn time_to_direct(&self) -> Option<Duration> {
+        self.direct_since
+            .map(|since| since.saturating_duration_since(self.connected_at))
+    }
+}
+
 /// Minimum packet MTU that an [`IrohIo`] must support.
 pub const MIN_MTU: usize = IP_MTU;
 
@@ -413,7 +465,7 @@ pub(crate) fn poll_connecting(
             Connected { rx_dc_reason },
             session,
         ));
-        apply_path(&mut entity_commands, next.initial_meta.path);
+        apply_path(&mut entity_commands, None, next.initial_meta.path);
     }
 }
 
@@ -443,10 +495,10 @@ fn try_disconnect(
 }
 
 pub(crate) fn poll(
-    mut sessions: Query<(Entity, &mut Session, &mut IrohIo)>,
+    mut sessions: Query<(Entity, &mut Session, &mut IrohIo, Option<&mut PathReport>)>,
     mut commands: Commands,
 ) {
-    'sessions: for (entity, mut session, mut io) in &mut sessions {
+    'sessions: for (entity, mut session, mut io, mut path_report) in &mut sessions {
         let span = trace_span!("poll", %entity);
         let _span = span.enter();
 
@@ -458,7 +510,11 @@ pub(crate) fn poll(
                 });
                 continue 'sessions;
             }
-            apply_path(&mut commands.entity(entity), meta.path);
+            apply_path(
+                &mut commands.entity(entity),
+                path_report.as_deref_mut(),
+                meta.path,
+            );
         }
 
         let mut num_packets = Saturating(0);
@@ -479,11 +535,34 @@ pub(crate) fn poll(
     }
 }
 
-fn apply_path(entity: &mut EntityCommands, path: Option<(TransportAddr, Duration)>) {
+fn apply_path(
+    entity: &mut EntityCommands,
+    existing_report: Option<&mut PathReport>,
+    path: Option<(TransportAddr, Duration)>,
+) {
     let Some((path, rtt)) = path else {
-        entity.remove::<(SelectedPath, PeerAddr, PacketRtt)>();
+        entity.remove::<(SelectedPath, PeerAddr, PacketRtt, PathReport)>();
         return;
     };
+
+    let kind = match &path {
+        TransportAddr::Relay(relay) => PathKind::Relayed {
+            relay: relay.clone(),
+        },
+        _ => PathKind::Direct,
+    };
+    match existing_report {
+        Some(report) => {
+            if matches!(kind, PathKind::Direct) && !matches!(report.kind, PathKind::Direct) {
+                report.direct_since.get_or_insert_with(Instant::now);
+            }
+            report.kind = kind;
+            report.rtt = rtt;
+        }
+        None => {
+            entity.try_insert(PathReport::new(kind, rtt));
+        }
+    }
 
     let peer_addr = match &path {
         TransportAddr::Ip(addr) => Some(*addr),
@@ -735,9 +814,24 @@ async fn meta_loop(
 ) -> Result<Never, SessionError> {
     const META_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
 
+    // `PathEventStream` is not a fused stream, but `StreamExt::fuse` wraps
+    // any stream into one, so `futures::select!` can poll it — no tokio
+    // dependency needed, and this works on WASM too.
+    let mut path_events = conn.path_events().fuse();
     loop {
+        // Wait until either the periodic tick fires or the selected path
+        // changes, so relay-to-direct migration is reported promptly instead
+        // of up to one interval late.
         futures::select! {
             () = IrohRuntime::sleep(META_UPDATE_INTERVAL).fuse() => {},
+            event = path_events.next() => {
+                match event {
+                    Some(iroh::endpoint::PathEvent::Selected { .. } | iroh::endpoint::PathEvent::Closed { .. }) => {}
+                    // not a selection change, or the connection closed (the
+                    // recv loop will surface the error); wait for the tick
+                    _ => IrohRuntime::sleep(META_UPDATE_INTERVAL).await,
+                }
+            }
             _ = rx_closed => return Err(SessionError::FrontendClosed),
         }
 
