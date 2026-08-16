@@ -118,8 +118,8 @@ impl SteamNetServer {
     /// Creates an [`EntityCommand`] to set up a server and have it start
     /// listening for connections.
     ///
-    /// [`SteamworksSockets`] must be present in the world before this command is
-    /// applied.
+    /// [`SteamworksSockets`] must be present in the world before this command
+    /// is applied.
     ///
     /// # Examples
     ///
@@ -253,7 +253,9 @@ impl SessionResponse {
 /// };
 ///
 /// fn on_session_request(mut request: On<SessionRequest>, sockets: Res<SteamworksSockets>) {
-///     let SteamworksSockets::Client(steam) = sockets.as_ref() else { return; };
+///     let SteamworksSockets::Client(steam) = sockets.as_ref() else {
+///         return;
+///     };
 ///     let friend = steam.friends().get_friend(request.steam_id);
 ///     if !friend.has_friend(FriendFlags::IMMEDIATE) {
 ///         request.respond(SessionResponse::rejected("not friend of the host"));

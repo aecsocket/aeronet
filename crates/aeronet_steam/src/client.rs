@@ -82,8 +82,8 @@ impl SteamNetClient {
     /// Creates an [`EntityCommand`] to set up a session and connect it to the
     /// `target`.
     ///
-    /// [`SteamworksSockets`] must be present in the world before this command is
-    /// applied.
+    /// [`SteamworksSockets`] must be present in the world before this command
+    /// is applied.
     ///
     /// # Examples
     ///

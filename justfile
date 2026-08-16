@@ -31,4 +31,4 @@ prepare:
     tombi fmt
     cargo +nightly fmt
     cargo shear --fix
-    cargo clippy --fix
+    cargo clippy --fix --allow-dirty
