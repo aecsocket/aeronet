@@ -1,8 +1,6 @@
 //! Example showing a Steam sockets client which can send and receive UTF-8
 //! strings.
 
-use aeronet_steam::SteamworksSockets;
-
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {
         fn main() {
@@ -16,7 +14,7 @@ use {
         connection::{Disconnect, DisconnectReason, Disconnected},
     },
     aeronet_steam::{
-        SessionConfig,
+        SessionConfig, SteamworksSockets,
         client::{SteamNetClient, SteamNetClientPlugin},
     },
     bevy::prelude::*,
