@@ -23,11 +23,6 @@ name = "steam_server"
 path = "examples/steam_server.rs"
 required-features = ["server"]
 
-[[example]]
-name = "steam_dedicated_server"
-path = "examples/steam_dedicated_server.rs"
-required-features = []
-
 [dependencies]
 aeronet_io = { workspace = true }
 anyhow = { workspace = true }
@@ -63,7 +58,6 @@ steamworks = { workspace = true }
 client = []
 ## Enables the `server` module.
 server = []
-
 
 [lints]
 workspace = true

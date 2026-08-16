@@ -11,7 +11,6 @@ use {
 
 #[cfg(feature = "client")]
 pub mod client;
-pub mod dedicated_server;
 #[cfg(feature = "server")]
 pub mod server;
 pub mod session;
@@ -26,12 +25,6 @@ pub use config::SessionConfig;
 #[derive(Deref, Clone, DerefMut, Resource)]
 pub struct SteamworksClient(pub steamworks::Client);
 
-impl SocketProvider for SteamworksClient {
-    fn provide(&self) -> networking_sockets::NetworkingSockets {
-        return self.networking_sockets();
-    }
-}
-
 /// [`steamworks::Server`] used to drive Steam networking socket IO.
 ///
 /// You must initialize a [`steamworks::Server`] yourself, then insert this
@@ -39,31 +32,32 @@ impl SocketProvider for SteamworksClient {
 #[derive(Deref, Clone, DerefMut, Resource)]
 pub struct SteamworksServer(pub steamworks::Server);
 
-impl SocketProvider for SteamworksServer {
-    fn provide(&self) -> networking_sockets::NetworkingSockets {
-        return self.networking_sockets();
-    }
-}
-
-/// [`steamworks::Sockets`] used to drive Steam networking socket IO.
+/// [`steamworks::Client`] or [`steamworks::Server`] instance used to drive
+/// Steam networking socket IO.
 ///
-/// You must initialize a [`steamworks::Sockets`] yourself, then insert this
-/// resource into the app manually.
+/// This is used by both clients and servers to obtain the [`NetworkingSockets`]
+/// that they drive their IO over. You must initialize the relevant
+/// [`steamworks::Client`] or [`steamworks::Server`] yourself, wrap it in this
+/// enum, and insert it into the app as a resource.
+///
+/// [`NetworkingSockets`]: networking_sockets::NetworkingSockets
 #[derive(Clone, Resource)]
 pub enum SteamworksSockets {
+    /// A [`steamworks::Client`] driving socket IO.
     Client(SteamworksClient),
+    /// A [`steamworks::Server`] driving socket IO.
     Server(SteamworksServer),
 }
 
-impl SocketProvider for SteamworksSockets {
-    fn provide(&self) -> networking_sockets::NetworkingSockets {
+impl SteamworksSockets {
+    /// Gets the [`NetworkingSockets`] that this wrapper drives IO over.
+    ///
+    /// [`NetworkingSockets`]: networking_sockets::NetworkingSockets
+    #[must_use]
+    pub fn networking_sockets(&self) -> networking_sockets::NetworkingSockets {
         match self {
-            SteamworksSockets::Client(steamworks_client) => steamworks_client.networking_sockets(),
-            SteamworksSockets::Server(steamworks_server) => steamworks_server.networking_sockets(),
+            Self::Client(steamworks_client) => steamworks_client.networking_sockets(),
+            Self::Server(steamworks_server) => steamworks_server.networking_sockets(),
         }
     }
-}
-
-pub trait SocketProvider {
-    fn provide(&self) -> networking_sockets::NetworkingSockets;
 }

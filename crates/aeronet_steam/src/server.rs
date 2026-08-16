@@ -2,7 +2,7 @@
 
 use {
     crate::{
-        SteamworksClient,
+        SteamworksSockets,
         config::SessionConfig,
         session::{SessionError, SteamNetIo, SteamNetSessionPlugin, entity_to_user_data},
     },
@@ -118,7 +118,7 @@ impl SteamNetServer {
     /// Creates an [`EntityCommand`] to set up a server and have it start
     /// listening for connections.
     ///
-    /// [`SteamworksClient`] must be present in the world before this command is
+    /// [`SteamworksSockets`] must be present in the world before this command is
     /// applied.
     ///
     /// # Examples
@@ -156,7 +156,7 @@ fn open(mut entity: EntityWorldMut, config: SessionConfig, target: ListenTarget)
     let mtu = config.send_buffer_size;
     let sockets = entity
         .world()
-        .resource::<SteamworksClient>()
+        .resource::<SteamworksSockets>()
         .networking_sockets();
     let (tx_next, rx_next) = oneshot::channel::<OpenResult>();
     blocking::unblock(move || {
