@@ -23,8 +23,8 @@ pub fn hash_to_b64(hash: impl AsRef<CertificateHash>) -> String {
 pub fn spki_fingerprint(cert: &wtransport::tls::Certificate) -> Option<spki::FingerprintBytes> {
     let cert = x509_cert::Certificate::from_der(cert.der()).ok()?;
     let fingerprint = cert
-        .tbs_certificate
-        .subject_public_key_info
+        .tbs_certificate()
+        .subject_public_key_info()
         .fingerprint_bytes()
         .ok()?;
     Some(fingerprint)
