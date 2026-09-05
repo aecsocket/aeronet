@@ -448,7 +448,7 @@ fn recv_on_lane(
             }
         }
         LaneState::ReliableUnordered { pending, recv_buf } => {
-            if msg_seq < *pending {
+            if msg_seq < *pending || !recv_buf.insert(msg_seq) {
                 // msg is guaranteed to already be received, drop it
                 Either::Left(None)
             } else {
