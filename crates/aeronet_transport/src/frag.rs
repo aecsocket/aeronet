@@ -146,6 +146,14 @@ pub enum ReassembleError {
         /// Index of the largest fragment we have received up to now.
         max: usize,
     },
+    /// Received a fragment with an index beyond the known last fragment.
+    #[display("received fragment {index} beyond last fragment {last}")]
+    FragmentBeyondLast {
+        /// Index of the fragment received.
+        index: usize,
+        /// Index of the last fragment.
+        last: usize,
+    },
     /// Received a non-last fragment which has an invalid length.
     ///
     /// All non-last fragments must be the same size.
@@ -254,6 +262,15 @@ impl FragmentReceiver {
         // idempotent.
         if buf.frag_indices_recv.get(frag_index) == Some(true) {
             return Ok(None);
+        }
+
+        if let Some(last) = buf.last_frag_index
+            && frag_index > last
+        {
+            return Err(ReassembleError::FragmentBeyondLast {
+                index: frag_index,
+                last,
+            });
         }
 
         // copy the payload data into the buffer
@@ -376,6 +393,39 @@ mod tests {
             "{:?}",
             recv.reassemble(max_frag_len, mem_left, msg_seq, position, &payload)
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn rejects_fragment_beyond_last_index() {
+        let mut recv = FragmentReceiver::default();
+        let max_frag_len = MinSize(1);
+        let msg_seq = MessageSeq::new(0);
+
+        // The message has two fragments, but fragment 0 is still missing.
+        assert_eq!(
+            recv.reassemble(
+                max_frag_len,
+                usize::MAX,
+                msg_seq,
+                FragmentPosition::last(MinSize(1)).unwrap(),
+                b"B",
+            ),
+            Ok(None)
+        );
+
+        // Fragment 2 cannot belong to this message and must not count toward
+        // completion in place of the missing fragment 0.
+        let result = recv.reassemble(
+            max_frag_len,
+            usize::MAX,
+            msg_seq,
+            FragmentPosition::non_last(MinSize(2)).unwrap(),
+            b"C",
+        );
+        assert_eq!(
+            result,
+            Err(ReassembleError::FragmentBeyondLast { index: 2, last: 1 })
         );
     }
 }
