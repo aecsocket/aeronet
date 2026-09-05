@@ -234,7 +234,9 @@ pub fn recv_on(
 
     let mut frag_index = Saturating(0);
     let mut frags_recv = Saturating(0);
-    for (result, bytes_left) in frags {
+    for result in frags {
+        let (result, bytes_left) = result?;
+
         match result {
             Ok(()) => {
                 frags_recv += 1;
@@ -258,12 +260,33 @@ pub fn recv_on(
 ///
 /// We split this out from `recv_on` to test the fragment iteration loop
 /// ourselves, and it keeps things a bit more functional and iterator-oriented.
+///
+/// The return signature is a little complicated, let me break it down:
+/// - an iterator of the following item `I`:
+/// - `I = Result<X, RecvError>` answering _is this fragment well-formed?_
+///   - if it's not well-formed, we want to immediately stop receiving the
+///     packet, since we don't even know where the next fragment is supposed
+///     to start
+///   - consumers of this function should _immediately return_ when encountering
+///     this error
+/// - `X = (Y, usize)` - the `usize` reports how many bytes we have left
+///   - this is just used for a diagnostic `trace!` message
+/// - `Y = Result<(), RecvError>` answering _was this fragment valid for our
+///   transport state?_
+///   - we know the fragment is well-formed, but it might still not be received
+///     properly if e.g. we've already received it on this lane, or it'll use
+///     too much memory to store
+///   - but since _this_ fragment is well-formed, we _are_ allowed to keep
+///     reading the packet for more fragments; we _really_ want to process those
+///     fragments if we can - see <https://github.com/aecsocket/aeronet/issues/15>
+///   - consumers _should keep iterating_ if they encounter an error here
 fn recv_frags_on<'a>(
     transport: &'a mut Transport,
     config: &'a TransportConfig,
     recv_at: Instant,
     mut packet: &'a [u8],
-) -> Result<impl Iterator<Item = (Result<(), RecvError>, usize)> + 'a, RecvError> {
+) -> Result<impl Iterator<Item = Result<(Result<(), RecvError>, usize), RecvError>> + 'a, RecvError>
+{
     trace!("Receiving packet of length {}", packet.len());
 
     let header = packet
@@ -291,8 +314,16 @@ fn recv_frags_on<'a>(
         if !packet.has_remaining() {
             return None;
         }
-        let result = recv_frag(transport, config, recv_at, &mut packet);
-        Some((result, packet.len()))
+
+        // ensure this fragment is well-formed first
+        match packet.read::<Fragment>() {
+            Ok(frag) => {
+                // then check if we can actually receive it
+                let result = recv_frag(transport, config, recv_at, frag);
+                Some(Ok((result, packet.len())))
+            }
+            Err(_) => Some(Err(RecvError::ReadFragment)),
+        }
     }))
 }
 
@@ -354,11 +385,8 @@ fn recv_frag(
     transport: &mut Transport,
     config: &TransportConfig,
     recv_at: Instant,
-    packet: &mut &[u8],
+    frag: Fragment,
 ) -> Result<(), RecvError> {
-    let frag = packet
-        .read::<Fragment>()
-        .map_err(|_| RecvError::ReadFragment)?;
     let lane_index = frag.header.lane;
 
     let memory_left = config
@@ -545,7 +573,7 @@ mod tests {
     }
 
     #[test]
-    fn recv_truncated_frag_stops_iteration() {
+    fn recv_truncated_frag_returns_decode_error() {
         let now = Instant::now();
         let session = Session::new(now, 1024);
         let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
@@ -556,14 +584,12 @@ mod tests {
         // without consuming this trailing byte.
         packet.push(0);
         let mut frags = super::recv_frags_on(&mut transport, &config, now, &packet).unwrap();
+        // An outer error makes recv_on return via `?`. An inner error would
+        // be logged and retried indefinitely because no bytes were consumed.
         assert!(matches!(
             frags.next(),
-            Some((Err(super::RecvError::ReadFragment), 1))
+            Some(Err(super::RecvError::ReadFragment))
         ));
-        assert!(
-            frags.next().is_none(),
-            "decoding failure must end iteration instead of retrying the same bytes"
-        );
     }
 
     #[test]
