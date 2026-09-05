@@ -248,10 +248,13 @@ impl Transport {
         now: Instant,
     ) -> Result<Self, MtuTooSmall> {
         let min_mtu = session.min_mtu();
-        let max_frag_len = min_mtu.checked_sub(FRAG_OVERHEAD).ok_or(MtuTooSmall {
-            mtu: min_mtu,
-            min: FRAG_OVERHEAD,
-        })?;
+        let max_frag_len = min_mtu
+            .checked_sub(FRAG_OVERHEAD)
+            .filter(|&len| len > 0)
+            .ok_or(MtuTooSmall {
+                mtu: min_mtu,
+                min: FRAG_OVERHEAD + 1,
+            })?;
         let max_frag_len = MinSize::MAX.min_of(max_frag_len);
         Ok(Self {
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
@@ -407,5 +410,33 @@ fn check_memory_limit(
                 }),
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_requires_space_for_fragment_payload() {
+        let now = Instant::now();
+        let lanes = [LaneKind::ReliableOrdered];
+
+        for mtu in [FRAG_OVERHEAD, FRAG_OVERHEAD - 1, 0] {
+            let session = Session::new(now, mtu);
+            let Err(err) = Transport::new(&session, lanes, lanes, now) else {
+                panic!("MTU {mtu} leaves no room for a fragment payload");
+            };
+            assert_eq!(err.mtu, mtu);
+            assert_eq!(err.min, FRAG_OVERHEAD + 1);
+        }
+
+        // The first accepted MTU must support enqueuing a nonempty message.
+        let session = Session::new(now, FRAG_OVERHEAD + 1);
+        let mut transport = Transport::new(&session, lanes, lanes, now).unwrap();
+        transport
+            .send
+            .push(LaneIndex::new(0), octs::Bytes::from_static(b"x"), now)
+            .unwrap();
     }
 }
