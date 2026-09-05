@@ -10,7 +10,10 @@ use {
         send::SendLane,
         seq_buf::SeqBuf,
     },
-    aeronet_io::Session,
+    aeronet_io::{
+        Session,
+        connection::{DisconnectReason, Disconnected},
+    },
     alloc::{boxed::Box, vec::Vec},
     bevy_ecs::prelude::*,
     bevy_platform::{
@@ -180,11 +183,19 @@ pub fn clear_buffers(mut sessions: Query<(Entity, &mut Transport)>) {
     }
 }
 
-pub(crate) fn poll(mut sessions: Query<(Entity, &mut Session, &mut Transport, &TransportConfig)>) {
+pub(crate) fn poll(
+    mut commands: Commands,
+    mut sessions: Query<(Entity, &mut Session, &mut Transport, &TransportConfig)>,
+) {
     for (entity, mut session, mut transport, config) in &mut sessions {
         for packet in session.recv.drain(..) {
             if let Err(err) = recv_on(&mut transport, config, packet.recv_at, &packet.payload) {
-                trace!("{entity} received invalid packet: {err:?}");
+                warn!("{entity} received invalid packet, disconnecting: {err:?}");
+                commands.trigger(Disconnected {
+                    entity,
+                    reason: DisconnectReason::by_error(err),
+                });
+                break;
             }
         }
     }
@@ -222,8 +233,8 @@ pub enum RecvError {
 ///
 /// # Errors
 ///
-/// Errors if the packet could not be received, decoded, and made available to
-/// the transport. Errors are non-fatal.
+/// Errors if the packet was malformed or invalid in such a way that the session
+/// should not be allowed to continue. Errors are fatal.
 pub fn recv_on(
     transport: &mut Transport,
     config: &TransportConfig,
@@ -246,17 +257,9 @@ pub fn recv_on(
     let mut frag_index = Saturating(0);
     let mut frags_recv = Saturating(0);
     for result in frags {
-        let (result, bytes_left) = result?;
-
-        match result {
-            Ok(()) => {
-                frags_recv += 1;
-                trace!("Successfully received fragment {frag_index} ({bytes_left} bytes left)");
-            }
-            Err(err) => {
-                trace!("Failed to receive fragment {frag_index}: {err:?}");
-            }
-        }
+        let bytes_left = result?;
+        frags_recv += 1;
+        trace!("Successfully received fragment {frag_index} ({bytes_left} bytes left)");
         frag_index += 1;
     }
 
@@ -287,35 +290,13 @@ pub fn recv_on(
 /// We split this out from `recv_on` to test the fragment iteration loop
 /// ourselves, and it keeps things a bit more functional and iterator-oriented.
 ///
-/// The return signature is a little complicated, let me break it down:
-/// - An iterator of the following item `I`:
-/// - `I = Result<X, RecvError>` answering _can we keep receiving fragments?_
-///   - If a fragment is not well-formed, we want to immediately stop receiving
-///     the packet, since we don't even know where the next fragment is supposed
-///     to start.
-///   - Or if receiving the fragment will cause us to use too much memory, we
-///     will reject the fragment. This is fatal to the packet, since that
-///     fragment might be for a reliable message, and we can't mark the packet
-///     as acknowledged without receiving that fragment of a reliable message.
-///   - Consumers of this function should _immediately return_ when encountering
-///     this error.
-/// - `X = (Y, usize)` - the `usize` reports how many bytes we have left
-///   - this is just used for a diagnostic `trace!` message
-/// - `Y = Result<(), RecvError>` answering _was this fragment valid for our
-///   transport state?_
-///   - We know the fragment is well-formed, but it might still not be received
-///     properly if e.g. we've already received it on this lane, or it'll use
-///     too much memory to store.
-///   - But since _this_ fragment is well-formed, we _are_ allowed to keep
-///     reading the packet for more fragments; we _really_ want to process those
-///     fragments if we can - see <https://github.com/aecsocket/aeronet/issues/15>.
-///   - Consumers _should keep iterating_ if they encounter an error here.
+/// Errors must be treated as fatal - see [`recv_on`].
 fn recv_frags_on<'a>(
     transport: &'a mut Transport,
     config: &'a TransportConfig,
     recv_at: Instant,
     mut packet: &'a [u8],
-) -> impl Iterator<Item = Result<(Result<(), RecvError>, usize), RecvError>> + 'a {
+) -> impl Iterator<Item = Result<usize, RecvError>> + 'a {
     iter::from_fn(move || {
         if !packet.has_remaining() {
             return None;
@@ -326,23 +307,10 @@ fn recv_frags_on<'a>(
             return Some(Err(RecvError::ReadFragment));
         };
 
-        // then check if we can actually receive it
+        // then try to actually receive it
         match recv_frag(transport, config, recv_at, frag) {
-            Ok(()) => {
-                let result: Result<(Result<(), RecvError>, usize), RecvError> =
-                    Ok((Ok(()), packet.len()));
-                Some(result)
-            }
-            Err(err @ RecvError::Reassemble(ReassembleError::OutOfMemory { .. })) => {
-                // treat out-of-memory errors as fatal to the packet
-                let result: Result<(Result<(), RecvError>, usize), RecvError> = Err(err);
-                Some(result)
-            }
-            Err(err) => {
-                let result: Result<(Result<(), RecvError>, usize), RecvError> =
-                    Ok((Err(err), packet.len()));
-                Some(result)
-            }
+            Ok(()) => Some(Ok(packet.len())),
+            Err(err) => Some(Err(err)),
         }
     })
 }
@@ -729,5 +697,97 @@ mod tests {
             !transport.peer_acks.is_acked(packet_seq),
             "acking a rejected reliable fragment would stop the sender retransmitting it"
         );
+    }
+
+    #[test]
+    fn recv_out_of_memory_disconnects_session() {
+        use {
+            aeronet_io::{AeronetIoPlugin, connection::DisconnectReason, packet::RecvPacket},
+            bevy_app::{App, Update},
+            bevy_ecs::prelude::*,
+        };
+
+        #[derive(Default, Resource)]
+        struct DisconnectCount(usize);
+
+        let now = Instant::now();
+        let mut session = Session::new(now, 1024);
+        // Unordered delivery lets message 1 arrive while message 0 is incomplete.
+        let lanes = [LaneKind::ReliableUnordered];
+        let transport = Transport::new(&session, lanes, lanes, now).unwrap();
+        let config = TransportConfig {
+            max_memory_usage: transport.memory_used() + 1024,
+            ..TransportConfig::default()
+        };
+        let packet_seq = PacketSeq::new(1);
+        let mut packet = Vec::<u8>::new();
+        packet
+            .write(PacketHeader {
+                seq: packet_seq,
+                acks: Acknowledge::default(),
+            })
+            .unwrap();
+
+        // The first fragment needs a large reassembly buffer. The second is
+        // a complete message small enough to fit in the remaining budget.
+        for (seq, position, payload) in [
+            (0, FragmentPosition::last(2u16).unwrap(), b"tail".as_slice()),
+            (1, FragmentPosition::ZERO_LAST, b"small".as_slice()),
+        ] {
+            packet
+                .write(Fragment {
+                    header: FragmentHeader {
+                        lane: LANE,
+                        seq: MessageSeq::new(seq),
+                        position,
+                    },
+                    payload: FragmentPayload::new(Bytes::from_static(payload)).unwrap(),
+                })
+                .unwrap();
+        }
+
+        // Multiple queued packets must still produce only one disconnect.
+        let packet = Bytes::from(packet);
+        for _ in 0..2 {
+            session.recv.push(RecvPacket {
+                recv_at: now,
+                payload: packet.clone(),
+            });
+        }
+
+        let mut app = App::new();
+        app.add_plugins(AeronetIoPlugin)
+            .init_resource::<DisconnectCount>()
+            .add_systems(Update, super::poll)
+            .add_observer(
+                move |event: On<super::Disconnected>,
+                      mut count: ResMut<DisconnectCount>,
+                      transports: Query<(&Transport, &TransportConfig)>| {
+                    let DisconnectReason::ByError(err) = &event.reason else {
+                        panic!("expected an OOM disconnect");
+                    };
+                    assert!(matches!(
+                        err.downcast_ref::<super::RecvError>(),
+                        Some(super::RecvError::Reassemble(
+                            super::ReassembleError::OutOfMemory { .. }
+                        ))
+                    ));
+
+                    let (transport, config) = transports.get(event.entity).unwrap();
+                    assert!(transport.recv.msgs.0.is_empty());
+                    assert!(!transport.peer_acks.is_acked(packet_seq));
+                    // The rejected allocation never exceeded the global limit;
+                    // the receive error itself must trigger disconnection.
+                    assert!(transport.memory_used() <= config.max_memory_usage);
+                    count.0 += 1;
+                },
+            );
+        let entity = app.world_mut().spawn((session, transport, config)).id();
+        // Poll directly so the IO plugin's PreUpdate buffer clearing doesn't
+        // discard the packets we injected for the test.
+        app.world_mut().run_schedule(Update);
+
+        assert_eq!(app.world().resource::<DisconnectCount>().0, 1);
+        assert!(app.world().get_entity(entity).is_err());
     }
 }

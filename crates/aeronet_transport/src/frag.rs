@@ -222,11 +222,14 @@ impl FragmentReceiver {
     /// # Errors
     ///
     /// Errors if the fragment received is unexpected for the current state of
-    /// reassembly.
+    /// the reassemblers.
     ///
-    /// Errors must not be treated as fatal, as they may happen due to network
-    /// conditions such as duplicated or lost packets. Errors will not cause any
-    /// invalid state.
+    /// Errors must be treated as fatal, as [`ReassembleError`] represents only
+    /// failure modes stemming from app bugs (like sending a fragment with an
+    /// invalid length), or memory exhaustion.
+    ///
+    /// If a packet is duplicated or lost, the reassembler will handle that
+    /// without error.
     ///
     /// # Panics
     ///
