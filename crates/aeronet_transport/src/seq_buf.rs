@@ -23,6 +23,11 @@ use {
 /// indicating that a new value has not been inserted into this index in the
 /// meantime, and only then provide access to `data[i]`.
 ///
+/// For buffers with more than one slot, an empty slot stores a key that maps
+/// to a different slot. This leaves every [`u16`] available as a real key,
+/// without needing extra storage to track occupancy. For a single-slot buffer,
+/// every key maps to that slot, so `len` determines whether it is occupied.
+///
 /// To avoid `unsafe` usage, all elements of `data` must be populated with valid
 /// values. You will need a way to construct a valid (if meaningless) `T` when
 /// creating the buffer or removing elements. If `T: Default`, functions are
@@ -44,8 +49,6 @@ pub struct SeqBuf<T, const N: usize> {
     len: usize,
 }
 
-const EMPTY: u16 = u16::MAX;
-
 impl<T: Default, const N: usize> Default for SeqBuf<T, N> {
     fn default() -> Self {
         Self::new_from_fn(|_| T::default())
@@ -66,7 +69,7 @@ impl<T, const N: usize> SeqBuf<T, N> {
         assert!(N > 0);
         assert!(N < u16::MAX as usize);
         Self {
-            indices: Box::new([EMPTY; N]),
+            indices: Box::new(array::from_fn(Self::empty_key)),
             data: Box::new(array::from_fn(cb)),
             len: 0,
         }
@@ -124,10 +127,20 @@ impl<T, const N: usize> SeqBuf<T, N> {
     }
 
     #[inline]
+    fn empty_key(index: usize) -> u16 {
+        debug_assert!(index < N);
+        // For N > 1, this key cannot belong to `index`. For N == 1,
+        // the value is irrelevant because `len` tracks occupancy instead.
+        #[expect(clippy::cast_possible_truncation, reason = "result < N < u16::MAX")]
+        let key = ((index + 1) % N) as u16;
+        key
+    }
+
+    #[inline]
     fn index(key: u16) -> u16 {
         #[expect(clippy::cast_possible_truncation, reason = "N < u16::MAX")]
         let index = key % N as u16;
-        debug_assert!(index != EMPTY);
+        debug_assert!(usize::from(index) < N);
         index
     }
 
@@ -154,7 +167,7 @@ impl<T, const N: usize> SeqBuf<T, N> {
         let index = Self::index(key);
         let index_u = usize::from(index);
         let real_index = *self.indices.get(index_u).expect("key % N should be < N");
-        if key == real_index {
+        if (N != 1 || self.len != 0) && key == real_index {
             Some(self.data.get(index_u).expect(
                 "`index_u` is valid into `indices`, and `indices` is of the same length as \
                  `data`, so it should be a valid index into `data`",
@@ -184,7 +197,7 @@ impl<T, const N: usize> SeqBuf<T, N> {
         let index = Self::index(key);
         let index_u = usize::from(index);
         let real_index = *self.indices.get(index_u).expect("key % N should be < N");
-        if key == real_index {
+        if (N != 1 || self.len != 0) && key == real_index {
             Some(self.data.get_mut(index_u).expect(
                 "`index_u` is valid into `indices`, and `indices` is of the same length as \
                  `data`, so it should be a valid index into `data`",
@@ -236,7 +249,12 @@ impl<T, const N: usize> SeqBuf<T, N> {
             .indices
             .get_mut(index_u)
             .expect("key % N should be < N");
-        if *index_slot == EMPTY {
+        let is_empty = if N == 1 {
+            self.len == 0
+        } else {
+            *index_slot == Self::empty_key(index_u)
+        };
+        if is_empty {
             self.len = self
                 .len
                 .checked_add(1)
@@ -280,8 +298,8 @@ impl<T, const N: usize> SeqBuf<T, N> {
             .get_mut(index_u)
             .expect("key % N should be < N");
 
-        if *index_slot != EMPTY && key == *index_slot {
-            *index_slot = EMPTY;
+        if (N != 1 || self.len != 0) && key == *index_slot {
+            *index_slot = Self::empty_key(index_u);
             let data_slot = self.data.get_mut(index_u).expect(
                 "`index_u` is valid into `indices`, and `indices` is of the same length as \
                  `data`, so it should be a valid index into `data`",
@@ -357,6 +375,19 @@ mod tests {
     }
 
     #[test]
+    fn single_slot_overwrite() {
+        let mut b = SeqBuf::<u32, 1>::new();
+        b.insert(0, 1234);
+        b.insert(u16::MAX, 5678);
+        assert_eq!(b.len(), 1);
+        assert!(b.get(0).is_none());
+        assert!(b.remove(0).is_none());
+        assert_eq!(b.remove(u16::MAX), Some(5678));
+        assert!(b.is_empty());
+        assert!(b.get(0).is_none());
+    }
+
+    #[test]
     fn keys_lower_than_cap() {
         let mut b = SeqBuf::<u32, 16>::new();
 
@@ -411,12 +442,57 @@ mod tests {
     #[test]
     fn u16_max_key() {
         let mut b = SeqBuf::<u32, 16>::new();
+        let key = u16::MAX;
 
-        assert!(b.remove(u16::MAX).is_none());
+        assert!(
+            b.get(key).is_none(),
+            "an empty slot must not match a valid key"
+        );
+        assert!(b.get_mut(key).is_none());
+        assert!(b.remove(key).is_none());
         assert!(b.is_empty());
 
-        b.insert(u16::MAX, 1);
-        assert_eq!(1, *b.get(u16::MAX).unwrap());
-        assert_eq!(1, b.len());
+        b.insert(key, 1234);
+        assert_eq!(b.get(key), Some(&1234));
+        assert_eq!(b.len(), 1);
+
+        // Replacing this key must not count it as a newly occupied slot.
+        b.insert(key, 5678);
+        assert_eq!(b.get(key), Some(&5678));
+        assert_eq!(b.len(), 1);
+
+        assert_eq!(b.remove(key), Some(5678));
+        assert!(b.is_empty());
+        assert!(b.get(key).is_none());
+        assert!(b.get_mut(key).is_none());
+        assert!(b.remove(key).is_none());
+    }
+
+    #[test]
+    fn all_keys() {
+        fn check<const N: usize>() {
+            let mut b = SeqBuf::<u32, N>::new();
+            for key in 0..=u16::MAX {
+                assert!(b.get(key).is_none());
+                assert!(b.get_mut(key).is_none());
+                assert!(b.remove(key).is_none());
+
+                b.insert(key, 1234);
+                assert_eq!(b.get(key), Some(&1234));
+                *b.get_mut(key).unwrap() = 5678;
+                assert_eq!(b.get(key), Some(&5678));
+                assert_eq!(b.len(), 1);
+                b.insert(key, 9012);
+                assert_eq!(b.len(), 1);
+                assert_eq!(b.remove(key), Some(9012));
+                assert!(b.is_empty());
+                assert!(b.get(key).is_none());
+            }
+        }
+
+        check::<1>();
+        check::<2>();
+        check::<3>();
+        check::<16>();
     }
 }
