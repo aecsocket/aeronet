@@ -228,8 +228,42 @@ pub fn recv_on(
     transport: &mut Transport,
     config: &TransportConfig,
     recv_at: Instant,
-    mut packet: &[u8],
+    packet: &[u8],
 ) -> Result<(), RecvError> {
+    let frags = recv_frags_on(transport, config, recv_at, packet)?;
+
+    let mut frag_index = Saturating(0);
+    let mut frags_recv = Saturating(0);
+    for (result, bytes_left) in frags {
+        match result {
+            Ok(()) => {
+                frags_recv += 1;
+                trace!("Successfully received fragment {frag_index} ({bytes_left} bytes left)");
+            }
+            Err(err) => {
+                trace!("Failed to receive fragment {frag_index}: {err:?}");
+            }
+        }
+        frag_index += 1;
+    }
+
+    trace!(
+        "Finished receiving packet; successfully received {frags_recv} of {frag_index} fragments",
+    );
+
+    Ok(())
+}
+
+/// Decodes the packet header, then returns an iterator over the fragments.
+///
+/// We split this out from `recv_on` to test the fragment iteration loop
+/// ourselves, and it keeps things a bit more functional and iterator-oriented.
+fn recv_frags_on<'a>(
+    transport: &'a mut Transport,
+    config: &'a TransportConfig,
+    recv_at: Instant,
+    mut packet: &'a [u8],
+) -> Result<impl Iterator<Item = (Result<(), RecvError>, usize)> + 'a, RecvError> {
     trace!("Receiving packet of length {}", packet.len());
 
     let header = packet
@@ -253,31 +287,13 @@ pub fn recv_on(
         header.acks.seqs(),
     ));
 
-    let mut frag_index = Saturating(0);
-    let mut frags_recv = Saturating(0);
-    while packet.has_remaining() {
-        match recv_frag(transport, config, recv_at, &mut packet) {
-            Ok(()) => {
-                frags_recv += 1;
-                trace!(
-                    "Successfully received fragment {} ({} bytes left)",
-                    frag_index.0,
-                    packet.len()
-                );
-            }
-            Err(err) => {
-                trace!("Failed to receive fragment {}: {err:?}", frag_index.0);
-            }
+    Ok(iter::from_fn(move || {
+        if !packet.has_remaining() {
+            return None;
         }
-        frag_index += 1;
-    }
-
-    trace!(
-        "Finished receiving packet; successfully received {} of {} fragments",
-        frags_recv.0, frag_index.0
-    );
-
-    Ok(())
+        let result = recv_frag(transport, config, recv_at, &mut packet);
+        Some((result, packet.len()))
+    }))
 }
 
 fn packet_acks_to_msg_keys<'s, const N: usize>(
@@ -526,5 +542,85 @@ mod tests {
             let mut msgs = transport.recv.msgs.drain();
             assert!(msgs.next().is_none());
         }
+    }
+
+    #[test]
+    fn recv_truncated_frag_stops_iteration() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
+        let config = TransportConfig::default();
+        let mut packet = Vec::<u8>::new();
+        packet.write(PacketHeader::default()).unwrap();
+        // A fragment's message sequence needs two bytes, so decoding fails
+        // without consuming this trailing byte.
+        packet.push(0);
+        let mut frags = super::recv_frags_on(&mut transport, &config, now, &packet).unwrap();
+        assert!(matches!(
+            frags.next(),
+            Some((Err(super::RecvError::ReadFragment), 1))
+        ));
+        assert!(
+            frags.next().is_none(),
+            "decoding failure must end iteration instead of retrying the same bytes"
+        );
+    }
+
+    #[test]
+    fn recv_fresh_frag_after_duplicate() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
+        let config = TransportConfig::default();
+        let last = Fragment {
+            header: FragmentHeader {
+                lane: LANE,
+                seq: MessageSeq::new(0),
+                position: FragmentPosition::last(1u16).unwrap(),
+            },
+            payload: FragmentPayload::new(Bytes::from_static(b"tail")).unwrap(),
+        };
+
+        // Keep the message partially reassembled so receiving `last` again
+        // produces AlreadyReceivedFrag, rather than a completed-message duplicate.
+        let mut packet = Vec::<u8>::new();
+        packet.write(PacketHeader::default()).unwrap();
+        packet.write(&last).unwrap();
+        super::recv_on(&mut transport, &config, now, &packet).unwrap();
+        assert!(transport.recv.msgs.drain().next().is_none());
+
+        let first_payload = vec![b'a'; usize::from(transport.send.max_frag_len)];
+        let first = Fragment {
+            header: FragmentHeader {
+                lane: LANE,
+                seq: MessageSeq::new(0),
+                position: FragmentPosition::ZERO_NON_LAST,
+            },
+            payload: FragmentPayload::new(Bytes::from(first_payload.clone())).unwrap(),
+        };
+
+        // A retransmission may share a packet with a fragment we still need.
+        // Rejecting the duplicate must not prevent processing the fresh fragment.
+        packet.clear();
+        packet
+            .write(PacketHeader {
+                seq: PacketSeq::new(1),
+                acks: Acknowledge::default(),
+            })
+            .unwrap();
+        packet.write(&last).unwrap();
+        packet.write(first).unwrap();
+        super::recv_on(&mut transport, &config, now, &packet).unwrap();
+
+        let mut expected = first_payload;
+        expected.extend_from_slice(b"tail");
+        let mut msgs = transport.recv.msgs.drain();
+        let msg = msgs
+            .next()
+            .expect("fresh fragment should complete the message");
+        assert_eq!(msg.lane, LANE);
+        assert_eq!(msg.payload, expected);
+        assert!(msgs.next().is_none());
+        assert!(transport.peer_acks.is_acked(PacketSeq::new(1)));
     }
 }

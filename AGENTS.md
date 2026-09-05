@@ -12,3 +12,8 @@ When bumping the version number:
 - run `cargo check --workspace`
 - update the `Versions` table in `README.md`
 - prompt the user to add a changelog entry to `crates/aeronet/docs/changelog.md`
+
+# Nags
+
+General project-specific guidance.
+- When writing tests, place simpler tests at the top and more complicated tests at the bottom.
