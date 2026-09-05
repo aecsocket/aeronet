@@ -265,8 +265,8 @@ pub fn recv_on(
 /// - an iterator of the following item `I`:
 /// - `I = Result<X, RecvError>` answering _is this fragment well-formed?_
 ///   - if it's not well-formed, we want to immediately stop receiving the
-///     packet, since we don't even know where the next fragment is supposed
-///     to start
+///     packet, since we don't even know where the next fragment is supposed to
+///     start
 ///   - consumers of this function should _immediately return_ when encountering
 ///     this error
 /// - `X = (Y, usize)` - the `usize` reports how many bytes we have left
@@ -648,5 +648,24 @@ mod tests {
         assert_eq!(msg.payload, expected);
         assert!(msgs.next().is_none());
         assert!(transport.peer_acks.is_acked(PacketSeq::new(1)));
+    }
+
+    #[test]
+    fn recv_reliable_unordered_drops_duplicate_ahead_of_gap() {
+        let mut lane = super::RecvLane::new(LaneKind::ReliableUnordered);
+        let msg = b"message 1".to_vec();
+        let seq = MessageSeq::new(1);
+
+        // Message 0 is still missing, but unordered delivery must allow 1
+        // through immediately and remember it when a retransmission arrives.
+        let received = super::recv_on_lane(&mut lane.state, msg.clone(), seq).collect::<Vec<_>>();
+        assert_eq!(received, vec![msg.clone()]);
+
+        assert!(
+            super::recv_on_lane(&mut lane.state, msg, seq)
+                .next()
+                .is_none(),
+            "a reliable-unordered message must only be delivered once, even before the gap closes"
+        );
     }
 }
