@@ -117,12 +117,6 @@ pub struct FragmentReceiver {
 /// Received an invalid fragment when reassembling fragments into a message.
 #[derive(Debug, Clone, PartialEq, Eq, Display, Error)]
 pub enum ReassembleError {
-    /// Already received a fragment with this index.
-    #[display("already received fragment {index}")]
-    AlreadyReceivedFrag {
-        /// Index of the fragment received.
-        index: usize,
-    },
     /// Not enough free memory to buffer this fragment up.
     #[display("out of memory - {left} / {required} bytes")]
     OutOfMemory {
@@ -252,9 +246,11 @@ impl FragmentReceiver {
         let buf = self.msgs.entry(msg_seq).or_default();
         let frag_index = usize::from(position.index());
 
-        // check if this fragment has been received yet
+        // check if this fragment has been received yet;
+        // if so, this is *not an error*, since inserting a fragment should be
+        // idempotent.
         if buf.frag_indices_recv.get(frag_index) == Some(true) {
-            return Err(ReassembleError::AlreadyReceivedFrag { index: frag_index });
+            return Ok(None);
         }
 
         // copy the payload data into the buffer

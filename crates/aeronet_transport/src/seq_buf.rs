@@ -253,7 +253,7 @@ impl<T, const N: usize> SeqBuf<T, N> {
     }
 
     /// Removes a value from this buffer at the given key, replacing it with a
-    /// default (meaningless) value.
+    /// default value.
     ///
     /// If `T: Default`, consider using [`SeqBuf::remove`].
     ///

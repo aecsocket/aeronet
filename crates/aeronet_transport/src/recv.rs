@@ -228,10 +228,21 @@ pub fn recv_on(
     transport: &mut Transport,
     config: &TransportConfig,
     recv_at: Instant,
-    packet: &[u8],
+    mut packet: &[u8],
 ) -> Result<(), RecvError> {
-    let frags = recv_frags_on(transport, config, recv_at, packet)?;
+    trace!("Receiving packet of length {}", packet.len());
 
+    let header = packet
+        .read::<PacketHeader>()
+        .map_err(|_| RecvError::ReadHeader)?;
+
+    trace!(
+        "Received packet header with sequence {} ({} bytes left)",
+        header.seq.0.0,
+        packet.len()
+    );
+
+    let frags = recv_frags_on(transport, config, recv_at, packet);
     let mut frag_index = Saturating(0);
     let mut frags_recv = Saturating(0);
     for result in frags {
@@ -249,56 +260,9 @@ pub fn recv_on(
         frag_index += 1;
     }
 
-    trace!(
-        "Finished receiving packet; successfully received {frags_recv} of {frag_index} fragments",
-    );
-
-    Ok(())
-}
-
-/// Decodes the packet header, then returns an iterator over the fragments.
-///
-/// We split this out from `recv_on` to test the fragment iteration loop
-/// ourselves, and it keeps things a bit more functional and iterator-oriented.
-///
-/// The return signature is a little complicated, let me break it down:
-/// - an iterator of the following item `I`:
-/// - `I = Result<X, RecvError>` answering _is this fragment well-formed?_
-///   - if it's not well-formed, we want to immediately stop receiving the
-///     packet, since we don't even know where the next fragment is supposed to
-///     start
-///   - consumers of this function should _immediately return_ when encountering
-///     this error
-/// - `X = (Y, usize)` - the `usize` reports how many bytes we have left
-///   - this is just used for a diagnostic `trace!` message
-/// - `Y = Result<(), RecvError>` answering _was this fragment valid for our
-///   transport state?_
-///   - we know the fragment is well-formed, but it might still not be received
-///     properly if e.g. we've already received it on this lane, or it'll use
-///     too much memory to store
-///   - but since _this_ fragment is well-formed, we _are_ allowed to keep
-///     reading the packet for more fragments; we _really_ want to process those
-///     fragments if we can - see <https://github.com/aecsocket/aeronet/issues/15>
-///   - consumers _should keep iterating_ if they encounter an error here
-fn recv_frags_on<'a>(
-    transport: &'a mut Transport,
-    config: &'a TransportConfig,
-    recv_at: Instant,
-    mut packet: &'a [u8],
-) -> Result<impl Iterator<Item = Result<(Result<(), RecvError>, usize), RecvError>> + 'a, RecvError>
-{
-    trace!("Receiving packet of length {}", packet.len());
-
-    let header = packet
-        .read::<PacketHeader>()
-        .map_err(|_| RecvError::ReadHeader)?;
-
-    trace!(
-        "Received packet header with sequence {} ({} bytes left)",
-        header.seq.0.0,
-        packet.len()
-    );
-
+    // only acknowledge this packet once we're sure that we've received all the
+    // fragments this packet contains (and there are no more fallible paths in
+    // this function), otherwise we've violated our reliability guarantee :(
     transport.peer_acks.ack(header.seq);
     transport.recv.acks.0.extend(packet_acks_to_msg_keys(
         &mut transport.flushed_packets,
@@ -310,21 +274,77 @@ fn recv_frags_on<'a>(
         header.acks.seqs(),
     ));
 
-    Ok(iter::from_fn(move || {
+    trace!(
+        "Finished receiving packet; successfully received {frags_recv} of {frag_index} fragments",
+    );
+
+    Ok(())
+}
+
+/// Builds an iterator over the fragments in a packet, after parsing the packet
+/// headaer.
+///
+/// We split this out from `recv_on` to test the fragment iteration loop
+/// ourselves, and it keeps things a bit more functional and iterator-oriented.
+///
+/// The return signature is a little complicated, let me break it down:
+/// - An iterator of the following item `I`:
+/// - `I = Result<X, RecvError>` answering _can we keep receiving fragments?_
+///   - If a fragment is not well-formed, we want to immediately stop receiving
+///     the packet, since we don't even know where the next fragment is supposed
+///     to start.
+///   - Or if receiving the fragment will cause us to use too much memory, we
+///     will reject the fragment. This is fatal to the packet, since that
+///     fragment might be for a reliable message, and we can't mark the packet
+///     as acknowledged without receiving that fragment of a reliable message.
+///   - Consumers of this function should _immediately return_ when encountering
+///     this error.
+/// - `X = (Y, usize)` - the `usize` reports how many bytes we have left
+///   - this is just used for a diagnostic `trace!` message
+/// - `Y = Result<(), RecvError>` answering _was this fragment valid for our
+///   transport state?_
+///   - We know the fragment is well-formed, but it might still not be received
+///     properly if e.g. we've already received it on this lane, or it'll use
+///     too much memory to store.
+///   - But since _this_ fragment is well-formed, we _are_ allowed to keep
+///     reading the packet for more fragments; we _really_ want to process those
+///     fragments if we can - see <https://github.com/aecsocket/aeronet/issues/15>.
+///   - Consumers _should keep iterating_ if they encounter an error here.
+fn recv_frags_on<'a>(
+    transport: &'a mut Transport,
+    config: &'a TransportConfig,
+    recv_at: Instant,
+    mut packet: &'a [u8],
+) -> impl Iterator<Item = Result<(Result<(), RecvError>, usize), RecvError>> + 'a {
+    iter::from_fn(move || {
         if !packet.has_remaining() {
             return None;
         }
 
         // ensure this fragment is well-formed first
-        match packet.read::<Fragment>() {
-            Ok(frag) => {
-                // then check if we can actually receive it
-                let result = recv_frag(transport, config, recv_at, frag);
-                Some(Ok((result, packet.len())))
+        let Ok(frag) = packet.read::<Fragment>() else {
+            return Some(Err(RecvError::ReadFragment));
+        };
+
+        // then check if we can actually receive it
+        match recv_frag(transport, config, recv_at, frag) {
+            Ok(()) => {
+                let result: Result<(Result<(), RecvError>, usize), RecvError> =
+                    Ok((Ok(()), packet.len()));
+                Some(result)
             }
-            Err(_) => Some(Err(RecvError::ReadFragment)),
+            Err(err @ RecvError::Reassemble(ReassembleError::OutOfMemory { .. })) => {
+                // treat out-of-memory errors as fatal to the packet
+                let result: Result<(Result<(), RecvError>, usize), RecvError> = Err(err);
+                Some(result)
+            }
+            Err(err) => {
+                let result: Result<(Result<(), RecvError>, usize), RecvError> =
+                    Ok((Err(err), packet.len()));
+                Some(result)
+            }
         }
-    }))
+    })
 }
 
 fn packet_acks_to_msg_keys<'s, const N: usize>(
@@ -578,12 +598,9 @@ mod tests {
         let session = Session::new(now, 1024);
         let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
         let config = TransportConfig::default();
-        let mut packet = Vec::<u8>::new();
-        packet.write(PacketHeader::default()).unwrap();
         // A fragment's message sequence needs two bytes, so decoding fails
         // without consuming this trailing byte.
-        packet.push(0);
-        let mut frags = super::recv_frags_on(&mut transport, &config, now, &packet).unwrap();
+        let mut frags = super::recv_frags_on(&mut transport, &config, now, &[0]);
         // An outer error makes recv_on return via `?`. An inner error would
         // be logged and retried indefinitely because no bytes were consumed.
         assert!(matches!(
@@ -608,7 +625,7 @@ mod tests {
         };
 
         // Keep the message partially reassembled so receiving `last` again
-        // produces AlreadyReceivedFrag, rather than a completed-message duplicate.
+        // exercises fragment deduplication, rather than message deduplication.
         let mut packet = Vec::<u8>::new();
         packet.write(PacketHeader::default()).unwrap();
         packet.write(&last).unwrap();
@@ -666,6 +683,51 @@ mod tests {
                 .next()
                 .is_none(),
             "a reliable-unordered message must only be delivered once, even before the gap closes"
+        );
+    }
+
+    #[test]
+    fn recv_out_of_memory_frag_does_not_ack_packet() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
+        let config = TransportConfig {
+            // Enough for reassembly metadata, but not the message's payload.
+            max_memory_usage: transport.memory_used() + 1024,
+            ..TransportConfig::default()
+        };
+        let packet_seq = PacketSeq::new(1);
+        let mut packet = Vec::<u8>::new();
+        packet
+            .write(PacketHeader {
+                seq: packet_seq,
+                acks: Acknowledge::default(),
+            })
+            .unwrap();
+        packet
+            .write(Fragment {
+                header: FragmentHeader {
+                    lane: LANE,
+                    seq: MessageSeq::new(0),
+                    position: FragmentPosition::last(2u16).unwrap(),
+                },
+                payload: FragmentPayload::new(Bytes::from_static(b"tail")).unwrap(),
+            })
+            .unwrap();
+
+        assert!(matches!(
+            super::recv_on(&mut transport, &config, now, &packet),
+            Err(super::RecvError::Reassemble(
+                super::ReassembleError::OutOfMemory { .. }
+            ))
+        ));
+
+        assert!(transport.recv.msgs.drain().next().is_none());
+        // Rejecting the allocation leaves us below the disconnect threshold.
+        assert!(transport.memory_used() <= config.max_memory_usage);
+        assert!(
+            !transport.peer_acks.is_acked(packet_seq),
+            "acking a rejected reliable fragment would stop the sender retransmitting it"
         );
     }
 }
