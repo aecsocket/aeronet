@@ -178,17 +178,26 @@ impl Consume for ConsumeImpl<'_> {
 /// [token bucket]: https://en.wikipedia.org/wiki/Token_bucket
 /// [consuming]: Limit::consume
 /// [refilling]: TokenBucket::refill_portion
-#[derive(Debug, Clone, PartialEq, Eq, TypeSize)]
+#[derive(Debug, Clone, PartialEq, TypeSize)]
 pub struct TokenBucket {
     cap: usize,
     rem: usize,
+    // Always finite and in [0, 1); discarded when the bucket fills.
+    fractional: f64,
 }
+
+// The private fractional credit can never be NaN, so equality is reflexive.
+impl Eq for TokenBucket {}
 
 impl TokenBucket {
     /// Creates a new token bucket with the given constant capacity.
     #[must_use]
     pub const fn new(cap: usize) -> Self {
-        Self { cap, rem: cap }
+        Self {
+            cap,
+            rem: cap,
+            fractional: 0.0,
+        }
     }
 
     /// Gets the maximum number of counts in this bucket.
@@ -249,6 +258,7 @@ impl TokenBucket {
     #[inline]
     pub const fn refill(&mut self) {
         self.rem = self.cap;
+        self.fractional = 0.0;
     }
 
     /// Refills this bucket with an exact amount of counts.
@@ -273,10 +283,16 @@ impl TokenBucket {
     /// ```
     pub fn refill_exact(&mut self, n: usize) {
         self.rem = self.cap.min(self.rem.saturating_add(n));
+        if self.rem == self.cap {
+            self.fractional = 0.0;
+        }
     }
 
     /// Refills this bucket with an amount of counts proportional to its
     /// capacity and the portion provided.
+    ///
+    /// Fractional counts carry over to subsequent refills. Filling the bucket
+    /// discards any excess credit, including fractional counts.
     ///
     /// If the bucket is already full, this will not add any more counts.
     ///
@@ -303,14 +319,28 @@ impl TokenBucket {
     ///
     /// # Panics
     ///
-    /// Panics if `f` is less than `0.0`.
+    /// Panics if `f` is negative or NaN.
     pub fn refill_portion(&mut self, f: f64) {
         assert!(f >= 0.0, "f = {f}");
-        #[expect(clippy::cast_sign_loss, reason = "f >= 0.0")]
-        #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
+        if self.rem == self.cap {
+            return;
+        }
         #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
-        let n = ((self.cap as f64) * f) as usize;
-        self.refill_exact(n);
+        #[cfg_attr(
+            feature = "std",
+            expect(clippy::suboptimal_flops, reason = "mul_add is unavailable in no_std")
+        )]
+        let credit = (self.cap as f64) * f + self.fractional;
+        #[expect(clippy::cast_sign_loss, reason = "credit is nonnegative")]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "whole counts are added now; fractional credit is retained below"
+        )]
+        self.refill_exact(credit as usize);
+        if self.rem < self.cap {
+            // Infinite credit fills the bucket, so this remainder is finite.
+            self.fractional = credit % 1.0;
+        }
     }
 
     /// Updates the maximum number of counts in this bucket, potentially
@@ -334,6 +364,9 @@ impl TokenBucket {
     pub fn set_cap(&mut self, cap: usize) {
         self.cap = cap;
         self.rem = self.rem.min(cap);
+        if self.rem == self.cap {
+            self.fractional = 0.0;
+        }
     }
 }
 
@@ -424,6 +457,57 @@ impl<A: Consume, B: Consume> Consume for ConsumeMinOf<A, B> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fractional_refills_accumulate() {
+        let mut counts = TokenBucket::new(30);
+        counts.consume(30).unwrap();
+        for _ in 0..60 {
+            counts.refill_portion(1.0 / 60.0);
+        }
+        assert_eq!(30, counts.rem());
+    }
+
+    #[test]
+    fn fractional_credit_survives_consumption_and_exact_refills() {
+        let mut counts = TokenBucket::new(8);
+        counts.consume(8).unwrap();
+        counts.refill_portion(0.1875); // 1.5 counts
+        counts.consume(1).unwrap();
+        counts.refill_exact(1);
+        counts.refill_portion(0.0625); // another 0.5 counts
+        assert_eq!(2, counts.rem());
+    }
+
+    #[test]
+    fn filling_discards_fractional_credit() {
+        for fill in [
+            TokenBucket::refill,
+            |counts: &mut TokenBucket| counts.refill_exact(8),
+            |counts: &mut TokenBucket| counts.refill_portion(1.0),
+            |counts: &mut TokenBucket| counts.set_cap(0),
+        ] {
+            let mut counts = TokenBucket::new(8);
+            counts.consume(8).unwrap();
+            counts.refill_portion(0.0625);
+            fill(&mut counts);
+            counts.set_cap(8);
+            counts.consume(counts.rem()).unwrap();
+            counts.refill_portion(0.0625);
+            assert_eq!(0, counts.rem());
+        }
+    }
+
+    #[test]
+    fn infinite_refill_fills_without_invalid_credit() {
+        let mut counts = TokenBucket::new(usize::MAX);
+        counts.consume(usize::MAX).unwrap();
+        counts.refill_portion(f64::INFINITY);
+        assert_eq!(TokenBucket::new(usize::MAX), counts);
+        let mut empty = TokenBucket::new(0);
+        empty.refill_portion(f64::INFINITY);
+        assert_eq!(TokenBucket::new(0), empty);
+    }
 
     #[test]
     fn refill_usize_max() {
