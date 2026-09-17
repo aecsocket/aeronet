@@ -117,7 +117,9 @@ impl Plugin for AeronetTransportPlugin {
 pub struct Transport {
     // shared
     flushed_packets: SeqBuf<FlushedPacket, 1024>,
-    stats: MessageStats,
+    msgs_recv: Saturating<usize>,
+    packet_acks_recv: Saturating<usize>,
+    msg_acks_recv: Saturating<usize>,
     peer_acks: Acknowledge,
     rtt: RttEstimator,
     /// Interface to the receiving half of this transport.
@@ -258,7 +260,9 @@ impl Transport {
         let max_frag_len = MinSize::MAX.min_of(max_frag_len);
         Ok(Self {
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
-            stats: MessageStats::default(),
+            msgs_recv: Saturating(0),
+            packet_acks_recv: Saturating(0),
+            msg_acks_recv: Saturating(0),
             peer_acks: Acknowledge::default(),
             rtt: RttEstimator::default(),
             recv: TransportRecv::new(recv_lanes),
@@ -269,7 +273,12 @@ impl Transport {
     /// Gets the total stats gathered up to now.
     #[must_use]
     pub const fn stats(&self) -> MessageStats {
-        self.stats
+        MessageStats {
+            msgs_recv: self.msgs_recv,
+            msgs_sent: self.send.msgs_sent,
+            packet_acks_recv: self.packet_acks_recv,
+            msg_acks_recv: self.msg_acks_recv,
+        }
     }
 
     /// Gets access to the RTT estimator, allowing you to read the current RTT
@@ -350,7 +359,9 @@ pub struct MessageKey {
 pub struct MessageStats {
     /// Number of messages received into [`TransportRecv::msgs`].
     pub msgs_recv: Saturating<usize>,
-    /// Number of messages sent out from [`Transport::send`].
+    /// Number of messages whose first fragment was flushed from [`Transport::send`].
+    ///
+    /// Retransmissions and subsequent fragments do not increment this counter.
     pub msgs_sent: Saturating<usize>,
     /// Number of packet acknowledgements received.
     pub packet_acks_recv: Saturating<usize>,

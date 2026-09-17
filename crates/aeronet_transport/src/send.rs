@@ -24,7 +24,7 @@ use {
         time::Instant,
     },
     bevy_time::{Real, Time},
-    core::iter,
+    core::{iter, num::Saturating},
     derive_more::{Display, Error, From},
     log::trace,
     octs::{Bytes, EncodeLen, Write},
@@ -34,6 +34,7 @@ use {
 /// Allows buffering up messages to be sent on a [`Transport`].
 #[derive(Debug, TypeSize)]
 pub struct TransportSend {
+    pub(crate) msgs_sent: Saturating<usize>,
     pub(crate) max_frag_len: MinSize,
     pub(crate) lanes: Box<[SendLane]>,
     bytes_bucket: TokenBucket,
@@ -72,6 +73,7 @@ impl TransportSend {
         lanes: impl IntoIterator<Item = impl Into<LaneKind>>,
     ) -> Self {
         Self {
+            msgs_sent: Saturating(0),
             max_frag_len,
             lanes: lanes
                 .into_iter()
@@ -222,6 +224,7 @@ impl TransportSend {
                 frags: frags.into_iter().map(Some).collect(),
             });
 
+            self.msgs_sent += 1;
             lane.next_msg_seq += MessageSeq::new(1);
             Ok(MessageKey {
                 lane: lane_index,
@@ -542,6 +545,60 @@ mod tests {
     #[test]
     fn send_no_data() {
         round_trip(b"");
+    }
+
+    #[test]
+    fn failed_push_does_not_increment_message_stats() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
+        let key = transport.send.push(LANE, Bytes::new(), now).unwrap();
+        assert_eq!(transport.stats().msgs_sent.0, 1);
+
+        // Simulate sequence wraparound onto a message that is still queued.
+        transport.send.lanes.first_mut().unwrap().next_msg_seq = key.seq;
+        assert!(matches!(
+            transport.send.push(LANE, Bytes::new(), now),
+            Err(super::TransportSendError::TooManyMessages)
+        ));
+        assert_eq!(transport.stats().msgs_sent.0, 1);
+    }
+
+    #[test]
+    fn message_stats_count_enqueue_and_delivery_once() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut sender = Transport::new(&session, LANES, LANES, now).unwrap();
+        let mut receiver = Transport::new(&session, LANES, LANES, now).unwrap();
+        assert_eq!(sender.stats().msgs_sent.0, 0);
+        sender
+            .send
+            .push(LANE, Bytes::from(vec![0; 2048]), now)
+            .unwrap();
+        assert_eq!(sender.stats().msgs_sent.0, 1);
+
+        // Flushing must not change the number of enqueued messages.
+        let _ = super::flush_on(&mut sender, now, 32).collect::<Vec<_>>();
+        assert_eq!(sender.stats().msgs_sent.0, 1);
+        let packets = super::flush_on(&mut sender, now, 1024).collect::<Vec<_>>();
+        assert!(packets.len() > 1);
+        assert_eq!(sender.stats().msgs_sent.0, 1);
+        let config = crate::TransportConfig::default();
+        for packet in &packets {
+            crate::recv::recv_on(&mut receiver, &config, now, packet).unwrap();
+        }
+        assert_eq!(receiver.stats().msgs_recv.0, 1);
+        assert_eq!(receiver.recv.msgs.drain().count(), 1);
+
+        let retry_at = now.checked_add(sender.rtt.pto()).unwrap();
+        let retries = super::flush_on(&mut sender, retry_at, 1024).collect::<Vec<_>>();
+        assert!(retries.len() > 1);
+        for packet in &retries {
+            crate::recv::recv_on(&mut receiver, &config, retry_at, packet).unwrap();
+        }
+        assert_eq!(sender.stats().msgs_sent.0, 1);
+        assert_eq!(receiver.stats().msgs_recv.0, 1);
+        assert_eq!(receiver.recv.msgs.drain().count(), 0);
     }
 
     fn round_trip(msg: &'static [u8]) {

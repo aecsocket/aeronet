@@ -64,15 +64,21 @@ impl SessionStatsSampling {
     /// # Panics
     ///
     /// Panics if `rate` or `history_sec` are zero or negative.
+    ///
+    /// /// Panics if the sampling interval cannot be represented as a
+    /// [`Duration`], or if `rate * history_sec` is not positive or truncates to
+    /// zero samples.
     #[must_use]
     pub fn new(rate: f64, history_sec: f64) -> Self {
         assert!(rate > 0.0);
         assert!(history_sec > 0.0);
+        assert!(rate * history_sec > 0.0);
 
         let interval = Duration::from_secs_f64(1.0 / rate);
-        #[expect(clippy::cast_sign_loss, reason = "`rate`, `history_sec` > 0.0")]
+        #[expect(clippy::cast_sign_loss, reason = "`rate * history_sec` > 0.0")]
         #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
         let history_cap = (rate * history_sec) as usize;
+        assert!(history_cap > 0, "history must hold at least one sample");
         Self {
             interval,
             history_cap,
@@ -327,4 +333,20 @@ fn compute_loss(
 
     // Clamp to ensure it's between 0 and 1
     packet_loss.clamp(0.0, 1.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SessionStatsSampling;
+
+    #[test]
+    fn one_sample_history() {
+        assert_eq!(SessionStatsSampling::new(0.5, 2.0).history_cap, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "history must hold at least one sample")]
+    fn rejects_history_truncating_to_zero() {
+        let _ = SessionStatsSampling::new(0.5, 1.0);
+    }
 }

@@ -271,8 +271,8 @@ pub fn recv_on(
         &mut transport.flushed_packets,
         &mut transport.send.lanes,
         &mut transport.rtt,
-        &mut transport.stats.packet_acks_recv,
-        &mut transport.stats.msg_acks_recv,
+        &mut transport.packet_acks_recv,
+        &mut transport.msg_acks_recv,
         recv_at,
         header.acks.seqs(),
     ));
@@ -402,12 +402,14 @@ fn recv_frag(
     );
 
     if let Some(msg) = msg {
-        let msgs_with_lane =
-            recv_on_lane(&mut lane.state, msg, frag.header.seq).map(|msg| RecvMessage {
+        let msgs_with_lane = recv_on_lane(&mut lane.state, msg, frag.header.seq).map(|msg| {
+            transport.msgs_recv += 1;
+            RecvMessage {
                 lane: lane_index,
                 recv_at,
                 payload: msg,
-            });
+            }
+        });
         transport.recv.msgs.0.extend(msgs_with_lane);
         trace!("Fragment finished reassembling this message");
     }
