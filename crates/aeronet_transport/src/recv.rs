@@ -267,6 +267,9 @@ pub fn recv_on(
     // fragments this packet contains (and there are no more fallible paths in
     // this function), otherwise we've violated our reliability guarantee :(
     transport.peer_acks.ack(header.seq);
+    for seq in header.acks.seqs() {
+        transport.packet_loss.ack(seq);
+    }
     transport.recv.acks.0.extend(packet_acks_to_msg_keys(
         &mut transport.flushed_packets,
         &mut transport.send.lanes,

@@ -405,6 +405,7 @@ pub fn flush_on(
             packet_seq.0.0,
             packet_frags.len()
         );
+        transport.packet_loss.record(packet_seq, now);
         transport.flushed_packets.insert(
             packet_seq.0.0,
             FlushedPacket {

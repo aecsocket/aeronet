@@ -128,7 +128,7 @@ fn on_connected(
     commands.entity(entity).insert((
         SessionVisualizer::default(),
         TransportConfig {
-            max_memory_usage: 64 * 1024,
+            max_memory_usage: 128 * 1024,
             tx_bytes_per_sec: 4 * 1024,
             ..default()
         },
