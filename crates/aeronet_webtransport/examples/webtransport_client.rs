@@ -1,3 +1,4 @@
+#![allow(clippy::arithmetic_side_effects, reason = "example code")]
 //! Example showing a WebTransport client which can send and receive UTF-8
 //! strings.
 

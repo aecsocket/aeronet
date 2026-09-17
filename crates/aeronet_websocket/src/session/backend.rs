@@ -248,7 +248,15 @@ pub mod native {
                 Message::Close(Some(frame)) => {
                     return Err(DisconnectReason::by_peer(frame.reason.to_string()));
                 }
-                msg => msg.into_data(),
+                Message::Ping(_) | Message::Pong(_) => {
+                    // explicitly ignore ping/pong messages
+                    return Ok(());
+                }
+                Message::Binary(msg) => msg,
+                msg @ Message::Text(_) => msg.into_data(),
+                Message::Frame(_) => {
+                    unreachable!("should not receive `Message::Frame`s from reading message");
+                }
             };
             let now = Instant::now();
 

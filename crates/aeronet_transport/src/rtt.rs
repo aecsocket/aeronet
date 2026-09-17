@@ -18,6 +18,10 @@ const TIMER_GRANULARITY: Duration = Duration::from_millis(1);
 impl RttEstimator {
     /// Creates a new estimator from a given initial RTT.
     #[must_use]
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "dividing a Duration by the nonzero constant 2 cannot panic"
+    )]
     pub fn new(initial_rtt: Duration) -> Self {
         Self {
             latest: initial_rtt,
@@ -68,7 +72,8 @@ impl RttEstimator {
     /// [RFC 9002 Section 6.2.1]: https://www.rfc-editor.org/rfc/rfc9002.html#section-6.2.1
     #[must_use]
     pub fn pto(&self) -> Duration {
-        self.get() + (self.var * 4).max(TIMER_GRANULARITY)
+        self.get()
+            .saturating_add(self.var.saturating_mul(4).max(TIMER_GRANULARITY))
     }
 
     /// Adds an RTT sample to this estimation.
@@ -77,8 +82,8 @@ impl RttEstimator {
         self.min = self.min.min(rtt);
 
         let var_sample = self.smoothed.abs_diff(rtt);
-        self.var = (3 * self.var + var_sample) / 4;
-        self.smoothed = (7 * self.smoothed + rtt) / 8;
+        self.var = weighted_average(self.var, var_sample, 3);
+        self.smoothed = weighted_average(self.smoothed, rtt, 7);
     }
 }
 
@@ -93,5 +98,69 @@ pub const DEFAULT_INITIAL_RTT: Duration = Duration::from_millis(333);
 impl Default for RttEstimator {
     fn default() -> Self {
         Self::new(DEFAULT_INITIAL_RTT)
+    }
+}
+
+// Compute the weighted mean in nanoseconds to preserve rounding without
+// overflowing Duration's narrower seconds representation.
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "Duration nanoseconds times a u32 weight fit in u128, and weight + 1 is nonzero"
+)]
+fn weighted_average(previous: Duration, sample: Duration, previous_weight: u32) -> Duration {
+    let weight = u128::from(previous_weight);
+    let nanos = (previous.as_nanos() * weight + sample.as_nanos()) / (weight + 1);
+    Duration::new(
+        u64::try_from(nanos / 1_000_000_000)
+            .expect("a weighted average cannot exceed Duration::MAX"),
+        u32::try_from(nanos % 1_000_000_000).expect("subsecond nanoseconds fit in u32"),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn update_preserves_weighted_estimate() {
+        let mut rtt = RttEstimator::new(Duration::from_millis(100));
+        rtt.update(Duration::from_millis(200));
+        assert_eq!(rtt.get(), Duration::from_micros(112_500));
+        assert_eq!(rtt.pto(), Duration::from_micros(362_500));
+    }
+
+    #[test]
+    fn weighted_average_preserves_nanosecond_rounding() {
+        for previous in 0..16 {
+            for sample in 0..16 {
+                for weight in [3, 7] {
+                    assert_eq!(
+                        weighted_average(
+                            Duration::from_nanos(previous),
+                            Duration::from_nanos(sample),
+                            weight
+                        ),
+                        Duration::from_nanos(
+                            (previous * u64::from(weight) + sample) / u64::from(weight + 1)
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn maximum_duration_does_not_overflow() {
+        let mut rtt = RttEstimator::new(Duration::MAX);
+        assert_eq!(rtt.pto(), Duration::MAX);
+        rtt.update(Duration::MAX);
+        assert_eq!(rtt.get(), Duration::MAX);
+        assert_eq!(rtt.pto(), Duration::MAX);
+        rtt.update(Duration::ZERO);
+        assert!(rtt.get() < Duration::MAX);
+        assert_eq!(
+            weighted_average(Duration::MAX, Duration::MAX, u32::MAX),
+            Duration::MAX
+        );
     }
 }

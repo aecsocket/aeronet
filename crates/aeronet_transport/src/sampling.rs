@@ -305,10 +305,16 @@ fn compute_loss(
         );
 
     // Calculate total packets sent and acked in the window
-    let total_packets_sent =
-        session.stats.packets_sent.0 - lost_thresh_sample.packets_total.packets_sent.0;
-    let total_packets_acked =
-        transport.stats().packet_acks_recv.0 - lost_thresh_sample.msgs_total.packet_acks_recv.0;
+    let total_packets_sent = session
+        .stats
+        .packets_sent
+        .0
+        .saturating_sub(lost_thresh_sample.packets_total.packets_sent.0);
+    let total_packets_acked = transport
+        .stats()
+        .packet_acks_recv
+        .0
+        .saturating_sub(lost_thresh_sample.msgs_total.packet_acks_recv.0);
 
     // Avoid division by zero and handle edge cases
     if total_packets_sent == 0 {

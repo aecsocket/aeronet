@@ -147,7 +147,13 @@ pub struct ConsumeImpl<'a> {
 impl Consume for ConsumeImpl<'_> {
     #[inline]
     fn consume(self) {
-        *self.rem -= self.n;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "try_consume checked n <= rem and holds an exclusive borrow until consumption"
+        )]
+        {
+            *self.rem -= self.n;
+        }
     }
 }
 
@@ -216,6 +222,10 @@ impl TokenBucket {
     /// assert_eq!(350, counts.used());
     /// ```
     #[must_use]
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "all bucket mutations maintain rem <= cap"
+    )]
     pub const fn used(&self) -> usize {
         self.cap - self.rem
     }

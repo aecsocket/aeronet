@@ -1,3 +1,4 @@
+#![allow(clippy::arithmetic_side_effects, reason = "example code")]
 //! Example showing symmetric Iroh peers which print their endpoint IDs and
 //! exchange UTF-8 strings.
 

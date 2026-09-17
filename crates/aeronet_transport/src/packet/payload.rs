@@ -45,7 +45,9 @@ impl FragmentPayload {
 impl EncodeLen for FragmentPayload {
     fn encode_len(&self) -> usize {
         let len = self.len();
-        len.encode_len() + usize::from(len)
+        len.encode_len()
+            .checked_add(usize::from(len))
+            .expect("fragment payload encoded length must fit in usize")
     }
 }
 

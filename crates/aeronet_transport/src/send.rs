@@ -171,7 +171,10 @@ impl TransportSend {
         now: Instant,
     ) -> Result<MessageKey, TransportSendError> {
         let result = (|| {
-            let lane = &mut self.lanes[usize::from(lane_index.0)];
+            let lane = self
+                .lanes
+                .get_mut(usize::from(lane_index.0))
+                .expect("lane index must be within the configured send lanes");
             let msg_seq = lane.next_msg_seq;
             let Entry::Vacant(entry) = lane.sent_msgs.entry(msg_seq) else {
                 return Err(TransportSendError::TooManyMessages);
@@ -502,7 +505,8 @@ fn write_frag_at_path(
         LaneReliability::Reliable => {
             // don't drop the frag, just attempt to resend it later
             // it'll be dropped when the peer acks it
-            sent_frag.next_flush_at = now + rtt.pto();
+            // If the deadline cannot be represented, retry on the next flush.
+            sent_frag.next_flush_at = now.checked_add(rtt.pto()).unwrap_or(now);
         }
     }
 

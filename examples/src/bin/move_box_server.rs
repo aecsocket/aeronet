@@ -1,3 +1,4 @@
+#![allow(clippy::arithmetic_side_effects, reason = "example code")]
 //! See `src/move_box.rs`.
 
 cfg_if::cfg_if! {
@@ -87,7 +88,7 @@ fn main() -> AppExit {
 fn open_web_transport_server(mut commands: Commands, args: Res<Args>) {
     let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1", "::1"])
         .expect("all given SANs should be valid DNS names");
-    let cert = &identity.certificate_chain().as_slice()[0];
+    let cert = identity.certificate_chain().as_slice().first().expect("self-signed identity has a certificate");
     let spki_fingerprint = cert::spki_fingerprint_b64(cert).expect("should be a valid certificate");
     let cert_hash = cert::hash_to_b64(cert.hash());
     info!("************************");
@@ -194,7 +195,7 @@ fn on_connected(
         clippy::cast_possible_truncation,
         reason = "truncation is what we want"
     )]
-    let color = Color::srgb_u8((time * 3) as u8, (time * 5) as u8, (time * 7) as u8);
+    let color = Color::srgb_u8(time.wrapping_mul(3) as u8, time.wrapping_mul(5) as u8, time.wrapping_mul(7) as u8);
 
     commands.entity(client).insert((
         Player,

@@ -169,7 +169,9 @@ fn find_session(world: &mut World, side: SessionSide) -> Entity {
 }
 
 fn wait_until(app: &mut App, mut condition: impl FnMut(&mut World) -> bool) {
-    let deadline = Instant::now() + TIMEOUT;
+    let deadline = Instant::now()
+        .checked_add(TIMEOUT)
+        .expect("test timeout fits in an Instant");
     loop {
         app.update();
         if condition(app.world_mut()) {

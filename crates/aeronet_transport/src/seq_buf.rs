@@ -127,6 +127,10 @@ impl<T, const N: usize> SeqBuf<T, N> {
     }
 
     #[inline]
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "index < N < u16::MAX and N is nonzero, as enforced by construction"
+    )]
     fn empty_key(index: usize) -> u16 {
         debug_assert!(index < N);
         // For N > 1, this key cannot belong to `index`. For N == 1,
@@ -137,6 +141,10 @@ impl<T, const N: usize> SeqBuf<T, N> {
     }
 
     #[inline]
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "construction requires 0 < N < u16::MAX, so the divisor is nonzero"
+    )]
     fn index(key: u16) -> u16 {
         #[expect(clippy::cast_possible_truncation, reason = "N < u16::MAX")]
         let index = key % N as u16;
@@ -317,7 +325,9 @@ impl<T, const N: usize> SeqBuf<T, N> {
 
 impl<T: TypeSize, const N: usize> TypeSize for SeqBuf<T, N> {
     fn extra_size(&self) -> usize {
-        self.indices.extra_size() + self.data.extra_size()
+        self.indices
+            .extra_size()
+            .saturating_add(self.data.extra_size())
     }
 }
 

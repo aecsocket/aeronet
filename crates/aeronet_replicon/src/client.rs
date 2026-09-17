@@ -185,7 +185,7 @@ fn update_state(
         let stats = stats.last().copied().unwrap_or_default();
 
         num_connected += 1;
-        sum_rtt += stats.msg_rtt;
+        sum_rtt = sum_rtt.saturating_add(stats.msg_rtt);
         sum_packet_loss += stats.loss;
         sum_bytes_recv += stats.packets_delta.bytes_recv;
         sum_bytes_sent += stats.packets_delta.bytes_sent;

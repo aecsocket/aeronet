@@ -146,9 +146,15 @@ pub enum ReassembleError {
         /// Index of the largest fragment we have received up to now.
         max: usize,
     },
+    /// Received a fragment whose index is too large, resulting in arithmetic
+    /// overflows.
+    FragIndexTooLarge {
+        /// Index of the fragment received.
+        index: usize,
+    },
     /// Received a fragment with an index beyond the known last fragment.
     #[display("received fragment {index} beyond last fragment {last}")]
-    FragmentBeyondLast {
+    FragBeyondLast {
         /// Index of the fragment received.
         index: usize,
         /// Index of the last fragment.
@@ -267,24 +273,33 @@ impl FragmentReceiver {
         if let Some(last) = buf.last_frag_index
             && frag_index > last
         {
-            return Err(ReassembleError::FragmentBeyondLast {
+            return Err(ReassembleError::FragBeyondLast {
                 index: frag_index,
                 last,
             });
         }
 
         // copy the payload data into the buffer
-        let start = frag_index * usize::from(max_frag_len);
-        let end = start + payload.len();
+        let start = frag_index
+            .checked_mul(usize::from(max_frag_len))
+            .ok_or(ReassembleError::FragIndexTooLarge { index: frag_index })?;
+        let end = start
+            .checked_add(payload.len())
+            .ok_or(ReassembleError::FragIndexTooLarge { index: frag_index })?;
 
         // try to resize buffers to make room for this fragment,
         // checking if we have enough memory
         let payload_mem_required = end.saturating_sub(buf.payload.capacity());
-        let indices_mem_required = frag_index
+        let num_indices = frag_index
+            .checked_add(1)
+            .ok_or(ReassembleError::FragIndexTooLarge { index: frag_index })?;
+        let indices_mem_required = num_indices
             .saturating_sub(buf.frag_indices_recv.capacity())
             .div_ceil(8);
 
-        let mem_required = payload_mem_required + indices_mem_required;
+        let mem_required = payload_mem_required
+            .checked_add(indices_mem_required)
+            .ok_or(ReassembleError::FragIndexTooLarge { index: frag_index })?;
         // we *may* end up reserving more memory than `mem_required`,
         // but this should be sufficient to prevent ridiculously sized allocs
         // and anyway, if we go over the memory limit later, we'll catch it
@@ -299,7 +314,7 @@ impl FragmentReceiver {
         let new_payload_len = buf.payload.len().max(end);
         buf.payload.resize(new_payload_len, 0);
 
-        let grow_len = (frag_index + 1).saturating_sub(buf.frag_indices_recv.len());
+        let grow_len = num_indices.saturating_sub(buf.frag_indices_recv.len());
         buf.frag_indices_recv.grow(grow_len, false);
 
         // update some meta stuff depending on if this is the last frag or not
@@ -326,7 +341,10 @@ impl FragmentReceiver {
                 expected: usize::from(max_frag_len),
             });
         }
-        buf.payload[start..end].copy_from_slice(payload);
+        buf.payload
+            .get_mut(start..end)
+            .ok_or(ReassembleError::FragIndexTooLarge { index: frag_index })?
+            .copy_from_slice(payload);
 
         // only update the buffer meta once we know there are no more error
         // paths
@@ -346,7 +364,13 @@ impl FragmentReceiver {
         } else {
             // this happens separately from the other buffer meta update
             // so that the `if` condition above works properly
-            buf.num_frags_recv += 1;
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "unique fragment indices fit in 31 bits, so their count fits in usize"
+            )]
+            {
+                buf.num_frags_recv += 1;
+            }
             Ok(None)
         }
     }
@@ -426,7 +450,7 @@ mod tests {
         );
         assert_eq!(
             result,
-            Err(ReassembleError::FragmentBeyondLast { index: 2, last: 1 })
+            Err(ReassembleError::FragBeyondLast { index: 2, last: 1 })
         );
     }
 }
