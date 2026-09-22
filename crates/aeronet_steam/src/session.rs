@@ -86,7 +86,7 @@ pub enum SessionError {
 struct PollGroup(NetPollGroup);
 
 fn init_io(
-    trigger: On<Add, SteamNetIo>,
+    trigger: On<Add<SteamNetIo>>,
     steam: Option<Res<SteamworksSockets>>,
     io: Query<&SteamNetIo>,
     poll_group: Option<Res<PollGroup>>,

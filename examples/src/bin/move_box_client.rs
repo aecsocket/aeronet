@@ -86,7 +86,7 @@ fn setup_ui(mut commands: Commands) {
 }
 
 fn on_connecting(
-    trigger: On<Add, SessionEndpoint>,
+    trigger: On<Add<SessionEndpoint>>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
     mut commands: Commands,
@@ -103,14 +103,14 @@ fn on_connecting(
     // so that `aeronet_replicon` knows you want to use this for `bevy_replicon`!
     //
     // You can also do this when `spawn`ing the entity instead, which is a bit more
-    // efficient. We just do it on `On<Add, SessionEndpoint>`, since we have
+    // efficient. We just do it on `On<Add<SessionEndpoint>>`, since we have
     // multiple `spawn` calls, and it's nicer to centralize inserting this
     // component in a single place.
     commands.entity(entity).insert(AeronetRepliconClient);
 }
 
 fn on_connected(
-    trigger: On<Add, Session>,
+    trigger: On<Add<Session>>,
     names: Query<&Name>,
     mut ui_state: ResMut<GlobalUi>,
     mut game_state: ResMut<NextState<GameState>>,

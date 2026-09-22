@@ -92,7 +92,7 @@ impl Plugin for AeronetTransportPlugin {
 /// # Lifecycle
 ///
 /// After [`Session`] is added to your entity, you should create and add a
-/// [`Transport`] component - use a [`On<Add, Session>`] for this. If
+/// [`Transport`] component - use a [`On<Add<Session>>`] for this. If
 /// you are using a crate like `aeronet_replicon`, this step will already be
 /// handled for you. You can also add or mutate [`TransportConfig`] at any
 /// time during the session lifetime to change its configuration.
@@ -229,7 +229,7 @@ impl Transport {
     ///
     /// const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
     ///
-    /// fn on_connected(trigger: On<Add, Session>, sessions: Query<&Session>, mut commands: Commands) {
+    /// fn on_connected(trigger: On<Add<Session>>, sessions: Query<&Session>, mut commands: Commands) {
     ///     let entity = trigger.event_target();
     ///     let session = sessions
     ///         .get(entity)

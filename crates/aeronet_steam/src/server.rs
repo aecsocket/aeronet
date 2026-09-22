@@ -464,7 +464,7 @@ fn on_connected(
 }
 
 fn on_remove_client(
-    trigger: On<Remove, SteamNetServerClient>,
+    trigger: On<Remove<SteamNetServerClient>>,
     clients: Query<(&SteamNetServerClient, &ChildOf)>,
     mut servers: Query<&mut SteamNetServer>,
 ) -> Result<(), BevyError> {

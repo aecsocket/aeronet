@@ -185,12 +185,12 @@ pub struct LocalAddr(pub SocketAddr);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, Component)]
 pub struct PeerAddr(pub SocketAddr);
 
-fn on_connecting(trigger: On<Add, SessionEndpoint>) {
+fn on_connecting(trigger: On<Add<SessionEndpoint>>) {
     let entity = trigger.event_target();
     debug!("{entity} connecting");
 }
 
-fn on_connected(trigger: On<Add, Session>) {
+fn on_connected(trigger: On<Add<Session>>) {
     let entity = trigger.event_target();
     debug!("{entity} connected");
 }

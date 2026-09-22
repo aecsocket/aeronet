@@ -57,7 +57,7 @@ pub struct ServerEndpoint;
 /// should be disconnected instead of the entire server being torn down.
 ///
 /// To listen for when a server is opened, add an observer listening for
-/// [`On<Add, Server>`].
+/// [`On<Add<Server>>`].
 ///
 /// When a client connects, it is spawned as a [child] of the server entity.
 /// Therefore, to query for sessions spawned under a server, use
@@ -196,12 +196,12 @@ impl<E: Into<anyhow::Error>> From<E> for CloseReason {
     }
 }
 
-fn on_opening(trigger: On<Add, ServerEndpoint>) {
+fn on_opening(trigger: On<Add<ServerEndpoint>>) {
     let target = trigger.event_target();
     debug!("{target} opening");
 }
 
-fn on_opened(trigger: On<Add, Server>) {
+fn on_opened(trigger: On<Add<Server>>) {
     let target = trigger.event_target();
     debug!("{target} opened");
 }

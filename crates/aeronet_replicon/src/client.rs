@@ -118,7 +118,7 @@ pub enum ClientTransportSystems {
 pub struct AeronetRepliconClient;
 
 fn on_client_connected(
-    trigger: On<Add, Session>,
+    trigger: On<Add<Session>>,
     mut commands: Commands,
     clients: Query<&Session, With<AeronetRepliconClient>>,
     channels: Res<RepliconChannels>,

@@ -52,7 +52,7 @@ fn on_closed(trigger: On<Closed>) {
     panic!("server closed: {:?}", trigger.event());
 }
 
-fn on_opened(trigger: On<Add, Server>, servers: Query<&LocalAddr>) {
+fn on_opened(trigger: On<Add<Server>>, servers: Query<&LocalAddr>) {
     let server = trigger.event_target();
     let local_addr = servers
         .get(server)
@@ -60,7 +60,7 @@ fn on_opened(trigger: On<Add, Server>, servers: Query<&LocalAddr>) {
     info!("{server} opened on {}", **local_addr);
 }
 
-fn on_connecting(trigger: On<Add, SessionEndpoint>, clients: Query<&ChildOf>) {
+fn on_connecting(trigger: On<Add<SessionEndpoint>>, clients: Query<&ChildOf>) {
     let client = trigger.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
@@ -69,7 +69,7 @@ fn on_connecting(trigger: On<Add, SessionEndpoint>, clients: Query<&ChildOf>) {
     info!("{client} connecting to {server}");
 }
 
-fn on_connected(trigger: On<Add, Session>, clients: Query<&ChildOf>) {
+fn on_connected(trigger: On<Add<Session>>, clients: Query<&ChildOf>) {
     let client = trigger.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;

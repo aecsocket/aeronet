@@ -147,7 +147,7 @@ fn ping_pong(
         struct ClientEntity(Entity);
 
         fn on_add_server_endpoint(
-            trigger: On<Add, ServerEndpoint>,
+            trigger: On<Add<ServerEndpoint>>,
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
@@ -156,7 +156,7 @@ fn ping_pong(
         }
 
         fn on_add_server(
-            trigger: On<Add, Server>,
+            trigger: On<Add<Server>>,
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
@@ -166,7 +166,7 @@ fn ping_pong(
         }
 
         fn on_add_session_endpoint(
-            trigger: On<Add, SessionEndpoint>,
+            trigger: On<Add<SessionEndpoint>>,
             parents: Query<&ChildOf>,
             expected_server: Res<ServerEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
@@ -201,7 +201,7 @@ fn ping_pong(
         }
 
         fn on_add_session(
-            trigger: On<Add, Session>,
+            trigger: On<Add<Session>>,
             expected_client: Res<ClientEntity>,
             mut seq: ResMut<SequenceTester<ServerEvent>>,
         ) {
@@ -258,7 +258,7 @@ fn ping_pong(
         struct ClientEntity(Entity);
 
         fn on_add_session_endpoint(
-            trigger: On<Add, SessionEndpoint>,
+            trigger: On<Add<SessionEndpoint>>,
             mut seq: ResMut<SequenceTester<ClientEvent>>,
             mut commands: Commands,
         ) {
@@ -268,7 +268,7 @@ fn ping_pong(
         }
 
         fn on_add_session(
-            trigger: On<Add, Session>,
+            trigger: On<Add<Session>>,
             expected_client: Res<ClientEntity>,
             mut seq: ResMut<SequenceTester<ClientEvent>>,
             mut sessions: Query<&mut Session>,

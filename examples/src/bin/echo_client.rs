@@ -141,7 +141,7 @@ fn setup_connection(mut commands: Commands) {
 }
 
 // Observe state change events using `Trigger`s.
-fn on_connecting(trigger: On<Add, SessionEndpoint>, mut sessions: Query<&mut UiState>) {
+fn on_connecting(trigger: On<Add<SessionEndpoint>>, mut sessions: Query<&mut UiState>) {
     let entity = trigger.event_target();
     let mut ui_state = sessions
         .get_mut(entity)
@@ -150,7 +150,7 @@ fn on_connecting(trigger: On<Add, SessionEndpoint>, mut sessions: Query<&mut UiS
 }
 
 fn on_connected(
-    trigger: On<Add, Session>,
+    trigger: On<Add<Session>>,
     mut sessions: Query<(&Session, &mut UiState)>,
     mut commands: Commands,
 ) {

@@ -47,7 +47,7 @@ fn open_endpoint(mut commands: Commands) {
 }
 
 fn on_endpoint_opened(
-    trigger: On<Add, IrohEndpoint>,
+    trigger: On<Add<IrohEndpoint>>,
     endpoints: Query<&IrohEndpoint>,
     args: Res<Args>,
     mut commands: Commands,
@@ -74,7 +74,7 @@ fn on_session_request(mut request: On<SessionRequest>) {
     request.respond(SessionResponse::Accepted);
 }
 
-fn on_connecting(trigger: On<Add, SessionEndpoint>, sessions: Query<&IrohSession>) {
+fn on_connecting(trigger: On<Add<SessionEndpoint>>, sessions: Query<&IrohSession>) {
     let entity = trigger.event_target();
     let Ok(session) = sessions.get(entity) else {
         return;
@@ -84,7 +84,7 @@ fn on_connecting(trigger: On<Add, SessionEndpoint>, sessions: Query<&IrohSession
 }
 
 fn on_connected(
-    trigger: On<Add, Session>,
+    trigger: On<Add<Session>>,
     endpoints: Query<&IrohEndpoint>,
     mut sessions: Query<(&IrohSession, &mut Session)>,
 ) {

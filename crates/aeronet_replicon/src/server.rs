@@ -142,7 +142,7 @@ fn update_state(
 }
 
 fn on_connected(
-    trigger: On<Add, Session>,
+    trigger: On<Add<Session>>,
     sessions: Query<&Session>,
     child_of: Query<&ChildOf>,
     open_servers: Query<(), OpenedServer>,

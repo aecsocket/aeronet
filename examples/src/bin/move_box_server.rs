@@ -162,7 +162,7 @@ fn web_socket_config(args: &Args) -> WebSocketServerConfig {
 //
 
 fn on_opened(
-    trigger: On<Add, Server>,
+    trigger: On<Add<Server>>,
     servers: Query<&LocalAddr>,
     mut commands: Commands,
 ) {
@@ -175,7 +175,7 @@ fn on_opened(
 }
 
 fn on_connected(
-    trigger: On<Add, Session>,
+    trigger: On<Add<Session>>,
     clients: Query<&ChildOf>,
     mut commands: Commands,
 ) {

@@ -136,7 +136,7 @@ pub struct ChannelDisconnected;
 
 const MTU: usize = usize::MAX;
 
-fn on_io_added(trigger: On<Add, ChannelIo>, mut commands: Commands) {
+fn on_io_added(trigger: On<Add<ChannelIo>>, mut commands: Commands) {
     let entity = trigger.event_target();
     let session = Session::new(Instant::now(), MTU);
     commands.entity(entity).insert((SessionEndpoint, session));

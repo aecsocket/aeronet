@@ -200,7 +200,7 @@ pub struct SessionStatsSample {
 }
 
 fn add_session_stats(
-    trigger: On<Add, Transport>,
+    trigger: On<Add<Transport>>,
     mut commands: Commands,
     sampling: Res<SessionStatsSampling>,
 ) {
