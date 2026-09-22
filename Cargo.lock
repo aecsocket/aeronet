@@ -224,6 +224,7 @@ version = "0.21.0"
 dependencies = [
  "aeronet_io",
  "arbitrary",
+ "bevy",
  "bevy_app",
  "bevy_ecs",
  "bevy_egui",

@@ -15,11 +15,12 @@ rustdoc-args = ["--cfg=docsrs_aeronet"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [package.metadata.cargo-shear]
-ignored = ["bevy_winit"]
+ignored = ["bevy", "bevy_winit"]
 
 [dependencies]
 aeronet_io = { workspace = true }
 arbitrary = { workspace = true, optional = true }
+bevy = { version = "0.20.0-rc.1", default-features = false, features = ["bevy_extract"], optional = true }
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_egui = { workspace = true, optional = true }
@@ -88,6 +89,7 @@ std = ["aeronet_io/std"]
 ## [`bevy_egui`]: https://docs.rs/bevy_egui
 ## [`egui_plot`]: https://docs.rs/egui_plot
 visualizer = [
+  "dep:bevy",
   "dep:bevy_egui",
   "dep:egui_plot",
   "dep:itertools",

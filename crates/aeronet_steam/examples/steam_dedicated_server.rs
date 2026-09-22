@@ -142,7 +142,7 @@ fn on_connecting(trigger: On<Add<SessionEndpoint>>, clients: Query<&ChildOf>) {
     info!("{client} connecting to {server}");
 }
 
-fn on_connected(trigger: <<Add, Session>>, clients: Query<&ChildOf>) {
+fn on_connected(trigger: On<Add<Session>>, clients: Query<&ChildOf>) {
     let client = trigger.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
