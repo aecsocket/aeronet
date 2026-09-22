@@ -4,7 +4,7 @@ use {
     crate::{
         FlushedPacket, MessageKey, RecvMessage, Transport, TransportConfig,
         frag::{FragmentReceiver, ReassembleError},
-        lane::{LaneIndex, LaneKind},
+        lane::{LaneIndex, LaneKind, LaneReliability},
         packet::{Fragment, MessageSeq, PacketHeader, PacketSeq},
         rtt::RttEstimator,
         send::SendLane,
@@ -53,6 +53,27 @@ pub struct TransportRecv {
 pub struct RecvBuffer<T: TypeSize>(Vec<T>);
 
 impl TransportRecv {
+    fn unreliable_eviction_candidates(
+        &self,
+        protected_lane: usize,
+        protected_seq: MessageSeq,
+    ) -> Vec<(usize, MessageSeq, Instant)> {
+        let mut candidates = self
+            .lanes
+            .iter()
+            .enumerate()
+            .filter(|(_, lane)| lane.kind().reliability() == LaneReliability::Unreliable)
+            .flat_map(|(index, lane)| {
+                let protected = (index == protected_lane).then_some(protected_seq);
+                lane.frags
+                    .eviction_candidates(protected)
+                    .map(move |(seq, at)| (index, seq, at))
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_unstable_by_key(|(_, _, at)| *at);
+        candidates
+    }
+
     pub(crate) fn new(lanes: impl IntoIterator<Item = impl Into<LaneKind>>) -> Self {
         Self {
             lanes: lanes
@@ -380,24 +401,65 @@ fn recv_frag(
 ) -> Result<(), RecvError> {
     let lane_index = frag.header.lane;
 
-    let memory_left = config
-        .max_memory_usage
-        .saturating_sub(transport.memory_used());
+    let index = usize::from(lane_index.0);
     let lane = transport
         .recv
         .lanes
-        .get_mut(usize::from(lane_index.0))
+        .get(index)
         .ok_or(RecvError::InvalidLane { lane: lane_index })?;
-    let msg = lane
+    if let LaneState::UnreliableSequenced { pending } = lane.state
+        && frag.header.seq < pending
+    {
+        return Ok(());
+    }
+    let Some(prepared) = lane
         .frags
-        .reassemble(
+        .prepare(
             transport.send.max_frag_len,
-            memory_left,
             frag.header.seq,
             frag.header.position,
             &frag.payload,
         )
-        .map_err(RecvError::Reassemble)?;
+        .map_err(RecvError::Reassemble)?
+    else {
+        return Ok(());
+    };
+
+    let mut memory_left = config
+        .max_memory_usage
+        .saturating_sub(transport.memory_used());
+    if prepared.memory_required > memory_left {
+        let candidates = transport
+            .recv
+            .unreliable_eviction_candidates(index, frag.header.seq);
+        for (evict_lane, seq, _) in candidates {
+            transport
+                .recv
+                .lanes
+                .get_mut(evict_lane)
+                .expect("candidate came from this lane list")
+                .frags
+                .discard(seq);
+            memory_left = config
+                .max_memory_usage
+                .saturating_sub(transport.memory_used());
+            if prepared.memory_required <= memory_left {
+                break;
+            }
+        }
+        if prepared.memory_required > memory_left {
+            return Err(RecvError::Reassemble(ReassembleError::OutOfMemory {
+                required: prepared.memory_required,
+                left: memory_left,
+            }));
+        }
+    }
+    let lane = transport
+        .recv
+        .lanes
+        .get_mut(index)
+        .expect("lane was validated above");
+    let msg = lane.frags.insert_prepared(prepared, recv_at);
 
     trace!(
         "Received fragment on lane {} - message seq {} position {:?}",
@@ -414,6 +476,9 @@ fn recv_frag(
             }
         });
         transport.recv.msgs.0.extend(msgs_with_lane);
+        if let LaneState::UnreliableSequenced { pending } = lane.state {
+            lane.frags.discard_before(pending);
+        }
         trace!("Fragment finished reassembling this message");
     }
 
@@ -617,7 +682,8 @@ mod tests {
         };
 
         // A retransmission may share a packet with a fragment we still need.
-        // Rejecting the duplicate must not prevent processing the fresh fragment.
+        // Rejecting the duplicate must not prevent processing the fresh
+        // fragment.
         packet.clear();
         packet
             .write(PacketHeader {
@@ -705,6 +771,152 @@ mod tests {
         );
     }
 
+    fn partial(
+        transport: &mut Transport,
+        config: &TransportConfig,
+        lane: u16,
+        seq: u16,
+        index: u16,
+        now: Instant,
+    ) {
+        let payload = vec![0; usize::from(transport.send.max_frag_len)];
+        super::recv_frag(
+            transport,
+            config,
+            now,
+            Fragment {
+                header: FragmentHeader {
+                    lane: LaneIndex::new(u32::from(lane)),
+                    seq: MessageSeq::new(seq),
+                    position: FragmentPosition::non_last(index).unwrap(),
+                },
+                payload: FragmentPayload::new(Bytes::from(payload)).unwrap(),
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn memory_pressure_evicts_only_oldest_unreliable_message() {
+        use core::time::Duration;
+        let now = Instant::now();
+        let later = now.checked_add(Duration::from_secs(1)).unwrap();
+        let session = Session::new(now, 1024);
+        let lanes = [LaneKind::UnreliableUnordered, LaneKind::ReliableOrdered];
+        let mut transport = Transport::new(&session, lanes, lanes, now).unwrap();
+        let mut config = TransportConfig::default();
+        partial(&mut transport, &config, 1, 0, 3, now);
+        partial(&mut transport, &config, 0, 0, 3, now);
+        partial(&mut transport, &config, 0, 1, 3, later);
+        config.max_memory_usage = transport.memory_used().saturating_add(256);
+        partial(&mut transport, &config, 0, 2, 0, later);
+        assert!(transport.memory_used() <= config.max_memory_usage);
+        let lane = transport.recv.lanes.first().unwrap();
+        assert_eq!(lane.frags.len(), 2);
+        assert_eq!(
+            lane.frags
+                .eviction_candidates(Some(MessageSeq::new(2)))
+                .next()
+                .unwrap()
+                .0,
+            MessageSeq::new(1)
+        );
+        assert_eq!(transport.recv.lanes.get(1).unwrap().frags.len(), 1);
+    }
+
+    #[test]
+    fn invalid_fragment_does_not_evict_or_allocate() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let lanes = [LaneKind::UnreliableUnordered];
+        let mut transport = Transport::new(&session, lanes, lanes, now).unwrap();
+        let mut config = TransportConfig::default();
+        partial(&mut transport, &config, 0, 0, 0, now);
+        let before = transport.memory_used();
+        config.max_memory_usage = before;
+        let result = super::recv_frag(
+            &mut transport,
+            &config,
+            now,
+            Fragment {
+                header: FragmentHeader {
+                    lane: LANE,
+                    seq: MessageSeq::new(1),
+                    position: FragmentPosition::non_last(10u16).unwrap(),
+                },
+                payload: FragmentPayload::empty(),
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(super::RecvError::Reassemble(
+                super::ReassembleError::InvalidPayloadLength { .. }
+            ))
+        ));
+        assert_eq!(transport.memory_used(), before);
+        assert_eq!(transport.recv.lanes.first().unwrap().frags.len(), 1);
+    }
+
+    #[test]
+    fn memory_pressure_evicts_multiple_messages_in_age_order() {
+        use core::time::Duration;
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let lanes = [LaneKind::UnreliableUnordered; 2];
+        let mut transport = Transport::new(&session, lanes, lanes, now).unwrap();
+        let mut config = TransportConfig::default();
+        partial(&mut transport, &config, 1, 0, 3, now);
+        let later = now.checked_add(Duration::from_secs(1)).unwrap();
+        partial(&mut transport, &config, 0, 0, 3, later);
+        let latest = later.checked_add(Duration::from_secs(1)).unwrap();
+        partial(&mut transport, &config, 1, 1, 3, latest);
+        config.max_memory_usage = transport.memory_used().saturating_add(256);
+        // This needs more than one candidate's allocation to be reclaimed.
+        partial(&mut transport, &config, 0, 1, 6, latest);
+        assert!(transport.memory_used() <= config.max_memory_usage);
+        for lane in &transport.recv.lanes {
+            assert_eq!(lane.frags.len(), 1);
+            assert_eq!(
+                lane.frags.eviction_candidates(None).next().unwrap().0,
+                MessageSeq::new(1)
+            );
+        }
+    }
+
+    #[test]
+    fn sequenced_delivery_discards_obsolete_partials_across_wraparound() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let lanes = [LaneKind::UnreliableSequenced];
+        let mut transport = Transport::new(&session, lanes, lanes, now).unwrap();
+        let config = TransportConfig::default();
+        let old = u16::MAX.saturating_sub(1);
+        transport.recv.lanes.first_mut().unwrap().state = super::LaneState::UnreliableSequenced {
+            pending: MessageSeq::new(old),
+        };
+        partial(&mut transport, &config, 0, old, 0, now);
+        partial(&mut transport, &config, 0, 0, 0, now);
+        super::recv_frag(
+            &mut transport,
+            &config,
+            now,
+            Fragment {
+                header: FragmentHeader {
+                    lane: LANE,
+                    seq: MessageSeq::new(u16::MAX),
+                    position: FragmentPosition::ZERO_LAST,
+                },
+                payload: FragmentPayload::empty(),
+            },
+        )
+        .unwrap();
+        assert_eq!(transport.recv.msgs.drain().count(), 1);
+        assert_eq!(transport.recv.lanes.first().unwrap().frags.len(), 1);
+        // An obsolete fragment must not recreate its discarded buffer.
+        partial(&mut transport, &config, 0, old, 0, now);
+        assert_eq!(transport.recv.lanes.first().unwrap().frags.len(), 1);
+    }
+
     #[test]
     fn recv_out_of_memory_disconnects_session() {
         use {
@@ -718,7 +930,8 @@ mod tests {
 
         let now = Instant::now();
         let mut session = Session::new(now, 1024);
-        // Unordered delivery lets message 1 arrive while message 0 is incomplete.
+        // Unordered delivery lets message 1 arrive while message 0 is
+        // incomplete.
         let lanes = [LaneKind::ReliableUnordered];
         let transport = Transport::new(&session, lanes, lanes, now).unwrap();
         let config = TransportConfig {

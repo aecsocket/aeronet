@@ -253,7 +253,8 @@ fn compute_loss(transport: &Transport, config: &TransportConfig, now: Instant) -
 
 const LOSS_HISTORY_CAP: u16 = 1024;
 
-/// Separate from retransmission metadata, which is removed as soon as acknowledged.
+/// Separate from retransmission metadata, which is removed as soon as
+/// acknowledged.
 #[derive(Debug, TypeSize)]
 pub(crate) struct PacketLossHistory {
     packets: SeqBuf<PacketOutcome, 1024>,
