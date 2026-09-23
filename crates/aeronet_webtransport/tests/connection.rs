@@ -35,7 +35,12 @@ fn connect() {
 
     _ = wtransport::tls::rustls::crypto::ring::default_provider().install_default();
     let identity = Identity::self_signed(["127.0.0.1", "::1", "localhost"]).unwrap();
-    let cert_hash = identity.certificate_chain().as_slice()[0].hash();
+    let cert_hash = identity
+        .certificate_chain()
+        .as_slice()
+        .first()
+        .expect("self-signed identity has a certificate")
+        .hash();
     ping_pong(
         ServerConfig::builder()
             .with_bind_default(PORT)

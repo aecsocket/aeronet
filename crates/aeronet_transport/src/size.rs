@@ -120,18 +120,25 @@ pub(crate) fn of_bitvec(v: &BitVec) -> usize {
 }
 
 pub(crate) fn of_set<T: TypeSize>(v: &HashSet<T>) -> usize {
-    // copied from
-    // <https://github.com/GnomedDev/typesize/blob/2be34b451154dbcd257e36fe661e8a93e73b3fa6/src/vec.rs#L5>
-    v.iter().map(TypeSize::get_size).sum::<usize>() + (v.capacity() - v.len()) * size_of::<T>()
+    let element_size = v
+        .iter()
+        .map(TypeSize::get_size)
+        .fold(0, usize::saturating_add);
+    let free_size = v
+        .capacity()
+        .saturating_sub(v.len())
+        .saturating_mul(size_of::<T>());
+    element_size.saturating_add(free_size)
 }
 
 pub(crate) fn of_map<K: TypeSize, V: TypeSize>(v: &HashMap<K, V>) -> usize {
-    // copied from
-    // <https://github.com/GnomedDev/typesize/blob/2be34b451154dbcd257e36fe661e8a93e73b3fa6/src/map.rs#L15>
     let element_size = v
         .iter()
-        .map(|(k, v)| k.get_size() + v.get_size())
-        .sum::<usize>();
-    let free_size = (v.capacity() - v.len()) * (size_of::<K>() + size_of::<V>());
-    element_size + free_size
+        .map(|(k, v)| k.get_size().saturating_add(v.get_size()))
+        .fold(0, usize::saturating_add);
+    let free_size = v
+        .capacity()
+        .saturating_sub(v.len())
+        .saturating_mul(size_of::<K>().saturating_add(size_of::<V>()));
+    element_size.saturating_add(free_size)
 }

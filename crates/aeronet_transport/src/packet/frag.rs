@@ -129,6 +129,10 @@ impl FixedEncodeLenHint for FragmentHeader {
 }
 
 impl EncodeLen for FragmentHeader {
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "the lane and position each encode to at most 5 bytes, and the sequence to 2"
+    )]
     fn encode_len(&self) -> usize {
         self.lane.encode_len() + self.seq.encode_len() + self.position.encode_len()
     }
@@ -161,7 +165,10 @@ impl Decode for FragmentHeader {
 
 impl EncodeLen for Fragment {
     fn encode_len(&self) -> usize {
-        self.header.encode_len() + self.payload.encode_len()
+        self.header
+            .encode_len()
+            .checked_add(self.payload.encode_len())
+            .expect("fragment encoded length must fit in usize")
     }
 }
 

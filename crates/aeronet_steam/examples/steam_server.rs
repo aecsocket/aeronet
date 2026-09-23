@@ -1,3 +1,4 @@
+#![allow(clippy::arithmetic_side_effects, reason = "example code")]
 //! Example server using Steam which listens for clients sending strings and
 //! sends back a string reply.
 

@@ -1,3 +1,4 @@
+#![allow(clippy::arithmetic_side_effects, reason = "example code")]
 //! Example showing a session connected over [`aeronet_channel`]'s [`ChannelIo`]
 //! IO layer.
 

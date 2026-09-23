@@ -8,3 +8,13 @@ doc-valid-idents = [
   "WiFi",
   "..",
 ]
+
+# These operators are implemented using wrapping sequence arithmetic or
+# field-wise saturating counters. Keep the exceptions limited to matching types.
+arithmetic-side-effects-allowed-binary = [
+  ["packet::Seq", "packet::Seq"],
+  ["packet::MessageSeq", "packet::MessageSeq"],
+  ["packet::PacketSeq", "packet::PacketSeq"],
+  ["MessageStats", "MessageStats"],
+  ["aeronet_io::packet::PacketStats", "aeronet_io::packet::PacketStats"],
+]

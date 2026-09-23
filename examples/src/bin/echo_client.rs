@@ -1,3 +1,4 @@
+#![allow(clippy::arithmetic_side_effects, reason = "example code")]
 //! Client which connects to an echo server, and sends/receives plain UTF-8
 //! strings.
 //!

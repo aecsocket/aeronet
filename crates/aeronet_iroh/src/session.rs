@@ -571,7 +571,7 @@ async fn send_admission(conn: &Connection, response: &SessionResponse) -> Result
         SessionResponse::Accepted => vec![ACCEPTED],
         SessionResponse::Rejected(reason) => {
             let reason = truncate_utf8(reason, MAX_ADMISSION_RESPONSE_SIZE - 1);
-            let mut message = Vec::with_capacity(1 + reason.len());
+            let mut message = Vec::with_capacity(MAX_ADMISSION_RESPONSE_SIZE);
             message.push(REJECTED);
             message.extend_from_slice(reason.as_bytes());
             message
@@ -623,7 +623,13 @@ fn truncate_utf8(value: &str, max_bytes: usize) -> &str {
 
     let mut end = max_bytes;
     while !value.is_char_boundary(end) {
-        end -= 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "zero is always a UTF-8 character boundary, so end cannot underflow"
+        )]
+        {
+            end -= 1;
+        }
     }
     &value[..end]
 }

@@ -1,20 +1,22 @@
 //! See [`SessionSamplingPlugin`].
 
 use {
-    crate::{MessageStats, Transport, TransportConfig},
+    crate::{MessageStats, Transport, TransportConfig, packet::PacketSeq, seq_buf::SeqBuf},
     aeronet_io::{
         Session,
         packet::{PacketRtt, PacketStats},
     },
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
+    bevy_platform::time::Instant,
     bevy_time::{Real, Time, Timer, TimerMode},
     core::time::Duration,
     derive_more::{Deref, DerefMut},
     ringbuf::{
         HeapRb,
-        traits::{Consumer, Observer, RingBuffer},
+        traits::{Consumer, RingBuffer},
     },
+    typesize::derive::TypeSize,
 };
 
 /// Periodically samples the state of [`Session`]s to gather statistics on the
@@ -64,15 +66,21 @@ impl SessionStatsSampling {
     /// # Panics
     ///
     /// Panics if `rate` or `history_sec` are zero or negative.
+    ///
+    /// /// Panics if the sampling interval cannot be represented as a
+    /// [`Duration`], or if `rate * history_sec` is not positive or truncates to
+    /// zero samples.
     #[must_use]
     pub fn new(rate: f64, history_sec: f64) -> Self {
         assert!(rate > 0.0);
         assert!(history_sec > 0.0);
+        assert!(rate * history_sec > 0.0);
 
         let interval = Duration::from_secs_f64(1.0 / rate);
-        #[expect(clippy::cast_sign_loss, reason = "`rate`, `history_sec` > 0.0")]
+        #[expect(clippy::cast_sign_loss, reason = "`rate * history_sec` > 0.0")]
         #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
         let history_cap = (rate * history_sec) as usize;
+        assert!(history_cap > 0, "history must hold at least one sample");
         Self {
             interval,
             history_cap,
@@ -152,50 +160,21 @@ pub struct SessionStatsSample {
     pub mem_used: usize,
     /// [`TransportConfig::max_memory_usage`] at the time of sampling.
     pub mem_max: usize,
-    /// What proportion of packets sent recently are believed to have been lost
-    /// in transit.
-    ///
-    /// If the receiver has not acknowledged a packet within a variable time
-    /// threshold (which is a function of the RTT), then they have probably lost
-    /// that packet.
+    /// Out of the last few packets, that we should have received an
+    /// acknowledgement for by the peer by now, how many have actually
+    /// received an acknowledgement?
     ///
     /// # Algorithm
     ///
-    /// We want to figure out how many packets have been lost during this
-    /// sample. To do this, we find out how many packets, that we sent out
-    /// earlier, should have been acknowledged by our peer by now; and how many
-    /// of those have actually been acknowledged. "By now" is defined as a
-    /// function of the current RTT estimate. Currently it is [the PTO]
-    /// multiplied by [`TransportConfig::packet_lost_threshold_factor`],
-    /// however the implementation may change this in the future.
+    /// We keep a rolling buffer of the 1024 last flushed packets. Once that
+    /// packet gets old enough (current PTO multiplied by
+    /// [`TransportConfig::packet_lost_threshold_factor`]), we expect to have
+    /// received an acknowledgement for it by now. If we haven't received that
+    /// acknowledgement yet, we count it as a lost packet, increasing the loss
+    /// fraction.
     ///
-    /// Let's assume that we are calculating sample 100, and our RTT is such
-    /// that we expect to have received acknowledgements for all packets sent up
-    /// to sample 90 by now.
-    ///
-    /// Up to sample 90, we received 950 acks and sent 1000 messages total.
-    /// Therefore, at sample 100, we expect to have 1000 acks - we expect to
-    /// have 50 more acks than we had at sample 90.
-    ///
-    /// - If by now we have received 1000 acks, then:
-    ///   - we have received 50 (1000 - 950) extra acks
-    ///   - we have lost 0 (50 - 50) packets
-    ///   - we have 0% packet loss
-    ///   - we have a very accurate RTT estimate
-    /// - If we have more than 1000 acks, then:
-    ///   - we have received more than 50 extra acks
-    ///   - we have lost 0 packets
-    ///   - we have 0% packet loss
-    ///   - our RTT estimate is too high - the peer actually acknowledges
-    ///     packets faster than we think
-    /// - If we have between 950 and 1000 acknowledgements, we have some
-    ///   percentage of packet loss. If we have 960 acks, then:
-    ///   - we have received 10 extra acks
-    ///   - we have lost 40 (50 - 10) packets
-    ///   - we have 90% packet loss
-    /// - If we still only have 950 acks, we have 100% packet loss.
-    ///
-    /// [the PTO]: crate::rtt::RttEstimator::pto
+    /// Returns zero if no retained packets are eligible, if we are sending
+    /// packets too fast to evict them before they reach the threshold.
     pub loss: f64,
 }
 
@@ -241,15 +220,15 @@ fn update_stats(
         &Transport,
         &TransportConfig,
     )>,
-    sampling: Res<SessionStatsSampling>,
 ) {
     timer.tick(time.delta());
     if !timer.just_finished() {
         return;
     }
 
+    let now = Instant::now();
     for (mut stats, session, packet_rtt, transport, transport_config) in &mut sessions {
-        let loss = compute_loss(session, transport, transport_config, &sampling, &stats);
+        let loss = compute_loss(transport, transport_config, now);
         let last_sample = stats.iter().next_back().copied().unwrap_or_default();
         let sample = SessionStatsSample {
             packet_rtt: packet_rtt.map(|rtt| **rtt),
@@ -267,58 +246,203 @@ fn update_stats(
     }
 }
 
-fn compute_loss(
-    session: &Session,
-    transport: &Transport,
-    transport_config: &TransportConfig,
-    sampling: &SessionStatsSampling,
-    stats: &SessionStats,
-) -> f64 {
-    // see `SessionStatsSample::loss`
+fn compute_loss(transport: &Transport, config: &TransportConfig, now: Instant) -> f64 {
+    let threshold = transport.rtt().pto().as_secs_f64() * config.packet_lost_threshold_factor;
+    transport.packet_loss.loss(now, threshold)
+}
 
-    // Early exit if not enough samples
-    if stats.is_empty() {
-        return 0.0;
+const LOSS_HISTORY_CAP: u16 = 1024;
+
+/// Separate from retransmission metadata, which is removed as soon as
+/// acknowledged.
+#[derive(Debug, TypeSize)]
+pub(crate) struct PacketLossHistory {
+    packets: SeqBuf<PacketOutcome, 1024>,
+    latest: Option<PacketSeq>,
+}
+
+#[derive(Debug, TypeSize)]
+struct PacketOutcome {
+    #[typesize(with = crate::size::of_instant)]
+    flushed_at: Instant,
+    acked: bool,
+}
+
+impl PacketLossHistory {
+    pub(crate) fn new(now: Instant) -> Self {
+        Self {
+            packets: SeqBuf::new_from_fn(|_| PacketOutcome {
+                flushed_at: now,
+                acked: false,
+            }),
+            latest: None,
+        }
     }
 
-    let sampling_rate = sampling.rate();
-    let pto = transport.rtt().pto();
-    let lost_thresh = pto.as_secs_f64() * transport_config.packet_lost_threshold_factor;
-
-    // Convert lost threshold to sample index
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "all floats involved should be positive"
-    )]
-    #[expect(clippy::cast_possible_truncation, reason = "truncation is acceptable")]
-    let lost_thresh_index = (lost_thresh * sampling_rate) as usize;
-
-    // Find the most recent sample that falls within the loss threshold
-    let lost_thresh_sample = stats
-        .iter()
-        .rev()
-        .enumerate()
-        .find(|(index, _)| *index <= lost_thresh_index)
-        .map_or_else(
-            || stats.iter().next_back().copied().unwrap_or_default(),
-            |(_, sample)| *sample,
+    pub(crate) fn record(&mut self, seq: PacketSeq, now: Instant) {
+        self.packets.insert(
+            seq.0.0,
+            PacketOutcome {
+                flushed_at: now,
+                acked: false,
+            },
         );
-
-    // Calculate total packets sent and acked in the window
-    let total_packets_sent =
-        session.stats.packets_sent.0 - lost_thresh_sample.packets_total.packets_sent.0;
-    let total_packets_acked =
-        transport.stats().packet_acks_recv.0 - lost_thresh_sample.msgs_total.packet_acks_recv.0;
-
-    // Avoid division by zero and handle edge cases
-    if total_packets_sent == 0 {
-        return 0.0;
+        self.latest = Some(seq);
     }
 
-    // Calculate packet loss percentage
-    #[expect(clippy::cast_precision_loss, reason = "precision loss is acceptable")]
-    let packet_loss = 1.0 - (total_packets_acked as f64 / total_packets_sent as f64);
+    pub(crate) fn ack(&mut self, seq: PacketSeq) {
+        if let Some(packet) = self.packets.get_mut(seq.0.0) {
+            packet.acked = true;
+        }
+    }
 
-    // Clamp to ensure it's between 0 and 1
-    packet_loss.clamp(0.0, 1.0)
+    fn loss(&self, now: Instant, threshold_sec: f64) -> f64 {
+        let Some(latest) = self.latest else {
+            return 0.0;
+        };
+        let mut eligible = 0u32;
+        let mut lost = 0u32;
+        for offset in 0..LOSS_HISTORY_CAP {
+            let seq = latest - PacketSeq::new(offset);
+            let Some(packet) = self.packets.get(seq.0.0) else {
+                continue;
+            };
+            if now
+                .saturating_duration_since(packet.flushed_at)
+                .as_secs_f64()
+                >= threshold_sec
+            {
+                #[expect(
+                    clippy::arithmetic_side_effects,
+                    reason = "at most 1024 packets are counted"
+                )]
+                {
+                    eligible += 1;
+                    lost += u32::from(!packet.acked);
+                }
+            }
+        }
+        if eligible == 0 {
+            0.0
+        } else {
+            f64::from(lost) / f64::from(eligible)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![expect(
+        clippy::float_cmp,
+        reason = "expected loss ratios are exactly representable: 0, 0.5, and 1"
+    )]
+
+    use super::SessionStatsSampling;
+
+    #[test]
+    fn one_sample_history() {
+        assert_eq!(SessionStatsSampling::new(0.5, 2.0).history_cap, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "history must hold at least one sample")]
+    fn rejects_history_truncating_to_zero() {
+        let _ = SessionStatsSampling::new(0.5, 1.0);
+    }
+
+    #[test]
+    fn loss_waits_for_packet_age_and_accepts_late_acks() {
+        let now = bevy_platform::time::Instant::now();
+        let mut history = super::PacketLossHistory::new(now);
+        assert_eq!(history.loss(now, 1.0), 0.0);
+        let seq = crate::packet::PacketSeq::new(0);
+        history.record(seq, now);
+        assert_eq!(history.loss(now, 1.0), 0.0);
+        let later = now.checked_add(core::time::Duration::from_secs(1)).unwrap();
+        assert_eq!(history.loss(later, 1.0), 1.0);
+        history.ack(seq);
+        assert_eq!(history.loss(later, 1.0), 0.0);
+        history.ack(seq); // duplicate ACKs must not change the denominator
+        assert_eq!(history.loss(later, 1.0), 0.0);
+    }
+
+    #[test]
+    fn newer_acks_do_not_hide_older_loss() {
+        let now = bevy_platform::time::Instant::now();
+        let later = now.checked_add(core::time::Duration::from_secs(1)).unwrap();
+        let mut history = super::PacketLossHistory::new(now);
+        for seq in 0..2 {
+            history.record(crate::packet::PacketSeq::new(seq), now);
+        }
+        history.record(crate::packet::PacketSeq::new(2), later);
+        // ACKs arrive out of order; packet 0 is still missing.
+        history.ack(crate::packet::PacketSeq::new(2));
+        history.ack(crate::packet::PacketSeq::new(1));
+        assert_eq!(history.loss(later, 1.0), 0.5);
+    }
+
+    #[test]
+    fn eviction_and_sequence_wrap_preserve_packet_identity() {
+        let now = bevy_platform::time::Instant::now();
+        let later = now.checked_add(core::time::Duration::from_secs(1)).unwrap();
+        let mut history = super::PacketLossHistory::new(now);
+        let first = crate::packet::PacketSeq::new(u16::MAX);
+        history.record(first, now);
+        assert_eq!(history.loss(later, 1.0), 1.0);
+        for offset in 1..=super::LOSS_HISTORY_CAP {
+            let seq = first + crate::packet::PacketSeq::new(offset);
+            history.record(seq, later);
+        }
+        // The old loss was evicted, but the new packets are still in flight.
+        assert_eq!(history.loss(later, 1.0), 0.0);
+        history.ack(first); // must not ACK the packet now occupying its slot
+        assert_eq!(history.loss(later, 0.0), 1.0);
+        for offset in 1..=super::LOSS_HISTORY_CAP {
+            history.ack(first + crate::packet::PacketSeq::new(offset));
+        }
+        assert_eq!(history.loss(later, 0.0), 0.0);
+    }
+
+    #[test]
+    fn loss_tracks_flushes_and_received_acknowledgements() {
+        use {
+            crate::{
+                Transport, TransportConfig,
+                lane::LaneKind,
+                packet::{Acknowledge, PacketHeader, PacketSeq},
+            },
+            aeronet_io::Session,
+            bevy_platform::time::Instant,
+            octs::Write,
+        };
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut transport = Transport::new(
+            &session,
+            [LaneKind::ReliableOrdered],
+            [LaneKind::ReliableOrdered],
+            now,
+        )
+        .unwrap();
+        let config = TransportConfig {
+            packet_lost_threshold_factor: 0.0,
+            ..TransportConfig::default()
+        };
+        // Even a header-only packet participates in packet-loss estimation.
+        assert_eq!(crate::send::flush_on(&mut transport, now, 1024).count(), 1);
+        assert_eq!(super::compute_loss(&transport, &config, now), 1.0);
+        let mut acks = Acknowledge::default();
+        acks.ack(PacketSeq::new(0));
+        let mut packet = Vec::new();
+        packet
+            .write(PacketHeader {
+                seq: PacketSeq::new(0),
+                acks,
+            })
+            .unwrap();
+        crate::recv::recv_on(&mut transport, &config, now, &packet).unwrap();
+        assert_eq!(transport.num_unacked_packets(), 0);
+        // ACKed outcomes survive removal of retransmission metadata.
+        assert_eq!(super::compute_loss(&transport, &config, now), 0.0);
+    }
 }
