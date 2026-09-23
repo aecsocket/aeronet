@@ -8,7 +8,7 @@
 //! [`Session`]: crate::Session
 
 use {
-    crate::connection::Disconnect,
+    crate::{BevyError, connection::Disconnect},
     alloc::{string::String, vec::Vec},
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -162,8 +162,8 @@ pub enum CloseReason {
     /// down.
     ///
     /// If you want to get the concrete error type, use
-    /// [`anyhow::Error::downcast_ref`].
-    ByError(anyhow::Error),
+    /// [`BevyError::downcast_ref`].
+    ByError(BevyError),
 }
 
 impl CloseReason {
@@ -175,14 +175,14 @@ impl CloseReason {
 
     /// Creates a [`CloseReason::ByError`] from the given reason.
     #[must_use]
-    pub fn by_error(reason: impl Into<anyhow::Error>) -> Self {
+    pub fn by_error(reason: impl Into<BevyError>) -> Self {
         Self::ByError(reason.into())
     }
 
     /// If this value is a [`CloseReason::ByError`], creates a new
     /// [`CloseReason::ByError`] using the mapping function.
     #[must_use]
-    pub fn map_err(self, f: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
+    pub fn map_err(self, f: impl FnOnce(BevyError) -> BevyError) -> Self {
         match self {
             Self::ByUser(reason) => Self::ByUser(reason),
             Self::ByError(err) => Self::ByError(f(err)),
@@ -190,7 +190,7 @@ impl CloseReason {
     }
 }
 
-impl<E: Into<anyhow::Error>> From<E> for CloseReason {
+impl<E: Into<BevyError>> From<E> for CloseReason {
     fn from(value: E) -> Self {
         Self::by_error(value)
     }

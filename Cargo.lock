@@ -141,7 +141,6 @@ dependencies = [
 name = "aeronet_io"
 version = "0.21.0"
 dependencies = [
- "anyhow",
  "bevy_app",
  "bevy_ecs",
  "bevy_platform",
@@ -192,7 +191,6 @@ name = "aeronet_steam"
 version = "0.21.0"
 dependencies = [
  "aeronet_io",
- "anyhow",
  "bevy",
  "bevy_app",
  "bevy_ecs",
@@ -286,7 +284,6 @@ version = "0.21.0"
 dependencies = [
  "aeronet_io",
  "aeronet_tokio_runtime",
- "anyhow",
  "base64 0.22.1",
  "bevy",
  "bevy_app",
@@ -485,12 +482,6 @@ dependencies = [
  "once_cell_polyfill",
  "windows-sys 0.61.2",
 ]
-
-[[package]]
-name = "anyhow"
-version = "1.0.104"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "approx"

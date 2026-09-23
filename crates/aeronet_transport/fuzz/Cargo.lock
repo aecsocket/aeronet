@@ -6,7 +6,6 @@ version = 4
 name = "aeronet_io"
 version = "0.21.0"
 dependencies = [
- "anyhow",
  "bevy_app",
  "bevy_ecs",
  "bevy_platform",
@@ -44,12 +43,6 @@ dependencies = [
  "arbitrary",
  "libfuzzer-sys",
 ]
-
-[[package]]
-name = "anyhow"
-version = "1.0.97"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
 
 [[package]]
 name = "arbitrary"

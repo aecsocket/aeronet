@@ -50,7 +50,6 @@ tracing = { workspace = true }
 xwt-core = { workspace = true }
 
 [dev-dependencies]
-anyhow = { workspace = true }
 bevy = { workspace = true }
 bevy_egui = { workspace = true }
 
