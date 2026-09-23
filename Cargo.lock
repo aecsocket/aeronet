@@ -111,7 +111,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet"
-version = "0.21.0"
+version = "0.22.0-rc.1"
 dependencies = [
  "aeronet_io",
  "aeronet_transport",
@@ -121,7 +121,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_channel"
-version = "0.21.0"
+version = "0.22.0-rc.1"
 dependencies = [
  "aeronet_io",
  "bevy",
@@ -139,7 +139,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_io"
-version = "0.21.0"
+version = "0.22.0-rc.1"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_iroh"
-version = "0.21.0"
+version = "0.22.0-rc.1"
 dependencies = [
  "aeronet_io",
  "aeronet_tokio_runtime",
@@ -170,7 +170,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_replicon"
-version = "0.21.0"
+version = "0.22.0-rc.1"
 dependencies = [
  "aeronet_channel",
  "aeronet_io",
@@ -188,7 +188,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_steam"
-version = "0.21.0"
+version = "0.22.0-rc.1"
 dependencies = [
  "aeronet_io",
  "bevy",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_tokio_runtime"
-version = "0.21.0"
+version = "0.22.0-rc.1"
 dependencies = [
  "bevy_ecs",
  "gloo-timers",
@@ -218,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_transport"
-version = "0.21.0"
+version = "0.22.0-rc.1"
 dependencies = [
  "aeronet_io",
  "arbitrary",
@@ -247,11 +247,11 @@ dependencies = [
 
 [[package]]
 name = "aeronet_webrtc"
-version = "0.0.1"
+version = "0.22.0-rc.1"
 
 [[package]]
 name = "aeronet_websocket"
-version = "0.21.0"
+version = "0.22.0-rc.1"
 dependencies = [
  "aeronet_io",
  "aeronet_tokio_runtime",
@@ -280,7 +280,7 @@ dependencies = [
 
 [[package]]
 name = "aeronet_webtransport"
-version = "0.21.0"
+version = "0.22.0-rc.1"
 dependencies = [
  "aeronet_io",
  "aeronet_tokio_runtime",

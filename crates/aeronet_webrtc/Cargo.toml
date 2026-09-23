@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_webrtc"
-version = "0.0.1"
+version = "0.22.0-rc.1"
 edition.workspace = true
 rust-version.workspace = true
 description = "WebRTC IO layer implementation for `aeronet`"

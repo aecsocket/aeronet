@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_channel"
-version = "0.21.0"
+version = "0.22.0-rc.1"
 edition.workspace = true
 description = "In-memory MPSC channel IO layer implementation for `aeronet`"
 repository.workspace = true
