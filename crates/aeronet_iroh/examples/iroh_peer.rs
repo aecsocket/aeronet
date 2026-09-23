@@ -133,7 +133,8 @@ fn reply(endpoints: Query<&IrohEndpoint>, mut sessions: Query<(&IrohSession, &mu
             .get(iroh_session.endpoint())
             .expect("session endpoint should exist");
 
-        // Explicit dereference lets us access the disjoint receive and send fields.
+        // Explicit dereference lets us access the disjoint receive and send
+        // fields.
         let session = &mut *session;
         for packet in session.recv.drain(..) {
             let message =

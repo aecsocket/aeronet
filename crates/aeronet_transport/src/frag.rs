@@ -312,7 +312,8 @@ impl FragmentReceiver {
         }
         buf.payload[start..end].copy_from_slice(payload);
 
-        // only update the buffer meta once we know there are no more error paths
+        // only update the buffer meta once we know there are no more error
+        // paths
         buf.frag_indices_recv.set(frag_index, true);
         buf.max_frag_index = buf.max_frag_index.max(frag_index);
 

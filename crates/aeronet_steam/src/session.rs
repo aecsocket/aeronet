@@ -111,8 +111,8 @@ fn init_io(
         // - init authentication
         // - create poll group
         //
-        // this means that if the poll group is removed, we re-init authentication
-        // but this should be fine, I think
+        // this means that if the poll group is removed, we re-init
+        // authentication but this should be fine, I think
 
         // https://github.com/cBournhonesque/lightyear/issues/243
         steam
@@ -156,7 +156,8 @@ fn poll_io(
             Ok(NetworkingConnectionState::Connected) => {
                 // make sure we don't replace any existing session
                 // since `Connected` could theoretically be called twice,
-                // and we may make a `Session` manually *before* receiving this event
+                // and we may make a `Session` manually *before* receiving this
+                // event
                 let mtu = io.mtu;
                 commands
                     .entity(entity)
@@ -243,14 +244,18 @@ fn poll_messages(
                 //
                 // This code is UNSOUND, because the message is of length 0,
                 // this panics due to debug assertions in `std`
-                // (and in release, will fail silently, causing memory unsafety!)
+                // (and in release, will fail silently, causing memory
+                // unsafety!)
                 //
-                // `steamworks-rs` maintainer is unresponsive, and there hasn't been an update
-                // in a long time (as of 28 Mar 2025). We should make a `steam-sockets` crate
-                // which provides bindings for only the Steam socket functionality, and irons
-                // out all of the issues of `steamworks-rs`.
+                // `steamworks-rs` maintainer is unresponsive, and there hasn't
+                // been an update in a long time (as of 28 Mar
+                // 2025). We should make a `steam-sockets` crate
+                // which provides bindings for only the Steam socket
+                // functionality, and irons out all of the
+                // issues of `steamworks-rs`.
                 //
-                // This would also let us fix a bunch of other miscellaneous issues.
+                // This would also let us fix a bunch of other miscellaneous
+                // issues.
                 let payload = Bytes::from(packet.data().to_vec());
 
                 session.stats.packets_recv += 1;

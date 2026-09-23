@@ -395,7 +395,8 @@ fn recv_on_lane(
         }
         LaneState::UnreliableSequenced { pending } => {
             if msg_seq < *pending {
-                // msg is older than the message we're expecting to get next, drop it
+                // msg is older than the message we're expecting to get next,
+                // drop it
                 Either::Left(None)
             } else {
                 // msg is the one we're expecting to get or newer, return it

@@ -342,10 +342,11 @@ pub fn flush_on(
 
         // make a buffer for the packet
         // note: we may want to preallocate some memory for this,
-        // and have it be user-configurable, but I don't want to overcomplicate it
-        // also, we don't preallocate `mtu` bytes, because that might be a big length
-        // e.g. Steamworks already fragments messages, so we don't fragment messages
-        // ourselves, leading to very large `mtu`s (~512KiB)
+        // and have it be user-configurable, but I don't want to overcomplicate
+        // it also, we don't preallocate `mtu` bytes, because that might
+        // be a big length e.g. Steamworks already fragments messages,
+        // so we don't fragment messages ourselves, leading to very
+        // large `mtu`s (~512KiB)
         let mut packet = Vec::<u8>::new();
 
         // we can't put more than either `mtu` or `bytes_left`

@@ -109,9 +109,10 @@ fn setup_connection(mut commands: Commands) {
         {
             // Since our demo server uses self-signed certificates, we need to
             // explicitly configure the client to accept those certificates.
-            // We can do this by disabling certificate validation entirely, but in
-            // production you should use the default certificate validation, and
-            // generate real certificates using a root CA.
+            // We can do this by disabling certificate validation entirely, but
+            // in production you should use the default certificate
+            // validation, and generate real certificates using a
+            // root CA.
             ClientConfig::builder().with_no_cert_validation()
         }
     };
@@ -199,8 +200,8 @@ fn recv_messages(
         for msg in transport.recv.msgs.drain() {
             let payload = msg.payload;
 
-            // `payload` is a `Vec<u8>` - we have full ownership of the bytes received.
-            // We'll turn it into a UTF-8 string.
+            // `payload` is a `Vec<u8>` - we have full ownership of the bytes
+            // received. We'll turn it into a UTF-8 string.
             // We don't care about the lane index.
             let text = String::from_utf8(payload).unwrap_or_else(|_| "(not UTF-8)".into());
             ui_state.log.push(format!("> {text}"));
@@ -241,7 +242,8 @@ fn ui(
 
             if ui.button("Disconnect").clicked() {
                 // Here's how you disconnect the session with a given reason.
-                // Don't just remove components or despawn entities - use `Disconnect` instead!
+                // Don't just remove components or despawn entities - use
+                // `Disconnect` instead!
                 commands.trigger(Disconnect::new(entity, "pressed disconnect button"));
             }
 

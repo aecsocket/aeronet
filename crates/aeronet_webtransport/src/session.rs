@@ -400,9 +400,11 @@ async fn send_loop(
                     Ok(())
                 }
                 Err(SendDatagramError::TooLarge) => {
-                    // the backend constantly informs the frontend about changes in the path MTU
-                    // so hopefully the frontend will realise its packets are exceeding MTU,
-                    // and shrink them accordingly; therefore this is just a one-off error
+                    // the backend constantly informs the frontend about changes
+                    // in the path MTU so hopefully the
+                    // frontend will realise its packets are exceeding MTU,
+                    // and shrink them accordingly; therefore this is just a
+                    // one-off error
                     let mtu = conn.max_datagram_size();
                     tracing::debug!(
                         packet_len,
@@ -412,8 +414,9 @@ async fn send_loop(
                     Ok(())
                 }
                 Err(SendDatagramError::UnsupportedByPeer) => {
-                    // this should be impossible, since we checked that the client does support
-                    // datagrams before connecting, but we'll error-case it anyway
+                    // this should be impossible, since we checked that the
+                    // client does support datagrams before
+                    // connecting, but we'll error-case it anyway
                     Err(SessionError::DatagramsNotSupported)
                 }
             }?;
@@ -428,7 +431,8 @@ fn get_disconnect_reason(err: SessionError) -> DisconnectReason {
         // I suspect we need this fixed first
         // https://github.com/BiagioFesta/wtransport/issues/182
         //
-        // Tested: when the server disconnects us, all we get is "Connection lost."
+        // Tested: when the server disconnects us, all we get is "Connection
+        // lost."
         DisconnectReason::by_error(err)
     }
 
