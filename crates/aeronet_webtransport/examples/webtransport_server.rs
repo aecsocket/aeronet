@@ -71,7 +71,7 @@ fn server_config(identity: wtransport::Identity) -> ServerConfig {
 }
 
 fn on_opened(
-    trigger: On<Add, Server>,
+    trigger: On<Add<Server>>,
     servers: Query<&LocalAddr>,
     mut commands: Commands,
 ) {
@@ -99,7 +99,7 @@ fn on_session_request(mut request: On<SessionRequest>) {
     request.respond(SessionResponse::Accepted);
 }
 
-fn on_connected(trigger: On<Add, Session>, clients: Query<&ChildOf>) {
+fn on_connected(trigger: On<Add<Session>>, clients: Query<&ChildOf>) {
     let client = trigger.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;

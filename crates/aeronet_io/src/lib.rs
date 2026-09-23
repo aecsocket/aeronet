@@ -8,6 +8,11 @@ pub mod connection;
 pub mod packet;
 pub mod server;
 
+pub use {bevy_ecs::error::BevyError, bytes};
+
+/// A [`core::result::Result`] that defaults to [`BevyError`].
+pub type Result<T, E = BevyError> = core::result::Result<T, E>;
+
 use {
     alloc::vec::Vec,
     bevy_app::prelude::*,
@@ -17,7 +22,6 @@ use {
     bytes::Bytes,
     packet::{MtuTooSmall, PacketStats, RecvPacket},
 };
-pub use {anyhow, bytes};
 
 /// Sets up the IO layer functionality.
 ///

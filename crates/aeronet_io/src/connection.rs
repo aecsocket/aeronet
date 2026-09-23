@@ -1,7 +1,7 @@
 //! Logic for connection and disconnection of a [`Session`].
 
 use {
-    crate::{Session, SessionEndpoint},
+    crate::{BevyError, Session, SessionEndpoint},
     alloc::string::String,
     bevy_app::prelude::*,
     bevy_ecs::prelude::*,
@@ -107,8 +107,8 @@ pub enum DisconnectReason {
     /// - ..and more
     ///
     /// If you want to get the concrete error type, use
-    /// [`anyhow::Error::downcast_ref`].
-    ByError(anyhow::Error),
+    /// [`BevyError::downcast_ref`].
+    ByError(BevyError),
 }
 
 impl DisconnectReason {
@@ -126,14 +126,14 @@ impl DisconnectReason {
 
     /// Creates a [`DisconnectReason::ByError`] from the given reason.
     #[must_use]
-    pub fn by_error(reason: impl Into<anyhow::Error>) -> Self {
+    pub fn by_error(reason: impl Into<BevyError>) -> Self {
         Self::ByError(reason.into())
     }
 
     /// If this value is a [`DisconnectReason::ByError`], creates a new
     /// [`DisconnectReason::ByError`] using the mapping function.
     #[must_use]
-    pub fn map_err(self, f: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
+    pub fn map_err(self, f: impl FnOnce(BevyError) -> BevyError) -> Self {
         match self {
             Self::ByUser(reason) => Self::ByUser(reason),
             Self::ByPeer(reason) => Self::ByPeer(reason),
@@ -142,7 +142,7 @@ impl DisconnectReason {
     }
 }
 
-impl<E: Into<anyhow::Error>> From<E> for DisconnectReason {
+impl<E: Into<BevyError>> From<E> for DisconnectReason {
     fn from(value: E) -> Self {
         Self::by_error(value)
     }
@@ -185,12 +185,12 @@ pub struct LocalAddr(pub SocketAddr);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, Component)]
 pub struct PeerAddr(pub SocketAddr);
 
-fn on_connecting(trigger: On<Add, SessionEndpoint>) {
+fn on_connecting(trigger: On<Add<SessionEndpoint>>) {
     let entity = trigger.event_target();
     debug!("{entity} connecting");
 }
 
-fn on_connected(trigger: On<Add, Session>) {
+fn on_connected(trigger: On<Add<Session>>) {
     let entity = trigger.event_target();
     debug!("{entity} connected");
 }

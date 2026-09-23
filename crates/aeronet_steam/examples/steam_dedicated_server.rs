@@ -107,7 +107,7 @@ fn open_server(mut commands: Commands) {
         .queue(SteamNetServer::open(SessionConfig::default(), target));
 }
 
-fn on_opened(trigger: On<Add, Server>, servers: Query<&LocalAddr>) {
+fn on_opened(trigger: On<Add<Server>>, servers: Query<&LocalAddr>) {
     let server = trigger.event_target();
     if let Ok(local_addr) = servers.get(server) {
         info!("{server} opened on {:?}", **local_addr);
@@ -133,7 +133,7 @@ fn on_session_request(mut request: On<SessionRequest>, clients: Query<&ChildOf>)
     request.respond(SessionResponse::Accepted);
 }
 
-fn on_connecting(trigger: On<Add, SessionEndpoint>, clients: Query<&ChildOf>) {
+fn on_connecting(trigger: On<Add<SessionEndpoint>>, clients: Query<&ChildOf>) {
     let client = trigger.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;
@@ -142,7 +142,7 @@ fn on_connecting(trigger: On<Add, SessionEndpoint>, clients: Query<&ChildOf>) {
     info!("{client} connecting to {server}");
 }
 
-fn on_connected(trigger: On<Add, Session>, clients: Query<&ChildOf>) {
+fn on_connected(trigger: On<Add<Session>>, clients: Query<&ChildOf>) {
     let client = trigger.event_target();
     let Ok(&ChildOf(server)) = clients.get(client) else {
         return;

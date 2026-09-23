@@ -3,7 +3,7 @@
 
 use {
     aeronet_io::{
-        Session, SessionEndpoint,
+        Result, Session, SessionEndpoint,
         connection::{Disconnect, DisconnectReason, Disconnected, LocalAddr, PeerAddr},
         packet::PacketRtt,
     },
@@ -47,7 +47,7 @@ fn setup_camera(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
 
-fn on_connecting(trigger: On<Add, SessionEndpoint>, names: Query<&Name>, mut log: ResMut<Log>) {
+fn on_connecting(trigger: On<Add<SessionEndpoint>>, names: Query<&Name>, mut log: ResMut<Log>) {
     let target = trigger.event_target();
     let name = names
         .get(target)
@@ -55,7 +55,7 @@ fn on_connecting(trigger: On<Add, SessionEndpoint>, names: Query<&Name>, mut log
     log.push(format!("{name} connecting"));
 }
 
-fn on_connected(trigger: On<Add, Session>, names: Query<&Name>, mut log: ResMut<Log>) {
+fn on_connected(trigger: On<Add<Session>>, names: Query<&Name>, mut log: ResMut<Log>) {
     let target = trigger.event_target();
     let name = names
         .get(target)
@@ -142,10 +142,10 @@ fn global_ui(
 }
 
 #[cfg(target_family = "wasm")]
-fn client_config(cert_hash: String) -> Result<ClientConfig, anyhow::Error> {
+fn client_config(cert_hash: String) -> Result<ClientConfig> {
     use {
         aeronet_webtransport::xwt_web::{CertificateHash, HashAlgorithm},
-        anyhow::bail,
+        bevy_ecs::bail,
     };
 
     let server_certificate_hashes = if cert_hash.is_empty() {
@@ -157,7 +157,7 @@ fn client_config(cert_hash: String) -> Result<ClientConfig, anyhow::Error> {
                 value: Vec::from(hash),
             }],
             Err(err) => {
-                bail!("Failed to read certificate hash from string: {err:?}");
+                bail!("Failed to read certificate hash from string: {:?}", err);
             }
         }
     };
@@ -169,7 +169,7 @@ fn client_config(cert_hash: String) -> Result<ClientConfig, anyhow::Error> {
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn client_config(cert_hash: String) -> Result<ClientConfig, anyhow::Error> {
+fn client_config(cert_hash: String) -> Result<ClientConfig> {
     use {aeronet_webtransport::wtransport::tls::Sha256Digest, core::time::Duration};
 
     let config = ClientConfig::builder().with_bind_default();

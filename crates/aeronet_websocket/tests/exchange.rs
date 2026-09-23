@@ -38,7 +38,7 @@ fn test_exchange(port: u16, msg: &'static [u8]) {
                 },
             )
             .add_observer(
-                |trigger: On<Add, Session>, mut session: Query<&mut Session>| {
+                |trigger: On<Add<Session>>, mut session: Query<&mut Session>| {
                     let mut session = session.get_mut(trigger.entity).unwrap();
                     session.send.push(Bytes::new());
                 },
@@ -63,7 +63,7 @@ fn test_exchange(port: u16, msg: &'static [u8]) {
 
         // send packet on connect
         entity.observe(
-            move |trigger: On<Add, Session>, mut session: Query<&mut Session>| {
+            move |trigger: On<Add<Session>>, mut session: Query<&mut Session>| {
                 let mut session = session.get_mut(trigger.entity).unwrap();
                 session.send.push(Bytes::from_static(msg));
             },

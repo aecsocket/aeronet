@@ -41,7 +41,7 @@ impl Plugin for IrohEndpointPlugin {
 ///
 /// Use [`IrohEndpoint::open`] to start opening an endpoint. The component is
 /// added once the endpoint has successfully bound and is ready. You can observe
-/// `On<Add, IrohEndpoint>` to learn when this happens.
+/// `On<Add<IrohEndpoint>>` to learn when this happens.
 ///
 /// When a peer attempts to connect, the endpoint will trigger a
 /// [`SessionRequest`](session::SessionRequest). Your app **must** observe this,

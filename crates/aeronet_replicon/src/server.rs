@@ -142,7 +142,7 @@ fn update_state(
 }
 
 fn on_connected(
-    trigger: On<Add, Session>,
+    trigger: On<Add<Session>>,
     sessions: Query<&Session>,
     child_of: Query<&ChildOf>,
     open_servers: Query<(), OpenedServer>,
@@ -231,8 +231,8 @@ fn update_client_data(
     for (client, session, session_stats, connected_client, mut client_stats) in &mut clients {
         let stats = session_stats.last().copied().unwrap_or_default();
         let mtu = session.mtu();
-        // ConnectedClient is immutable, so it needs to be re-inserted when `max_size`
-        // changes.
+        // ConnectedClient is immutable, so it needs to be re-inserted when
+        // `max_size` changes.
         if connected_client.max_size != mtu {
             commands
                 .entity(client)

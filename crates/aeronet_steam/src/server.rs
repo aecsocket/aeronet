@@ -7,13 +7,12 @@ use {
         session::{SessionError, SteamNetIo, SteamNetSessionPlugin, entity_to_user_data},
     },
     aeronet_io::{
-        IoSystems, Session, SessionEndpoint,
+        IoSystems, Result, Session, SessionEndpoint,
         connection::LocalAddr,
         server::{CloseReason, Closed, Server, ServerEndpoint},
     },
-    anyhow::{Context, Result, bail},
     bevy_app::prelude::*,
-    bevy_ecs::prelude::*,
+    bevy_ecs::{bail, prelude::*},
     bevy_platform::{
         collections::{HashMap, hash_map::Entry},
         time::Instant,
@@ -414,7 +413,11 @@ fn on_connecting(
     let entry = match server_io.clients.entry(steam_id) {
         Entry::Occupied(entry) => {
             let client = entry.get();
-            bail!("steam ID {steam_id:?} is already mapped to client {client}");
+            bail!(
+                "steam ID {:?} is already mapped to client {}",
+                steam_id,
+                client
+            );
         }
         Entry::Vacant(entry) => entry,
     };
@@ -464,10 +467,10 @@ fn on_connected(
 }
 
 fn on_remove_client(
-    trigger: On<Remove, SteamNetServerClient>,
+    trigger: On<Remove<SteamNetServerClient>>,
     clients: Query<(&SteamNetServerClient, &ChildOf)>,
     mut servers: Query<&mut SteamNetServer>,
-) -> Result<(), BevyError> {
+) -> Result<()> {
     let entity = trigger.event_target();
     let (client_io, &ChildOf(server)) = clients
         .get(entity)

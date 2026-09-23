@@ -182,11 +182,12 @@ fn recv_input(
 
 fn apply_movement(time: Res<Time>, mut players: Query<(&PlayerInput, &mut PlayerPosition)>) {
     for (input, mut position) in &mut players {
-        // make sure to validate inputs and normalize on the authority (server) side,
-        // since we're accepting arbitrary client input
+        // make sure to validate inputs and normalize on the authority (server)
+        // side, since we're accepting arbitrary client input
         if let Some(movement) = input.movement.try_normalize() {
-            // only change `position` if we actually have a movement vector to apply
-            // this saves bandwidth; we don't replicate position if we don't change it
+            // only change `position` if we actually have a movement vector to
+            // apply this saves bandwidth; we don't replicate
+            // position if we don't change it
             **position += movement * time.delta_secs() * MOVE_SPEED;
         }
     }

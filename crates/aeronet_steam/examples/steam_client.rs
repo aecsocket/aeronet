@@ -56,7 +56,7 @@ fn setup_camera(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
 
-fn on_connecting(trigger: On<Add, SessionEndpoint>, names: Query<&Name>, mut log: ResMut<Log>) {
+fn on_connecting(trigger: On<Add<SessionEndpoint>>, names: Query<&Name>, mut log: ResMut<Log>) {
     let session = trigger.event_target();
     let name = names
         .get(session)
@@ -64,7 +64,7 @@ fn on_connecting(trigger: On<Add, SessionEndpoint>, names: Query<&Name>, mut log
     log.push(format!("{name} connecting"));
 }
 
-fn on_connected(trigger: On<Add, Session>, names: Query<&Name>, mut log: ResMut<Log>) {
+fn on_connected(trigger: On<Add<Session>>, names: Query<&Name>, mut log: ResMut<Log>) {
     let session = trigger.event_target();
     let name = names
         .get(session)

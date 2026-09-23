@@ -20,7 +20,7 @@ use {
         egui::{self, epaint::Hsva},
     },
     bevy_platform::time::Instant,
-    core::{hash::Hash, ops::RangeInclusive, time::Duration},
+    core::{fmt::Debug, hash::Hash, ops::RangeInclusive, time::Duration},
     itertools::Itertools,
     ringbuf::traits::Consumer,
     size_format::{BinaryPrefixes, PointSeparated, SizeFormatter},
@@ -509,7 +509,7 @@ fn graph_x(index: usize, sample_rate: f64) -> f64 {
     x
 }
 
-fn plot(history_sec: f64, id_salt: impl Hash) -> egui_plot::Plot<'static> {
+fn plot(history_sec: f64, id_salt: impl Hash + Debug) -> egui_plot::Plot<'static> {
     egui_plot::Plot::new(id_salt)
         .height(150.0)
         .view_aspect(2.5)

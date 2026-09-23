@@ -38,7 +38,7 @@ fn events_connect() {
 
     let mut app = app();
     app.init_resource::<WhoConnected>().add_observer(
-        |trigger: On<Add, Session>, mut who: ResMut<WhoConnected>| {
+        |trigger: On<Add<Session>>, mut who: ResMut<WhoConnected>| {
             who.0.push(trigger.event_target());
         },
     );

@@ -15,7 +15,6 @@ rustdoc-args = ["--cfg=docsrs_aeronet"]
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
-anyhow = { workspace = true }
 bevy_app = { workspace = true, features = ["bevy_reflect"] }
 bevy_ecs = { workspace = true, features = ["bevy_reflect"] }
 bevy_platform = { workspace = true, features = ["alloc"] }
@@ -39,7 +38,7 @@ bytes = { workspace = true, features = ["extra-platforms"] }
 [features]
 default = ["std"]
 ## Enables standard library support.
-std = ["anyhow/std", "bevy_platform/std", "bytes/std", "log/std"]
+std = ["bevy_platform/std", "bytes/std", "log/std"]
 
 [lints]
 workspace = true
