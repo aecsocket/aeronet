@@ -59,6 +59,9 @@ wtransport = { workspace = true }
 x509-cert = { workspace = true }
 xwt-wtransport = { workspace = true }
 
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+tokio = { workspace = true, features = ["rt", "net", "time"] }
+
 [target.'cfg(target_family = "wasm")'.dependencies]
 js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }

@@ -298,6 +298,7 @@ dependencies = [
  "futures",
  "js-sys",
  "spki",
+ "tokio",
  "tracing",
  "wasm-bindgen",
  "wtransport",
