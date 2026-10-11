@@ -25,6 +25,9 @@ pub mod size;
 pub mod visualizer;
 
 pub use aeronet_io as io;
+
+use bevy_time::{Real, Time};
+use core::time::Duration;
 use {
     aeronet_io::{
         IoSystems, Session,
@@ -77,7 +80,8 @@ impl Plugin for AeronetTransportPlugin {
                         .in_set(TransportSystems::Poll),
                 ),
             )
-            .add_systems(PostUpdate, send::flush.in_set(TransportSystems::Flush));
+            .add_systems(PostUpdate, send::flush.in_set(TransportSystems::Flush))
+            .init_resource::<MemoryLimitCheck>();
     }
 }
 
@@ -412,10 +416,42 @@ pub struct MemoryLimitExceeded {
     pub max: usize,
 }
 
+/// Resource containing the configuration of the [`check_memory_limit`] system
+/// You may want to modify this resource if [`Transform::memory_used`] is
+/// too expensive
+#[derive(Resource)]
+pub struct MemoryLimitCheck {
+    /// How often to check whether a session exceeds
+    /// [`TransportConfig::max_memory_usage`]
+    ///
+    /// - `duration`: check at most once per `duration`.
+    /// - `Duration::ZERO`: check every frame (previous behavior).
+    ///
+    /// By default, this is `Duration::ZERO`. You may want to change this
+    /// value because [`Transform::memory_used`] can be potentially expensive
+    /// to run every frame.
+    pub interval: Duration,
+}
+impl Default for MemoryLimitCheck {
+    fn default() -> Self {
+        Self {
+            interval: Duration::ZERO,
+        }
+    }
+}
+
 fn check_memory_limit(
     mut commands: Commands,
     sessions: Query<(Entity, &Transport, &TransportConfig)>,
+    time: Res<Time<Real>>,
+    mut last_check: Local<Option<Duration>>,
+    settings: Res<MemoryLimitCheck>,
 ) {
+    let now = time.elapsed();
+    if last_check.is_some_and(|last| now.saturating_sub(last) < settings.interval) {
+        return;
+    }
+    *last_check = Some(now);
     for (entity, transport, config) in &sessions {
         let mem_used = transport.memory_used();
         let mem_max = config.max_memory_usage;
