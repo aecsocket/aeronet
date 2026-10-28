@@ -79,6 +79,7 @@ all = { level = "warn", priority = -1 }
 alloc_instead_of_core = "warn"
 arithmetic_side_effects = "warn"
 indexing_slicing = "warn"
+map_unwrap_or = "allow"
 module_name_repetitions = "allow"
 needless_pass_by_value = "allow"
 nursery = { level = "warn", priority = -1 }
@@ -88,6 +89,7 @@ similar_names = "allow"
 std_instead_of_alloc = "warn"
 std_instead_of_core = "warn"
 too_many_arguments = "allow"
+too_many_lines = "allow"
 type_complexity = "allow"
 unwrap_used = "warn"
 
