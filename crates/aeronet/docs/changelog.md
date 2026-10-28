@@ -8,6 +8,7 @@ Version changelog.
   - `aeronet_websocket` no longer installs a crypto provider when its plugins are added; applications must install their selected provider themselves when both `ring` and `aws-lc-rs` are enabled (or when the default `aws-lc-rs` feature is disabled), otherwise TLS configuration will panic
 - Allow using dedicated Steam server sockets for `aeronet_steam`
 - Rework `Transport::memory_used` to not recalculate memory usage on each call
+- Fix WebTransport cancelling pending handshakes when frontend closes (<https://github.com/aecsocket/aeronet/pull/110>)
 - Many miscellaneous protocol fixes
 
 # 0.21.0
