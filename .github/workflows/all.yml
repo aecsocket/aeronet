@@ -6,13 +6,13 @@ on:
 
 jobs:
   typos:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v5
       - uses: crate-ci/typos@2a44449ff3410624a0fa2ea073c670e1c9236a40
 
   tombi:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v5
       - uses: tombi-toml/setup-tombi@23af0f0e4fcad609f048a37fb312714cd6b07741
