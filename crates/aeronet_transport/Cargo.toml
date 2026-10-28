@@ -1,6 +1,6 @@
 [package]
 name = "aeronet_transport"
-version = "0.22.0-rc.1"
+version = "0.22.0"
 edition.workspace = true
 rust-version.workspace = true
 description = "Transport layer implementation for `aeronet`"
@@ -20,7 +20,7 @@ ignored = ["bevy", "bevy_winit"]
 [dependencies]
 aeronet_io = { workspace = true }
 arbitrary = { workspace = true, optional = true }
-bevy = { version = "0.20.0-rc.1", default-features = false, features = ["bevy_extract"], optional = true }
+bevy = { version = "0.20.0", default-features = false, features = ["bevy_extract"], optional = true }
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_egui = { workspace = true, optional = true }

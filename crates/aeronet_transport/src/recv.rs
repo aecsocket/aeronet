@@ -353,7 +353,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
         // let's find what fragments that packet contained when we flushed it out
         .filter_map(move |acked_seq| {
             flushed_packets
-                .remove_with(acked_seq.0 .0, FlushedPacket::new(recv_at))
+                .remove_with(acked_seq.0.0, FlushedPacket::new(recv_at))
                 .map(|packet| (acked_seq, packet))
         })
         .flat_map(move |(acked_seq, packet)| {
@@ -361,7 +361,10 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
             rtt.update(packet_rtt);
 
             let rtt_now = rtt.get();
-            trace!("Got peer ack for packet {} - packet RTT: {packet_rtt:?} / RTT now: {rtt_now:?}", acked_seq.0.0);
+            trace!(
+                "Got peer ack for packet {} - packet RTT: {packet_rtt:?} / RTT now: {rtt_now:?}",
+                acked_seq.0.0
+            );
 
             *packet_acks_recv += 1;
             Box::into_iter(packet.frags)
@@ -372,8 +375,8 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
             let lane = tx_lanes
                 .get_mut(lane_index)
                 .expect("frag path should point into a valid lane index");
-            // fallible instead of panicking, because these messages may have already been
-            // removed by a previous ack that we received
+            // fallible instead of panicking, because these messages may have
+            // already been removed by a previous ack that we received
             let msg = lane.sent_msgs.get_mut(&frag_path.msg_seq)?;
             let frag_opt = msg.frags.get_mut(usize::from(frag_path.frag_index))?;
             // take this fragment out so it stops being resent
@@ -385,7 +388,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
                 *msgs_acks_recv += 1;
                 Some(MessageKey {
                     lane: frag_path.lane_index,
-                    seq: frag_path.msg_seq
+                    seq: frag_path.msg_seq,
                 })
             } else {
                 None
