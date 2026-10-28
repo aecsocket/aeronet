@@ -24,7 +24,7 @@ use {
         time::Instant,
     },
     bevy_time::{Real, Time},
-    core::{iter, num::Saturating},
+    core::{iter, num::Saturating, sync::atomic::Ordering},
     derive_more::{Display, Error, From},
     log::trace,
     octs::{Bytes, EncodeLen, Write},
@@ -37,6 +37,7 @@ pub struct TransportSend {
     pub(crate) msgs_sent: Saturating<usize>,
     pub(crate) max_frag_len: MinSize,
     pub(crate) lanes: Box<[SendLane]>,
+    sent_msgs_size: usize,
     bytes_bucket: TokenBucket,
     next_packet_seq: PacketSeq,
     error: Option<TransportSendError>,
@@ -60,7 +61,7 @@ pub(crate) struct SentMessage {
 pub(crate) struct SentFragment {
     position: FragmentPosition,
     #[typesize(with = FragmentPayload::len_usize)]
-    payload: FragmentPayload,
+    pub(crate) payload: FragmentPayload,
     #[typesize(with = crate::size::of_instant)]
     sent_at: Instant,
     #[typesize(with = crate::size::of_instant)]
@@ -84,6 +85,7 @@ impl TransportSend {
                     next_msg_seq: MessageSeq::default(),
                 })
                 .collect(),
+            sent_msgs_size: 0,
             bytes_bucket: TokenBucket::new(usize::MAX),
             next_packet_seq: PacketSeq::default(),
             error: None,
@@ -220,6 +222,10 @@ impl TransportSend {
                 frags
             };
 
+            self.sent_msgs_size = frags.iter().fold(self.sent_msgs_size, |size, frag| {
+                size.checked_add(usize::from(frag.payload.len()))
+                    .expect("sent message payload bytes should fit in usize")
+            });
             entry.insert(SentMessage {
                 frags: frags.into_iter().map(Some).collect(),
             });
@@ -371,6 +377,7 @@ pub fn flush_on(
         // collect the paths of the frags we want to put into this packet
         // so that we can track which ones have been acked later
         let mut packet_frags = Vec::new();
+
         for path_opt in &mut frag_paths {
             let Some(path) = path_opt else {
                 continue;
@@ -384,9 +391,7 @@ pub fn flush_on(
                 &mut bytes_left,
                 &mut packet,
                 path,
-            )
-            .is_ok()
-            {
+            ) == Ok(()) {
                 // if we successfully wrote this frag out,
                 // remove it from the candidate frag paths
                 // and track that this frag has been sent out in this packet
@@ -406,13 +411,24 @@ pub fn flush_on(
             packet_frags.len()
         );
         transport.packet_loss.record(packet_seq, now);
-        transport.flushed_packets.insert(
+        let packet_frags = packet_frags.into_boxed_slice();
+        let packet_bytes = core::mem::size_of_val(packet_frags.as_ref());
+        let old = transport.flushed_packets.insert(
             packet_seq.0.0,
             FlushedPacket {
                 flushed_at: now,
-                frags: packet_frags.into_boxed_slice(),
+                frags: packet_frags,
             },
         );
+        if let Some(old) = old {
+            transport.flushed_packets_size.fetch_sub(
+                core::mem::size_of_val(old.frags.as_ref()),
+                Ordering::Relaxed,
+            );
+        }
+        transport
+            .flushed_packets_size
+            .fetch_add(packet_bytes, Ordering::Relaxed);
 
         transport.send.next_packet_seq += PacketSeq::new(1);
         sent_packet_yet = true;

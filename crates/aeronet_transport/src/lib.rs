@@ -36,7 +36,7 @@ use {
     bevy_ecs::{prelude::*, schedule::SystemSet},
     bevy_platform::time::Instant,
     bevy_reflect::Reflect,
-    core::num::Saturating,
+    core::{num::Saturating, sync::atomic::AtomicUsize},
     derive_more::{Add, AddAssign, Display, Error, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
     log::warn,
@@ -117,6 +117,7 @@ impl Plugin for AeronetTransportPlugin {
 pub struct Transport {
     // shared
     flushed_packets: SeqBuf<FlushedPacket, 1024>,
+    flushed_packets_size: AtomicUsize,
     packet_loss: sampling::PacketLossHistory,
     msgs_recv: Saturating<usize>,
     packet_acks_recv: Saturating<usize>,
@@ -266,6 +267,7 @@ impl Transport {
         let max_frag_len = MinSize::MAX.min_of(max_frag_len);
         Ok(Self {
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
+            flushed_packets_size: AtomicUsize::new(0),
             packet_loss: sampling::PacketLossHistory::new(now),
             msgs_recv: Saturating(0),
             packet_acks_recv: Saturating(0),

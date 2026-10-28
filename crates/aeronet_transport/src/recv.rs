@@ -20,7 +20,11 @@ use {
         collections::{HashMap, HashSet},
         time::Instant,
     },
-    core::{iter, num::Saturating},
+    core::{
+        iter,
+        num::Saturating,
+        sync::atomic::{AtomicUsize, Ordering},
+    },
     derive_more::{Display, Error},
     either::Either,
     log::{trace, warn},
@@ -293,6 +297,7 @@ pub fn recv_on(
     }
     transport.recv.acks.0.extend(packet_acks_to_msg_keys(
         &mut transport.flushed_packets,
+        &transport.flushed_packets_size,
         &mut transport.send.lanes,
         &mut transport.rtt,
         &mut transport.packet_acks_recv,
@@ -341,6 +346,7 @@ fn recv_frags_on<'a>(
 
 fn packet_acks_to_msg_keys<'s, const N: usize>(
     flushed_packets: &'s mut SeqBuf<FlushedPacket, N>,
+    flushed_packets_size: &'s AtomicUsize,
     tx_lanes: &'s mut [SendLane],
     rtt: &'s mut RttEstimator,
     packet_acks_recv: &'s mut Saturating<usize>,
@@ -354,6 +360,12 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
         .filter_map(move |acked_seq| {
             flushed_packets
                 .remove_with(acked_seq.0 .0, FlushedPacket::new(recv_at))
+                .inspect(|removed| {
+                    flushed_packets_size.fetch_sub(
+                        core::mem::size_of_val(removed.frags.as_ref()),
+                        Ordering::Relaxed,
+                    );
+                })
                 .map(|packet| (acked_seq, packet))
         })
         .flat_map(move |(acked_seq, packet)| {
@@ -366,7 +378,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
             *packet_acks_recv += 1;
             Box::into_iter(packet.frags)
         })
-        .filter_map(|frag_path| {
+        .filter_map(move |frag_path| {
             // for each of those fragments, we'll mark that fragment as acked
             let lane_index = usize::from(frag_path.lane_index.0);
             let lane = tx_lanes
@@ -561,6 +573,71 @@ mod tests {
 
     const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
     const LANE: LaneIndex = LaneIndex::new(0);
+
+    #[test]
+    fn packet_ack_size_accounting() {
+        use {
+            crate::{
+                FlushedPacket, FragmentPath, rtt::RttEstimator, seq_buf::SeqBuf, size::MinSize,
+            },
+            core::{
+                num::Saturating,
+                sync::atomic::{AtomicUsize, Ordering},
+            },
+        };
+
+        let now = Instant::now();
+        let mut packets = SeqBuf::<FlushedPacket, 1>::new_from_fn(|_| FlushedPacket::new(now));
+        let size = AtomicUsize::new(0);
+        for (seq, num_frags) in [(0, 1), (1, 3)] {
+            let frags = vec![
+                FragmentPath {
+                    lane_index: LANE,
+                    msg_seq: MessageSeq::new(0),
+                    frag_index: MinSize(0),
+                };
+                num_frags
+            ]
+            .into_boxed_slice();
+            let bytes = core::mem::size_of_val(frags.as_ref());
+            let old = packets.insert(
+                seq,
+                FlushedPacket {
+                    flushed_at: now,
+                    frags,
+                },
+            );
+            if let Some(old) = old {
+                size.fetch_sub(
+                    core::mem::size_of_val(old.frags.as_ref()),
+                    Ordering::Relaxed,
+                );
+            }
+            size.fetch_add(bytes, Ordering::Relaxed);
+            assert_eq!(size.load(Ordering::Relaxed), bytes);
+        }
+
+        let session = Session::new(now, 1024);
+        let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
+        let mut rtt = RttEstimator::default();
+        let mut packet_acks = Saturating(0);
+        let mut msg_acks = Saturating(0);
+        let num_keys = super::packet_acks_to_msg_keys(
+            &mut packets,
+            &size,
+            &mut transport.send.lanes,
+            &mut rtt,
+            &mut packet_acks,
+            &mut msg_acks,
+            now,
+            [0, 1, 1].into_iter().map(PacketSeq::new),
+        )
+        .count();
+        assert_eq!(num_keys, 0);
+        assert!(packets.is_empty());
+        assert_eq!(size.load(Ordering::Relaxed), 0);
+        assert_eq!(packet_acks.0, 1);
+    }
 
     #[test]
     fn recv_one_frag() {
