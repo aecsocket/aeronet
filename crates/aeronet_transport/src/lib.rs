@@ -34,12 +34,12 @@ use {
     alloc::{boxed::Box, vec::Vec},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
-    bevy_platform::time::Instant,
-    bevy_reflect::Reflect,
-    core::{
-        num::Saturating,
+    bevy_platform::{
         sync::atomic::{AtomicUsize, Ordering},
+        time::Instant,
     },
+    bevy_reflect::Reflect,
+    core::num::Saturating,
     derive_more::{Add, AddAssign, Display, Error, Sub, SubAssign},
     lane::{LaneIndex, LaneKind},
     log::warn,

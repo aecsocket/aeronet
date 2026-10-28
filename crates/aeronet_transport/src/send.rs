@@ -21,10 +21,11 @@ use {
     bevy_ecs::prelude::*,
     bevy_platform::{
         collections::{HashMap, hash_map::Entry},
+        sync::atomic::Ordering,
         time::Instant,
     },
     bevy_time::{Real, Time},
-    core::{iter, num::Saturating, sync::atomic::Ordering},
+    core::{iter, num::Saturating},
     derive_more::{Display, Error, From},
     log::trace,
     octs::{Bytes, EncodeLen, Write},

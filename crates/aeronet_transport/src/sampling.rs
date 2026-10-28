@@ -330,7 +330,7 @@ impl PacketLossHistory {
 
 #[cfg(test)]
 mod tests {
-    #![expect(
+    #![allow(
         clippy::float_cmp,
         reason = "expected loss ratios are exactly representable: 0, 0.5, and 1"
     )]
