@@ -1,9 +1,6 @@
 //! See [`Limit`].
 
-use {
-    derive_more::{Display, Error},
-    typesize::derive::TypeSize,
-};
+use derive_more::{Display, Error};
 
 /// Tracks how many counts this value has remaining, and allows consuming or
 /// refilling this counter.
@@ -178,7 +175,7 @@ impl Consume for ConsumeImpl<'_> {
 /// [token bucket]: https://en.wikipedia.org/wiki/Token_bucket
 /// [consuming]: Limit::consume
 /// [refilling]: TokenBucket::refill_portion
-#[derive(Debug, Clone, PartialEq, TypeSize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TokenBucket {
     cap: usize,
     rem: usize,

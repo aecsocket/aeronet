@@ -34,7 +34,10 @@ use {
     alloc::{boxed::Box, vec::Vec},
     bevy_app::prelude::*,
     bevy_ecs::{prelude::*, schedule::SystemSet},
-    bevy_platform::time::Instant,
+    bevy_platform::{
+        sync::atomic::{AtomicUsize, Ordering},
+        time::Instant,
+    },
     bevy_reflect::Reflect,
     core::num::Saturating,
     derive_more::{Add, AddAssign, Display, Error, Sub, SubAssign},
@@ -47,7 +50,6 @@ use {
     send::TransportSend,
     seq_buf::SeqBuf,
     size::MinSize,
-    typesize::{TypeSize, derive::TypeSize},
 };
 
 /// Sets up the transport layer functionality.
@@ -112,11 +114,12 @@ impl Plugin for AeronetTransportPlugin {
 ///
 /// The `recv` buffers must be drained on every update, otherwise some may be
 /// lost, leading to incorrect behavior, and a warning will be logged.
-#[derive(Debug, Component, TypeSize)]
+#[derive(Debug, Component)]
 #[require(TransportConfig)]
 pub struct Transport {
     // shared
     flushed_packets: SeqBuf<FlushedPacket, 1024>,
+    flushed_packets_size: AtomicUsize,
     packet_loss: sampling::PacketLossHistory,
     msgs_recv: Saturating<usize>,
     packet_acks_recv: Saturating<usize>,
@@ -140,7 +143,7 @@ pub struct Transport {
 ///
 /// This component may be modified over the lifetime of a [`Session`] and the
 /// [`Transport`] will be updated accordingly.
-#[derive(Debug, Clone, Component, TypeSize, Reflect)]
+#[derive(Debug, Clone, Component, Reflect)]
 #[reflect(Component)]
 pub struct TransportConfig {
     /// Maximum amount of memory, in bytes, that this [`Transport`] may use for
@@ -196,12 +199,11 @@ impl Default for TransportConfig {
 
 /// Incoming message that a [`Transport`] created from packets received by the
 /// IO layer.
-#[derive(Debug, TypeSize)]
+#[derive(Debug)]
 pub struct RecvMessage {
     /// Lane index on which this message was received.
     pub lane: LaneIndex,
     /// Instant at which the final fragment of this message was received.
-    #[typesize(with = crate::size::of_instant)]
     pub recv_at: Instant,
     /// Raw byte data of this message.
     pub payload: Vec<u8>,
@@ -266,6 +268,7 @@ impl Transport {
         let max_frag_len = MinSize::MAX.min_of(max_frag_len);
         Ok(Self {
             flushed_packets: SeqBuf::new_from_fn(|_| FlushedPacket::new(now)),
+            flushed_packets_size: AtomicUsize::new(0),
             packet_loss: sampling::PacketLossHistory::new(now),
             msgs_recv: Saturating(0),
             packet_acks_recv: Saturating(0),
@@ -302,13 +305,26 @@ impl Transport {
         self.flushed_packets.len()
     }
 
-    /// Gets how many total bytes of memory this transport is using.
+    /// Gets an estimation of how much memory this transport is using for
+    /// storing message payloads.
     ///
-    /// This call is potentially expensive. You should cache this where
-    /// possible.
+    /// This is a very fast operation, suitable for running every frame to track
+    /// for diagnostics, or to remove a session which is using too much memory.
+    /// However, the actual value returned by this function is somewhat
+    /// arbitrary; it's not the _total_ memory usage of the session, but rather
+    /// only the memory used for heap allocations which may be controlled by a
+    /// network peer (i.e. unfinished messages).
     #[must_use]
+    #[expect(
+        clippy::missing_panics_doc,
+        reason = "buffered memory sizes fit in usize"
+    )]
     pub fn memory_used(&self) -> usize {
-        self.get_size()
+        self.send
+            .sent_msgs_size
+            .checked_add(self.recv.memory_used())
+            .and_then(|size| size.checked_add(self.flushed_packets_size.load(Ordering::Relaxed)))
+            .expect("transport memory usage should fit in usize")
     }
 }
 
@@ -351,7 +367,7 @@ pub enum TransportSystems {
 /// key - it's very likely to have the same key as another message later.
 ///
 /// [`Seq`]: packet::Seq
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct MessageKey {
     /// Lane index on which the message was sent.
@@ -361,7 +377,7 @@ pub struct MessageKey {
 }
 
 /// Statistics for a [`Transport`].
-#[derive(Debug, Clone, Copy, Default, TypeSize)] // force `#[derive]` on multiple lines
+#[derive(Debug, Clone, Copy, Default)] // force `#[derive]` on multiple lines
 #[derive(Add, AddAssign, Sub, SubAssign)]
 pub struct MessageStats {
     /// Number of messages received into [`TransportRecv::msgs`].
@@ -378,16 +394,15 @@ pub struct MessageStats {
     pub msg_acks_recv: Saturating<usize>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct FragmentPath {
     lane_index: LaneIndex,
     msg_seq: MessageSeq,
     frag_index: MinSize,
 }
 
-#[derive(Debug, Clone, TypeSize)]
+#[derive(Debug, Clone)]
 struct FlushedPacket {
-    #[typesize(with = crate::size::of_instant)]
     flushed_at: Instant,
     frags: Box<[FragmentPath]>,
 }
@@ -435,6 +450,29 @@ fn check_memory_limit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn memory_used_sums_cached_totals() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let lanes = [LaneKind::ReliableOrdered];
+        let mut transport = Transport::new(&session, lanes, lanes, now).unwrap();
+        assert_eq!(transport.memory_used(), 0);
+        transport
+            .send
+            .push(LaneIndex::new(0), octs::Bytes::from_static(b"hello"), now)
+            .unwrap();
+        assert_eq!(transport.memory_used(), 5);
+        let packets = send::flush_on(&mut transport, now, 1024).collect::<Vec<_>>();
+        assert_eq!(transport.memory_used(), 5 + size_of::<FragmentPath>());
+        let config = TransportConfig::default();
+        for packet in packets {
+            recv::recv_on(&mut transport, &config, now, &packet).unwrap();
+        }
+        assert_eq!(transport.memory_used(), 10 + size_of::<FragmentPath>());
+        drop(transport.recv.msgs.drain());
+        assert_eq!(transport.memory_used(), 5 + size_of::<FragmentPath>());
+    }
 
     #[test]
     fn new_requires_space_for_fragment_payload() {

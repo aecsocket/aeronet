@@ -35,13 +35,12 @@ use {
     bevy_reflect::prelude::*,
     derive_more::Display,
     octs::{BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, Write},
-    typesize::derive::TypeSize,
 };
 
 /// What guarantees a kind of [lane] provides about message delivery.
 ///
 /// [lane]: crate::lane
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LaneKind {
@@ -130,7 +129,7 @@ impl LaneKind {
 /// received by the peer.
 ///
 /// [lane]: crate::lane
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LaneReliability {
     /// Messages may not be received by the peer, or may be received multiple
@@ -143,7 +142,7 @@ pub enum LaneReliability {
 /// Index of a [lane] on either the sender or receiver side.
 ///
 /// [lane]: crate::lane
-#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash, TypeSize, Reflect)]
+#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LaneIndex(pub MinSize);

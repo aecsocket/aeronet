@@ -1,11 +1,11 @@
 //! See [`RttEstimator`].
 
-use {core::time::Duration, typesize::derive::TypeSize};
+use core::time::Duration;
 
 /// Computes an RTT estimation for a network path.
 ///
 /// This is based on [`quinn-proto`'s `RttEstimator`](https://github.com/quinn-rs/quinn/blob/411abe9/quinn-proto/src/connection/paths.rs#L151).
-#[derive(Debug, Clone, TypeSize)]
+#[derive(Debug, Clone)]
 pub struct RttEstimator {
     latest: Duration,
     smoothed: Duration,

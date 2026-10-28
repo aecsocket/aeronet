@@ -20,8 +20,8 @@ fn main() -> AppExit {
                 ..default()
             }),
             EguiPlugin::default(),
-            // Add the IO plugin for the IO layer implementation you want to use.
-            // This will automatically add the `AeronetIoPlugin`.
+            // Add the IO plugin for the IO layer implementation you want to
+            // use. This will automatically add the `AeronetIoPlugin`.
             ChannelIoPlugin,
         ))
         .add_systems(Startup, (setup_camera, setup_io))

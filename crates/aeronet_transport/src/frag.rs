@@ -19,7 +19,6 @@ use {
     core::{fmt, iter::FusedIterator},
     derive_more::{Display, Error},
     octs::{Bytes, chunks::ByteChunksExt},
-    typesize::derive::TypeSize,
 };
 
 /// Splits a message up into smaller fragments, ready to be reassembled by a
@@ -97,7 +96,7 @@ pub fn split(
 
 /// Passed a message to [`split`] which was too long in length, and cannot be
 /// represented in [`MinSize::MAX`] number of fragments.
-#[derive(Debug, Clone, Display, Error, TypeSize)]
+#[derive(Debug, Clone, Display, Error)]
 #[display("message too big - byte length: {byte_len}, num frags: {num_frags} / {}", MinSize::MAX.0)]
 pub struct MessageTooBig {
     /// How long the message is, in bytes.
@@ -108,9 +107,8 @@ pub struct MessageTooBig {
 
 /// Receives fragments created by [`split`] and reassembles them into full
 /// messages.
-#[derive(Default, Clone, TypeSize)]
+#[derive(Default, Clone)]
 pub struct FragmentReceiver {
-    #[typesize(with = crate::size::of_map)]
     msgs: HashMap<MessageSeq, MessageBuf>,
 }
 
@@ -174,14 +172,12 @@ pub enum ReassembleError {
     },
 }
 
-#[derive(Clone, TypeSize)]
+#[derive(Clone)]
 struct MessageBuf {
-    #[typesize(with = crate::size::of_instant)]
     first_received: Instant,
     last_frag_index: Option<usize>,
     max_frag_index: usize,
     num_frags_recv: usize,
-    #[typesize(with = crate::size::of_bitvec)]
     frag_indices_recv: BitVec,
     payload: Vec<u8>,
 }
@@ -197,7 +193,7 @@ pub(crate) struct PreparedFragment<'a> {
     num_indices: usize,
     last: bool,
     payload: &'a [u8],
-    pub(crate) memory_required: usize,
+    pub(crate) payload_growth: usize,
 }
 
 impl fmt::Debug for FragmentReceiver {
@@ -210,8 +206,18 @@ impl fmt::Debug for FragmentReceiver {
 }
 
 impl FragmentReceiver {
-    pub(crate) fn discard_before(&mut self, pending: MessageSeq) {
-        self.msgs.retain(|seq, _| *seq >= pending);
+    pub(crate) fn discard_before(&mut self, pending: MessageSeq) -> usize {
+        let mut removed = 0usize;
+        self.msgs.retain(|seq, msg| {
+            if *seq >= pending {
+                return true;
+            }
+            removed = removed
+                .checked_add(msg.payload.len())
+                .expect("discarded payload lengths fit in usize");
+            false
+        });
+        removed
     }
 
     pub(crate) fn eviction_candidates(
@@ -224,8 +230,11 @@ impl FragmentReceiver {
             .map(|(seq, msg)| (*seq, msg.first_received))
     }
 
-    pub(crate) fn discard(&mut self, seq: MessageSeq) {
-        self.msgs.remove(&seq);
+    pub(crate) fn discard(&mut self, seq: MessageSeq) -> usize {
+        self.msgs
+            .remove(&seq)
+            .map(|msg| msg.payload.len())
+            .unwrap_or(0)
     }
 
     /// Gets the number of messages which are currently being reassembled, but
@@ -295,9 +304,9 @@ impl FragmentReceiver {
         let Some(prepared) = self.prepare(max_frag_len, msg_seq, position, payload)? else {
             return Ok(None);
         };
-        if prepared.memory_required > mem_left {
+        if prepared.payload_growth > mem_left {
             return Err(ReassembleError::OutOfMemory {
-                required: prepared.memory_required,
+                required: prepared.payload_growth,
                 left: mem_left,
             });
         }
@@ -361,14 +370,8 @@ impl FragmentReceiver {
         let num_indices = index
             .checked_add(1)
             .ok_or(ReassembleError::FragIndexTooLarge { index })?;
-        let payload_required = end.saturating_sub(buf.map_or(0, |buf| buf.payload.capacity()));
-        let indices_required = num_indices
-            .saturating_sub(buf.map_or(0, |buf| buf.frag_indices_recv.capacity()))
-            .div_ceil(8);
-        let memory_required = payload_required
-            .checked_add(indices_required)
-            .ok_or(ReassembleError::FragIndexTooLarge { index })?;
-        // we *may* end up reserving more memory than `mem_required`,
+        let payload_growth = end.saturating_sub(buf.map(|buf| buf.payload.len()).unwrap_or(0));
+        // we *may* end up reserving more memory than `payload_growth`,
         // but this should be sufficient to prevent ridiculously sized allocs
         // and anyway, if we go over the memory limit later, we'll catch it
         // somewhere else
@@ -380,7 +383,7 @@ impl FragmentReceiver {
             num_indices,
             last: position.is_last(),
             payload,
-            memory_required,
+            payload_growth,
         }))
     }
 
@@ -445,6 +448,40 @@ mod tests {
     use {super::*, std::println};
 
     // TODO
+
+    #[test]
+    fn payload_growth_and_actual_discard() {
+        let mut recv = FragmentReceiver::default();
+        let seq = MessageSeq::new(0);
+        let position = FragmentPosition::non_last(MinSize(2)).unwrap();
+        let prepared = recv
+            .prepare(MinSize(2), seq, position, b"ab")
+            .unwrap()
+            .unwrap();
+        assert_eq!(prepared.payload_growth, 6);
+        assert!(recv.is_empty());
+        assert!(recv.insert_prepared(prepared, Instant::now()).is_none());
+        assert!(
+            recv.prepare(MinSize(2), seq, position, b"ab")
+                .unwrap()
+                .is_none()
+        );
+        let prepared = recv
+            .prepare(
+                MinSize(2),
+                seq,
+                FragmentPosition::non_last(MinSize(0)).unwrap(),
+                b"cd",
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(prepared.payload_growth, 0);
+        assert!(recv.insert_prepared(prepared, Instant::now()).is_none());
+        assert_eq!(recv.discard(seq), 6);
+        assert_eq!(recv.discard(seq), 0);
+        assert_eq!(recv.discard_before(MessageSeq::new(1)), 0);
+        assert!(recv.is_empty());
+    }
 
     #[test]
     fn round_trip() {

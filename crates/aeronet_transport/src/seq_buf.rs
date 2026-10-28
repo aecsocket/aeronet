@@ -3,7 +3,6 @@
 use {
     alloc::boxed::Box,
     core::{array, mem},
-    typesize::TypeSize,
 };
 
 /// Rolling sequence buffer data structure.
@@ -228,7 +227,7 @@ impl<T, const N: usize> SeqBuf<T, N> {
     /// - 33 (1 + 16 + 16)
     /// - 49 (1 + 16 + 16 + 16)
     ///
-    /// Returns a reference to the newly inserted value.
+    /// Returns the value that was previously stored at this key, if any.
     ///
     /// # Examples
     ///
@@ -236,21 +235,21 @@ impl<T, const N: usize> SeqBuf<T, N> {
     /// use aeronet_transport::seq_buf::SeqBuf;
     ///
     /// let mut buf = SeqBuf::<String, 16>::new();
-    /// let inserted = buf.insert(4, "hello world".into());
-    /// assert_eq!("hello world", inserted);
+    /// let old = buf.insert(4, "hello world".into());
+    /// assert!(old.is_none());
     /// assert_eq!(1, buf.len());
     ///
-    /// let inserted = buf.insert(4, "hello".into());
-    /// assert_eq!("hello", inserted);
+    /// let old = buf.insert(4, "hello".into());
+    /// assert_eq!(Some("hello world".into()), old);
     /// assert_eq!(1, buf.len());
     ///
-    /// let inserted = buf.insert(4 + 16, "world".into());
-    /// assert_eq!("world", inserted);
+    /// let old = buf.insert(4 + 16, "world".into());
+    /// assert_eq!(Some("hello".into()), old);
     /// assert_eq!(1, buf.len());
     /// ```
     #[inline]
     #[expect(clippy::missing_panics_doc, reason = "shouldn't panic")]
-    pub fn insert(&mut self, key: u16, value: T) -> &mut T {
+    pub fn insert(&mut self, key: u16, value: T) -> Option<T> {
         let index = Self::index(key);
         let index_u = usize::from(index);
         let index_slot = self
@@ -274,8 +273,8 @@ impl<T, const N: usize> SeqBuf<T, N> {
             "`index_u` is valid into `indices`, and `indices` is of the same length as `data`, so \
              it should be a valid index into `data`",
         );
-        *data_slot = value;
-        data_slot
+        let old = mem::replace(data_slot, value);
+        if is_empty { None } else { Some(old) }
     }
 
     /// Removes a value from this buffer at the given key, replacing it with a
@@ -320,14 +319,6 @@ impl<T, const N: usize> SeqBuf<T, N> {
         } else {
             None
         }
-    }
-}
-
-impl<T: TypeSize, const N: usize> TypeSize for SeqBuf<T, N> {
-    fn extra_size(&self) -> usize {
-        self.indices
-            .extra_size()
-            .saturating_add(self.data.extra_size())
     }
 }
 
