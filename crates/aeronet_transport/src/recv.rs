@@ -7,7 +7,7 @@ use {
         lane::{LaneIndex, LaneKind, LaneReliability},
         packet::{Fragment, MessageSeq, PacketHeader, PacketSeq},
         rtt::RttEstimator,
-        send::SendLane,
+        send::TransportSend,
         seq_buf::SeqBuf,
     },
     aeronet_io::{
@@ -298,7 +298,7 @@ pub fn recv_on(
     transport.recv.acks.0.extend(packet_acks_to_msg_keys(
         &mut transport.flushed_packets,
         &transport.flushed_packets_size,
-        &mut transport.send.lanes,
+        &mut transport.send,
         &mut transport.rtt,
         &mut transport.packet_acks_recv,
         &mut transport.msg_acks_recv,
@@ -347,7 +347,7 @@ fn recv_frags_on<'a>(
 fn packet_acks_to_msg_keys<'s, const N: usize>(
     flushed_packets: &'s mut SeqBuf<FlushedPacket, N>,
     flushed_packets_size: &'s AtomicUsize,
-    tx_lanes: &'s mut [SendLane],
+    send: &'s mut TransportSend,
     rtt: &'s mut RttEstimator,
     packet_acks_recv: &'s mut Saturating<usize>,
     msgs_acks_recv: &'s mut Saturating<usize>,
@@ -381,7 +381,7 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
         .filter_map(move |frag_path| {
             // for each of those fragments, we'll mark that fragment as acked
             let lane_index = usize::from(frag_path.lane_index.0);
-            let lane = tx_lanes
+            let lane = send.lanes
                 .get_mut(lane_index)
                 .expect("frag path should point into a valid lane index");
             // fallible instead of panicking, because these messages may have already been
@@ -389,7 +389,10 @@ fn packet_acks_to_msg_keys<'s, const N: usize>(
             let msg = lane.sent_msgs.get_mut(&frag_path.msg_seq)?;
             let frag_opt = msg.frags.get_mut(usize::from(frag_path.frag_index))?;
             // take this fragment out so it stops being resent
-            *frag_opt = None;
+            let frag = frag_opt.take()?;
+            send.sent_msgs_size = send.sent_msgs_size
+                .checked_sub(usize::from(frag.payload.len()))
+                .expect("acknowledged fragment payload bytes should be accounted for");
 
             // if all the fragments are now acked, then we report that
             // the entire message is now acked
@@ -625,7 +628,7 @@ mod tests {
         let num_keys = super::packet_acks_to_msg_keys(
             &mut packets,
             &size,
-            &mut transport.send.lanes,
+            &mut transport.send,
             &mut rtt,
             &mut packet_acks,
             &mut msg_acks,

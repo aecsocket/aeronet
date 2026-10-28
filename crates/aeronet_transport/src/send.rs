@@ -37,7 +37,7 @@ pub struct TransportSend {
     pub(crate) msgs_sent: Saturating<usize>,
     pub(crate) max_frag_len: MinSize,
     pub(crate) lanes: Box<[SendLane]>,
-    sent_msgs_size: usize,
+    pub(crate) sent_msgs_size: usize,
     bytes_bucket: TokenBucket,
     next_packet_seq: PacketSeq,
     error: Option<TransportSendError>,
@@ -388,10 +388,12 @@ pub fn flush_on(
                 now,
                 &transport.rtt,
                 &mut transport.send.lanes,
+                &mut transport.send.sent_msgs_size,
                 &mut bytes_left,
                 &mut packet,
                 path,
-            ) == Ok(()) {
+            ) == Ok(())
+            {
                 // if we successfully wrote this frag out,
                 // remove it from the candidate frag paths
                 // and track that this frag has been sent out in this packet
@@ -479,6 +481,7 @@ fn write_frag_at_path(
     now: Instant,
     rtt: &RttEstimator,
     lanes: &mut [SendLane],
+    sent_msgs_size: &mut usize,
     bytes_left: &mut impl Limit,
     packet: &mut Vec<u8>,
     path: FragmentPath,
@@ -520,6 +523,9 @@ fn write_frag_at_path(
             // drop the frag
             // if we've dropped all frags of this message, then
             // on the next `flush`, we'll drop the message
+            *sent_msgs_size = sent_msgs_size
+                .checked_sub(usize::from(sent_frag.payload.len()))
+                .expect("removed fragment payload bytes should be accounted for");
             *frag_slot = None;
         }
         LaneReliability::Reliable => {
@@ -562,6 +568,96 @@ mod tests {
     #[test]
     fn send_no_data() {
         round_trip(b"");
+    }
+
+    #[test]
+    fn unreliable_payload_bytes_released_on_flush() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut transport =
+            Transport::new(&session, LANES, [LaneKind::UnreliableUnordered; 2], now).unwrap();
+        transport
+            .send
+            .push(LANE, Bytes::from_static(b"hello"), now)
+            .unwrap();
+        transport
+            .send
+            .push(LaneIndex::new(1), Bytes::from_static(b"world!"), now)
+            .unwrap();
+        assert_eq!(transport.send.sent_msgs_size, 11);
+
+        // A packet header alone cannot release any payload.
+        let header_len = octs::EncodeLen::encode_len(&PacketHeader {
+            seq: PacketSeq::new(0),
+            acks: Acknowledge::default(),
+        });
+        let _ = super::flush_on(&mut transport, now, header_len).count();
+        assert_eq!(transport.send.sent_msgs_size, 11);
+        let _ = super::flush_on(&mut transport, now, 1024).count();
+        assert_eq!(transport.send.sent_msgs_size, 0);
+        // Removing empty messages on the next flush must not subtract again.
+        let _ = super::flush_on(&mut transport, now, 1024).count();
+        assert_eq!(transport.send.sent_msgs_size, 0);
+    }
+
+    #[test]
+    fn reliable_payload_bytes_released_once_after_retransmission() {
+        use octs::Write;
+
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
+        transport
+            .send
+            .push(LANE, Bytes::from_static(b"hello"), now)
+            .unwrap();
+        assert_eq!(transport.send.sent_msgs_size, 5);
+        let _ = super::flush_on(&mut transport, now, 1024).count();
+        assert_eq!(transport.send.sent_msgs_size, 5);
+        let later = now + transport.rtt().pto();
+        let _ = super::flush_on(&mut transport, later, 1024).count();
+        assert_eq!(transport.send.sent_msgs_size, 5);
+        assert_eq!(transport.num_unacked_packets(), 2);
+
+        let mut acks = Acknowledge::default();
+        acks.ack(PacketSeq::new(0));
+        acks.ack(PacketSeq::new(1));
+        let mut packet = Vec::new();
+        packet
+            .write(&PacketHeader {
+                seq: PacketSeq::new(0),
+                acks,
+            })
+            .unwrap();
+        let config = crate::TransportConfig::default();
+        crate::recv::recv_on(&mut transport, &config, later, &packet).unwrap();
+        assert_eq!(transport.send.sent_msgs_size, 0);
+        assert_eq!(transport.recv.acks.drain().count(), 1);
+        crate::recv::recv_on(&mut transport, &config, later, &packet).unwrap();
+        assert_eq!(transport.send.sent_msgs_size, 0);
+        assert_eq!(transport.recv.acks.drain().count(), 0);
+    }
+
+    #[test]
+    fn unreliable_payload_bytes_released_per_fragment() {
+        let now = Instant::now();
+        let session = Session::new(now, 64);
+        let mut transport =
+            Transport::new(&session, LANES, [LaneKind::UnreliableUnordered], now).unwrap();
+        let frag_len = usize::from(transport.send.max_frag_len);
+        let payload_len = frag_len.checked_mul(2).unwrap();
+        transport
+            .send
+            .push(LANE, Bytes::from(vec![0; payload_len]), now)
+            .unwrap();
+        assert_eq!(transport.send.sent_msgs_size, payload_len);
+        {
+            let mut packets = super::flush_on(&mut transport, now, 64);
+            assert!(packets.next().is_some());
+        }
+        assert_eq!(transport.send.sent_msgs_size, frag_len);
+        let _ = super::flush_on(&mut transport, now, 64).count();
+        assert_eq!(transport.send.sent_msgs_size, 0);
     }
 
     #[test]
