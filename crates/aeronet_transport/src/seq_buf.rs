@@ -3,7 +3,6 @@
 use {
     alloc::boxed::Box,
     core::{array, mem},
-    typesize::TypeSize,
 };
 
 /// Rolling sequence buffer data structure.
@@ -320,14 +319,6 @@ impl<T, const N: usize> SeqBuf<T, N> {
         } else {
             None
         }
-    }
-}
-
-impl<T: TypeSize, const N: usize> TypeSize for SeqBuf<T, N> {
-    fn extra_size(&self) -> usize {
-        self.indices
-            .extra_size()
-            .saturating_add(self.data.extra_size())
     }
 }
 

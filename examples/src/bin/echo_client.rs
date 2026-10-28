@@ -130,8 +130,9 @@ fn setup_connection(mut commands: Commands) {
         // a default `TransportConfig` will also be added.
         TransportConfig {
             // Define how many bytes of memory this session can use
-            // for transport state.
-            max_memory_usage: 4 * 1024 * 1024,
+            // for payloads in the transport state.
+            // 4KiB is pretty low; you'll want to adjust this up.
+            max_memory_usage: 4 * 1024,
             ..default()
         },
         // Add `UiState` so that we can log what messages we've received.

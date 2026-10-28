@@ -19,7 +19,6 @@ use {
     core::{fmt, iter::FusedIterator},
     derive_more::{Display, Error},
     octs::{Bytes, chunks::ByteChunksExt},
-    typesize::derive::TypeSize,
 };
 
 /// Splits a message up into smaller fragments, ready to be reassembled by a
@@ -97,7 +96,7 @@ pub fn split(
 
 /// Passed a message to [`split`] which was too long in length, and cannot be
 /// represented in [`MinSize::MAX`] number of fragments.
-#[derive(Debug, Clone, Display, Error, TypeSize)]
+#[derive(Debug, Clone, Display, Error)]
 #[display("message too big - byte length: {byte_len}, num frags: {num_frags} / {}", MinSize::MAX.0)]
 pub struct MessageTooBig {
     /// How long the message is, in bytes.
@@ -108,9 +107,8 @@ pub struct MessageTooBig {
 
 /// Receives fragments created by [`split`] and reassembles them into full
 /// messages.
-#[derive(Default, Clone, TypeSize)]
+#[derive(Default, Clone)]
 pub struct FragmentReceiver {
-    #[typesize(with = crate::size::of_map)]
     msgs: HashMap<MessageSeq, MessageBuf>,
 }
 
@@ -174,14 +172,12 @@ pub enum ReassembleError {
     },
 }
 
-#[derive(Clone, TypeSize)]
+#[derive(Clone)]
 struct MessageBuf {
-    #[typesize(with = crate::size::of_instant)]
     first_received: Instant,
     last_frag_index: Option<usize>,
     max_frag_index: usize,
     num_frags_recv: usize,
-    #[typesize(with = crate::size::of_bitvec)]
     frag_indices_recv: BitVec,
     payload: Vec<u8>,
 }

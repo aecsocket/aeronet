@@ -29,11 +29,10 @@ use {
     either::Either,
     log::{trace, warn},
     octs::{Buf, Read},
-    typesize::{TypeSize, derive::TypeSize},
 };
 
 /// Access to the receiving half of a [`Transport`].
-#[derive(Debug, TypeSize)]
+#[derive(Debug)]
 pub struct TransportRecv {
     lanes: Box<[RecvLane]>,
     /// Payload bytes retained in reassembly and ordered-delivery buffers.
@@ -61,8 +60,8 @@ pub struct TransportRecv {
 ///
 /// This is effectively a wrapper around [`Vec`] which only publicly allows
 /// draining elements from it.
-#[derive(Debug, TypeSize)]
-pub struct RecvBuffer<T: TypeSize> {
+#[derive(Debug)]
+pub struct RecvBuffer<T> {
     items: Vec<T>,
     // used on `recv.msgs`; unused on `recv.acks` for simplicity
     queued_payload_size: usize,
@@ -123,7 +122,7 @@ impl TransportRecv {
     }
 }
 
-impl<T: TypeSize> RecvBuffer<T> {
+impl<T> RecvBuffer<T> {
     /// Drains all items from this buffer.
     pub fn drain(&mut self) -> impl Iterator<Item = T> + '_ {
         self.queued_payload_size = 0;
@@ -132,13 +131,13 @@ impl<T: TypeSize> RecvBuffer<T> {
 }
 
 /// State of a lane used for receiving incoming messages on a [`Transport`].
-#[derive(Debug, Clone, TypeSize)]
+#[derive(Debug, Clone)]
 pub struct RecvLane {
     frags: FragmentReceiver,
     state: LaneState,
 }
 
-#[derive(Debug, Clone, TypeSize)]
+#[derive(Debug, Clone)]
 enum LaneState {
     UnreliableUnordered,
     UnreliableSequenced {
@@ -146,12 +145,10 @@ enum LaneState {
     },
     ReliableUnordered {
         pending: MessageSeq,
-        #[typesize(with = crate::size::of_set)]
         recv_buf: HashSet<MessageSeq>,
     },
     ReliableOrdered {
         pending: MessageSeq,
-        #[typesize(with = crate::size::of_map)]
         recv_buf: HashMap<MessageSeq, Vec<u8>>,
     },
 }

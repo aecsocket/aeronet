@@ -28,11 +28,10 @@ use {
     derive_more::{Display, Error, From},
     log::trace,
     octs::{Bytes, EncodeLen, Write},
-    typesize::derive::TypeSize,
 };
 
 /// Allows buffering up messages to be sent on a [`Transport`].
-#[derive(Debug, TypeSize)]
+#[derive(Debug)]
 pub struct TransportSend {
     pub(crate) msgs_sent: Saturating<usize>,
     pub(crate) max_frag_len: MinSize,
@@ -44,27 +43,23 @@ pub struct TransportSend {
 }
 
 /// State of a lane used for sending outgoing messages on a [`Transport`].
-#[derive(Debug, Clone, TypeSize)]
+#[derive(Debug, Clone)]
 pub struct SendLane {
     kind: LaneKind,
-    #[typesize(with = crate::size::of_map)]
     pub(crate) sent_msgs: HashMap<MessageSeq, SentMessage>,
     next_msg_seq: MessageSeq,
 }
 
-#[derive(Debug, Clone, TypeSize)]
+#[derive(Debug, Clone)]
 pub(crate) struct SentMessage {
     pub(crate) frags: Box<[Option<SentFragment>]>,
 }
 
-#[derive(Debug, Clone, TypeSize)]
+#[derive(Debug, Clone)]
 pub(crate) struct SentFragment {
     position: FragmentPosition,
-    #[typesize(with = FragmentPayload::len_usize)]
     pub(crate) payload: FragmentPayload,
-    #[typesize(with = crate::size::of_instant)]
     sent_at: Instant,
-    #[typesize(with = crate::size::of_instant)]
     next_flush_at: Instant,
 }
 
@@ -250,7 +245,7 @@ impl TransportSend {
 }
 
 /// Failed to enqueue a message for sending using [`TransportSend::push`].
-#[derive(Debug, Clone, Display, Error, From, TypeSize)]
+#[derive(Debug, Clone, Display, Error, From)]
 pub enum TransportSendError {
     /// Too many messages were already buffered for sending, and we would be
     /// overwriting the sequence number of an existing message.

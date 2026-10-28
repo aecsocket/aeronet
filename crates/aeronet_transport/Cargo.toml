@@ -51,7 +51,6 @@ ringbuf = { workspace = true, features = ["alloc", "portable-atomic"] }
 serde = { workspace = true, optional = true }
 size_format = { workspace = true, optional = true }
 thousands = { workspace = true, optional = true }
-typesize = { workspace = true, features = ["saturating_impls"] }
 
 [features]
 default = ["std"]
