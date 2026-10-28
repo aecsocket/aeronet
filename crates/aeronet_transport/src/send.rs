@@ -222,13 +222,17 @@ impl TransportSend {
                 frags
             };
 
-            self.sent_msgs_size = frags.iter().fold(self.sent_msgs_size, |size, frag| {
-                size.checked_add(usize::from(frag.payload.len()))
-                    .expect("sent message payload bytes should fit in usize")
-            });
-            entry.insert(SentMessage {
+            let msg = entry.insert(SentMessage {
                 frags: frags.into_iter().map(Some).collect(),
             });
+            self.sent_msgs_size =
+                msg.frags
+                    .iter()
+                    .flatten()
+                    .fold(self.sent_msgs_size, |size, frag| {
+                        size.checked_add(usize::from(frag.payload.len()))
+                            .expect("sent message payload bytes should fit in usize")
+                    });
 
             self.msgs_sent += 1;
             lane.next_msg_seq += MessageSeq::new(1);
@@ -523,10 +527,10 @@ fn write_frag_at_path(
             // drop the frag
             // if we've dropped all frags of this message, then
             // on the next `flush`, we'll drop the message
+            let removed = frag_slot.take().expect("fragment slot is still occupied");
             *sent_msgs_size = sent_msgs_size
-                .checked_sub(usize::from(sent_frag.payload.len()))
+                .checked_sub(usize::from(removed.payload.len()))
                 .expect("removed fragment payload bytes should be accounted for");
-            *frag_slot = None;
         }
         LaneReliability::Reliable => {
             // don't drop the frag, just attempt to resend it later
@@ -665,16 +669,23 @@ mod tests {
         let now = Instant::now();
         let session = Session::new(now, 1024);
         let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
-        let key = transport.send.push(LANE, Bytes::new(), now).unwrap();
+        let key = transport
+            .send
+            .push(LANE, Bytes::from_static(b"hello"), now)
+            .unwrap();
+        assert_eq!(transport.send.sent_msgs_size, 5);
         assert_eq!(transport.stats().msgs_sent.0, 1);
 
         // Simulate sequence wraparound onto a message that is still queued.
         transport.send.lanes.first_mut().unwrap().next_msg_seq = key.seq;
         assert!(matches!(
-            transport.send.push(LANE, Bytes::new(), now),
+            transport
+                .send
+                .push(LANE, Bytes::from_static(b"replacement"), now),
             Err(super::TransportSendError::TooManyMessages)
         ));
         assert_eq!(transport.stats().msgs_sent.0, 1);
+        assert_eq!(transport.send.sent_msgs_size, 5);
     }
 
     #[test]

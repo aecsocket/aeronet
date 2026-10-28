@@ -36,6 +36,14 @@ use {
 #[derive(Debug, TypeSize)]
 pub struct TransportRecv {
     lanes: Box<[RecvLane]>,
+    /// Payload bytes retained in reassembly and ordered-delivery buffers.
+    ///
+    /// For tracking allocated memory sizes, we have 2 counters: 1 here, and 1
+    /// in the `RecvBuffer`, representing memory used in different stages of
+    /// the packet process lifecycle. When memory is transferred from one stage
+    /// to the other, we subtract one counter and add the delta to the next
+    /// counter. To read the total memory usage, just sum the two.
+    pending_payload_size: usize,
     /// Buffer of received messages.
     ///
     /// This must be drained by the user on every update.
@@ -54,7 +62,11 @@ pub struct TransportRecv {
 /// This is effectively a wrapper around [`Vec`] which only publicly allows
 /// draining elements from it.
 #[derive(Debug, TypeSize)]
-pub struct RecvBuffer<T: TypeSize>(Vec<T>);
+pub struct RecvBuffer<T: TypeSize> {
+    items: Vec<T>,
+    // used on `recv.msgs`; unused on `recv.acks` for simplicity
+    queued_payload_size: usize,
+}
 
 impl TransportRecv {
     fn unreliable_eviction_candidates(
@@ -80,14 +92,28 @@ impl TransportRecv {
 
     pub(crate) fn new(lanes: impl IntoIterator<Item = impl Into<LaneKind>>) -> Self {
         Self {
+            pending_payload_size: 0,
             lanes: lanes
                 .into_iter()
                 .map(Into::into)
                 .map(RecvLane::new)
                 .collect(),
-            msgs: RecvBuffer(Vec::new()),
-            acks: RecvBuffer(Vec::new()),
+            msgs: RecvBuffer {
+                items: Vec::new(),
+                queued_payload_size: 0,
+            },
+            acks: RecvBuffer {
+                items: Vec::new(),
+                queued_payload_size: 0,
+            },
         }
+    }
+
+    #[must_use]
+    pub(crate) const fn memory_used(&self) -> usize {
+        self.pending_payload_size
+            .checked_add(self.msgs.queued_payload_size)
+            .expect("receive payload lengths fit in usize")
     }
 
     /// Gets access to the state of the receiving-side lanes.
@@ -100,7 +126,8 @@ impl TransportRecv {
 impl<T: TypeSize> RecvBuffer<T> {
     /// Drains all items from this buffer.
     pub fn drain(&mut self) -> impl Iterator<Item = T> + '_ {
-        self.0.drain(..)
+        self.queued_payload_size = 0;
+        self.items.drain(..)
     }
 }
 
@@ -188,22 +215,22 @@ impl RecvLane {
 /// layer itself is responsible for draining that buffer.
 pub fn clear_buffers(mut sessions: Query<(Entity, &mut Transport)>) {
     for (entity, mut transport) in &mut sessions {
-        let len = transport.recv.msgs.0.len();
+        let len = transport.recv.msgs.items.len();
         if len > 0 {
             warn!(
                 "{entity} has {len} received messages which have not been consumed - this \
                  indicates a bug in code above the transport layer"
             );
-            transport.recv.msgs.0.clear();
+            drop(transport.recv.msgs.drain());
         }
 
-        let len = transport.recv.acks.0.len();
+        let len = transport.recv.acks.items.len();
         if len > 0 {
             warn!(
                 "{entity} has {len} received acks which have not been consumed - this indicates a \
                  bug in code above the transport layer"
             );
-            transport.recv.acks.0.clear();
+            transport.recv.acks.items.clear();
         }
     }
 }
@@ -295,7 +322,7 @@ pub fn recv_on(
     for seq in header.acks.seqs() {
         transport.packet_loss.ack(seq);
     }
-    transport.recv.acks.0.extend(packet_acks_to_msg_keys(
+    transport.recv.acks.items.extend(packet_acks_to_msg_keys(
         &mut transport.flushed_packets,
         &transport.flushed_packets_size,
         &mut transport.send,
@@ -443,28 +470,33 @@ fn recv_frag(
     let mut memory_left = config
         .max_memory_usage
         .saturating_sub(transport.memory_used());
-    if prepared.memory_required > memory_left {
+    if prepared.payload_growth > memory_left {
         let candidates = transport
             .recv
             .unreliable_eviction_candidates(index, frag.header.seq);
         for (evict_lane, seq, _) in candidates {
-            transport
+            let removed = transport
                 .recv
                 .lanes
                 .get_mut(evict_lane)
                 .expect("candidate came from this lane list")
                 .frags
                 .discard(seq);
+            transport.recv.pending_payload_size = transport
+                .recv
+                .pending_payload_size
+                .checked_sub(removed)
+                .expect("removed receive payload bytes should be accounted for");
             memory_left = config
                 .max_memory_usage
                 .saturating_sub(transport.memory_used());
-            if prepared.memory_required <= memory_left {
+            if prepared.payload_growth <= memory_left {
                 break;
             }
         }
-        if prepared.memory_required > memory_left {
+        if prepared.payload_growth > memory_left {
             return Err(RecvError::Reassemble(ReassembleError::OutOfMemory {
-                required: prepared.memory_required,
+                required: prepared.payload_growth,
                 left: memory_left,
             }));
         }
@@ -474,7 +506,13 @@ fn recv_frag(
         .lanes
         .get_mut(index)
         .expect("lane was validated above");
+    let payload_growth = prepared.payload_growth;
     let msg = lane.frags.insert_prepared(prepared, recv_at);
+    transport.recv.pending_payload_size = transport
+        .recv
+        .pending_payload_size
+        .checked_add(payload_growth)
+        .expect("receive payload lengths fit in usize");
 
     trace!(
         "Received fragment on lane {} - message seq {} position {:?}",
@@ -482,7 +520,15 @@ fn recv_frag(
     );
 
     if let Some(msg) = msg {
-        let msgs_with_lane = recv_on_lane(&mut lane.state, msg, frag.header.seq).map(|msg| {
+        let size = &mut transport.recv.pending_payload_size;
+        let queued_size = &mut transport.recv.msgs.queued_payload_size;
+        let msgs_with_lane = recv_on_lane(&mut lane.state, size, msg, frag.header.seq).map(|msg| {
+            *size = size
+                .checked_sub(msg.len())
+                .expect("removed receive payload bytes should be accounted for");
+            *queued_size = queued_size
+                .checked_add(msg.len())
+                .expect("queued payload lengths fit in usize");
             transport.msgs_recv += 1;
             RecvMessage {
                 lane: lane_index,
@@ -490,9 +536,11 @@ fn recv_frag(
                 payload: msg,
             }
         });
-        transport.recv.msgs.0.extend(msgs_with_lane);
+        transport.recv.msgs.items.extend(msgs_with_lane);
         if let LaneState::UnreliableSequenced { pending } = lane.state {
-            lane.frags.discard_before(pending);
+            *size = size
+                .checked_sub(lane.frags.discard_before(pending))
+                .expect("removed receive payload bytes should be accounted for");
         }
         trace!("Fragment finished reassembling this message");
     }
@@ -500,11 +548,12 @@ fn recv_frag(
     Ok(())
 }
 
-fn recv_on_lane(
-    lane: &mut LaneState,
+fn recv_on_lane<'a>(
+    lane: &'a mut LaneState,
+    pending_payload_size: &mut usize,
     msg: Vec<u8>,
     msg_seq: MessageSeq,
-) -> impl Iterator<Item = Vec<u8>> + '_ {
+) -> impl Iterator<Item = Vec<u8>> + 'a {
     match lane {
         LaneState::UnreliableUnordered => {
             // always just return the message
@@ -514,6 +563,10 @@ fn recv_on_lane(
             if msg_seq < *pending {
                 // msg is older than the message we're expecting to get next,
                 // drop it
+                *pending_payload_size = pending_payload_size
+                    .checked_sub(msg.len())
+                    .expect("removed receive payload bytes should be accounted for");
+                drop(msg);
                 Either::Left(None)
             } else {
                 // msg is the one we're expecting to get or newer, return it
@@ -524,6 +577,10 @@ fn recv_on_lane(
         LaneState::ReliableUnordered { pending, recv_buf } => {
             if msg_seq < *pending || !recv_buf.insert(msg_seq) {
                 // msg is guaranteed to already be received, drop it
+                *pending_payload_size = pending_payload_size
+                    .checked_sub(msg.len())
+                    .expect("removed receive payload bytes should be accounted for");
+                drop(msg);
                 Either::Left(None)
             } else {
                 // here's an example to visualize what this does:
@@ -542,11 +599,19 @@ fn recv_on_lane(
         LaneState::ReliableOrdered { pending, recv_buf } => {
             if msg_seq < *pending {
                 // msg is guaranteed to already be received, drop it
+                *pending_payload_size = pending_payload_size
+                    .checked_sub(msg.len())
+                    .expect("removed receive payload bytes should be accounted for");
+                drop(msg);
                 Either::Left(None)
             } else {
                 // almost identical to above, but we also return the
                 // messages that we remove
-                recv_buf.insert(msg_seq, msg);
+                if let Some(replaced) = recv_buf.insert(msg_seq, msg) {
+                    *pending_payload_size = pending_payload_size
+                        .checked_sub(replaced.len())
+                        .expect("replaced receive payload bytes should be accounted for");
+                }
                 Either::Right(iter::from_fn(move || {
                     let msg = recv_buf.remove(pending)?;
                     *pending += MessageSeq::new(1);
@@ -576,6 +641,147 @@ mod tests {
 
     const LANES: [LaneKind; 1] = [LaneKind::ReliableOrdered];
     const LANE: LaneIndex = LaneIndex::new(0);
+
+    #[test]
+    fn payload_accounting_gaps_and_duplicate_fragments() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let mut transport = Transport::new(&session, LANES, LANES, now).unwrap();
+        let config = TransportConfig::default();
+        let len = usize::from(transport.send.max_frag_len);
+        partial(&mut transport, &config, 0, 0, 3, now);
+        assert_eq!(transport.recv.memory_used(), 4 * len);
+        partial(&mut transport, &config, 0, 0, 3, now);
+        partial(&mut transport, &config, 0, 0, 0, now);
+        assert_eq!(transport.recv.memory_used(), 4 * len);
+        partial(&mut transport, &config, 0, 0, 1, now);
+        partial(&mut transport, &config, 0, 0, 2, now);
+        super::recv_frag(
+            &mut transport,
+            &config,
+            now,
+            Fragment {
+                header: FragmentHeader {
+                    lane: LANE,
+                    seq: MessageSeq::new(0),
+                    position: FragmentPosition::last(4u16).unwrap(),
+                },
+                payload: FragmentPayload::new(Bytes::from_static(b"end")).unwrap(),
+            },
+        )
+        .unwrap();
+        assert_eq!(transport.recv.memory_used(), 4 * len + 3);
+        drop(transport.recv.msgs.drain());
+        assert_eq!(transport.recv.memory_used(), 0);
+    }
+
+    #[test]
+    fn payload_accounting_delivery_duplicates_and_drain() {
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        for kind in [LaneKind::ReliableOrdered, LaneKind::ReliableUnordered] {
+            let mut transport = Transport::new(&session, [kind], [kind], now).unwrap();
+            let config = TransportConfig::default();
+            for (seq, payload) in [
+                (1, b"abc".as_slice()),
+                (1, b"longer"),
+                (0, b"x"),
+                (0, b"obsolete"),
+            ] {
+                super::recv_frag(
+                    &mut transport,
+                    &config,
+                    now,
+                    Fragment {
+                        header: FragmentHeader {
+                            lane: LANE,
+                            seq: MessageSeq::new(seq),
+                            position: FragmentPosition::last(0u16).unwrap(),
+                        },
+                        payload: FragmentPayload::new(Bytes::copy_from_slice(payload)).unwrap(),
+                    },
+                )
+                .unwrap();
+                let retained = if kind == LaneKind::ReliableOrdered {
+                    6
+                } else {
+                    3
+                };
+                let total = if seq == 1 {
+                    if kind == LaneKind::ReliableOrdered {
+                        payload.len()
+                    } else {
+                        3
+                    }
+                } else {
+                    retained + 1
+                };
+                let pending = if kind == LaneKind::ReliableOrdered && seq == 1 {
+                    payload.len()
+                } else {
+                    0
+                };
+                assert_eq!(transport.recv.pending_payload_size, pending);
+                assert_eq!(transport.recv.msgs.queued_payload_size, total - pending);
+                assert_eq!(transport.recv.memory_used(), total);
+            }
+            let mut drain = transport.recv.msgs.drain();
+            assert!(drain.next().is_some());
+            drop(drain);
+            assert_eq!(transport.recv.memory_used(), 0);
+            assert_eq!(transport.recv.msgs.drain().count(), 0);
+        }
+    }
+
+    #[test]
+    fn payload_accounting_across_lanes_and_clear_buffers() {
+        use bevy_ecs::{schedule::Schedule, world::World};
+
+        let now = Instant::now();
+        let session = Session::new(now, 1024);
+        let lanes = [LaneKind::ReliableOrdered; 2];
+        let mut transport = Transport::new(&session, lanes, lanes, now).unwrap();
+        let config = TransportConfig::default();
+        let len = usize::from(transport.send.max_frag_len);
+        partial(&mut transport, &config, 0, 1, 0, now);
+        partial(&mut transport, &config, 1, 1, 2, now);
+        assert_eq!(transport.recv.memory_used(), 4 * len);
+        for lane in [0, 1] {
+            super::recv_frag(
+                &mut transport,
+                &config,
+                now,
+                Fragment {
+                    header: FragmentHeader {
+                        lane: LaneIndex::new(lane),
+                        seq: MessageSeq::new(0),
+                        position: FragmentPosition::ZERO_LAST,
+                    },
+                    payload: FragmentPayload::new(Bytes::from_static(b"abc")).unwrap(),
+                },
+            )
+            .unwrap();
+        }
+        assert_eq!(transport.recv.memory_used(), 4 * len + 6);
+        assert_eq!(transport.recv.pending_payload_size, 4 * len);
+        assert_eq!(transport.recv.msgs.queued_payload_size, 6);
+        assert_eq!(transport.recv.msgs.items.len(), 2);
+
+        let mut world = World::new();
+        let entity = world.spawn(transport).id();
+        let mut schedule = Schedule::default();
+        schedule.add_systems(super::clear_buffers);
+        schedule.run(&mut world);
+        let transport = world.get::<Transport>(entity).unwrap();
+        assert!(transport.recv.msgs.items.is_empty());
+        assert_eq!(transport.recv.memory_used(), 4 * len);
+        // Clearing an already empty delivery queue preserves partial payloads.
+        schedule.run(&mut world);
+        assert_eq!(
+            world.get::<Transport>(entity).unwrap().recv.memory_used(),
+            4 * len
+        );
+    }
 
     #[test]
     fn packet_ack_size_accounting() {
@@ -795,15 +1001,19 @@ mod tests {
 
         // Message 0 is still missing, but unordered delivery must allow 1
         // through immediately and remember it when a retransmission arrives.
-        let received = super::recv_on_lane(&mut lane.state, msg.clone(), seq).collect::<Vec<_>>();
+        let mut pending_payload_size = msg.len();
+        let received =
+            super::recv_on_lane(&mut lane.state, &mut pending_payload_size, msg.clone(), seq)
+                .collect::<Vec<_>>();
         assert_eq!(received, vec![msg.clone()]);
 
         assert!(
-            super::recv_on_lane(&mut lane.state, msg, seq)
+            super::recv_on_lane(&mut lane.state, &mut pending_payload_size, msg, seq)
                 .next()
                 .is_none(),
             "a reliable-unordered message must only be delivered once, even before the gap closes"
         );
+        assert_eq!(pending_payload_size, 0);
     }
 
     #[test]
@@ -902,6 +1112,10 @@ mod tests {
             MessageSeq::new(1)
         );
         assert_eq!(transport.recv.lanes.get(1).unwrap().frags.len(), 1);
+        assert_eq!(
+            transport.recv.memory_used(),
+            9 * usize::from(transport.send.max_frag_len)
+        );
     }
 
     #[test]
@@ -992,6 +1206,10 @@ mod tests {
         .unwrap();
         assert_eq!(transport.recv.msgs.drain().count(), 1);
         assert_eq!(transport.recv.lanes.first().unwrap().frags.len(), 1);
+        assert_eq!(
+            transport.recv.memory_used(),
+            usize::from(transport.send.max_frag_len)
+        );
         // An obsolete fragment must not recreate its discarded buffer.
         partial(&mut transport, &config, 0, old, 0, now);
         assert_eq!(transport.recv.lanes.first().unwrap().frags.len(), 1);
@@ -1073,7 +1291,7 @@ mod tests {
                     ));
 
                     let (transport, config) = transports.get(event.entity).unwrap();
-                    assert!(transport.recv.msgs.0.is_empty());
+                    assert!(transport.recv.msgs.items.is_empty());
                     assert!(!transport.peer_acks.is_acked(packet_seq));
                     // The rejected allocation never exceeded the global limit;
                     // the receive error itself must trigger disconnection.
