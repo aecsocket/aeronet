@@ -64,7 +64,6 @@ tokio = { version = "1.39.2" }
 tokio-rustls = { version = "0.26.2", default-features = false }
 tokio-tungstenite = { version = "0.30.0", default-features = false }
 tracing = { version = "0.1.40", default-features = false }
-typesize = { version = "0.1.14", default-features = false }
 wasm-bindgen = { version = "0.2.101" }
 wasm-bindgen-futures = { version = "0.4.51" }
 web-sys = { version = "0.3.70" }
@@ -79,6 +78,7 @@ all = { level = "warn", priority = -1 }
 alloc_instead_of_core = "warn"
 arithmetic_side_effects = "warn"
 indexing_slicing = "warn"
+map_unwrap_or = "allow"
 module_name_repetitions = "allow"
 needless_pass_by_value = "allow"
 nursery = { level = "warn", priority = -1 }
@@ -88,6 +88,7 @@ similar_names = "allow"
 std_instead_of_alloc = "warn"
 std_instead_of_core = "warn"
 too_many_arguments = "allow"
+too_many_lines = "allow"
 type_complexity = "allow"
 unwrap_used = "warn"
 

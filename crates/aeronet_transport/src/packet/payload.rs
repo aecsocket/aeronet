@@ -32,14 +32,6 @@ impl FragmentPayload {
         )]
         MinSize(self.0.len() as u32)
     }
-
-    /// Returns the number of bytes contained in this `Bytes`, as a [`usize`].
-    ///
-    /// This is checked at construction time to fit into a [`MinSize`].
-    #[must_use]
-    pub const fn len_usize(&self) -> usize {
-        self.len().0 as usize
-    }
 }
 
 impl EncodeLen for FragmentPayload {

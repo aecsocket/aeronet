@@ -1,16 +1,10 @@
 //! See [`MinSize`].
 
 use {
-    bevy_platform::{
-        collections::{HashMap, HashSet},
-        time::Instant,
-    },
     bevy_reflect::Reflect,
-    bit_vec::BitVec,
     core::num::TryFromIntError,
     derive_more::Display,
     octs::{BufTooShortOr, Decode, Encode, EncodeLen, FixedEncodeLenHint, Read, VarInt, Write},
-    typesize::{TypeSize, derive::TypeSize},
 };
 
 #[cfg(target_pointer_width = "16")]
@@ -27,7 +21,7 @@ compile_error!("`aeronet_transport` cannot safely compile for a 16-bit platform"
 /// any platforms where `usize` is smaller than [`u32`].
 ///
 /// This value is always encoded as a [`VarInt`] on the wire.
-#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, TypeSize, Reflect)]
+#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Reflect)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MinSize(pub u32);
@@ -109,36 +103,4 @@ impl Decode for MinSize {
     fn decode(mut src: impl Read) -> Result<Self, BufTooShortOr<Self::Error>> {
         Ok(Self(src.read::<VarInt<u32>>()?.0))
     }
-}
-
-pub(crate) const fn of_instant(_v: &Instant) -> usize {
-    0
-}
-
-pub(crate) fn of_bitvec(v: &BitVec) -> usize {
-    v.capacity() / 8
-}
-
-pub(crate) fn of_set<T: TypeSize>(v: &HashSet<T>) -> usize {
-    let element_size = v
-        .iter()
-        .map(TypeSize::get_size)
-        .fold(0, usize::saturating_add);
-    let free_size = v
-        .capacity()
-        .saturating_sub(v.len())
-        .saturating_mul(size_of::<T>());
-    element_size.saturating_add(free_size)
-}
-
-pub(crate) fn of_map<K: TypeSize, V: TypeSize>(v: &HashMap<K, V>) -> usize {
-    let element_size = v
-        .iter()
-        .map(|(k, v)| k.get_size().saturating_add(v.get_size()))
-        .fold(0, usize::saturating_add);
-    let free_size = v
-        .capacity()
-        .saturating_sub(v.len())
-        .saturating_mul(size_of::<K>().saturating_add(size_of::<V>()));
-    element_size.saturating_add(free_size)
 }

@@ -16,7 +16,6 @@ use {
         HeapRb,
         traits::{Consumer, RingBuffer},
     },
-    typesize::derive::TypeSize,
 };
 
 /// Periodically samples the state of [`Session`]s to gather statistics on the
@@ -255,15 +254,14 @@ const LOSS_HISTORY_CAP: u16 = 1024;
 
 /// Separate from retransmission metadata, which is removed as soon as
 /// acknowledged.
-#[derive(Debug, TypeSize)]
+#[derive(Debug)]
 pub(crate) struct PacketLossHistory {
     packets: SeqBuf<PacketOutcome, 1024>,
     latest: Option<PacketSeq>,
 }
 
-#[derive(Debug, TypeSize)]
+#[derive(Debug)]
 struct PacketOutcome {
-    #[typesize(with = crate::size::of_instant)]
     flushed_at: Instant,
     acked: bool,
 }
@@ -332,7 +330,7 @@ impl PacketLossHistory {
 
 #[cfg(test)]
 mod tests {
-    #![expect(
+    #![allow(
         clippy::float_cmp,
         reason = "expected loss ratios are exactly representable: 0, 0.5, and 1"
     )]

@@ -9,6 +9,10 @@ doc-valid-idents = [
   "..",
 ]
 
+disallowed-methods = [
+  { path = "core::option::Option::map_or", reason = "prefer `.map(...).unwrap_or(...)` for clarity" },
+]
+
 # These operators are implemented using wrapping sequence arithmetic or
 # field-wise saturating counters. Keep the exceptions limited to matching types.
 arithmetic-side-effects-allowed-binary = [

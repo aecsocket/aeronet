@@ -1,9 +1,5 @@
 #![expect(missing_docs, reason = "testing")]
 #![cfg(not(target_family = "wasm"))]
-#![cfg_attr(
-    not(target_family = "wasm"),
-    expect(clippy::too_many_lines, reason = "testing")
-)]
 
 use {
     aeronet_io::{
